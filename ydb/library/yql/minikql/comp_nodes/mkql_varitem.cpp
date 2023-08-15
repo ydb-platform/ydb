@@ -32,7 +32,7 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     void DoGenerateGetValue(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto valueType = Type::getInt128Ty(context);
         const auto indexType = Type::getInt32Ty(context);
 

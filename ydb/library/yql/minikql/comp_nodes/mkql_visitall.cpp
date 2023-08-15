@@ -28,7 +28,7 @@ public:
     }
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
@@ -95,7 +95,7 @@ public:
     }
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
         const auto work = BasicBlock::Create(context, "work", ctx.Func);
@@ -190,7 +190,7 @@ public:
     }
 #ifndef MKQL_DISABLE_CODEGEN
     TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
         const auto work = BasicBlock::Create(context, "work", ctx.Func);
@@ -255,7 +255,7 @@ public:
             slice.reserve(allGetters.size());
             std::transform(allGetters.begin(), allGetters.end(), std::back_inserter(slice), [j = idx++](TGettersList& list) { return std::move(list[j]);});
             return [index, slice = std::move(slice)](const TCodegenContext& ctx, BasicBlock*& block) {
-                auto& context = ctx.Codegen->GetContext();
+                auto& context = ctx.Codegen.GetContext();
 
                 const auto stub = BasicBlock::Create(context, "stub", ctx.Func);
                 const auto done = BasicBlock::Create(context, "done", ctx.Func);

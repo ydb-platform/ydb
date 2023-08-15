@@ -145,7 +145,7 @@ struct TGreater : public TCompareArithmeticBinary<TLeft, TRight, TGreater<TLeft,
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Gen(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        return GenGreater<TLeft, TRight, Aggr>(left, right, ctx.Codegen->GetContext(), block);
+        return GenGreater<TLeft, TRight, Aggr>(left, right, ctx.Codegen.GetContext(), block);
     }
 #endif
 };
@@ -170,7 +170,7 @@ struct TDiffDateGreater : public TCompareArithmeticBinary<TLeft, TRight, TDiffDa
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Gen(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         return std::is_same<TLeft, TRight>::value ?
             GenGreater<TLeft, TRight, Aggr>(left, right, context, block):
             GenGreater<TScaledDate, TScaledDate, Aggr>(GenToScaledDate<TLeft>(left, context, block), GenToScaledDate<TRight>(right, context, block), context, block);
@@ -200,12 +200,12 @@ struct TAggrTzDateGreater : public TCompareArithmeticBinaryWithTimezone<TLeft, T
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Gen(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        return GenGreater<TLeft, TRight, Aggr>(left, right, ctx.Codegen->GetContext(), block);
+        return GenGreater<TLeft, TRight, Aggr>(left, right, ctx.Codegen.GetContext(), block);
     }
 
     static Value* GenTz(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        return GenGreater<ui16, ui16, Aggr>(left, right, ctx.Codegen->GetContext(), block);
+        return GenGreater<ui16, ui16, Aggr>(left, right, ctx.Codegen.GetContext(), block);
     }
 #endif
 };
@@ -219,7 +219,7 @@ struct TCustomGreater : public TAggrGreater {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto res = CallBinaryUnboxedValueFunction(&CompareCustoms<Slot>, Type::getInt32Ty(context), left, right, ctx.Codegen, block);
         const auto comp = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, res, ConstantInt::get(res->getType(), 0), "greater", block);
         ValueCleanup(EValueRepresentation::String, left, ctx, block);
@@ -239,7 +239,7 @@ struct TDecimalGreater {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto l = GetterForInt128(left, block);
         const auto r = GetterForInt128(right, block);
         const auto lok = NDecimal::GenIsComparable(l, context, block);
@@ -262,7 +262,7 @@ struct TDecimalAggrGreater : public TAggrGreater {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto l = GetterForInt128(left, block);
         const auto r = GetterForInt128(right, block);
         const auto gt = GenGreaterSigned(l, r, block);

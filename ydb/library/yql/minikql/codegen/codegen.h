@@ -60,7 +60,7 @@ public:
     virtual void AddGlobalMapping(TStringBuf name, const void* address) = 0;
     virtual void TogglePerfJITEventListener() = 0;
 
-    typedef std::unique_ptr<ICodegen> TPtr;
+    using TPtr = std::unique_ptr<ICodegen>;
     static TPtr Make(ETarget target, ESanitize sanitize = ESanitize::Auto);
 };
 

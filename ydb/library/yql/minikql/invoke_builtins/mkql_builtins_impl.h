@@ -144,7 +144,7 @@ struct TSimpleArithmeticUnary : public TArithmeticConstraintsSame<TInput, TOutpu
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto val = GetterFor<TInput>(arg, context, block);
         const auto res = TImpl::Gen(val, ctx, block);
         const auto wide = SetterFor<TOutput>(res, context, block);
@@ -162,7 +162,7 @@ struct TSimpleArithmeticBinary : public TArithmeticConstraintsBinary<TLeft, TRig
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto lhs = StaticCast<TLeft, TOutput>(GetterFor<TLeft>(left, context, block), context, block);
         const auto rhs = StaticCast<TRight, TOutput>(GetterFor<TRight>(right, context, block), context, block);
         const auto res = TImpl::Gen(lhs, rhs, ctx, block);
@@ -181,7 +181,7 @@ struct TShiftArithmeticBinary : public TArithmeticConstraintsSame<TInput, TOutpu
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto lhs = GetterFor<TInput>(left, context, block);
         const auto rhs = CastInst::Create(Instruction::Trunc, right, Type::getInt8Ty(context), "bits", block);
         const auto res = TImpl::Gen(lhs, rhs, ctx, block);
@@ -984,7 +984,7 @@ struct TBinaryKernelExecs<TInput1, TInput2, TOutput, TFunc, false> : TBinaryKern
                         continue;
                     }
                 }
-                
+
                 arrow::BitUtil::ClearBit(resValid, i + resArr.offset);
             }
         } else {

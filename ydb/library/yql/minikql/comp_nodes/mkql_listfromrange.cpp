@@ -254,7 +254,7 @@ public:
     }
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto valueType = Type::getInt128Ty(context);
 
         const auto startv = GetNodeValue(Start, ctx, block);
@@ -277,7 +277,7 @@ public:
         const auto timezone = TzDate ? GetterForTimezone(context, startv, block) : ConstantInt::get(Type::getInt16Ty(context), 0);
 
         const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TListFromRangeWrapper::MakeList));
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
+        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
             const auto signature = FunctionType::get(valueType, {ctx.Ctx->getType(), start->getType(), end->getType(), step->getType(), timezone->getType()}, false);
             const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block);
             const auto output = CallInst::Create(signature, creator, {ctx.Ctx, start, end, step, timezone}, "output", block);

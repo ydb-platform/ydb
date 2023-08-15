@@ -312,14 +312,14 @@ public:
     }
 #ifndef MKQL_DISABLE_CODEGEN
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
         const auto ptrValueType = PointerType::getUnqual(valueType);
         const auto structPtrType = PointerType::getUnqual(StructType::get(context));
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
-        const auto indexType = Type::getInt32Ty(ctx.Codegen->GetContext());
+        const auto indexType = Type::getInt32Ty(ctx.Codegen.GetContext());
 
         TLLVMFieldsStructureState<HasCount> stateFields(context);
         const auto stateType = StructType::get(context, stateFields.GetFieldsArray());
@@ -543,15 +543,15 @@ private:
         return out.Str();
     }
 
-    void FinalizeFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
+    void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) final {
         if (CompareFunc) {
-            Compare = reinterpret_cast<TComparePtr>(codegen->GetPointerToFunction(CompareFunc));
+            Compare = reinterpret_cast<TComparePtr>(codegen.GetPointerToFunction(CompareFunc));
         }
     }
 
-    void GenerateFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
+    void GenerateFunctions(NYql::NCodegen::ICodegen& codegen) final {
         if (!HasComplexType) {
-            codegen->ExportSymbol(CompareFunc = GenerateCompareFunction(codegen, MakeName(), KeyTypes));
+            codegen.ExportSymbol(CompareFunc = GenerateCompareFunction(codegen, MakeName(), KeyTypes));
         }
     }
 #endif

@@ -33,7 +33,7 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto factory = ctx.GetFactory();
         const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::LazyList));
 
@@ -60,7 +60,7 @@ public:
 
         block = wrap;
 
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
+        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
             const auto funType = FunctionType::get(list->getType(), {factory->getType(), list->getType()}, false);
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
             const auto res = CallInst::Create(funType, funcPtr, {factory, list}, "res", block);

@@ -23,7 +23,7 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto valueType = Type::getInt128Ty(context);
 
         const auto dict = GetNodeValue(Dict, ctx, block);

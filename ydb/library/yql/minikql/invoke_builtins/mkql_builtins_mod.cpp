@@ -19,8 +19,8 @@ struct TMod : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TMod<TLeft,
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Gen(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        ctx.Codegen->AddGlobalMapping("fmod", reinterpret_cast<const void*>(static_cast<double(*)(double, double)>(&std::fmod)));
-        ctx.Codegen->AddGlobalMapping("fmodf", reinterpret_cast<const void*>(static_cast<float(*)(float, float)>(&std::fmod)));
+        ctx.Codegen.AddGlobalMapping("fmod", reinterpret_cast<const void*>(static_cast<double(*)(double, double)>(&std::fmod)));
+        ctx.Codegen.AddGlobalMapping("fmodf", reinterpret_cast<const void*>(static_cast<float(*)(float, float)>(&std::fmod)));
         return BinaryOperator::CreateFRem(left, right, "frem", block);
     }
 #endif
@@ -49,7 +49,7 @@ struct TIntegralMod {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto lv = StaticCast<TLeft, TOutput>(GetterFor<TLeft>(left, context, block), context, block);
         const auto rv = StaticCast<TRight, TOutput>(GetterFor<TRight>(right, context, block), context, block);
         const auto type = Type::getInt128Ty(context);

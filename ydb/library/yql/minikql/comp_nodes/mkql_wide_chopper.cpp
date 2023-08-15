@@ -129,7 +129,7 @@ private:
     }
 #ifndef MKQL_DISABLE_CODEGEN
     TGenerateResult DoGenGetValuesInput(const TCodegenContext& ctx, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto load = BasicBlock::Create(context, "load", ctx.Func);
         const auto work = BasicBlock::Create(context, "work", ctx.Func);
@@ -193,7 +193,7 @@ public:
     TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         EnsureDynamicCast<IWideFlowProxyCodegeneratorNode*>(Input)->SetGenerator(std::bind(&TWideChopperWrapper::DoGenGetValuesInput, this, _1, _2));
 
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
         const auto loop = BasicBlock::Create(context, "loop", ctx.Func);

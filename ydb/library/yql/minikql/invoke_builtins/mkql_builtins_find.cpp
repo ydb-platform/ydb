@@ -25,7 +25,7 @@ struct TFind {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* string, Value* sub, Value* p, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(Find<Reverse>));
         const auto pos = PosOptional ?
             SelectInst::Create(
@@ -34,7 +34,7 @@ struct TFind {
                 StaticCast<ui32, std::string_view::size_type>(GetterFor<ui32>(p, context, block), context, block),
             "pos", block):
             StaticCast<ui32, std::string_view::size_type>(GetterFor<ui32>(p, context, block), context, block);
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
+        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
             const auto funType = FunctionType::get(string->getType(), {string->getType(), sub->getType(), pos->getType()}, false);
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "func", block);
             const auto result = CallInst::Create(funType, funcPtr, {string, sub, pos}, "find", block);

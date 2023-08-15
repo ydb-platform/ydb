@@ -26,7 +26,7 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto loop = BasicBlock::Create(context, "loop", ctx.Func);
         const auto skip = BasicBlock::Create(context, "skip", ctx.Func);
@@ -75,7 +75,7 @@ public:
     }
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto loop = BasicBlock::Create(context, "loop", ctx.Func);
         const auto exit = BasicBlock::Create(context, "exit", ctx.Func);
@@ -148,26 +148,26 @@ private:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    void GenerateFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
+    void GenerateFunctions(NYql::NCodegen::ICodegen& codegen) final {
         FetchFunc = GenerateFetch(codegen);
-        codegen->ExportSymbol(FetchFunc);
+        codegen.ExportSymbol(FetchFunc);
     }
 
-    void FinalizeFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
+    void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) final {
         if (FetchFunc)
-            Fetch = reinterpret_cast<TFetchPtr>(codegen->GetPointerToFunction(FetchFunc));
+            Fetch = reinterpret_cast<TFetchPtr>(codegen.GetPointerToFunction(FetchFunc));
     }
 
-    Function* GenerateFetch(const NYql::NCodegen::ICodegen::TPtr& codegen) const {
-        auto& module = codegen->GetModule();
-        auto& context = codegen->GetContext();
+    Function* GenerateFetch(NYql::NCodegen::ICodegen& codegen) const {
+        auto& module = codegen.GetModule();
+        auto& context = codegen.GetContext();
 
         const auto& name = TBaseComputation::MakeName("Fetch");
         if (const auto f = module.getFunction(name.c_str()))
             return f;
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto containerType = codegen->GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? static_cast<Type*>(PointerType::getUnqual(valueType)) : static_cast<Type*>(valueType);
+        const auto containerType = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? static_cast<Type*>(PointerType::getUnqual(valueType)) : static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
         const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType)}, false);
@@ -184,7 +184,7 @@ private:
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         auto block = main;
 
-        const auto container = codegen->GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
+        const auto container = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
             new LoadInst(valueType, containerArg, "load_container", false, block) : static_cast<Value*>(containerArg);
 
         const auto loop = BasicBlock::Create(context, "loop", ctx.Func);

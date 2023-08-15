@@ -107,9 +107,9 @@ public:
     }
 #ifndef MKQL_DISABLE_CODEGEN
 private:
-    Function* GenerateHandler(const NYql::NCodegen::ICodegen::TPtr& codegen) const {
-        auto& module = codegen->GetModule();
-        auto& context = codegen->GetContext();
+    Function* GenerateHandler(NYql::NCodegen::ICodegen& codegen) const {
+        auto& module = codegen.GetModule();
+        auto& context = codegen.GetContext();
 
         TStringStream out;
         out << this->DebugString() << "::Handler_(" << static_cast<const void*>(this) << ").";
@@ -193,7 +193,7 @@ public:
         MKQL_ENSURE(codegenKeyArg, "Key arg must be codegenerator node.");
         MKQL_ENSURE(codegenInput, "Input arg must be codegenerator node.");
 
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
         const auto loop = BasicBlock::Create(context, "loop", ctx.Func);
@@ -525,23 +525,23 @@ private:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    void GenerateFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
+    void GenerateFunctions(NYql::NCodegen::ICodegen& codegen) final {
         InputFunc = GenerateInput(codegen);
         OutputFunc = GenerateOutput(codegen);
-        codegen->ExportSymbol(InputFunc);
-        codegen->ExportSymbol(OutputFunc);
+        codegen.ExportSymbol(InputFunc);
+        codegen.ExportSymbol(OutputFunc);
     }
 
-    void FinalizeFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
+    void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) final {
         if (InputFunc)
-            InputPtr = reinterpret_cast<TInputPtr>(codegen->GetPointerToFunction(InputFunc));
+            InputPtr = reinterpret_cast<TInputPtr>(codegen.GetPointerToFunction(InputFunc));
         if (OutputFunc)
-            OutputPtr = reinterpret_cast<TOutputPtr>(codegen->GetPointerToFunction(OutputFunc));
+            OutputPtr = reinterpret_cast<TOutputPtr>(codegen.GetPointerToFunction(OutputFunc));
     }
 
-    Function* GenerateInput(const NYql::NCodegen::ICodegen::TPtr& codegen) const {
-        auto& module = codegen->GetModule();
-        auto& context = codegen->GetContext();
+    Function* GenerateInput(NYql::NCodegen::ICodegen& codegen) const {
+        auto& module = codegen.GetModule();
+        auto& context = codegen.GetContext();
 
         const auto& name = MakeName("Input");
         if (const auto f = module.getFunction(name.c_str()))
@@ -554,7 +554,7 @@ private:
         MKQL_ENSURE(codegenKeyArg, "Key arg must be codegenerator node.");
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto containerType = codegen->GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? static_cast<Type*>(PointerType::getUnqual(valueType)) : static_cast<Type*>(valueType);
+        const auto containerType = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? static_cast<Type*>(PointerType::getUnqual(valueType)) : static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
         const auto stateType = Type::getInt8Ty(context);
@@ -576,7 +576,7 @@ private:
 
         auto block = main;
 
-        const auto container = codegen->GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
+        const auto container = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
             new LoadInst(valueType, containerArg, "load_container", false, block) : static_cast<Value*>(containerArg);
 
         const auto first = new LoadInst(stateType, stateArg, "first", block);
@@ -631,9 +631,9 @@ private:
         return ctx.Func;
     }
 
-    Function* GenerateOutput(const NYql::NCodegen::ICodegen::TPtr& codegen) const {
-        auto& module = codegen->GetModule();
-        auto& context = codegen->GetContext();
+    Function* GenerateOutput(NYql::NCodegen::ICodegen& codegen) const {
+        auto& module = codegen.GetModule();
+        auto& context = codegen.GetContext();
 
         const auto& name = MakeName("Output");
         if (const auto f = module.getFunction(name.c_str()))
@@ -648,7 +648,7 @@ private:
         MKQL_ENSURE(codegenInput, "Input arg must be codegenerator node.");
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto containerType = codegen->GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? static_cast<Type*>(PointerType::getUnqual(valueType)) : static_cast<Type*>(valueType);
+        const auto containerType = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? static_cast<Type*>(PointerType::getUnqual(valueType)) : static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
         const auto stateType = Type::getInt8Ty(context);
@@ -676,7 +676,7 @@ private:
 
         auto block = main;
 
-        const auto input = codegen->GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
+        const auto input = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
             new LoadInst(valueType, inputArg, "load_input", false, block) : static_cast<Value*>(inputArg);
 
         BranchInst::Create(loop, block);

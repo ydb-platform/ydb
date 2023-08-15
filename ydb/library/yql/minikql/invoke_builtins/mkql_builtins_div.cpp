@@ -48,7 +48,7 @@ struct TIntegralDiv {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto lv = StaticCast<TLeft, TOutput>(GetterFor<TLeft>(left, context, block), context, block);
         const auto rv = StaticCast<TRight, TOutput>(GetterFor<TRight>(right, context, block), context, block);
         const auto type = Type::getInt128Ty(context);
@@ -106,7 +106,7 @@ struct TNumDivInterval {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto lv = StaticCast<TLeft, TOutput>(GetterFor<TLeft>(left, context, block), context, block);
         const auto rv = StaticCast<TRight, TOutput>(GetterFor<TRight>(right, context, block), context, block);
         const auto type = Type::getInt128Ty(context);

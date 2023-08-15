@@ -643,7 +643,7 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
         }
 #ifndef MKQL_DISABLE_CODEGEN
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
         const auto indexType = Type::getInt32Ty(context);
@@ -823,7 +823,6 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                     if (!SelfJoinSameKeys_) {
                         std::copy_n(LeftPacker->TupleHolder.begin(), LeftPacker->TotalColumnsNum, RightPacker->TupleHolder.begin());
                     }
-                    
                 } else {
                     resultRight = FlowRight->FetchValues(ctx, RightPacker->TuplePtrs.data());
                 }
@@ -882,7 +881,7 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
                     if ( SelfJoinSameKeys_ ) {
                         JoinedTablePtr->Join(*LeftPacker->TablePtr, *LeftPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
                     } else {
-                        JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows); 
+                        JoinedTablePtr->Join(*LeftPacker->TablePtr, *RightPacker->TablePtr, JoinKind, *HaveMoreLeftRows, *HaveMoreRightRows);
                     }
                     JoinedTablePtr->ResetIterator();
                     LeftPacker->EndTime = std::chrono::system_clock::now();
@@ -900,7 +899,7 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
 
 IComputationNode* CreateGraceJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx, bool isSelfJoin = false) {
 
-    MKQL_ENSURE(callable.GetInputsCount() == 8, "Expected 8 args");        
+    MKQL_ENSURE(callable.GetInputsCount() == 8, "Expected 8 args");
 
     const auto leftFlowNode = callable.GetInput(0);
     const auto rightFlowNode = callable.GetInput(1);
@@ -957,8 +956,7 @@ IComputationNode* CreateGraceJoin(TCallable& callable, const TComputationNodeFac
 }
 
 IComputationNode* WrapGraceJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-
-    MKQL_ENSURE(callable.GetInputsCount() == 8, "Expected 8 args");        
+    MKQL_ENSURE(callable.GetInputsCount() == 8, "Expected 8 args");
 
     const auto leftFlowNode = callable.GetInput(0);
     const auto rightFlowNode = callable.GetInput(1);
@@ -1015,8 +1013,7 @@ IComputationNode* WrapGraceJoin(TCallable& callable, const TComputationNodeFacto
 }
 
 IComputationNode* WrapSelfJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-
-   MKQL_ENSURE(callable.GetInputsCount() == 7, "Expected 7 args");        
+    MKQL_ENSURE(callable.GetInputsCount() == 7, "Expected 7 args");
 
     const auto leftFlowNode = callable.GetInput(0);
     const auto leftFlowComponents = GetWideComponents(AS_TYPE(TFlowType, leftFlowNode));
@@ -1059,9 +1056,9 @@ IComputationNode* WrapSelfJoin(TCallable& callable, const TComputationNodeFactor
         rightKeyColumns.emplace_back(AS_VALUE(TDataLiteral, rightKeyColumnsNode->GetValue(i))->AsValue().Get<ui32>());
     }
 
-    MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Number of key columns for self join should be equal");  
+    MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Number of key columns for self join should be equal");
 
-//    MKQL_ENSURE(leftKeyColumns == rightKeyColumns, "Key columns for self join should be equal");      
+//    MKQL_ENSURE(leftKeyColumns == rightKeyColumns, "Key columns for self join should be equal");
 
     rightRenames.reserve(rightRenamesNode->GetValuesCount());
     for (ui32 i = 0; i < rightRenamesNode->GetValuesCount(); ++i) {

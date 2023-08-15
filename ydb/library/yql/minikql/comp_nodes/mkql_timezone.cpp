@@ -105,7 +105,7 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto setz = BasicBlock::Create(context, "setz", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);

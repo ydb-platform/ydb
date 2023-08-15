@@ -33,7 +33,7 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     void DoGenerateGetValue(const TCodegenContext& ctx, Value* result, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto valueType = Type::getInt128Ty(context);
         const auto ptrType = PointerType::getUnqual(valueType);
 
@@ -129,7 +129,7 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     void DoGenerateGetValue(const TCodegenContext& ctx, Value* result, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto valueType = Type::getInt128Ty(context);
         const auto ptrType = PointerType::getUnqual(valueType);
 

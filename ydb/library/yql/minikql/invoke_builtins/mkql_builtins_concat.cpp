@@ -16,7 +16,7 @@ struct TConcat {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        return CallBinaryUnboxedValueFunction(&ConcatStrings, Type::getInt128Ty(ctx.Codegen->GetContext()), left, right, ctx.Codegen, block);
+        return CallBinaryUnboxedValueFunction(&ConcatStrings, Type::getInt128Ty(ctx.Codegen.GetContext()), left, right, ctx.Codegen, block);
     }
 #endif
 };

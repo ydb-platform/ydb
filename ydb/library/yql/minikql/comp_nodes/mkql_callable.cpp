@@ -82,19 +82,19 @@ private:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    void GenerateFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
+    void GenerateFunctions(NYql::NCodegen::ICodegen& codegen) final {
         RunFunc = GenerateRun(codegen);
-        codegen->ExportSymbol(RunFunc);
+        codegen.ExportSymbol(RunFunc);
     }
 
-    void FinalizeFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
+    void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) final {
         if (RunFunc)
-            Run = reinterpret_cast<TRunPtr>(codegen->GetPointerToFunction(RunFunc));
+            Run = reinterpret_cast<TRunPtr>(codegen.GetPointerToFunction(RunFunc));
     }
 
-    Function* GenerateRun(const NYql::NCodegen::ICodegen::TPtr& codegen) const {
-        auto& module = codegen->GetModule();
-        auto& context = codegen->GetContext();
+    Function* GenerateRun(NYql::NCodegen::ICodegen& codegen) const {
+        auto& module = codegen.GetModule();
+        auto& context = codegen.GetContext();
 
         const auto& name = TBaseComputation::MakeName("Run");
         if (const auto f = module.getFunction(name.c_str()))
@@ -104,7 +104,7 @@ private:
         const auto argsType = ArrayType::get(valueType, ArgNodes.size());
         const auto contextType = GetCompContextType(context);
 
-        const auto funcType = codegen->GetEffectiveTarget() != NYql::NCodegen::ETarget::Windows ?
+        const auto funcType = codegen.GetEffectiveTarget() != NYql::NCodegen::ETarget::Windows ?
             FunctionType::get(valueType, {PointerType::getUnqual(contextType), PointerType::getUnqual(argsType)}, false):
             FunctionType::get(Type::getVoidTy(context), {PointerType::getUnqual(valueType), PointerType::getUnqual(contextType), PointerType::getUnqual(argsType)}, false);
 
@@ -113,7 +113,7 @@ private:
 
         auto args = ctx.Func->arg_begin();
 
-        const auto resultArg = codegen->GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? &*args++ : nullptr;
+        const auto resultArg = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? &*args++ : nullptr;
         if (resultArg) {
             resultArg->addAttr(Attribute::StructRet);
             resultArg->addAttr(Attribute::NoAlias);

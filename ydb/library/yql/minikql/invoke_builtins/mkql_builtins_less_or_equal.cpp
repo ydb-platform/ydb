@@ -145,7 +145,7 @@ struct TLessOrEqual : public TCompareArithmeticBinary<TLeft, TRight, TLessOrEqua
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Gen(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        return GenLessOrEqual<TLeft, TRight, Aggr>(left, right, ctx.Codegen->GetContext(), block);
+        return GenLessOrEqual<TLeft, TRight, Aggr>(left, right, ctx.Codegen.GetContext(), block);
     }
 #endif
 };
@@ -170,7 +170,7 @@ struct TDiffDateLessOrEqual : public TCompareArithmeticBinary<TLeft, TRight, TDi
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Gen(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         return std::is_same<TLeft, TRight>::value ?
             GenLessOrEqual<TLeft, TRight, Aggr>(left, right, context, block):
             GenLessOrEqual<TScaledDate, TScaledDate, Aggr>(GenToScaledDate<TLeft>(left, context, block), GenToScaledDate<TRight>(right, context, block), context, block);
@@ -200,12 +200,12 @@ struct TAggrTzDateLessOrEqual : public TCompareArithmeticBinaryWithTimezone<TLef
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Gen(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        return GenLessOrEqual<TLeft, TRight, Aggr>(left, right, ctx.Codegen->GetContext(), block);
+        return GenLessOrEqual<TLeft, TRight, Aggr>(left, right, ctx.Codegen.GetContext(), block);
     }
 
     static Value* GenTz(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        return GenLessOrEqual<ui16, ui16, Aggr>(left, right, ctx.Codegen->GetContext(), block);
+        return GenLessOrEqual<ui16, ui16, Aggr>(left, right, ctx.Codegen.GetContext(), block);
     }
 #endif
 };
@@ -219,7 +219,7 @@ struct TCustomLessOrEqual : public TAggrLessOrEqual {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto res = CallBinaryUnboxedValueFunction(&CompareCustoms<Slot>, Type::getInt32Ty(context), left, right, ctx.Codegen, block);
         const auto comp = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLE, res, ConstantInt::get(res->getType(), 0), "less_or_equal", block);
         ValueCleanup(EValueRepresentation::String, left, ctx, block);
@@ -239,7 +239,7 @@ struct TDecimalLessOrEqual {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto l = GetterForInt128(left, block);
         const auto r = GetterForInt128(right, block);
         const auto lok = NDecimal::GenIsComparable(l, context, block);
@@ -262,7 +262,7 @@ struct TDecimalAggrLessOrEqual : public TAggrLessOrEqual {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto l = GetterForInt128(left, block);
         const auto r = GetterForInt128(right, block);
         const auto le = GenLessOrEqualSigned(l, r, block);

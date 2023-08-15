@@ -44,7 +44,7 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto codegenItemArg = dynamic_cast<ICodegeneratorExternalNode*>(ComputationNodes.ItemArg);
         const auto codegenStateArg = dynamic_cast<ICodegeneratorExternalNode*>(ComputationNodes.StateArg);
@@ -216,9 +216,9 @@ public:
     {}
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Function* GenerateMapper(const NYql::NCodegen::ICodegen::TPtr& codegen, const TString& name) const {
-        auto& module = codegen->GetModule();
-        auto& context = codegen->GetContext();
+    Function* GenerateMapper(NYql::NCodegen::ICodegen& codegen, const TString& name) const {
+        auto& module = codegen.GetModule();
+        auto& context = codegen.GetContext();
 
         const auto codegenItemArg = dynamic_cast<ICodegeneratorExternalNode*>(ComputationNodes.ItemArg);
         const auto codegenStateArg = dynamic_cast<ICodegeneratorExternalNode*>(ComputationNodes.StateArg);
@@ -230,7 +230,7 @@ public:
             return f;
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto containerType = codegen->GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? static_cast<Type*>(PointerType::getUnqual(valueType)) : static_cast<Type*>(valueType);
+        const auto containerType = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? static_cast<Type*>(PointerType::getUnqual(valueType)) : static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = IsStream ? Type::getInt32Ty(context) : Type::getInt1Ty(context);
         const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType), PointerType::getUnqual(valueType)}, false);
@@ -248,7 +248,7 @@ public:
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         auto block = main;
 
-        const auto container = codegen->GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
+        const auto container = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
             new LoadInst(valueType, containerArg, "load_container", false, block) : static_cast<Value*>(containerArg);
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
@@ -331,14 +331,14 @@ private:
         Own(ComputationNodes.StateArg);
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    void GenerateFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
+    void GenerateFunctions(NYql::NCodegen::ICodegen& codegen) final {
         ChainMapFunc = GenerateMapper(codegen, TBaseComputation::MakeName("Fetch"));
-        codegen->ExportSymbol(ChainMapFunc);
+        codegen.ExportSymbol(ChainMapFunc);
     }
 
-    void FinalizeFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
+    void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) final {
         if (ChainMapFunc)
-            ChainMap = reinterpret_cast<TChainMapPtr>(codegen->GetPointerToFunction(ChainMapFunc));
+            ChainMap = reinterpret_cast<TChainMapPtr>(codegen.GetPointerToFunction(ChainMapFunc));
     }
 #endif
 };
@@ -379,7 +379,7 @@ public:
     }
 
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto codegenItemArg = dynamic_cast<ICodegeneratorExternalNode*>(ComputationNodes.ItemArg);
         const auto codegenStateArg = dynamic_cast<ICodegeneratorExternalNode*>(ComputationNodes.StateArg);
@@ -454,7 +454,7 @@ public:
             const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TListChainMapWrapper::MakeLazyList));
             const auto ptrType = PointerType::getUnqual(StructType::get(context));
             const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-            if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
+            if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
                 const auto funType = FunctionType::get(list->getType() , {self->getType(), ctx.Ctx->getType(), list->getType(), init->getType()}, false);
                 const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "function", block);
                 const auto value = CallInst::Create(funType, doFuncPtr, {self, ctx.Ctx, list, init}, "value", block);
@@ -488,16 +488,16 @@ private:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    void GenerateFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
+    void GenerateFunctions(NYql::NCodegen::ICodegen& codegen) final {
         TMutableCodegeneratorRootNode<TListChainMapWrapper>::GenerateFunctions(codegen);
         ChainMapFunc = GenerateMapper(codegen, TBaseComputation::MakeName("Next"));
-        codegen->ExportSymbol(ChainMapFunc);
+        codegen.ExportSymbol(ChainMapFunc);
     }
 
-    void FinalizeFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
+    void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) final {
         TMutableCodegeneratorRootNode<TListChainMapWrapper>::FinalizeFunctions(codegen);
         if (ChainMapFunc)
-            ChainMap = reinterpret_cast<TChainMapPtr>(codegen->GetPointerToFunction(ChainMapFunc));
+            ChainMap = reinterpret_cast<TChainMapPtr>(codegen.GetPointerToFunction(ChainMapFunc));
     }
 #endif
 };

@@ -119,7 +119,7 @@ public:
     }
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto list = GetNodeValue(List, ctx, block);
         const auto startv = GetNodeValue(Start, ctx, block);
@@ -132,7 +132,7 @@ public:
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
 
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
+        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
             const auto signature = FunctionType::get(list->getType(), {self->getType(), ctx.Ctx->getType(), list->getType(), start->getType(), step->getType()}, false);
             const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block);
             const auto output = CallInst::Create(signature, creator, {self, ctx.Ctx, list, start, step}, "output", block);

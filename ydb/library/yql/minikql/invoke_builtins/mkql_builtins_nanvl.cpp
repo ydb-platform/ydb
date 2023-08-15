@@ -31,12 +31,12 @@ struct TNanvl {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
-        auto& module = ctx.Codegen->GetModule();
+        auto& context = ctx.Codegen.GetContext();
+        auto& module = ctx.Codegen.GetModule();
         const auto val = GetterFor<TLeft>(left, context, block);
         const auto fnType = FunctionType::get(Type::getInt1Ty(context), {val->getType()}, false);
         const auto name = std::is_same<TLeft, float>() ? "MyFloatIsNan" : "MyDoubleIsNan";
-        ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(static_cast<bool(*)(TLeft)>(&std::isnan)));
+        ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(static_cast<bool(*)(TLeft)>(&std::isnan)));
         const auto func = module.getOrInsertFunction(name, fnType).getCallee();
         const auto isnan = CallInst::Create(fnType, func, {val}, "isnan", block);
 
@@ -63,7 +63,7 @@ struct TDecimalNanvl {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto good = NDecimal::GenIsComparable(GetterForInt128(left, block), context, block);
         const auto sel = SelectInst::Create(good, left, right, "sel", block);
         return sel;

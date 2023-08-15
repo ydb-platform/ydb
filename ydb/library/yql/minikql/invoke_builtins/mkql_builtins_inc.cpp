@@ -40,7 +40,7 @@ struct TDecimalInc {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto& bounds = NDecimal::GenBounds<Precision, false, true>(context);
 
         const auto val = GetterForInt128(arg, block);

@@ -144,7 +144,7 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     void DoGenerateGetValue(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto idxType = Type::getInt32Ty(context);
         const auto valType = Type::getInt128Ty(context);

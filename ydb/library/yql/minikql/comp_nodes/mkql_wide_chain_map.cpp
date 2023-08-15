@@ -46,7 +46,7 @@ public:
     }
 #ifndef MKQL_DISABLE_CODEGEN
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto flagType = Type::getInt1Ty(context);
         const auto flagPtr = new AllocaInst(flagType, 0U, "flag_ptr", &ctx.Func->getEntryBlock().back());
@@ -110,7 +110,7 @@ public:
                 result.emplace_back([output = Outputs[i]] (const TCodegenContext& ctx, BasicBlock*& block) { return GetNodeValue(output, ctx, block); });
             else
                 result.emplace_back([this, i, source = getres.second, flagPtr, flagType] (const TCodegenContext& ctx, BasicBlock*& block) {
-                    auto& context = ctx.Codegen->GetContext();
+                    auto& context = ctx.Codegen.GetContext();
 
                     const auto init = BasicBlock::Create(context, "init", ctx.Func);
                     const auto next = BasicBlock::Create(context, "next", ctx.Func);

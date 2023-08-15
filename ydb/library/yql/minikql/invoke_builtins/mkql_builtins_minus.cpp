@@ -33,7 +33,7 @@ struct TDecimalMinus {
     static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
         const auto val = GetterForInt128(arg, block);
-        const auto ok = NDecimal::GenIsComparable(val, ctx.Codegen->GetContext(), block);
+        const auto ok = NDecimal::GenIsComparable(val, ctx.Codegen.GetContext(), block);
         const auto neg = BinaryOperator::CreateNeg(val, "neg", block);
         const auto res = SelectInst::Create(ok, SetterForInt128(neg, block), arg, "result", block);
         return res;

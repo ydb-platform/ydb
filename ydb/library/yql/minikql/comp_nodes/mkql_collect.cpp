@@ -26,7 +26,7 @@ public:
     }
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto factory = ctx.GetFactory();
 
@@ -42,7 +42,7 @@ public:
 
         const auto list = PHINode::Create(valueType, 2U, "list", work);
 
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
+        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
             const auto funType = FunctionType::get(valueType, {factory->getType()}, false);
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, empty, PointerType::getUnqual(funType), "empty", block);
             const auto first = CallInst::Create(funType, funcPtr, {factory}, "init", block);
@@ -69,7 +69,7 @@ public:
         {
             block = good;
 
-            if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
+            if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
                 const auto funType = FunctionType::get(valueType, {factory->getType(), list->getType(), item->getType()}, false);
                 const auto funcPtr = CastInst::Create(Instruction::IntToPtr, append, PointerType::getUnqual(funType), "append", block);
                 const auto next = CallInst::Create(funType, funcPtr, {factory, list, item}, "next", block);
@@ -132,7 +132,7 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto factory = ctx.GetFactory();
 
@@ -154,7 +154,7 @@ public:
             BranchInst::Create(work, done, null, block);
 
             block = work;
-            if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
+            if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
                 const auto funType = FunctionType::get(seq->getType(), {factory->getType(), seq->getType()}, false);
                 const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
                 const auto res = CallInst::Create(funType, funcPtr, {factory, seq}, "res", block);
@@ -173,7 +173,7 @@ public:
             block = done;
             return result;
         } else {
-            if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
+            if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
                 const auto funType = FunctionType::get(seq->getType(), {factory->getType(), seq->getType()}, false);
                 const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
                 const auto res = CallInst::Create(funType, funcPtr, {factory, seq}, "res", block);

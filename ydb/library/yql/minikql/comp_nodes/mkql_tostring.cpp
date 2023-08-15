@@ -57,18 +57,18 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto valType = Type::getInt128Ty(context);
         const auto psType = Type::getInt8Ty(context);
         const auto valTypePtr = PointerType::getUnqual(valType);
 
         const auto name = "DecimalToString";
-        ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(&DecimalToString));
-        const auto fnType = NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget() ?
+        ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&DecimalToString));
+        const auto fnType = NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget() ?
             FunctionType::get(valType, { valType, psType, psType }, false):
             FunctionType::get(Type::getVoidTy(context), { valTypePtr, valTypePtr, psType, psType }, false);
-        const auto func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType);
+        const auto func = ctx.Codegen.GetModule().getOrInsertFunction(name, fnType);
 
         const auto fail = BasicBlock::Create(context, "fail", ctx.Func);
         const auto nice = BasicBlock::Create(context, "nice", ctx.Func);
@@ -91,7 +91,7 @@ public:
             block = call;
 
             Value* string;
-            if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
+            if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
                 string = CallInst::Create(func, { GetterForInt128(value, block), precision, scale }, "to_string", block);
             } else {
                 const auto retPtr = new AllocaInst(valType, 0U, "ret_ptr", block);
@@ -105,7 +105,7 @@ public:
             const auto test = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, string, zero, "test", block);
             BranchInst::Create(fail, nice, test, block);
         } else {
-            if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
+            if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
                 result = CallInst::Create(func, { GetterForInt128(value, block), precision, scale }, "to_string", block);
             } else {
                 const auto retPtr = new AllocaInst(valType, 0U, "ret_ptr", block);
@@ -163,18 +163,18 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto valType = Type::getInt128Ty(context);
         const auto slotType = Type::getInt32Ty(context);
         const auto valTypePtr = PointerType::getUnqual(valType);
 
         const auto name = "DataToString";
-        ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(&DataToString));
-        const auto fnType = NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget() ?
+        ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&DataToString));
+        const auto fnType = NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget() ?
             FunctionType::get(valType, { valType, slotType }, false):
             FunctionType::get(Type::getVoidTy(context), { valTypePtr, valTypePtr, slotType }, false);
-        const auto func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType);
+        const auto func = ctx.Codegen.GetModule().getOrInsertFunction(name, fnType);
 
         const auto zero = ConstantInt::get(valType, 0ULL);
         const auto slot = ConstantInt::get(slotType, static_cast<ui32>(SchemeType));
@@ -192,7 +192,7 @@ public:
             block = call;
 
             Value* string;
-            if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
+            if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
                 string = CallInst::Create(func, { value, slot }, "to_string", block);
             } else {
                 const auto retPtr = new AllocaInst(valType, 0U, "ret_ptr", block);
@@ -211,7 +211,7 @@ public:
             return result;
         } else {
             Value* string;
-            if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
+            if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
                 string = CallInst::Create(func, { value, slot }, "to_string", block);
             } else {
                 const auto retPtr = new AllocaInst(valType, 0U, "ret_ptr", block);

@@ -33,7 +33,7 @@ public:
     }
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item);
         MKQL_ENSURE(codegenItem, "Item must be codegenerator node.");
@@ -115,7 +115,7 @@ public:
     }
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item);
         MKQL_ENSURE(codegenItem, "Item must be codegenerator node.");
@@ -197,7 +197,7 @@ public:
     }
 #ifndef MKQL_DISABLE_CODEGEN
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item);
         MKQL_ENSURE(codegenItem, "Item must be codegenerator node.");
@@ -245,7 +245,7 @@ public:
         std::generate_n(std::back_inserter(getters), right.second.size(), [&]() {
             const auto i = idx++;
             return [codegenItem, lget = left.second[i], rget = right.second[i]](const TCodegenContext& ctx, BasicBlock*& block) {
-                auto& context = ctx.Codegen->GetContext();
+                auto& context = ctx.Codegen.GetContext();
 
                 const auto pres = BasicBlock::Create(context, "pres", ctx.Func);
                 const auto miss = BasicBlock::Create(context, "miss", ctx.Func);

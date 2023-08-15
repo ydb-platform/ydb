@@ -35,7 +35,7 @@ struct TAbs : public TSimpleArithmeticUnary<TInput, TOutput, TAbs<TInput, TOutpu
             return arg;
 
         if (std::is_floating_point<TInput>()) {
-            auto& module = ctx.Codegen->GetModule();
+            auto& module = ctx.Codegen.GetModule();
             const auto fnType = FunctionType::get(arg->getType(), {arg->getType()}, false);
             const auto& name = GetFuncNameForType<TInput>("llvm.fabs");
             const auto func = module.getOrInsertFunction(name, fnType).getCallee();

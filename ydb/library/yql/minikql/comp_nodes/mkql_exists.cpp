@@ -23,7 +23,7 @@ public:
         const auto check = IsExists(value, block);
         if (Node->IsTemporaryValue())
             ValueCleanup(Node->GetRepresentation(), value, ctx, block);
-        return MakeBoolean(check, ctx.Codegen->GetContext(), block);
+        return MakeBoolean(check, ctx.Codegen.GetContext(), block);
     }
 #endif
 };

@@ -153,9 +153,9 @@ private:
             argConstraints = set.GetAllConstraints();
             if (singleLambda) {
                 if (const auto& reduceBy = NYql::GetSettingAsColumnList(op.Settings().Ref(), EYtSettingType::ReduceBy); !reduceBy.empty()) {
-                    TConstraintNode::TSetOfSetsType sets;
+                    TPartOfConstraintBase::TSetOfSetsType sets;
                     sets.reserve(reduceBy.size());
-                    std::transform(reduceBy.cbegin(), reduceBy.cend(), std::back_inserter(sets), [&ctx](const TString& column) { return TConstraintNode::TSetType{TConstraintNode::TPathType(1U, ctx.AppendString(column))}; });
+                    std::transform(reduceBy.cbegin(), reduceBy.cend(), std::back_inserter(sets), [&ctx](const TString& column) { return TPartOfConstraintBase::TSetType{TPartOfConstraintBase::TPathType(1U, ctx.AppendString(column))}; });
                     argConstraints.push_back(ctx.MakeConstraint<TChoppedConstraintNode>(std::move(sets)));
                 }
             }
@@ -178,9 +178,9 @@ private:
             }
 
             if (const auto& reduceBy = NYql::GetSettingAsColumnList(op.Settings().Ref(), EYtSettingType::ReduceBy); !reduceBy.empty()) {
-                TConstraintNode::TSetOfSetsType sets;
+                TPartOfConstraintBase::TSetOfSetsType sets;
                 sets.reserve(reduceBy.size());
-                std::transform(reduceBy.cbegin(), reduceBy.cend(), std::back_inserter(sets), [&ctx](const TString& column) { return TConstraintNode::TSetType{TConstraintNode::TPathType(1U, ctx.AppendString(column))}; });
+                std::transform(reduceBy.cbegin(), reduceBy.cend(), std::back_inserter(sets), [&ctx](const TString& column) { return TPartOfConstraintBase::TSetType{TPartOfConstraintBase::TPathType(1U, ctx.AppendString(column))}; });
                 argConstraints.push_back(ctx.MakeConstraint<TChoppedConstraintNode>(std::move(sets)));
             }
 

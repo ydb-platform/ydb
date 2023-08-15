@@ -4615,10 +4615,10 @@ TYtJoinNodeOp::TPtr ImportYtEquiJoin(TYtEquiJoin equiJoin, TExprContext& ctx) {
         auto leaf = MakeIntrusive<TYtJoinNodeLeaf>(equiJoin.Input().Item(i), TMaybeNode<TCoLambda>(equiJoin.Ref().ChildPtr(joinFixedArgsCount + i)));
         leaf->Label = NYql::GetSetting(leaf->Section.Settings().Ref(), EYtSettingType::JoinLabel)->Child(1);
         leaf->Index = i;
-        TConstraintNode::TPathReduce rename;
+        TPartOfConstraintBase::TPathReduce rename;
         if (leaf->Label->IsAtom()) {
             leaf->Scope.emplace_back(leaf->Label->Content());
-            rename = [&](const TConstraintNode::TPathType& path) -> std::vector<TConstraintNode::TPathType> {
+            rename = [&](const TPartOfConstraintBase::TPathType& path) -> std::vector<TPartOfConstraintBase::TPathType> {
                 auto result = path;
                 TStringBuilder sb;
                 sb << leaf->Scope.front() << '.' << result.front();
@@ -4655,9 +4655,8 @@ TYtJoinNodeOp::TPtr ImportYtEquiJoin(TYtEquiJoin equiJoin, TExprContext& ctx) {
     }
 
     const auto root = ImportYtEquiJoinRecursive(leaves, nullptr, drops, equiJoin.Joins().Ref(), ctx);
-
     if (const auto renames = LoadJoinRenameMap(equiJoin.JoinOptions().Ref()); !renames.empty()) {
-        const auto rename = [&renames](const TConstraintNode::TPathType& path) -> std::vector<TConstraintNode::TPathType> {
+        const auto rename = [&renames](const TPartOfConstraintBase::TPathType& path) -> std::vector<TPartOfConstraintBase::TPathType> {
             if (path.empty())
                 return {};
 
@@ -4667,7 +4666,7 @@ TYtJoinNodeOp::TPtr ImportYtEquiJoin(TYtEquiJoin equiJoin, TExprContext& ctx) {
             if (it->second.empty())
                 return {};
 
-            std::vector<TConstraintNode::TPathType> res(it->second.size());
+            std::vector<TPartOfConstraintBase::TPathType> res(it->second.size());
             std::transform(it->second.cbegin(), it->second.cend(), res.begin(), [&path](const std::string_view& newName) {
                 auto newPath = path;
                 newPath.front() = newName;

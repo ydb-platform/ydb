@@ -695,7 +695,7 @@ private:
             auto outStructType = ctx.MakeType<TStructExprType>(structItems);
             auto distinct = outTable.Ref().GetConstraint<TDistinctConstraintNode>();
             if (distinct) {
-                distinct = distinct->FilterFields(ctx, [&columns](const TConstraintNode::TPathType& path) { return !path.empty() && columns.contains(path.front()); });
+                distinct = distinct->FilterFields(ctx, [&columns](const TPartOfConstraintBase::TPathType& path) { return !path.empty() && columns.contains(path.front()); });
             }
 
             TExprNode::TPtr newOp;
@@ -750,7 +750,7 @@ private:
                         }
 
                         if (sorted = sorted->CutPrefix(prefixLength, ctx)) {
-                            if (sorted = sorted->FilterFields(ctx, [&columns](const TConstraintNode::TPathType& path) { return !path.empty() && columns.contains(path.front()); })) {
+                            if (sorted = sorted->FilterFields(ctx, [&columns](const TPartOfConstraintBase::TPathType& path) { return !path.empty() && columns.contains(path.front()); })) {
                                 TKeySelectorBuilder builder(map.Mapper().Pos(), ctx, useNativeDescSort, outStructType);
                                 builder.ProcessConstraint(*sorted);
                                 builder.FillRowSpecSort(*mapOut.RowSpec);

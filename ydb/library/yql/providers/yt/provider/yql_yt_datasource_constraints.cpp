@@ -94,7 +94,7 @@ public:
     TStatus HandlePath(TExprBase input, TExprContext& ctx) {
         auto path = input.Cast<TYtPath>();
         const auto outItemType = path.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-        const auto filter = [outItemType](const TConstraintNode::TPathType& path) { return !path.empty() && outItemType->FindItem(path.front()); };
+        const auto filter = [outItemType](const TPartOfConstraintBase::TPathType& path) { return !path.empty() && outItemType->FindItem(path.front()); };
 
         if (const auto sort = path.Table().Ref().GetConstraint<TSortedConstraintNode>()) {
             if (const auto filtered = sort->FilterFields(ctx, filter)) {

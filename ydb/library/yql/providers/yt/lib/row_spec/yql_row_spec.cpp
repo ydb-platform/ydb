@@ -503,7 +503,7 @@ NYT::TNode TYqlRowSpecInfo::GetConstraintsNode() const {
 
     auto map = NYT::TNode::CreateMap();
 
-    const auto pathToNode = [](const TConstraintNode::TPathType& path) -> NYT::TNode {
+    const auto pathToNode = [](const TPartOfConstraintBase::TPathType& path) -> NYT::TNode {
         if (1U == path.size())
             return TStringBuf(path.front());
 
@@ -513,7 +513,7 @@ NYT::TNode TYqlRowSpecInfo::GetConstraintsNode() const {
         return list;
     };
 
-    const auto setToNode = [pathToNode](const TConstraintNode::TSetType& set) -> NYT::TNode {
+    const auto setToNode = [pathToNode](const TPartOfConstraintBase::TSetType& set) -> NYT::TNode {
         if (1U == set.size() && 1U == set.front().size())
             return TStringBuf(set.front().front());
 
@@ -572,9 +572,9 @@ void TYqlRowSpecInfo::ParseConstraintsNode(TExprContext& ctx) {
     try  {
         const auto nodeToPath = [&ctx](const NYT::TNode& node) {
             if (node.IsString())
-                return TConstraintNode::TPathType{ctx.AppendString(node.AsString())};
+                return TPartOfConstraintBase::TPathType{ctx.AppendString(node.AsString())};
 
-            TConstraintNode::TPathType path;
+            TPartOfConstraintBase::TPathType path;
             for (const auto& col : node.AsList())
                 path.emplace_back(ctx.AppendString(col.AsString()));
             return path;
@@ -582,9 +582,9 @@ void TYqlRowSpecInfo::ParseConstraintsNode(TExprContext& ctx) {
 
         const auto nodeToSet = [&ctx, nodeToPath](const NYT::TNode& node) {
             if (node.IsString())
-                return TConstraintNode::TSetType{TConstraintNode::TPathType(1U, ctx.AppendString(node.AsString()))};
+                return TPartOfConstraintBase::TSetType{TPartOfConstraintBase::TPathType(1U, ctx.AppendString(node.AsString()))};
 
-            TConstraintNode::TSetType set;
+            TPartOfConstraintBase::TSetType set;
             for (const auto& col : node.AsList())
                 set.insert_unique(nodeToPath(col));
             return set;
@@ -595,7 +595,7 @@ void TYqlRowSpecInfo::ParseConstraintsNode(TExprContext& ctx) {
         if (const auto it = constraints.find(TSortedConstraintNode::Name()); constraints.cend() != it) {
             TSortedConstraintNode::TContainerType sorted;
             for (const auto& pair : it->second.AsList()) {
-                TSortedConstraintNode::TSetType set;
+                TPartOfConstraintBase::TSetType set;
                 for (const auto& path : pair.AsList().front().AsList())
                     set.insert_unique(nodeToPath(path));
                 sorted.emplace_back(std::move(set), pair.AsList().back().AsBool());
@@ -606,7 +606,7 @@ void TYqlRowSpecInfo::ParseConstraintsNode(TExprContext& ctx) {
         if (const auto it = constraints.find(TUniqueConstraintNode::Name()); constraints.cend() != it) {
             TUniqueConstraintNode::TContentType content;
             for (const auto& item : it->second.AsList()) {
-                TConstraintNode::TSetOfSetsType sets;
+                TPartOfConstraintBase::TSetOfSetsType sets;
                 for (const auto& part : item.AsList())
                     sets.insert_unique(nodeToSet(part));
                 content.insert_unique(std::move(sets));
@@ -617,7 +617,7 @@ void TYqlRowSpecInfo::ParseConstraintsNode(TExprContext& ctx) {
         if (const auto it = constraints.find(TDistinctConstraintNode::Name()); constraints.cend() != it) {
             TDistinctConstraintNode::TContentType content;
             for (const auto& item : it->second.AsList()) {
-                TConstraintNode::TSetOfSetsType sets;
+                TPartOfConstraintBase::TSetOfSetsType sets;
                 for (const auto& part : item.AsList())
                     sets.insert_unique(nodeToSet(part));
                 content.insert_unique(std::move(sets));
@@ -1598,7 +1598,7 @@ const TSortedConstraintNode* TYqlRowSpecInfo::MakeSortConstraint(TExprContext& c
         TSortedConstraintNode::TContainerType sorted;
         for (auto i = 0U; i < SortMembers.size(); ++i) {
             const auto column = ctx.AppendString(SortMembers[i]);
-            sorted.emplace_back(TSortedConstraintNode::TSetType{TConstraintNode::TPathType{column}}, i >= SortDirections.size() || SortDirections[i]);
+            sorted.emplace_back(TPartOfConstraintBase::TSetType{TPartOfConstraintBase::TPathType{column}}, i >= SortDirections.size() || SortDirections[i]);
         }
         return ctx.MakeConstraint<TSortedConstraintNode>(std::move(sorted));
     }

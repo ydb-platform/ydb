@@ -188,10 +188,10 @@ public:
             const bool lOneRow = leftAny || lUnique && lUnique->ContainsCompleteSet(leftJoinKeys);
             const bool rOneRow = rightAny || rUnique && rUnique->ContainsCompleteSet(rightJoinKeys);
 
-            const auto makeRename = [&ctx](const TExprBase& label) -> TConstraintNode::TPathReduce {
+            const auto makeRename = [&ctx](const TExprBase& label) -> TPartOfConstraintBase::TPathReduce {
                 if (label.Ref().IsAtom()) {
                     const auto table = label.Cast<TCoAtom>().Value();
-                    return [table, &ctx](const TConstraintNode::TPathType& path) -> std::vector<TConstraintNode::TPathType> {
+                    return [table, &ctx](const TPartOfConstraintBase::TPathType& path) -> std::vector<TPartOfConstraintBase::TPathType> {
                         if (path.empty())
                             return {path};
                         auto out = path;

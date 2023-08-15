@@ -3105,10 +3105,10 @@ std::unordered_set<ui32> GetUselessSortedJoinInputs(const TCoEquiJoin& equiJoin)
             joinTreeNodes.emplace_back(joinTree->Child(2));
 
         if (!joinTree->Head().IsAtom("Cross")) {
-            std::unordered_map<std::string_view, TConstraintNode::TSetType> tableJoinKeys;
+            std::unordered_map<std::string_view, TPartOfConstraintBase::TSetType> tableJoinKeys;
             for (const auto keys : {joinTree->Child(3), joinTree->Child(4)})
                 for (ui32 i = 0U; i < keys->ChildrenSize(); ++i)
-                    tableJoinKeys[keys->Child(i)->Content()].insert_unique(TConstraintNode::TPathType(1U, keys->Child(++i)->Content()));
+                    tableJoinKeys[keys->Child(i)->Content()].insert_unique(TPartOfConstraintBase::TPathType(1U, keys->Child(++i)->Content()));
 
             for (const auto& [label, joinKeys]: tableJoinKeys) {
                 if (const auto it = sorteds.find(label); sorteds.cend() != it) {

@@ -123,7 +123,7 @@ namespace {
                 scope.insert(x);
             }
 
-            const auto rename = [&](const TConstraintNode::TPathType& path) -> std::vector<TConstraintNode::TPathType> {
+            const auto rename = [&](const TPartOfConstraintBase::TPathType& path) -> std::vector<TPartOfConstraintBase::TPathType> {
                 if (path.empty())
                     return {};
                 auto newPath = path;

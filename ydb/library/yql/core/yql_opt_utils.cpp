@@ -71,7 +71,7 @@ TExprNode::TPtr KeepChoppedConstraint(TExprNode::TPtr node, const TExprNode& src
     return node;
 }
 
-TExprNodeBuilder GetterBuilder(TExprNodeBuilder parent, ui32 index, TConstraintNode::TPathType path) {
+TExprNodeBuilder GetterBuilder(TExprNodeBuilder parent, ui32 index, TPartOfConstraintBase::TPathType path) {
     if (path.empty())
         return parent.Arg(index, "item");
 
@@ -159,7 +159,7 @@ bool IsListReorder(const TExprNode& node) {
 
 // Check if the flat map is a simple rename flat map
 bool IsRenameFlatMap(const NNodes::TCoFlatMapBase& node, TExprNode::TPtr& structNode) {
-        
+
     auto lambda = node.Lambda();
     if (!IsJustOrSingleAsList(lambda.Body().Ref())) {
         return false;
@@ -173,7 +173,7 @@ bool IsRenameFlatMap(const NNodes::TCoFlatMapBase& node, TExprNode::TPtr& struct
     }
 
     for (auto child : asStruct.Cast<TCoAsStruct>()) {
-        
+
         if (!child.Item(1).Maybe<TCoMember>()) {
             return false;
         }
@@ -188,9 +188,9 @@ bool IsRenameFlatMap(const NNodes::TCoFlatMapBase& node, TExprNode::TPtr& struct
 }
 
 // Check if the flat map is a simple rename flat map and compute the mapping from new names to original ones
-bool IsRenameFlatMapWithMapping(const NNodes::TCoFlatMapBase& node, TExprNode::TPtr& structNode, 
+bool IsRenameFlatMapWithMapping(const NNodes::TCoFlatMapBase& node, TExprNode::TPtr& structNode,
     THashMap<TString, TString> & mapping) {
-        
+
     auto lambda = node.Lambda();
     if (!IsJustOrSingleAsList(lambda.Body().Ref())) {
         return false;

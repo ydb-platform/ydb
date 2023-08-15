@@ -199,7 +199,7 @@ protected:
 
                     if (ctx.IsConstraintEnabled<TSortedConstraintNode>()) {
                         if (const auto s = path.Table().Ref().GetConstraint<TSortedConstraintNode>()) {
-                            if (const auto sorted = s->FilterFields(ctx, [outStructType](const TConstraintNode::TPathType& path) { return !path.empty() && outStructType->FindItem(path.front()); }) ) {
+                            if (const auto sorted = s->FilterFields(ctx, [outStructType](const TPartOfConstraintBase::TPathType& path) { return !path.empty() && outStructType->FindItem(path.front()); }) ) {
                                 TKeySelectorBuilder builder(map.Mapper().Pos(), ctx, useNativeDescSort, outStructType);
                                 builder.ProcessConstraint(*sorted);
                                 builder.FillRowSpecSort(*mapOut.RowSpec);

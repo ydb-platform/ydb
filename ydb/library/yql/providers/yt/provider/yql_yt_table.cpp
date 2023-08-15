@@ -940,11 +940,11 @@ TYtOutTableInfo& TYtOutTableInfo::SetUnique(const TDistinctConstraintNode* disti
             auto content = simple->GetContent();
             if (1U < content.size()) {
                 std::unordered_set<std::string_view> sorted(RowSpec->SortMembers.cbegin(), RowSpec->SortMembers.cend());
-                if (const auto filtered = simple->FilterFields(ctx, [&sorted](const TConstraintNode::TPathType& path) { return 1U == path.size() && sorted.contains(path.front()); }))
+                if (const auto filtered = simple->FilterFields(ctx, [&sorted](const TPartOfConstraintBase::TPathType& path) { return 1U == path.size() && sorted.contains(path.front()); }))
                     content = filtered->GetContent();
             }
             std::vector<std::string_view> uniques(content.front().size());
-            std::transform(content.front().cbegin(), content.front().cend(), uniques.begin(), [&](const TConstraintNode::TSetType& set) { return set.front().front(); });
+            std::transform(content.front().cbegin(), content.front().cend(), uniques.begin(), [&](const TPartOfConstraintBase::TSetType& set) { return set.front().front(); });
             Settings = TExprBase(NYql::AddSetting(Settings.Ref(), EYtSettingType::UniqueBy, ToAtomList(uniques, pos, ctx), ctx));
         }
     }

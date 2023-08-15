@@ -17,7 +17,7 @@ namespace NKikimr {
     };
 
     struct TNodeWardenConfig : public TThrRefBase {
-        NKikimrBlobStorage::TNodeWardenServiceSet ServiceSet;
+        NKikimrConfig::TBlobStorageConfig BlobStorageConfig;
         TIntrusivePtr<IPDiskServiceFactory> PDiskServiceFactory;
         TIntrusivePtr<TAllVDiskKinds> AllVDiskKinds;
         TIntrusivePtr<NPDisk::TDriveModelDb> AllDriveModels;

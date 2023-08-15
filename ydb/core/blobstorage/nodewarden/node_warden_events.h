@@ -12,10 +12,7 @@ namespace NKikimr::NStorage {
         TEvNodeConfigPush() = default;
 
         // ctor for initial push request
-        TEvNodeConfigPush(const NKikimrBlobStorage::TStorageConfig *config, const THashMap<ui32, ui32>& boundNodeIds) {
-            if (config) {
-                Record.MutableStorageConfig()->CopyFrom(*config);
-            }
+        TEvNodeConfigPush(const THashMap<ui32, ui32>& boundNodeIds) {
             for (const auto [nodeId, counter] : boundNodeIds) {
                 Record.AddNewBoundNodeIds(nodeId);
             }
@@ -28,10 +25,7 @@ namespace NKikimr::NStorage {
     {
         TEvNodeConfigReversePush() = default;
 
-        TEvNodeConfigReversePush(const NKikimrBlobStorage::TStorageConfig *config, ui32 rootNodeId) {
-            if (config) {
-                Record.MutableStorageConfig()->CopyFrom(*config);
-            }
+        TEvNodeConfigReversePush(ui32 rootNodeId) {
             Record.SetRootNodeId(rootNodeId);
         }
 
@@ -44,7 +38,16 @@ namespace NKikimr::NStorage {
 
     struct TEvNodeConfigUnbind
         : TEventPB<TEvNodeConfigUnbind, NKikimrBlobStorage::TEvNodeConfigUnbind, TEvBlobStorage::EvNodeConfigUnbind>
+    {};
+
+    struct TEvNodeConfigScatter
+        : TEventPB<TEvNodeConfigScatter, NKikimrBlobStorage::TEvNodeConfigScatter, TEvBlobStorage::EvNodeConfigScatter>
     {
+        TEvNodeConfigScatter() = default;
     };
+
+    struct TEvNodeConfigGather
+        : TEventPB<TEvNodeConfigGather, NKikimrBlobStorage::TEvNodeConfigGather, TEvBlobStorage::EvNodeConfigGather>
+    {};
 
 } // NKikimr::NStorage

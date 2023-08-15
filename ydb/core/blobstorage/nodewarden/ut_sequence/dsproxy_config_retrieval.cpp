@@ -71,7 +71,7 @@ void SetupServices(TTestBasicRuntime& runtime) {
         SetupStateStorage(runtime, i);
         auto config = MakeIntrusive<TNodeWardenConfig>(new TStrandedPDiskServiceFactory(runtime));
         config->SectorMaps[path] = sectorMap;
-        config->ServiceSet = configs[i];
+        config->BlobStorageConfig.MutableServiceSet()->CopyFrom(configs[i]);
         SetupBSNodeWarden(runtime, i, config);
         SetupTabletResolver(runtime, i);
         SetupNodeWhiteboard(runtime, i);

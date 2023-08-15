@@ -6,9 +6,17 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(big_integer)
-add_subdirectory(crypto)
-add_subdirectory(holders)
-add_subdirectory(init)
-add_subdirectory(io)
-add_subdirectory(method)
+find_package(OpenSSL REQUIRED)
+
+add_library(cpp-openssl-crypto)
+target_link_libraries(cpp-openssl-crypto PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  OpenSSL::OpenSSL
+  cpp-openssl-big_integer
+  cpp-openssl-init
+)
+target_sources(cpp-openssl-crypto PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/openssl/crypto/sha.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/openssl/crypto/rsa.cpp
+)

@@ -124,9 +124,9 @@ namespace NKikimr::NStorage {
             , EnablePutBatching(Cfg->FeatureFlags.GetEnablePutBatchingForBlobStorage(), false, true)
             , EnableVPatch(Cfg->FeatureFlags.GetEnableVPatch(), false, true)
         {
-            Y_VERIFY(Cfg->ServiceSet.AvailabilityDomainsSize() <= 1);
+            Y_VERIFY(Cfg->BlobStorageConfig.GetServiceSet().AvailabilityDomainsSize() <= 1);
             AvailDomainId = 1;
-            for (const auto& domain : Cfg->ServiceSet.GetAvailabilityDomains()) {
+            for (const auto& domain : Cfg->BlobStorageConfig.GetServiceSet().GetAvailabilityDomains()) {
                 AvailDomainId = domain;
             }
         }
@@ -527,6 +527,8 @@ namespace NKikimr::NStorage {
                 fFunc(TEvBlobStorage::EvNodeConfigPush, ForwardToDistributedConfigKeeper);
                 fFunc(TEvBlobStorage::EvNodeConfigReversePush, ForwardToDistributedConfigKeeper);
                 fFunc(TEvBlobStorage::EvNodeConfigUnbind, ForwardToDistributedConfigKeeper);
+                fFunc(TEvBlobStorage::EvNodeConfigScatter, ForwardToDistributedConfigKeeper);
+                fFunc(TEvBlobStorage::EvNodeConfigGather, ForwardToDistributedConfigKeeper);
 
                 default:
                     EnqueuePendingMessage(ev);

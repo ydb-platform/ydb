@@ -137,7 +137,7 @@ namespace NKikimr::NStorage {
 
         TPDiskCategory category(record.Record.GetPDiskCategory());
         std::optional<ui64> readBytesPerSecond, writeBytesPerSecond;
-        for (const auto& item : Cfg->ServiceSet.GetReplBrokerConfig().GetMediaTypeQuota()) {
+        for (const auto& item : Cfg->BlobStorageConfig.GetServiceSet().GetReplBrokerConfig().GetMediaTypeQuota()) {
             if (PDiskTypeToPDiskType(item.GetType()) == category.Type()) {
                 if (item.HasReadBytesPerSecond()) {
                     readBytesPerSecond.emplace(item.GetReadBytesPerSecond());

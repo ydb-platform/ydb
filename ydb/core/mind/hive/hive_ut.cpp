@@ -159,7 +159,7 @@ namespace {
                     STRAND_PDISK && !runtime.IsRealThreads() ? static_cast<IPDiskServiceFactory*>(new TStrandedPDiskServiceFactory(runtime)) :
                     static_cast<IPDiskServiceFactory*>(new TRealPDiskServiceFactory()));
                 //nodeWardenConfig->Monitoring = monitoring;
-            google::protobuf::TextFormat::ParseFromString(staticConfig, &nodeWardenConfig->ServiceSet);
+            google::protobuf::TextFormat::ParseFromString(staticConfig, nodeWardenConfig->BlobStorageConfig.MutableServiceSet());
 
             TIntrusivePtr<TNodeWardenConfig> existingNodeWardenConfig = NodeWardenConfigs[nodeIndex];
             if (existingNodeWardenConfig != nullptr) {
@@ -193,7 +193,7 @@ namespace {
             static TTempDir tempDir;
             pDiskPath = tempDir() + "/pdisk.dat";
         }
-        nodeWardenConfig->ServiceSet.MutablePDisks(0)->SetPath(pDiskPath);
+        nodeWardenConfig->BlobStorageConfig.MutableServiceSet()->MutablePDisks(0)->SetPath(pDiskPath);
         ui64 pDiskGuid = 1;
         static ui64 iteration = 0;
         ++iteration;
@@ -283,7 +283,7 @@ namespace {
         for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
             auto it = NodeWardenConfigs.find(nodeIndex);
             if (it != NodeWardenConfigs.end()) {
-                runtime.GetAppData(nodeIndex).StaticBlobStorageConfig = MakeHolder<NKikimrBlobStorage::TNodeWardenServiceSet>(it->second->ServiceSet);
+                runtime.GetAppData(nodeIndex).StaticBlobStorageConfig = MakeHolder<NKikimrBlobStorage::TNodeWardenServiceSet>(it->second->BlobStorageConfig.GetServiceSet());
             }
         }
 

@@ -914,7 +914,7 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
         const auto& bsc = Config.GetBlobStorageConfig();
         appData->StaticBlobStorageConfig->MergeFrom(bsc.GetServiceSet());
         nodeWardenConfig->FeatureFlags = Config.GetFeatureFlags();
-        nodeWardenConfig->ServiceSet.MergeFrom(bsc.GetServiceSet());
+        nodeWardenConfig->BlobStorageConfig.CopyFrom(bsc);
         if (Config.HasVDiskConfig()) {
             nodeWardenConfig->AllVDiskKinds->Merge(Config.GetVDiskConfig());
         }

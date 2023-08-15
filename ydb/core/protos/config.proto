@@ -272,7 +272,25 @@ message TBlobStorageConfig {
     optional string CacheFilePath = 3;
     optional bool CachePDisks = 4 [default = true];
     optional bool CacheVDisks = 5 [default = true];
-}
+
+    // Automatic configuration: when not filled in, then the autoconfig feature is disabled. When multiple nodes are
+    // negotiating about this feature, the disabled one overrides others.
+    message TAutoconfigSettings {
+        // subset of DefineStoragePool command
+        optional string ErasureSpecies = 1;
+        optional NKikimrBlobStorage.TGroupGeometry Geometry = 2;
+        repeated NKikimrBlobStorage.TPDiskFilter PDiskFilter = 3;
+
+        // some extra settings
+        optional bool AutomaticBoxManagement = 4; // invoke BSC DefineHostConfig/DefineBox automatically
+
+        // filled in by config parser, not by user; required for automatic static group creation
+        repeated NKikimrBlobStorage.TDefineHostConfig DefineHostConfig = 5;
+        optional NKikimrBlobStorage.TDefineBox DefineBox = 6;
+    }
+
+    optional TAutoconfigSettings AutoconfigSettings = 6;
+ }
 
 message TBlobStorageFormatConfig {
     message TDrive {

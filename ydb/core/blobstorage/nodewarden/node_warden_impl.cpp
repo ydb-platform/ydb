@@ -90,7 +90,7 @@ void TNodeWarden::Bootstrap() {
     }
 
     // start replication broker
-    const auto& replBrokerConfig = Cfg->ServiceSet.GetReplBrokerConfig();
+    const auto& replBrokerConfig = Cfg->BlobStorageConfig.GetServiceSet().GetReplBrokerConfig();
 
     ui64 requestBytesPerSecond = 500000000; // 500 MB/s by default
     if (replBrokerConfig.HasTotalRequestBytesPerSecond()) {
@@ -110,11 +110,13 @@ void TNodeWarden::Bootstrap() {
     actorSystem->RegisterLocalService(MakeBlobStorageReplBrokerID(), Register(CreateReplBrokerActor(maxBytes)));
 
     // determine if we are running in 'mock' mode
-    EnableProxyMock = Cfg->ServiceSet.GetEnableProxyMock();
+    EnableProxyMock = Cfg->BlobStorageConfig.GetServiceSet().GetEnableProxyMock();
 
     // Start a statically configured set
-    ApplyServiceSet(Cfg->ServiceSet, true, false, false);
-    StartStaticProxies();
+    if (Cfg->BlobStorageConfig.HasServiceSet()) {
+        ApplyServiceSet(Cfg->BlobStorageConfig.GetServiceSet(), true, false, false);
+        StartStaticProxies();
+    }
     EstablishPipe();
 
     Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(LocalNodeId));

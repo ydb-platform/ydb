@@ -8,6 +8,7 @@ namespace NKikimr::NStorage {
         struct TEvPrivate {
             enum {
                EvProcessPendingEvent = EventSpaceBegin(TEvents::ES_PRIVATE),
+               EvQuorumCheckTimeout,
             };
         };
 
@@ -44,11 +45,22 @@ namespace NKikimr::NStorage {
             ui64 Cookie;
             TActorId SessionId;
             THashSet<ui32> BoundNodeIds;
+            THashSet<ui64> ScatterTasks; // unanswered scatter queries
 
             TBoundNode(ui64 cookie, TActorId sessionId)
                 : Cookie(cookie)
                 , SessionId(sessionId)
             {}
+        };
+
+        struct TScatterTask {
+            THashSet<ui32> PendingNodes;
+            NKikimrBlobStorage::TEvNodeConfigScatter Task;
+            std::vector<NKikimrBlobStorage::TEvNodeConfigGather> CollectedReplies;
+
+            TScatterTask(NKikimrBlobStorage::TEvNodeConfigScatter&& task) {
+                Task.Swap(&task);
+            }
         };
 
         // current most relevant storage config
@@ -58,22 +70,48 @@ namespace NKikimr::NStorage {
         std::optional<TBinding> Binding;
         ui64 BindingCookie = RandomNumber<ui64>();
         TBindQueue BindQueue;
-        ui32 NumPeerNodes = 0;
         bool Scheduled = false;
 
         // incoming bindings
         THashMap<ui32, TBoundNode> DirectBoundNodes; // a set of nodes directly bound to this one
         THashMap<ui32, ui32> AllBoundNodes; // counter may be more than 2 in case of races, but not for long
 
+        // pending event queue
         std::deque<TAutoPtr<IEventHandle>> PendingEvents;
         std::vector<ui32> NodeIds;
+
+        // scatter tasks
+        ui64 NextScatterCookie = RandomNumber<ui64>();
+        THashMap<ui64, TScatterTask> ScatterTasks;
+
+        // root node operation
+        enum class ERootState {
+            INITIAL,
+            QUORUM_CHECK_TIMEOUT,
+            COLLECT_CONFIG,
+        };
+        static constexpr TDuration QuorumCheckTimeout = TDuration::Seconds(1); // time to wait after obtaining quorum
+        ERootState RootState = ERootState::INITIAL;
 
     public:
         void Bootstrap() {
             STLOG(PRI_DEBUG, BS_NODE, NWDC00, "Bootstrap");
-            StorageConfig.SetGeneration(1);
+            StorageConfig.SetFingerprint(CalculateFingerprint(StorageConfig));
             Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes(true));
             Become(&TThis::StateWaitForList);
+        }
+
+        TString CalculateFingerprint(const NKikimrBlobStorage::TStorageConfig& config) {
+            NKikimrBlobStorage::TStorageConfig temp;
+            temp.CopyFrom(config);
+            temp.ClearFingerprint();
+
+            TString s;
+            const bool success = temp.SerializeToString(&s);
+            Y_VERIFY(success);
+
+            auto digest = NOpenSsl::NSha1::Calc(s.data(), s.size());
+            return TString(reinterpret_cast<const char*>(digest.data()), digest.size());
         }
 
         void Handle(TEvInterconnect::TEvNodesInfo::TPtr ev) {
@@ -110,6 +148,7 @@ namespace NKikimr::NStorage {
                     UnbindNode(nodeId, true);
                     if (Binding && Binding->NodeId == nodeId) {
                         Binding.reset();
+                        AbortAllScatterTasks();
                         bindingReset = true;
                     }
                     changes = true;
@@ -127,13 +166,11 @@ namespace NKikimr::NStorage {
             // issue updates
             NodeIds = std::move(nodeIds);
             BindQueue.Update(NodeIds);
-            NumPeerNodes = NodeIds.size() - 1;
             IssueNextBindRequest();
 
             if (bindingReset) {
                 for (const auto& [nodeId, info] : DirectBoundNodes) {
-                    SendEvent(nodeId, info.Cookie, info.SessionId, std::make_unique<TEvNodeConfigReversePush>(nullptr,
-                        GetRootNodeId()));
+                    SendEvent(nodeId, info.Cookie, info.SessionId, std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId()));
                 }
             }
         }
@@ -152,7 +189,8 @@ namespace NKikimr::NStorage {
         // Binding to peer nodes
 
         void IssueNextBindRequest() {
-            if (!Binding && AllBoundNodes.size() + 1 /* including this one */ < NumPeerNodes) {
+            CheckRootNodeStatus();
+            if (!Binding && AllBoundNodes.size() < NodeIds.size() && RootState == ERootState::INITIAL) {
                 const TMonotonic now = TActivationContext::Monotonic();
                 TMonotonic closest;
                 if (std::optional<ui32> nodeId = BindQueue.Pick(now, &closest)) {
@@ -182,8 +220,7 @@ namespace NKikimr::NStorage {
                 }
 
                 STLOG(PRI_DEBUG, BS_NODE, NWDC09, "Continuing bind", (Binding, Binding));
-                SendEvent(nodeId, Binding->Cookie, Binding->SessionId, std::make_unique<TEvNodeConfigPush>(&StorageConfig,
-                    AllBoundNodes));
+                SendEvent(nodeId, Binding->Cookie, Binding->SessionId, std::make_unique<TEvNodeConfigPush>(AllBoundNodes));
             }
         }
 
@@ -239,21 +276,10 @@ namespace NKikimr::NStorage {
                     UnsubscribeInterconnect(senderNodeId, sessionId);
                 }
 
-                // check if we have newer configuration from the peer
-                bool configUpdated = false;
-                if (record.HasStorageConfig()) {
-                    const auto& config = record.GetStorageConfig();
-                    if (StorageConfig.GetGeneration() < config.GetGeneration()) {
-                        StorageConfig.Swap(record.MutableStorageConfig());
-                        configUpdated = true;
-                    }
-                }
-
                 // fan-out updates to the following peers
-                if (configUpdated || rootUpdated) {
+                if (rootUpdated) {
                     for (const auto& [nodeId, info] : DirectBoundNodes) {
-                        SendEvent(nodeId, info, std::make_unique<TEvNodeConfigReversePush>(
-                            configUpdated ? &StorageConfig : nullptr, GetRootNodeId()));
+                        SendEvent(nodeId, info, std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId()));
                     }
                 }
             } else {
@@ -319,15 +345,14 @@ namespace NKikimr::NStorage {
                 }
             }
 
-            // prepare configuration push down
-            auto downEv = Binding
-                ? std::make_unique<TEvNodeConfigPush>()
-                : nullptr;
-
-            // and configuration push up
-            auto upEv = record.GetInitial()
-                ? std::make_unique<TEvNodeConfigReversePush>(nullptr, GetRootNodeId())
-                : nullptr;
+            // configuration push message
+            std::unique_ptr<TEvNodeConfigPush> pushEv;
+            auto getPushEv = [&] {
+                if (Binding && !pushEv) {
+                    pushEv = std::make_unique<TEvNodeConfigPush>();
+                }
+                return pushEv.get();
+            };
 
             // insert new connection into map (if there is none)
             const auto [it, inserted] = DirectBoundNodes.try_emplace(senderNodeId, ev->Cookie, ev->InterconnectSession);
@@ -345,7 +370,7 @@ namespace NKikimr::NStorage {
                 }
 
                 // account newly bound node itself and add it to the record
-                AddBound(senderNodeId, downEv.get());
+                AddBound(senderNodeId, getPushEv());
             } else if (ev->Cookie != info.Cookie || ev->InterconnectSession != info.SessionId) {
                 STLOG(PRI_CRIT, BS_NODE, NWDC12, "distributed configuration protocol violation: cookie/session mismatch",
                     (Sender, ev->Sender),
@@ -361,7 +386,7 @@ namespace NKikimr::NStorage {
             // process added items
             for (const ui32 nodeId : record.GetNewBoundNodeIds()) {
                 if (info.BoundNodeIds.insert(nodeId).second) {
-                    AddBound(nodeId, downEv.get());
+                    AddBound(nodeId, getPushEv());
                 } else {
                     STLOG(PRI_CRIT, BS_NODE, NWDC04, "distributed configuration protocol violation: adding duplicate item",
                         (Sender, ev->Sender),
@@ -377,7 +402,7 @@ namespace NKikimr::NStorage {
             // process deleted items
             for (const ui32 nodeId : record.GetDeletedBoundNodeIds()) {
                 if (info.BoundNodeIds.erase(nodeId)) {
-                    DeleteBound(nodeId, downEv.get());
+                    DeleteBound(nodeId, getPushEv());
                 } else {
                     STLOG(PRI_CRIT, BS_NODE, NWDC05, "distributed configuration protocol violation: deleting nonexisting item",
                         (Sender, ev->Sender),
@@ -390,31 +415,12 @@ namespace NKikimr::NStorage {
                 }
             }
 
-            // process configuration update
-            if (record.HasStorageConfig()) {
-                const auto& config = record.GetStorageConfig();
-                if (StorageConfig.GetGeneration() < config.GetGeneration()) {
-                    StorageConfig.Swap(record.MutableStorageConfig());
-                    if (downEv) {
-                        downEv->Record.MutableStorageConfig()->CopyFrom(StorageConfig);
-                    }
-
-                    for (const auto& [nodeId, info] : DirectBoundNodes) {
-                        if (nodeId != senderNodeId) {
-                            SendEvent(nodeId, info, std::make_unique<TEvNodeConfigReversePush>(&StorageConfig, GetRootNodeId()));
-                        }
-                    }
-                } else if (config.GetGeneration() < StorageConfig.GetGeneration() && upEv) {
-                    upEv->Record.MutableStorageConfig()->CopyFrom(StorageConfig);
-                }
+            if (pushEv) {
+                SendEvent(*Binding, std::move(pushEv));
             }
 
-            if (downEv && (downEv->Record.HasStorageConfig() || downEv->Record.NewBoundNodeIdsSize() ||
-                    downEv->Record.DeletedBoundNodeIdsSize())) {
-                SendEvent(*Binding, std::move(downEv));
-            }
-            if (upEv) {
-                SendEvent(senderNodeId, info, std::move(upEv));
+            if (!Binding) {
+                CheckRootNodeStatus();
             }
         }
 
@@ -453,6 +459,11 @@ namespace NKikimr::NStorage {
                     SendEvent(*Binding, std::move(ev));
                 }
 
+                // abort all unprocessed scatter tasks
+                for (const ui64 cookie : info.ScatterTasks) {
+                    AbortScatterTask(cookie, nodeId);
+                }
+
                 const TActorId sessionId = info.SessionId;
                 DirectBoundNodes.erase(it);
 
@@ -466,6 +477,195 @@ namespace NKikimr::NStorage {
 
         ui32 GetRootNodeId() const {
             return Binding && Binding->RootNodeId ? Binding->RootNodeId : SelfId().NodeId();
+        }
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Root node operation
+
+        void CheckRootNodeStatus() {
+            if (RootState == ERootState::INITIAL && !Binding && HasQuorum()) {
+                STLOG(PRI_DEBUG, BS_NODE, NWDC18, "Starting QUORUM_CHECK_TIMEOUT");
+                TActivationContext::Schedule(QuorumCheckTimeout, new IEventHandle(TEvPrivate::EvQuorumCheckTimeout, 0,
+                    SelfId(), {}, nullptr, 0));
+                RootState = ERootState::QUORUM_CHECK_TIMEOUT;
+            }
+        }
+
+        void HandleQuorumCheckTimeout() {
+            if (HasQuorum()) {
+                STLOG(PRI_DEBUG, BS_NODE, NWDC19, "Quorum check timeout hit, quorum remains");
+
+                RootState = ERootState::COLLECT_CONFIG;
+
+                NKikimrBlobStorage::TEvNodeConfigScatter task;
+                task.MutableCollectConfigs();
+                IssueScatterTask(std::move(task));
+            } else {
+                STLOG(PRI_DEBUG, BS_NODE, NWDC20, "Quorum check timeout hit, quorum reset");
+                RootState = ERootState::INITIAL; // fall back to waiting for quorum
+                IssueNextBindRequest();
+            }
+        }
+
+        void ProcessGather(NKikimrBlobStorage::TEvNodeConfigGather&& res) {
+            switch (RootState) {
+                case ERootState::COLLECT_CONFIG:
+                    STLOG(PRI_DEBUG, BS_NODE, NWDC27, "ProcessGather(COLLECT_CONFIG)", (Res, res));
+                    break;
+
+                default:
+                    break;
+            }
+        }
+
+        bool HasQuorum() const {
+            // we have strict majority of all nodes (including this one)
+            return AllBoundNodes.size() + 1 > (NodeIds.size() + 1) / 2;
+        }
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Scatter/gather logic
+
+        void IssueScatterTask(NKikimrBlobStorage::TEvNodeConfigScatter&& task) {
+            const ui64 cookie = NextScatterCookie++;
+            STLOG(PRI_DEBUG, BS_NODE, NWDC21, "IssueScatterTask", (Task, task), (Cookie, cookie));
+            const auto [it, inserted] = ScatterTasks.try_emplace(cookie, std::move(task));
+            Y_VERIFY(inserted);
+            TScatterTask& scatterTask = it->second;
+            for (auto& [nodeId, info] : DirectBoundNodes) {
+                auto ev = std::make_unique<TEvNodeConfigScatter>();
+                ev->Record.CopyFrom(scatterTask.Task);
+                ev->Record.SetCookie(cookie);
+                SendEvent(nodeId, info, std::move(ev));
+                info.ScatterTasks.insert(cookie);
+                scatterTask.PendingNodes.insert(nodeId);
+            }
+            if (scatterTask.PendingNodes.empty()) {
+                CompleteScatterTask(scatterTask);
+                ScatterTasks.erase(it);
+            }
+        }
+
+        void CompleteScatterTask(TScatterTask& task) {
+            STLOG(PRI_DEBUG, BS_NODE, NWDC22, "CompleteScatterTask", (Task, task.Task));
+
+            NKikimrBlobStorage::TEvNodeConfigGather res;
+            if (task.Task.HasCookie()) {
+                res.SetCookie(task.Task.GetCookie());
+            }
+
+            switch (task.Task.GetRequestCase()) {
+                case NKikimrBlobStorage::TEvNodeConfigScatter::kCollectConfigs:
+                    GenerateCollectConfigs(res.MutableCollectConfigs(), task);
+                    break;
+
+                case NKikimrBlobStorage::TEvNodeConfigScatter::kApplyConfigs:
+                    break;
+
+                case NKikimrBlobStorage::TEvNodeConfigScatter::REQUEST_NOT_SET:
+                    // unexpected case
+                    break;
+            }
+
+            if (Binding && res.HasCookie()) {
+                auto reply = std::make_unique<TEvNodeConfigGather>();
+                reply->Record.CopyFrom(res);
+                SendEvent(*Binding, std::move(reply));
+            } else if (!res.HasCookie()) {
+                ProcessGather(std::move(res));
+            }
+        }
+
+        void GenerateCollectConfigs(NKikimrBlobStorage::TEvNodeConfigGather::TCollectConfigs *response, TScatterTask& task) {
+            THashMap<std::tuple<ui64, TString>, NKikimrBlobStorage::TEvNodeConfigGather::TCollectConfigs::TItem*> configs;
+
+            auto addConfig = [&](const NKikimrBlobStorage::TStorageConfig& config, const auto& nodeIds) {
+                const auto key = std::make_tuple(config.GetGeneration(), config.GetFingerprint());
+                auto& ptr = configs[key];
+                if (!ptr) {
+                    ptr = response->AddItems();
+                    ptr->MutableConfig()->CopyFrom(config);
+                }
+                for (const ui32 nodeId : nodeIds) {
+                    ptr->AddNodeIds(nodeId);
+                }
+            };
+
+            addConfig(StorageConfig, std::initializer_list<ui32>{SelfId().NodeId()});
+
+            for (const auto& reply : task.CollectedReplies) {
+                if (reply.HasCollectConfigs()) {
+                    for (const auto& item : reply.GetCollectConfigs().GetItems()) {
+                        addConfig(item.GetConfig(), item.GetNodeIds());
+                    }
+                }
+            }
+        }
+
+        void AbortScatterTask(ui64 cookie, ui32 nodeId) {
+            STLOG(PRI_DEBUG, BS_NODE, NWDC23, "AbortScatterTask", (Cookie, cookie), (NodeId, nodeId));
+
+            const auto it = ScatterTasks.find(cookie);
+            Y_VERIFY(it != ScatterTasks.end());
+            TScatterTask& task = it->second;
+
+            const size_t n = task.PendingNodes.erase(nodeId);
+            Y_VERIFY(n == 1);
+            if (task.PendingNodes.empty()) {
+                CompleteScatterTask(task);
+                ScatterTasks.erase(it);
+            }
+        }
+
+        void AbortAllScatterTasks() {
+            STLOG(PRI_DEBUG, BS_NODE, NWDC24, "AbortAllScatterTasks");
+
+            for (auto& [cookie, task] : std::exchange(ScatterTasks, {})) {
+                for (const ui32 nodeId : task.PendingNodes) {
+                    const auto it = DirectBoundNodes.find(nodeId);
+                    Y_VERIFY(it != DirectBoundNodes.end());
+                    TBoundNode& info = it->second;
+                    const size_t n = info.ScatterTasks.erase(cookie);
+                    Y_VERIFY(n == 1);
+                }
+            }
+        }
+
+        void Handle(TEvNodeConfigScatter::TPtr ev) {
+            STLOG(PRI_DEBUG, BS_NODE, NWDC25, "TEvNodeConfigScatter", (Binding, Binding), (Sender, ev->Sender),
+                (Cookie, ev->Cookie), (SessionId, ev->InterconnectSession), (Record, ev->Get()->Record));
+
+            if (Binding && Binding->Expected(*ev)) {
+                IssueScatterTask(std::move(ev->Get()->Record));
+            }
+        }
+
+        void Handle(TEvNodeConfigGather::TPtr ev) {
+            STLOG(PRI_DEBUG, BS_NODE, NWDC26, "TEvNodeConfigGather", (Sender, ev->Sender), (Cookie, ev->Cookie),
+                (SessionId, ev->InterconnectSession), (Record, ev->Get()->Record));
+
+            const ui32 senderNodeId = ev->Sender.NodeId();
+            if (const auto it = DirectBoundNodes.find(senderNodeId); it != DirectBoundNodes.end()
+                    && ev->Cookie == it->second.Cookie
+                    && ev->InterconnectSession == it->second.SessionId) {
+                TBoundNode& info = it->second;
+                auto& record = ev->Get()->Record;
+                if (const auto jt = ScatterTasks.find(record.GetCookie()); jt != ScatterTasks.end()) {
+                    const size_t n = info.ScatterTasks.erase(jt->first);
+                    Y_VERIFY(n == 1);
+
+                    TScatterTask& task = jt->second;
+                    record.Swap(&task.CollectedReplies.emplace_back());
+                    const size_t m = task.PendingNodes.erase(senderNodeId);
+                    Y_VERIFY(m == 1);
+                    if (task.PendingNodes.empty()) {
+                        CompleteScatterTask(task);
+                        ScatterTasks.erase(jt);
+                    }
+                } else {
+                    Y_VERIFY_DEBUG(false);
+                }
+            }
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -506,11 +706,11 @@ namespace NKikimr::NStorage {
                 STLOG(PRI_DEBUG, BS_NODE, NWDC10, "Binding aborted by disconnection", (Binding, Binding));
 
                 Binding.reset();
+                AbortAllScatterTasks();
                 IssueNextBindRequest();
 
                 for (const auto& [nodeId, info] : DirectBoundNodes) {
-                    SendEvent(nodeId, info.Cookie, info.SessionId, std::make_unique<TEvNodeConfigReversePush>(nullptr,
-                        GetRootNodeId()));
+                    SendEvent(nodeId, info.Cookie, info.SessionId, std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId()));
                 }
             }
         }
@@ -534,6 +734,24 @@ namespace NKikimr::NStorage {
             }
             if (Binding) {
                 Y_VERIFY(std::binary_search(NodeIds.begin(), NodeIds.end(), Binding->NodeId));
+            }
+
+            for (const auto& [cookie, task] : ScatterTasks) {
+                for (const ui32 nodeId : task.PendingNodes) {
+                    const auto it = DirectBoundNodes.find(nodeId);
+                    Y_VERIFY(it != DirectBoundNodes.end());
+                    TBoundNode& info = it->second;
+                    Y_VERIFY(info.ScatterTasks.contains(cookie));
+                }
+            }
+
+            for (const auto& [nodeId, info] : DirectBoundNodes) {
+                for (const ui64 cookie : info.ScatterTasks) {
+                    const auto it = ScatterTasks.find(cookie);
+                    Y_VERIFY(it != ScatterTasks.end());
+                    TScatterTask& task = it->second;
+                    Y_VERIFY(task.PendingNodes.contains(nodeId));
+                }
             }
 #endif
         }
@@ -565,9 +783,12 @@ namespace NKikimr::NStorage {
                 hFunc(TEvNodeConfigPush, Handle);
                 hFunc(TEvNodeConfigReversePush, Handle);
                 hFunc(TEvNodeConfigUnbind, Handle);
+                hFunc(TEvNodeConfigScatter, Handle);
+                hFunc(TEvNodeConfigGather, Handle);
                 hFunc(TEvInterconnect::TEvNodesInfo, Handle);
                 hFunc(TEvInterconnect::TEvNodeConnected, Handle);
                 hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
+                cFunc(TEvPrivate::EvQuorumCheckTimeout, HandleQuorumCheckTimeout);
                 cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
                 cFunc(TEvents::TSystem::Poison, PassAway);
             )

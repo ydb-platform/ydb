@@ -24,6 +24,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/json
+    library/cpp/openssl/crypto
     ydb/core/base
     ydb/core/blob_depot/agent
     ydb/core/blobstorage/crypto

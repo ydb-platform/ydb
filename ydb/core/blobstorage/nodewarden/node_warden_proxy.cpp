@@ -75,7 +75,8 @@ void TNodeWarden::StartVirtualGroupAgent(ui32 groupId) {
 }
 
 void TNodeWarden::StartStaticProxies() {
-    for (const auto& group : Cfg->ServiceSet.GetGroups()) {
+    Y_VERIFY(Cfg->BlobStorageConfig.HasServiceSet());
+    for (const auto& group : Cfg->BlobStorageConfig.GetServiceSet().GetGroups()) {
         StartLocalProxy(group.GetGroupID());
     }
 }

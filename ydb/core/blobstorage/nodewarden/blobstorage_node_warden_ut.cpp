@@ -203,7 +203,7 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
             static_cast<IPDiskServiceFactory*>(new TStrandedPDiskServiceFactory(runtime)) :
             static_cast<IPDiskServiceFactory*>(new TRealPDiskServiceFactory())));
 //            nodeWardenConfig->Monitoring = monitoring;
-        google::protobuf::TextFormat::ParseFromString(staticConfig, &nodeWardenConfig->ServiceSet);
+        google::protobuf::TextFormat::ParseFromString(staticConfig, nodeWardenConfig->BlobStorageConfig.MutableServiceSet());
 
         if (nodeIndex == 0) {
             nodeWardenConfig->SectorMaps[extraPath] = extraSectorMap;
@@ -217,7 +217,7 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
 
 
             TString pDiskPath0 = TStringBuilder() << "SectorMap:" << baseDir << "pdisk_map";
-            nodeWardenConfig->ServiceSet.MutablePDisks(0)->SetPath(pDiskPath0);
+            nodeWardenConfig->BlobStorageConfig.MutableServiceSet()->MutablePDisks(0)->SetPath(pDiskPath0);
             nodeWardenConfig->SectorMaps[pDiskPath0] = sectorMap;
 
             ui64 pDiskGuid = 1;

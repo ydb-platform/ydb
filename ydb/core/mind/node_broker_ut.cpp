@@ -92,7 +92,7 @@ void SetupServices(TTestActorRuntime &runtime,
             new TNodeWardenConfig(STRAND_PDISK && !runtime.IsRealThreads()
                                   ? static_cast<IPDiskServiceFactory*>(new TStrandedPDiskServiceFactory(runtime))
                                   : static_cast<IPDiskServiceFactory*>(new TRealPDiskServiceFactory()));
-        google::protobuf::TextFormat::ParseFromString(staticConfig, &nodeWardenConfig->ServiceSet);
+        google::protobuf::TextFormat::ParseFromString(staticConfig, nodeWardenConfig->BlobStorageConfig.MutableServiceSet());
 
         TIntrusivePtr<TNodeWardenConfig> existingNodeWardenConfig = NodeWardenConfigs[nodeIndex];
         if (existingNodeWardenConfig != nullptr) {
@@ -117,7 +117,7 @@ void SetupServices(TTestActorRuntime &runtime,
                 static TTempDir tempDir;
                 pDiskPath = tempDir() + "/pdisk0.dat";
             }
-            nodeWardenConfig->ServiceSet.MutablePDisks(0)->SetPath(pDiskPath);
+            nodeWardenConfig->BlobStorageConfig.MutableServiceSet()->MutablePDisks(0)->SetPath(pDiskPath);
             ui64 pDiskGuid = 1;
             static ui64 iteration = 0;
             ++iteration;

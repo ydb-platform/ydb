@@ -214,7 +214,7 @@ struct TEnvironmentSetup {
             }
 
             auto config = MakeIntrusive<TNodeWardenConfig>(new TMockPDiskServiceFactory(*this));
-            config->ServiceSet.AddAvailabilityDomains(DomainId);
+            config->BlobStorageConfig.MutableServiceSet()->AddAvailabilityDomains(DomainId);
             std::unique_ptr<IActor> warden(CreateBSNodeWarden(config));
 
             const TActorId wardenId = Runtime->Register(warden.release(), nodeId);

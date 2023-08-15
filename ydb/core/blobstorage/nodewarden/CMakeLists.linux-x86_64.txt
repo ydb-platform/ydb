@@ -15,6 +15,7 @@ target_link_libraries(core-blobstorage-nodewarden PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-json
+  cpp-openssl-crypto
   ydb-core-base
   core-blob_depot-agent
   core-blobstorage-crypto

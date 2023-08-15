@@ -40,6 +40,7 @@
 
 #include <library/cpp/digest/crc32c/crc32c.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
+#include <library/cpp/openssl/crypto/sha.h>
 
 #include <util/folder/dirut.h>
 #include <util/folder/tempdir.h>

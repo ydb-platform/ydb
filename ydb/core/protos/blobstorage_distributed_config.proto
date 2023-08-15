@@ -13,7 +13,7 @@ message TStorageConfig { // contents of storage metadata
 // Attach sender node to the recipient one; if already bound, then just update configuration.
 message TEvNodeConfigPush {
     bool Initial = 1; // set to true if this push is initial connection establishment
-    TStorageConfig StorageConfig = 2; // configuration update (if called for the first time)
+    reserved 2;
     repeated uint32 NewBoundNodeIds = 3; // a list of nodes (not including sender) that are attached
     repeated uint32 DeletedBoundNodeIds = 4; // a list of detached nodes
 }
@@ -27,4 +27,42 @@ message TEvNodeConfigReversePush {
 
 // Remove node from bound list.
 message TEvNodeConfigUnbind {
+}
+
+// Propagate query to the tree bottom and collect replies.
+message TEvNodeConfigScatter {
+    message TCollectConfigs {}
+
+    message TApplyConfigs {
+        optional TStorageConfig Config = 1; // config to apply
+    }
+
+    optional uint64 Cookie = 1;
+
+    oneof Request {
+        TCollectConfigs CollectConfigs = 2;
+        TApplyConfigs ApplyConfigs = 3;
+    }
+}
+
+// Collected replies from the bottom.
+message TEvNodeConfigGather {
+    message TCollectConfigs {
+        message TItem {
+            repeated uint32 NodeIds = 1; // node ids with the same config (generation & fingerprint)
+            optional TStorageConfig Config = 2;
+        }
+        repeated TItem Items = 1;
+    }
+
+    message TApplyConfigs {
+        repeated uint32 NodeIds = 1; // node ids that have processed this config
+    }
+
+    optional uint64 Cookie = 1;
+
+    oneof Response {
+        TCollectConfigs CollectConfigs = 2;
+        TApplyConfigs ApplyConfigs = 3;
+    }
 }

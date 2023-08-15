@@ -850,6 +850,8 @@ struct TEvBlobStorage {
         EvNodeConfigPush,
         EvNodeConfigReversePush,
         EvNodeConfigUnbind,
+        EvNodeConfigScatter,
+        EvNodeConfigGather,
 
         // Other
         EvRunActor = EvPut + 15 * 512,

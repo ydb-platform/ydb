@@ -834,10 +834,68 @@ namespace NKikimr::NYaml {
         }
     }
 
+    void PrepareBlobStorageConfig(NJson::TJsonValue& json) {
+        if (!json.Has("blob_storage_config")) {
+            return;
+        }
+        auto& blobStorageConfig = json["blob_storage_config"];
+
+        if (!blobStorageConfig.Has("autoconfig_settings")) {
+            return;
+        }
+        auto& autoconfigSettings = blobStorageConfig["autoconfig_settings"];
+
+        autoconfigSettings.EraseValue("define_host_config");
+        autoconfigSettings.EraseValue("define_box");
+
+        if (json.Has("host_configs")) {
+            auto& array = autoconfigSettings.InsertValue("define_host_config", NJson::JSON_ARRAY);
+            for (const auto& hostConfig : json["host_configs"].GetArraySafe()) {
+                array.AppendValue(NJson::TJsonValue(hostConfig));
+            }
+        }
+
+        THashMap<std::tuple<TString, ui32>, ui32> hostNodeMap;
+        Y_ENSURE_BT(json.Has("nameservice_config"));
+        const auto& nameserviceConfig = json["nameservice_config"];
+        Y_ENSURE_BT(nameserviceConfig.Has("node"));
+        for (const auto& item : nameserviceConfig["node"].GetArraySafe()) {
+            const auto key = std::make_tuple(item["interconnect_host"].GetStringSafe(), item["port"].GetUIntegerSafe());
+            hostNodeMap[key] = item["node_id"].GetUIntegerSafe();
+        }
+
+        NJson::TJsonValue *defineBox = nullptr;
+
+        if (!json.Has("hosts")) {
+            return;
+        }
+        for (const auto& host : json["hosts"].GetArraySafe()) {
+            if (host.Has("host_config_id")) {
+                if (!defineBox) {
+                    defineBox = &autoconfigSettings.InsertValue("define_box", NJson::TJsonMap{
+                        {"box_id", 1},
+                        {"host", NJson::TJsonArray{}},
+                    });
+                }
+
+                const TString fqdn = host["interconnect_host"].GetStringSafe(host["host"].GetStringSafe());
+                const ui32 port = host["port"].GetUIntegerSafe(19001);
+                const auto key = std::make_tuple(fqdn, port);
+                Y_ENSURE_BT(hostNodeMap.contains(key));
+
+                (*defineBox)["host"].AppendValue(NJson::TJsonMap{
+                    {"host_config_id", host["host_config_id"].GetUIntegerSafe()},
+                    {"enforced_node_id", hostNodeMap[key]},
+                });
+            }
+        }
+    }
+
     void TransformConfig(NJson::TJsonValue& json, bool relaxed) {
         PrepareNameserviceConfig(json);
         PrepareActorSystemConfig(json);
         PrepareStaticGroup(json);
+        PrepareBlobStorageConfig(json);
         PrepareIcConfig(json);
         PrepareLogConfig(json);
         PrepareSystemTabletsInfo(json, relaxed);

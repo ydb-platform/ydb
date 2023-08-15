@@ -6,9 +6,15 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(big_integer)
-add_subdirectory(crypto)
-add_subdirectory(holders)
-add_subdirectory(init)
-add_subdirectory(io)
-add_subdirectory(method)
+find_package(OpenSSL REQUIRED)
+
+add_library(cpp-openssl-big_integer)
+target_link_libraries(cpp-openssl-big_integer PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  OpenSSL::OpenSSL
+)
+target_sources(cpp-openssl-big_integer PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/openssl/big_integer/big_integer.cpp
+)

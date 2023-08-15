@@ -67,6 +67,9 @@ public:
         std::vector<TString> statements;
 
         for (auto pStmt = stmtIter.Next(); pStmt != nullptr; pStmt = stmtIter.Next()) {
+            if (!statements.empty() && IsQueryEmpty(*pStmt)) {
+                continue;
+            }
             statements.push_back(*pStmt);
         }
 

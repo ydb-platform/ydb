@@ -96,7 +96,7 @@
 #define HS_VERSION
 #define HS_MAJOR_VERSION
 #define HS_MINOR_VERSION
-/* #undef HS_PATCH_VERSION */
+#define HS_PATCH_VERSION
 
 #define BUILD_DATE
 

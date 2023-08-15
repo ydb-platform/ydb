@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2019, Intel Corporation
+ * Copyright (c) 2015-2022, Intel Corporation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -1013,6 +1013,7 @@ hs_error_t HS_CDECL hs_close_stream(hs_stream_t *id, hs_scratch_t *scratch,
         report_eod_matches(id, scratch, onEvent, context);
         if (unlikely(internal_matching_error(scratch))) {
             unmarkScratchInUse(scratch);
+            hs_stream_free(id);
             return HS_UNKNOWN_ERROR;
         }
         unmarkScratchInUse(scratch);

@@ -913,6 +913,17 @@ private:
         dqIntegration->FillSinkSettings(sink.Ref(), settings, sinkType);
         YQL_ENSURE(!settings.type_url().empty(), "Data sink provider \"" << dataSinkCategory << "\" did't fill dq sink settings for its dq sink node");
         YQL_ENSURE(sinkType, "Data sink provider \"" << dataSinkCategory << "\" did't fill dq sink settings type for its dq sink node");
+
+        THashMap<TString, TString> secureParams;
+        NYql::NCommon::FillSecureParams(sink.Ptr(), TypesCtx, secureParams);
+        if (!secureParams.empty()) {
+            YQL_ENSURE(secureParams.size() == 1, "Only one SecureParams per sink allowed");
+            auto it = secureParams.begin();
+            externalSink.SetSinkName(it->first);
+            auto token = it->second;
+            externalSink.SetAuthInfo(CreateStructuredTokenParser(token).ToBuilder().RemoveSecrets().ToJson());
+            CreateStructuredTokenParser(token).ListReferences(SecretNames);
+        }
     }
 
     void FillConnection(const TDqConnection& connection, const TMap<ui64, ui32>& stagesMap,

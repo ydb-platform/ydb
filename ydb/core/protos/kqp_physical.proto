@@ -327,6 +327,9 @@ message TKqpSource {
 message TKqpExternalSink {
     string Type = 1;
     google.protobuf.Any Settings = 2;
+
+    string SinkName = 3;
+    string AuthInfo = 4;
 }
 
 message TKqpSink {

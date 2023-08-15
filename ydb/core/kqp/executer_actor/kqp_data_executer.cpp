@@ -1346,7 +1346,7 @@ private:
         taskMeta.ReadInfo.Reverse = reverse;
     };
 
-    void BuildDatashardTasks(TStageInfo& stageInfo) {
+    void BuildDatashardTasks(TStageInfo& stageInfo, const TMap<TString, TString>& secureParams) {
         THashMap<ui64, ui64> shardTasks; // shardId -> taskId
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
@@ -1361,7 +1361,7 @@ private:
             task.Meta.ShardId = shardId;
             shardTasks.emplace(shardId, task.Id);
 
-            BuildSinks(stage, task);
+            BuildSinks(stage, task, secureParams);
 
             return task;
         };
@@ -1490,7 +1490,7 @@ private:
         }
     }
 
-    void BuildComputeTasks(TStageInfo& stageInfo) {
+    void BuildComputeTasks(TStageInfo& stageInfo, const TMap<TString, TString>& secureParams) {
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         ui32 partitionsCount = 1;
@@ -1544,7 +1544,7 @@ private:
             task.Meta.ExecuterId = SelfId();
             task.Meta.Type = TTaskMeta::TTaskType::Compute;
 
-            BuildSinks(stage, task);
+            BuildSinks(stage, task, secureParams);
 
             LOG_D("Stage " << stageInfo.Id << " create compute task: " << task.Id);
         }
@@ -1668,8 +1668,7 @@ private:
         size_t readActors = 0;
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             auto& tx = Request.Transactions[txIdx];
-            const auto& secretNames = tx.Body->GetSecretNames();
-            TMap<TString, TString> secureParams;
+            TMap<TString, TString> secureParams = ResolveSecretNames(tx.Body->GetSecretNames());
 
             for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
                 auto& stage = tx.Body->GetStages(stageIdx);
@@ -1707,27 +1706,24 @@ private:
                 if (stage.SourcesSize() > 0) {
                     switch (stage.GetSources(0).GetTypeCase()) {
                         case NKqpProto::TKqpSource::kReadRangesSource:
-                            if (auto actors = BuildScanTasksFromSource(stageInfo)) {
+                            if (auto actors = BuildScanTasksFromSource(stageInfo, secureParams)) {
                                 readActors += *actors;
                             } else {
                                 UnknownAffectedShardCount = true;
                             }
                             break;
                         case NKqpProto::TKqpSource::kExternalSource:
-                            if (!secretNames.empty() && secureParams.empty()) {
-                                ResolveSecretNames(secretNames, secureParams);
-                            }
                             BuildReadTasksFromSource(stageInfo, secureParams);
                             break;
                         default:
                             YQL_ENSURE(false, "unknown source type");
                     }
                 } else if (stageInfo.Meta.ShardOperations.empty()) {
-                    BuildComputeTasks(stageInfo);
+                    BuildComputeTasks(stageInfo, secureParams);
                 } else if (stageInfo.Meta.IsSysView()) {
-                    BuildSysViewScanTasks(stageInfo);
+                    BuildSysViewScanTasks(stageInfo, secureParams);
                 } else {
-                    BuildDatashardTasks(stageInfo);
+                    BuildDatashardTasks(stageInfo, secureParams);
                 }
 
                 if (stage.GetIsSinglePartition()) {

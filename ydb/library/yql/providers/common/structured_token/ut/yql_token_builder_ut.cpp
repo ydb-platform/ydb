@@ -89,6 +89,8 @@ Y_UNIT_TEST_SUITE(TokenBuilderTest) {
         UNIT_ASSERT(references.contains("my_passw_reference"));
         b.ReplaceReferences({{"my_passw_reference", "my_passw_value"}});
         UNIT_ASSERT_VALUES_EQUAL(R"({"basic_login":"my_login","basic_password":"my_passw_value"})", b.ToJson());
+        b.RemoveSecrets();
+        UNIT_ASSERT_VALUES_EQUAL(R"({"basic_login":"my_login"})", b.ToJson());
     }
 
     Y_UNIT_TEST(IAMToken) {

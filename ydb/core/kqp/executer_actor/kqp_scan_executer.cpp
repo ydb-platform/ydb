@@ -532,7 +532,7 @@ private:
             if (stage.SourcesSize() > 0) {
                 switch (stage.GetSources(0).GetTypeCase()) {
                     case NKqpProto::TKqpSource::kReadRangesSource:
-                        BuildScanTasksFromSource(stageInfo);
+                        BuildScanTasksFromSource(stageInfo, {});
                         break;
                     default:
                         YQL_ENSURE(false, "unknown source type");
@@ -540,7 +540,7 @@ private:
             } else if (stageInfo.Meta.ShardOperations.empty()) {
                 BuildComputeTasks(stageInfo);
             } else if (stageInfo.Meta.IsSysView()) {
-                BuildSysViewScanTasks(stageInfo);
+                BuildSysViewScanTasks(stageInfo, {});
             } else if (stageInfo.Meta.IsOlap() || stageInfo.Meta.IsDatashard()) {
                 BuildScanTasks(stageInfo);
             } else {

@@ -396,7 +396,8 @@ protected:
 
     virtual void OnSecretsFetched() {}
 
-    void ResolveSecretNames(const google::protobuf::RepeatedPtrField<TProtoStringType>& secretNames, TMap<TString, TString>& secureParams) {
+    TMap<TString, TString> ResolveSecretNames(const google::protobuf::RepeatedPtrField<TProtoStringType>& secretNames) {
+        TMap<TString, TString> secureParams;
         for (const auto& secretName : secretNames) {
             auto secretId = NMetadata::NSecret::TSecretId(UserToken->GetUserSID(), secretName);
 
@@ -405,6 +406,8 @@ protected:
 
             secureParams[secretName] = secretValue;
         }
+
+        return secureParams;
     }
 
 protected:
@@ -691,7 +694,7 @@ protected:
 
 
 protected:
-    void BuildSysViewScanTasks(TStageInfo& stageInfo) {
+    void BuildSysViewScanTasks(TStageInfo& stageInfo, const TMap<TString, TString>& secureParams) {
         Y_VERIFY_DEBUG(stageInfo.Meta.IsSysView());
 
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
@@ -734,19 +737,26 @@ protected:
             task.Meta.ReadInfo.Reverse = op.GetReadRange().GetReverse();
             task.Meta.Type = TTaskMeta::TTaskType::Compute;
 
-            BuildSinks(stage, task);
+            BuildSinks(stage, task, secureParams);
 
             LOG_D("Stage " << stageInfo.Id << " create sysview scan task: " << task.Id);
         }
     }
 
-    void BuildSinks(const NKqpProto::TKqpPhyStage& stage, TKqpTasksGraph::TTaskType& task) {
+    void BuildSinks(const NKqpProto::TKqpPhyStage& stage, TKqpTasksGraph::TTaskType& task, const TMap<TString, TString>& secureParams) {
         if (stage.SinksSize() > 0) {
             YQL_ENSURE(stage.SinksSize() == 1, "multiple sinks are not supported");
             const auto& sink = stage.GetSinks(0);
             YQL_ENSURE(sink.HasExternalSink(), "only external sinks are supported");
             const auto& extSink = sink.GetExternalSink();
             YQL_ENSURE(sink.GetOutputIndex() < task.Outputs.size());
+
+            auto sinkName = extSink.GetSinkName();
+            if (sinkName) {
+                auto structuredToken = NYql::CreateStructuredTokenParser(extSink.GetAuthInfo()).ToBuilder().ReplaceReferences(secureParams).ToJson();
+                task.Meta.SecureParams.emplace(sinkName, structuredToken);
+            }
+
             auto& output = task.Outputs[sink.GetOutputIndex()];
             output.Type = TTaskOutputType::Sink;
             output.SinkType = extSink.GetType();
@@ -754,7 +764,7 @@ protected:
         }
     }
 
-    void BuildReadTasksFromSource(TStageInfo& stageInfo, TMap<TString, TString> secureParams) {
+    void BuildReadTasksFromSource(TStageInfo& stageInfo, const TMap<TString, TString>& secureParams) {
         const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         YQL_ENSURE(stage.GetSources(0).HasExternalSource());
@@ -780,11 +790,11 @@ protected:
 
             task.Meta.Type = TTaskMeta::TTaskType::Compute;
 
-            BuildSinks(stage, task);
+            BuildSinks(stage, task, secureParams);
         }
     }
 
-    TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo) {
+    TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, const TMap<TString, TString>& secureParams) {
         THashMap<ui64, std::vector<ui64>> nodeTasks;
         THashMap<ui64, ui64> assignedShardsCount;
 
@@ -893,7 +903,7 @@ protected:
                 settings->SetLockNodeId(self.NodeId());
             }
 
-            BuildSinks(stage, task);
+            BuildSinks(stage, task, secureParams);
         };
 
         if (source.GetSequentialInFlightShards()) {

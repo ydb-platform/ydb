@@ -139,8 +139,8 @@ TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, co
     , DiskIsFull(false)
     , SubDomainOutOfSpace(subDomainOutOfSpace)
     , HasDataReqNum(0)
-    , AvgReadBytes(TDuration::Minutes(1), 1000)
     , AvgWriteBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000}, {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
+    , AvgReadBytes(TDuration::Minutes(1), 1000)
     , AvgQuotaBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000}, {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
     , ReservedSize(0)
     , Channel(0)
@@ -196,7 +196,7 @@ ui64 TPartition::UsedReserveSize(const TActorContext& ctx) const {
 }
 
 ui64 TPartition::GetUsedStorage(const TActorContext& ctx) {
-    const auto now = ctx.Now(); 
+    const auto now = ctx.Now();
     const auto duration = now - LastUsedStorageMeterTimestamp;
     LastUsedStorageMeterTimestamp = now;
     ui64 size = MeteringDataSize(ctx);
@@ -1814,7 +1814,7 @@ void TPartition::ProcessUserAct(TEvPQ::TEvSetClientInfo& act,
     if (act.Type != TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION && act.Type != TEvPQ::TEvSetClientInfo::ESCI_INIT_READ_RULE
             && !act.SessionId.empty() && userInfo.Session != act.SessionId //request to wrong session
             && (act.Type != TEvPQ::TEvSetClientInfo::ESCI_DROP_SESSION || !userInfo.Session.empty()) //but allow DropSession request when session is already dropped - for idempotence
-            || (act.Type == TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION && !userInfo.Session.empty()
+            || (act.ClientId != CLIENTID_WITHOUT_CONSUMER && act.Type == TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION && !userInfo.Session.empty()
                  && (act.Generation < userInfo.Generation || act.Generation == userInfo.Generation && act.Step <= userInfo.Step))) { //old generation request
         TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
 
@@ -2133,7 +2133,6 @@ TUserInfoBase& TPartition::GetOrCreatePendingUser(const TString& user,
                                                   TMaybe<ui64> readRuleGeneration)
 {
     TUserInfoBase* userInfo = nullptr;
-
     auto i = PendingUsersInfo.find(user);
     if (i == PendingUsersInfo.end()) {
         auto ui = UsersInfoStorage->GetIfExists(user);
@@ -2361,7 +2360,7 @@ void TPartition::Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext
             "SubDomainOutOfSpace was changed." <<
             " Topic: \"" << TopicName() << "\"." <<
             " Partition: " << Partition << "." <<
-            " SubDomainOutOfSpace: " << SubDomainOutOfSpace 
+            " SubDomainOutOfSpace: " << SubDomainOutOfSpace
         );
 
         if (!SubDomainOutOfSpace) {

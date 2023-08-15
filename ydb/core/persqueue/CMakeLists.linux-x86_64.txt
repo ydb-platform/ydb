@@ -74,6 +74,7 @@ target_sources(ydb-core-persqueue PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/user_info.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/utils.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/write_meta.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/microseconds_sliding_window.cpp
 )
 generate_enum_serilization(ydb-core-persqueue
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/sourceid.h

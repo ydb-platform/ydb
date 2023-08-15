@@ -85,7 +85,8 @@ void TPartitionActor::MakeCommit(const TActorContext& ctx) {
         ClientCommitOffset = offset;
         ++CommitCookie;
         CommitsInfly.push_back(std::pair<ui64, TCommitInfo>(CommitCookie, {CommitCookie, offset, ctx.Now()}));
-        Counters.SLITotal.Inc();
+        if (Counters.SLITotal)
+            Counters.SLITotal.Inc();
 
         if (PipeClient) //if not then pipe will be recreated soon and SendCommit will be done
             SendCommit(CommitCookie, offset, ctx);
@@ -102,7 +103,8 @@ void TPartitionActor::MakeCommit(const TActorContext& ctx) {
         } else {
             ClientCommitOffset = ClientReadOffset;
             CommitsInfly.push_back(std::pair<ui64, TCommitInfo>(0, {0, ClientReadOffset, ctx.Now()}));
-            Counters.SLITotal.Inc();
+            if (Counters.SLITotal)
+                Counters.SLITotal.Inc();
             if (PipeClient) //if not then pipe will be recreated soon and SendCommit will be done
                 SendCommit(0, ClientReadOffset, ctx);
         }
@@ -133,7 +135,8 @@ void TPartitionActor::MakeCommit(const TActorContext& ctx) {
 
     ClientCommitOffset = offset;
     CommitsInfly.push_back(std::pair<ui64, TCommitInfo>(readId, {startReadId, offset, ctx.Now()}));
-    Counters.SLITotal.Inc();
+    if (Counters.SLITotal)
+        Counters.SLITotal.Inc();
 
     if (PipeClient) //if not then pipe will be recreated soon and SendCommit will be done
         SendCommit(readId, offset, ctx);
@@ -543,8 +546,11 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
         Counters.Commits.Inc();
 
         ui32 commitDurationMs = (ctx.Now() - CommitsInfly.front().second.StartTime).MilliSeconds();
-        Counters.CommitLatency.IncFor(commitDurationMs, 1);
-        if (commitDurationMs >= AppData(ctx)->PQConfig.GetCommitLatencyBigMs()) {
+        if (Counters.CommitLatency) {
+            Counters.CommitLatency.IncFor(commitDurationMs, 1);
+        }
+
+        if (Counters.SLIBigLatency && commitDurationMs >= AppData(ctx)->PQConfig.GetCommitLatencyBigMs()) {
             Counters.SLIBigLatency.Inc();
         }
 
@@ -751,7 +757,8 @@ void TPartitionActor::InitStartReading(const TActorContext& ctx) {
         }
         Y_VERIFY(CommitsInfly.empty());
         CommitsInfly.push_back(std::pair<ui64, TCommitInfo>(Max<ui64>(), {Max<ui64>(), ClientCommitOffset.GetOrElse(0), ctx.Now()}));
-        Counters.SLITotal.Inc();
+        if (Counters.SLITotal)
+            Counters.SLITotal.Inc();
         if (PipeClient) //pipe will be recreated soon
             SendCommit(CommitsInfly.back().first, CommitsInfly.back().second.Offset, ctx);
     } else {

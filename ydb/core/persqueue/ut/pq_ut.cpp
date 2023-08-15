@@ -20,7 +20,7 @@ const static TString TOPIC_NAME = "rt3.dc1--topic";
 
 Y_UNIT_TEST_SUITE(TPQTest) {
 
-Y_UNIT_TEST(TestPartitionTotalQuota) { 
+Y_UNIT_TEST(TestPartitionTotalQuota) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -38,7 +38,7 @@ Y_UNIT_TEST(TestPartitionTotalQuota) {
         TString s{2_MB, 'c'};
         data.push_back({1, s});
         CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 0, false, false, true);
-        
+
         //check throttling on total partition quota
         auto startTime = tc.Runtime->GetTimeProvider()->Now();
         CmdRead(0, 0, Max<i32>(), Max<i32>(), 1, false, tc, {0}, 0, 0, "user1");
@@ -48,7 +48,7 @@ Y_UNIT_TEST(TestPartitionTotalQuota) {
     });
 }
 
-Y_UNIT_TEST(TestPartitionPerConsumerQuota) { 
+Y_UNIT_TEST(TestPartitionPerConsumerQuota) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -60,7 +60,7 @@ Y_UNIT_TEST(TestPartitionPerConsumerQuota) {
 
         tc.Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetPartitionReadQuotaIsTwiceWriteQuota(true);
         tc.Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetMaxParallelConsumersPerPartition(1000); //total partition quota is 1 consumer quota * 1000. Very high.
-        
+
 
         PQTabletPrepare({.partitions = 1, .writeSpeed = 100_KB}, {{"important_user", true}}, tc);
         TVector<std::pair<ui64, TString>> data;
@@ -74,7 +74,7 @@ Y_UNIT_TEST(TestPartitionPerConsumerQuota) {
         CmdRead(0, 0, Max<i32>(), Max<i32>(), 1, false, tc, {0}, 0, 0, "user1");
         auto diffReadWithSameConsumers = (tc.Runtime->GetTimeProvider()->Now() - startTimeReadWithSameConsumer).Seconds();
         UNIT_ASSERT(diffReadWithSameConsumers >= 9); //read quota is twice write quota. So, it's 200kb per seconds and 200kb burst. (2mb - 200kb) / 200kb = 9 seconds needed to get quota
-        
+
         //check not throttling on total partition quota
         auto startTimeReadWithDifferentConsumers = tc.Runtime->GetTimeProvider()->Now();
         CmdRead(0, 0, Max<i32>(), Max<i32>(), 1, false, tc, {0}, 0, 0, "user2");

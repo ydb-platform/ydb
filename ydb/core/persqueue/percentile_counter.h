@@ -43,6 +43,8 @@ public:
     void IncFor(ui64 key, ui64 value = 1);
     void DecFor(ui64 key, ui64 value = 1);
 
+    operator bool();
+
 private:
     TVector<TMultiCounter> Counters;
     TVector<ui64> Ranges;

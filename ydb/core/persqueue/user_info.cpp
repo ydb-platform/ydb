@@ -181,7 +181,7 @@ TUserInfo TUsersInfoStorage::CreateUserInfo(const TActorContext& ctx,
     bool meterRead = userServiceType.empty() || userServiceType == defaultServiceType;
 
 
-    return { 
+    return {
         ctx, StreamCountersSubgroup,
         user, readRuleGeneration, important, TopicConverter, Partition,
         session, gen, step, offset, readOffsetRewindSum, DCId, readFromTimestamp, DbPath,

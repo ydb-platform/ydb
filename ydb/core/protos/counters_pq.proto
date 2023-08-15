@@ -233,4 +233,6 @@ enum EPartitionLabeledCounters {
     METRIC_RESERVE_USED_BYTES = 36                                [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_SUM SVName: "topic.reserve.used_bytes"}];
     METRIC_READ_QUOTA_PARTITION_TOTAL_USAGE = 37                  [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_MAX SVName: "topic.partition.read.throttled_microseconds_max"}];
     METRIC_READ_QUOTA_PARTITION_TOTAL_BYTES = 38                  [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_MIN SVName: "topic.partition.read.speed_limit_bytes_per_second"}];
+
+    METRIC_READ_INFLIGHT_LIMIT_THROTTLED = 39                     [(LabeledCounterOpts) = {Name: "" AggrFunc : EAF_MAX SVName: "topic.partition.read.inflight_throttled_microseconds_max"}];
 }

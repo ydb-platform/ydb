@@ -28,6 +28,7 @@ struct TReadInfo {
     TInstant Timestamp;
     ui64 ReadTimestampMs;
     TDuration WaitQuotaTime;
+    bool IsExternalRead;
 
     bool IsSubscription;
 
@@ -45,7 +46,8 @@ struct TReadInfo {
         const ui32 size,
         const ui64 dst,
         ui64 readTimestampMs,
-        TDuration waitQuotaTime
+        TDuration waitQuotaTime,
+        const bool isExternalRead
     )
         : User(user)
         , ClientDC(clientDC)
@@ -57,6 +59,7 @@ struct TReadInfo {
         , Timestamp(TAppData::TimeProvider->Now())
         , ReadTimestampMs(readTimestampMs)
         , WaitQuotaTime(waitQuotaTime)
+        , IsExternalRead(isExternalRead)
         , IsSubscription(false)
         , CachedOffset(0)
     {}
@@ -82,7 +85,6 @@ struct TReadInfo {
         const ui64 sizeLag,
         const TActorId& tablet,
         const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode
-
     ) {
         TEvPQ::TEvBlobResponse response(0, TVector<TRequestedBlob>());
         return FormAnswer(ctx, response, endOffset, partition, ui, dst, sizeLag, tablet, meteringMode);

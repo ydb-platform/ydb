@@ -210,7 +210,7 @@ private:
             HFunc(TEvPQProxy::TEvPartitionStatus, Handle); // from partitionActor
 
             // Balancer events
-            HFunc(TEvPersQueue::TEvLockPartition, Handle);
+            HFunc(TEvPersQueue::TEvLockPartition, Handle); // can be sent to itself when reading without a consumer
             HFunc(TEvPersQueue::TEvReleasePartition, Handle);
             HFunc(TEvPersQueue::TEvError, Handle);
 
@@ -257,7 +257,7 @@ private:
     void Handle(TEvPQProxy::TEvPartitionStatus::TPtr& ev, const TActorContext& ctx);
 
     // Balancer events
-    void Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const TActorContext& ctx); // can be sent to itself when reading without a consumer
     void Handle(TEvPersQueue::TEvReleasePartition::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvError::TPtr& ev, const TActorContext& ctx);
 
@@ -276,6 +276,7 @@ private:
     void InitSession(const TActorContext& ctx);
     void RegisterSession(const TString& topic, const TActorId& pipe, const TVector<ui32>& groups, const TActorContext& ctx);
     void CloseSession(PersQueue::ErrorCode::ErrorCode code, const TString& reason, const TActorContext& ctx);
+    void SendLockPartitionToSelf(ui32 group, TString topicName, TTopicHolder topic, const TActorContext& ctx);
 
     void SetupCounters();
     void SetupTopicCounters(const NPersQueue::TTopicConverterPtr& topic);
@@ -311,6 +312,7 @@ private:
     TString PeerName;
 
     bool CommitsDisabled;
+    bool ReadWithoutConsumer;
 
     bool InitDone;
     bool RangesMode;

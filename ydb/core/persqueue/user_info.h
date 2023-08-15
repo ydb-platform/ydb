@@ -73,6 +73,8 @@ struct TUserInfo: public TUserInfoBase {
     TWorkingTimeCounter Counter;
     NKikimr::NPQ::TMultiCounter BytesRead;
     NKikimr::NPQ::TMultiCounter MsgsRead;
+    NKikimr::NPQ::TMultiCounter BytesReadGrpc;
+    NKikimr::NPQ::TMultiCounter MsgsReadGrpc;
     TMap<TString, NKikimr::NPQ::TMultiCounter> BytesReadFromDC;
 
     ui32 ActiveReads;
@@ -85,7 +87,7 @@ struct TUserInfo: public TUserInfoBase {
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> WriteLagMs;
 
     std::shared_ptr<TPercentileCounter> ReadTimeLag;
-    bool DoInternalRead = false;
+    bool NoConsumer = false;
     bool MeterRead = true;
 
     bool Parsed = false;
@@ -113,13 +115,21 @@ struct TUserInfo: public TUserInfoBase {
     }
 
     void ReadDone(const TActorContext& ctx, const TInstant& now, ui64 readSize, ui32 readCount,
-                  const TString& clientDC, const TActorId& tablet) {
+                  const TString& clientDC, const TActorId& tablet, bool isExternalRead) {
         Y_UNUSED(tablet);
         if (BytesRead && !clientDC.empty()) {
-            if (BytesRead)
-                BytesRead.Inc(readSize);
-            if (MsgsRead)
+            BytesRead.Inc(readSize);
+            if (!isExternalRead && BytesReadGrpc) {
+                BytesReadGrpc.Inc(readSize);
+            }
+
+            if (MsgsRead) {
                 MsgsRead.Inc(readCount);
+                if (!isExternalRead && MsgsReadGrpc) {
+                    MsgsReadGrpc.Inc(readCount);
+                }
+            }
+
             auto it = BytesReadFromDC.find(clientDC);
             if (it == BytesReadFromDC.end()) {
                 auto pos = TopicConverter->GetFederationPath().find("/");
@@ -177,7 +187,7 @@ struct TUserInfo: public TUserInfoBase {
         , AvgReadBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000},
                        {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
         , WriteLagMs(TDuration::Minutes(1), 100)
-        , DoInternalRead(user != CLIENTID_WITHOUT_CONSUMER)
+        , NoConsumer(user == CLIENTID_WITHOUT_CONSUMER)
         , MeterRead(meterRead)
     {
         if (AppData(ctx)->Counters) {
@@ -199,21 +209,14 @@ struct TUserInfo: public TUserInfoBase {
     void SetupStreamCounters(NMonitoring::TDynamicCounterPtr subgroup) {
         Y_VERIFY(subgroup);
         TVector<std::pair<TString, TString>> subgroups;
-        if (DoInternalRead) {
+        if (!NoConsumer) {
             subgroups.push_back({"consumer", User});
-
-            BytesRead = TMultiCounter(subgroup, {}, subgroups,
-                                      {"api.grpc.topic.stream_read.bytes",
-                                       "topic.read.bytes"}, true, "name");
-            MsgsRead = TMultiCounter(subgroup, {}, subgroups,
-                                     {"api.grpc.topic.stream_read.messages",
-                                      "topic.read.messages"}, true, "name");
-        } else {
-            BytesRead = TMultiCounter(subgroup, {}, subgroups,
-                                      {"topic.read.bytes"}, true, "name");
-            MsgsRead = TMultiCounter(subgroup, {}, subgroups,
-                                      {"topic.read.messages"}, true, "name");
         }
+
+        BytesRead = TMultiCounter(subgroup, {}, subgroups, {"topic.read.bytes"}, true, "name");
+        MsgsRead = TMultiCounter(subgroup, {}, subgroups,{"topic.read.messages"}, true, "name");
+        BytesReadGrpc = TMultiCounter(subgroup, {}, subgroups, {"api.grpc.topic.stream_read.bytes"}, true, "name");
+        MsgsReadGrpc = TMultiCounter(subgroup, {}, subgroups, {"api.grpc.topic.stream_read.messages"}, true, "name");
 
         subgroups.emplace_back("name", "topic.read.lag_milliseconds");
         ReadTimeLag.reset(new TPercentileCounter(

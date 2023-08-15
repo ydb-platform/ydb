@@ -132,6 +132,7 @@ struct TEvPQ {
         EvApproveQuota,
         EvConsumed,
         EvQuotaUpdated,
+        EvAccountQuotaCountersUpdated,
         EvQuotaCountersUpdated,
         EvConsumerRemoved,
         EvEnd
@@ -803,7 +804,7 @@ struct TEvPQ {
 
     struct TEvRequestQuota : public TEventLocal<TEvRequestQuota, EvRequestQuota> {
         TEvRequestQuota(TEvPQ::TEvRead::TPtr readRequest)
-            : 
+            :
             ReadRequest(std::move(readRequest))
         {}
 
@@ -811,8 +812,8 @@ struct TEvPQ {
     };
 
     struct TEvApproveQuota : public TEventLocal<TEvApproveQuota, EvApproveQuota> {
-        TEvApproveQuota(TEvPQ::TEvRead::TPtr readRequest, TDuration waitTime) 
-            : 
+        TEvApproveQuota(TEvPQ::TEvRead::TPtr readRequest, TDuration waitTime)
+            :
             ReadRequest(std::move(readRequest)),
             WaitTime(std::move(waitTime))
         {}

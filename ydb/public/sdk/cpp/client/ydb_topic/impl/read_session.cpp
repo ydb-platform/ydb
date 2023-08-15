@@ -97,8 +97,12 @@ bool TReadSession::ValidateSettings() {
         issues.AddIssue("Empty topics list.");
     }
 
-    if (Settings.ConsumerName_.empty()) {
-        issues.AddIssue("No consumer specified.");
+    if (Settings.ConsumerName_.empty() && !Settings.WithoutConsumer_) { 
+        issues.AddIssue("No consumer specified."); 
+    }
+
+    if (!Settings.ConsumerName_.empty() && Settings.WithoutConsumer_) { 
+        issues.AddIssue("No need to specify a consumer when reading without a consumer."); 
     }
 
     if (Settings.MaxMemoryUsageBytes_ < 1_MB) {

@@ -101,6 +101,10 @@ void TPercentileCounter::DecFor(ui64 key, ui64 value) {
     }
 }
 
+TPercentileCounter::operator bool() {
+    return !Counters.empty();
+}
+
 NKikimr::NPQ::TPercentileCounter CreateSLIDurationCounter(
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, TVector<NPersQueue::TPQLabelsInfo> aggr, const TString name, ui32 border,
         TVector<ui32> durations

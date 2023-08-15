@@ -1476,8 +1476,22 @@ struct TReadSessionSettings: public TRequestSettings<TReadSessionSettings> {
         FLUENT_SETTING(IExecutor::TPtr, HandlersExecutor);
     };
 
+    
+    TString ConsumerName_ = "";
     //! Consumer.
-    FLUENT_SETTING(TString, ConsumerName);
+    TSelf& ConsumerName(const TString& name) {
+        ConsumerName_ = name;
+        WithoutConsumer_ = false;
+        return static_cast<TSelf&>(*this);
+    }
+    
+    bool WithoutConsumer_ = false;
+    //! Read without consumer.
+    TSelf& WithoutConsumer() {
+        WithoutConsumer_ = true;
+        ConsumerName_ = "";
+        return static_cast<TSelf&>(*this);
+    }
 
     //! Topics.
     FLUENT_SETTING_VECTOR(TTopicReadSettings, Topics);

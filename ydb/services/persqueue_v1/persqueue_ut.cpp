@@ -42,6 +42,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/data_plane_helpers.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <thread>
 
 
 namespace NKikimr::NPersQueueTests {
@@ -77,7 +78,6 @@ THolder<TTempFileHandle> CreateNetDataFile(const TString& content) {
 
     return netDataFile;
 }
-
 
 static TString FormNetData() {
     return "10.99.99.224/32\tSAS\n"
@@ -122,8 +122,6 @@ namespace {
         StubP_ = Service::NewStub(Channel_); \
     }                                                                     \
     grpc::ClientContext rcontext;
-
-
 
 Y_UNIT_TEST_SUITE(TPersQueueTest) {
     Y_UNIT_TEST(AllEqual) {
@@ -6383,5 +6381,235 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
         driver->Stop();
     }
+
+    Y_UNIT_TEST(ReadWithoutConsumer) {
+        auto readToEndThenCommit = [] (NPersQueue::TTestServer& server, ui32 partitions, ui32 maxOffset, TString consumer, ui32 readByBytes) {
+            std::shared_ptr<grpc::Channel> Channel_;
+            std::unique_ptr<Ydb::Topic::V1::TopicService::Stub> StubP_;
+
+            Channel_ = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials());
+            StubP_ = Ydb::Topic::V1::TopicService::NewStub(Channel_);
+
+            grpc::ClientContext rcontext;
+            auto readStream = StubP_->StreamRead(&rcontext);
+            UNIT_ASSERT(readStream);
+
+            {
+                Ydb::Topic::StreamReadMessage::FromClient  req;
+                Ydb::Topic::StreamReadMessage::FromServer resp;
+
+                auto topicReadSettings = req.mutable_init_request()->add_topics_read_settings();
+                topicReadSettings->set_path(SHORT_TOPIC_NAME);
+                for (ui32 i = 0; i < partitions; i++) {
+                    topicReadSettings->add_partition_ids(i);
+                }
+
+                req.mutable_init_request()->set_consumer(consumer);
+
+                if (!readStream->Write(req)) {
+                    ythrow yexception() << "write fail";
+                }
+
+                UNIT_ASSERT(readStream->Read(&resp));
+                UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kInitResponse);
+            }
+            ui32 partitionsSigned = 0;
+
+            while (partitionsSigned != partitions) {
+
+                Ydb::Topic::StreamReadMessage::FromServer resp;
+                UNIT_ASSERT(readStream->Read(&resp));
+                UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest, resp);
+                auto assignId = resp.start_partition_session_request().partition_session().partition_session_id();
+
+                Ydb::Topic::StreamReadMessage::FromClient req;
+                req.mutable_start_partition_session_response()->set_partition_session_id(assignId);
+                req.mutable_start_partition_session_response()->set_read_offset(0);
+                auto res = readStream->Write(req);
+                UNIT_ASSERT(res);
+                partitionsSigned++;
+            }
+            ui32 offset = 0;
+            ui32 session = 0;
+            while (offset != maxOffset) {
+                Ydb::Topic::StreamReadMessage::FromClient  req;
+                req.mutable_read_request()->set_bytes_size(readByBytes);
+                readStream->Write(req);
+
+                Ydb::Topic::StreamReadMessage::FromServer resp;
+                UNIT_ASSERT(readStream->Read(&resp));
+                UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kReadResponse, resp);
+                Cerr << "\n" << "Bytes readed: " << resp.read_response().bytes_size() << "\n";
+                for (int j = 0; j < resp.read_response().partition_data_size(); j++) {
+                    for (int k = 0; k < resp.read_response().partition_data(j).batches_size(); k++) {
+                        for (int l = 0; l < resp.read_response().partition_data(j).batches(k).message_data_size(); l++) {
+                            offset = resp.read_response().partition_data(j).batches(k).message_data(l).offset();
+                            session = resp.read_response().partition_data(j).partition_session_id();
+                            Cerr << "\n" << "Offset: " << offset << " from session " << session << "\n";
+                        }
+                    }
+                }
+            }
+
+            //check commit failed
+            Ydb::Topic::StreamReadMessage::FromClient commitRequest;
+            Ydb::Topic::StreamReadMessage::FromServer commitResponse;
+
+            auto commit = commitRequest.mutable_commit_offset_request()->add_commit_offsets();
+            commit->set_partition_session_id(session);
+
+            auto offsets = commit->add_offsets();
+            offsets->set_start(0);
+            offsets->set_end(maxOffset);
+
+            if (!readStream->Write(commitRequest)) {
+                ythrow yexception() << "write fail";
+            }
+            UNIT_ASSERT(readStream->Read(&commitResponse));
+            UNIT_ASSERT_VALUES_EQUAL(commitResponse.status(), Ydb::StatusIds::BAD_REQUEST);
+        };
+        const ui32 partititonsCount = 5;
+        const ui32 messagesCount = 10;
+
+        NPersQueue::TTestServer server;
+        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, partititonsCount);
+        TPQDataWriter writer("source", server);
+
+        for(ui32 i = 0; i < messagesCount; i++) {
+            writer.Write(SHORT_TOPIC_NAME, {"value" + std::to_string(i)}); //every Write call writes 4 messages. So, it messagesCount * 4 messages
+        }
+
+        std::thread thread1(readToEndThenCommit, std::ref(server), partititonsCount, 4 * messagesCount - 1, "", 400);
+        std::thread thread2(readToEndThenCommit, std::ref(server), partititonsCount, 4 * messagesCount - 1, "", 400);
+        thread1.join();
+        thread2.join();
+    }
+
+    Y_UNIT_TEST(InflightLimit) {
+        const auto writeSpeed = 10_KB;
+        const auto readSpeed = writeSpeed * 2;
+        const auto burst = readSpeed;
+        const auto writeKbCount = 80_KB;
+
+        auto readToEnd = [] (NPersQueue::TTestServer& server, ui32 partitions, ui32 maxOffset, TString consumer, ui32 readByBytes) {
+            std::shared_ptr<grpc::Channel> Channel_;
+            std::unique_ptr<Ydb::Topic::V1::TopicService::Stub> StubP_;
+
+            Channel_ = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials());
+            StubP_ = Ydb::Topic::V1::TopicService::NewStub(Channel_);
+
+            grpc::ClientContext rcontext;
+            auto readStream = StubP_->StreamRead(&rcontext);
+            UNIT_ASSERT(readStream);
+
+            {
+                Ydb::Topic::StreamReadMessage::FromClient  req;
+                Ydb::Topic::StreamReadMessage::FromServer resp;
+
+                auto topicReadSettings = req.mutable_init_request()->add_topics_read_settings();
+                topicReadSettings->set_path(SHORT_TOPIC_NAME);
+                for (ui32 i = 0; i < partitions; i++) {
+                    topicReadSettings->add_partition_ids(i);
+                }
+
+                req.mutable_init_request()->set_consumer(consumer);
+
+                if (!readStream->Write(req)) {
+                    ythrow yexception() << "write fail";
+                }
+
+                UNIT_ASSERT(readStream->Read(&resp));
+                UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kInitResponse);
+            }
+            ui32 partitionsSigned = 0;
+
+            while (partitionsSigned != partitions) {
+
+                Ydb::Topic::StreamReadMessage::FromServer resp;
+                UNIT_ASSERT(readStream->Read(&resp));
+                UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest, resp);
+                auto assignId = resp.start_partition_session_request().partition_session().partition_session_id();
+
+                Ydb::Topic::StreamReadMessage::FromClient req;
+                req.mutable_start_partition_session_response()->set_partition_session_id(assignId);
+                req.mutable_start_partition_session_response()->set_read_offset(0);
+                auto res = readStream->Write(req);
+                UNIT_ASSERT(res);
+                partitionsSigned++;
+            }
+            ui32 offset = 0;
+            ui32 session = 0;
+            while (offset != maxOffset) {
+                Ydb::Topic::StreamReadMessage::FromClient  req;
+                req.mutable_read_request()->set_bytes_size(readByBytes);
+                readStream->Write(req);
+
+                Ydb::Topic::StreamReadMessage::FromServer resp;
+                UNIT_ASSERT(readStream->Read(&resp));
+                UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kReadResponse, resp);
+                Cerr << "\n" << "Bytes readed: " << resp.read_response().bytes_size() << "\n";
+                for (int j = 0; j < resp.read_response().partition_data_size(); j++) {
+                    for (int k = 0; k < resp.read_response().partition_data(j).batches_size(); k++) {
+                        for (int l = 0; l < resp.read_response().partition_data(j).batches(k).message_data_size(); l++) {
+                            offset = resp.read_response().partition_data(j).batches(k).message_data(l).offset();
+                            session = resp.read_response().partition_data(j).partition_session_id();
+                            Cerr << "\n" << "Offset: " << offset << " from session " << session << "\n";
+                        }
+                    }
+                }
+            }
+        };
+
+        auto createServerAndWrite80kb = [] (ui32 inflightLimit) {
+            TServerSettings settings = PQSettings(0);
+            settings.PQConfig.SetMaxInflightReadRequestsPerPartition(inflightLimit);
+
+            auto quotaSettings = settings.PQConfig.MutableQuotingConfig();
+            quotaSettings->SetPartitionReadQuotaIsTwiceWriteQuota(true);
+            quotaSettings->SetMaxParallelConsumersPerPartition(1);
+
+            NPersQueue::TTestServer server(settings);
+
+            server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 8 + 1024 * 1024, 86400, writeSpeed);
+
+            TPQDataWriter writer("source", server);
+            TString s{writeKbCount/4, 'c'}; // writes 4 times
+            writer.Write(SHORT_TOPIC_NAME, {s});
+            return std::move(server);
+        };
+
+        auto serverWithNoInflightLimit = createServerAndWrite80kb(100);
+        auto serverWithInflightLimit = createServerAndWrite80kb(1);
+
+
+        const auto timeNeededToWaitQuotaAfterReadToEnd= (writeKbCount - burst)/readSpeed;
+
+        readToEnd(serverWithNoInflightLimit, 1, 3, "", 1_MB);
+        /*
+        Here the reading quota is used. The two threads below will wait for the quota, and when execute in parallel,
+        because inflight limit = 100
+        */
+        auto startTime = TInstant::Now();
+        std::thread readParallel1(readToEnd, std::ref(serverWithNoInflightLimit), 1, 3, "", 1_MB);
+        std::thread readParallel2(readToEnd, std::ref(serverWithNoInflightLimit), 1, 3, "", 1_MB);
+        readParallel1.join();
+        readParallel2.join();
+        auto diff = (TInstant::Now() - startTime).Seconds();
+        UNIT_ASSERT(diff <= (timeNeededToWaitQuotaAfterReadToEnd) + 1);
+        
+        readToEnd(serverWithInflightLimit, 1, 3, "", 1_MB);
+        /*
+        Here the reading quota is used. The two threads below will wait for the quota, and when execute consistently,
+        because inflight limit = 1
+        */
+        startTime = TInstant::Now();
+        std::thread readConsistently1(readToEnd, std::ref(serverWithInflightLimit), 1, 3, "", 1_MB);
+        std::thread readConsistently2(readToEnd, std::ref(serverWithInflightLimit), 1, 3, "", 1_MB);
+        readConsistently1.join();
+        readConsistently2.join();
+        diff = (TInstant::Now() - startTime).Seconds();
+        UNIT_ASSERT(diff >= timeNeededToWaitQuotaAfterReadToEnd * 2);
+    }
+
 }
 }

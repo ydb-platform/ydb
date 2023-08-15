@@ -31,6 +31,7 @@ SRCS(
     user_info.cpp
     utils.cpp
     write_meta.cpp
+    microseconds_sliding_window.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(sourceid.h)

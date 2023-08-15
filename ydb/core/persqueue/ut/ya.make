@@ -39,6 +39,7 @@ SRCS(
     type_codecs_ut.cpp
     user_info_ut.cpp
     pqrb_describes_ut.cpp
+    microseconds_sliding_window_ut.cpp
 )
 
 RESOURCE(

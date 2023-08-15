@@ -84,6 +84,7 @@ message TPQConfig {
 
     }
     optional TQuotingConfig QuotingConfig = 18;
+    optional uint32 MaxInflightReadRequestsPerPartition = 56 [default = 20];
 
     // Time duration that we wait before we consider remote cluster enabled for load balancing purposes
     optional uint32 RemoteClusterEnabledDelaySec = 24 [default = 300]; // 5 minutes
@@ -278,8 +279,8 @@ message TMessageGroup {
 
 enum ETopicPartitionStatus {
     Active = 1; // the partition can be written
-    Inactive = 2; // the partition can't be written but can be read 
-    Deleted = 3; // the partition can't be written and read 
+    Inactive = 2; // the partition can't be written but can be read
+    Deleted = 3; // the partition can't be written and read
 }
 
 message TPQTabletConfig {

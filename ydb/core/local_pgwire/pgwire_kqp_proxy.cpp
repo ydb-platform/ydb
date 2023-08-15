@@ -178,6 +178,7 @@ public:
 
         // HACK
         ConvertQueryToRequest(query, request);
+        request.SetUsePublicResponseDataFormat(true);
         if (request.HasAction()) {
             ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
             BLOG_D("Sent event to kqpProxy " << request.ShortDebugString());
@@ -245,7 +246,7 @@ public:
         try {
             if (record.HasYdbStatus()) {
                 if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
-                    BLOG_ENSURE(record.GetResponse().GetResults().empty());
+                    BLOG_ENSURE(record.GetResponse().GetYdbResults().empty());
 
                     // HACK
                     if (response->Tag == "SELECT") {
@@ -389,6 +390,7 @@ public:
 
         // HACK
         ConvertQueryToRequest(Statement_.QueryData.Query, request);
+        request.SetUsePublicResponseDataFormat(true);
         if (request.HasAction()) {
             for (unsigned int paramNum = 0; paramNum < Statement_.BindData.ParametersValue.size(); ++paramNum) {
                 if (paramNum >= Statement_.ParameterTypes.size()) {
@@ -447,7 +449,7 @@ public:
         try {
             if (record.HasYdbStatus()) {
                 if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
-                    BLOG_ENSURE(record.GetResponse().GetResults().empty());
+                    BLOG_ENSURE(record.GetResponse().GetYdbResults().empty());
 
                     // HACK
                     if (response->Tag == "SELECT") {

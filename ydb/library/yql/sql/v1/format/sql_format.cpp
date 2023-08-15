@@ -1599,8 +1599,12 @@ private:
 
     void VisitNamedSingleSource(const TRule_named_single_source& msg) {
         Visit(msg.GetRule_single_source1());
-        //TODO handle MATCH_RECOGNIZE block
-        //https://st.yandex-team.ru/YQL-16186
+        if (msg.HasBlock2()) {
+            const auto& matchRecognize = msg.GetBlock2();
+            //TODO handle MATCH_RECOGNIZE block
+            //https://st.yandex-team.ru/YQL-16186
+            Visit(matchRecognize);
+        }
         if (msg.HasBlock3()) {
             NewLine();
             PushCurrentIndent();

@@ -1305,5 +1305,26 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
         setup.Run(cases);
     }
 
+    Y_UNIT_TEST(MatchRecognize) {
+        TCases cases = {{R"(
+pragma FeatureR010="prototype";
+USE plato;
+SELECT
+    *
+FROM Input MATCH_RECOGNIZE(
+    PATTERN ( A )
+    DEFINE A as A
+);
+)",
+R"(PRAGMA FeatureR010 = "prototype";
+USE plato;
+SELECT
+    *
+FROM Input MATCH_RECOGNIZE (PATTERN (A) DEFINE A AS A);
 
+)"
+    }};
+    TSetup setup;
+    setup.Run(cases);
+}
 }

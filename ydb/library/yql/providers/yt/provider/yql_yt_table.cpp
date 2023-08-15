@@ -953,7 +953,7 @@ TYtOutTableInfo& TYtOutTableInfo::SetUnique(const TDistinctConstraintNode* disti
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-bool TYtRangesInfo::Validate(const TExprNode& node, TExprContext& ctx, const TYqlRowSpecInfo::TPtr& rowSpec) {
+bool TYtRangesInfo::Validate(const TExprNode& node, TExprContext& ctx, bool exists, const TYqlRowSpecInfo::TPtr& rowSpec) {
     auto validatKey = [&rowSpec, &ctx] (TExprNode& key) {
         if (!EnsureTupleMaxSize(key, (ui32)rowSpec->SortMembers.size(), ctx)) {
             return false;
@@ -1029,7 +1029,7 @@ bool TYtRangesInfo::Validate(const TExprNode& node, TExprContext& ctx, const TYq
                     return false;
                 }
             }
-        } else {
+        } else if (exists) {
             ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), TStringBuilder()
                 << child->Content() << " cannot be used with YAMR table"));
             return false;
@@ -2740,7 +2740,8 @@ bool TYtPathInfo::Validate(const TExprNode& node, TExprContext& ctx) {
 
     if (!node.Child(TYtPath::idx_Ranges)->IsCallable(TCoVoid::CallableName())) {
         TYqlRowSpecInfo::TPtr rowSpec = TYtTableBaseInfo::GetRowSpec(TExprBase(node.ChildPtr(TYtPath::idx_Table)));
-        if (!TYtRangesInfo::Validate(*node.Child(TYtPath::idx_Ranges), ctx, rowSpec)) {
+        TYtTableMetaInfo::TPtr meta = TYtTableBaseInfo::GetMeta(TExprBase(node.ChildPtr(TYtPath::idx_Table)));
+        if (!TYtRangesInfo::Validate(*node.Child(TYtPath::idx_Ranges), ctx, meta && meta->DoesExist, rowSpec)) {
             return false;
         }
     }

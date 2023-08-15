@@ -205,7 +205,7 @@ struct TYtRangesInfo: public TThrRefBase {
     {
     }
 
-    static bool Validate(const TExprNode& node, TExprContext& ctx, const TYqlRowSpecInfo::TPtr& rowSpec = {});
+    static bool Validate(const TExprNode& node, TExprContext& ctx, bool exists, const TYqlRowSpecInfo::TPtr& rowSpec = {});
     void Parse(NNodes::TExprBase node);
     void Parse(const TVector<NYT::TReadRange>& ranges, TExprContext& ctx, const TPositionHandle& pos = {});
     void AddRowRange(const TRowRange& range);

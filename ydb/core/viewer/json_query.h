@@ -160,6 +160,7 @@ public:
         auto event = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         NKikimrKqp::TQueryRequest& request = *event->Record.MutableRequest();
         request.SetQuery(Query);
+        request.SetUsePublicResponseDataFormat(true);
         if (Action.empty() || Action == "execute-script" || Action == "execute") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT);
@@ -473,12 +474,12 @@ private:
     void MakeOkReply(TStringBuilder& out, NJson::TJsonValue& jsonResponse, NKikimrKqp::TEvQueryResponse& record) {
         const auto& response = record.GetResponse();
 
-        if (response.ResultsSize() > 0) {
+        if (response.YdbResultsSize() > 0) {
             try {
-                for (const auto& result : response.GetResults()) {
-                    Ydb::ResultSet resultSet;
-                    NKqp::ConvertKqpQueryResultToDbResult(result, &resultSet);
-                    ResultSets.emplace_back(std::move(resultSet));
+                for (auto& result : response.GetYdbResults()) {
+                    // Ydb::ResultSet resultSet;
+                    // NKqp::ConvertKqpQueryResultToDbResult(result, &resultSet);
+                    ResultSets.emplace_back(std::move(result));
                 }
             }
             catch (const std::exception& ex) {

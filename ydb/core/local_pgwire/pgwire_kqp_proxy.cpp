@@ -27,6 +27,7 @@ protected:
     std::unordered_map<TString, TString> ConnectionParams_;
     TConnectionState Connection_;
     TString Tag_;
+    NKikimrKqp::EQueryAction QueryAction_ = {};
 
     TPgwireKqpProxy(const TActorId owner, std::unordered_map<TString, TString> params, const TConnectionState& connection)
         : Owner_(owner)
@@ -115,6 +116,7 @@ protected:
             request.SetSyntax(Ydb::Query::SYNTAX_PG);
             request.SetQuery(TString(query));
         }
+        QueryAction_ = request.GetAction();
     }
 
     void ProcessKqpResponseReleaseProxy(const NKikimrKqp::TEvQueryResponse& record) {
@@ -122,7 +124,7 @@ protected:
 
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             Connection_.Transaction.Id = record.GetResponse().GetTxMeta().id();
-            if (Connection_.Transaction.Id) {
+            if (Connection_.Transaction.Id && QueryAction_ != NKikimrKqp::QUERY_ACTION_COMMIT_TX && QueryAction_ != NKikimrKqp::QUERY_ACTION_ROLLBACK_TX) {
                 Connection_.Transaction.Status = 'T';
             } else {
                 Connection_.Transaction.Status = 'I';
@@ -295,7 +297,7 @@ public:
         // HACK
         ConvertQueryToRequest(QueryData_.Query, request);
         if (request.HasAction()) {
-            request.SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
+            request.SetAction(QueryAction_ = NKikimrKqp::QUERY_ACTION_EXPLAIN);
 
             request.SetUsePublicResponseDataFormat(true);
 

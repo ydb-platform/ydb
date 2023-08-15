@@ -29,8 +29,8 @@ struct TMin : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TMin<TLeft,
     static Value* Gen(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
         if constexpr (std::is_floating_point<TOutput>()) {
-            auto& context = ctx.Codegen->GetContext();
-            auto& module = ctx.Codegen->GetModule();
+            auto& context = ctx.Codegen.GetContext();
+            auto& module = ctx.Codegen.GetModule();
             const auto fnType = FunctionType::get(GetTypeFor<TOutput>(context), {left->getType(), right->getType()}, false);
             const auto& name = GetFuncNameForType<TOutput>("llvm.minnum");
             const auto func = module.getOrInsertFunction(name, fnType).getCallee();
@@ -77,7 +77,7 @@ struct TDecimalMin {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto next = BasicBlock::Create(context, "next", ctx.Func);
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
@@ -179,7 +179,7 @@ struct TCustomMin {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto res = CallBinaryUnboxedValueFunction(&CompareCustoms<Slot>, Type::getInt32Ty(context), left, right, ctx.Codegen, block);
         const auto comp = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, res, ConstantInt::get(res->getType(), 0), "greater", block);
         const auto max = SelectInst::Create(comp, left, right, "max", block);

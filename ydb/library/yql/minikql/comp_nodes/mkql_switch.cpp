@@ -273,9 +273,9 @@ private:
         }
     };
 
-    Function* GenerateHandler(ui32 i, const NYql::NCodegen::ICodegen::TPtr& codegen) const {
-        auto& module = codegen->GetModule();
-        auto& context = codegen->GetContext();
+    Function* GenerateHandler(ui32 i, NYql::NCodegen::ICodegen& codegen) const {
+        auto& module = codegen.GetModule();
+        auto& context = codegen.GetContext();
 
         TStringStream out;
         out << this->DebugString() << "::Handler_" << i << "_(" << static_cast<const void*>(this) << ").";
@@ -304,7 +304,7 @@ private:
 
         auto block = main;
 
-        const auto placeholder = NYql::NCodegen::ETarget::Windows == ctx.Codegen->GetEffectiveTarget() ?
+        const auto placeholder = NYql::NCodegen::ETarget::Windows == ctx.Codegen.GetEffectiveTarget() ?
             new AllocaInst(valueType, 0U, "placeholder", block) : nullptr;
 
         const auto statePtr = GetElementPtrInst::CreateInBounds(valueType, ctx.GetMutables(), {ConstantInt::get(indexType, static_cast<const IComputationNode*>(this)->GetIndex())}, "state_ptr", block);
@@ -326,7 +326,7 @@ private:
         const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TFlowState::Get));
 
         Value* input;
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
+        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
             const auto getType = FunctionType::get(valueType, {stateArg->getType(), pos->getType()}, false);
             const auto getPtr = CastInst::Create(Instruction::IntToPtr, getFunc, PointerType::getUnqual(getType), "get", block);
             input = CallInst::Create(getType, getPtr, {stateArg, pos}, "input", block);
@@ -373,7 +373,7 @@ private:
     }
 public:
     Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
         const auto ptrValueType = PointerType::getUnqual(valueType);
@@ -791,19 +791,19 @@ private:
         }
     };
 
-    void GenerateFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
+    void GenerateFunctions(NYql::NCodegen::ICodegen& codegen) final {
         SwitchFunc = GenerateSwitch(codegen);
-        codegen->ExportSymbol(SwitchFunc);
+        codegen.ExportSymbol(SwitchFunc);
     }
 
-    void FinalizeFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
+    void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) final {
         if (SwitchFunc)
-            Switch = reinterpret_cast<TSwitchPtr>(codegen->GetPointerToFunction(SwitchFunc));
+            Switch = reinterpret_cast<TSwitchPtr>(codegen.GetPointerToFunction(SwitchFunc));
     }
 
-    Function* GenerateSwitch(const NYql::NCodegen::ICodegen::TPtr& codegen) const {
-        auto& module = codegen->GetModule();
-        auto& context = codegen->GetContext();
+    Function* GenerateSwitch(NYql::NCodegen::ICodegen& codegen) const {
+        auto& module = codegen.GetModule();
+        auto& context = codegen.GetContext();
 
         const auto& name = this->MakeName("Fetch");
         if (const auto f = module.getFunction(name.c_str()))
@@ -812,7 +812,7 @@ private:
         const auto valueType = Type::getInt128Ty(context);
         const auto ptrValueType = PointerType::getUnqual(valueType);
         const auto structPtrType = PointerType::getUnqual(StructType::get(context));
-        const auto containerType = codegen->GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? static_cast<Type*>(ptrValueType) : static_cast<Type*>(valueType);
+        const auto containerType = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? static_cast<Type*>(ptrValueType) : static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
         const auto indexType = Type::getInt32Ty(context);
@@ -881,7 +881,7 @@ private:
 
             const auto used = GetMemoryUsed(MemLimit, ctx, block);
 
-            const auto stream = codegen->GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
+            const auto stream = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
                 new LoadInst(valueType, containerArg, "load_container", false, block) : static_cast<Value*>(containerArg);
 
             BranchInst::Create(loop, block);

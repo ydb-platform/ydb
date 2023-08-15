@@ -15,7 +15,7 @@ struct TCompareArithmeticBinary : public TArithmeticConstraintsBinary<TLeft, TRi
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto lhs = GetterFor<TLeft>(left, context, block);
         const auto rhs = GetterFor<TRight>(right, context, block);
         const auto res = TImpl::Gen(lhs, rhs, ctx, block);
@@ -37,7 +37,7 @@ struct TCompareArithmeticBinaryWithTimezone : public TArithmeticConstraintsBinar
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto lhs = GetterFor<TLeft>(left, context, block);
         const auto rhs = GetterFor<TRight>(right, context, block);
         const auto equals = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, lhs, rhs, "equals", block);
@@ -58,7 +58,7 @@ struct TSelectArithmeticBinaryCopyTimezone : public TArithmeticConstraintsBinary
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto lhs = GetterFor<TType>(left, context, block);
         const auto rhs = GetterFor<TType>(right, context, block);
         const auto result = SelectInst::Create(TImpl::Gen(lhs, rhs, ctx, block), left, right, "result", block);
@@ -79,7 +79,7 @@ struct TSelectArithmeticBinaryWithTimezone : public TArithmeticConstraintsBinary
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto lhs = GetterFor<TType>(left, context, block);
         const auto rhs = GetterFor<TType>(right, context, block);
         const auto equals = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, lhs, rhs, "equals", block);

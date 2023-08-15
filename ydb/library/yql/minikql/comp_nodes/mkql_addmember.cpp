@@ -56,7 +56,7 @@ public:
         if (Representations_.size() > CodegenArraysFallbackLimit)
             return TBaseComputation::DoGenerateGetValue(ctx, block);
 
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto newSize = Representations_.size() + 1U;
 

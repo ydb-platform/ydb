@@ -200,7 +200,7 @@ public:
     }
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
         const auto structPtrType = PointerType::getUnqual(StructType::get(context));
@@ -274,7 +274,7 @@ public:
     }
 #ifndef MKQL_DISABLE_CODEGEN
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, Value* currentPtr, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
         const auto arrayType = ArrayType::get(valueType, Width);
@@ -343,7 +343,7 @@ public:
         getters.reserve(Width);
         for (ui32 i = 0U; i < Width; ++i) {
             getters.emplace_back([i, placeholder, pointerType, valueType, arrayType](const TCodegenContext& ctx, BasicBlock*& block) {
-                auto& context = ctx.Codegen->GetContext();
+                auto& context = ctx.Codegen.GetContext();
                 const auto current = new LoadInst(valueType, placeholder, (TString("current_") += ToString(i)).c_str(), block);
                 const auto integer = GetterFor<ui64>(current, context, block);
                 const auto pointer = CastInst::Create(Instruction::IntToPtr, integer, pointerType, (TString("pointer_") += ToString(i)).c_str(), block);

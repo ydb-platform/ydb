@@ -38,13 +38,13 @@ struct TFloatToIntegralImpl {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Gen(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
-        auto& module = ctx.Codegen->GetModule();
+        auto& context = ctx.Codegen.GetContext();
+        auto& module = ctx.Codegen.GetModule();
         const auto val = GetterFor<TIn>(arg, context, block);
         const auto type = Type::getInt32Ty(context);
         const auto fnType = FunctionType::get(type, {val->getType()}, false);
         const auto name = std::is_same<TIn, float>() ? "MyFloatClassify" : "MyDoubleClassify";
-        ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(static_cast<int(*)(TIn)>(&std::fpclassify)));
+        ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(static_cast<int(*)(TIn)>(&std::fpclassify)));
         const auto func = module.getOrInsertFunction(name, fnType).getCallee();
         const auto classify = CallInst::Create(fnType, func, {val}, "fpclassify", block);
 
@@ -105,13 +105,13 @@ struct TFloatToIntegralImpl<TIn, bool> {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Gen(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
-        auto& module = ctx.Codegen->GetModule();
+        auto& context = ctx.Codegen.GetContext();
+        auto& module = ctx.Codegen.GetModule();
         const auto val = GetterFor<TIn>(arg, context, block);
         const auto type = Type::getInt32Ty(context);
         const auto fnType = FunctionType::get(type, {val->getType()}, false);
         const auto name = std::is_same<TIn, float>() ? "MyFloatClassify" : "MyDoubleClassify";
-        ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(static_cast<int(*)(TIn)>(&std::fpclassify)));
+        ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(static_cast<int(*)(TIn)>(&std::fpclassify)));
         const auto func = module.getOrInsertFunction(name, fnType).getCallee();
         const auto classify = CallInst::Create(fnType, func, {val}, "fpclassify", block);
 
@@ -195,7 +195,7 @@ struct TWideToShort : public TArithmeticConstraintsUnary<TInput, TOutput> {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto val = GetterFor<TInput>(arg, context, block);
         const auto lb = ConstantInt::get(val->getType(), LowerBound);
         const auto ub = ConstantInt::get(val->getType(), UpperBound);
@@ -220,7 +220,7 @@ struct TConvert : public TArithmeticConstraintsUnary<TInput, TOutput> {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto val = GetterFor<TInput>(arg, context, block);
         const auto res = StaticCast<TInput, TOutput>(val, context, block);
         const auto wide = SetterFor<TOutput>(res, context, block);
@@ -239,7 +239,7 @@ struct TScaleUp : public TArithmeticConstraintsUnary<TInput, TOutput> {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto val = GetterFor<TInput>(arg, context, block);
         const auto cast = StaticCast<TInput, TOutput>(val, context, block);
         const auto mul = BinaryOperator::CreateMul(ConstantInt::get(cast->getType(), Multiplier), cast, "mul", block);
@@ -282,7 +282,7 @@ struct TDatetimeScaleUp : public TArithmeticConstraintsUnary<TInput, TOutput> {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto val = GetterFor<TInput>(arg, context, block);
         const auto cast = StaticCast<TInput, TOutput>(val, context, block);
         const auto mul = BinaryOperator::CreateMul(ConstantInt::get(cast->getType(), TScale<TInput, TOutput>::Modifier), cast, "mul", block);
@@ -316,7 +316,7 @@ struct TDatetimeScaleDown : public TArithmeticConstraintsUnary<TInput, TOutput> 
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto val = GetterFor<TInput>(arg, context, block);
         const auto div = BinaryOperator::CreateUDiv(val, ConstantInt::get(val->getType(), TScale<TOutput, TInput>::Modifier), "div", block);
         const auto cast = StaticCast<TInput, TOutput>(div, context, block);
@@ -397,7 +397,7 @@ struct TJsonToJsonDocumentConvert {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* json, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto functionAddress = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(JsonToJsonDocument));
         const auto functionType = FunctionType::get(json->getType(), {json->getType()}, /* isVarArg */ false);
         const auto functionPtr = CastInst::Create(Instruction::IntToPtr, functionAddress, PointerType::getUnqual(functionType), "func", block);
@@ -420,7 +420,7 @@ struct TJsonDocumentToJsonConvert {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* jsonDocument, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto functionAddress = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(JsonDocumentToJson));
         const auto functionType = FunctionType::get(jsonDocument->getType(), {jsonDocument->getType()}, /* isVarArg */ false);
         const auto functionPtr = CastInst::Create(Instruction::IntToPtr, functionAddress, PointerType::getUnqual(functionType), "func", block);
@@ -442,7 +442,7 @@ struct TConvertFromIntegral {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        const auto val = GetterFor<TInput>(arg, ctx.Codegen->GetContext(), block);
+        const auto val = GetterFor<TInput>(arg, ctx.Codegen.GetContext(), block);
         const auto ext = CastInst::Create(std::is_signed<TInput>() ? Instruction::SExt : Instruction::ZExt, val, arg->getType(), "ext", block);
         return SetterForInt128(ext, block);
     }
@@ -461,7 +461,7 @@ struct TConvertToIntegral {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto val = GetterForInt128(arg, block);
         const auto cut = CastInst::Create(Instruction::Trunc, val, GetTypeFor<TOutput>(context), "cut", block);
         const auto full = SetterFor<TOutput>(cut, context, block);
@@ -500,21 +500,21 @@ void GenFP(PHINode* result, Value* val, const TCodegenContext& ctx, BasicBlock* 
 
 template<>
 void GenFP<float, 0>(PHINode* result, Value* val, const TCodegenContext& ctx, BasicBlock* done, BasicBlock*& block) {
-    const auto cast = CastInst::Create(Instruction::SIToFP, val, GetTypeFor<float>(ctx.Codegen->GetContext()), "cast", block);
+    const auto cast = CastInst::Create(Instruction::SIToFP, val, GetTypeFor<float>(ctx.Codegen.GetContext()), "cast", block);
     result->addIncoming(cast, block);
     BranchInst::Create(done, block);
 }
 
 template<>
 void GenFP<double, 0>(PHINode* result, Value* val, const TCodegenContext& ctx, BasicBlock* done, BasicBlock*& block) {
-    const auto cast = CastInst::Create(Instruction::SIToFP, val, GetTypeFor<double>(ctx.Codegen->GetContext()), "cast", block);
+    const auto cast = CastInst::Create(Instruction::SIToFP, val, GetTypeFor<double>(ctx.Codegen.GetContext()), "cast", block);
     result->addIncoming(cast, block);
     BranchInst::Create(done, block);
 }
 
 template<typename TOutput, ui8 Scale>
 void GenFP(PHINode* result, Value* val, const TCodegenContext& ctx, BasicBlock* done, BasicBlock*& block) {
-    auto& context = ctx.Codegen->GetContext();
+    auto& context = ctx.Codegen.GetContext();
     const auto& str = ToString(Scale);
     const auto stop = BasicBlock::Create(context, (TString("stop_") += str).c_str(), ctx.Func);
     const auto step = BasicBlock::Create(context, (TString("step_") += str).c_str(), ctx.Func);
@@ -527,7 +527,7 @@ void GenFP(PHINode* result, Value* val, const TCodegenContext& ctx, BasicBlock* 
     BranchInst::Create(step, stop, nul, block);
 
     block = stop;
-    const auto cast = CastInst::Create(Instruction::SIToFP, val, GetTypeFor<TOutput>(ctx.Codegen->GetContext()), "cast", block);
+    const auto cast = CastInst::Create(Instruction::SIToFP, val, GetTypeFor<TOutput>(ctx.Codegen.GetContext()), "cast", block);
     const auto divf = BinaryOperator::CreateFDiv(cast, ConstantFP::get(GetTypeFor<TOutput>(context), static_cast<TOutput>(NYql::NDecimal::GetDivider<Scale>())), "divf", block);
     result->addIncoming(divf, block);
     BranchInst::Create(done, block);
@@ -557,7 +557,7 @@ struct TToFP {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto val = GetterForInt128(arg, block);
 
@@ -615,7 +615,7 @@ struct TScaleUp {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto val = GetterForInt128(arg, block);
         const auto mul = BinaryOperator::CreateMul(val, GenConstant(NYql::NDecimal::GetDivider<Scale>(), context), "mul", block);
         const auto res = SelectInst::Create(GenIsNormal(val, context, block), mul, val, "result", block);
@@ -634,7 +634,7 @@ struct TScaleDown {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto val = GetterForInt128(arg, block);
         const auto divider = GenConstant(NYql::NDecimal::GetDivider<Scale>() >> 1, context);
 
@@ -692,7 +692,7 @@ struct TCheckBounds {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto val = GetterForInt128(arg, block);
 

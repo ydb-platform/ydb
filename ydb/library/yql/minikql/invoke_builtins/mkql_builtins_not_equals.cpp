@@ -152,7 +152,7 @@ struct TNotEquals : public TCompareArithmeticBinary<TLeft, TRight, TNotEquals<TL
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Gen(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        return GenNotEquals<TLeft, TRight, Aggr>(left, right, ctx.Codegen->GetContext(), block);
+        return GenNotEquals<TLeft, TRight, Aggr>(left, right, ctx.Codegen.GetContext(), block);
     }
 #endif
 };
@@ -177,7 +177,7 @@ struct TDiffDateNotEquals : public TCompareArithmeticBinary<TLeft, TRight, TDiff
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Gen(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         return std::is_same<TLeft, TRight>::value ?
             GenNotEquals<TLeft, TRight, Aggr>(left, right, context, block):
             GenNotEquals<TScaledDate, TScaledDate, Aggr>(GenToScaledDate<TLeft>(left, context, block), GenToScaledDate<TRight>(right, context, block), context, block);
@@ -203,7 +203,7 @@ struct TAggrTzDateNotEquals : public TArithmeticConstraintsBinary<TLeft, TRight,
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto lhs = GetterFor<TLeft>(left, context, block);
         const auto rhs = GetterFor<TRight>(right, context, block);
         const auto ltz = GetterForTimezone(context, left, block);
@@ -224,7 +224,7 @@ struct TCustomNotEquals : public TAggrNotEquals {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto res = CallBinaryUnboxedValueFunction(&CompareCustoms<Slot>, Type::getInt32Ty(context), left, right, ctx.Codegen, block);
         const auto comp = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, res, ConstantInt::get(res->getType(), 0), "not_equals", block);
         ValueCleanup(EValueRepresentation::String, left, ctx, block);
@@ -244,7 +244,7 @@ struct TDecimalNotEquals {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto l = GetterForInt128(left, block);
         const auto r = GetterForInt128(right, block);
         const auto bad = NDecimal::GenIsNonComparable(r, context, block);
@@ -265,7 +265,7 @@ struct TDecimalAggrNotEquals : public TAggrNotEquals {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto l = GetterForInt128(left, block);
         const auto r = GetterForInt128(right, block);
         const auto neq = GenNotEqualsIntegral(l, r, block);

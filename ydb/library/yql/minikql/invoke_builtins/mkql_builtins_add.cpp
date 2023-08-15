@@ -49,7 +49,7 @@ struct TDecimalAdd {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto& bounds = NDecimal::GenBounds<Precision>(context);
 
         const auto l = GetterForInt128(left, block);
@@ -122,7 +122,7 @@ struct TDateTimeAddT {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto lhs = GenToScaledDate<TLeft>(GetterFor<TLeft>(left, context, block), context, block);
         const auto rhs = GenToScaledDate<TRight>(GetterFor<TRight>(right, context, block), context, block);
         const auto add = BinaryOperator::CreateAdd(lhs, rhs, "add", block);

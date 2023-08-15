@@ -244,7 +244,7 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* arg, BasicBlock*& block) const {
-        return MakeOptional(ctx.Codegen->GetContext(), arg, block);
+        return MakeOptional(ctx.Codegen.GetContext(), arg, block);
     }
 #endif
 };
@@ -667,7 +667,7 @@ public:
         if (ValueNodes.size() > CodegenArraysFallbackLimit)
             return TBaseComputation::DoGenerateGetValue(ctx, block);
 
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto valType = Type::getInt128Ty(context);
         const auto idxType = Type::getInt32Ty(context);
@@ -710,12 +710,12 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto valueType = Type::getInt128Ty(context);
         const auto factory = ctx.GetFactory();
         const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::GetEmptyContainer));
 
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
+        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
             const auto funType = FunctionType::get(valueType, {factory->getType()}, false);
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
             const auto res = CallInst::Create(funType, funcPtr, {factory}, "res", block);
@@ -2816,7 +2816,7 @@ public:
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         const auto value = GetNodeValue(ItemNode, ctx, block);
-        return MakeVariant(value, ConstantInt::get(Type::getInt32Ty(ctx.Codegen->GetContext()), Index), ctx, block);
+        return MakeVariant(value, ConstantInt::get(Type::getInt32Ty(ctx.Codegen.GetContext()), Index), ctx, block);
     }
 #endif
 private:
@@ -4057,7 +4057,7 @@ Value* GenerateCheckNotUniqueBoxed(Value* value, LLVMContext& context, Function*
 }
 
 Value* TContainerCacheOnContext::GenNewArray(ui64 sz, Value* items, const TCodegenContext& ctx, BasicBlock*& block) const {
-    auto& context = ctx.Codegen->GetContext();
+    auto& context = ctx.Codegen.GetContext();
     const auto valueType = Type::getInt128Ty(context);
     const auto arrayType = ArrayType::get(valueType, sz);
     const auto pointerType = PointerType::getUnqual(arrayType);
@@ -4115,7 +4115,7 @@ Value* TContainerCacheOnContext::GenNewArray(ui64 sz, Value* items, const TCodeg
         const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::CreateDirectArrayHolder));
         const auto size = ConstantInt::get(Type::getInt64Ty(context), sz);
 
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
+        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
             const auto funType = FunctionType::get(valueType, {fact->getType(), size->getType(), items->getType()}, false);
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
             const auto array = CallInst::Create(funType, funcPtr, {fact, size, items}, "array", block);

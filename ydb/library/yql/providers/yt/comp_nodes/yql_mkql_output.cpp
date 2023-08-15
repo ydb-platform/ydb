@@ -23,7 +23,7 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* item, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         if (true /*|| TODO: !Writer.GenAddRow(item, ctx, block)*/) {
             const auto addFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TYtOutputWrapper::AddRowImpl));
             const auto selfArg = ConstantInt::get(Type::getInt64Ty(context), ui64(this));
@@ -61,7 +61,7 @@ public:
     }
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto item = GetNodeValue(Flow, ctx, block);
 
@@ -134,7 +134,7 @@ public:
     }
 #ifndef MKQL_DISABLE_CODEGEN
     TGenerateResult DoGenGetValues(const TCodegenContext& ctx, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
         const auto indexType = Type::getInt32Ty(context);

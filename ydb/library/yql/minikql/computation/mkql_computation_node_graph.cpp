@@ -818,7 +818,7 @@ public:
             for (auto it = nodes.crbegin(); nodes.crend() != it; ++it) {
                 if (const auto codegen = dynamic_cast<ICodegeneratorRootNode*>(it->Get())) {
                     try {
-                        codegen->GenerateFunctions(Codegen);
+                        codegen->GenerateFunctions(*Codegen);
                         hasCode = true;
                     } catch (const TNoCodegen&) {
                         hasCode = false;
@@ -887,7 +887,7 @@ public:
                 ui64 count = 0U;
                 for (const auto& node : nodes) {
                     if (const auto codegen = dynamic_cast<ICodegeneratorRootNode*>(node.Get())) {
-                        codegen->FinalizeFunctions(Codegen);
+                        codegen->FinalizeFunctions(*Codegen);
                         ++count;
                     }
                 }

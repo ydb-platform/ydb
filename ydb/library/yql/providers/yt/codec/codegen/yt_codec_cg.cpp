@@ -107,7 +107,7 @@ public:
             static_cast<Value*>(new AllocaInst(valueType, 0U, "elemPtr", Block_));
 
         if constexpr (!Flat) {
-            CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetElement>(elemPtr, value, Codegen_, Block_, index);
+            CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetElement>(elemPtr, value, *Codegen_, Block_, index);
         }
 
         bool isOptional;
@@ -188,7 +188,7 @@ public:
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, funcAddr, PointerType::getUnqual(funType), "ptr", Block_);
             CallInst::Create(funType, funcPtr, { typeConst, elemPtr, buf }, "", Block_);
         }
-        TCodegenContext ctx(Codegen_);
+        TCodegenContext ctx(*Codegen_);
         ctx.Func = Func_;
         if constexpr (Flat)
             ValueCleanup(EValueRepresentation::Any, elemPtr, ctx, Block_);
@@ -366,7 +366,7 @@ public:
                     CallInst::Create(module.getFunction("WriteString"), { buf, bytePtr, size }, "", Block_);
                 }
 
-                TCodegenContext ctx(Codegen_);
+                TCodegenContext ctx(*Codegen_);
                 ctx.Func = Func_;
                 if constexpr (Flat)
                     ValueCleanup(EValueRepresentation::String, elemPtr, ctx, Block_);
@@ -430,7 +430,7 @@ public:
 
         const auto funcPtr = CastInst::Create(Instruction::IntToPtr, funcAddr, PointerType::getUnqual(funType), "ptr", Block_);
         CallInst::Create(funType, funcPtr, { typeConst, elemPtr, buf }, "", Block_);
-        TCodegenContext ctx(Codegen_);
+        TCodegenContext ctx(*Codegen_);
         ctx.Func = Func_;
         if constexpr (Flat)
             ValueCleanup(EValueRepresentation::Any, elemPtr, ctx, Block_);
@@ -529,7 +529,7 @@ public:
                 APInt defInt(128, bits);
                 const auto defValData = ConstantInt::get(valueType, defInt);
                 new StoreInst(defValData, elemPtr, Block_);
-                TCodegenContext ctx(Codegen_);
+                TCodegenContext ctx(*Codegen_);
                 ctx.Func = Func_;
                 ValueAddRef(EValueRepresentation::Any, elemPtr, ctx, Block_);
                 BranchInst::Create(done, Block_);
@@ -883,7 +883,7 @@ private:
             auto varType = static_cast<TVariantType*>(type);
             const auto isOneByte = ConstantInt::get(Type::getInt8Ty(context), varType->GetAlternativesCount() < 256);
             const auto data = CallInst::Create(module.getFunction("ReadVariantData"), { buf, isOneByte }, "data", Block_);
-            
+
             std::function<TType*(size_t)> getType;
             std::function<void(size_t, size_t)> genLR = [&] (size_t l, size_t r){
                 size_t m = (l + r) >> 1;
@@ -920,7 +920,7 @@ private:
                 };
             } else {
                 auto structType = static_cast<TStructType*>(varType->GetUnderlyingType());
-                
+
                 const std::vector<size_t>* reorder = nullptr;
                 if (auto cookie = structType->GetCookie()) {
                     reorder = ((const std::vector<size_t>*)cookie);
@@ -978,7 +978,7 @@ private:
             Block_ = done;
             return;
         }
-        
+
         YQL_ENSURE(false, "Unsupported type for skip: " << type->GetKindAsStr());
     }
 

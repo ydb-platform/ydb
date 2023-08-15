@@ -26,7 +26,7 @@ public:
         const auto dict = GetNodeValue(Dict, ctx, block);
 
         GetNodeValue(pointer, Key, ctx, block);
-        const auto keyp = new LoadInst(Type::getInt128Ty(ctx.Codegen->GetContext()), pointer, "key", block);
+        const auto keyp = new LoadInst(Type::getInt128Ty(ctx.Codegen.GetContext()), pointer, "key", block);
 
         CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Lookup>(pointer, dict, ctx.Codegen, block, pointer);
         ValueUnRef(Key->GetRepresentation(), keyp, ctx, block);

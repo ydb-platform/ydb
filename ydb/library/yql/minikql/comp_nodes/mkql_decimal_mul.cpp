@@ -52,7 +52,7 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto valType = Type::getInt128Ty(context);
         const auto valTypePtr = PointerType::getUnqual(valType);
@@ -60,15 +60,15 @@ public:
         const bool useMulAddDiv = Divider > 1;
         const auto name = useMulAddDiv ? "DecimalMulAndDivNormalDivider" : "DecimalMul";
         const auto fnType = useMulAddDiv ?
-            NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget() ?
+            NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget() ?
                     FunctionType::get(valType, { valType, valType, valType }, false):
                     FunctionType::get(Type::getVoidTy(context), { valTypePtr, valTypePtr, valTypePtr, valTypePtr }, false):
-            NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget() ?
+            NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget() ?
                 FunctionType::get(valType, { valType, valType}, false):
                 FunctionType::get(Type::getVoidTy(context), { valTypePtr, valTypePtr, valTypePtr }, false);
 
-        ctx.Codegen->AddGlobalMapping(name,  useMulAddDiv ? reinterpret_cast<const void*>(&DecimalMulAndDivNormalDivider) : reinterpret_cast<const void*>(&DecimalMul));
-        const auto func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType);
+        ctx.Codegen.AddGlobalMapping(name,  useMulAddDiv ? reinterpret_cast<const void*>(&DecimalMulAndDivNormalDivider) : reinterpret_cast<const void*>(&DecimalMul));
+        const auto func = ctx.Codegen.GetModule().getOrInsertFunction(name, fnType);
 
         const auto left = GetNodeValue(Left, ctx, block);
         const auto right = GetNodeValue(Right, ctx, block);
@@ -90,7 +90,7 @@ public:
 
             Value* muldiv;
             if (useMulAddDiv) {
-                if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
+                if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
                     muldiv = CallInst::Create(func, { GetterForInt128(left, block), GetterForInt128(right, block), NDecimal::GenConstant(Divider, context) }, "mul_and_div", block);
                 } else {
                     const auto retPtr = new AllocaInst(valType, 0U, "ret_ptr", block);
@@ -104,7 +104,7 @@ public:
                     muldiv = new LoadInst(valType, retPtr, "res", block);
                 }
             } else {
-                if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
+                if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
                     muldiv = CallInst::Create(func, { GetterForInt128(left, block), GetterForInt128(right, block) }, "mul", block);
                 } else {
                     const auto retPtr = new AllocaInst(valType, 0U, "ret_ptr", block);
@@ -133,7 +133,7 @@ public:
         } else {
             Value* muldiv;
             if (useMulAddDiv) {
-                if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
+                if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
                     muldiv = CallInst::Create(func, { GetterForInt128(left, block), GetterForInt128(right, block), NDecimal::GenConstant(Divider, context) }, "mul_and_div", block);
                 } else {
                     const auto retPtr = new AllocaInst(valType, 0U, "ret_ptr", block);
@@ -147,7 +147,7 @@ public:
                     muldiv = new LoadInst(valType, retPtr, "res", block);
                 }
             } else {
-                if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
+                if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
                     muldiv = CallInst::Create(func, { GetterForInt128(left, block), GetterForInt128(right, block) }, "mul", block);
                 } else {
                     const auto retPtr = new AllocaInst(valType, 0U, "ret_ptr", block);
@@ -216,17 +216,17 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto valType = Type::getInt128Ty(context);
         const auto valTypePtr = PointerType::getUnqual(valType);
 
         const auto name = "DecimalMul";
-        ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(&DecimalMul));
-        const auto fnType = NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget() ?
+        ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&DecimalMul));
+        const auto fnType = NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget() ?
             FunctionType::get(valType, { valType, valType }, false):
             FunctionType::get(Type::getVoidTy(context), { valTypePtr, valTypePtr, valTypePtr }, false);
-        const auto func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType);
+        const auto func = ctx.Codegen.GetModule().getOrInsertFunction(name, fnType);
 
         const auto left = GetNodeValue(Left, ctx, block);
         const auto right = GetNodeValue(Right, ctx, block);
@@ -250,7 +250,7 @@ public:
                 static_cast<CastInst*>(new SExtInst(GetterFor<TRight>(right, context, block), valType, "sext", block)):
                 static_cast<CastInst*>(new ZExtInst(GetterFor<TRight>(right, context, block), valType, "zext", block));
             Value* mul;
-            if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
+            if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
                 mul = CallInst::Create(func, {GetterForInt128(left, block), cast}, "div", block);
             } else {
                 const auto retPtr = new AllocaInst(valType, 0U, "ret_ptr", block);
@@ -280,7 +280,7 @@ public:
                 static_cast<CastInst*>(new SExtInst(GetterFor<TRight>(right, context, block), valType, "sext", block)):
                 static_cast<CastInst*>(new ZExtInst(GetterFor<TRight>(right, context, block), valType, "zext", block));
             Value* mul;
-            if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
+            if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
                 mul = CallInst::Create(func, {GetterForInt128(left, block), cast}, "div", block);
             } else {
                 const auto retPtr = new AllocaInst(valType, 0U, "ret_ptr", block);

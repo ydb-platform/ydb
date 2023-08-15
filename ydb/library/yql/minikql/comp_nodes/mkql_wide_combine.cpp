@@ -387,7 +387,7 @@ public:
     }
 #ifndef MKQL_DISABLE_CODEGEN
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
         const auto ptrValueType = PointerType::getUnqual(valueType);
@@ -695,18 +695,18 @@ private:
         return out.Str();
     }
 
-    void FinalizeFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
+    void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) final {
         if (EqualsFunc) {
-            Equals = reinterpret_cast<TEqualsPtr>(codegen->GetPointerToFunction(EqualsFunc));
+            Equals = reinterpret_cast<TEqualsPtr>(codegen.GetPointerToFunction(EqualsFunc));
         }
         if (HashFunc) {
-            Hash = reinterpret_cast<THashPtr>(codegen->GetPointerToFunction(HashFunc));
+            Hash = reinterpret_cast<THashPtr>(codegen.GetPointerToFunction(HashFunc));
         }
     }
 
-    void GenerateFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
-        codegen->ExportSymbol(HashFunc = GenerateHashFunction(codegen, MakeName<false>(), KeyTypes));
-        codegen->ExportSymbol(EqualsFunc = GenerateEqualsFunction(codegen, MakeName<true>(), KeyTypes));
+    void GenerateFunctions(NYql::NCodegen::ICodegen& codegen) final {
+        codegen.ExportSymbol(HashFunc = GenerateHashFunction(codegen, MakeName<false>(), KeyTypes));
+        codegen.ExportSymbol(EqualsFunc = GenerateEqualsFunction(codegen, MakeName<true>(), KeyTypes));
     }
 #endif
 };
@@ -762,7 +762,7 @@ public:
     }
 #ifndef MKQL_DISABLE_CODEGEN
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
         const auto ptrValueType = PointerType::getUnqual(valueType);
@@ -1030,18 +1030,18 @@ private:
         return out.Str();
     }
 
-    void FinalizeFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
+    void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) final {
         if (EqualsFunc) {
-            Equals = reinterpret_cast<TEqualsPtr>(codegen->GetPointerToFunction(EqualsFunc));
+            Equals = reinterpret_cast<TEqualsPtr>(codegen.GetPointerToFunction(EqualsFunc));
         }
         if (HashFunc) {
-            Hash = reinterpret_cast<THashPtr>(codegen->GetPointerToFunction(HashFunc));
+            Hash = reinterpret_cast<THashPtr>(codegen.GetPointerToFunction(HashFunc));
         }
     }
 
-    void GenerateFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
-        codegen->ExportSymbol(HashFunc = GenerateHashFunction(codegen, MakeName<false>(), KeyTypes));
-        codegen->ExportSymbol(EqualsFunc = GenerateEqualsFunction(codegen, MakeName<true>(), KeyTypes));
+    void GenerateFunctions(NYql::NCodegen::ICodegen& codegen) final {
+        codegen.ExportSymbol(HashFunc = GenerateHashFunction(codegen, MakeName<false>(), KeyTypes));
+        codegen.ExportSymbol(EqualsFunc = GenerateEqualsFunction(codegen, MakeName<true>(), KeyTypes));
     }
 #endif
 };

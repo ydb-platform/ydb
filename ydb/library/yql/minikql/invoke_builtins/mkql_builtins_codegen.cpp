@@ -15,7 +15,7 @@ Value* GenerateUnaryWithoutCheck(Value* arg, const TCodegenContext& ctx, BasicBl
 }
 
 Value* GenerateUnaryWithCheck(Value* arg, const TCodegenContext& ctx, BasicBlock*& block, TUnaryGenFunc generator) {
-    auto& context = ctx.Codegen->GetContext();
+    auto& context = ctx.Codegen.GetContext();
     const auto valType = Type::getInt128Ty(context);
 
     const auto zero = ConstantInt::get(valType, 0ULL);
@@ -39,7 +39,7 @@ Value* GenerateUnaryWithCheck(Value* arg, const TCodegenContext& ctx, BasicBlock
 
 template<bool CheckLeft, bool CheckRight>
 Value* GenerateBinary(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block, TBinaryGenFunc generator) {
-    auto& context = ctx.Codegen->GetContext();
+    auto& context = ctx.Codegen.GetContext();
 
     const auto valType = Type::getInt128Ty(context);
     const auto zero = ConstantInt::get(valType, 0ULL);
@@ -86,7 +86,7 @@ Value* GenerateBinary(Value* left, Value* right, const TCodegenContext& ctx, Bas
 }
 
 Value* GenerateAggregate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block, TBinaryGenFunc generator) {
-    auto& context = ctx.Codegen->GetContext();
+    auto& context = ctx.Codegen.GetContext();
 
     const auto valType = Type::getInt128Ty(context);
     const auto zero = ConstantInt::get(valType, 0ULL);
@@ -117,7 +117,7 @@ Value* GenerateAggregate(Value* left, Value* right, const TCodegenContext& ctx, 
 }
 
 Value* GenerateCompareAggregate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block, TBinaryGenFunc generator, CmpInst::Predicate predicate) {
-    auto& context = ctx.Codegen->GetContext();
+    auto& context = ctx.Codegen.GetContext();
 
     const auto valType = Type::getInt128Ty(context);
     const auto zero = ConstantInt::get(valType, 0ULL);
@@ -150,7 +150,7 @@ Value* GenerateCompareAggregate(Value* left, Value* right, const TCodegenContext
 
 template<bool CheckFirst>
 Value* GenerateTernary(Value* first, Value* second, Value* third, const TCodegenContext& ctx, BasicBlock*& block, TTernaryGenFunc generator) {
-    auto& context = ctx.Codegen->GetContext();
+    auto& context = ctx.Codegen.GetContext();
 
     const auto valType = Type::getInt128Ty(context);
 

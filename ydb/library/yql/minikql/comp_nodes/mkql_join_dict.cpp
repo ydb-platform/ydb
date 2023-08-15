@@ -41,7 +41,7 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     void DoGenerateGetValue(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto joinFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TJoinDictWrapper::JoinDicts));
         const auto joinFuncArg = ConstantInt::get(Type::getInt64Ty(context), (ui64)this);
@@ -49,7 +49,7 @@ public:
         const auto one = GetNodeValue(Dict1, ctx, block);
         const auto two = GetNodeValue(Dict2, ctx, block);
 
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
+        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
             const auto joinFuncType = FunctionType::get(Type::getInt128Ty(context),
                 { joinFuncArg->getType(), ctx.Ctx->getType(), one->getType(), two->getType() }, false);
             const auto joinFuncPtr = CastInst::Create(Instruction::IntToPtr, joinFunc, PointerType::getUnqual(joinFuncType), "cast", block);

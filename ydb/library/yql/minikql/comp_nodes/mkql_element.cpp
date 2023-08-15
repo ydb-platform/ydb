@@ -27,7 +27,7 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto array = GetNodeValue(Array, ctx, block);
         const auto elementsType = PointerType::getUnqual(array->getType());
@@ -93,7 +93,7 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     void DoGenerateGetElement(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto array = GetNodeValue(Array, ctx, block);
         const auto index = ConstantInt::get(Type::getInt32Ty(context), Index);
@@ -127,7 +127,7 @@ public:
             return DoGenerateGetElement(ctx, pointer, block);
         }
 
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto cache = GetNodeValue(Cache, ctx, block);
 
         const auto fast = BasicBlock::Create(context, "fast", ctx.Func);

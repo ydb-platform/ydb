@@ -47,7 +47,7 @@ struct TDecimalSub {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto& bounds = NDecimal::GenBounds<Precision>(context);
 
         const auto l = GetterForInt128(left, block);
@@ -109,7 +109,7 @@ struct TDiffDateTimeSub {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto lhs = GenToScaledDate<std::make_signed_t<TLeft>>(GetterFor<TLeft>(left, context, block), context, block);
         const auto rhs = GenToScaledDate<std::make_signed_t<TRight>>(GetterFor<TRight>(right, context, block), context, block);
         const auto sub = BinaryOperator::CreateSub(lhs, rhs, "sub", block);
@@ -135,7 +135,7 @@ struct TSameDateTimeSub {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto lhs = GetterFor<TLeft>(left, context, block);
         const auto rhs = GetterFor<TRight>(right, context, block);
         const auto sub = BinaryOperator::CreateSub(lhs, rhs, "sub", block);
@@ -161,7 +161,7 @@ struct TIntervalSubInterval {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto lhs = GetterFor<TLeft>(left, context, block);
         const auto rhs = GetterFor<TRight>(right, context, block);
         const auto sub = BinaryOperator::CreateSub(lhs, rhs, "sub", block);
@@ -198,7 +198,7 @@ struct TAnyDateTimeSubIntervalT {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
         const auto lhs = GenToScaledDate<TLeft>(GetterFor<TLeft>(left, context, block), context, block);
         const auto rhs = GenToScaledDate<TRight>(GetterFor<TRight>(right, context, block), context, block);
         const auto sub = BinaryOperator::CreateSub(lhs, rhs, "sub", block);

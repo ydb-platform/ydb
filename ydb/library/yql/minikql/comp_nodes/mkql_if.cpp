@@ -29,7 +29,7 @@ public:
     }
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto then = BasicBlock::Create(context, "then", ctx.Func);
         const auto elsb = BasicBlock::Create(context, "else", ctx.Func);
@@ -104,7 +104,7 @@ public:
     }
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
         const auto test = BasicBlock::Create(context, "test", ctx.Func);
@@ -186,7 +186,7 @@ public:
     }
 #ifndef MKQL_DISABLE_CODEGEN
     TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
         const auto test = BasicBlock::Create(context, "test", ctx.Func);
@@ -234,7 +234,7 @@ public:
         std::generate_n(std::back_inserter(getters), right.second.size(), [&]() {
             const auto i = idx++;
             return [index, lget = left.second[i], rget = right.second[i]](const TCodegenContext& ctx, BasicBlock*& block) {
-                auto& context = ctx.Codegen->GetContext();
+                auto& context = ctx.Codegen.GetContext();
 
                 const auto then = BasicBlock::Create(context, "then", ctx.Func);
                 const auto elsb = BasicBlock::Create(context, "elsb", ctx.Func);

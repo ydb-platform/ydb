@@ -1157,7 +1157,7 @@ public:
     }
 #ifndef MKQL_DISABLE_CODEGEN
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
         const auto indexType = Type::getInt32Ty(context);
@@ -1241,7 +1241,7 @@ private:
 #ifdef MKQL_DISABLE_CODEGEN
         state = ctx.HolderFactory.Create<TValue>(ctx, this, std::bind(&IComputationWideFlowNode::FetchValues, Flow, std::placeholders::_1, std::placeholders::_2));
 #else
-        state = Fetch && ctx.ExecuteLLVM ?
+        state = ctx.ExecuteLLVM && Fetch ?
             ctx.HolderFactory.Create<TValue>(ctx, this, Fetch):
             ctx.HolderFactory.Create<TValue>(ctx, this, std::bind(&IComputationWideFlowNode::FetchValues, Flow, std::placeholders::_1, std::placeholders::_2));
 #endif
@@ -1275,14 +1275,14 @@ private:
 
     Function* FetchFunc = nullptr;
 
-    void FinalizeFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
+    void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) final {
         if (FetchFunc) {
-            Fetch = reinterpret_cast<TFetchPtr>(codegen->GetPointerToFunction(FetchFunc));
+            Fetch = reinterpret_cast<TFetchPtr>(codegen.GetPointerToFunction(FetchFunc));
         }
     }
 
-    void GenerateFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
-        codegen->ExportSymbol(FetchFunc = GenerateFetchFunction(codegen));
+    void GenerateFunctions(NYql::NCodegen::ICodegen& codegen) final {
+        codegen.ExportSymbol(FetchFunc = GenerateFetchFunction(codegen));
     }
 
     TString MakeName() const {
@@ -1291,9 +1291,9 @@ private:
         return out.Str();
     }
 
-    Function* GenerateFetchFunction(const NYql::NCodegen::ICodegen::TPtr& codegen) const {
-        auto& module = codegen->GetModule();
-        auto& context = codegen->GetContext();
+    Function* GenerateFetchFunction(NYql::NCodegen::ICodegen& codegen) const {
+        auto& module = codegen.GetModule();
+        auto& context = codegen.GetContext();
 
         const auto& name = MakeName();
         if (const auto f = module.getFunction(name.c_str()))

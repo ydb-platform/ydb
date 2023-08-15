@@ -17,8 +17,8 @@ struct TCountBits : public TSimpleArithmeticUnary<TInput, TOutput, TCountBits<TI
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Gen(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        auto& context = ctx.Codegen->GetContext();
-        auto& module = ctx.Codegen->GetModule();
+        auto& context = ctx.Codegen.GetContext();
+        auto& module = ctx.Codegen.GetModule();
         const auto fnType = FunctionType::get(arg->getType(), {arg->getType()}, false);
         const auto& name = GetFuncNameForType<TInput>("llvm.ctpop");
         const auto func = module.getOrInsertFunction(name, fnType).getCallee();

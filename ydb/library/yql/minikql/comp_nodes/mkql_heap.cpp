@@ -52,7 +52,7 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
 
@@ -84,7 +84,7 @@ public:
         const auto idxType = Type::getInt32Ty(context);
 
         Value* array = nullptr;
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
+        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
             const auto funType = FunctionType::get(valueType, {fact->getType(), list->getType(), itemsPtr->getType()}, false);
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
             array = CallInst::Create(funType, funcPtr, {fact, list, itemsPtr}, "array", block);
@@ -121,7 +121,7 @@ public:
 #endif
 private:
     void Do(TComputationContext& ctx, NUdf::TUnboxedValuePod* begin, NUdf::TUnboxedValuePod* end) const {
-        if (Comparator) {
+        if (ctx.ExecuteLLVM && Comparator) {
             return Algorithm(begin, end, std::bind(Comparator, std::ref(ctx), std::placeholders::_1, std::placeholders::_2));
         }
 
@@ -161,15 +161,15 @@ private:
         return out.Str();
     }
 
-    void FinalizeFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
+    void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) final {
         if (CompareFunc) {
-            Comparator = reinterpret_cast<TComparePtr>(codegen->GetPointerToFunction(CompareFunc));
+            Comparator = reinterpret_cast<TComparePtr>(codegen.GetPointerToFunction(CompareFunc));
         }
     }
 
-    void GenerateFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
+    void GenerateFunctions(NYql::NCodegen::ICodegen& codegen) final {
         CompareFunc = GenerateCompareFunction(codegen, MakeName(), Left, Right, Compare);
-        codegen->ExportSymbol(CompareFunc);
+        codegen.ExportSymbol(CompareFunc);
     }
 
     Function* CompareFunc = nullptr;
@@ -229,7 +229,7 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
 
@@ -269,7 +269,7 @@ public:
         const auto idxType = Type::getInt32Ty(context);
 
         Value* array = nullptr;
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
+        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
             const auto funType = FunctionType::get(valueType, {fact->getType(), list->getType(), itemsPtr->getType()}, false);
             const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
             array = CallInst::Create(funType, funcPtr, {fact, list, itemsPtr}, "array", block);
@@ -307,7 +307,7 @@ public:
 #endif
 private:
     void Do(TComputationContext& ctx, NUdf::TUnboxedValuePod* begin, NUdf::TUnboxedValuePod* nth,  NUdf::TUnboxedValuePod* end) const {
-        if (Comparator) {
+        if (ctx.ExecuteLLVM && Comparator) {
             return Algorithm(begin, nth, end, std::bind(Comparator, std::ref(ctx), std::placeholders::_1, std::placeholders::_2));
         }
 
@@ -349,15 +349,15 @@ private:
         return out.Str();
     }
 
-    void FinalizeFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
+    void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) final {
         if (CompareFunc) {
-            Comparator = reinterpret_cast<TComparePtr>(codegen->GetPointerToFunction(CompareFunc));
+            Comparator = reinterpret_cast<TComparePtr>(codegen.GetPointerToFunction(CompareFunc));
         }
     }
 
-    void GenerateFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
+    void GenerateFunctions(NYql::NCodegen::ICodegen& codegen) final {
         CompareFunc = GenerateCompareFunction(codegen, MakeName(), Left, Right, Compare);
-        codegen->ExportSymbol(CompareFunc);
+        codegen.ExportSymbol(CompareFunc);
     }
 
     Function* CompareFunc = nullptr;

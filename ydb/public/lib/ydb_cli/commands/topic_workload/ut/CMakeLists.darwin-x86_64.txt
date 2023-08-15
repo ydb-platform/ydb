@@ -35,7 +35,7 @@ set_property(
   ydb-public-lib-ydb_cli-commands-topic_workload-ut
   PROPERTY
   SPLIT_FACTOR
-  10
+  1
 )
 add_yunittest(
   NAME

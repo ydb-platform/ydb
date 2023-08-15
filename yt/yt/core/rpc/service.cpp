@@ -83,8 +83,8 @@ void ThrowUnsupportedClientFeature(int featureId, TStringBuf featureName)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TServiceId::TServiceId(const TString& serviceName, TRealmId realmId)
-    : ServiceName(serviceName)
+TServiceId::TServiceId(std::string serviceName, TRealmId realmId)
+    : ServiceName(std::move(serviceName))
     , RealmId(realmId)
 { }
 
@@ -100,7 +100,7 @@ bool operator != (const TServiceId& lhs, const TServiceId& rhs)
 
 TString ToString(const TServiceId& serviceId)
 {
-    auto result = serviceId.ServiceName;
+    auto result = TString(serviceId.ServiceName);
     if (!serviceId.RealmId.IsEmpty()) {
         result.append(':');
         result.append(ToString(serviceId.RealmId));

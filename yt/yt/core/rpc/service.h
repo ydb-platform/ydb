@@ -94,10 +94,12 @@ struct IServiceContext
     virtual TMutationId GetMutationId() const = 0;
 
     //! Returns request service name.
-    virtual const TString& GetService() const = 0;
+    // NB: Service name is supposed to be short, so SSO should work.
+    virtual std::string GetService() const = 0;
 
     //! Returns request method name.
-    virtual const TString& GetMethod() const = 0;
+    // NB: Method name is supposed to be short, so SSO should work.
+    virtual std::string GetMethod() const = 0;
 
     //! Returns request realm id.
     virtual TRealmId GetRealmId() const = 0;
@@ -268,9 +270,9 @@ DEFINE_REFCOUNTED_TYPE(IServiceContext)
 struct TServiceId
 {
     TServiceId() = default;
-    TServiceId(const TString& serviceName, TRealmId realmId = NullRealmId);
+    TServiceId(std::string serviceName, TRealmId realmId = NullRealmId);
 
-    TString ServiceName;
+    std::string ServiceName;
     TRealmId RealmId;
 };
 

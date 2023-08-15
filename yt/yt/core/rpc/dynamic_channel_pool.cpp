@@ -45,7 +45,7 @@ public:
         IChannelFactoryPtr channelFactory,
         TString endpointDescription,
         IAttributeDictionaryPtr endpointAttributes,
-        TString serviceName,
+        std::string serviceName,
         TDiscoverRequestHook discoverRequestHook)
         : Config_(std::move(config))
         , ChannelFactory_(std::move(channelFactory))
@@ -187,7 +187,7 @@ private:
     const IChannelFactoryPtr ChannelFactory_;
     const TString EndpointDescription_;
     const IAttributeDictionaryPtr EndpointAttributes_;
-    const TString ServiceName_;
+    const std::string ServiceName_;
     const TDiscoverRequestHook DiscoverRequestHook_;
 
     const NLogging::TLogger Logger;
@@ -868,7 +868,7 @@ TDynamicChannelPool::TDynamicChannelPool(
     IChannelFactoryPtr channelFactory,
     TString endpointDescription,
     IAttributeDictionaryPtr endpointAttributes,
-    TString serviceName,
+    std::string serviceName,
     TDiscoverRequestHook discoverRequestHook)
     : Impl_(New<TImpl>(
         std::move(config),

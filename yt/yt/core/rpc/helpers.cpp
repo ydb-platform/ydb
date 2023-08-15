@@ -413,7 +413,7 @@ TTraceContextPtr GetOrCreateHandlerTraceContext(
         forceTracing);
 }
 
-TTraceContextPtr CreateCallTraceContext(const TString& service, const TString& method)
+TTraceContextPtr CreateCallTraceContext(std::string service, std::string method)
 {
     auto context = TryGetCurrentTraceContext();
     if (!context) {

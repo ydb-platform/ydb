@@ -44,7 +44,7 @@ public:
         IChannelFactoryPtr channelFactory,
         TString endpointDescription,
         IAttributeDictionaryPtr endpointAttributes,
-        TString serviceName,
+        std::string serviceName,
         TDiscoverRequestHook discoverRequestHook)
         : Config_(std::move(config))
         , EndpointDescription_(endpointDescription)
@@ -216,9 +216,9 @@ public:
         }
     }
 
-    TFuture<IChannelPtr> GetChannel(const TString& serviceName) override
+    TFuture<IChannelPtr> GetChannel(std::string serviceName) override
     {
-        return GetSubprovider(serviceName)->GetChannel();
+        return GetSubprovider(std::move(serviceName))->GetChannel();
     }
 
     TFuture<IChannelPtr> GetChannel() override
@@ -250,10 +250,10 @@ private:
     const IAttributeDictionaryPtr EndpointAttributes_;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
-    THashMap<TString, TBalancingChannelSubproviderPtr> SubproviderMap_;
+    THashMap<std::string, TBalancingChannelSubproviderPtr> SubproviderMap_;
 
 
-    TBalancingChannelSubproviderPtr GetSubprovider(const TString& serviceName)
+    TBalancingChannelSubproviderPtr GetSubprovider(std::string serviceName)
     {
         {
             auto guard = ReaderGuard(SpinLock_);
@@ -277,11 +277,10 @@ private:
                 EndpointAttributes_,
                 serviceName,
                 DiscoverRequestHook_);
-            YT_VERIFY(SubproviderMap_.emplace(serviceName, subprovider).second);
+            EmplaceOrCrash(SubproviderMap_, serviceName, subprovider);
             return subprovider;
         }
     }
-
 };
 
 DEFINE_REFCOUNTED_TYPE(TBalancingChannelProvider)

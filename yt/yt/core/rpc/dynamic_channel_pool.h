@@ -29,7 +29,7 @@ public:
         IChannelFactoryPtr channelFactory,
         TString endpointDescription,
         NYTree::IAttributeDictionaryPtr endpointAttributes,
-        TString serviceName,
+        std::string serviceName,
         TDiscoverRequestHook discoverRequestHook = {});
     ~TDynamicChannelPool();
 

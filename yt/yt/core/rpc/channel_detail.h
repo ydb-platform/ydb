@@ -78,7 +78,7 @@ class TClientRequestPerformanceProfiler
     : public IClientRequestControl
 {
 public:
-    TClientRequestPerformanceProfiler(const TString& service, const TString& method);
+    TClientRequestPerformanceProfiler(std::string service, std::string method);
 
     void ProfileRequest(const TSharedRefArray& requestMessage);
     void ProfileAcknowledgement();
@@ -95,7 +95,7 @@ private:
     const TPerformanceCounters* const MethodCounters_;
     NProfiling::TWallTimer Timer_;
 
-    static const TPerformanceCounters* GetPerformanceCounters(const TString& service, const TString& method);
+    static const TPerformanceCounters* GetPerformanceCounters(std::string service, std::string method);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

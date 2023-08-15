@@ -35,8 +35,8 @@ static const auto LightInvokerDurationWarningThreshold = TDuration::MilliSeconds
 TClientContext::TClientContext(
     TRequestId requestId,
     NTracing::TTraceContextPtr traceContext,
-    const TString& service,
-    const TString& method,
+    std::string service,
+    std::string method,
     TFeatureIdFormatter featureIdFormatter,
     bool responseIsHeavy,
     TAttachmentsOutputStreamPtr requestAttachmentsStream,
@@ -44,8 +44,8 @@ TClientContext::TClientContext(
     TMemoryTag responseMemoryTag)
     : RequestId_(requestId)
     , TraceContext_(std::move(traceContext))
-    , Service_(service)
-    , Method_(method)
+    , Service_(std::move(service))
+    , Method_(std::move(method))
     , FeatureIdFormatter_(featureIdFormatter)
     , ResponseHeavy_(responseIsHeavy)
     , RequestAttachmentsStream_(std::move(requestAttachmentsStream))
@@ -66,8 +66,8 @@ TClientRequest::TClientRequest(
 {
     YT_ASSERT(Channel_);
 
-    Header_.set_service(serviceDescriptor.GetFullServiceName());
-    Header_.set_method(methodDescriptor.MethodName);
+    ToProto(Header_.mutable_service(), serviceDescriptor.FullServiceName);
+    ToProto(Header_.mutable_method(), methodDescriptor.MethodName);
     Header_.set_protocol_version_major(serviceDescriptor.ProtocolVersion.Major);
     Header_.set_protocol_version_minor(serviceDescriptor.ProtocolVersion.Minor);
 
@@ -199,14 +199,14 @@ TRealmId TClientRequest::GetRealmId() const
     return FromProto<TRealmId>(Header_.realm_id());
 }
 
-const TString& TClientRequest::GetService() const
+std::string TClientRequest::GetService() const
 {
-    return Header_.service();
+    return FromProto<std::string>(Header_.service());
 }
 
-const TString& TClientRequest::GetMethod() const
+std::string TClientRequest::GetMethod() const
 {
-    return Header_.method();
+    return FromProto<std::string>(Header_.method());
 }
 
 void TClientRequest::DeclareClientFeature(int featureId)
@@ -706,8 +706,9 @@ void TClientResponse::HandleStreamingFeedback(const TStreamingFeedback& feedback
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TServiceDescriptor::TServiceDescriptor(const TString& serviceName)
-    : ServiceName(serviceName)
+TServiceDescriptor::TServiceDescriptor(std::string serviceName)
+    : ServiceName(std::move(serviceName))
+    , FullServiceName(ServiceName)
 { }
 
 TServiceDescriptor& TServiceDescriptor::SetProtocolVersion(int majorVersion)
@@ -724,9 +725,10 @@ TServiceDescriptor& TServiceDescriptor::SetProtocolVersion(TProtocolVersion vers
     return *this;
 }
 
-TServiceDescriptor& TServiceDescriptor::SetNamespace(const TString& value)
+TServiceDescriptor& TServiceDescriptor::SetNamespace(std::string value)
 {
-    Namespace = value;
+    Namespace = std::move(value);
+    FullServiceName = Namespace + "." + ServiceName;
     return *this;
 }
 
@@ -734,11 +736,6 @@ TServiceDescriptor& TServiceDescriptor::SetAcceptsBaggage(bool value)
 {
     AcceptsBaggage = value;
     return *this;
-}
-
-TString TServiceDescriptor::GetFullServiceName() const
-{
-    return Namespace ? Namespace + "." + ServiceName : ServiceName;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

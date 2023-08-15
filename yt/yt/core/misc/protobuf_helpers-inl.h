@@ -44,9 +44,21 @@ inline void ToProto(TString* serialized, TString original)
     *serialized = std::move(original);
 }
 
+inline void ToProto(TString* serialized, std::string original)
+{
+    *serialized = std::move(original);
+}
+
 inline void FromProto(TString* original, TString serialized)
 {
     *original = std::move(serialized);
+}
+
+// NB: ToProto works in O(1) time if TSTRING_IS_STD_STRING is used and
+// may work in O(n) time otherwise due to CoW.
+inline void FromProto(std::string* original, TString serialized)
+{
+    *original = std::move(serialized.MutRef());
 }
 
 // These conversions work in case if the original protobuf that uses
@@ -58,7 +70,17 @@ inline void ToProto(std::string* serialized, TString original)
     *serialized = std::move(original.MutRef());
 }
 
+inline void ToProto(std::string* serialized, std::string original)
+{
+    *serialized = std::move(original);
+}
+
 inline void FromProto(TString* original, std::string serialized)
+{
+    *original = std::move(serialized);
+}
+
+inline void FromProto(std::string* original, std::string serialized)
 {
     *original = std::move(serialized);
 }

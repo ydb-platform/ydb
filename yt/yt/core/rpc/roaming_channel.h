@@ -25,7 +25,7 @@ struct IRoamingChannelProvider
 
     //! Returns the actual channel to use for sending to service with
     //! a given #serviceName.
-    virtual TFuture<IChannelPtr> GetChannel(const TString& serviceName) = 0;
+    virtual TFuture<IChannelPtr> GetChannel(std::string serviceName) = 0;
 
     //! Returns a channel to use.
     virtual TFuture<IChannelPtr> GetChannel() = 0;

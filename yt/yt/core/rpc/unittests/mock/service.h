@@ -133,14 +133,14 @@ public:
     );
 
     MOCK_METHOD(
-        const TString&,
+        std::string,
         GetService,
         (),
         (const, override)
     );
 
     MOCK_METHOD(
-        const TString&,
+        std::string,
         GetMethod,
         (),
         (const, override)

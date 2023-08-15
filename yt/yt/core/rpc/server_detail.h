@@ -42,8 +42,8 @@ public:
     bool IsRetry() const override;
     TMutationId GetMutationId() const override;
 
-    const TString& GetService() const override;
-    const TString& GetMethod() const override;
+    std::string GetService() const override;
+    std::string GetMethod() const override;
     TRealmId GetRealmId() const override;
     const TAuthenticationIdentity& GetAuthenticationIdentity() const override;
 
@@ -186,8 +186,8 @@ public:
     bool IsRetry() const override;
     TMutationId GetMutationId() const override;
 
-    const TString& GetService() const override;
-    const TString& GetMethod() const override;
+    std::string GetService() const override;
+    std::string GetMethod() const override;
     TRealmId GetRealmId() const override;
     const TAuthenticationIdentity& GetAuthenticationIdentity() const override;
 

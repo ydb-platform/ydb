@@ -44,13 +44,13 @@ TYPathRequest::TYPathRequest(const TRequestHeader& header)
 { }
 
 TYPathRequest::TYPathRequest(
-    TString service,
-    TString method,
+    std::string service,
+    std::string method,
     TYPath path,
     bool mutating)
 {
-    Header_.set_service(std::move(service));
-    Header_.set_method(std::move(method));
+    ToProto(Header_.mutable_service(), std::move(service));
+    ToProto(Header_.mutable_method(), std::move(method));
 
     auto* ypathExt = Header_.MutableExtension(NProto::TYPathHeaderExt::ypath_header_ext);
     ypathExt->set_mutating(mutating);
@@ -67,14 +67,14 @@ TRealmId TYPathRequest::GetRealmId() const
     return NullRealmId;
 }
 
-const TString& TYPathRequest::GetMethod() const
+std::string TYPathRequest::GetMethod() const
 {
-    return Header_.method();
+    return FromProto<std::string>(Header_.method());
 }
 
-const TString& TYPathRequest::GetService() const
+std::string TYPathRequest::GetService() const
 {
-    return Header_.service();
+    return FromProto<std::string>(Header_.service());
 }
 
 void TYPathRequest::DeclareClientFeature(int featureId)

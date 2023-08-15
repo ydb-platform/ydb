@@ -187,23 +187,23 @@ struct TClientRequestPerformanceProfiler::TPerformanceCounters
 };
 
 auto TClientRequestPerformanceProfiler::GetPerformanceCounters(
-    const TString& service,
-    const TString& method) -> const TPerformanceCounters*
+    std::string service,
+    std::string method) -> const TPerformanceCounters*
 {
-    using TCountersMap = NConcurrency::TSyncMap<std::pair<TString, TString>, TPerformanceCounters>;
+    using TCountersMap = NConcurrency::TSyncMap<std::pair<std::string, std::string>, TPerformanceCounters>;
 
     auto [counter, _] = LeakySingleton<TCountersMap>()->FindOrInsert(std::pair(service, method), [&] {
         auto profiler = RpcClientProfiler
             .WithHot()
-            .WithTag("yt_service", service)
-            .WithTag("method", method, -1);
+            .WithTag("yt_service", TString(service))
+            .WithTag("method", TString(method), -1);
         return TPerformanceCounters(profiler);
     });
     return counter;
 }
 
-TClientRequestPerformanceProfiler::TClientRequestPerformanceProfiler(const TString& service, const TString& method)
-    : MethodCounters_(GetPerformanceCounters(service, method))
+TClientRequestPerformanceProfiler::TClientRequestPerformanceProfiler(std::string service, std::string method)
+    : MethodCounters_(GetPerformanceCounters(std::move(service), std::move(method)))
 { }
 
 void TClientRequestPerformanceProfiler::ProfileRequest(const TSharedRefArray& requestMessage)

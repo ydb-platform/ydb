@@ -28,8 +28,8 @@ public:
 public:
     NRpc::TRequestId GetRequestId() const override;
     NRpc::TRealmId GetRealmId() const override;
-    const TString& GetMethod() const override;
-    const TString& GetService() const override;
+    std::string GetMethod() const override;
+    std::string GetService() const override;
 
     using NRpc::IClientRequest::DeclareClientFeature;
     using NRpc::IClientRequest::RequireServerFeature;
@@ -75,8 +75,8 @@ protected:
     explicit TYPathRequest(const NRpc::NProto::TRequestHeader& header);
 
     TYPathRequest(
-        TString service,
-        TString method,
+        std::string service,
+        std::string method,
         NYPath::TYPath path,
         bool mutating);
 
@@ -103,13 +103,13 @@ public:
     { }
 
     TTypedYPathRequest(
-        const TString& service,
-        const TString& method,
+        std::string service,
+        std::string method,
         const NYPath::TYPath& path,
         bool mutating)
         : TYPathRequest(
-            service,
-            method,
+            std::move(service),
+            std::move(method),
             path,
             mutating)
     { }

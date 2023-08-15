@@ -428,16 +428,12 @@ private:
                 return;
             }
 
-            const auto& realmId = requestControl->GetRealmId();
-            const auto& service = requestControl->GetService();
-            const auto& method = requestControl->GetMethod();
-
             NProto::TRequestCancelationHeader header;
             ToProto(header.mutable_request_id(), requestId);
-            header.set_service(service);
-            header.set_method(method);
-            if (realmId) {
-                ToProto(header.mutable_realm_id(), realmId);
+            ToProto(header.mutable_service(), requestControl->GetService());
+            ToProto(header.mutable_method(), requestControl->GetMethod());
+            if (auto realmId = requestControl->GetRealmId()) {
+                ToProto(header.mutable_realm_id(), requestControl->GetRealmId());
             }
 
             auto message = CreateRequestCancelationMessage(header);
@@ -454,17 +450,12 @@ private:
                 return MakeFuture(TError(NRpc::EErrorCode::TransportError, "Session is terminated"));
             }
 
-            auto requestId = requestControl->GetRequestId();
-            const auto& realmId = requestControl->GetRealmId();
-            const auto& service = requestControl->GetService();
-            const auto& method = requestControl->GetMethod();
-
             NProto::TStreamingPayloadHeader header;
-            ToProto(header.mutable_request_id(), requestId);
-            header.set_service(service);
-            header.set_method(method);
-            if (realmId) {
-                ToProto(header.mutable_realm_id(), realmId);
+            ToProto(header.mutable_request_id(), requestControl->GetRequestId());
+            ToProto(header.mutable_service(), requestControl->GetService());
+            ToProto(header.mutable_method(), requestControl->GetMethod());
+            if (auto realmId = requestControl->GetRealmId()) {
+                ToProto(header.mutable_realm_id(), requestControl->GetRealmId());
             }
             header.set_sequence_number(payload.SequenceNumber);
             header.set_codec(static_cast<int>(payload.Codec));
@@ -485,17 +476,12 @@ private:
                 return MakeFuture(TError(NRpc::EErrorCode::TransportError, "Session is terminated"));
             }
 
-            auto requestId = requestControl->GetRequestId();
-            const auto& realmId = requestControl->GetRealmId();
-            const auto& service = requestControl->GetService();
-            const auto& method = requestControl->GetMethod();
-
             NProto::TStreamingFeedbackHeader header;
-            ToProto(header.mutable_request_id(), requestId);
-            header.set_service(service);
-            header.set_method(method);
-            if (realmId) {
-                ToProto(header.mutable_realm_id(), realmId);
+            ToProto(header.mutable_request_id(), requestControl->GetRequestId());
+            ToProto(header.mutable_service(), requestControl->GetService());
+            ToProto(header.mutable_method(), requestControl->GetMethod());
+            if (auto realmId = requestControl->GetRealmId()) {
+                ToProto(header.mutable_realm_id(), requestControl->GetRealmId());
             }
             header.set_read_position(feedback.ReadPosition);
 
@@ -1102,12 +1088,12 @@ private:
             return RealmId_;
         }
 
-        const TString& GetService() const
+        std::string GetService() const
         {
             return Service_;
         }
 
-        const TString& GetMethod() const
+        std::string GetMethod() const
         {
             return Method_;
         }
@@ -1186,8 +1172,8 @@ private:
     private:
         const TSessionPtr Session_;
         const TRealmId RealmId_;
-        const TString Service_;
-        const TString Method_;
+        const std::string Service_;
+        const std::string Method_;
         const TRequestId RequestId_;
         const TSendOptions Options_;
 

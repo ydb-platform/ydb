@@ -1094,8 +1094,8 @@ private:
 
         NProto::TStreamingPayloadHeader header;
         ToProto(header.mutable_request_id(), RequestId_);
-        header.set_service(GetService());
-        header.set_method(GetMethod());
+        ToProto(header.mutable_service(), GetService());
+        ToProto(header.mutable_method(), GetMethod());
         if (GetRealmId()) {
             ToProto(header.mutable_realm_id(), GetRealmId());
         }
@@ -1434,8 +1434,8 @@ TServiceBase::TServiceBase(
     , DefaultInvoker_(std::move(defaultInvoker))
     , Authenticator_(std::move(authenticator))
     , ServiceDescriptor_(descriptor)
-    , ServiceId_(descriptor.GetFullServiceName(), realmId)
-    , Profiler_(RpcServerProfiler.WithHot().WithTag("yt_service", ServiceId_.ServiceName))
+    , ServiceId_(descriptor.FullServiceName, realmId)
+    , Profiler_(RpcServerProfiler.WithHot().WithTag("yt_service", TString(ServiceId_.ServiceName)))
     , AuthenticationTimer_(Profiler_.Timer("/authentication_time"))
     , ServiceLivenessChecker_(New<TPeriodicExecutor>(
         TDispatcher::Get()->GetLightInvoker(),

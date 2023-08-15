@@ -38,7 +38,7 @@ public:
         return GetChannel();
     }
 
-    TFuture<IChannelPtr> GetChannel(const TString& /*serviceName*/) override
+    TFuture<IChannelPtr> GetChannel(std::string /*serviceName*/) override
     {
         return GetChannel();
     }
@@ -82,7 +82,7 @@ public:
         return GetChannel();
     }
 
-    TFuture<IChannelPtr> GetChannel(const TString& /*serviceName*/) override
+    TFuture<IChannelPtr> GetChannel(std::string /*serviceName*/) override
     {
         return GetChannel();
     }
@@ -120,7 +120,7 @@ public:
         return GetChannel();
     }
 
-    TFuture<IChannelPtr> GetChannel(const TString& /*serviceName*/) override
+    TFuture<IChannelPtr> GetChannel(std::string /*serviceName*/) override
     {
         return GetChannel();
     }

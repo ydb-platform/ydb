@@ -65,8 +65,8 @@ NTracing::TTraceContextPtr GetOrCreateHandlerTraceContext(
     const NProto::TRequestHeader& header,
     bool forceTracing);
 NTracing::TTraceContextPtr CreateCallTraceContext(
-    const TString& service,
-    const TString& method);
+    std::string service,
+    std::string method);
 
 //! Generates a random mutation id.
 TMutationId GenerateMutationId();

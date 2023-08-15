@@ -1,5 +1,5 @@
-#ifndef BOOST_SMART_PTR_DETAIL_SP_THREAD_YIELD_HPP_INCLUDED
-#define BOOST_SMART_PTR_DETAIL_SP_THREAD_YIELD_HPP_INCLUDED
+#ifndef BOOST_CORE_DETAIL_SP_THREAD_YIELD_HPP_INCLUDED
+#define BOOST_CORE_DETAIL_SP_THREAD_YIELD_HPP_INCLUDED
 
 // MS compatible compilers support #pragma once
 
@@ -7,9 +7,9 @@
 # pragma once
 #endif
 
-// boost/smart_ptr/detail/sp_thread_yield.hpp
+// boost/core/detail/sp_thread_yield.hpp
 //
-// inline void bost::detail::sp_thread_yield();
+// inline void bost::core::sp_thread_yield();
 //
 //   Gives up the remainder of the time slice,
 //   as if by calling sched_yield().
@@ -21,27 +21,31 @@
 #include <boost/config.hpp>
 #include <boost/config/pragma_message.hpp>
 
-#if defined( WIN32 ) || defined( _WIN32 ) || defined( __WIN32__ ) || defined( __CYGWIN__ )
+#if defined( _WIN32 ) || defined( __WIN32__ ) || defined( __CYGWIN__ )
 
 #if defined(BOOST_SP_REPORT_IMPLEMENTATION)
-  BOOST_PRAGMA_MESSAGE("Using Sleep(0) in sp_thread_yield")
+  BOOST_PRAGMA_MESSAGE("Using SwitchToThread() in sp_thread_yield")
 #endif
 
-#include <boost/smart_ptr/detail/sp_win32_sleep.hpp>
+#include <boost/core/detail/sp_win32_sleep.hpp>
 
 namespace boost
 {
-
+namespace core
+{
 namespace detail
 {
 
-inline void sp_thread_yield()
+inline void sp_thread_yield() BOOST_NOEXCEPT
 {
-    Sleep( 0 );
+    SwitchToThread();
 }
 
 } // namespace detail
 
+using boost::core::detail::sp_thread_yield;
+
+} // namespace core
 } // namespace boost
 
 #elif defined(BOOST_HAS_SCHED_YIELD)
@@ -59,17 +63,15 @@ inline void sp_thread_yield()
 
 namespace boost
 {
-
-namespace detail
+namespace core
 {
 
-inline void sp_thread_yield()
+inline void sp_thread_yield() BOOST_NOEXCEPT
 {
     sched_yield();
 }
 
-} // namespace detail
-
+} // namespace core
 } // namespace boost
 
 #else
@@ -78,23 +80,21 @@ inline void sp_thread_yield()
   BOOST_PRAGMA_MESSAGE("Using sp_thread_pause() in sp_thread_yield")
 #endif
 
-#include <boost/smart_ptr/detail/sp_thread_pause.hpp>
+#include <boost/core/detail/sp_thread_pause.hpp>
 
 namespace boost
 {
-
-namespace detail
+namespace core
 {
 
-inline void sp_thread_yield()
+inline void sp_thread_yield() BOOST_NOEXCEPT
 {
     sp_thread_pause();
 }
 
-} // namespace detail
-
+} // namespace core
 } // namespace boost
 
 #endif
 
-#endif // #ifndef BOOST_SMART_PTR_DETAIL_SP_THREAD_YIELD_HPP_INCLUDED
+#endif // #ifndef BOOST_CORE_DETAIL_SP_THREAD_YIELD_HPP_INCLUDED

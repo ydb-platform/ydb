@@ -1,5 +1,5 @@
-#ifndef BOOST_SMART_PTR_DETAIL_SP_WIN32_SLEEP_HPP_INCLUDED
-#define BOOST_SMART_PTR_DETAIL_SP_WIN32_SLEEP_HPP_INCLUDED
+#ifndef BOOST_CORE_DETAIL_SP_WIN32_SLEEP_HPP_INCLUDED
+#define BOOST_CORE_DETAIL_SP_WIN32_SLEEP_HPP_INCLUDED
 
 // MS compatible compilers support #pragma once
 
@@ -7,7 +7,7 @@
 # pragma once
 #endif
 
-// boost/smart_ptr/detail/sp_win32_sleep.hpp
+// boost/core/detail/sp_win32_sleep.hpp
 //
 // Declares the Win32 Sleep() function.
 //
@@ -21,6 +21,8 @@
 
 namespace boost
 {
+namespace core
+{
 namespace detail
 {
 
@@ -28,22 +30,25 @@ namespace detail
 
 #if defined(__clang__) && defined(__x86_64__)
 // clang x64 warns that __stdcall is ignored
-# define BOOST_SP_STDCALL
+# define BOOST_CORE_SP_STDCALL
 #else
-# define BOOST_SP_STDCALL __stdcall
+# define BOOST_CORE_SP_STDCALL __stdcall
 #endif
 
 #if defined(__LP64__) // Cygwin 64
-  extern "C" __declspec(dllimport) void BOOST_SP_STDCALL Sleep( unsigned int ms );
+  extern "C" __declspec(dllimport) void BOOST_CORE_SP_STDCALL Sleep( unsigned int ms );
 #else
-  extern "C" __declspec(dllimport) void BOOST_SP_STDCALL Sleep( unsigned long ms );
+  extern "C" __declspec(dllimport) void BOOST_CORE_SP_STDCALL Sleep( unsigned long ms );
 #endif
 
-#undef BOOST_SP_STDCALL
+extern "C" __declspec(dllimport) int BOOST_CORE_SP_STDCALL SwitchToThread();
+
+#undef BOOST_CORE_SP_STDCALL
 
 #endif // !defined( BOOST_USE_WINDOWS_H )
 
 } // namespace detail
+} // namespace core
 } // namespace boost
 
-#endif // #ifndef BOOST_SMART_PTR_DETAIL_SP_WIN32_SLEEP_HPP_INCLUDED
+#endif // #ifndef BOOST_CORE_DETAIL_SP_WIN32_SLEEP_HPP_INCLUDED

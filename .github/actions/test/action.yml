@@ -55,7 +55,7 @@ runs:
       echo "testfilterfile=$(pwd)/.github/config/muted_test.txt" >> $GITHUB_OUTPUT
       echo "testshardfilterfile=$(pwd)/.github/config/muted_shard.txt" >> $GITHUB_OUTPUT
       echo "functestfilterfile=$(pwd)/.github/config/muted_functest.txt" >> $GITHUB_OUTPUT
-      echo "pytest-logfilename=${{inputs.log_suffix}}-pytest-stdout.gz" >> $GITHUB_OUTPUT
+      echo "pytest-logfilename=${{inputs.log_suffix}}-pytest-stdout.log" >> $GITHUB_OUTPUT
 
   - name: configure s3cmd
     shell: bash
@@ -169,8 +169,6 @@ runs:
 
       .github/scripts/tests/attach-logs.py \
         --url-prefix $S3_URL_PREFIX/logs/ \
-        --filter-shard-file ${{steps.init.outputs.testshardfilterfile}} \
-        --filter-test-file ${{steps.init.outputs.testfilterfile}} \
         --ctest-report $TESTREPDIR/suites/ctest_report.xml \
         --junit-reports-path $TESTREPDIR/unittests/ \
         --decompress \
@@ -250,7 +248,7 @@ runs:
         --source-root $source_root \
         --build-root $build_root \
         --output-dir $TMPDIR/pytest/ \
-        . | tee $WORKDIR/pytest-short.log
+        . | tee $ARTIFACTS_DIR/${{steps.init.outputs.pytest-logfilename}}
 
 #        --artifacts-dir $ARTIFACTS_DIR/pytest/ \
 #        --artifacts-url $S3_URL_PREFIX/pytest/ \
@@ -261,9 +259,8 @@ runs:
     run: |
       echo "::group::junit-postprocess"
       
-      .github/scripts/tests/junit-postprocess.py \
+      .github/scripts/tests/pytest-postprocess.py \
         --filter-file ${{ steps.init.outputs.functestfilterfile }} \
-        --no-attach-filename \
         $PYTESTREPDIR/
 
       echo "::endgroup::"
@@ -282,7 +279,7 @@ runs:
       testmo automation:run:submit-thread \
         --instance "$TESTMO_URL" --run-id ${{steps.th.outputs.runid}} \
         --results "$PYTESTREPDIR/*.xml" \
-        -- cat $WORKDIR/pytest-short.log
+        -- cat $ARTIFACTS_DIR/${{steps.init.outputs.pytest-logfilename}}
 
   - name: Test history run complete
     if: always() && inputs.testman_token

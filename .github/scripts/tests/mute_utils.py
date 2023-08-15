@@ -1,63 +1,50 @@
 import operator
+import re
 import xml.etree.ElementTree as ET
 from junit_utils import add_junit_property
 
 
-class MutedTestCheck:
-    def __init__(self, fn=None):
-        self.classes = set()
-        self.methods = set()
+def pattern_to_re(pattern):
+    res = []
+    for c in pattern:
+        if c == '*':
+            res.append('.*')
+        else:
+            res.append(re.escape(c))
 
-        if fn:
-            self.populate(fn)
+    return f"(?:^{''.join(res)}$)"
 
-    def populate(self, fn):
-        with open(fn, "r") as fp:
+
+class MuteTestCheck:
+    def __init__(self, fn):
+        self.regexps = []
+
+        with open(fn, 'r') as fp:
             for line in fp:
                 line = line.strip()
-                if not line:
-                    continue
-                if "::" in line:
-                    cls, method = line.split("::", maxsplit=1)
-                    self.methods.add((cls, method))
-                else:
-                    self.classes.add(line)
+                pattern = pattern_to_re(line)
 
-    def __call__(self, cls, method=None):
-        if cls in self.classes:
-            return True
+                try:
+                    self.regexps.append(re.compile(pattern))
+                except re.error:
+                    print(f"Unable to compile regex {pattern!r}")
+                    raise
 
-        if method and (cls, method) in self.methods:
-            return True
-
+    def __call__(self, fullname):
+        for r in self.regexps:
+            if r.match(fullname):
+                return True
         return False
 
-    @property
-    def has_rules(self):
-        return len(self.classes) or len(self.methods)
 
+def mute_target(node):
+    for node_name in ('failure', 'error'):
+        failure = node.find(node_name)
+        # print('failure', node_name, node, failure)
 
-class MutedShardCheck:
-    def __init__(self, fn=None):
-        self.muted = set()
-        if fn:
-            self.populate(fn)
-
-    def populate(self, fn):
-        with open(fn, "rt") as fp:
-            for line in fp:
-                target = line.strip()
-                if target:
-                    self.muted.add(target)
-
-    def __call__(self, target):
-        return target in self.muted
-
-
-def mute_target(node, node_name="failure"):
-    failure = node.find(node_name)
-
-    if failure is None:
+        if failure is not None:
+            break
+    else:
         return False
 
     msg = failure.get("message")
@@ -117,7 +104,7 @@ def recalc_suite_info(suite):
 
     for case in suite.findall("testcase"):
         tests += 1
-        elapsed += float(case.get("time"))
+        elapsed += float(case.get("time", 0))
         if case.find("skipped"):
             skipped += 1
         if case.find("failure"):

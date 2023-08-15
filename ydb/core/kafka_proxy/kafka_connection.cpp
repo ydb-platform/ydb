@@ -392,7 +392,7 @@ protected:
                     case SIZE_PREPARE:
                         NormalizeNumber(Request->ExpectedSize);
                         if ((ui64)Request->ExpectedSize > Context->Config.GetMaxMessageSize()) {
-                            KAFKA_LOG_ERROR("message is big. Size: " << Request->ExpectedSize);
+                            KAFKA_LOG_ERROR("message is big. Size: " << Request->ExpectedSize << ". MaxSize: " << Context->Config.GetMaxMessageSize());
                             return PassAway();
                         }
                         Step = INFLIGTH_CHECK;

@@ -17,7 +17,6 @@ namespace NKafka {
 namespace NPrivate {
 
 static constexpr bool DEBUG_ENABLED = false;
-static constexpr TKafkaInt32 MAX_RECORDS_SIZE = 1 << 28; // 256Mb
 
 struct TWriteCollector {
     ui32 NumTaggedFields = 0;
@@ -447,11 +446,12 @@ public:
 //
 template<typename Meta>
 class TypeStrategy<Meta, TKafkaRecords, TKafkaRecordsDesc> {
+    static constexpr TKafkaVersion CURRENT_RECORD_VERSION = 2;
 public:
     inline static void DoWrite(TKafkaWritable& writable, TKafkaVersion version, const TKafkaRecords& value) {
         if (value) {
-            WriteArraySize<Meta>(writable, version, DoSize(version, value));
-            (*value).Write(writable, version);
+            WriteArraySize<Meta>(writable, version, DoSize(CURRENT_RECORD_VERSION, value));
+            (*value).Write(writable, CURRENT_RECORD_VERSION);
         } else {
             WriteArraySize<Meta>(writable, version, 0);
         }
@@ -464,16 +464,35 @@ public:
     inline static void DoRead(TKafkaReadable& readable, TKafkaVersion version, TKafkaRecords& value) {
         int length = ReadArraySize<Meta>(readable, version);
         if (length > 0) {
+            char magic = readable.take(16);
             value.emplace();
-            (*value).Read(readable, version);
+
+            if (magic < CURRENT_RECORD_VERSION) {
+                TKafkaRecordBatchV0 v0;
+                v0.Read(readable, magic);
+
+                value->Magic = v0.Record.Magic;
+                value->Crc = v0.Record.Crc;
+                value->Attributes = v0.Record.Attributes & 0x07;
+
+                value->Records.resize(1);
+                auto& record = value->Records.front();
+                record.Length = v0.Record.MessageSize;
+                record.OffsetDelta = v0.Offset;
+                record.TimestampDelta = v0.Record.Timestamp;
+                record.Key = v0.Record.Key;
+                record.Value = v0.Record.Value;
+            } else {
+                (*value).Read(readable, magic);
+            }
         } else {
             value = std::nullopt;
         }
     }
 
-    inline static i64 DoSize(TKafkaVersion version, const TKafkaRecords& value) {
+    inline static i64 DoSize(TKafkaVersion /*version*/, const TKafkaRecords& value) {
         if (value) {
-            return (*value).Size(version);
+            return (*value).Size(CURRENT_RECORD_VERSION);
         } else {
             return 0;
         }

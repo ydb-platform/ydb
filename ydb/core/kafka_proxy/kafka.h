@@ -355,6 +355,9 @@ public:
     i32 readVarint();
     TArrayRef<const char> Bytes(size_t length);
 
+    // returns a character from the specified position. The current position does not change.
+    char take(size_t shift);
+
     void skip(size_t length);
 
 private:

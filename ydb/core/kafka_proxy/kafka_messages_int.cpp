@@ -94,6 +94,11 @@ void TKafkaReadable::skip(size_t length) {
     Position += length;
 }
 
+char TKafkaReadable::take(size_t shift) {
+    checkEof(shift + sizeof(char));
+    return *(Is.Data() + Position + shift);
+}
+
 void TKafkaReadable::checkEof(size_t length) {
     if (Position + length > Is.Size()) {
         ythrow yexception() << "unexpected end of stream";

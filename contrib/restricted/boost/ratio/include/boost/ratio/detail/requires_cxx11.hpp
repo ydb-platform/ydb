@@ -15,7 +15,7 @@
     defined(BOOST_NO_CXX11_NOEXCEPT) || \
     defined(BOOST_NO_CXX11_HDR_RATIO)
 
-BOOST_PRAGMA_MESSAGE("C++03 support is deprecated in Boost.Ratio 1.82 and will be removed in Boost.Ratio 1.84.")
+BOOST_PRAGMA_MESSAGE("C++03 support was deprecated in Boost.Ratio 1.82 and will be removed in Boost.Ratio 1.84.")
 
 #endif
 

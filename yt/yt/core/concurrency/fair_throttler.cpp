@@ -387,7 +387,7 @@ public:
             return false;
         }
 
-        auto globalConsumed = std::min(amount - available, globalAvailable);
+        auto globalConsumed = std::clamp<i64>(amount - available, 0, globalAvailable);
         *Quota_.Value -= amount - globalConsumed;
         *SharedBucket_->Limit.Value -= globalConsumed;
 
@@ -406,8 +406,8 @@ public:
 
         auto consumed = std::min(amount, available + globalAvailable);
 
-        auto globalConsumed = std::min(consumed - available, globalAvailable);
-        *Quota_.Value -= amount - globalConsumed;
+        auto globalConsumed = std::clamp<i64>(consumed - available, 0, globalAvailable);
+        *Quota_.Value -= consumed - globalConsumed;
         *SharedBucket_->Limit.Value -= globalConsumed;
 
         Value_.Increment(consumed);
@@ -423,7 +423,7 @@ public:
         auto available = Quota_.Value->load();
         auto globalAvailable = IsLimited() ? 0 : SharedBucket_->Limit.Value->load();
 
-        auto globalConsumed = std::min(amount - available, globalAvailable);
+        auto globalConsumed = std::clamp<i64>(amount - available, 0, globalAvailable);
         *Quota_.Value -= amount - globalConsumed;
         *SharedBucket_->Limit.Value -= globalConsumed;
 

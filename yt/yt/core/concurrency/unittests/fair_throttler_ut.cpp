@@ -236,6 +236,28 @@ TEST_F(TFairThrottlerTest, AcquireOverdraft)
     ASSERT_FALSE(bucket->IsOverdraft());
 }
 
+TEST_F(TFairThrottlerTest, AcquireLimitedBucket)
+{
+    auto limitedConfig = New<TFairThrottlerBucketConfig>();
+    limitedConfig->RelativeLimit = 0.5;
+
+    auto bucket = FairThrottler->CreateBucketThrottler("main", limitedConfig);
+
+    Sleep(TDuration::Seconds(5));
+    ASSERT_TRUE(bucket->TryAcquire(1));
+    ASSERT_TRUE(bucket->TryAcquire(1));
+}
+
+TEST_F(TFairThrottlerTest, TryAcquireAvailable)
+{
+    auto bucket = FairThrottler->CreateBucketThrottler("main", BucketConfig);
+
+    Sleep(TDuration::Seconds(1));
+    ASSERT_EQ(bucket->TryAcquireAvailable(150), 100);
+    ASSERT_EQ(bucket->GetQueueTotalAmount(), 0);
+    ASSERT_GE(bucket->GetAvailable(), 0);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TFairThrottlerIPCTest

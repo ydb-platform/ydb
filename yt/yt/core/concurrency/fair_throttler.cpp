@@ -275,15 +275,18 @@ DEFINE_REFCOUNTED_TYPE(TBucketThrottleRequest)
 
 struct TLeakyCounter
 {
-    TLeakyCounter(int windowSize)
+    TLeakyCounter(int windowSize, NProfiling::TGauge quotaGauge)
         : Value(std::make_shared<std::atomic<i64>>(0))
         , Window(windowSize)
+        , QuotaGauge_(std::move(quotaGauge))
     { }
 
     std::shared_ptr<std::atomic<i64>> Value;
 
     std::vector<i64> Window;
     int WindowPosition = 0;
+
+    NProfiling::TGauge QuotaGauge_;
 
     i64 Increment(i64 delta)
     {
@@ -309,6 +312,8 @@ struct TLeakyCounter
         }
 
         *Value += delta;
+        QuotaGauge_.Update(Value->load());
+
         return std::max<i64>(currentValue - maxValue, 0);
     }
 };
@@ -317,8 +322,8 @@ struct TLeakyCounter
 
 struct TSharedBucket final
 {
-    TSharedBucket(int windowSize)
-        : Limit(windowSize)
+    TSharedBucket(int windowSize, const NProfiling::TProfiler& profiler)
+        : Limit(windowSize, profiler.Gauge("/shared_quota"))
     { }
 
     TLeakyCounter Limit;
@@ -341,15 +346,11 @@ public:
         , SharedBucket_(sharedBucket)
         , Value_(profiler.Counter("/value"))
         , WaitTime_(profiler.Timer("/wait_time"))
-        , Quota_(config->BucketAccumulationTicks)
+        , Quota_(config->BucketAccumulationTicks, profiler.Gauge("/quota"))
         , DistributionPeriod_(config->DistributionPeriod)
     {
         profiler.AddFuncGauge("/queue_size", MakeStrong(this), [this] {
             return GetQueueTotalAmount();
-        });
-
-        profiler.AddFuncGauge("/quota", MakeStrong(this), [this] {
-            return Quota_.Value->load();
         });
 
         profiler.AddFuncGauge("/throttled", MakeStrong(this), [this] {
@@ -589,7 +590,7 @@ TFairThrottler::TFairThrottler(
     NProfiling::TProfiler profiler)
     : Logger(std::move(logger))
     , Profiler_(std::move(profiler))
-    , SharedBucket_(New<TSharedBucket>(config->GlobalAccumulationTicks))
+    , SharedBucket_(New<TSharedBucket>(config->GlobalAccumulationTicks, Profiler_))
     , Config_(std::move(config))
 {
     if (Config_->IPCPath) {
@@ -608,10 +609,6 @@ TFairThrottler::TFairThrottler(
     }
 
     ScheduleLimitUpdate(TInstant::Now());
-
-    Profiler_.AddFuncGauge("/shared_quota", MakeStrong(this), [this] {
-        return SharedBucket_->Limit.Value->load();
-    });
 
     Profiler_.AddFuncGauge("/total_limit", MakeStrong(this), [this] {
         auto guard = Guard(Lock_);

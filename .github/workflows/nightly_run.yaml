@@ -30,5 +30,6 @@ jobs:
     with:
       runner_label: ARM64
       sanitizer: ${{matrix.sanitizer}}
+      extra_compile_flags: "-DMKQL_DISABLE_CODEGEN"
       test_label_regexp: ${{inputs.test_label_regexp}}
     secrets: inherit

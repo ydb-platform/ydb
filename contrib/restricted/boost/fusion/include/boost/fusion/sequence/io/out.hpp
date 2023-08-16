@@ -10,11 +10,11 @@
 #define BOOST_OUT_05042005_0120
 
 #include <boost/fusion/support/config.hpp>
-#include <ostream>
 #include <boost/fusion/sequence/io/detail/out.hpp>
 #include <boost/fusion/support/is_sequence.hpp>
 #include <boost/utility/enable_if.hpp>
 #include <boost/mpl/or.hpp>
+#include <iosfwd>
 
 namespace boost { namespace fusion
 {

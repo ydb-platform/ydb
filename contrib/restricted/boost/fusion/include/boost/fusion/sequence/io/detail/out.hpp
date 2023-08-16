@@ -10,7 +10,6 @@
 #define FUSION_OUT_05052005_0121
 
 #include <boost/fusion/support/config.hpp>
-#include <ostream>
 #include <boost/fusion/sequence/io/detail/manip.hpp>
 
 #include <boost/mpl/bool.hpp>

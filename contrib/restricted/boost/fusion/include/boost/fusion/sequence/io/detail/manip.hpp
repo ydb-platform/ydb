@@ -36,10 +36,10 @@ namespace boost { namespace fusion
     namespace detail
     {
         template <typename Tag>
-        int get_xalloc_index(Tag* = 0)
+        int get_xalloc_index(int xalloc())
         {
             // each Tag will have a unique index
-            static int index = std::ios::xalloc();
+            static int const index = xalloc();
             return index;
         }
 
@@ -66,12 +66,12 @@ namespace boost { namespace fusion
             {
                 static arena ar; // our arena
                 ar.data.push_back(new T(data));
-                stream.pword(get_xalloc_index<Tag>()) = ar.data.back();
+                stream.pword(get_xalloc_index<Tag>(stream.xalloc)) = ar.data.back();
             }
 
             static T const* get(Stream& stream)
             {
-                return (T const*)stream.pword(get_xalloc_index<Tag>());
+                return (T const*)stream.pword(get_xalloc_index<Tag>(stream.xalloc));
             }
         };
 
@@ -114,7 +114,6 @@ namespace boost { namespace fusion
             {
                 // read a delimiter
                 string_type const* p = stream_data_t::get(stream);
-                std::ws(stream);
 
                 if (p)
                 {
@@ -141,7 +140,7 @@ namespace boost { namespace fusion
                     if (stream.get() != c)
                     {
                         stream.unget();
-                        stream.setstate(std::ios::failbit);
+                        stream.setstate(Stream::failbit);
                     }
                 }
             }

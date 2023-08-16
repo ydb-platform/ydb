@@ -2,6 +2,7 @@
 ::suite_tests.test_postgres
 ::suite_tests.test_sql_logic
 ::suite_tests.test_stream_query
+<<<<<<< HEAD
 ydb/tests/functional/sqs/common/test_queue_attributes_validation.py::TestQueueAttributesValidation::*
 ydb/tests/functional/sqs/common/test_queues_managing.py::TestQueuesManagingWithPathTestQueuesManagingWithPath::*
 ydb/tests/functional/sqs/common/test_queues_managing.py::TestQueuesManagingWithTenant::*

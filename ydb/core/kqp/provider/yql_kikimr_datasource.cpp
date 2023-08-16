@@ -251,12 +251,40 @@ public:
 
         switch (metadata.ExternalSource.DataSourceAuth.identity_case()) {
             case NKikimrSchemeOp::TAuth::kServiceAccount:
+                properties["authMethod"] = "SERVICE_ACCOUNT";
                 properties["serviceAccountId"] = metadata.ExternalSource.DataSourceAuth.GetServiceAccount().GetId();
                 properties["serviceAccountIdSignature"] = metadata.ExternalSource.ServiceAccountIdSignature;
                 properties["serviceAccountIdSignatureReference"] = metadata.ExternalSource.DataSourceAuth.GetServiceAccount().GetSecretName();
                 break;
 
             case NKikimrSchemeOp::TAuth::kNone:
+                properties["authMethod"] = "SERVICE_ACCOUNT";
+                break;
+            
+            case NKikimrSchemeOp::TAuth::kBasic:
+                properties["authMethod"] = "BASIC";
+                properties["login"] = metadata.ExternalSource.DataSourceAuth.GetBasic().GetLogin();
+                properties["password"] = metadata.ExternalSource.Password;
+                properties["passwordReference"] = metadata.ExternalSource.DataSourceAuth.GetBasic().GetPasswordSecretName();
+                break;
+
+            case NKikimrSchemeOp::TAuth::kMdbBasic:
+                properties["authMethod"] = "MDB_BASIC";
+                properties["serviceAccountId"] = metadata.ExternalSource.DataSourceAuth.GetMdbBasic().GetServiceAccountId();
+                properties["serviceAccountIdSignature"] = metadata.ExternalSource.ServiceAccountIdSignature;
+                properties["serviceAccountIdSignatureReference"] = metadata.ExternalSource.DataSourceAuth.GetMdbBasic().GetServiceAccountSecretName();
+
+                properties["login"] = metadata.ExternalSource.DataSourceAuth.GetMdbBasic().GetLogin();
+                properties["password"] = metadata.ExternalSource.Password;
+                properties["passwordReference"] = metadata.ExternalSource.DataSourceAuth.GetMdbBasic().GetPasswordSecretName();
+                break;
+
+            case NKikimrSchemeOp::TAuth::kAws:
+                properties["authMethod"] = "AWS";
+                properties["awsAccessKeyId"] = metadata.ExternalSource.AwsAccessKeyId;
+                properties["awsAccessKeyIdReference"] = metadata.ExternalSource.DataSourceAuth.GetAws().GetAwsAccessKeyIdSecretName();
+                properties["awsSecretAccessKey"] = metadata.ExternalSource.AwsSecretAccessKey;
+                properties["awsSecretAccessKeyReference"] = metadata.ExternalSource.DataSourceAuth.GetAws().GetAwsSecretAccessKeySecretName();
                 break;
 
             case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET:

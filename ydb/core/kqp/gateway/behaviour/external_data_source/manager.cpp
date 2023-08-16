@@ -13,26 +13,42 @@ namespace NKikimr::NKqp {
 
 namespace {
 
-TString GetOrDefault(const NYql::TCreateObjectSettings& container, const TString& key, const TString& defaultValue = TString{}) {
+TString GetOrEmpty(const NYql::TCreateObjectSettings& container, const TString& key) {
     auto fValue = container.GetFeaturesExtractor().Extract(key);
-    return fValue ? *fValue : defaultValue;
+    return fValue ? *fValue : TString{};
 }
 
 void FillCreateExternalDataSourceDesc(NKikimrSchemeOp::TExternalDataSourceDescription& externaDataSourceDesc,
                                       const TString& name,
                                       const NYql::TCreateObjectSettings& settings) {
     externaDataSourceDesc.SetName(name);
-    externaDataSourceDesc.SetSourceType(GetOrDefault(settings, "source_type"));
-    externaDataSourceDesc.SetLocation(GetOrDefault(settings, "location"));
-    externaDataSourceDesc.SetInstallation(GetOrDefault(settings, "installation"));
+    externaDataSourceDesc.SetSourceType(GetOrEmpty(settings, "source_type"));
+    externaDataSourceDesc.SetLocation(GetOrEmpty(settings, "location"));
+    externaDataSourceDesc.SetInstallation(GetOrEmpty(settings, "installation"));
 
-    TString authMethod = GetOrDefault(settings, "auth_method");
+    TString authMethod = GetOrEmpty(settings, "auth_method");
     if (authMethod == "NONE") {
         externaDataSourceDesc.MutableAuth()->MutableNone();
     } else if (authMethod == "SERVICE_ACCOUNT") {
         auto& sa = *externaDataSourceDesc.MutableAuth()->MutableServiceAccount();
-        sa.SetId(GetOrDefault(settings, "service_account_id"));
-        sa.SetSecretName(GetOrDefault(settings, "service_account_secret_name"));
+        sa.SetId(GetOrEmpty(settings, "service_account_id"));
+        sa.SetSecretName(GetOrEmpty(settings, "service_account_secret_name"));
+    } else if (authMethod == "BASIC") {
+        auto& basic = *externaDataSourceDesc.MutableAuth()->MutableBasic();
+        basic.SetLogin(GetOrEmpty(settings, "login"));
+        basic.SetPasswordSecretName(GetOrEmpty(settings, "password_secret_name"));
+    } else if (authMethod == "MDB_BASIC") {
+        auto& mdbBasic = *externaDataSourceDesc.MutableAuth()->MutableMdbBasic();
+        mdbBasic.SetServiceAccountId(GetOrEmpty(settings, "service_account_id"));
+        mdbBasic.SetServiceAccountSecretName(GetOrEmpty(settings, "service_account_secret_name"));
+        mdbBasic.SetLogin(GetOrEmpty(settings, "login"));
+        mdbBasic.SetPasswordSecretName(GetOrEmpty(settings, "password_secret_name"));
+    } else if (authMethod == "AWS") {
+        auto& aws = *externaDataSourceDesc.MutableAuth()->MutableAws();
+        aws.SetAwsAccessKeyIdSecretName(GetOrEmpty(settings, "aws_access_key_id_secret_name"));
+        aws.SetAwsSecretAccessKeySecretName(GetOrEmpty(settings, "aws_secret_access_key_secret_name"));
+    } else {
+        ythrow yexception() << "Internal error. Unknown auth method: " << authMethod;
     }
 }
 

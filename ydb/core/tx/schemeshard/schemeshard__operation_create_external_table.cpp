@@ -159,6 +159,10 @@ TExternalTableInfo::TPtr CreateExternalTable(const TString& sourceType, const NK
         NKikimrExternalSources::TGeneral general;
         general.ParseFromStringOrThrow(desc.GetContent());
         auto source = factory->GetOrCreate(sourceType);
+        if (!source->HasExternalTable()) {
+            errStr = TStringBuilder{} << "External table isn't supported for " << sourceType;
+            return nullptr;
+        }
         externalTableInfo->Content = source->Pack(schema, general);
     } catch (...) {
         errStr = CurrentExceptionMessage();

@@ -7,6 +7,7 @@ PEERDIR(
 
 SRCS(
     object_storage_ut.cpp
+    external_data_source.cpp
 )
 
 END()

@@ -33,6 +33,7 @@ target_link_options(ydb-core-external_sources-ut PRIVATE
 )
 target_sources(ydb-core-external_sources-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/external_sources/object_storage_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/external_sources/external_data_source.cpp
 )
 set_property(
   TARGET

@@ -311,9 +311,9 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         TInstant start = TInstant::Now();
         bool created = false;
         while (!created && TInstant::Now() - start <= maximalWaitTime) {
-            auto promise = NThreading::NewPromise<TDescribeObjectResponse>();
-            runtime->Register(new TDescribeObjectActor("", secretId, promise));
-            TDescribeObjectResponse response = promise.GetFuture().GetValueSync();
+            auto promise = NThreading::NewPromise<TDescribeSecretsResponse>();
+            runtime->Register(new TDescribeSecretsActor("", {secretId}, promise));
+            TDescribeSecretsResponse response = promise.GetFuture().GetValueSync();
 
             if (response.Status == Ydb::StatusIds::SUCCESS) {
                 created = true;
@@ -326,7 +326,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         UNIT_ASSERT_C(created, "Creating secret object timeout.\n");
     }
     
-    Y_UNIT_TEST(TestLoadSecretValueFromExternalDataSourceMetadata) {
+    Y_UNIT_TEST(TestLoadServiceAccountSecretValueFromExternalDataSourceMetadata) {
         TKikimrRunner kikimr;
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         auto db = kikimr.GetTableClient();
@@ -362,6 +362,108 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         auto response = responseFuture.GetValue();
         UNIT_ASSERT_C(response.Success(), response.Issues().ToOneLineString());
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.ServiceAccountIdSignature, secretValue);
+    }
+
+    Y_UNIT_TEST(TestLoadBasicSecretValueFromExternalDataSourceMetadata) {
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        TString secretId = "myPasswordSecretId";
+        TString secretValue = "pswd";
+        CreateSecretObject(secretId, secretValue, session, kikimr.GetTestServer().GetRuntime());
+
+        TString externalDataSourceName = "/Root/ExternalDataSource";
+        auto query = TStringBuilder() << R"(
+            CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+                SOURCE_TYPE="PostgreSQL",
+                LOCATION="my-bucket",
+                AUTH_METHOD="BASIC",
+                LOGIN="mylogin",
+                PASSWORD_SECRET_NAME=")" << secretId << R"("
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto responseFuture = GetIcGateway(kikimr.GetTestServer())->LoadTableMetadata(TestCluster, externalDataSourceName, IKikimrGateway::TLoadTableMetadataSettings());
+        responseFuture.Wait();
+
+        auto response = responseFuture.GetValue();
+        UNIT_ASSERT_C(response.Success(), response.Issues().ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Password, secretValue);
+    }
+
+    Y_UNIT_TEST(TestLoadMdbBasicSecretValueFromExternalDataSourceMetadata) {
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        TString secretPasswordId = "myPasswordSecretId";
+        TString secretPasswordValue = "pswd";
+        CreateSecretObject(secretPasswordId, secretPasswordValue, session, kikimr.GetTestServer().GetRuntime());
+
+        TString secretSaId = "mySa";
+        TString secretSaValue = "sign(mySa)";
+        CreateSecretObject(secretSaId, secretSaValue, session, kikimr.GetTestServer().GetRuntime());
+
+        TString externalDataSourceName = "/Root/ExternalDataSource";
+        auto query = TStringBuilder() << R"(
+            CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+                SOURCE_TYPE="PostgreSQL",
+                LOCATION="my-bucket",
+                AUTH_METHOD="MDB_BASIC",
+                SERVICE_ACCOUNT_ID="mysa",
+                SERVICE_ACCOUNT_SECRET_NAME=")" << secretSaId << R"(",
+                LOGIN="mylogin",
+                PASSWORD_SECRET_NAME=")" << secretPasswordId << R"("
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto responseFuture = GetIcGateway(kikimr.GetTestServer())->LoadTableMetadata(TestCluster, externalDataSourceName, IKikimrGateway::TLoadTableMetadataSettings());
+        responseFuture.Wait();
+
+        auto response = responseFuture.GetValue();
+        UNIT_ASSERT_C(response.Success(), response.Issues().ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Password, secretPasswordValue);
+        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.ServiceAccountIdSignature, secretSaValue);
+    }
+
+     Y_UNIT_TEST(TestLoadAwsSecretValueFromExternalDataSourceMetadata) {
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        TString awsAccessKeyIdSecretId = "awsAccessKeyIdSecretId";
+        TString awsAccessKeyIdSecretValue = "key";
+        CreateSecretObject(awsAccessKeyIdSecretId, awsAccessKeyIdSecretValue, session, kikimr.GetTestServer().GetRuntime());
+
+        TString awsSecretAccessKeySecretId = "awsSecretAccessKeySecretId";
+        TString awsSecretAccessKeySecretValue = "value";
+        CreateSecretObject(awsSecretAccessKeySecretId, awsSecretAccessKeySecretValue, session, kikimr.GetTestServer().GetRuntime());
+
+        TString externalDataSourceName = "/Root/ExternalDataSource";
+        auto query = TStringBuilder() << R"(
+            CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="my-bucket",
+                AUTH_METHOD="AWS",
+                AWS_ACCESS_KEY_ID_SECRET_NAME=")" << awsAccessKeyIdSecretId << R"(",
+                AWS_SECRET_ACCESS_KEY_SECRET_NAME=")" << awsSecretAccessKeySecretId << R"("
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto responseFuture = GetIcGateway(kikimr.GetTestServer())->LoadTableMetadata(TestCluster, externalDataSourceName, IKikimrGateway::TLoadTableMetadataSettings());
+        responseFuture.Wait();
+
+        auto response = responseFuture.GetValue();
+        UNIT_ASSERT_C(response.Success(), response.Issues().ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.AwsAccessKeyId, awsAccessKeyIdSecretValue);
+        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.AwsSecretAccessKey, awsSecretAccessKeySecretValue);
     }
 }
 

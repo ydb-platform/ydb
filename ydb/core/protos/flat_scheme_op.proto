@@ -1730,18 +1730,38 @@ message TExternalTableDescription {
 }
 
 // Access without authorization
-message NoneAuth {
+message TNoneAuth {
 }
 
-message ServiceAccountAuth {
+message TServiceAccountAuth {
     optional string Id = 1;
     optional string SecretName = 2;
 }
 
+message TMdbBasic {
+    optional string ServiceAccountId = 1;
+    optional string ServiceAccountSecretName = 2;
+    optional string Login = 3;
+    optional string PasswordSecretName = 4;
+}
+
+message TAws {
+    optional string AwsAccessKeyIdSecretName = 1;
+    optional string AwsSecretAccessKeySecretName = 2;
+}
+
+message TBasic {
+    optional string Login = 1;
+    optional string PasswordSecretName = 2;
+}
+
 message TAuth {
     oneof identity {
-        NoneAuth None = 3;
-        ServiceAccountAuth ServiceAccount = 4;
+        TNoneAuth None = 3;
+        TServiceAccountAuth ServiceAccount = 4;
+        TBasic Basic = 5;
+        TMdbBasic MdbBasic = 6;
+        TAws Aws = 7;
     }
 }
 

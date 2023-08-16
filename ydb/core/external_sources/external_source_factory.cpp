@@ -1,7 +1,10 @@
 #include "external_source_factory.h"
 #include "object_storage.h"
+#include "external_data_source.h"
 
 #include <util/generic/map.h>
+
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 
 
 namespace NKikimr::NExternalSource {
@@ -29,7 +32,9 @@ private:
 
 IExternalSourceFactory::TPtr CreateExternalSourceFactory() {
     return MakeIntrusive<TExternalSourceFactory>(TMap<TString, IExternalSource::TPtr>{
-        {"ObjectStorage", CreateObjectStorageExternalSource()}
+        {"ObjectStorage", CreateObjectStorageExternalSource()},
+        {"ClickHouse", CreateExternalDataSource(TString{NYql::GenericProviderName}, {"MDB_BASIC", "BASIC"})},
+        {"PostgreSQL", CreateExternalDataSource(TString{NYql::GenericProviderName}, {"MDB_BASIC", "BASIC"})}
     });
 }
 

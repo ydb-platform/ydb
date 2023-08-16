@@ -113,23 +113,23 @@ private:
     TActorId ActorId;
 };
 
-struct TDescribeObjectResponse {
-    TDescribeObjectResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
+struct TDescribeSecretsResponse {
+    TDescribeSecretsResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
         : Status(status)
         , Issues(std::move(issues))
     {}
 
-    TDescribeObjectResponse(const TString& secretValue)
-        : SecretValue(secretValue)
+    TDescribeSecretsResponse(const TVector<TString>& secretValues)
+        : SecretValues(secretValues)
         , Status(Ydb::StatusIds::SUCCESS)
     {}
 
-    TString SecretValue;
+    TVector<TString> SecretValues;
     Ydb::StatusIds::StatusCode Status;
     NYql::TIssues Issues;
 };
 
-class TDescribeObjectActor: public NActors::TActorBootstrapped<TDescribeObjectActor> {
+class TDescribeSecretsActor: public NActors::TActorBootstrapped<TDescribeSecretsActor> {
     STRICT_STFUNC(StateFunc,
         hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
     )
@@ -138,15 +138,19 @@ class TDescribeObjectActor: public NActors::TActorBootstrapped<TDescribeObjectAc
         Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvUnsubscribeExternal(GetSecretsSnapshotParser()));
         auto snapshot = ev->Get()->GetSnapshotAs<NMetadata::NSecret::TSnapshot>();
 
-        TString secretValue;
-        bool isFound = snapshot->GetSecretValue(NMetadata::NSecret::TSecretIdOrValue::BuildAsId(SecretId), secretValue);
-        
-        if (isFound) {
-            Promise.SetValue(TDescribeObjectResponse(secretValue));
-        } else {
-            Promise.SetValue(TDescribeObjectResponse(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("secret with name '" + SecretId.GetSecretId() + "' not found") }));
+        TVector<TString> secretValues;
+        secretValues.reserve(SecretIds.size());
+        for (const auto& secretId: SecretIds) {
+            TString secretValue;
+            const bool isFound = snapshot->GetSecretValue(NMetadata::NSecret::TSecretIdOrValue::BuildAsId(secretId), secretValue);
+            if (!isFound) {
+                Promise.SetValue(TDescribeSecretsResponse(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("secret with name '" + secretId.GetSecretId() + "' not found") }));
+                PassAway();
+                return;
+            }
+            secretValues.push_back(secretValue);
         }
-
+        Promise.SetValue(TDescribeSecretsResponse(secretValues));
         PassAway();
     }
 
@@ -155,26 +159,34 @@ class TDescribeObjectActor: public NActors::TActorBootstrapped<TDescribeObjectAc
     }
 
 public:
-    TDescribeObjectActor(const TString& ownerUserId, const TString& secretId, NThreading::TPromise<TDescribeObjectResponse> promise) 
-        : SecretId(ownerUserId, secretId)
+    TDescribeSecretsActor(const TString& ownerUserId, const TVector<TString>& secretIds, NThreading::TPromise<TDescribeSecretsResponse> promise) 
+        : SecretIds(CreateSecretIds(ownerUserId, secretIds))
         , Promise(promise)
     {}
 
     void Bootstrap() {
         if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
-            Promise.SetValue(TDescribeObjectResponse(Ydb::StatusIds::INTERNAL_ERROR, { NYql::TIssue("metadata service is not active") }));
+            Promise.SetValue(TDescribeSecretsResponse(Ydb::StatusIds::INTERNAL_ERROR, { NYql::TIssue("metadata service is not active") }));
             PassAway();
             return;
         }
         
         this->Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvSubscribeExternal(GetSecretsSnapshotParser()));
-
-        Become(&TDescribeObjectActor::StateFunc);
+        Become(&TDescribeSecretsActor::StateFunc);
     }
 
 private:
-    const NMetadata::NSecret::TSecretId SecretId;
-    NThreading::TPromise<TDescribeObjectResponse> Promise;
+    static TVector<NMetadata::NSecret::TSecretId> CreateSecretIds(const TString& ownerUserId, const TVector<TString>& secretIds) {
+        TVector<NMetadata::NSecret::TSecretId> result;
+        for (const auto& secretId: secretIds) {
+            result.emplace_back(ownerUserId, secretId);
+        }
+        return result;
+    }
+
+private:
+    const TVector<NMetadata::NSecret::TSecretId> SecretIds;
+    NThreading::TPromise<TDescribeSecretsResponse> Promise;
 };
 
 }

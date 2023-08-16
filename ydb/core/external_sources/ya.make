@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    external_data_source.cpp
     external_source_factory.cpp
     object_storage.cpp
 )

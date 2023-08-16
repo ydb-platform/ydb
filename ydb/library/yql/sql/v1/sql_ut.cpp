@@ -2237,6 +2237,82 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         VerifyProgram(res, elementStat, verifyLine);
         UNIT_ASSERT(elementStat["Aggregate"] == 1);
     }
+
+    Y_UNIT_TEST(CreateAsyncReplicationParseCorrect) {
+        auto req = R"(
+            USE plato;
+            CREATE ASYNC REPLICATION MyReplication
+            FOR table1 AS table2, table3 AS table4
+            WITH (
+                ENDPOINT = "localhost:2135",
+                DATABASE = "/MyDatabase"
+            );
+        )";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createAsyncReplication"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table1"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table2"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table3"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table4"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("ENDPOINT"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("localhost:2135"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("DATABASE"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("/MyDatabase"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(DropAsyncReplicationParseCorrect) {
+        auto req = R"(
+            USE plato;
+            DROP ASYNC REPLICATION MyReplication;
+        )";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("dropAsyncReplication"));
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("cascade"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(DropAsyncReplicationCascade) {
+        auto req = R"(
+            USE plato;
+            DROP ASYNC REPLICATION MyReplication CASCADE;
+        )";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("cascade"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
 }
 
 Y_UNIT_TEST_SUITE(ExternalFunction) {
@@ -5043,7 +5119,7 @@ Y_UNIT_TEST_SUITE(ExternalDeclares) {
 }
 
 Y_UNIT_TEST_SUITE(ExternalDataSource) {
-    Y_UNIT_TEST(CreateExternalDataSource) {
+    Y_UNIT_TEST(CreateExternalDataSourceWithAuthNone) {
         NYql::TAstParseResult res = SqlToYql(R"(
                 USE plato;
                 CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
@@ -5067,7 +5143,7 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 
-    Y_UNIT_TEST(CreateExternalDataSourceWithServiceAccount) {
+    Y_UNIT_TEST(CreateExternalDataSourceWithAuthServiceAccount) {
         NYql::TAstParseResult res = SqlToYql(R"(
                 USE plato;
                 CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
@@ -5075,14 +5151,94 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
                     LOCATION="my-bucket",
                     AUTH_METHOD="SERVICE_ACCOUNT",
                     SERVICE_ACCOUNT_ID="sa",
-                    SERVICE_ACCOUNT_SECRET_NAME="secret_name"
+                    SERVICE_ACCOUNT_SECRET_NAME="sa_secret_name"
                 );
             )");
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
-                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"auth_method" '"SERVICE_ACCOUNT") '('"location" '"my-bucket") '('"service_account_id" '"sa") '('"service_account_secret_name" '"secret_name") '('"source_type" '"ObjectStorage"))#");
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"auth_method" '"SERVICE_ACCOUNT") '('"location" '"my-bucket") '('"service_account_id" '"sa") '('"service_account_secret_name" '"sa_secret_name") '('"source_type" '"ObjectStorage"))#");
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(CreateExternalDataSourceWithBasic) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+                USE plato;
+                CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+                    SOURCE_TYPE="PostgreSQL",
+                    LOCATION="protocol://host:port/",
+                    AUTH_METHOD="BASIC",
+                    LOGIN="admin",
+                    PASSWORD_SECRET_NAME="secret_name"
+                );
+            )");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"auth_method" '"BASIC") '('"location" '"protocol://host:port/") '('"login" '"admin") '('"password_secret_name" '"secret_name") '('"source_type" '"PostgreSQL"))#");
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(CreateExternalDataSourceWithMdbBasic) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+                USE plato;
+                CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+                    SOURCE_TYPE="PostgreSQL",
+                    LOCATION="protocol://host:port/",
+                    AUTH_METHOD="MDB_BASIC",
+                    SERVICE_ACCOUNT_ID="sa",
+                    SERVICE_ACCOUNT_SECRET_NAME="sa_secret_name",
+                    LOGIN="admin",
+                    PASSWORD_SECRET_NAME="secret_name"
+                );
+            )");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"auth_method" '"MDB_BASIC") '('"location" '"protocol://host:port/") '('"login" '"admin") '('"password_secret_name" '"secret_name") '('"service_account_id" '"sa") '('"service_account_secret_name" '"sa_secret_name") '('"source_type" '"PostgreSQL"))#");
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(CreateExternalDataSourceWithAws) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+                USE plato;
+                CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+                    SOURCE_TYPE="PostgreSQL",
+                    LOCATION="protocol://host:port/",
+                    AUTH_METHOD="AWS",
+                    AWS_ACCESS_KEY_ID_SECRET_NAME="secred_id_name",
+                    AWS_SECRET_ACCESS_KEY_SECRET_NAME="secret_key_name"
+                );
+            )");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"auth_method" '"AWS") '('"aws_access_key_id_secret_name" '"secred_id_name") '('"aws_secret_access_key_secret_name" '"secret_key_name") '('"location" '"protocol://host:port/") '('"source_type" '"PostgreSQL"))#");
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
             }
         };
@@ -5195,6 +5351,94 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
                     SERVICE_ACCOUNT_SECRET_NAME="s1"
                 );
             )" , "<main>:7:49: Error: SERVICE_ACCOUNT_ID requires key\n");
+
+        ExpectFailWithError(R"(
+                USE plato;
+                CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+                    SOURCE_TYPE="PostgreSQL",
+                    LOCATION="protocol://host:port/",
+                    AUTH_METHOD="BASIC",
+                    LOGIN="admin"
+                );
+            )" , "<main>:7:27: Error: PASSWORD_SECRET_NAME requires key\n");
+
+        ExpectFailWithError(R"(
+                USE plato;
+                CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+                    SOURCE_TYPE="PostgreSQL",
+                    LOCATION="protocol://host:port/",
+                    AUTH_METHOD="BASIC",
+                    PASSWORD_SECRET_NAME="secret_name"
+                );
+            )" , "<main>:7:42: Error: LOGIN requires key\n");
+
+        ExpectFailWithError(R"(
+                USE plato;
+                CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+                    SOURCE_TYPE="PostgreSQL",
+                    LOCATION="protocol://host:port/",
+                    AUTH_METHOD="MDB_BASIC",
+                    SERVICE_ACCOUNT_SECRET_NAME="sa_secret_name",
+                    LOGIN="admin",
+                    PASSWORD_SECRET_NAME="secret_name"
+                );
+            )" , "<main>:9:42: Error: SERVICE_ACCOUNT_ID requires key\n");
+
+        ExpectFailWithError(R"(
+                USE plato;
+                CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+                    SOURCE_TYPE="PostgreSQL",
+                    LOCATION="protocol://host:port/",
+                    AUTH_METHOD="MDB_BASIC",
+                    SERVICE_ACCOUNT_ID="sa",
+                    LOGIN="admin",
+                    PASSWORD_SECRET_NAME="secret_name"
+                );
+            )" , "<main>:9:42: Error: SERVICE_ACCOUNT_SECRET_NAME requires key\n");
+
+        ExpectFailWithError(R"(
+                USE plato;
+                CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+                    SOURCE_TYPE="PostgreSQL",
+                    LOCATION="protocol://host:port/",
+                    AUTH_METHOD="MDB_BASIC",
+                    SERVICE_ACCOUNT_ID="sa",
+                    SERVICE_ACCOUNT_SECRET_NAME="sa_secret_name",
+                    PASSWORD_SECRET_NAME="secret_name"
+                );
+            )" , "<main>:9:42: Error: LOGIN requires key\n");
+
+        ExpectFailWithError(R"(
+                USE plato;
+                CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+                    SOURCE_TYPE="PostgreSQL",
+                    LOCATION="protocol://host:port/",
+                    AUTH_METHOD="MDB_BASIC",
+                    SERVICE_ACCOUNT_ID="sa",
+                    SERVICE_ACCOUNT_SECRET_NAME="sa_secret_name",
+                    LOGIN="admin"
+                );
+            )" , "<main>:9:27: Error: PASSWORD_SECRET_NAME requires key\n");
+
+        ExpectFailWithError(R"(
+                USE plato;
+                CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+                    SOURCE_TYPE="PostgreSQL",
+                    LOCATION="protocol://host:port/",
+                    AUTH_METHOD="AWS",
+                    AWS_SECRET_ACCESS_KEY_SECRET_NAME="secret_key_name"
+                );
+            )" , "<main>:7:55: Error: AWS_ACCESS_KEY_ID_SECRET_NAME requires key\n");
+
+        ExpectFailWithError(R"(
+                USE plato;
+                CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+                    SOURCE_TYPE="PostgreSQL",
+                    LOCATION="protocol://host:port/",
+                    AUTH_METHOD="AWS",
+                    AWS_ACCESS_KEY_ID_SECRET_NAME="secred_id_name"
+                );
+            )" , "<main>:7:51: Error: AWS_SECRET_ACCESS_KEY_SECRET_NAME requires key\n");
     }
 
     Y_UNIT_TEST(DropExternalDataSourceWithTablePrefix) {
@@ -5230,82 +5474,6 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
                 UNIT_ASSERT_STRING_CONTAINS(line, "/aba/MyDataSource");
                 UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("'features"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("dropObject"));
-            }
-        };
-
-        TWordCountHive elementStat = { {TString("Write"), 0}};
-        VerifyProgram(res, elementStat, verifyLine);
-
-        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
-    }
-
-    Y_UNIT_TEST(CreateAsyncReplicationParseCorrect) {
-        auto req = R"(
-            USE plato;
-            CREATE ASYNC REPLICATION MyReplication
-            FOR table1 AS table2, table3 AS table4
-            WITH (
-                ENDPOINT = "localhost:2135",
-                DATABASE = "/MyDatabase"
-            );
-        )";
-        auto res = SqlToYql(req);
-        UNIT_ASSERT(res.Root);
-
-        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
-            if (word == "Write") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createAsyncReplication"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table1"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table2"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table3"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("table4"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("ENDPOINT"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("localhost:2135"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("DATABASE"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("/MyDatabase"));
-            }
-        };
-
-        TWordCountHive elementStat = { {TString("Write"), 0}};
-        VerifyProgram(res, elementStat, verifyLine);
-
-        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
-    }
-
-    Y_UNIT_TEST(DropAsyncReplicationParseCorrect) {
-        auto req = R"(
-            USE plato;
-            DROP ASYNC REPLICATION MyReplication;
-        )";
-        auto res = SqlToYql(req);
-        UNIT_ASSERT(res.Root);
-
-        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
-            if (word == "Write") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("MyReplication"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("dropAsyncReplication"));
-                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("cascade"));
-            }
-        };
-
-        TWordCountHive elementStat = { {TString("Write"), 0}};
-        VerifyProgram(res, elementStat, verifyLine);
-
-        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
-    }
-
-    Y_UNIT_TEST(DropAsyncReplicationCascade) {
-        auto req = R"(
-            USE plato;
-            DROP ASYNC REPLICATION MyReplication CASCADE;
-        )";
-        auto res = SqlToYql(req);
-        UNIT_ASSERT(res.Root);
-
-        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
-            if (word == "Write") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("cascade"));
             }
         };
 

@@ -15,15 +15,6 @@ using namespace NSchemeShard;
 constexpr uint32_t MAX_FIELD_SIZE = 1000;
 constexpr uint32_t MAX_PROTOBUF_SIZE = 2 * 1024 * 1024; // 2 MiB
 
-bool ValidateSourceType(const TString& sourceType, TString& errStr) {
-    // Only object storage supported today
-    if (sourceType != "ObjectStorage") {
-        errStr = "Only ObjectStorage source type supported but got " + sourceType;
-        return false;
-    }
-    return true;
-}
-
 bool ValidateLocationAndInstallation(const TString& location, const TString& installation, TString& errStr) {
     if (!location && !installation) {
         errStr = "Location or installation must not be empty";
@@ -40,32 +31,53 @@ bool ValidateLocationAndInstallation(const TString& location, const TString& ins
     return true;
 }
 
-bool ValidateAuth(const NKikimrSchemeOp::TAuth& auth, TString& errStr) {
+bool CheckAuth(const TString& authMethod, const TVector<TString>& availableAuthMethods, TString& errStr) {
+    if (Find(availableAuthMethods, authMethod) == availableAuthMethods.end()) {
+        errStr = TStringBuilder{} << authMethod << " isn't supported for this source type";
+        return false;
+    }
+
+    return true;
+}
+
+bool ValidateAuth(const NKikimrSchemeOp::TAuth& auth, const NKikimr::NExternalSource::IExternalSource::TPtr& source, TString& errStr) {
     if (auth.ByteSizeLong() > MAX_PROTOBUF_SIZE) {
         errStr = Sprintf("Maximum size of authorization information must be less or equal equal to %u but got %lu", MAX_PROTOBUF_SIZE, auth.ByteSizeLong());
         return false;
     }
+    const auto availableAuthMethods = source->GetAuthMethods();
     switch (auth.identity_case()) {
         case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET: {
-            errStr = "Authorization method not specified";
+            errStr = "Authorization method isn't specified";
             return false;
         }
         case NKikimrSchemeOp::TAuth::kServiceAccount:
-        case NKikimrSchemeOp::TAuth::kNone: {
-            return true;
-        }
+            return CheckAuth("SERVICE_ACCOUNT", availableAuthMethods, errStr);
+        case NKikimrSchemeOp::TAuth::kMdbBasic:
+            return CheckAuth("MDB_BASIC", availableAuthMethods, errStr);
+        case NKikimrSchemeOp::TAuth::kBasic:
+            return CheckAuth("BASIC", availableAuthMethods, errStr);
+        case NKikimrSchemeOp::TAuth::kAws:
+            return CheckAuth("AWS", availableAuthMethods, errStr);
+        case NKikimrSchemeOp::TAuth::kNone:
+            return CheckAuth("NONE", availableAuthMethods, errStr);
     }
     return false;
 }
 
-bool Validate(const NKikimrSchemeOp::TExternalDataSourceDescription& desc, TString& errStr) {
-    return ValidateSourceType(desc.GetSourceType(), errStr)
-        && ValidateLocationAndInstallation(desc.GetLocation(), desc.GetInstallation(), errStr)
-        && ValidateAuth(desc.GetAuth(), errStr);
+bool Validate(const NKikimrSchemeOp::TExternalDataSourceDescription& desc, const NKikimr::NExternalSource::IExternalSourceFactory::TPtr& factory, TString& errStr) {
+    try {
+        auto source = factory->GetOrCreate(desc.GetSourceType());
+        return ValidateLocationAndInstallation(desc.GetLocation(), desc.GetInstallation(), errStr)
+            && ValidateAuth(desc.GetAuth(), source, errStr);
+    } catch (...) {
+        errStr = CurrentExceptionMessage();
+        return false;
+    }
 }
 
-TExternalDataSourceInfo::TPtr CreateExternalDataSource(const NKikimrSchemeOp::TExternalDataSourceDescription& desc, TString& errStr) {
-    if (!Validate(desc, errStr)) {
+TExternalDataSourceInfo::TPtr CreateExternalDataSource(const NKikimrSchemeOp::TExternalDataSourceDescription& desc, const NKikimr::NExternalSource::IExternalSourceFactory::TPtr& factory, TString& errStr) {
+    if (!Validate(desc, factory, errStr)) {
         return nullptr;
     }
     TExternalDataSourceInfo::TPtr externalDataSoureInfo = new TExternalDataSourceInfo;
@@ -241,7 +253,7 @@ public:
             return result;
         }
 
-        TExternalDataSourceInfo::TPtr externalDataSoureInfo = CreateExternalDataSource(externalDataSoureDescription, errStr);
+        TExternalDataSourceInfo::TPtr externalDataSoureInfo = CreateExternalDataSource(externalDataSoureDescription, context.SS->ExternalSourceFactory, errStr);
         if (!externalDataSoureInfo) {
             result->SetError(NKikimrScheme::StatusSchemeError, errStr);
             return result;

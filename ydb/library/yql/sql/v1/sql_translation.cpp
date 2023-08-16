@@ -4198,7 +4198,8 @@ bool TSqlTranslation::StoreDataSourceSettingsEntry(const TIdentifier& id, const 
     }
 
     if (IsIn({"source_type", "installation", "location",
-              "auth_method", "service_account_id", "service_account_secret_name"}, key)) {
+             "auth_method", "service_account_id", "service_account_secret_name",
+             "login", "password_secret_name", "aws_access_key_id_secret_name", "aws_secret_access_key_secret_name"}, key)) {
         if (!StoreString(*value, result[key], Ctx, to_upper(key))) {
             return false;
         }
@@ -4238,11 +4239,18 @@ bool TSqlTranslation::ParseExternalDataSourceSettings(std::map<TString, TDeferre
 bool TSqlTranslation::ValidateAuthMethod(const std::map<TString, TDeferredAtom>& result) {
     const static TSet<TStringBuf> allAuthFields{
         "service_account_id",
-        "service_account_secret_name"
+        "service_account_secret_name",
+        "login",
+        "password_secret_name",
+        "aws_access_key_id_secret_name",
+        "aws_secret_access_key_secret_name"
     };
     const static TMap<TStringBuf, TSet<TStringBuf>> authMethodFields{
         {"NONE", {}},
-        {"SERVICE_ACCOUNT", {"service_account_id", "service_account_secret_name"}}
+        {"SERVICE_ACCOUNT", {"service_account_id", "service_account_secret_name"}},
+        {"BASIC", {"login", "password_secret_name"}},
+        {"AWS", {"aws_access_key_id_secret_name", "aws_secret_access_key_secret_name"}},
+        {"MDB_BASIC", {"service_account_id", "service_account_secret_name", "login", "password_secret_name"}}
     };
     auto authMethodIt = result.find("auth_method");
     if (authMethodIt == result.end() || authMethodIt->second.GetLiteral() == nullptr) {

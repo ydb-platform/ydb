@@ -40,7 +40,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
         }
 
         if (auto issues = Validate(schema, objectStorage)) {
-            ythrow TExternalSourceException() << issues.ToString() << Endl;
+            ythrow TExternalSourceException() << issues.ToString();
         }
 
         return objectStorage.SerializeAsString();
@@ -48,6 +48,14 @@ struct TObjectStorageExternalSource : public IExternalSource {
 
     virtual TString GetName() const override {
         return TString{NYql::S3ProviderName};
+    }
+
+    virtual bool HasExternalTable() const override {
+        return true;
+    }
+
+    virtual TVector<TString> GetAuthMethods() const override {
+        return {"NONE", "SERVICE_ACCOUNT", "AWS"};
     }
 
     virtual TMap<TString, TVector<TString>> GetParameters(const TString& content) const override {

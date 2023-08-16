@@ -172,6 +172,9 @@ message TDynamicNameserviceConfig {
     optional uint32 MaxStaticNodeId = 1 [default = 1000];
     optional uint32 MaxDynamicNodeId = 2 [default = 200000];
     optional uint64 LeaseDuration = 3 [default = 3600000000]; // DEPRECATED
+    // Soft limit, new dynamic nodes will be registered in range [MinDynamicNodeId, MaxDynamicNodeId],
+    // but already existing dynamic nodes in range (MaxStaticNodeId, MaxDynamicNodeId) will be handled properly
+    optional uint32 MinDynamicNodeId = 4 [default = 50000];
 }
 
 message TDomainsConfig {

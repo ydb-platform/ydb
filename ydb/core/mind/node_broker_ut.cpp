@@ -153,6 +153,7 @@ void SetupServices(TTestActorRuntime &runtime,
     runtime.GetAppData().DynamicNameserviceConfig = new TDynamicNameserviceConfig;
     auto dnConfig = runtime.GetAppData().DynamicNameserviceConfig;
     dnConfig->MaxStaticNodeId = 1023;
+    dnConfig->MinDynamicNodeId = 1024;
     dnConfig->MaxDynamicNodeId = 1024 + (singleDomainMode ? (maxDynNodes - 1) : 32 * (maxDynNodes - 1));
     runtime.GetAppData().FeatureFlags.SetEnableNodeBrokerSingleDomainMode(singleDomainMode);
 
@@ -1205,6 +1206,37 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         Cerr << "... waiting for epoch update" << Endl;
         WaitForEpochUpdate(runtime, sender);
         epoch = CheckNodesList(runtime, sender, {1024}, {}, 3);
+    }
+
+    Y_UNIT_TEST(MinDynamicNodeIdShifted)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        // There should be no dynamic nodes initially.
+        auto epoch = GetEpoch(runtime, sender);
+        // Register node 1024.
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, 1024, epoch.GetNextEnd());
+        
+        // Update config and restart NodeBroker
+        auto dnConfig = runtime.GetAppData().DynamicNameserviceConfig;
+        dnConfig->MinDynamicNodeId += 64;
+        dnConfig->MaxDynamicNodeId += 64;
+        RestartNodeBroker(runtime);
+
+        // Register node 1088.
+        CheckRegistration(runtime, sender, "host2", 1001, "host2.yandex.net", "1.2.3.5",
+                          1, 2, 3, 5, TStatus::OK, 1088, epoch.GetNextEnd());
+
+        // Wait until epoch expiration.
+        WaitForEpochUpdate(runtime, sender);
+        epoch = GetEpoch(runtime, sender);
+
+        // Check lease extension for both nodes.
+        CheckLeaseExtension(runtime, sender, 1024, TStatus::OK, epoch);
+        CheckLeaseExtension(runtime, sender, 1088, TStatus::OK, epoch);
     }
 }
 

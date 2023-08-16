@@ -238,6 +238,7 @@ namespace Tests {
             appData.DynamicNameserviceConfig = new TDynamicNameserviceConfig;
             auto dnConfig = appData.DynamicNameserviceConfig;
             dnConfig->MaxStaticNodeId = 1023;
+            dnConfig->MinDynamicNodeId = 1024;
             dnConfig->MaxDynamicNodeId = 1024 + 100;
         });
 

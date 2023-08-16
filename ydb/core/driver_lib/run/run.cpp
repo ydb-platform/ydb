@@ -309,6 +309,7 @@ public:
         auto &dnConfig = Config.GetDynamicNameserviceConfig();
         TIntrusivePtr<TDynamicNameserviceConfig> config = new TDynamicNameserviceConfig;
         config->MaxStaticNodeId = dnConfig.GetMaxStaticNodeId();
+        config->MinDynamicNodeId = dnConfig.GetMinDynamicNodeId();
         config->MaxDynamicNodeId = dnConfig.GetMaxDynamicNodeId();
         appData->DynamicNameserviceConfig = config;
     }

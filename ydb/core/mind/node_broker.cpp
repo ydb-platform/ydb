@@ -62,6 +62,7 @@ void TNodeBroker::OnActivateExecutor(const TActorContext &ctx)
     SingleDomainAlloc = SingleDomain && appData->FeatureFlags.GetEnableNodeBrokerSingleDomainMode();
 
     MaxStaticId = Min(appData->DynamicNameserviceConfig->MaxStaticNodeId, TActorId::MaxNodeId);
+    MinDynamicId = Min(appData->DynamicNameserviceConfig->MinDynamicNodeId, TActorId::MaxNodeId);
     MaxDynamicId = Min(appData->DynamicNameserviceConfig->MaxDynamicNodeId, TActorId::MaxNodeId);
 
     ClearState();
@@ -203,10 +204,10 @@ void TNodeBroker::RecomputeFreeIds()
     FreeIds.Clear();
 
     if (SingleDomainAlloc) {
-        FreeIds.Set(MaxStaticId + 1, MaxDynamicId + 1);
+        FreeIds.Set(MinDynamicId, MaxDynamicId + 1);
     } else {
-        auto firstId = RewriteNodeId(MaxStaticId + 1);
-        if (firstId <= MaxStaticId)
+        auto firstId = RewriteNodeId(MinDynamicId);
+        if (firstId < MinDynamicId)
             firstId += NodeIdStep();
 
         auto lastId = RewriteNodeId(MaxDynamicId);

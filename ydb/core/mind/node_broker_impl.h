@@ -311,6 +311,7 @@ private:
     // Current config.
     NKikimrNodeBroker::TConfig Config;
     ui64 MaxStaticId;
+    ui64 MinDynamicId;
     ui64 MaxDynamicId;
     TDuration EpochDuration;
     TVector<std::pair<ui32, ui32>> BannedIds;

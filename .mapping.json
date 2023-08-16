@@ -24,6 +24,7 @@
   ".github/scripts/tests/junit_utils.py":"ydb/github_toplevel/.github/scripts/tests/junit_utils.py",
   ".github/scripts/tests/log_parser.py":"ydb/github_toplevel/.github/scripts/tests/log_parser.py",
   ".github/scripts/tests/mute_utils.py":"ydb/github_toplevel/.github/scripts/tests/mute_utils.py",
+  ".github/scripts/tests/pytest-postprocess.py":"ydb/github_toplevel/.github/scripts/tests/pytest-postprocess.py",
   ".github/workflows/allowed_dirs.yml":"ydb/github_toplevel/.github/workflows/allowed_dirs.yml",
   ".github/workflows/build_and_test_ondemand.yml":"ydb/github_toplevel/.github/workflows/build_and_test_ondemand.yml",
   ".github/workflows/build_and_test_provisioned.yml":"ydb/github_toplevel/.github/workflows/build_and_test_provisioned.yml",

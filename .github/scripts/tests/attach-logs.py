@@ -96,7 +96,12 @@ def attach_to_unittests(ctest_log: CTestLog, unit_path):
         log_name = os.path.splitext(os.path.basename(fn))[0]
         common_shard_name = fn_shard_part_re.sub("", log_name)
         found_tests = all_found_tests.setdefault(common_shard_name, [])
-        tree = ET.parse(fn)
+        try:
+            tree = ET.parse(fn)
+        except ET.ParseError as e:
+            print(f"Unable to parse {fn}: {e}")
+            continue
+
         root = tree.getroot()
         changed = False
 
@@ -119,7 +124,7 @@ def attach_to_unittests(ctest_log: CTestLog, unit_path):
         if not extra_logs:
             continue
 
-        fn = f"_{shard}_not_found.xml"
+        fn = f"{shard}-0000.xml"
         print(f"create {fn}")
         testcases = [create_error_testcase(t.shard.name, t.classname, t.method, t.fn, t.url) for t in extra_logs]
 
@@ -131,8 +136,6 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--url-prefix", default="./")
     parser.add_argument("--decompress", action="store_true", default=False, help="decompress ctest log")
-    parser.add_argument("--filter-test-file", required=False)
-    parser.add_argument("--filter-shard-file", required=False)
     parser.add_argument("--ctest-report")
     parser.add_argument("--junit-reports-path")
     parser.add_argument("ctest_log")

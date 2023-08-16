@@ -1,14 +1,25 @@
 #!/usr/bin/env python3
 import argparse
+import re
 from typing import TextIO
 import xml.etree.ElementTree as ET
 
 from log_parser import ctest_log_parser, log_reader
-from mute_utils import mute_target, remove_failure, update_suite_info, MutedShardCheck
+from mute_utils import mute_target, remove_failure, update_suite_info, MuteTestCheck
 
 
 def find_targets_to_remove(log_fp):
     return {target for target, reason, _ in ctest_log_parser(log_fp) if reason == "Failed"}
+
+
+shard_suffix_re = re.compile(r"_\d+$")
+
+
+def strip_shardname(testcase):
+    name = testcase.get('classname')
+    classname = shard_suffix_re.sub('', name)
+
+    testcase.set('classname', classname)
 
 
 def postprocess_ctest(log_fp: TextIO, ctest_junit_report, is_mute_shard, dry_run):
@@ -19,6 +30,8 @@ def postprocess_ctest(log_fp: TextIO, ctest_junit_report, is_mute_shard, dry_run
 
     for testcase in root.findall("testcase"):
         target = testcase.attrib["classname"]
+
+        strip_shardname(testcase)
 
         if is_mute_shard(target):
             if mute_target(testcase):
@@ -31,13 +44,12 @@ def postprocess_ctest(log_fp: TextIO, ctest_junit_report, is_mute_shard, dry_run
             n_remove_failures += 1
             remove_failure(testcase)
 
-    if n_remove_failures:
-        update_suite_info(root, n_remove_failures, n_skipped=n_skipped)
-        print(f"{'(dry-run) ' if dry_run else ''}update {ctest_junit_report}")
-        if not dry_run:
-            tree.write(ctest_junit_report, xml_declaration=True, encoding="UTF-8")
-    else:
-        print("nothing to remove")
+    update_suite_info(root, n_remove_failures, n_skipped=n_skipped)
+
+    print(f"{'(dry-run) ' if dry_run else ''}update {ctest_junit_report}")
+
+    if not dry_run:
+        tree.write(ctest_junit_report, xml_declaration=True, encoding="UTF-8")
 
 
 def main():
@@ -50,7 +62,7 @@ def main():
     args = parser.parse_args()
 
     log = log_reader(args.ctest_log, args.decompress)
-    is_mute_shard = MutedShardCheck(args.filter_file)
+    is_mute_shard = MuteTestCheck(args.filter_file)
     postprocess_ctest(log, args.ctest_junit_report, is_mute_shard, args.dry_run)
 
 

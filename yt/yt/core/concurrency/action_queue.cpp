@@ -15,6 +15,8 @@
 #include <yt/yt/core/misc/ring_queue.h>
 #include <yt/yt/core/misc/shutdown.h>
 
+#include <library/cpp/yt/memory/memory_tag.h>
+
 #include <util/thread/lfqueue.h>
 
 namespace NYT::NConcurrency {

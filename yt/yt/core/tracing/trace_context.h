@@ -1,6 +1,10 @@
 #pragma once
 
+#include "allocation_tags.h"
+#include "library/cpp/yt/threading/rw_spin_lock.h"
 #include "public.h"
+
+#include <yt/yt/library/tracing/public.h>
 
 #include <yt/yt/core/misc/guid.h>
 
@@ -9,8 +13,6 @@
 #include <yt/yt/core/yson/string.h>
 
 #include <yt/yt/core/concurrency/public.h>
-
-#include <yt/yt/library/tracing/public.h>
 
 #include <library/cpp/yt/threading/spin_lock.h>
 
@@ -119,13 +121,24 @@ public:
     void SetRequestId(TRequestId requestId);
     TRequestId GetRequestId() const;
 
-    //! Sets allocation tags.
-    /*!
-     *  Not thread-safe.
-     */
-    void SetAllocationTags(TAllocationTagsPtr tags);
-    TAllocationTagsPtr GetAllocationTags() const;
-    std::vector<std::pair<TString, TString>> ExtractAllocationTags() const;
+    void SetAllocationTags(TAllocationTags::TTags&& tags);
+
+    TAllocationTags::TTags GetAllocationTags() const;
+
+    TAllocationTagsPtr GetAllocationTagsPtr() const noexcept;
+
+    void ClearAllocationTagsPtr() noexcept;
+
+    template <typename TTag>
+    std::optional<TTag> FindAllocationTag(const TString& key) const;
+
+    template <typename TTag>
+    std::optional<TTag> SetAllocationTag(
+        const TString& key,
+        TTag value);
+
+    template <typename TTag>
+    std::optional<TTag> RemoveAllocationTag(const TString& key);
 
     //! Sets logging tag.
     /*!
@@ -229,6 +242,10 @@ private:
     NYson::TYsonString Baggage_;
 
     std::vector<std::pair<TString, std::variant<TString, i64>>> ProfilingTags_;
+
+    // Must NOT allocate memory on the heap in callbacks with usage of AllocationTags_ to avoid deadlock with allocator.
+    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, AllocationTagsRWLock_);
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, AllocationTagsAsRefCountedSpinlock_);
     TAllocationTagsPtr AllocationTags_;
 
     TTraceContext(
@@ -238,6 +255,17 @@ private:
     DECLARE_NEW_FRIEND()
 
     void SetDuration();
+
+    void DoSetAllocationTags(TAllocationTags::TTags&& tags);
+
+    template <typename TTag>
+    std::optional<TTag> DoSetAllocationTag(const TString& key, TTag newTag);
+
+    TAllocationTags::TTags DoGetAllocationTags() const;
+
+    template <typename TTag>
+    std::optional<TTag> DoFindAllocationTag(const TString& key) const;
+
 };
 
 DEFINE_REFCOUNTED_TYPE(TTraceContext)
@@ -390,7 +418,6 @@ private:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-
 
 } // namespace NYT::NTracing
 

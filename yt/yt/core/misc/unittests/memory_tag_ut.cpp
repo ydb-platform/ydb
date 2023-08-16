@@ -6,14 +6,16 @@
 #include <yt/yt/core/concurrency/thread_pool.h>
 #include <yt/yt/core/concurrency/scheduler.h>
 
+#include <yt/yt/core/misc/lazy_ptr.h>
+
+#include <yt/yt/core/tracing/allocation_tags.h>
+#include <yt/yt/core/tracing/trace_context.h>
+
 #include <library/cpp/yt/memory/memory_tag.h>
 
 #include <util/random/random.h>
 
 #include <util/system/compiler.h>
-
-// These tests do not work under MSAN and ASAN.
-#if !defined(_msan_enabled_) and !defined(_asan_enabled_) and defined(_linux_) and defined(YT_ALLOC_ENABLED)
 
 namespace NYT {
 
@@ -22,12 +24,11 @@ namespace NYT {
 // Used for fake side effects to disable compiler optimizations.
 volatile const void* FakeSideEffectVolatileVariable = nullptr;
 
-////////////////////////////////////////////////////////////////////////////////
-
-namespace {
-
 using namespace NConcurrency;
 using namespace ::testing;
+
+// These tests do not work under MSAN and ASAN.
+#if !defined(_msan_enabled_) and !defined(_asan_enabled_) and defined(_linux_) and defined(YT_ALLOC_ENABLED)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -238,7 +239,98 @@ INSTANTIATE_TEST_SUITE_P(MemoryTagTest, TMemoryTagTest, Values(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace
-} // namespace NYT
-
 #endif // !defined(_msan_enabled_)
+
+////////////////////////////////////////////////////////////////////////////////
+
+using namespace NTracing;
+
+TEST(MemoryTagTest, MemoryTagPropagationViaAllocationTags)
+{
+    auto localContext = CreateTraceContextFromCurrent("MemoryTagPropagation");
+    auto localTag = 1u;
+
+    localContext->SetAllocationTags({
+        {MemoryTagLiteral, ToString(localTag)}
+    });
+
+    auto guard = TCurrentTraceContextGuard(localContext);
+
+    auto actionQueue = New<TActionQueue>();
+
+    auto tag = 2u;
+    auto invoker = CreateMemoryTaggingInvoker(actionQueue->GetInvoker(), tag);
+    auto currentTag = TryGetCurrentTraceContext()->FindAllocationTag<TMemoryTag>(MemoryTagLiteral);
+    EXPECT_EQ(currentTag, localTag);
+
+    auto asyncResult = BIND_NO_PROPAGATE([=] {
+        auto currentTag = TryGetCurrentTraceContext()->FindAllocationTag<TMemoryTag>(MemoryTagLiteral);
+        EXPECT_EQ(currentTag, tag);
+    })
+        .AsyncVia(invoker)
+        .Run();
+
+    WaitFor(asyncResult)
+        .ThrowOnError();
+
+    currentTag = TryGetCurrentTraceContext()->FindAllocationTag<TMemoryTag>(MemoryTagLiteral);
+    EXPECT_EQ(currentTag, localTag);
+}
+
+void TestYield(TMemoryTag tag)
+{
+    auto currentTag = TryGetCurrentTraceContext()->FindAllocationTag<TMemoryTag>(MemoryTagLiteral);
+    EXPECT_EQ(currentTag, tag);
+
+    Yield();
+    currentTag = TryGetCurrentTraceContext()->FindAllocationTag<TMemoryTag>(MemoryTagLiteral);
+    EXPECT_EQ(currentTag, tag);
+
+    Yield();
+    currentTag = TryGetCurrentTraceContext()->FindAllocationTag<TMemoryTag>(MemoryTagLiteral);
+    EXPECT_EQ(currentTag, tag);
+}
+
+TEST(MemoryTagTest, MemoryTagWithYieldContextPropagation)
+{
+    auto localContext = CreateTraceContextFromCurrent("MemoryTagSwitchContextPropagation");
+    auto localTag = 1u;
+
+    localContext->SetAllocationTags({
+        {MemoryTagLiteral, ToString(localTag)}
+    });
+
+    auto guard = TCurrentTraceContextGuard(localContext);
+
+    auto actionQueue = New<TActionQueue>();
+
+    auto tag1 = 222u;
+    auto tag2 = 333u;
+
+    auto invoker1 = CreateMemoryTaggingInvoker(actionQueue->GetInvoker(), tag1);
+    auto invoker2 = CreateMemoryTaggingInvoker(actionQueue->GetInvoker(), tag2);
+    auto currentTag = TryGetCurrentTraceContext()->FindAllocationTag<TMemoryTag>(MemoryTagLiteral);
+    EXPECT_EQ(currentTag, localTag);
+
+    // Use BIND_NO_PROPAGATE in order not overwrite tags in localContext.
+
+    auto asyncResult1 = BIND_NO_PROPAGATE(TestYield)
+        .AsyncVia(invoker1)
+        .Run(tag1);
+
+    auto asyncResult2 = BIND_NO_PROPAGATE(TestYield)
+        .AsyncVia(invoker2)
+        .Run(tag2);
+
+    WaitFor(asyncResult1)
+        .ThrowOnError();
+    WaitFor(asyncResult2)
+        .ThrowOnError();
+
+    currentTag = TryGetCurrentTraceContext()->FindAllocationTag<TMemoryTag>(MemoryTagLiteral);
+    EXPECT_EQ(currentTag, localTag);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT

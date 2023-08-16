@@ -8,9 +8,34 @@ TAllocationTags::TAllocationTags(std::vector<std::pair<TString, TString>> tags)
     : Tags_(std::move(tags))
 { }
 
-const TAllocationTags::TTags& TAllocationTags::GetTags() const
+const TAllocationTags::TTags& TAllocationTags::GetTags() const noexcept
 {
     return Tags_;
+}
+
+std::optional<TAllocationTags::TValue> TAllocationTags::FindTagValue(const TKey& key) const
+{
+    return FindTagValue(Tags_, key);
+}
+
+std::optional<TAllocationTags::TValue> TAllocationTags::FindTagValue(
+    const TTags& tags,
+    const TKey& key)
+{
+    std::optional<TAllocationTags::TValue> value;
+
+    auto memoryTagIterator = std::find_if(
+        tags.cbegin(),
+        tags.cend(),
+        [&] (const auto& pair) {
+            return pair.first == key;
+        });
+
+    if (memoryTagIterator != tags.cend()) {
+        value = memoryTagIterator->second;
+    }
+
+    return value;
 }
 
 TAllocationTagsFreeList::~TAllocationTagsFreeList()

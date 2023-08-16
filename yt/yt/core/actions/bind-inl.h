@@ -7,6 +7,10 @@
 
 #include <yt/yt/core/concurrency/propagating_storage.h>
 
+#include <yt/yt/core/tracing/trace_context.h>
+
+#include <library/cpp/yt/memory/memory_tag.h>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -504,12 +508,27 @@ public:
         auto* volatile unoptimizedState = state;
         Y_UNUSED(unoptimizedState);
 
+        TMemoryTag memoryTag = GetCurrentMemoryTag();
+
         auto propagatingStorageGuard = state->MakePropagatingStorageGuard();
         Y_UNUSED(propagatingStorageGuard);
 
-        return state->Functor(
-            NDetail::Unwrap(std::get<BoundIndexes>(state->BoundArgs))...,
-            std::forward<TAs>(args)...);
+        if (memoryTag != NullMemoryTag) {
+            auto traceContext = NTracing::GetOrCreateTraceContext("BindMemoryTag");
+
+            // Does NOT finish the trace context upon destruction.
+            NTracing::TCurrentTraceContextGuard contextGuard(traceContext);
+
+            traceContext->SetAllocationTag(NTracing::MemoryTagLiteral, memoryTag);
+
+            return state->Functor(
+                NDetail::Unwrap(std::get<BoundIndexes>(state->BoundArgs))...,
+                std::forward<TAs>(args)...);
+        } else {
+            return state->Functor(
+                NDetail::Unwrap(std::get<BoundIndexes>(state->BoundArgs))...,
+                std::forward<TAs>(args)...);
+        }
     }
 
 private:

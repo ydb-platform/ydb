@@ -4,6 +4,10 @@
 #include "trace_context.h"
 #endif
 
+#include "allocation_tags.h"
+
+#include <yt/yt/core/concurrency/thread_affinity.h>
+
 #include <atomic>
 
 namespace NYT::NTracing {
@@ -75,6 +79,100 @@ void TTraceContext::AddTag(const TString& tagName, const T& tagValue)
 
     using ::ToString;
     AddTag(tagName, ToString(tagValue));
+}
+
+template <typename TTag>
+std::optional<TTag> TTraceContext::DoFindAllocationTag(const TString& key) const
+{
+    VERIFY_SPINLOCK_AFFINITY(AllocationTagsRWLock_);
+
+    TAllocationTagsPtr tags = nullptr;
+
+    {
+        // Local guard for copy RefCounted AllocationTags_.
+        auto guard = Guard(AllocationTagsAsRefCountedSpinlock_);
+        tags = AllocationTags_;
+    }
+
+    if (tags) {
+        auto valueOpt = tags->FindTagValue(key);
+
+        if (valueOpt.has_value()) {
+            return FromString<TTag>(valueOpt.value());
+        }
+    }
+
+    return std::nullopt;
+}
+
+template <typename TTag>
+std::optional<TTag> TTraceContext::FindAllocationTag(const TString& key) const
+{
+    auto readerGuard = ReaderGuard(AllocationTagsRWLock_);
+    return DoFindAllocationTag<TTag>(key);
+}
+
+template <typename TTag>
+std::optional<TTag> TTraceContext::RemoveAllocationTag(const TString& key)
+{
+    auto writerGuard = NThreading::WriterGuard(AllocationTagsRWLock_);
+    auto newTags = DoGetAllocationTags();
+
+    auto foundTagIt = std::remove_if(
+        newTags.begin(),
+        newTags.end(),
+        [&key] (const auto& pair) {
+            return pair.first == key;
+        });
+
+    std::optional<TTag> oldTag;
+
+    if (foundTagIt != newTags.end()) {
+        oldTag = FromString<TTag>(foundTagIt->second);
+    }
+
+    newTags.erase(foundTagIt, newTags.end());
+
+    DoSetAllocationTags(std::move(newTags));
+
+    return oldTag;
+}
+
+template <typename TTag>
+std::optional<TTag> TTraceContext::SetAllocationTag(const TString& key, TTag newTag)
+{
+    auto newTagString = ToString(newTag);
+
+    auto writerGuard = NThreading::WriterGuard(AllocationTagsRWLock_);
+    auto newTags = DoGetAllocationTags();
+
+    if (!newTags.empty()) {
+        std::optional<TString> oldTag;
+
+        auto tagIt = std::find_if(
+            newTags.begin(),
+            newTags.end(),
+            [&key] (const auto& pair) {
+                return pair.first == key;
+            });
+
+        if (tagIt != newTags.end()) {
+            oldTag = std::move(tagIt->second);
+            tagIt->second = std::move(newTagString);
+        } else {
+            newTags.emplace_back(key, std::move(newTagString));
+        }
+
+        DoSetAllocationTags(std::move(newTags));
+
+        if (oldTag.has_value()) {
+            return FromString<TTag>(oldTag.value());
+        }
+    } else {
+        DoSetAllocationTags({{key, std::move(newTagString)}});
+    }
+
+    return std::nullopt;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -220,6 +318,12 @@ Y_FORCE_INLINE TTraceContextPtr CreateTraceContextFromCurrent(TString spanName)
 {
     auto* context = TryGetCurrentTraceContext();
     return context ? context->CreateChild(std::move(spanName)) : TTraceContext::NewRoot(std::move(spanName));
+}
+
+Y_FORCE_INLINE TTraceContextPtr GetOrCreateTraceContext(TString spanNameIfCreate)
+{
+    auto* context = TryGetCurrentTraceContext();
+    return context ? context : TTraceContext::NewRoot(std::move(spanNameIfCreate));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

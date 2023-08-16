@@ -11,11 +11,19 @@ namespace NYT::NTracing {
 class TAllocationTags : public TRefCounted
 {
 public:
-    using TTags = std::vector<std::pair<TString, TString>>;
+    using TKey = TString;
+    using TValue = TString;
+    using TTags = std::vector<std::pair<TKey, TValue>>;
 
     explicit TAllocationTags(TTags tags);
 
-    const TTags& GetTags() const;
+    const TTags& GetTags() const noexcept;
+
+    std::optional<TValue> FindTagValue(const TKey& key) const;
+
+    static std::optional<TValue> FindTagValue(
+        const TTags& tags,
+        const TKey& key);
 
 private:
     friend class TAllocationTagsFreeList;

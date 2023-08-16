@@ -367,6 +367,7 @@ RECURSE_FOR_TESTS(
     http/unittests
     misc/unittests
     net/unittests
+    tracing/unittests
     yson/unittests
     http/mock
     net/mock

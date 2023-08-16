@@ -6,17 +6,4 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(abseil-cpp)
-add_subdirectory(abseil-cpp-tstring)
-add_subdirectory(aws)
-add_subdirectory(boost)
-add_subdirectory(cityhash-1.0.2)
-add_subdirectory(dragonbox)
-add_subdirectory(fast_float)
-add_subdirectory(google)
-add_subdirectory(googletest)
-add_subdirectory(http-parser)
-add_subdirectory(nlohmann_json)
-add_subdirectory(patched)
-add_subdirectory(thrift)
-add_subdirectory(uriparser)
+add_subdirectory(replxx)

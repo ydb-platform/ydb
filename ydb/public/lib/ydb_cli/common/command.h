@@ -304,10 +304,6 @@ private:
 
 class TClientCommandTree : public TClientCommand {
 public:
-    TMap<TString, std::unique_ptr<TClientCommand>> SubCommands;
-    TMap<TString, TString> Aliases;
-    TClientCommand* SelectedCommand;
-
     TClientCommandTree(const TString& name, const std::initializer_list<TString>& aliases = std::initializer_list<TString>(), const TString& description = TString());
     void AddCommand(std::unique_ptr<TClientCommand> command);
     virtual void Prepare(TConfig& config) override;
@@ -316,6 +312,7 @@ public:
         const NColorizer::TColors& colors = NColorizer::TColors(false)
     );
     virtual void SetFreeArgs(TConfig& config);
+    bool HasSelectedCommand() const { return SelectedCommand; }
 
 protected:
     virtual void Config(TConfig& config) override;
@@ -323,8 +320,13 @@ protected:
     virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
+    TClientCommand* SelectedCommand;
+
 private:
     bool HasOptionsToShow();
+
+    TMap<TString, std::unique_ptr<TClientCommand>> SubCommands;
+    TMap<TString, TString> Aliases;
 };
 
 class TCommandWithPath {

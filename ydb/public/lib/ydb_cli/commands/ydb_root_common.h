@@ -33,7 +33,7 @@ public:
     void ParseAddress(TConfig& config) override;
     void ParseCredentials(TConfig& config) override;
     void Validate(TConfig& config) override;
-
+    int Run(TConfig& config) override;
 protected:
     virtual void FillConfig(TConfig& config);
     virtual void SetCredentialsGetter(TConfig& config);

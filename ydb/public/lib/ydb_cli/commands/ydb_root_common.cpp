@@ -12,8 +12,9 @@
 #include "ydb_service_topic.h"
 #include "ydb_tools.h"
 #include "ydb_yql.h"
-
 #include "ydb_workload.h"
+
+#include <ydb/public/lib/ydb_cli/commands/interactive/interactive_cli.h>
 
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
@@ -25,7 +26,7 @@ namespace NConsoleClient {
 
 TClientCommandRootCommon::TClientCommandRootCommon(const TString& name, const TClientSettings& settings)
     : TClientCommandRootBase(name)
-    , Settings (settings)
+    , Settings(settings)
 {
     ValidateSettings();
     AddCommand(std::make_unique<TCommandAuth>());
@@ -229,6 +230,8 @@ void TClientCommandRootCommon::Config(TConfig& config) {
 
     opts.GetLongOption("time").Hidden();
     opts.GetLongOption("progress").Hidden();
+
+    config.SetFreeArgsMin(0);
 }
 
 void TClientCommandRootCommon::Parse(TConfig& config) {
@@ -375,6 +378,24 @@ void TClientCommandRootCommon::Validate(TConfig& config) {
         throw TMisuseException() << "Path to a database \"" << Database
             << "\" is incorrect. It must be absolute and thus must begin with '/'.";
     }
+}
+
+int TClientCommandRootCommon::Run(TConfig& config) {
+    if (HasSelectedCommand()) {
+        return TClientCommandRootBase::Run(config);
+    }
+
+    TString prompt;
+    if (!ProfileName.Empty()) {
+        prompt = ProfileName + "> ";
+    } else {
+        prompt = "ydb> ";
+    }
+
+    TInteractiveCLI interactiveCLI(config, prompt);
+    interactiveCLI.Run();
+
+    return EXIT_SUCCESS;
 }
 
 namespace {

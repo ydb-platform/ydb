@@ -306,8 +306,8 @@ TClientCommandTree::TClientCommandTree(const TString& name, const std::initializ
 }
 
 void TClientCommandTree::AddCommand(std::unique_ptr<TClientCommand> command) {
-    for (const TString& a : command->Aliases) {
-        Aliases[a] = command->Name;
+    for (const TString& alias : command->Aliases) {
+        Aliases[alias] = command->Name;
     }
     command->Parent = this;
     SubCommands[command->Name] = std::move(command);
@@ -335,6 +335,11 @@ void TClientCommandTree::SaveParseResult(TConfig& config) {
 
 void TClientCommandTree::Parse(TConfig& config) {
     TClientCommand::Parse(config);
+
+    if (config.ParseResult->GetFreeArgs().empty()) {
+        return;
+    }
+
     TString cmd = config.ParseResult->GetFreeArgs().at(0);
     config.Tokens.push_back(cmd);
     size_t count = config.ParseResult->GetFreeArgsPos();
@@ -372,8 +377,6 @@ void TClientCommandTree::Prepare(TConfig& config) {
 
     if (SelectedCommand) {
         SelectedCommand->Prepare(config);
-    } else {
-        throw yexception() << "No child command to prepare";
     }
 }
 

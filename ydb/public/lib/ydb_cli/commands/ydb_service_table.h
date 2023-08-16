@@ -118,6 +118,8 @@ private:
 class TCommandExplain : public TTableCommand, public TCommandWithFormat, TCommandQueryBase, TInterruptibleCommand {
 public:
     TCommandExplain();
+    TCommandExplain(TString query, TString queryType = "data", bool printAst = false);
+
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;

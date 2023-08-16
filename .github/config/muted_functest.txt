@@ -6,7 +6,8 @@ ydb/tests/functional/sqs/common/test_queue_attributes_validation.py::TestQueueAt
 ydb/tests/functional/sqs/common/test_queues_managing.py::TestQueuesManagingWithPath::*
 ydb/tests/functional/sqs/common/test_queues_managing.py::TestQueuesManagingWithTenant::*
 ydb/tests/functional/sqs/messaging/test_fifo_messaging.py::TestSqsFifoMessagingWithTenant::*
-ydb/tests/functional/sqs/multinode/test_multinode_cluster.py::TestSqsMultinodeCluster::*
+ydb/tests/functional/sqs/messaging/test_fifo_messaging.py::TestSqsFifoMessagingWithPath::*
+ydb/tests/functional/sqs/multinode/test_leader_start_inflight.py::TestSqsMultinodeCluster::*
 ydb/tests/functional/sqs/with_quotas/test_quoting.py::TestSqsQuotingWithKesus::*
 ydb/tests/functional/suite_tests/test_stream_query.py::TestStreamQuery::test_sql_suite[results-window.test]
 ydb/tests/functional/tenants/test_dynamic_tenants.py::*

@@ -15,7 +15,7 @@
     defined(BOOST_NO_CXX11_NOEXCEPT) || \
     defined(BOOST_NO_CXX11_HDR_TUPLE)
 
-BOOST_PRAGMA_MESSAGE("C++03 support is deprecated in Boost.ContainerHash 1.82 and will be removed in Boost.ContainerHash 1.84.")
+BOOST_PRAGMA_MESSAGE("C++03 support was deprecated in Boost.ContainerHash 1.82 and will be removed in Boost.ContainerHash 1.84. Please open an issue in https://github.com/boostorg/container_hash if you want it retained.")
 
 #endif
 

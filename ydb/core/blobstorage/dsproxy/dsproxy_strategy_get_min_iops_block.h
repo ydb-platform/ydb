@@ -55,8 +55,8 @@ public:
         }
         std::make_heap(heap.begin(), heap.end());
         while (heap) {
-            ui32 alignedBegin;
-            ui32 alignedEnd;
+            ui32 alignedBegin = 0;
+            ui32 alignedEnd = 0;
 
             // collect all intervals with this common beginning aligned offset
             auto iter = heap.end();

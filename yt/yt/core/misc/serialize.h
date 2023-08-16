@@ -236,7 +236,7 @@ public:
 
     TEntityStreamSaveContext(
         IZeroCopyOutput* output,
-        TEntityStreamSaveContext* parentContext);
+        const TEntityStreamSaveContext* parentContext);
 
     TEntitySerializationKey GenerateSerializationKey();
 

@@ -555,7 +555,7 @@ private:
                 if (publicId) {
                     if (State_->HybridInFlightOprations.empty())
                         State_->HybridStartTime = NMonotonic::TMonotonic::Now();
-                    YQL_ENSURE(State_->HybridInFlightOprations.emplace(*publicId).second, "Operation " << *publicId << " already started.");
+                    State_->HybridInFlightOprations.emplace(*publicId);
                 }
                 return RunDqWrite(input, ctx, tmpTable);
             } else {

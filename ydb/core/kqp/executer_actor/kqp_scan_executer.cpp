@@ -658,8 +658,7 @@ public:
 private:
     void ExecuteScanTx(TVector<NKikimrKqp::TKqpNodeResources>&& snapshot) {
 
-        Planner = CreateKqpPlanner(TasksGraph, TxId, SelfId(), {},
-            {}, GetSnapshot(),
+        Planner = CreateKqpPlanner(TasksGraph, TxId, SelfId(), GetSnapshot(),
             Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode, AppData()->EnableKqpSpilling,
             Request.RlPath, ExecuterSpan, std::move(snapshot), ExecuterRetriesConfig, false /* isDataQuery */, Request.MkqlMemoryLimit, nullptr, false);
 

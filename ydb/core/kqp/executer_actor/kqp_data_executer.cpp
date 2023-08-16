@@ -1714,6 +1714,7 @@ private:
                             break;
                         case NKqpProto::TKqpSource::kExternalSource:
                             BuildReadTasksFromSource(stageInfo, secureParams);
+                            HasExternalSources = true;
                             break;
                         default:
                             YQL_ENSURE(false, "unknown source type");
@@ -2138,9 +2139,15 @@ private:
             }
         }
 
-        Planner = CreateKqpPlanner(TasksGraph, TxId, SelfId(), {}, {}, GetSnapshot(),
+        const bool enableOptForTasks = !UnknownAffectedShardCount && !HasExternalSources;
+        bool dataQueryPool = true;
+        if (HasExternalSources && DatashardTxs.size() == 0) {
+            dataQueryPool = false;
+        }
+
+        Planner = CreateKqpPlanner(TasksGraph, TxId, SelfId(), GetSnapshot(),
             Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode, false, Nothing(),
-            ExecuterSpan, {}, ExecuterRetriesConfig, true /* isDataQuery */, Request.MkqlMemoryLimit, AsyncIoFactory, !UnknownAffectedShardCount);
+            ExecuterSpan, {}, ExecuterRetriesConfig, dataQueryPool /* isDataQuery */, Request.MkqlMemoryLimit, AsyncIoFactory, enableOptForTasks);
 
         auto err = Planner->PlanExecution();
         if (err) {
@@ -2222,7 +2229,8 @@ private:
         THashMap<TActorId, THashSet<ui64>> updates;
         for (ui64 taskId : ComputeTasks) {
             auto& task = TasksGraph.GetTask(taskId);
-            CollectTaskChannelsUpdates(task, updates);
+            if (task.ComputeActorId)
+                CollectTaskChannelsUpdates(task, updates);
         }
         PropagateChannelsUpdates(updates);
 
@@ -2344,6 +2352,7 @@ private:
     bool StreamResult = false;
 
     bool UnknownAffectedShardCount = false;
+    bool HasExternalSources = false;
 
     ui64 TxCoordinator = 0;
     THashMap<ui64, TShardState> ShardStates;

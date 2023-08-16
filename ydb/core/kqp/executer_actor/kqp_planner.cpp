@@ -54,8 +54,7 @@ void BuildInitialTaskResources(const TKqpTasksGraph& graph, ui64 taskId, TTaskRe
 constexpr ui32 MEMORY_ESTIMATION_OVERFLOW = 2;
 constexpr ui32 MAX_NON_PARALLEL_TASKS_EXECUTION_LIMIT = 4;
 
-TKqpPlanner::TKqpPlanner(TKqpTasksGraph& graph, ui64 txId, const TActorId& executer, TVector<ui64>&& computeTasks,
-    THashMap<ui64, TVector<ui64>>&& tasksPerNode, const IKqpGateway::TKqpSnapshot& snapshot,
+TKqpPlanner::TKqpPlanner(TKqpTasksGraph& graph, ui64 txId, const TActorId& executer, const IKqpGateway::TKqpSnapshot& snapshot,
     const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TInstant deadline,
     const Ydb::Table::QueryStatsCollection::Mode& statsMode,
     bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& executerSpan,
@@ -64,8 +63,6 @@ TKqpPlanner::TKqpPlanner(TKqpTasksGraph& graph, ui64 txId, const TActorId& execu
     bool isDataQuery, ui64 mkqlMemoryLimit, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, bool doOptimization)
     : TxId(txId)
     , ExecuterId(executer)
-    , ComputeTasks(std::move(computeTasks))
-    , TasksPerNode(std::move(tasksPerNode))
     , Snapshot(snapshot)
     , Database(database)
     , UserToken(userToken)
@@ -367,7 +364,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
         ComputeTasks.clear();
     }
     
-    if (nComputeTasks == 0 && TasksPerNode.size() == 1 && (AsyncIoFactory != nullptr) && DoOptimization) {
+    if (nComputeTasks == 0 && TasksPerNode.size() == 1 && (AsyncIoFactory != nullptr) && DoOptimization && IsDataQuery) {
         // query affects a single key or shard, so it might be more effective
         // to execute this task locally so we can avoid useless overhead for remote task launching.
         for(auto& [shardId, tasks]: TasksPerNode) {
@@ -472,15 +469,15 @@ ui32 TKqpPlanner::CalcSendMessageFlagsForNode(ui32 nodeId) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-std::unique_ptr<TKqpPlanner> CreateKqpPlanner(TKqpTasksGraph& tasksGraph, ui64 txId, const TActorId& executer, TVector<ui64>&& tasks,
-    THashMap<ui64, TVector<ui64>>&& tasksPerNode, const IKqpGateway::TKqpSnapshot& snapshot,
+std::unique_ptr<TKqpPlanner> CreateKqpPlanner(TKqpTasksGraph& tasksGraph, ui64 txId, const TActorId& executer,
+    const IKqpGateway::TKqpSnapshot& snapshot,
     const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TInstant deadline,
     const Ydb::Table::QueryStatsCollection::Mode& statsMode,
     bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& executerSpan,
     TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot, const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
     bool isDataQuery, ui64 mkqlMemoryLimit, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, bool doOptimization)
 {
-    return std::make_unique<TKqpPlanner>(tasksGraph, txId, executer, std::move(tasks), std::move(tasksPerNode), snapshot,
+    return std::make_unique<TKqpPlanner>(tasksGraph, txId, executer, snapshot,
         database, userToken, deadline, statsMode, withSpilling, rlPath, executerSpan,
         std::move(resourcesSnapshot), executerRetriesConfig, isDataQuery, mkqlMemoryLimit, asyncIoFactory, doOptimization);
 }

@@ -23,7 +23,7 @@ runs:
       patch -p1 < ydb/deploy/patches/0001-sanitizer-build.patch
       cd ../build
       rm -rf *
-      export CC=/usr/bin/clang-12
+      export CC=/usr/bin/clang-14
       export CC_FOR_BUILD=$CC
       cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_C_COMPILER_LAUNCHER=/usr/local/bin/ccache -DCMAKE_CXX_COMPILER_LAUNCHER=/usr/local/bin/ccache \
@@ -39,7 +39,7 @@ runs:
       cd ../build
       rm -rf *
       export CONAN_USER_HOME=`pwd`
-      export CC=/usr/bin/clang-12
+      export CC=/usr/bin/clang-14
       export CC_FOR_BUILD=$CC
 
       # FIXME: set DCMAKE_CXX_FLAGS_RELWITHDEBINFO and DCMAKE_CXX_FLAGS bacause of global_flags.cmake flags override.

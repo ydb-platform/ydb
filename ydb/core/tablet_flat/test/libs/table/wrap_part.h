@@ -148,7 +148,7 @@ namespace NTest {
 
             if (StopKey) {
                 auto cmp = CompareTypedCellVectors(key.Cells().data(), StopKey.data(), Scheme->Keys->Types.data(), StopKey.size());
-                if (cmp > 0) {
+                if (Direction == EDirection::Forward && cmp > 0 || Direction == EDirection::Reverse && cmp < 0) {
                    return EReady::Gone;
                 }
             }

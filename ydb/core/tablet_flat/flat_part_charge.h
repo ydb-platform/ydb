@@ -337,14 +337,10 @@ namespace NTable {
                 key2Page = Index.LookupKey(key2, Scheme.Groups[0], ESeek::Lower, &keyDefaults);
                 auto key2PageExt = key2Page + 1;
                 if (key2PageExt && key2PageExt <= last) {
-                    if (key2PageExt >= firstExt) {
-                        last = key2PageExt; // precharge up to key2PageExt
-                    } else {
-                        last = firstExt; // precharge up to firstExt
-                    }
+                    last = Max(key2PageExt, firstExt);
                     endRow = Min(endRow, last->GetRowId()); // may load the first row of key2PageExt
                 } else {
-                    overshot = true; // may find key > key2 on row > row2
+                    overshot = true; // may find first key > key2 on row > row2
                 }
             }
 
@@ -375,6 +371,9 @@ namespace NTable {
                 }
             }
 
+            // First extra page to precharge (when key placement is uncertain)
+            auto firstExt = first;
+
             // Last page to precharge (contains row2)
             auto last = Index.LookupRow(row2, first);
             if (Y_UNLIKELY(last > first)) {
@@ -391,7 +390,12 @@ namespace NTable {
                 }
                 if (first >= key1Page) {
                     first = key1Page; // use the minimum
+                    firstExt = key1Page - 1; // first key <= key1 might be on the next page
                     startRow = Min(startRow, Index.GetLastRowId(first));
+                    if (key1Page.Off() == 0 || last > firstExt) {
+                        firstExt = last; // never precharge past the last page
+                        overshot = true; // may have to touch the next slice
+                    }
                 } else {
                     key1Page = {};
                 }
@@ -400,16 +404,14 @@ namespace NTable {
             TIter key2Page;
             if (key2) {
                 // Last page to precharge (may contain key <= key2)
+                // We actually use the next page since lookup is not exact
                 key2Page = Index.LookupKeyReverse(key2, Scheme.Groups[0], ESeek::Lower, &keyDefaults);
-                if (key2Page && key2Page >= last) {
-                    if (key2Page <= first) {
-                        last = key2Page; // precharge up to keyPage
-                    } else {
-                        last = first; // precharge up to first
-                    }
-                    endRow = Max(endRow, last->GetRowId());
+                auto key2PageExt = key2Page - 1;
+                if (key2Page && key2Page.Off() != 0 && key2PageExt >= last) {
+                    last = Min(key2PageExt, firstExt);
+                    endRow = Max(endRow, Index.GetLastRowId(last)); // may load the last row of key2PageExt
                 } else {
-                    overshot = true; // may find key <= key2 on row < row2
+                    overshot = true; // may find first key < key2 on row < row2
                 }
             }
 

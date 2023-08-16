@@ -145,6 +145,7 @@ namespace {
         {
             CheckPrechargeByKeys(lower, upper, items, false, shouldPrecharge, true);
             CheckPrechargeByKeys(lower, upper, items, true, shouldPrecharge, true);
+            CheckIterByKeysReverse(lower, upper, items ? items : Max<ui32>(), shouldPrecharge);
         }
 
         void CheckByRows(TPageId row1, TPageId row2, ui64 items, TMap<TGroupId, TArr> shouldPrecharge) const
@@ -236,6 +237,41 @@ namespace {
                 // because instead of having |1 2 3| and stopping as soon as we see 2
                 // we may have |1*2 2*2 3*2| = |2 4 6| and be requested with upper = 5 (not 4)
                 if (key > upper) {
+                    break;
+                }
+            }
+
+            auto env = wrap.Displace<TTouchEnv>(nullptr);
+
+            AssertEqual(env->Touched, precharged, TPageIdFlags::IfIter);
+        }
+
+        void CheckIterByKeysReverse(ui32 lower, ui32 upper, ui64 items, const TMap<TGroupId, TArr>& precharged) const
+        {
+            Y_VERIFY(lower < Mass.Saved.Size() && upper < Mass.Saved.Size());
+
+            NTest::TCheckReverseIt wrap(Eggs, { new TTouchEnv(false) });
+
+            wrap.To(CurrentStep());
+            wrap.StopAfter(Tool.KeyCells(Mass.Saved[upper]));
+
+            auto seek = true;
+            for (ui32 key = lower; items-- + 1 > 0; key--) {
+                if (key % 4 == 0) {
+                    --key;
+                }
+
+                if (seek) {
+                    wrap.Seek(Mass.Saved[lower], ESeek::Lower);
+                    seek = false;
+                } else {
+                    wrap.Next().Is(key < upper || key == (ui32)-1 ? EReady::Gone : EReady::Data);
+                }
+
+                // forcebly touch the next stop element that is greater than upper
+                // because instead of having |1 2 3| and stopping as soon as we see 2
+                // we may have |1*2 2*2 3*2| = |2 4 6| and be requested with upper = 2 (not 4)
+                if (key < upper || key == (ui32)-1) {
                     break;
                 }
             }
@@ -747,12 +783,12 @@ Y_UNIT_TEST_SUITE(Charge) {
         */
 
         me.To(100).CheckByKeysReverse(15, 15, 0, TMap<TGroupId, TArr>{
-            {TGroupId{0}, {3}},
+            {TGroupId{0}, {3, 2_I}},
             {TGroupId{2}, {11_g}}
         });
 
         me.To(101).CheckByKeysReverse(15, 5, 0, TMap<TGroupId, TArr>{
-            {TGroupId{0}, {3, 2, 1}},
+            {TGroupId{0}, {3, 2, 1, 0}},
             {TGroupId{2}, {11_g, 10_g, 9_g, 8, 7, 6, 5_g, 4_g, 3_g}}
         });
 
@@ -777,27 +813,27 @@ Y_UNIT_TEST_SUITE(Charge) {
         });
 
         me.To(106).CheckByKeysReverse(17, 17, 0, TMap<TGroupId, TArr>{
-            {TGroupId{0}, {4}},
+            {TGroupId{0}, {4, 3}},
             {TGroupId{2}, {12_g}}
         });
         
         me.To(107).CheckByKeysReverse(16, 16, 0, TMap<TGroupId, TArr>{
-            {TGroupId{0}, {3}},
+            {TGroupId{0}, {3, 2_I}},
             {TGroupId{2}, {}}
         });
 
         me.To(108).CheckByKeysReverse(35, 35, 0, TMap<TGroupId, TArr>{
-            {TGroupId{0}, {8}},
+            {TGroupId{0}, {8, 7_I}},
             {TGroupId{2}, {26_g}}
         });
 
         me.To(109).CheckByKeysReverse(35, 33, 0, TMap<TGroupId, TArr>{
-            {TGroupId{0}, {8}},
+            {TGroupId{0}, {8, 7}},
             {TGroupId{2}, {26_g, 25_g, 24_g}}
         });
 
         me.To(110).CheckByKeysReverse(35, 32, 0, TMap<TGroupId, TArr>{
-            {TGroupId{0}, {8, 7}},
+            {TGroupId{0}, {8, 7, 6_I}},
             {TGroupId{2}, {26_g, 25_g, 24_g}}
         });
 
@@ -832,7 +868,7 @@ Y_UNIT_TEST_SUITE(Charge) {
         });
 
         me.To(202).CheckByKeysReverse(15, 5, 5, TMap<TGroupId, TArr>{
-            {TGroupId{0}, {3, 2, 1_f}},
+            {TGroupId{0}, {3, 2, 1_f, 0_f}},
             {TGroupId{2}, {11_g, 10_g, 9_g, 8, 7, 6}}
         });
 

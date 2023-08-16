@@ -71,6 +71,15 @@ namespace NTest {
             return Displace<IPages>(env), *this;
         }
 
+        template<typename TEnv>
+        TEnv* GetEnv() {
+            auto *casted = dynamic_cast<TEnv*>(Env.Get());
+
+            Y_VERIFY(!Env || casted, "Cannot cast IPages to given env");
+
+            return casted;
+        }
+
         template<typename ...TArgs>
         inline TChecker& IsN(TArgs&&...args)
         {
@@ -324,6 +333,11 @@ namespace NTest {
             }
 
             return *this;
+        }
+
+        EReady GetReady() const noexcept
+        {
+            return Ready;
         }
 
     private:

@@ -1,3 +1,4 @@
+#include "flat_part_charge.h"
 #include <ydb/core/tablet_flat/flat_part_dump.h>
 #include <ydb/core/tablet_flat/test/libs/rows/cook.h>
 #include <ydb/core/tablet_flat/test/libs/rows/layout.h>
@@ -13,6 +14,8 @@ namespace NKikimr {
 namespace NTable {
 
 namespace {
+    using namespace NTest;
+
     NPage::TConf PageConf(size_t groups = 1) noexcept
     {
         NPage::TConf conf{ true, 2 * 1024 };
@@ -51,6 +54,54 @@ namespace {
         static const auto& mass1 = Mass1();
         static const auto eggs1 = NTest::TPartCook::Make(mass1, PageConf(mass1.Model->Scheme->Families.size()));
         return eggs1;
+    }
+
+    struct TTouchEnv : public NTest::TTestEnv {
+        const TSharedData* TryGetPage(const TPart *part, TPageId id, TGroupId groupId) override
+        {
+            if (PrechargePhase) {
+                Precharged[groupId].insert(id);
+                return NTest::TTestEnv::TryGetPage(part, id, groupId);
+            } else {
+                Y_VERIFY_S(Precharged[groupId].count(id), "Requested page " << id << " should be precharged");
+                return NTest::TTestEnv::TryGetPage(part, id, groupId);
+            }
+        }
+
+        bool PrechargePhase = true;
+        TMap<TGroupId, TSet<TPageId>> Precharged;
+    };
+
+    template<EDirection Direction>
+    void Precharge(TChecker<TWrapPartImpl<Direction>, TPartEggs>& wrap, const TRow &row) {
+        auto env = wrap.template GetEnv<TTouchEnv>();
+        env->Precharged.clear();
+        env->PrechargePhase = true;
+
+        const auto part = (*wrap).Eggs.Lone();
+        const auto &keyDefaults = (*wrap).Eggs.Scheme->Keys;
+
+        TRun run(*keyDefaults);
+        for (auto& slice : *part->Slices) {
+            run.Insert(part, slice);
+        }
+
+        TRowTool tool(*(*wrap).Eggs.Scheme);
+        const auto from = tool.KeyCells(row);
+        const auto to = tool.KeyCells(row);
+
+        auto tags = TVector<TTag>();
+        for (auto c : (*wrap).Eggs.Scheme->Cols) {
+            tags.push_back(c.Tag);
+        }
+
+        if constexpr (Direction == EDirection::Forward) {
+            TCharge::Range(env, from, to, run, *keyDefaults, tags, 0, 0, true);
+        } else {
+            TCharge::RangeReverse(env, from, to, run, *keyDefaults, tags, 0, 0, true);
+        }
+
+        env->PrechargePhase = false;
     }
 }
 
@@ -647,8 +698,8 @@ Y_UNIT_TEST_SUITE(TPart) {
             fullCookR.Add(*TSchemedCookRow(*lay).Col(r.first, r.second));
         }
 
-        TCheckIt cutWrap(cutCook.Finish(), { }), fullWrap(fullCook.Finish(), { });
-        TCheckReverseIt cutWrapR(cutCookR.Finish(), { }), fullWrapR(fullCookR.Finish(), { });
+        TCheckIt cutWrap(cutCook.Finish(), { new TTouchEnv() }), fullWrap(fullCook.Finish(), { new TTouchEnv() });
+        TCheckReverseIt cutWrapR(cutCookR.Finish(), { new TTouchEnv() }), fullWrapR(fullCookR.Finish(), { new TTouchEnv() });
 
         const auto cutPart = (*cutWrap).Eggs.Lone();
         const auto fullPart = (*fullWrap).Eggs.Lone();
@@ -673,7 +724,7 @@ Y_UNIT_TEST_SUITE(TPart) {
         }
 
         for (size_t rowId = 0; rowId < fullRows.size(); rowId++)
-        for (auto seekMode : {ESeek::Exact, ESeek::Lower, ESeek::Upper})
+        for (auto seekMode : {ESeek::Exact, ESeek::Lower, ESeek::Upper })
         for (auto transformMode : {ESeek::Exact, ESeek::Lower, ESeek::Upper}) {
             auto str = fullRows[rowId].second;
 
@@ -690,13 +741,21 @@ Y_UNIT_TEST_SUITE(TPart) {
                 break;
             }
 
-            cutWrap.Seek(*TSchemedCookRow(*lay).Col(fullRows[rowId].first, str), seekMode);
-            fullWrap.Seek(*TSchemedCookRow(*lay).Col(fullRows[rowId].first, str), seekMode);
+            auto seekRow = *TSchemedCookRow(*lay).Col(fullRows[rowId].first, str);
+
+            Precharge(cutWrap, seekRow);
+            Precharge(fullWrap, seekRow);
+            cutWrap.Seek(seekRow, seekMode);
+            fullWrap.Seek(seekRow, seekMode);
+            UNIT_ASSERT_VALUES_EQUAL(cutWrap.GetReady(), fullWrap.GetReady());
             UNIT_ASSERT_VALUES_EQUAL(cutWrap->GetRowId(), fullWrap->GetRowId());
 
-            cutWrapR.Seek(*TSchemedCookRow(*lay).Col(fullRows[rowId].first, str), seekMode);
-            fullWrapR.Seek(*TSchemedCookRow(*lay).Col(fullRows[rowId].first, str), seekMode);
-            UNIT_ASSERT_VALUES_EQUAL(cutWrap->GetRowId(), fullWrap->GetRowId());
+            Precharge(cutWrapR, seekRow);
+            Precharge(fullWrapR, seekRow);
+            cutWrapR.Seek(seekRow, seekMode);
+            fullWrapR.Seek(seekRow, seekMode);
+            UNIT_ASSERT_VALUES_EQUAL(cutWrapR.GetReady(), fullWrapR.GetReady());
+            UNIT_ASSERT_VALUES_EQUAL(cutWrapR->GetRowId(), fullWrapR->GetRowId());
         }
     }
 
@@ -735,8 +794,8 @@ Y_UNIT_TEST_SUITE(TPart) {
             fullCookR.Add(*TSchemedCookRow(*lay).Col(r.first, r.second));
         }
 
-        TCheckIt cutWrap(cutCook.Finish(), { }), fullWrap(fullCook.Finish(), { });
-        TCheckReverseIt cutWrapR(cutCookR.Finish(), { }), fullWrapR(fullCookR.Finish(), { });
+        TCheckIt cutWrap(cutCook.Finish(), { new TTouchEnv() }), fullWrap(fullCook.Finish(), { new TTouchEnv() });
+        TCheckReverseIt cutWrapR(cutCookR.Finish(), { new TTouchEnv() }), fullWrapR(fullCookR.Finish(), { new TTouchEnv() });
 
         const auto cutPart = (*cutWrap).Eggs.Lone();
         const auto fullPart = (*fullWrap).Eggs.Lone();
@@ -771,13 +830,21 @@ Y_UNIT_TEST_SUITE(TPart) {
                 break;
             }
 
-            cutWrap.Seek(*TSchemedCookRow(*lay).Col(fullRows[rowId].first, str), seekMode);
-            fullWrap.Seek(*TSchemedCookRow(*lay).Col(fullRows[rowId].first, str), seekMode);
+            auto seekRow = *TSchemedCookRow(*lay).Col(fullRows[rowId].first, str);
+
+            Precharge(cutWrap, seekRow);
+            Precharge(fullWrap, seekRow);
+            cutWrap.Seek(seekRow, seekMode);
+            fullWrap.Seek(seekRow, seekMode);
+            UNIT_ASSERT_VALUES_EQUAL(cutWrap.GetReady(), fullWrap.GetReady());
             UNIT_ASSERT_VALUES_EQUAL(cutWrap->GetRowId(), fullWrap->GetRowId());
 
-            cutWrapR.Seek(*TSchemedCookRow(*lay).Col(fullRows[rowId].first, str), seekMode);
-            fullWrapR.Seek(*TSchemedCookRow(*lay).Col(fullRows[rowId].first, str), seekMode);
-            UNIT_ASSERT_VALUES_EQUAL(cutWrap->GetRowId(), fullWrap->GetRowId());
+            Precharge(cutWrapR, seekRow);
+            Precharge(fullWrapR, seekRow);
+            cutWrapR.Seek(seekRow, seekMode);
+            fullWrapR.Seek(seekRow, seekMode);
+            UNIT_ASSERT_VALUES_EQUAL(cutWrapR.GetReady(), fullWrapR.GetReady());
+            UNIT_ASSERT_VALUES_EQUAL(cutWrapR->GetRowId(), fullWrapR->GetRowId());
         }
     }
 

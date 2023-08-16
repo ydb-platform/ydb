@@ -366,7 +366,7 @@ public:
 
     const TGranuleRecord Record;
 
-    void AddColumnRecord(const TIndexInfo& indexInfo, const TPortionInfo& portion, const TColumnRecord& rec);
+    void AddColumnRecord(const TIndexInfo& indexInfo, const TPortionInfo& portion, const TColumnRecord& rec, const NKikimrTxColumnShard::TIndexPortionMeta* portionMeta);
 
     const THashMap<ui64, TPortionInfo>& GetPortions() const {
         return Portions;

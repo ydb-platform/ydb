@@ -65,7 +65,7 @@ void TDbWrapper::EraseColumn(ui32 index, const NOlap::TPortionInfo& portion, con
     NColumnShard::Schema::IndexColumns_Erase(db, index, portion, row);
 }
 
-bool TDbWrapper::LoadColumns(ui32 index, const std::function<void(const NOlap::TPortionInfo&, const TColumnRecord&)>& callback) {
+bool TDbWrapper::LoadColumns(ui32 index, const std::function<void(const NOlap::TPortionInfo&, const TColumnChunkLoadContext&)>& callback) {
     NIceDb::TNiceDb db(Database);
     return NColumnShard::Schema::IndexColumns_Load(db, DsGroupSelector, index, callback);
 }

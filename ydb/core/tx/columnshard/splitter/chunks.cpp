@@ -1,4 +1,5 @@
 #include "chunks.h"
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 
 namespace NKikimr::NOlap {
 
@@ -11,6 +12,10 @@ std::vector<TSplittedColumnChunk> TSplittedColumnChunk::InternalSplit(const TCol
     }
     SplitSizes.clear();
     return newChunks;
+}
+
+TString TOrderedColumnChunk::DebugString() const {
+    return TStringBuilder() << "column_id=" << ColumnId << ";data_size=" << Data.size() << ";records_count=" << Column->length() << ";data=" << NArrow::DebugJson(Column, 3, 3) << ";";
 }
 
 }

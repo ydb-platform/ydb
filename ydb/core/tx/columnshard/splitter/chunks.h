@@ -106,20 +106,27 @@ public:
 class TOrderedColumnChunk {
 private:
     YDB_READONLY(ui32, ColumnId, 0);
-    YDB_READONLY(ui32, RecordsCount, 0);
     YDB_READONLY_DEF(TString, Data);
+    std::shared_ptr<arrow::Array> Column;
 public:
-    TOrderedColumnChunk(const ui32 columnId, const ui32 recordsCount, const TString& data)
+    std::shared_ptr<arrow::Array> GetColumn() const {
+        return Column;
+    }
+
+    ui32 GetRecordsCount() const {
+        return Column->length();
+    }
+
+    TOrderedColumnChunk(const ui32 columnId, const TString& data, std::shared_ptr<arrow::Array> column)
         : ColumnId(columnId)
-        , RecordsCount(recordsCount)
         , Data(std::move(data))
+        , Column(column)
     {
+        Y_VERIFY(Column);
 
     }
 
-    TString DebugString() const {
-        return TStringBuilder() << "column_id=" << ColumnId << ";data_size=" << Data.size() << ";records_count=" << RecordsCount << ";";
-    }
+    TString DebugString() const;
 };
 
 }

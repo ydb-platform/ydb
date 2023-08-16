@@ -167,6 +167,7 @@ public:
 
     /// Returns whether the sorting keys defined.
     bool IsSorted() const { return SortingKey.get(); }
+    bool IsSortedColumn(const ui32 columnId) const { return GetPKFirstColumnId() == columnId; }
 
      /// Returns whether the replace keys defined.
     bool IsReplacing() const { return ReplaceKey.get(); }

@@ -91,7 +91,7 @@ bool TRBSplitLimiter::Next(std::vector<std::vector<TOrderedColumnChunk>>& portio
         }
         std::vector<TOrderedColumnChunk> chunksForBlob;
         for (auto&& c : i.GetChunks()) {
-            chunksForBlob.emplace_back(c.GetColumnId(), c.GetData().GetRecordsCount(), c.GetData().GetSerializedChunk());
+            chunksForBlob.emplace_back(c.GetColumnId(), c.GetData().GetSerializedChunk(), c.GetData().GetColumn());
         }
         result.emplace_back(std::move(chunksForBlob));
     }

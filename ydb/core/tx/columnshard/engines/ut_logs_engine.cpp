@@ -15,6 +15,8 @@ using TTypeInfo = NScheme::TTypeInfo;
 namespace {
 
 class TTestDbWrapper : public IDbWrapper {
+private:
+    std::map<TPortionAddress, std::map<TChunkAddress, TColumnChunkLoadContext>> LoadContexts;
 public:
     struct TIndex {
         THashMap<ui64, std::vector<TGranuleRecord>> Granules; // pathId -> granule
@@ -103,7 +105,18 @@ public:
     }
 
     void WriteColumn(ui32 index, const TPortionInfo& portion, const TColumnRecord& row) override {
+        auto proto = portion.GetMeta().SerializeToProto(row.ColumnId, row.Chunk);
+        auto rowProto = row.GetMeta().SerializeToProto();
+        if (proto) {
+            *rowProto.MutablePortionMeta() = std::move(*proto);
+        }
+
         auto& data = Indices[index].Columns[portion.GetGranule()];
+        NOlap::TColumnChunkLoadContext loadContext(row.GetAddress(), row.BlobRange, rowProto);
+        auto itInsertInfo = LoadContexts[portion.GetAddress()].emplace(row.GetAddress(), loadContext);
+        if (!itInsertInfo.second) {
+            itInsertInfo.first->second = loadContext;
+        }
         auto it = data.find(portion.GetPortion());
         if (it == data.end()) {
             it = data.emplace(portion.GetPortion(), portion.CopyWithFilteredColumns({})).first;
@@ -141,14 +154,18 @@ public:
         portionLocal.Records.swap(filtered);
     }
 
-    bool LoadColumns(ui32 index, const std::function<void(const TPortionInfo&, const TColumnRecord&)>& callback) override {
+    bool LoadColumns(ui32 index, const std::function<void(const TPortionInfo&, const TColumnChunkLoadContext&)>& callback) override {
         auto& columns = Indices[index].Columns;
         for (auto& [granule, portions] : columns) {
             for (auto& [portionId, portionLocal] : portions) {
                 auto copy = portionLocal;
+                copy.ResetMeta();
                 copy.Records.clear();
                 for (const auto& rec : portionLocal.Records) {
-                    callback(copy, rec);
+                    auto itContextLoader = LoadContexts[copy.GetAddress()].find(rec.GetAddress());
+                    Y_VERIFY(itContextLoader != LoadContexts[copy.GetAddress()].end());
+                    callback(copy, itContextLoader->second);
+                    LoadContexts[copy.GetAddress()].erase(itContextLoader);
                 }
             }
         }

@@ -18,7 +18,7 @@ void TChangesWithAppend::DoDebugString(TStringOutput& out) const {
 
 void TChangesWithAppend::DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& /*context*/) {
     for (auto& portionInfo : AppendedPortions) {
-        switch (portionInfo.GetPortionInfo().Meta.Produced) {
+        switch (portionInfo.GetPortionInfo().GetMeta().Produced) {
             case NOlap::TPortionMeta::EProduced::UNSPECIFIED:
                 Y_VERIFY(false); // unexpected
             case NOlap::TPortionMeta::EProduced::INSERTED:
@@ -113,7 +113,7 @@ std::vector<TPortionInfoWithBlobs> TChangesWithAppend::MakeAppendedPortions(
             auto& blobInfo = infoWithBlob.StartBlob(blob.size());
             for (auto&& chunk : blob) {
                 const TString data = chunk.GetData();
-                srcBlobs.emplace(blobInfo.AddChunk(infoWithBlob, std::move(chunk)).BlobRange, data);
+                srcBlobs.emplace(blobInfo.AddChunk(infoWithBlob, std::move(chunk), resultSchema->GetIndexInfo()).BlobRange, data);
             }
         }
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("portion_appended", infoWithBlob.GetPortionInfo().DebugString());

@@ -2,10 +2,10 @@
 
 namespace NKikimr::NOlap {
 
-const TColumnRecord& TPortionInfoWithBlobs::TBlobInfo::AddChunk(TPortionInfoWithBlobs& owner, TOrderedColumnChunk&& chunk) {
+const TColumnRecord& TPortionInfoWithBlobs::TBlobInfo::AddChunk(TPortionInfoWithBlobs& owner, TOrderedColumnChunk&& chunk, const TIndexInfo& info) {
     Y_VERIFY(!ResultBlob);
     const ui32 columnId = chunk.GetColumnId();
-    auto rec = TColumnRecord::Make(columnId, owner.ColumnChunkIds[columnId]++);
+    TColumnRecord rec(TChunkAddress(columnId, owner.ColumnChunkIds[columnId]++), chunk.GetColumn(), info);
     rec.BlobRange.Offset = Size;
     rec.BlobRange.Size = chunk.GetData().size();
     auto& result = owner.PortionInfo.AppendOneChunkColumn(std::move(rec));

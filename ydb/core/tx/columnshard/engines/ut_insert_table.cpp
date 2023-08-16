@@ -1,7 +1,10 @@
-#include <library/cpp/testing/unittest/registar.h>
-#include <util/string/printf.h>
 #include "db_wrapper.h"
 #include "insert_table/insert_table.h"
+
+#include <ydb/core/tx/columnshard/columnshard_schema.h>
+
+#include <library/cpp/testing/unittest/registar.h>
+#include <util/string/printf.h>
 
 namespace NKikimr {
 
@@ -30,7 +33,7 @@ public:
 
     void WriteColumn(ui32, const TPortionInfo&, const TColumnRecord&) override {}
     void EraseColumn(ui32, const TPortionInfo&, const TColumnRecord&) override {}
-    bool LoadColumns(ui32, const std::function<void(const TPortionInfo&, const TColumnRecord&)>&) override { return true; }
+    bool LoadColumns(ui32, const std::function<void(const TPortionInfo&, const TColumnChunkLoadContext&)>&) override { return true; }
 
     void WriteCounter(ui32, ui32, ui64) override {}
     bool LoadCounters(ui32, const std::function<void(ui32 id, ui64 value)>&) override { return true; }

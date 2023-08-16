@@ -33,7 +33,7 @@ public:
             return *ResultBlob;
         }
 
-        const TColumnRecord& AddChunk(TPortionInfoWithBlobs& owner, TOrderedColumnChunk&& chunk);
+        const TColumnRecord& AddChunk(TPortionInfoWithBlobs& owner, TOrderedColumnChunk&& chunk, const TIndexInfo& info);
 
         void RegisterBlobId(TPortionInfoWithBlobs& owner, const TUnifiedBlobId& blobId);
     };

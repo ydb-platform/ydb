@@ -1,68 +1,40 @@
 #pragma once
 #include <ydb/core/tx/columnshard/common/portion.h>
 #include <ydb/core/formats/arrow/replace_key.h>
+#include <ydb/core/protos/tx_columnshard.pb.h>
 #include <util/stream/output.h>
 
 namespace NKikimr::NOlap {
 
+struct TIndexInfo;
+
 struct TPortionMeta {
+private:
+    void AddMinMax(ui32 columnId, const std::shared_ptr<arrow::Array>& column, bool sorted);
+    std::shared_ptr<arrow::RecordBatch> ReplaceKeyEdges; // first and last PK rows
+    YDB_ACCESSOR_DEF(TString, TierName);
+public:
     using EProduced = NPortion::EProduced;
 
-    struct TColumnMeta {
-        ui32 NumRows{0};
-        ui32 RawBytes{0};
-        std::shared_ptr<arrow::Scalar> Min;
-        std::shared_ptr<arrow::Scalar> Max;
+    std::optional<NArrow::TReplaceKey> IndexKeyStart;
+    std::optional<NArrow::TReplaceKey> IndexKeyEnd;
+    EProduced Produced{EProduced::UNSPECIFIED};
+    ui32 FirstPkColumn = 0;
 
-        bool HasMinMax() const noexcept {
-            return Min.get() && Max.get();
-        }
-    };
+    bool DeserializeFromProto(const NKikimrTxColumnShard::TIndexPortionMeta& portionMeta, const TIndexInfo& indexInfo);
+    
+    std::optional<NKikimrTxColumnShard::TIndexPortionMeta> SerializeToProto(const ui32 columnId, const ui32 chunk) const;
+
+    void FillBatchInfo(const std::shared_ptr<arrow::RecordBatch> batch, const TIndexInfo& indexInfo);
 
     EProduced GetProduced() const {
         return Produced;
     }
 
-    EProduced Produced{EProduced::UNSPECIFIED};
-    THashMap<ui32, TColumnMeta> ColumnMeta;
-    ui32 FirstPkColumn = 0;
-    std::shared_ptr<arrow::RecordBatch> ReplaceKeyEdges; // first and last PK rows
-    std::optional<NArrow::TReplaceKey> IndexKeyStart;
-    std::optional<NArrow::TReplaceKey> IndexKeyEnd;
-
-    TString DebugString() const {
-        return TStringBuilder() <<
-            "produced:" << Produced << ";"
-            ;
-    }
-
-    bool HasMinMax(ui32 columnId) const {
-        if (!ColumnMeta.contains(columnId)) {
-            return false;
-        }
-        return ColumnMeta.find(columnId)->second.HasMinMax();
-    }
-
-    bool HasPkMinMax() const {
-        return HasMinMax(FirstPkColumn);
-    }
-
-    ui32 NumRows() const {
-        if (FirstPkColumn) {
-            Y_VERIFY(ColumnMeta.contains(FirstPkColumn));
-            return ColumnMeta.find(FirstPkColumn)->second.NumRows;
-        }
-        return 0;
-    }
+    TString DebugString() const;
 
     friend IOutputStream& operator << (IOutputStream& out, const TPortionMeta& info) {
-        out << "reason" << (ui32)info.Produced;
-        for (const auto& [_, meta] : info.ColumnMeta) {
-            if (meta.NumRows) {
-                out << " " << meta.NumRows << " rows";
-                break;
-            }
-        }
+        out << info.DebugString();
         return out;
     }
 };

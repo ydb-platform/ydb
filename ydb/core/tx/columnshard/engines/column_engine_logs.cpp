@@ -7,6 +7,7 @@
 #include <ydb/core/formats/arrow/merging_sorted_input_stream.h>
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/tx/columnshard/columnshard_ttl.h>
+#include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/library/conclusion/status.h>
 #include "changes/indexation.h"
 #include "changes/in_granule_compaction.h"
@@ -98,12 +99,10 @@ TColumnEngineStats::TPortionsStats DeltaStats(const TPortionInfo& portionInfo, u
     TColumnEngineStats::TPortionsStats deltaStats;
     THashSet<TUnifiedBlobId> blobs;
     for (auto& rec : portionInfo.Records) {
-        metadataBytes += rec.Metadata.size();
+        metadataBytes += rec.GetMeta().GetMetadataSize();
         blobs.insert(rec.BlobRange.BlobId);
         deltaStats.BytesByColumn[rec.ColumnId] += rec.BlobRange.Size;
-    }
-    for (auto& rec : portionInfo.Meta.ColumnMeta) {
-        deltaStats.RawBytesByColumn[rec.first] += rec.second.RawBytes;
+        deltaStats.RawBytesByColumn[rec.ColumnId] += rec.GetMeta().GetRawBytes();
     }
     deltaStats.Rows = portionInfo.NumRows();
     deltaStats.RawBytes = portionInfo.RawBytesSum();
@@ -123,16 +122,16 @@ void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, c
     ui64 metadataBytes = 0;
     TColumnEngineStats::TPortionsStats deltaStats = DeltaStats(portionInfo, metadataBytes);
 
-    Y_VERIFY(!exPortionInfo || exPortionInfo->Meta.Produced != TPortionMeta::EProduced::UNSPECIFIED);
-    Y_VERIFY(portionInfo.Meta.Produced != TPortionMeta::EProduced::UNSPECIFIED);
+    Y_VERIFY(!exPortionInfo || exPortionInfo->GetMeta().Produced != TPortionMeta::EProduced::UNSPECIFIED);
+    Y_VERIFY(portionInfo.GetMeta().Produced != TPortionMeta::EProduced::UNSPECIFIED);
 
     TColumnEngineStats::TPortionsStats& srcStats = exPortionInfo
         ? (exPortionInfo->IsActive()
-            ? engineStats.StatsByType[exPortionInfo->Meta.Produced]
+            ? engineStats.StatsByType[exPortionInfo->GetMeta().Produced]
             : engineStats.StatsByType[TPortionMeta::EProduced::INACTIVE])
-        : engineStats.StatsByType[portionInfo.Meta.Produced];
+        : engineStats.StatsByType[portionInfo.GetMeta().Produced];
     TColumnEngineStats::TPortionsStats& stats = portionInfo.IsActive()
-        ? engineStats.StatsByType[portionInfo.Meta.Produced]
+        ? engineStats.StatsByType[portionInfo.GetMeta().Produced]
         : engineStats.StatsByType[TPortionMeta::EProduced::INACTIVE];
 
     const bool isErase = updateType == EStatsUpdateType::ERASE;
@@ -236,16 +235,19 @@ bool TColumnEngineForLogs::LoadGranules(IDbWrapper& db) {
 }
 
 bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs) {
-    return ColumnsTable->Load(db, [&](const TPortionInfo& portion, const TColumnRecord& rec) {
-        auto& indexInfo = VersionedIndex.GetLastSchema()->GetIndexInfo();
+    TSnapshot lastSnapshot(0, 0);
+    const TIndexInfo* currentIndexInfo = nullptr;
+    return ColumnsTable->Load(db, [&](const TPortionInfo& portion, const TColumnChunkLoadContext& loadContext) {
+        if (!currentIndexInfo || lastSnapshot != portion.GetMinSnapshot()) {
+            currentIndexInfo = &VersionedIndex.GetSchema(portion.GetMinSnapshot())->GetIndexInfo();
+            lastSnapshot = portion.GetMinSnapshot();
+        }
         Y_VERIFY(portion.ValidSnapshotInfo());
-        Y_VERIFY(rec.Valid());
         // Do not count the blob as lost since it exists in the index.
-        lostBlobs.erase(rec.BlobRange.BlobId);
+        lostBlobs.erase(loadContext.GetBlobRange().BlobId);
         // Locate granule and append the record.
-        const auto gi = Granules.find(portion.GetGranule());
-        Y_VERIFY(gi != Granules.end());
-        gi->second->AddColumnRecord(indexInfo, portion, rec);
+        TColumnRecord rec(loadContext, *currentIndexInfo);
+        GetGranulePtrVerified(portion.GetGranule())->AddColumnRecord(*currentIndexInfo, portion, rec, loadContext.GetPortionMeta());
     });
 }
 
@@ -327,6 +329,7 @@ std::shared_ptr<TCompactColumnEngineChanges> TColumnEngineForLogs::StartCompacti
 
 std::shared_ptr<TCleanupColumnEngineChanges> TColumnEngineForLogs::StartCleanup(const TSnapshot& snapshot,
                                                                          THashSet<ui64>& pathsToDrop, ui32 maxRecords) noexcept {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanup")("portions_count", CleanupPortions.size());
     auto changes = TChangesConstructor::BuildCleanupChanges(snapshot);
     ui32 affectedRecords = 0;
 
@@ -364,6 +367,7 @@ std::shared_ptr<TCleanupColumnEngineChanges> TColumnEngineForLogs::StartCleanup(
     }
 
     if (affectedRecords > maxRecords) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanup")("portions_count", CleanupPortions.size())("portions_prepared", changes->PortionsToDrop.size());
         return changes;
     }
 
@@ -392,10 +396,12 @@ std::shared_ptr<TCleanupColumnEngineChanges> TColumnEngineForLogs::StartCleanup(
                 break;
             }
         } else {
+            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanup/Check")("snapshot", snapshot.DebugString())("portions_snapshot", portionInfo->GetRemoveSnapshot().DebugString());
             Y_VERIFY(portionInfo->CheckForCleanup());
             ++it;
         }
     }
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanup")("portions_count", CleanupPortions.size())("portions_prepared", changes->PortionsToDrop.size());
 
     return changes;
 }
@@ -446,13 +452,13 @@ TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering
                     const TInstant maxTtlPortionInstant = *mpiOpt;
                     const TDuration d = maxTtlPortionInstant - expireTimestamp;
                     keep = !!d;
-                    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "keep_detect")("max", maxTtlPortionInstant.Seconds())("expire", expireTimestamp.Seconds());
+                    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "keep_detect")("max", maxTtlPortionInstant.Seconds())("expire", expireTimestamp.Seconds());
                     if (d && dWaiting > d) {
                         dWaiting = d;
                     }
                 }
 
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "scalar_less_result")("keep", keep)("tryEvictPortion", tryEvictPortion)("allowDrop", context.AllowDrop);
+                AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "scalar_less_result")("keep", keep)("tryEvictPortion", tryEvictPortion)("allowDrop", context.AllowDrop);
                 if (keep && tryEvictPortion) {
                     TString tierName;
                     for (auto& tierRef : ttl.GetOrderedTiers()) {
@@ -477,8 +483,8 @@ TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering
                             break;
                         }
                     }
-                    if (info.TierName != tierName) {
-                        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "tiering switch detected")("from", info.TierName)("to", tierName);
+                    if (info.GetMeta().GetTierName() != tierName) {
+                        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "tiering switch detected")("from", info.GetMeta().GetTierName())("to", tierName);
                         evictionSize += info.BlobsSizes().first;
                         const bool needExport = ttl.NeedExport(tierName);
                         context.Changes->AddPortionToEvict(info, TPortionEvictionFeatures(tierName, pathId, needExport));
@@ -678,7 +684,7 @@ static TMap<TSnapshot, std::vector<const TPortionInfo*>> GroupPortionsBySnapshot
         if (visible) {
             out[recSnapshot].push_back(&portionInfo);
         }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "GroupPortionsBySnapshot")("analyze_portion", portionInfo.DebugString())("visible", visible)("snapshot", snapshot.DebugString());
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "GroupPortionsBySnapshot")("analyze_portion", portionInfo.DebugString())("visible", visible)("snapshot", snapshot.DebugString());
     }
     return out;
 }

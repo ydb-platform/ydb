@@ -5,6 +5,7 @@ SRCS(
     column_record.cpp
     with_blobs.cpp
     meta.cpp
+    common.cpp
 )
 
 PEERDIR(

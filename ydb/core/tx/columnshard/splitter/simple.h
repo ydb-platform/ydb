@@ -11,6 +11,10 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, SlicedBatch);
     YDB_READONLY_DEF(TString, SerializedChunk);
 public:
+    std::shared_ptr<arrow::Array> GetColumn() const {
+        return SlicedBatch->column(0);
+    }
+
     ui32 GetRecordsCount() const {
         return SlicedBatch->num_rows();
     }
@@ -19,7 +23,10 @@ public:
 
     TSaverSplittedChunk(std::shared_ptr<arrow::RecordBatch> batch, TString&& serializedChunk)
         : SlicedBatch(batch)
-        , SerializedChunk(std::move(serializedChunk)) {
+        , SerializedChunk(std::move(serializedChunk))
+    {
+        Y_VERIFY(SlicedBatch);
+        Y_VERIFY(SlicedBatch->num_columns() == 1);
 
     }
 

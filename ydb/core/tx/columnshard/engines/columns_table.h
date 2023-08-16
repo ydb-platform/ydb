@@ -21,7 +21,7 @@ public:
         db.EraseColumn(IndexId, portion, row);
     }
 
-    bool Load(IDbWrapper& db, std::function<void(const TPortionInfo&, const TColumnRecord&)> callback) {
+    bool Load(IDbWrapper& db, std::function<void(const TPortionInfo&, const TColumnChunkLoadContext&)> callback) {
         return db.LoadColumns(IndexId, callback);
     }
 

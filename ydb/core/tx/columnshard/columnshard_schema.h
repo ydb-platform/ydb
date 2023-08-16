@@ -12,6 +12,10 @@
 
 #include <type_traits>
 
+namespace NKikimr::NOlap {
+class TColumnChunkLoadContext;
+}
+
 namespace NKikimr::NColumnShard {
 
 using NOlap::TWriteId;
@@ -592,15 +596,20 @@ struct Schema : NIceDb::Schema {
     // IndexColumns activities
 
     static void IndexColumns_Write(NIceDb::TNiceDb& db, ui32 index, const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
+        auto proto = portion.GetMeta().SerializeToProto(row.ColumnId, row.Chunk);
+        auto rowProto = row.GetMeta().SerializeToProto();
+        if (proto) {
+            *rowProto.MutablePortionMeta() = std::move(*proto);
+        }
         db.Table<IndexColumns>().Key(index, portion.GetGranule(), row.ColumnId,
             portion.GetMinSnapshot().GetPlanStep(), portion.GetMinSnapshot().GetTxId(), portion.GetPortion(), row.Chunk).Update(
-            NIceDb::TUpdate<IndexColumns::XPlanStep>(portion.GetRemoveSnapshot().GetPlanStep()),
-            NIceDb::TUpdate<IndexColumns::XTxId>(portion.GetRemoveSnapshot().GetTxId()),
-            NIceDb::TUpdate<IndexColumns::Blob>(row.SerializedBlobId()),
-            NIceDb::TUpdate<IndexColumns::Metadata>(row.Metadata),
-            NIceDb::TUpdate<IndexColumns::Offset>(row.BlobRange.Offset),
-            NIceDb::TUpdate<IndexColumns::Size>(row.BlobRange.Size)
-        );
+                NIceDb::TUpdate<IndexColumns::XPlanStep>(portion.GetRemoveSnapshot().GetPlanStep()),
+                NIceDb::TUpdate<IndexColumns::XTxId>(portion.GetRemoveSnapshot().GetTxId()),
+                NIceDb::TUpdate<IndexColumns::Blob>(row.SerializedBlobId()),
+                NIceDb::TUpdate<IndexColumns::Metadata>(rowProto.SerializeAsString()),
+                NIceDb::TUpdate<IndexColumns::Offset>(row.BlobRange.Offset),
+                NIceDb::TUpdate<IndexColumns::Size>(row.BlobRange.Size)
+            );
     }
 
     static void IndexColumns_Erase(NIceDb::TNiceDb& db, ui32 index, const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
@@ -609,37 +618,7 @@ struct Schema : NIceDb::Schema {
     }
 
     static bool IndexColumns_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsGroupSelector, ui32 index,
-                                  const std::function<void(const NOlap::TPortionInfo&, const TColumnRecord&)>& callback) {
-        auto rowset = db.Table<IndexColumns>().Prefix(index).Select();
-        if (!rowset.IsReady())
-            return false;
-
-        while (!rowset.EndOfSet()) {
-            TColumnRecord row;
-            NOlap::TPortionInfo portion = NOlap::TPortionInfo::BuildEmpty();
-            portion.SetGranule(rowset.GetValue<IndexColumns::Granule>());
-            row.ColumnId = rowset.GetValue<IndexColumns::ColumnIdx>();
-            portion.SetMinSnapshot(rowset.GetValue<IndexColumns::PlanStep>(), rowset.GetValue<IndexColumns::TxId>());
-            portion.SetPortion(rowset.GetValue<IndexColumns::Portion>());
-            row.Chunk = rowset.GetValue<IndexColumns::Chunk>();
-            portion.SetRemoveSnapshot(rowset.GetValue<IndexColumns::XPlanStep>(), rowset.GetValue<IndexColumns::XTxId>());
-
-            TString strBlobId = rowset.GetValue<IndexColumns::Blob>();
-            row.Metadata = rowset.GetValue<IndexColumns::Metadata>();
-            row.BlobRange.Offset = rowset.GetValue<IndexColumns::Offset>();
-            row.BlobRange.Size = rowset.GetValue<IndexColumns::Size>();
-
-            Y_VERIFY(strBlobId.size() == sizeof(TLogoBlobID), "Size %" PRISZT "  doesn't match TLogoBlobID", strBlobId.size());
-            TLogoBlobID logoBlobId((const ui64*)strBlobId.data());
-            row.BlobRange.BlobId = NOlap::TUnifiedBlobId(dsGroupSelector->GetGroup(logoBlobId), logoBlobId);
-
-            callback(portion, row);
-
-            if (!rowset.Next())
-                return false;
-        }
-        return true;
-    }
+        const std::function<void(const NOlap::TPortionInfo&, const NOlap::TColumnChunkLoadContext&)>& callback);
 
     // IndexCounters
 
@@ -685,6 +664,52 @@ struct Schema : NIceDb::Schema {
         db.Table<Operations>().Key((ui64)writeId).Delete();
     }
 
+};
+
+}
+
+namespace NKikimr::NOlap {
+class TColumnChunkLoadContext {
+private:
+    YDB_READONLY_DEF(TBlobRange, BlobRange);
+    TChunkAddress Address;
+    YDB_READONLY_DEF(NKikimrTxColumnShard::TIndexColumnMeta, MetaProto);
+public:
+    const TChunkAddress& GetAddress() const {
+        return Address;
+    }
+
+    TColumnChunkLoadContext(const TChunkAddress& address, const TBlobRange& bRange, const NKikimrTxColumnShard::TIndexColumnMeta& metaProto)
+        : BlobRange(bRange)
+        , Address(address)
+        , MetaProto(metaProto)
+    {
+
+    }
+
+    template <class TSource>
+    TColumnChunkLoadContext(const TSource& rowset, const IBlobGroupSelector* dsGroupSelector)
+        : Address(rowset.template GetValue<NColumnShard::Schema::IndexColumns::ColumnIdx>(), rowset.template GetValue<NColumnShard::Schema::IndexColumns::Chunk>()) {
+        AFL_VERIFY(Address.GetColumnId())("event", "incorrect address")("address", Address.DebugString());
+        TString strBlobId = rowset.template GetValue<NColumnShard::Schema::IndexColumns::Blob>();
+        Y_VERIFY(strBlobId.size() == sizeof(TLogoBlobID), "Size %" PRISZT "  doesn't match TLogoBlobID", strBlobId.size());
+        TLogoBlobID logoBlobId((const ui64*)strBlobId.data());
+        BlobRange.BlobId = NOlap::TUnifiedBlobId(dsGroupSelector->GetGroup(logoBlobId), logoBlobId);
+        BlobRange.Offset = rowset.template GetValue<NColumnShard::Schema::IndexColumns::Offset>();
+        BlobRange.Size = rowset.template GetValue<NColumnShard::Schema::IndexColumns::Size>();
+        AFL_VERIFY(BlobRange.BlobId.IsValid() && BlobRange.Size)("event", "incorrect blob")("blob", BlobRange.ToString());
+
+        const TString metadata = rowset.template GetValue<NColumnShard::Schema::IndexColumns::Metadata>();
+        AFL_VERIFY(MetaProto.ParseFromArray(metadata.data(), metadata.size()))("event", "cannot parse metadata as protobuf");
+    }
+
+    const NKikimrTxColumnShard::TIndexPortionMeta* GetPortionMeta() const {
+        if (MetaProto.HasPortionMeta()) {
+            return &MetaProto.GetPortionMeta();
+        } else {
+            return nullptr;
+        }
+    }
 };
 
 }

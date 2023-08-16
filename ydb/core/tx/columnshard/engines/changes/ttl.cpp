@@ -38,7 +38,7 @@ bool TTTLColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TApplyC
 
         const TPortionInfo& oldInfo = self.GetGranuleVerified(granule).GetPortionVerified(portion);
         Y_VERIFY(oldInfo.IsActive());
-        Y_VERIFY(portionInfo.TierName != oldInfo.TierName);
+        Y_VERIFY(portionInfo.GetMeta().GetTierName() != oldInfo.GetMeta().GetTierName());
 
         self.UpsertPortion(portionInfo, &oldInfo);
 
@@ -60,7 +60,7 @@ void TTTLColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self, TWr
         auto& portionInfo = portionInfoWithBlobs.GetPortionInfo();
         // Mark exported blobs
         if (evictionFeatures.NeedExport) {
-            auto& tierName = portionInfo.TierName;
+            auto& tierName = portionInfo.GetMeta().GetTierName();
             Y_VERIFY(!tierName.empty());
 
             for (auto& rec : portionInfo.Records) {
@@ -161,14 +161,14 @@ bool TTTLColumnEngineChanges::UpdateEvictedPortion(TPortionInfoWithBlobs& portio
     const THashMap<TBlobRange, TString>& srcBlobs, std::vector<TColumnRecord>& evictedRecords,
     TConstructionContext& context) const {
     TPortionInfo& portionInfo = portionInfoWithBlobs.GetPortionInfo();
-    Y_VERIFY(portionInfo.TierName != evictFeatures.TargetTierName);
+    Y_VERIFY(portionInfo.GetMeta().GetTierName() != evictFeatures.TargetTierName);
 
     auto* tiering = Tiering.FindPtr(evictFeatures.PathId);
     Y_VERIFY(tiering);
     auto compression = tiering->GetCompression(evictFeatures.TargetTierName);
     if (!compression) {
         // Noting to recompress. We have no other kinds of evictions yet.
-        portionInfo.TierName = evictFeatures.TargetTierName;
+        portionInfo.MutableMeta().SetTierName(evictFeatures.TargetTierName);
         evictFeatures.DataChanges = false;
         return true;
     }
@@ -191,21 +191,22 @@ bool TTTLColumnEngineChanges::UpdateEvictedPortion(TPortionInfoWithBlobs& portio
         auto field = resultSchema->GetFieldByIndex(pos);
 
         TString blob;
+        std::shared_ptr<arrow::RecordBatch> rb;
         {
             auto it = srcBlobs.find(rec.BlobRange);
             Y_VERIFY(it != srcBlobs.end());
-            auto rb = resultSchema->GetColumnLoader(rec.ColumnId)->Apply(it->second);
-            Y_VERIFY(rb.ok());
+            rb = NArrow::TStatusValidator::GetValid(resultSchema->GetColumnLoader(rec.ColumnId)->Apply(it->second));
             auto columnSaver = resultSchema->GetColumnSaver(rec.ColumnId, saverContext);
-            blob = columnSaver.Apply(*rb);
+            blob = columnSaver.Apply(rb);
         }
+        Y_VERIFY(rb->num_columns() == 1);
         if (blob.size() >= TPortionInfo::BLOB_BYTES_LIMIT) {
             return false;
         }
         if (portionInfoWithBlobs.GetBlobs().empty() || portionInfoWithBlobs.GetBlobs().back().GetSize() + blob.size() >= TPortionInfo::BLOB_BYTES_LIMIT) {
-            portionInfoWithBlobs.StartBlob(0).AddChunk(portionInfoWithBlobs, TOrderedColumnChunk(rec.ColumnId, 0, blob));
+            portionInfoWithBlobs.StartBlob(0).AddChunk(portionInfoWithBlobs, TOrderedColumnChunk(rec.ColumnId, blob, rb->column(0)), blobSchema->GetIndexInfo());
         } else {
-            portionInfoWithBlobs.GetBlobs().back().AddChunk(portionInfoWithBlobs, TOrderedColumnChunk(rec.ColumnId, 0, blob));
+            portionInfoWithBlobs.GetBlobs().back().AddChunk(portionInfoWithBlobs, TOrderedColumnChunk(rec.ColumnId, blob, rb->column(0)), blobSchema->GetIndexInfo());
         }
     }
 
@@ -230,7 +231,7 @@ NKikimr::TConclusionStatus TTTLColumnEngineChanges::DoConstructBlobs(TConstructi
 
     for (auto& [portionInfo, evictFeatures] : PortionsToEvict) {
         if (UpdateEvictedPortion(portionInfo, evictFeatures, Blobs, EvictedRecords, context)) {
-            Y_VERIFY(portionInfo.GetPortionInfo().TierName == evictFeatures.TargetTierName);
+            Y_VERIFY(portionInfo.GetPortionInfo().GetMeta().GetTierName() == evictFeatures.TargetTierName);
             evicted.emplace_back(std::move(portionInfo), evictFeatures);
         }
     }

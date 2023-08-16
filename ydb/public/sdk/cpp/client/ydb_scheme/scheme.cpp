@@ -87,6 +87,10 @@ static ESchemeEntryType ConvertProtoEntryType(::Ydb::Scheme::Entry::Type entry) 
         return ESchemeEntryType::Topic;
     case ::Ydb::Scheme::Entry::COLUMN_STORE:
         return ESchemeEntryType::ColumnStore;
+    case ::Ydb::Scheme::Entry::EXTERNAL_TABLE:
+        return ESchemeEntryType::ExternalTable;
+    case ::Ydb::Scheme::Entry::EXTERNAL_DATA_SOURCE:
+        return ESchemeEntryType::ExternalDataSource;
     default:
         return ESchemeEntryType::Unknown;
     }

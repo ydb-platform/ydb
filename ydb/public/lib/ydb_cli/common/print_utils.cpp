@@ -35,7 +35,10 @@ void PrintSchemeEntry(IOutputStream& o, const NScheme::TSchemeEntry& entry, NCol
     case NScheme::ESchemeEntryType::CoordinationNode:
         o << colors.YellowColor();
         break;
-
+    case NScheme::ESchemeEntryType::ExternalTable:
+    case NScheme::ESchemeEntryType::ExternalDataSource:
+        o << colors.LightWhite();
+        break;
     default:
         o << colors.RedColor();
     }
@@ -95,6 +98,10 @@ TString EntryTypeToString(NScheme::ESchemeEntryType entry) {
         return "block-store-volume";
     case NScheme::ESchemeEntryType::CoordinationNode:
         return "coordination-node";
+    case NScheme::ESchemeEntryType::ExternalDataSource:
+        return "external-data-source";
+    case NScheme::ESchemeEntryType::ExternalTable:
+        return "external-table";
     case NScheme::ESchemeEntryType::Unknown:
     case NScheme::ESchemeEntryType::Sequence:
     case NScheme::ESchemeEntryType::Replication:

@@ -29,6 +29,8 @@ inline TMaybe<TReplication::ETargetKind> TryTargetKindFromEntryType(NYdb::NSchem
     case NYdb::NScheme::ESchemeEntryType::ColumnTable:
     case NYdb::NScheme::ESchemeEntryType::ColumnStore:
     case NYdb::NScheme::ESchemeEntryType::Topic:
+    case NYdb::NScheme::ESchemeEntryType::ExternalTable:
+    case NYdb::NScheme::ESchemeEntryType::ExternalDataSource:
         return Nothing();
     }
 }

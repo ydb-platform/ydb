@@ -105,6 +105,7 @@ protected:
             } else {
                 request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
                 request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
+                request.MutableQueryCachePolicy()->set_keep_in_cache(true);
                 if (Connection_.Transaction.Status == 'I') {
                     request.MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
                     request.MutableTxControl()->set_commit_tx(true);

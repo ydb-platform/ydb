@@ -32,7 +32,6 @@ target_link_libraries(restricted-boost-spirit INTERFACE
   restricted-boost-preprocessor
   restricted-boost-proto
   restricted-boost-range
-  restricted-boost-regex
   restricted-boost-smart_ptr
   restricted-boost-static_assert
   restricted-boost-thread

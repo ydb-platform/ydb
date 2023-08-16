@@ -21,7 +21,6 @@ namespace boost
     namespace functional
     {
         namespace detail {
-#if defined(_HAS_AUTO_PTR_ETC) && !_HAS_AUTO_PTR_ETC
             // std::unary_function and std::binary_function were both removed
             // in C++17.
 
@@ -39,12 +38,6 @@ namespace boost
                 typedef Arg2 second_argument_type;
                 typedef Result result_type;
             };
-#else
-            // Use the standard objects when we have them.
-
-            using std::unary_function;
-            using std::binary_function;
-#endif
         }
     }
 

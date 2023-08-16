@@ -255,24 +255,26 @@ THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TProduceRequestData::
     ui64 totalSize = 0;
 
     for (const auto& record : batch->Records) {
-        if (!record.Value) {
-            continue;
-        }
-
         NKikimrPQClient::TDataChunk proto;
         for(auto& h : record.Headers) {
-            auto res = proto.AddMessageMeta();
-            res->set_key(static_cast<const char*>(h.Key->data()), h.Key->size());
-            res->set_value(static_cast<const char*>(h.Value->data()), h.Value->size());
+                auto res = proto.AddMessageMeta();
+            if (h.Key) {
+                res->set_key(static_cast<const char*>(h.Key->data()), h.Key->size());
+            }
+            if (h.Value) {
+               res->set_value(static_cast<const char*>(h.Value->data()), h.Value->size());
+            }
         }
 
-        {
+        if (record.Key) {
             auto res = proto.AddMessageMeta();
             res->set_key("__key");
             res->set_value(static_cast<const char*>(record.Key->data()), record.Key->size());
         }
 
-        proto.SetData(static_cast<const void*>(record.Value->data()), record.Value->size());
+        if (record.Value) {
+            proto.SetData(static_cast<const void*>(record.Value->data()), record.Value->size());
+        }
 
         TString str;
         bool res = proto.SerializeToString(&str);
@@ -285,11 +287,11 @@ THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TProduceRequestData::
         w->SetData(str);
         w->SetCreateTimeMS(batch->BaseTimestamp + record.TimestampDelta);
         w->SetDisableDeduplication(true);
-        w->SetUncompressedSize(record.Value->size());
+        w->SetUncompressedSize(record.Value ? record.Value->size() : 0);
         w->SetClientDC(clientDC);
         w->SetIgnoreQuotaDeadline(true);
 
-        totalSize += record.Value->size();
+        totalSize += record.Value ? record.Value->size() : 0;
     }
 
     partitionRequest->SetPutUnitsSize(NPQ::PutUnitsSize(totalSize));

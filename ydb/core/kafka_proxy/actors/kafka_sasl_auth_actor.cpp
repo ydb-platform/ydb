@@ -8,6 +8,8 @@
 
 namespace NKafka {
 
+static constexpr char ERROR_AUTH_BYTES[] = "";
+
 NActors::IActor* CreateKafkaSaslAuthActor(const TContext::TPtr context, const ui64 correlationId, const NKikimr::NRawSocket::TSocketDescriptor::TSocketAddressType address, const TSaslAuthenticateRequestData* message) {
     return new TKafkaSaslAuthActor(context, correlationId, address, message);
 }    
@@ -43,7 +45,7 @@ void TKafkaSaslAuthActor::Handle(NKikimr::TEvTicketParser::TEvAuthorizeTicketRes
     auto responseToClient = std::make_shared<TSaslAuthenticateResponseData>();
     responseToClient->ErrorCode = EKafkaErrors::NONE_ERROR;
     responseToClient->ErrorMessage = "";
-    responseToClient->AuthBytes = TKafkaRawBytes();
+    responseToClient->AuthBytes = TKafkaRawBytes(ERROR_AUTH_BYTES, sizeof(ERROR_AUTH_BYTES));
 
     auto evResponse = std::make_shared<TEvKafka::TEvResponse>(CorrelationId, responseToClient);
 
@@ -98,7 +100,7 @@ void TKafkaSaslAuthActor::SendAuthFailedAndDie(TString errorMessage, EKafkaError
     auto responseToClient = std::make_shared<TSaslAuthenticateResponseData>();
     responseToClient->ErrorCode = errorCode;
     responseToClient->ErrorMessage = errorMessage; 
-    responseToClient->AuthBytes = TKafkaRawBytes();
+    responseToClient->AuthBytes = TKafkaRawBytes(ERROR_AUTH_BYTES, sizeof(ERROR_AUTH_BYTES));
 
     auto evResponse = std::make_shared<TEvKafka::TEvResponse>(CorrelationId, responseToClient);
     auto authResult = new TEvKafka::TEvAuthResult(EAuthSteps::FAILED, evResponse, nullptr, "", errorMessage);

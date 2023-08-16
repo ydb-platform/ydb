@@ -64,6 +64,7 @@ public:
 
     bool ConnectionEstablished = false;
     bool CloseConnection = false;
+    bool ActorActive = true;
 
     NAddressClassifier::TLabeledAddressClassifier::TConstPtr DatacenterClassifier;
 
@@ -106,6 +107,10 @@ public:
 
     void PassAway() override {
         KAFKA_LOG_D("PassAway");
+        if (!ActorActive) {
+            return;
+        }
+        ActorActive = false;
 
         if (ConnectionEstablished) {
             ConnectionEstablished = false;
@@ -348,13 +353,21 @@ protected:
         TBufferedWriter buffer(Socket.Get(), Context->Config.GetPacketSize());
         TKafkaWritable writable(buffer);
 
-        writable << size;
-        responseHeader.Write(writable, headerVersion);
-        reply->Write(writable, version);
+        try {
+            writable << size;
+            responseHeader.Write(writable, headerVersion);
+            reply->Write(writable, version);
 
-        buffer.flush();
+            buffer.flush();
 
-        KAFKA_LOG_D("Sent reply: ApiKey=" << header->RequestApiKey << ", Version=" << version << ", Correlation=" << responseHeader.CorrelationId <<  ", Size=" << size);
+            KAFKA_LOG_D("Sent reply: ApiKey=" << header->RequestApiKey << ", Version=" << version << ", Correlation=" << responseHeader.CorrelationId <<  ", Size=" << size);
+        } catch(const yexception& e) {
+            KAFKA_LOG_ERROR("error on processing response: ApiKey=" << reply->ApiKey()
+                                                     << ", Version=" << version
+                                                     << ", CorrelationId=" << header->CorrelationId
+                                                     << ", Error=" <<  e.what());
+            return PassAway();
+        }
     }
 
     void DoRead(const TActorContext& ctx) {

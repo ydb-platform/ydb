@@ -199,12 +199,10 @@ message TReadSplitsRequest {
 
     enum EFormat {
         FORMAT_RESERVED = 0;
-        // ColumnSet is a simple representation of columnar data.
-        // Do not use in production.
-        COLUMN_SET = 1;
         // Arrow IPC Streaming format:
         // https://arrow.apache.org/docs/format/Columnar.html#ipc-streaming-format
         ARROW_IPC_STREAMING = 2;
+        reserved 1;
     }
 
     // Determines the format of data representation

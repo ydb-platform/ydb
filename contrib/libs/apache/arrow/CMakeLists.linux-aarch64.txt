@@ -311,6 +311,7 @@ target_sources(libs-apache-arrow PRIVATE
 target_fbs_source(libs-apache-arrow
   PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/arrow/cpp/src/generated/File.fbs
+  --scoped-enums
   -I
   ${CMAKE_BINARY_DIR}
   -I
@@ -319,6 +320,7 @@ target_fbs_source(libs-apache-arrow
 target_fbs_source(libs-apache-arrow
   PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/arrow/cpp/src/generated/Message.fbs
+  --scoped-enums
   -I
   ${CMAKE_BINARY_DIR}
   -I
@@ -327,6 +329,7 @@ target_fbs_source(libs-apache-arrow
 target_fbs_source(libs-apache-arrow
   PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/arrow/cpp/src/generated/Schema.fbs
+  --scoped-enums
   -I
   ${CMAKE_BINARY_DIR}
   -I
@@ -335,6 +338,7 @@ target_fbs_source(libs-apache-arrow
 target_fbs_source(libs-apache-arrow
   PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/arrow/cpp/src/generated/SparseTensor.fbs
+  --scoped-enums
   -I
   ${CMAKE_BINARY_DIR}
   -I
@@ -343,6 +347,7 @@ target_fbs_source(libs-apache-arrow
 target_fbs_source(libs-apache-arrow
   PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/arrow/cpp/src/generated/Tensor.fbs
+  --scoped-enums
   -I
   ${CMAKE_BINARY_DIR}
   -I
@@ -351,6 +356,7 @@ target_fbs_source(libs-apache-arrow
 target_fbs_source(libs-apache-arrow
   PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/arrow/cpp/src/generated/feather.fbs
+  --scoped-enums
   -I
   ${CMAKE_BINARY_DIR}
   -I

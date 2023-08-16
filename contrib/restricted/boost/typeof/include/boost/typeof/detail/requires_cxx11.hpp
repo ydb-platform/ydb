@@ -11,7 +11,7 @@
 #if defined(BOOST_NO_CXX11_DECLTYPE) || \
     defined(BOOST_NO_CXX11_TEMPLATE_ALIASES)
 
-BOOST_PRAGMA_MESSAGE("C++03 support is deprecated in Boost.Typeof 1.82 and will be removed in Boost.Typeof 1.84.")
+BOOST_PRAGMA_MESSAGE("C++03 support was deprecated in Boost.Typeof 1.82 and will be removed in Boost.Typeof 1.84.")
 
 #endif
 

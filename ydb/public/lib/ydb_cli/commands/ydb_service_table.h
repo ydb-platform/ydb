@@ -92,7 +92,7 @@ protected:
 };
 
 class TCommandExecuteQuery : public TTableCommand, TCommandQueryBase, TCommandWithParameters,
-    public TCommandWithFormat, public TInterruptibleCommand
+    public TInterruptibleCommand
 {
 public:
     TCommandExecuteQuery();

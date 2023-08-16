@@ -20,10 +20,12 @@ namespace {
     THashMap<EOutputFormat, TString> StdinFormatDescriptions = {
         { EOutputFormat::JsonUnicode, "Parameter names and values in json unicode format" },
         { EOutputFormat::JsonBase64, "Parameter names and values in json unicode format, binary string parameter values are base64-encoded" },
+        { EOutputFormat::Csv, "Parameter names and values in csv format" },
+        { EOutputFormat::Tsv, "Parameter names and values in tsv format" },
         { EOutputFormat::NewlineDelimited, "Newline character delimits parameter sets on stdin and triggers "
                                             "processing in accordance to \"batch\" option" },
         { EOutputFormat::Raw, "Binary value with no transformations or parsing, parameter name is set by an \"stdin-par\" option" },
-        { EOutputFormat::NoFraming, "Data from stdin is taken as a single set of parameters" }
+        { EOutputFormat::NoFraming, "Data from stdin is taken as a single set of parameters" },
     };
 
     THashMap<EOutputFormat, TString> FormatDescriptions = {
@@ -197,7 +199,7 @@ void TCommandWithFormat::ParseFormats() {
                 IsStdinFormatSet = true;
             } else if (std::find(AllowedFramingFormats.begin(), AllowedFramingFormats.end(), format) != AllowedFramingFormats.end()) {
                 if (IsFramingFormatSet) {
-                    throw TMisuseException() << "Formats " << StdinFormat << " and " << format
+                    throw TMisuseException() << "Formats " << FramingFormat << " and " << format
                                              << " are mutually exclusive, choose only one of them.";
                 }
                 FramingFormat = format;

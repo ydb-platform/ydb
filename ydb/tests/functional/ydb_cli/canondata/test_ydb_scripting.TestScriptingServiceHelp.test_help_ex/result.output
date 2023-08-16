@@ -58,6 +58,10 @@ Options:
                                Parameter names and values in json unicode format, binary string parameter values are base64-encoded
                              raw
                                Binary value with no transformations or parsing, parameter name is set by an "stdin-par" option
+                             csv
+                               Parameter names and values in csv format
+                             tsv
+                               Parameter names and values in tsv format
                            Default: "json-unicode".
                            2. Framing: defines how parameter sets are delimited on the stdin. Available options:
                              no-framing
@@ -65,6 +69,8 @@ Options:
                              newline-delimited
                                Newline character delimits parameter sets on stdin and triggers processing in accordance to "batch" option
                            Default: "no-framing".
+  --columns STR            String with column names that replaces header. It is assumed that there is no header in the file
+  --skip-rows NUM          Number of header rows to skip (not including the row of column names, if any) (default: 0)
   --stdin-par STRING       Parameter name on stdin, required/applicable when stdin-format implies values only.
   --batch STRING           Batching mode for stdin parameters processing. Available options:
                              iterative

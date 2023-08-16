@@ -15,7 +15,7 @@ public:
     TCommandScripting();
 };
 
-class TCommandExecuteYqlScript : public TYdbOperationCommand, public TCommandWithFormat,
+class TCommandExecuteYqlScript : public TYdbOperationCommand,
     public TCommandWithResponseHeaders, TCommandWithParameters
 {
 public:

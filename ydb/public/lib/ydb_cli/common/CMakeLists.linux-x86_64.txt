@@ -29,6 +29,7 @@ target_link_libraries(common PUBLIC
   library-cpp-getopt
   cpp-json-writer
   cpp-yaml-as
+  cpp-string_utils-csv
   public-lib-json_value
   public-lib-operation_id
   public-lib-yson_value
@@ -45,11 +46,13 @@ target_sources(common PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/aws.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/command.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/common.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/csv_parser.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/examples.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/format.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/interactive.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/interruptible.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/normalize_path.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/parameter_stream.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/parameters.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/pretty_table.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/print_operation.cpp

@@ -10,3 +10,11 @@ __pycache__/
 
 # MacOS specific
 .DS_Store
+
+# clangd cache
+/.cache
+
+/compile_commands.json
+
+/build_*
+/build-*

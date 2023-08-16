@@ -345,6 +345,7 @@ public:
         : Logger(logger)
         , SharedBucket_(sharedBucket)
         , Value_(profiler.Counter("/value"))
+        , Released_(profiler.Counter("/released"))
         , WaitTime_(profiler.Timer("/wait_time"))
         , Quota_(config->BucketAccumulationTicks, profiler.Gauge("/quota"))
         , DistributionPeriod_(config->DistributionPeriod)
@@ -430,6 +431,20 @@ public:
 
         Value_.Increment(amount);
         Usage_ += amount;
+    }
+
+    void Release(i64 amount) override
+    {
+        YT_VERIFY(amount >= 0);
+
+        if (amount == 0) {
+            return;
+        }
+
+        *Quota_.Value += amount;
+        Usage_ -= amount;
+
+        Released_.Increment(amount);
     }
 
     bool IsOverdraft() override
@@ -560,6 +575,7 @@ private:
     TSharedBucketPtr SharedBucket_;
 
     NProfiling::TCounter Value_;
+    NProfiling::TCounter Released_;
     NProfiling::TEventTimer WaitTime_;
 
     TLeakyCounter Quota_;

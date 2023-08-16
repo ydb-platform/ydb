@@ -53,6 +53,14 @@ struct IThroughputThrottler
      */
     virtual void Acquire(i64 amount) = 0;
 
+    //! Releases #amount units back under control of the throttler.
+    //! This method should be used cautiously as in current implementation
+    //! it may locally disrupt fifo ordering or fairness of throttling requests.
+    /*!
+     *  \note Thread affinity: any
+     */
+    virtual void Release(i64 amount) = 0;
+
     //! Returns |true| if the throttling limit has been exceeded.
     /*!
      *  \note Thread affinity: any

@@ -258,6 +258,20 @@ TEST_F(TFairThrottlerTest, TryAcquireAvailable)
     ASSERT_GE(bucket->GetAvailable(), 0);
 }
 
+TEST_F(TFairThrottlerTest, Release)
+{
+    auto bucket = FairThrottler->CreateBucketThrottler("main", BucketConfig);
+
+    Sleep(TDuration::Seconds(5));
+
+    ASSERT_EQ(bucket->GetAvailable(), 100);
+
+    ASSERT_TRUE(bucket->TryAcquire(100));
+    bucket->Release(100);
+    ASSERT_TRUE(bucket->TryAcquire(100));
+    ASSERT_FALSE(bucket->TryAcquire(100));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TFairThrottlerIPCTest

@@ -241,6 +241,22 @@ TEST(TReconfigurableThroughputThrottlerTest, TestZeroLimit)
     EXPECT_LE(timer.GetElapsedTime().MilliSeconds(), 1000u);
 }
 
+TEST(TReconfigurableThroughputThrottlerTest, TestRelease)
+{
+    auto throttler = CreateReconfigurableThroughputThrottler(
+        TThroughputThrottlerConfig::Create(100));
+
+    auto future = throttler->Throttle(100);
+    EXPECT_EQ(future, VoidFuture);
+
+    throttler->Release(100);
+    future = throttler->Throttle(100);
+    EXPECT_EQ(future, VoidFuture);
+
+    future = throttler->Throttle(100);
+    EXPECT_FALSE(future.IsSet());
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 DECLARE_REFCOUNTED_CLASS(TMockThrottler)
@@ -262,6 +278,11 @@ public:
     }
 
     void Acquire(i64 /*amount*/) override
+    {
+        YT_UNIMPLEMENTED();
+    }
+
+    void Release(i64 /*amount*/) override
     {
         YT_UNIMPLEMENTED();
     }
@@ -390,6 +411,22 @@ TEST_F(TPrefetchingThrottlerExponentialGrowthTest, DoNotHangUpAfterAnError)
     EXPECT_FALSE(failedRequest.Get().IsOK());
 
     Throttler_->Throttle(1);
+}
+
+TEST_F(TPrefetchingThrottlerExponentialGrowthTest, Release)
+{
+    EXPECT_CALL(*Underlying_, Throttle(_))
+        .Times(1)
+        .WillRepeatedly(Return(VoidFuture));
+
+    EXPECT_TRUE(Throttler_->Throttle(1).Get().IsOK());
+    EXPECT_TRUE(Throttler_->IsOverdraft());
+
+    Throttler_->Release(1);
+    EXPECT_FALSE(Throttler_->IsOverdraft());
+
+    EXPECT_EQ(Throttler_->Throttle(1), VoidFuture);
+    EXPECT_TRUE(Throttler_->IsOverdraft());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

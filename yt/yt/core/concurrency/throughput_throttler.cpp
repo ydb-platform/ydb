@@ -47,6 +47,7 @@ public:
         const NProfiling::TProfiler& profiler)
         : Logger(logger)
         , ValueCounter_(profiler.Counter("/value"))
+        , ReleaseCounter_(profiler.Counter("/released"))
         , QueueSizeCounter_(profiler.Gauge("/queue_size"))
         , WaitTimer_(profiler.Timer("/wait_time"))
     {
@@ -147,6 +148,19 @@ public:
         ValueCounter_.Increment(amount);
     }
 
+    void Release(i64 amount) override
+    {
+        VERIFY_THREAD_AFFINITY_ANY();
+        YT_VERIFY(amount >= 0);
+
+        if (amount == 0) {
+            return;
+        }
+
+        Available_ += amount;
+        ReleaseCounter_.Increment(amount);
+    }
+
     bool IsOverdraft() override
     {
         VERIFY_THREAD_AFFINITY_ANY();
@@ -213,6 +227,7 @@ private:
     const TLogger Logger;
 
     NProfiling::TCounter ValueCounter_;
+    NProfiling::TCounter ReleaseCounter_;
     NProfiling::TGauge QueueSizeCounter_;
     NProfiling::TEventTimer WaitTimer_;
 
@@ -430,7 +445,6 @@ private:
             request->Promise.Set();
         }
     }
-
 };
 
 IReconfigurableThroughputThrottlerPtr CreateReconfigurableThroughputThrottler(
@@ -465,6 +479,7 @@ public:
     explicit TUnlimitedThroughputThrottler(
         const NProfiling::TProfiler& profiler = {})
         : ValueCounter_(profiler.Counter("/value"))
+        , ReleaseCounter_(profiler.Counter("/released"))
     { }
 
     TFuture<void> Throttle(i64 amount) override
@@ -502,6 +517,14 @@ public:
         ValueCounter_.Increment(amount);
     }
 
+    void Release(i64 amount) override
+    {
+        VERIFY_THREAD_AFFINITY_ANY();
+        YT_VERIFY(amount >= 0);
+
+        ReleaseCounter_.Increment(amount);
+    }
+
     bool IsOverdraft() override
     {
         VERIFY_THREAD_AFFINITY_ANY();
@@ -527,6 +550,7 @@ public:
 
 private:
     NProfiling::TCounter ValueCounter_;
+    NProfiling::TCounter ReleaseCounter_;
 };
 
 IThroughputThrottlerPtr GetUnlimitedThrottler()
@@ -588,6 +612,16 @@ public:
 
         for (const auto& throttler : Throttlers_) {
             throttler->Acquire(amount);
+        }
+    }
+
+    void Release(i64 amount) override
+    {
+        VERIFY_THREAD_AFFINITY_ANY();
+        YT_VERIFY(amount >= 0);
+
+        for (const auto& throttler : Throttlers_) {
+            throttler->Release(amount);
         }
     }
 
@@ -687,6 +721,12 @@ public:
     {
         Stealer_->Acquire(amount);
         Underlying_->Acquire(amount);
+    }
+
+    void Release(i64 amount) override
+    {
+        Stealer_->Release(amount);
+        Underlying_->Release(amount);
     }
 
     bool IsOverdraft() override
@@ -828,6 +868,24 @@ public:
         if (forecastedAvailable < 0) {
             StockUp(-forecastedAvailable);
         }
+    }
+
+    void Release(i64 amount) override
+    {
+        VERIFY_THREAD_AFFINITY_ANY();
+        YT_VERIFY(amount >= 0);
+
+        if (amount == 0) {
+            return;
+        }
+
+        {
+            auto guard = Guard(Lock_);
+            Available_ += amount;
+        }
+
+        YT_LOG_DEBUG("Released from prefetching throttler (Amount: %v)",
+            amount);
     }
 
     bool IsOverdraft() override

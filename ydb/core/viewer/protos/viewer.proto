@@ -512,6 +512,9 @@ message TEvViewerRequest {
         NKikimrWhiteboard.TEvTabletStateRequest TabletRequest = 11;
         NKikimrWhiteboard.TEvSystemStateRequest SystemRequest = 12;
         TQueryRequest QueryRequest = 13;
+        bytes Reserved14 = 14;
+        bytes Reserved15 = 15;
+        bytes Reserved16 = 16;
     }
 }
 
@@ -521,6 +524,9 @@ message TEvViewerResponse {
         NKikimrWhiteboard.TEvTabletStateResponse TabletResponse = 11;
         NKikimrWhiteboard.TEvSystemStateResponse SystemResponse = 12;
         NKikimrKqp.TEvQueryResponse QueryResponse = 13;
+        bytes Reserved14 = 14;
+        bytes Reserved15 = 15;
+        bytes Reserved16 = 16;
     }
 }
 

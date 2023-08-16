@@ -386,7 +386,10 @@ public:
                 TenantNodesSystemInfo[tenantId] = std::move(ev->Get()->Record);
                 RequestDone();
                 break;
-            case NKikimrViewer::TEvViewerResponse::kQueryResponse: 
+            case NKikimrViewer::TEvViewerResponse::kQueryResponse:
+            case NKikimrViewer::TEvViewerResponse::kReserved14:
+            case NKikimrViewer::TEvViewerResponse::kReserved15:
+            case NKikimrViewer::TEvViewerResponse::kReserved16:
             case NKikimrViewer::TEvViewerResponse::RESPONSE_NOT_SET:
                 break;
         }
@@ -419,7 +422,10 @@ public:
                 case NKikimrViewer::TEvViewerRequest::kSystemRequest: 
                     SendViewerSystemRequest(tenantId);
                     break;
-                case NKikimrViewer::TEvViewerRequest::kQueryRequest: 
+                case NKikimrViewer::TEvViewerRequest::kQueryRequest:
+                case NKikimrViewer::TEvViewerRequest::kReserved14:
+                case NKikimrViewer::TEvViewerRequest::kReserved15:
+                case NKikimrViewer::TEvViewerRequest::kReserved16:
                 case NKikimrViewer::TEvViewerRequest::REQUEST_NOT_SET:
                     break;
             }

@@ -248,7 +248,14 @@ runs:
         --source-root $source_root \
         --build-root $build_root \
         --output-dir $TMPDIR/pytest/ \
-        . | tee $ARTIFACTS_DIR/${{steps.init.outputs.pytest-logfilename}}
+        . | tee $ARTIFACTS_DIR/${{steps.init.outputs.pytest-logfilename}} || {
+          RC=$?
+          if [ $RC == 1 ]; then
+            echo "pytest: tests were collected and run but some of the tests failed"
+          else
+            exit $RC
+          fi;
+        }
 
 #        --artifacts-dir $ARTIFACTS_DIR/pytest/ \
 #        --artifacts-url $S3_URL_PREFIX/pytest/ \

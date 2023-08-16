@@ -177,7 +177,7 @@ int TWorkloadCommand::RunWorkload(TWorkloadQueryGenPtr workloadGen, const int ty
     }
 
     StartTime = Now();
-    StopTime = StartTime + TDuration::Seconds(Seconds);
+    StopTime = StartTime + TDuration::Seconds(TotalSec);
 
     NPar::LocalExecutor().RunAdditionalThreads(Threads);
     auto futures = NPar::LocalExecutor().ExecRangeWithFutures([this, &workloadGen, type](int id) {

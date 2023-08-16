@@ -69,15 +69,15 @@ struct TClickHouseConfiguration : public TClickHouseSettings, public NCommon::TS
             host = cluster.GetCluster();
             while (host.EndsWith("/"))
                 host = host.substr(0u, host.length() - 1u);
-            if (host.StartsWith("http://")) {
-                scheme = HS_HTTP;
-                host = host.substr(7u);
-                port = 80;
-            } else {
+            if (host.StartsWith("https://")) {
                 scheme = HS_HTTPS;
+                host = host.substr(8u);
                 port = 443;
-                if (host.StartsWith("https://")) {
-                    host = host.substr(8u);
+            } else {
+                scheme = HS_HTTP;
+                port = 80;
+                if (host.StartsWith("http://")) {
+                    host = host.substr(7u);
                 }
             }
 

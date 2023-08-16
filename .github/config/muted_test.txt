@@ -9,17 +9,13 @@ SpaceCheckForDiskReassign
 IntermediateDirsReboots::CreateKesusWithIntermediateDirs
 TReplicationWithRebootsTests::CreateDropRecreate
 TSectorMap
-TSentinelTests::PDiskRackGuardHalfRack
-TSentinelTests::PDiskRackGuardFullRack
 TMiniKQLAllocTest::TestDeallocated
 ConsistentIndexRead::InteractiveTx
 KqpExtTest::SecondaryIndexSelectUsingScripting
 KqpQuerySession::NoLocalAttach
-TSentinelTests::PDiskErrorState
-TSentinelTests::PDiskFaultyState
 Describe::Statistics
 CountingEvents::Get_Mirror3of4
-TPDiskFIT::Basic
+TPDiskFIT
 KqpScanArrowInChanels::AllTypesColumns
 KqpScanArrowFormat::AllTypesColumnsCellvec
 TEST_BACKTRACE_AND_SYMBOLIZE::TEST_NO_KIKIMR
@@ -28,3 +24,5 @@ TYardTest::TestLogMultipleWriteRead
 TYardTest::TestMultiYardLogMultipleWriteRead
 OperationLog::ConcurrentWrites
 TPDiskTest::TestMultipleLogSpliceNonceJump
+TCmsTest
+TSentinelTests

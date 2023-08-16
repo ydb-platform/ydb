@@ -12,16 +12,16 @@ shard_suffix_re = re.compile(r"-\d+$")
 
 def update_testname(fn, testcase):
     shardname = os.path.splitext(os.path.basename(fn))[0]
-    shardname = shard_suffix_re.sub('', shardname)
+    shardname = shard_suffix_re.sub("", shardname)
 
-    clsname = testcase.get('classname')
-    tstname = testcase.get('name')
-    testcase.set('classname', shardname)
+    clsname = testcase.get("classname")
+    tstname = testcase.get("name")
+    testcase.set("classname", shardname)
 
-    testcase.set('name', f'{clsname}::{tstname}')
-    testcase.set('id', f'{shardname}_{clsname}_{tstname}')
+    testcase.set("name", f"{clsname}::{tstname}")
+    testcase.set("id", f"{shardname}_{clsname}_{tstname}")
 
-    return f'{shardname}/{clsname}::{tstname}'
+    return f"{shardname}/{clsname}::{tstname}"
 
 
 def postprocess_yunit(fn, mute_check: MuteTestCheck, dry_run):
@@ -53,7 +53,7 @@ def postprocess_yunit(fn, mute_check: MuteTestCheck, dry_run):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--filter-file', required=True)
+    parser.add_argument("--filter-file", required=True)
     parser.add_argument("--dry-run", action="store_true", default=False)
     parser.add_argument("yunit_path")
 
@@ -69,5 +69,5 @@ def main():
         postprocess_yunit(fn, mute_check, args.dry_run)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

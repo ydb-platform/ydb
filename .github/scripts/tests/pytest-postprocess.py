@@ -2,35 +2,34 @@
 import argparse
 import glob
 import os
-import re
 import xml.etree.ElementTree as ET
 from mute_utils import MuteTestCheck, mute_target, recalc_suite_info
 from junit_utils import get_property_value
 
 
 def update_testname(testcase):
-    filename = get_property_value(testcase, 'filename')
+    filename = get_property_value(testcase, "filename")
 
-    clsname = testcase.get('classname')
-    tstname = testcase.get('name')
+    clsname = testcase.get("classname")
+    tstname = testcase.get("name")
 
     if filename is None:
         return f"{clsname}::{tstname}"
 
-    filename = filename.split('/')
+    filename = filename.split("/")
     test_fn = filename[-1]
-    folder = '/'.join(filename[:-1])
+    folder = "/".join(filename[:-1])
 
-    testcase.set('classname', folder)
+    testcase.set("classname", folder)
 
-    clsname = clsname.split('.')[-1]
+    clsname = clsname.split(".")[-1]
 
     test_name = f"{test_fn}::{clsname}::{tstname}"
 
-    testcase.set('name', test_name)
-    testcase.set('id', f'{folder}_{test_fn}_{clsname}_{tstname}')
+    testcase.set("name", test_name)
+    testcase.set("id", f"{folder}_{test_fn}_{clsname}_{tstname}")
 
-    return f'{folder}/{test_name}'
+    return f"{folder}/{test_name}"
 
 
 def postprocess_pytest(fn, mute_check, dry_run):
@@ -56,7 +55,7 @@ def postprocess_pytest(fn, mute_check, dry_run):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--filter-file', required=True)
+    parser.add_argument("--filter-file", required=True)
     parser.add_argument("--dry-run", action="store_true", default=False)
     parser.add_argument("pytest_xml_path")
 
@@ -72,5 +71,5 @@ def main():
         postprocess_pytest(fn, mute_check, args.dry_run)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

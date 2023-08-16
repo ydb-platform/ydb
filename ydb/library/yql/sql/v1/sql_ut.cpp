@@ -56,6 +56,21 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(failed, TVector<TString>{});
     }
 
+    Y_UNIT_TEST(TokensAsColumnNameInAddColumn) {
+        auto failed = ValidateTokens({ //id_schema
+             "ANY", "AUTOMAP", "CALLABLE", "COLUMN", "DICT", "ENUM", "ERASE", "FALSE", "FLOW",
+             "GLOBAL", "LIST", "OPTIONAL", "REPEATABLE", "RESOURCE",
+             "SET", "STREAM", "STRUCT", "TAGGED", "TRUE", "TUPLE", "VARIANT"
+             },
+             [](const TString& token){
+                 TStringBuilder req;
+                 req << "ALTER TABLE Plato.Input ADD COLUMN " << token << " Bool";
+                 return req;
+             }
+        );
+        UNIT_ASSERT_VALUES_EQUAL(failed, TVector<TString>{});
+    }
+
     Y_UNIT_TEST(TokensAsColumnAlias) {
         auto failed = ValidateTokens({
                  "AUTOMAP", "FALSE",

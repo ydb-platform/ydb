@@ -7,6 +7,7 @@
 #include "type_ann_wide.h"
 #include "type_ann_types.h"
 #include "type_ann_pg.h"
+#include "type_ann_match_recognize.h"
 
 #include <ydb/library/yql/core/yql_atom_enums.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
@@ -12086,6 +12087,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["RoundUp"] = &RoundWrapper;
         Functions["RoundDown"] = &RoundWrapper;
         Functions["NextValue"] = &NextValueWrapper;
+
+        Functions["MatchRecognize"] = &MatchRecognizeWrapper;
+        Functions["MatchRecognizeParams"] = &MatchRecognizeParamsWrapper;
+        Functions["MatchRecognizeMeasures"] = &MatchRecognizeMeasuresWrapper;
+        Functions["MatchRecognizePattern"] = &MatchRecognizePatternWrapper;
+        Functions["MatchRecognizeDefines"] = &MatchRecognizeDefinesWrapper;
 
         Functions["FromPg"] = &FromPgWrapper;
         Functions["ToPg"] = &ToPgWrapper;

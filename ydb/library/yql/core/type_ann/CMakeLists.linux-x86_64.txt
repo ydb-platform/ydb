@@ -23,6 +23,7 @@ target_link_libraries(yql-core-type_ann PUBLIC
   yql-core-expr_nodes
   yql-core-issue
   core-issue-protos
+  yql-core-sql_types
   common-schema-expr
   yql-parser-pg_catalog
   parser-pg_wrapper-interface
@@ -37,4 +38,5 @@ target_sources(yql-core-type_ann PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_pg.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_types.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_wide.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/type_ann/type_ann_match_recognize.cpp
 )

@@ -1,6 +1,8 @@
 #include "sql_match_recognize.h"
 #include "node.h"
 #include "sql_expression.h"
+#include <ydb/library/yql/core/sql_types/match_recognize.h>
+
 namespace NSQLTranslationV1 {
 
 using namespace NSQLv1Generated;
@@ -222,8 +224,7 @@ TRowPatternTerm TSqlMatchRecognizeClause::ParsePatternTerm(const TRule_row_patte
                 Y_ENSURE("^" == std::get<0>(primary));
                 break;
             case TRule_row_pattern_primary::kAltRowPatternPrimary4: {
-                constexpr size_t MaxNesting = 20; //Limit recursion
-                if (++PatternNestingLevel <= MaxNesting) {
+                if (++PatternNestingLevel <= MaxMatchRecognizePatternNesting) {
                     primary = ParsePattern(primaryVar.GetAlt_row_pattern_primary4().GetBlock2().GetRule_row_pattern1());
                 } else {
                     Ctx.Error(TokenPosition(primaryVar.GetAlt_row_pattern_primary4().GetToken1()))

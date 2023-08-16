@@ -1352,7 +1352,7 @@ message TTableServiceConfig {
     optional bool EnablePredicateExtractForScanQueries = 36 [default = true];
     optional bool EnablePredicateExtractForDataQueries = 37 [default = true];
     optional bool EnableKqpImmediateEffects = 38 [default = true];
-    optional bool EnableSequentialReads = 39 [default = false];
+    optional bool EnableSequentialReads = 39 [default = true];
     optional bool EnablePreparedDdl = 42 [default = false];
     optional bool EnableSequences = 43 [default = true];
     optional bool EnableAsyncComputationPatternCompilation = 48 [default = false];

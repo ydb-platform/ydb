@@ -906,10 +906,10 @@ protected:
             BuildSinks(stage, task, secureParams);
         };
 
-        if (source.GetSequentialInFlightShards()) {
+        THashMap<ui64, TShardInfo> partitions = PrunePartitions(source, stageInfo, HolderFactory(), TypeEnv());
+        if (partitions.size() > 0 && source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards()) {
             auto [startShard, shardInfo] = MakeVirtualTablePartition(source, stageInfo, HolderFactory(), TypeEnv());
             if (Stats) {
-                THashMap<ui64, TShardInfo> partitions = PrunePartitions(source, stageInfo, HolderFactory(), TypeEnv());
                 for (auto& [shardId, _] : partitions) {
                     Stats->AffectedShards.insert(shardId);
                 }
@@ -921,7 +921,6 @@ protected:
                 return 0;
             }
         } else {
-            THashMap<ui64, TShardInfo> partitions = PrunePartitions(source, stageInfo, HolderFactory(), TypeEnv());
             for (auto& [shardId, shardInfo] : partitions) {
                 addPartiton(shardId, shardId, shardInfo, {});
             }

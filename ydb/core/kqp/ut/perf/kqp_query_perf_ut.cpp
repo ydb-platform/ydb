@@ -272,7 +272,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         for (const auto& stage : stages) {
             totalTasks += stage.GetMapSafe().at("Stats").GetMapSafe().at("TotalTasks").GetIntegerSafe();
         }
-        UNIT_ASSERT_VALUES_EQUAL(totalTasks, 3);
+        UNIT_ASSERT_VALUES_EQUAL(totalTasks, EnableSourceRead ? 2 : 3);
     }
 
     Y_UNIT_TEST(Upsert) {

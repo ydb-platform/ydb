@@ -607,7 +607,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.Uint64GreaterOrEquals(0); // CPUTime
         check.Uint64GreaterOrEquals(0); // CompileCPUTime
         check.Int64GreaterOrEquals(0); // CompileDuration
-        check.Uint64(iterators ? 4 : 1); // ComputeNodesCount
+        check.Uint64(iterators ? 2 : 1); // ComputeNodesCount
         check.Uint64(0); // DeleteBytes
         check.Uint64(0); // DeleteRows
         check.Int64Greater(0); // Duration

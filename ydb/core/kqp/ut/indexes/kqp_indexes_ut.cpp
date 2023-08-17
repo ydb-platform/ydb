@@ -986,7 +986,18 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
         {
             auto result = session.DescribeTable("/Root/TestTable/Index/indexImplTable").ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+
+            const THashMap<std::string_view, std::string_view> columnTypes = {
+                {"Key", "String?"},
+                {"Index2", "String?"}
+            };
+
+            const auto& columns = result.GetTableDescription().GetTableColumns();
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), columnTypes.size());
+            for (const auto& column : columns) {
+                UNIT_ASSERT_VALUES_EQUAL_C(column.Type.ToString(), columnTypes.at(column.Name), column.Name);
+            }
         }
 
         {

@@ -3,7 +3,7 @@ ydb-apps-ydb-ut/YdbWorkloadTopic::*
 ydb-core-blobstorage-pdisk-ut/TPDiskTest::TestMultipleLogSpliceNonceJump
 ydb-core-blobstorage-pdisk-ut/TYardTest::TestLogMultipleWriteRead
 ydb-core-blobstorage-pdisk-ut/TYardTest::TestMultiYardLogMultipleWriteRead
-ydb-core-blobstorage-ut/TSectorMap::*
+ydb-core-blobstorage-pdisk-ut/TSectorMap::*
 ydb-core-blobstorage-ut_blobstorage/CountingEvents::Get_Mirror3of4
 ydb-core-blobstorage-ut_blobstorage/SpaceCheckForDiskReassign::*
 ydb-core-blobstorage-ut_pdiskfit-ut/TPDiskFIT::*

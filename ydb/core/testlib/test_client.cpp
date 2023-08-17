@@ -262,10 +262,12 @@ namespace Tests {
         //
         for (ui32 nodeIdx = 0; nodeIdx < StaticNodes(); ++nodeIdx) {
             SetupDomainLocalService(nodeIdx);
-        }
-        for (ui32 nodeIdx = 0; nodeIdx < StaticNodes() + DynamicNodes(); ++nodeIdx) {
             SetupConfigurators(nodeIdx);
             SetupProxies(nodeIdx);
+        }
+
+        for (ui32 nodeIdx = StaticNodes(); nodeIdx < StaticNodes() + DynamicNodes(); ++nodeIdx) {
+            SetupConfigurators(nodeIdx);
         }
 
         CreateBootstrapTablets();
@@ -768,6 +770,10 @@ namespace Tests {
 
         auto tenantPublisher = CreateTenantNodeEnumerationPublisher();
         Runtime->Register(tenantPublisher, nodeIdx);
+
+        if (nodeIdx >= StaticNodes()) {
+            SetupProxies(nodeIdx);
+        }
     }
 
     void TServer::SetupConfigurators(ui32 nodeIdx) {

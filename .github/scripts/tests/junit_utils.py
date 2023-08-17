@@ -1,3 +1,5 @@
+import os
+import glob
 from xml.etree import ElementTree as ET
 
 
@@ -63,3 +65,29 @@ def suite_case_iterator(root):
         for case in suite.findall("testcase"):
             cls, method = case.attrib["classname"], case.attrib["name"]
             yield suite, case, cls, method
+
+
+def iter_xml_files(folder_or_file):
+    if os.path.isfile(folder_or_file):
+        files = [folder_or_file]
+    else:
+        files = glob.glob(os.path.join(folder_or_file, "*.xml"))
+
+    for fn in files:
+        try:
+            tree = ET.parse(fn)
+        except ET.ParseError as e:
+            print(f"Unable to parse {fn}: {e}")
+            continue
+
+        root = tree.getroot()
+
+        if root.tag == "testsuite":
+            suites = [root]
+        elif root.tag == "testsuites":
+            suites = root.findall("testsuite")
+        else:
+            raise ValueError(f"Invalid root tag {root.tag}")
+        for suite in suites:
+            for case in suite.findall("testcase"):
+                yield fn, suite, case

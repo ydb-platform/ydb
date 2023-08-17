@@ -305,4 +305,4 @@ runs:
   - name: finish
     shell: bash
     run: |
-      .github/scripts/tests/fail-checker.py $TESTREPDIR/unittests/ $TESTREPDIR/suites/
+      .github/scripts/tests/fail-checker.py $TESTREPDIR/unittests/ $TESTREPDIR/suites/ $PYTESTREPDIR/

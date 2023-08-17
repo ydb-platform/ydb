@@ -1,24 +1,30 @@
 #!/usr/bin/env python3
 import argparse
-import glob
-import os
 from typing import List
-import xml.etree.ElementTree as ET
+from junit_utils import iter_xml_files
 
 
 def check_for_fail(paths: List[str]):
+    failed_list = []
+    error_list = []
     for path in paths:
-        for fn in glob.glob(os.path.join(path, "*.xml")):
-            root = ET.parse(fn).getroot()
-            if root.tag != "testsuite":
-                suites = root.findall("testsuite")
-            else:
-                suites = [root]
+        for fn, suite, case in iter_xml_files(path):
+            is_failure = case.find("failure") is not None
+            is_error = case.find("error") is not None
+            test_name = f"{case.get('classname')}::{case.get('name')}"
 
-            for suite in suites:
-                if int(suite.get("failures", 0)) > 0:
-                    print(f"::error::You have failed tests")
-                    raise SystemExit(-1)
+            if is_failure:
+                failed_list.append((test_name, fn))
+            elif is_error:
+                error_list.append((test_name, fn))
+
+    if failed_list or error_list:
+        print(f"::error::You have failed tests")
+        for t, fn in failed_list:
+            print(f"failure: {t} ({fn})")
+        for t, fn in error_list:
+            print(f"error: {t} ({fn})")
+        raise SystemExit(-1)
 
 
 def main():

@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 import argparse
 import os
-import glob
 import dataclasses
 import sys
 from typing import Optional, List
-from xml.etree import ElementTree as ET
-from junit_utils import get_property_value
+from junit_utils import get_property_value, iter_xml_files
 
 
 @dataclasses.dataclass
@@ -31,27 +29,6 @@ class SummaryEntry:
             return "Skipped"
 
         return "?"
-
-
-def iter_xml_files(folder_or_file):
-    if os.path.isfile(folder_or_file):
-        files = [folder_or_file]
-    else:
-        files = glob.glob(os.path.join(folder_or_file, "*.xml"))
-
-    for fn in files:
-        tree = ET.parse(fn)
-        root = tree.getroot()
-
-        if root.tag == "testsuite":
-            suites = [root]
-        elif root.tag == "testsuites":
-            suites = root.findall("testsuite")
-        else:
-            raise ValueError(f"Invalid root tag {root.tag}")
-        for suite in suites:
-            for case in suite.findall("testcase"):
-                yield fn, suite, case
 
 
 def parse_junit(folder_or_file):

@@ -396,6 +396,11 @@ message TStorageInfo {
     repeated TStorageGroupInfo StorageGroups = 5;
 }
 
+message TStorageUsageStats {
+    uint32 Pace = 1;
+    repeated uint32 Buckets = 2;
+}
+
 message TNodeInfo {
     uint32 NodeId = 1;
     NKikimrWhiteboard.TSystemStateInfo SystemState = 2;

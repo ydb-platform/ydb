@@ -8,6 +8,7 @@ ydb-core-blobstorage-ut_blobstorage/CountingEvents::Get_Mirror3of4
 ydb-core-blobstorage-ut_blobstorage/SpaceCheckForDiskReassign::*
 ydb-core-blobstorage-ut_pdiskfit-ut/TPDiskFIT::*
 ydb-core-blobstorage-ut_vdisk/TBsHuge::*
+ydb-core-blobstorage-ut_vdisk/THugeMigration::RollbackMap_HugeBlobs
 ydb-core-cms-ut/TCmsTest::*
 ydb-core-cms-ut_sentinel/TSentinelTests::*
 ydb-core-cms-ut_sentinel/TSentinelTests::PDiskErrorState

@@ -11,7 +11,7 @@ def check_for_fail(paths: List[str]):
         for fn, suite, case in iter_xml_files(path):
             is_failure = case.find("failure") is not None
             is_error = case.find("error") is not None
-            test_name = f"{case.get('classname')}::{case.get('name')}"
+            test_name = f"{case.get('classname')}/{case.get('name')}"
 
             if is_failure:
                 failed_list.append((test_name, fn))

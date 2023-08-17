@@ -299,13 +299,23 @@ public:
         // HACK
         ConvertQueryToRequest(QueryData_.Query, request);
         if (request.HasAction()) {
-            request.SetAction(QueryAction_ = NKikimrKqp::QUERY_ACTION_EXPLAIN);
+            if (request.GetType() == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY) {
+                request.SetAction(QueryAction_ = NKikimrKqp::QUERY_ACTION_EXPLAIN);
+                request.SetUsePublicResponseDataFormat(true);
 
-            request.SetUsePublicResponseDataFormat(true);
-
-            ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
-            BLOG_D("Sent event to kqpProxy " << request.ShortDebugString());
-            Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
+                ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
+                BLOG_D("Sent event to kqpProxy " << request.ShortDebugString());
+                Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
+            } else { // for DDL and TCL
+                auto response = EventParse_->Get()->Reply();
+                TParsedStatement statement;
+                statement.QueryData = std::move(QueryData_);
+                Send(Owner_, new TEvEvents::TEvProxyCompleted(statement));
+                BLOG_D("Finally replying to " << EventParse_->Sender);
+                Send(EventParse_->Sender, response.release(), 0, EventParse_->Cookie);
+                PassAway();
+                return;
+            }
         }
         // TODO(xenoxeno): timeout
         Become(&TPgwireKqpProxyParse::StateWork);

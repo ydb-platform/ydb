@@ -19,7 +19,7 @@ public:
     TPersQueueYdbSdkTestSetup(const TString& testCaseName, bool start = true,
                               const TVector<NKikimrServices::EServiceKikimr>& logServices = ::NPersQueue::TTestServer::LOGGED_SERVICES,
                               NActors::NLog::EPriority logPriority = NActors::NLog::PRI_DEBUG,
-                              ui32 nodeCount = 2,
+                              ui32 nodeCount = NKikimr::NPersQueueTests::PQ_DEFAULT_NODE_COUNT,
                               size_t topicPartitionsCount = 1)
         : SDKTestSetup(testCaseName, start, logServices, logPriority, nodeCount, topicPartitionsCount)
     {

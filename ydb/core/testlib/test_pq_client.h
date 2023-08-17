@@ -23,8 +23,9 @@ namespace NPersQueueTests {
 using namespace NNetClassifier;
 using namespace NKikimr::Tests;
 
+const static ui32 PQ_DEFAULT_NODE_COUNT = 2;
 
-inline Tests::TServerSettings PQSettings(ui16 port, ui32 nodesCount = 2, bool roundrobin = true, const TString& yql_timeout = "10", const THolder<TTempFileHandle>& netDataFile = nullptr) {
+inline Tests::TServerSettings PQSettings(ui16 port = 0, ui32 nodesCount = PQ_DEFAULT_NODE_COUNT, bool roundrobin = true, const TString& yql_timeout = "10", const THolder<TTempFileHandle>& netDataFile = nullptr) {
     NKikimrPQ::TPQConfig pqConfig;
     NKikimrProto::TAuthConfig authConfig;
     authConfig.SetUseBlackBox(false);

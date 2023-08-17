@@ -23,10 +23,10 @@ public:
     SDKTestSetup(const TString& testCaseName, bool start = true,
                  const TVector<NKikimrServices::EServiceKikimr>& logServices = TTestServer::LOGGED_SERVICES,
                  NActors::NLog::EPriority logPriority = NActors::NLog::PRI_DEBUG,
-                 ui32 nodeCount = 2,
+                 ui32 nodeCount = NKikimr::NPersQueueTests::PQ_DEFAULT_NODE_COUNT,
                  size_t topicPartitionsCount = 1)
         : TestCaseName(testCaseName)
-        , Server(false, Nothing(), logServices, logPriority)
+        , Server(NKikimr::NPersQueueTests::PQSettings(), false, logServices, logPriority, Nothing())
         , TopicPartitionsCount(topicPartitionsCount)
     {
         InitOptions(nodeCount);
@@ -35,7 +35,7 @@ public:
         }
     }
 
-    void InitOptions(ui32 nodeCount = 2) {
+    void InitOptions(ui32 nodeCount = NKikimr::NPersQueueTests::PQ_DEFAULT_NODE_COUNT) {
         Log.SetFormatter([testCaseName = TestCaseName](ELogPriority priority, TStringBuf message) {
             return TStringBuilder() << TInstant::Now() << " :" << testCaseName << " " << priority << ": " << message << Endl;
         });

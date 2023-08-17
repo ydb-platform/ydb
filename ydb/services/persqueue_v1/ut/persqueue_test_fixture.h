@@ -63,8 +63,7 @@ static void ModifyTopicACL(NYdb::TDriver* driver, const TString& topic, const TV
 
         void InitializePQ() {
             Y_VERIFY(Server == nullptr);
-            PortManager = new TPortManager();
-            Server = MakeHolder<NPersQueue::TTestServer>(false, PortManager);
+            Server = MakeHolder<NPersQueue::TTestServer>(false);
             Server->ServerSettings.PQConfig.SetTopicsAreFirstClassCitizen(TenantModeEnabled());
             Server->ServerSettings.PQConfig.MutablePQDiscoveryConfig()->SetLBFrontEnabled(true);
             Server->ServerSettings.PQConfig.SetACLRetryTimeoutSec(1);

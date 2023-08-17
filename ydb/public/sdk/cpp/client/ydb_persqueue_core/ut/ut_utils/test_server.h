@@ -15,12 +15,15 @@ static constexpr int DEBUG_LOG_LEVEL = 7;
 
 class TTestServer {
 public:
-    TTestServer(bool start = true, TMaybe<TSimpleSharedPtr<TPortManager>> portManager = Nothing(),
-                const TVector<NKikimrServices::EServiceKikimr>& logServices = TTestServer::LOGGED_SERVICES, NActors::NLog::EPriority logPriority = NActors::NLog::PRI_DEBUG)
+    TTestServer(const NKikimr::Tests::TServerSettings& settings, 
+                bool start = true,
+                const TVector<NKikimrServices::EServiceKikimr>& logServices = TTestServer::LOGGED_SERVICES,
+                NActors::NLog::EPriority logPriority = NActors::NLog::PRI_DEBUG,
+                TMaybe<TSimpleSharedPtr<TPortManager>> portManager = Nothing())
         : PortManager(portManager.GetOrElse(MakeSimpleShared<TPortManager>()))
         , Port(PortManager->GetPort(2134))
         , GrpcPort(PortManager->GetPort(2135))
-        , ServerSettings(NKikimr::NPersQueueTests::PQSettings(Port).SetGrpcPort(GrpcPort))
+        , ServerSettings(settings)
         , GrpcServerOptions(NGrpc::TServerOptions().SetHost("[::1]").SetPort(GrpcPort))
     {
         auto loggerInitializer = [logServices, logPriority](NActors::TTestActorRuntime& runtime) {
@@ -29,21 +32,16 @@ public:
         };
         ServerSettings.SetLoggerInitializer(loggerInitializer);
 
-        if (start) {
-            StartServer();
-        }
-    }
-    TTestServer(const NKikimr::Tests::TServerSettings& settings, bool start = true)
-        : PortManager(MakeSimpleShared<TPortManager>())
-        , Port(PortManager->GetPort(2134))
-        , GrpcPort(PortManager->GetPort(2135))
-        , ServerSettings(settings)
-        , GrpcServerOptions(NGrpc::TServerOptions().SetHost("[::1]").SetPort(GrpcPort))
-    {
         ServerSettings.Port = Port;
         ServerSettings.SetGrpcPort(GrpcPort);
+
         if (start)
             StartServer();
+    }
+
+    TTestServer(bool start = true)
+        : TTestServer(NKikimr::NPersQueueTests::PQSettings(), start)
+    {
     }
 
     void StartServer(bool doClientInit = true, TMaybe<TString> databaseName = Nothing()) {

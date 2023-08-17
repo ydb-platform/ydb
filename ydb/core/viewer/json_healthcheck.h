@@ -83,7 +83,7 @@ public:
         }
         Send(NHealthCheck::MakeHealthCheckID(), request.Release());
         Timeout += Timeout * 20 / 100; // we prefer to wait for more (+20%) verbose timeout status from HC
-        ctx.Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup());
+        ctx.Schedule(TDuration::Seconds(Timeout), new TEvents::TEvWakeup());
         Become(&TThis::StateRequestedInfo);
     }
 

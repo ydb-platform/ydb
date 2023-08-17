@@ -126,7 +126,9 @@ class TJsonStorage : public TViewerPipeClient<TJsonStorage> {
         uint64 Write;
 
         TGroupRow() 
-            : Used(0)
+            : Degraded(0)
+            , Usage(0)
+            , Used(0)
             , Limit(0)
             , Read(0)
             , Write(0) 

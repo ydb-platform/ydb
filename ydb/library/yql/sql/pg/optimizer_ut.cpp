@@ -95,6 +95,50 @@ Y_UNIT_TEST(PgJoinSearch2RelsLeft) {
     UNIT_ASSERT_STRINGS_EQUAL(expected, resStr);
 }
 
+Y_UNIT_TEST(PgJoinSearch2RelsRight) {
+    IOptimizer::TRel rel1 = {100000, 1000000, {{'a'}}};
+    IOptimizer::TRel rel2 = {1000000, 9000009, {{'b'}}};
+    IOptimizer::TInput input = {{rel1, rel2}};
+
+    input.EqClasses.emplace_back(IOptimizer::TEq {
+        {{1, 1}}
+    });
+    input.EqClasses.emplace_back(IOptimizer::TEq {
+        {{2, 1}}
+    });
+    input.Right.emplace_back(
+        IOptimizer::TEq {
+        {{1, 1}, {2, 1}}
+        }
+    );
+
+    auto log = [](const TString& str) {
+        Cerr << str << "\n";
+    };
+
+    auto optimizer = std::unique_ptr<IOptimizer>(MakePgOptimizer(input, log));
+
+    auto res = optimizer->JoinSearch();
+    auto resStr = res.ToString();
+    Cerr << resStr;
+    TString expected = R"__({
+ Left Join
+ Loop Strategy
+ Rels: [1,2]
+ Op: b = a
+ {
+  Node
+  Rels: [2]
+ }
+ {
+  Node
+  Rels: [1]
+ }
+}
+)__";
+    UNIT_ASSERT_STRINGS_EQUAL(expected, resStr);
+}
+
 Y_UNIT_TEST(PgJoinSearch3Rels) {
     IOptimizer::TRel rel1 = {100000, 1000000, {{'a'}}};
     IOptimizer::TRel rel2 = {1000000, 9000009, {{'b'}}};

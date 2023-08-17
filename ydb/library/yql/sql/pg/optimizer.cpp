@@ -250,10 +250,9 @@ int TPgOptimizer::MakeOutputJoin(TOutput& output, Path* path) {
     return id;
 }
 
-RelOptInfo* TPgOptimizer::JoinSearchInternal() {
-    std::vector<std::vector<RestrictInfo*>> restrictInfos(Input.Rels.size()+1);
-    std::vector<RestrictInfo*> allRestriction; allRestriction.reserve(Input.Left.size());
-    for (const auto& eq : Input.Left) {
+void TPgOptimizer::MakeLeftOrRightRestrictions(std::vector<RestrictInfo*>& dst, const std::vector<TEq>& src)
+{
+    for (const auto& eq : src) {
         YQL_ENSURE(eq.Vars.size() == 2);
         RestrictInfo* ri = makeNode(RestrictInfo);
         ri->can_join = 1;
@@ -279,10 +278,19 @@ RelOptInfo* TPgOptimizer::JoinSearchInternal() {
             }
             oe->args = lappend(oe->args, MakeVar(TVarId{relId, varId}));
 
-            restrictInfos[relId].emplace_back(ri);
+            RestrictInfos[relId].emplace_back(ri);
         }
-        allRestriction.emplace_back(ri);
+        dst.emplace_back(ri);
     }
+}
+
+RelOptInfo* TPgOptimizer::JoinSearchInternal() {
+    RestrictInfos.clear();
+    RestrictInfos.resize(Input.Rels.size()+1);
+    LeftRestriction.clear();
+    LeftRestriction.reserve(Input.Left.size());
+    MakeLeftOrRightRestrictions(LeftRestriction, Input.Left);
+    MakeLeftOrRightRestrictions(RightRestriction, Input.Right);
 
     List* rels = MakeRelOptInfoList(Input);
     ListCell* l;
@@ -290,7 +298,7 @@ RelOptInfo* TPgOptimizer::JoinSearchInternal() {
     int relId = 1;
     foreach (l, rels) {
         RelOptInfo* rel = (RelOptInfo*)lfirst(l);
-        for (auto* ri : restrictInfos[relId++]) {
+        for (auto* ri : RestrictInfos[relId++]) {
             rel->joininfo = lappend(rel->joininfo, ri);
         }
     }
@@ -320,7 +328,7 @@ RelOptInfo* TPgOptimizer::JoinSearchInternal() {
     root.all_baserels = bms_add_range(nullptr, 1, rels->length);
     root.eq_classes = MakeEqClasses();
 
-    for (auto* ri : allRestriction) {
+    for (auto* ri : LeftRestriction) {
         root.left_join_clauses = lappend(root.left_join_clauses, ri);
         root.hasJoinRTEs = 1;
         root.nullable_baserels = bms_add_members(root.nullable_baserels, ri->right_relids);
@@ -331,6 +339,23 @@ RelOptInfo* TPgOptimizer::JoinSearchInternal() {
 
         ji->syn_lefthand = bms_add_members(ji->min_lefthand, ri->left_relids);
         ji->syn_righthand = bms_add_members(ji->min_righthand, ri->right_relids);
+        ji->jointype = JOIN_LEFT;
+        ji->lhs_strict = 1;
+
+        root.join_info_list = lappend(root.join_info_list, ji);
+    }
+
+    for (auto* ri : RightRestriction) {
+        root.right_join_clauses = lappend(root.right_join_clauses, ri);
+        root.hasJoinRTEs = 1;
+        root.nullable_baserels = bms_add_members(root.nullable_baserels, ri->left_relids);
+
+        SpecialJoinInfo* ji = makeNode(SpecialJoinInfo);
+        ji->min_lefthand = bms_add_member(ji->min_lefthand, bms_first_member(ri->right_relids));
+        ji->min_righthand = bms_add_member(ji->min_righthand, bms_first_member(ri->left_relids));
+
+        ji->syn_lefthand = bms_add_members(ji->min_lefthand, ri->right_relids);
+        ji->syn_righthand = bms_add_members(ji->min_righthand, ri->left_relids);
         ji->jointype = JOIN_LEFT;
         ji->lhs_strict = 1;
 

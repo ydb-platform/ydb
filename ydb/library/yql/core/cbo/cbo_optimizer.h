@@ -29,6 +29,7 @@ struct IOptimizer {
         std::vector<TRel> Rels;
         std::vector<TEq> EqClasses;
         std::vector<TEq> Left;
+        std::vector<TEq> Right;
 
         TString ToString() const;
         void Normalize();

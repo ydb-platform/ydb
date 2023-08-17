@@ -45,6 +45,7 @@ const static TStatKey CodeGen_CompileTime("CodeGen_CompileTime", true);
 const static TStatKey CodeGen_TotalFunctions("CodeGen_TotalFunctions", true);
 const static TStatKey CodeGen_TotalInstructions("CodeGen_TotalInstructions", true);
 const static TStatKey CodeGen_MaxFunctionInstructions("CodeGen_MaxFunctionInstructions", false);
+const static TStatKey CodeGen_FunctionPassTime("CodeGen_FunctionPassTime", true);
 const static TStatKey CodeGen_ModulePassTime("CodeGen_ModulePassTime", true);
 const static TStatKey CodeGen_FinalizeTime("CodeGen_FinalizeTime", true);
 
@@ -861,11 +862,11 @@ public:
                 Codegen.reset();
             } else {
                 Codegen->Verify();
-                NYql::NCodegen::TCompileStats compileStats;
-                Codegen->Compile(GetCompileOptions(optLLVM), &compileStats);
+                Codegen->Compile(GetCompileOptions(optLLVM), &CompileStats);
 
-                MKQL_ADD_STAT(stats, CodeGen_ModulePassTime, compileStats.ModulePassTime);
-                MKQL_ADD_STAT(stats, CodeGen_FinalizeTime, compileStats.FinalizeTime);
+                MKQL_ADD_STAT(stats, CodeGen_FunctionPassTime, CompileStats.FunctionPassTime);
+                MKQL_ADD_STAT(stats, CodeGen_ModulePassTime, CompileStats.ModulePassTime);
+                MKQL_ADD_STAT(stats, CodeGen_FinalizeTime, CompileStats.FinalizeTime);
             }
 
             timerComp.Release();
@@ -909,6 +910,14 @@ public:
         return IsPatternCompiled.load();
     }
 
+    size_t CompiledCodeSize() const {
+        return CompileStats.TotalObjectSize;
+    }
+
+    void RemoveCompiledCode() {
+        Codegen.reset();
+    }
+
     THolder<IComputationGraph> Clone(const TComputationOptsFull& compOpts) {
         return MakeHolder<TComputationGraph>(PatternNodes, compOpts, IsPatternCompiled.load());
     }
@@ -935,6 +944,7 @@ private:
     TPatternNodes::TPtr PatternNodes;
     NYql::NCodegen::ICodegen::TPtr Codegen;
     std::atomic<bool> IsPatternCompiled = false;
+    NYql::NCodegen::TCompileStats CompileStats;
 };
 
 

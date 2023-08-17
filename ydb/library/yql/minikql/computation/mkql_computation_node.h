@@ -407,6 +407,8 @@ public:
     virtual ~IComputationPattern() = default;
     virtual void Compile(TString optLLVM, IStatsRegistry* stats) = 0;
     virtual bool IsCompiled() const = 0;
+    virtual size_t CompiledCodeSize() const = 0;
+    virtual void RemoveCompiledCode() = 0;
     virtual THolder<IComputationGraph> Clone(const TComputationOptsFull& compOpts) = 0;
     virtual bool GetSuitableForCache() const = 0;
 };

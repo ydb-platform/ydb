@@ -54,18 +54,18 @@ private:
 
         size_t patternsToCompileSize = PatternsToCompile.size();
         for (; PatternToCompileIndex < patternsToCompileSize && compilationIntervalMs > 0; ++PatternToCompileIndex) {
-            auto & entry = PatternsToCompile[PatternToCompileIndex];
-            if (!entry->IsInCache.load()) {
+            auto& patternToCompile = PatternsToCompile[PatternToCompileIndex];
+            if (!patternToCompile.Entry->IsInCache.load()) {
                 continue;
             }
 
             timer.Reset();
 
-            entry->Pattern->Compile({}, nullptr);
+            patternToCompile.Entry->Pattern->Compile({}, nullptr);
+            patternCache->NotifyPatternCompiled(patternToCompile.SerializedProgram, patternToCompile.Entry);
+            patternToCompile.Entry = nullptr;
+
             Counters->CompiledComputationPatterns->Inc();
-
-            entry = nullptr;
-
             compilationIntervalMs -= static_cast<i64>(timer.Get().MilliSeconds());
         }
 
@@ -85,9 +85,9 @@ private:
         THashMap<TString, std::shared_ptr<NMiniKQL::TPatternCacheEntry>> patternsToCompile;
         patternCache->GetPatternsToCompile(patternsToCompile);
 
-        TVector<std::pair<std::shared_ptr<NMiniKQL::TPatternCacheEntry>, size_t>> patternsToCompileWithAccessSize;
-        for (auto & [_, entry] : patternsToCompile) {
-            patternsToCompileWithAccessSize.emplace_back(entry, entry->AccessTimes.load());
+        TVector<std::pair<PatternToCompile, size_t>> patternsToCompileWithAccessSize;
+        for (auto& [serializedProgram, entry] : patternsToCompile) {
+            patternsToCompileWithAccessSize.emplace_back(PatternToCompile{serializedProgram, entry}, entry->AccessTimes.load());
         }
 
         std::sort(patternsToCompileWithAccessSize.begin(), patternsToCompileWithAccessSize.end(), [](auto & lhs, auto & rhs) {
@@ -95,8 +95,8 @@ private:
         });
 
         PatternsToCompile.reserve(patternsToCompileWithAccessSize.size());
-        for (auto & [entry, _] : patternsToCompileWithAccessSize) {
-            PatternsToCompile.push_back(entry);
+        for (auto& [patternToCompile, _] : patternsToCompileWithAccessSize) {
+            PatternsToCompile.push_back(patternToCompile);
         }
 
         *Counters->CompileQueueSize = PatternsToCompile.size();
@@ -112,7 +112,12 @@ private:
     TDuration WakeupInterval;
     TIntrusivePtr<TKqpCounters> Counters;
 
-    using PatternsToCompileContainer = TVector<std::shared_ptr<NMiniKQL::TPatternCacheEntry>>;
+    struct PatternToCompile {
+        TString SerializedProgram;
+        std::shared_ptr<NMiniKQL::TPatternCacheEntry> Entry;
+    };
+
+    using PatternsToCompileContainer = TVector<PatternToCompile>;
     using PatternsToCompileContainerIterator = PatternsToCompileContainer::iterator;
     PatternsToCompileContainer PatternsToCompile;
     size_t PatternToCompileIndex = 0;

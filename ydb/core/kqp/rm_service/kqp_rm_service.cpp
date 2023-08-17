@@ -150,7 +150,9 @@ public:
         }
         ActorSystem = actorSystem;
         SelfId = selfId;
-        UpdatePatternCache(Config.GetKqpPatternCacheCapacityBytes(), Config.GetKqpPatternCachePatternAccessTimesBeforeTryToCompile());
+        UpdatePatternCache(Config.GetKqpPatternCacheCapacityBytes(),
+            Config.GetKqpPatternCacheCompiledCapacityBytes(),
+            Config.GetKqpPatternCachePatternAccessTimesBeforeTryToCompile());
 
         if (PublishResourcesByExchanger) {
             CreateResourceInfoExchanger(Config.GetInfoExchangerSettings());
@@ -619,13 +621,13 @@ public:
         ActorSystem->Send(SelfId, new TEvPrivate::TEvSchedulePublishResources);
     }
 
-    void UpdatePatternCache(ui64 maxSizeBytes, ui64 patternAccessTimesBeforeTryToCompile) {
+    void UpdatePatternCache(ui64 maxSizeBytes, ui64 maxCompiledSizeBytes, ui64 patternAccessTimesBeforeTryToCompile) {
         if (maxSizeBytes == 0) {
             PatternCache.reset();
             return;
         }
 
-        NMiniKQL::TComputationPatternLRUCache::Config config{maxSizeBytes, patternAccessTimesBeforeTryToCompile};
+        NMiniKQL::TComputationPatternLRUCache::Config config{maxSizeBytes, maxCompiledSizeBytes, patternAccessTimesBeforeTryToCompile};
         if (!PatternCache || PatternCache->GetConfiguration() != config) {
             PatternCache = std::make_shared<NMiniKQL::TComputationPatternLRUCache>(config, Counters->GetKqpCounters());
         }
@@ -888,7 +890,9 @@ private:
         Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(event), IEventHandle::FlagTrackDelivery, ev->Cookie);
 
         auto& config = *event.MutableConfig()->MutableTableServiceConfig()->MutableResourceManager();
-        ResourceManager->UpdatePatternCache(config.GetKqpPatternCacheCapacityBytes(), config.GetKqpPatternCachePatternAccessTimesBeforeTryToCompile());
+        ResourceManager->UpdatePatternCache(config.GetKqpPatternCacheCapacityBytes(),
+            config.GetKqpPatternCacheCompiledCapacityBytes(),
+            config.GetKqpPatternCachePatternAccessTimesBeforeTryToCompile());
 
         bool enablePublishResourcesByExchanger = config.GetEnablePublishResourcesByExchanger();
         if (enablePublishResourcesByExchanger != PublishResourcesByExchanger) {

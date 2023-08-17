@@ -38,8 +38,10 @@ struct TCodegenStats {
 };
 
 struct TCompileStats {
+    ui32 FunctionPassTime = 0;
     ui32 ModulePassTime = 0;
     ui32 FinalizeTime = 0;
+    ui64 TotalObjectSize = 0;
 };
 
 class ICodegen {

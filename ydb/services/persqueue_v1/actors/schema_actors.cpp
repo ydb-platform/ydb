@@ -614,21 +614,13 @@ void TDescribeTopicActorImpl::RequestBalancer(const TActorContext& ctx) {
     if (Settings.RequireLocation && !PendingLocation && !GotLocation) {
         return RequestPartitionsLocationIfRequired(ctx);
     }
-    switch (Settings.Mode) {
-        case TDescribeTopicActorSettings::EMode::DescribeConsumer:
-        case TDescribeTopicActorSettings::EMode::DescribeTopic:
-            if (Settings.RequireStats) { 
-                NTabletPipe::SendData(
-                        ctx, *BalancerPipe,
-                        new TEvPersQueue::TEvGetReadSessionsInfo(NPersQueue::ConvertNewConsumerName(Settings.Consumer, ctx))
-                );
-                LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "DescribeTopicImpl " << ctx.SelfID.ToString() << ": Request sessions");
-                ++RequestsInfly;
-            }
-            break;
-        case TDescribeTopicActorSettings::EMode::DescribePartitions: {
-            break;
-        }
+    if (Settings.Mode == TDescribeTopicActorSettings::EMode::DescribeConsumer && Settings.RequireStats) { 
+        NTabletPipe::SendData(
+                ctx, *BalancerPipe,
+                new TEvPersQueue::TEvGetReadSessionsInfo(NPersQueue::ConvertNewConsumerName(Settings.Consumer, ctx))
+        );
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "DescribeTopicImpl " << ctx.SelfID.ToString() << ": Request sessions");
+        ++RequestsInfly;
     }
 }
 
@@ -746,16 +738,11 @@ void TDescribeTopicActorImpl::RequestAdditionalInfo(const TActorContext& ctx) {
 }
 
 void TDescribeTopicActorImpl::CheckCloseBalancerPipe(const TActorContext& ctx) {
-    switch (Settings.Mode) {
-        case TDescribeTopicActorSettings::EMode::DescribePartitions:
-            if (RequestsInfly || PendingLocation)
-                return;
-        // no break;
-        default:
-            NTabletPipe::CloseClient(ctx, *BalancerPipe);
-            *BalancerPipe = TActorId{};
-            BalancerTabletId = 0;
-    }
+    if (RequestsInfly || PendingLocation)
+        return;
+    NTabletPipe::CloseClient(ctx, *BalancerPipe);
+    *BalancerPipe = TActorId{};
+    BalancerTabletId = 0;
 }
 
 

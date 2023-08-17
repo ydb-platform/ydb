@@ -126,12 +126,14 @@ public:
                 Issues = response.Issues;
                 Status = response.Status;
                 ExecStatus = response.ExecStatus;
+                QueryStats = response.QueryStats;
                 Failed();
                 break;
             case NYdb::NQuery::EExecStatus::Completed:
                 Issues = response.Issues;
                 Status = response.Status;
                 ExecStatus = response.ExecStatus;
+                QueryStats = response.QueryStats;
                 Complete();
                 break;
         }
@@ -148,6 +150,8 @@ public:
         Fq::Private::PingTaskRequest pingTaskRequest;
         NYql::IssuesToMessage(Issues, pingTaskRequest.mutable_issues());
         pingTaskRequest.set_status(::FederatedQuery::QueryMeta::FAILING);
+        pingTaskRequest.set_ast(QueryStats.query_ast());
+        pingTaskRequest.set_plan(QueryStats.query_plan());
         Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest));
     }
 
@@ -158,6 +162,8 @@ public:
         Fq::Private::PingTaskRequest pingTaskRequest;
         NYql::IssuesToMessage(Issues, pingTaskRequest.mutable_issues());
         pingTaskRequest.set_status(::FederatedQuery::QueryMeta::COMPLETING);
+        pingTaskRequest.set_ast(QueryStats.query_ast());
+        pingTaskRequest.set_plan(QueryStats.query_plan());
         Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest));
     }
 
@@ -172,6 +178,7 @@ private:
     NYql::TIssues Issues;
     NYdb::EStatus Status = NYdb::EStatus::SUCCESS;
     NYdb::NQuery::EExecStatus ExecStatus = NYdb::NQuery::EExecStatus::Unspecified;
+    Ydb::TableStats::QueryStats QueryStats;
 };
 
 std::unique_ptr<NActors::IActor> CreateStatusTrackerActor(const TRunActorParams& params,

@@ -31,7 +31,7 @@
 
    ```bash
    apt-get install python3.8 python3.8-venv python3-venv
-   python3.8 -mvnev ~/ydbwork/ve
+   python3.8 -m venv ~/ydbwork/ve
    source ~/ydbwork/ve/bin/activate
    pip install -U pip
    ```

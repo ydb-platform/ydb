@@ -64,7 +64,7 @@ inline void TPoolAllocator::Free(void* ptr) noexcept
     header->Pool->DoFree(ptr);
 }
 
-template <class T, class... TArgs>
+template <std::derived_from<TPoolAllocator::TObjectBase> T, class... TArgs>
 std::unique_ptr<T> TPoolAllocator::New(TArgs&&... args)
 {
     struct TChunkTag

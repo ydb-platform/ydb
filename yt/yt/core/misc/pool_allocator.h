@@ -42,16 +42,6 @@ public:
      */
     static void Free(void* ptr) noexcept;
 
-    //! Allocates a new object of type #T (typically derived from #TPoolAllocator::TObjectBase)
-    //! from a per-thread pool.
-    /*!
-     *  \note
-     *  The object's disposal via |operator delete| must take place within
-     *  the same thread the object was created.
-     */
-    template <class T, class... TArgs>
-    static std::unique_ptr<T> New(TArgs&&... args);
-
     //! A base for objects instantiated via #TPoolAllocator::New.
     class TObjectBase
     {
@@ -67,6 +57,16 @@ public:
         [[deprecated("Vectorized allocations are not supported")]]
         void operator delete[](void* ptr) noexcept;
     };
+
+    //! Allocates a new object of type #T (derived from #TPoolAllocator::TObjectBase)
+    //! from a per-thread pool.
+    /*!
+     *  \note
+     *  The object's disposal via |operator delete| must take place within
+     *  the same thread the object was created.
+     */
+    template <std::derived_from<TObjectBase> T, class... TArgs>
+    static std::unique_ptr<T> New(TArgs&&... args);
 
 private:
     const size_t BlockSize_;

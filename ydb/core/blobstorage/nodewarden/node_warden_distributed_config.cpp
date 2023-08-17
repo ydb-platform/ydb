@@ -29,6 +29,13 @@ namespace NKikimr::NStorage {
                 , SessionId(sessionId)
             {}
 
+            TBinding(const TBinding& origin)
+                : NodeId(origin.NodeId)
+                , RootNodeId(origin.RootNodeId)
+                , Cookie(origin.Cookie)
+                , SessionId(origin.SessionId)
+            {}
+
             bool Expected(IEventHandle& ev) const {
                 return NodeId == ev.Sender.NodeId()
                     && Cookie == ev.Cookie
@@ -38,6 +45,14 @@ namespace NKikimr::NStorage {
             TString ToString() const {
                 return TStringBuilder() << '{' << NodeId << '.' << RootNodeId << '/' << Cookie
                     << '@' << SessionId << '}';
+            }
+
+            friend bool operator ==(const TBinding& x, const TBinding& y) {
+                return x.NodeId == y.NodeId && x.RootNodeId == y.RootNodeId && x.Cookie == y.Cookie && x.SessionId == y.SessionId;
+            }
+
+            friend bool operator !=(const TBinding& x, const TBinding& y) {
+                return !(x == y);
             }
         };
 
@@ -54,11 +69,14 @@ namespace NKikimr::NStorage {
         };
 
         struct TScatterTask {
+            std::optional<TBinding> Origin;
             THashSet<ui32> PendingNodes;
             NKikimrBlobStorage::TEvNodeConfigScatter Task;
             std::vector<NKikimrBlobStorage::TEvNodeConfigGather> CollectedReplies;
 
-            TScatterTask(NKikimrBlobStorage::TEvNodeConfigScatter&& task) {
+            TScatterTask(const std::optional<TBinding>& origin, NKikimrBlobStorage::TEvNodeConfigScatter&& task)
+                : Origin(origin)
+            {
                 Task.Swap(&task);
             }
         };
@@ -147,8 +165,8 @@ namespace NKikimr::NStorage {
                     const ui32 nodeId = *prevIt++;
                     UnbindNode(nodeId, true);
                     if (Binding && Binding->NodeId == nodeId) {
-                        Binding.reset();
                         AbortAllScatterTasks();
+                        Binding.reset();
                         bindingReset = true;
                     }
                     changes = true;
@@ -239,6 +257,8 @@ namespace NKikimr::NStorage {
                 (SessionId, ev->InterconnectSession), (Binding, Binding), (Record, record));
 
             if (Binding && Binding->Expected(*ev)) {
+                Y_VERIFY(ScatterTasks.empty());
+
                 // check if this binding was accepted and if it is acceptable from our point of view
                 bool rejected = record.GetRejected();
                 const char *rejectReason = nullptr;
@@ -499,7 +519,7 @@ namespace NKikimr::NStorage {
 
                 NKikimrBlobStorage::TEvNodeConfigScatter task;
                 task.MutableCollectConfigs();
-                IssueScatterTask(std::move(task));
+                IssueScatterTask(true, std::move(task));
             } else {
                 STLOG(PRI_DEBUG, BS_NODE, NWDC20, "Quorum check timeout hit, quorum reset");
                 RootState = ERootState::INITIAL; // fall back to waiting for quorum
@@ -526,10 +546,12 @@ namespace NKikimr::NStorage {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Scatter/gather logic
 
-        void IssueScatterTask(NKikimrBlobStorage::TEvNodeConfigScatter&& task) {
+        void IssueScatterTask(bool locallyGenerated, NKikimrBlobStorage::TEvNodeConfigScatter&& task) {
             const ui64 cookie = NextScatterCookie++;
             STLOG(PRI_DEBUG, BS_NODE, NWDC21, "IssueScatterTask", (Task, task), (Cookie, cookie));
-            const auto [it, inserted] = ScatterTasks.try_emplace(cookie, std::move(task));
+            Y_VERIFY(locallyGenerated || Binding);
+            const auto [it, inserted] = ScatterTasks.try_emplace(cookie, locallyGenerated ? std::nullopt : Binding,
+                std::move(task));
             Y_VERIFY(inserted);
             TScatterTask& scatterTask = it->second;
             for (auto& [nodeId, info] : DirectBoundNodes) {
@@ -549,6 +571,12 @@ namespace NKikimr::NStorage {
         void CompleteScatterTask(TScatterTask& task) {
             STLOG(PRI_DEBUG, BS_NODE, NWDC22, "CompleteScatterTask", (Task, task.Task));
 
+            // some state checks
+            if (task.Origin) {
+                Y_VERIFY(Binding); // when binding is dropped, all scatter tasks must be dropped too
+                Y_VERIFY(Binding == task.Origin); // binding must not change
+            }
+
             NKikimrBlobStorage::TEvNodeConfigGather res;
             if (task.Task.HasCookie()) {
                 res.SetCookie(task.Task.GetCookie());
@@ -567,11 +595,11 @@ namespace NKikimr::NStorage {
                     break;
             }
 
-            if (Binding && res.HasCookie()) {
+            if (task.Origin) {
                 auto reply = std::make_unique<TEvNodeConfigGather>();
-                reply->Record.CopyFrom(res);
+                res.Swap(&reply->Record);
                 SendEvent(*Binding, std::move(reply));
-            } else if (!res.HasCookie()) {
+            } else {
                 ProcessGather(std::move(res));
             }
         }
@@ -620,7 +648,12 @@ namespace NKikimr::NStorage {
         void AbortAllScatterTasks() {
             STLOG(PRI_DEBUG, BS_NODE, NWDC24, "AbortAllScatterTasks");
 
+            Y_VERIFY(Binding);
+
             for (auto& [cookie, task] : std::exchange(ScatterTasks, {})) {
+                Y_VERIFY(task.Origin);
+                Y_VERIFY(Binding == task.Origin);
+
                 for (const ui32 nodeId : task.PendingNodes) {
                     const auto it = DirectBoundNodes.find(nodeId);
                     Y_VERIFY(it != DirectBoundNodes.end());
@@ -636,7 +669,7 @@ namespace NKikimr::NStorage {
                 (Cookie, ev->Cookie), (SessionId, ev->InterconnectSession), (Record, ev->Get()->Record));
 
             if (Binding && Binding->Expected(*ev)) {
-                IssueScatterTask(std::move(ev->Get()->Record));
+                IssueScatterTask(false, std::move(ev->Get()->Record));
             }
         }
 
@@ -705,8 +738,8 @@ namespace NKikimr::NStorage {
             if (Binding && Binding->NodeId == nodeId) {
                 STLOG(PRI_DEBUG, BS_NODE, NWDC10, "Binding aborted by disconnection", (Binding, Binding));
 
-                Binding.reset();
                 AbortAllScatterTasks();
+                Binding.reset();
                 IssueNextBindRequest();
 
                 for (const auto& [nodeId, info] : DirectBoundNodes) {
@@ -751,6 +784,16 @@ namespace NKikimr::NStorage {
                     Y_VERIFY(it != ScatterTasks.end());
                     TScatterTask& task = it->second;
                     Y_VERIFY(task.PendingNodes.contains(nodeId));
+                }
+            }
+
+            for (const auto& [cookie, task] : ScatterTasks) {
+                if (task.Origin) {
+                    Y_VERIFY(Binding);
+                    Y_VERIFY(task.Origin == Binding);
+                } else { // locally-generated task
+                    Y_VERIFY(RootState != ERootState::INITIAL);
+                    Y_VERIFY(!Binding);
                 }
             }
 #endif

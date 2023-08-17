@@ -118,13 +118,28 @@ Y_UNIT_TEST(OrderJoins2TablesTableIn2Rels)
     UNIT_ASSERT(optimizedTree != tree);
 }
 
-Y_UNIT_TEST(UnsupportedJoin)
+Y_UNIT_TEST(OrderLeftJoin)
 {
     TExprContext exprCtx;
     auto tree = MakeOp({"c", "c_nationkey"}, {"n", "n_nationkey"}, {"c", "n"}, exprCtx);
     tree->Left = MakeLeaf({"c"}, {"c"}, 1000000, 1233333, exprCtx);
     tree->Right = MakeLeaf({"n"}, {"n"}, 10000, 12333, exprCtx);
     tree->JoinKind = exprCtx.NewAtom(exprCtx.AppendPosition({}), "Left");
+
+    TYtState::TPtr state = MakeIntrusive<TYtState>();
+    state->Configuration->CostBasedOptimizer = ECostBasedOptimizer::PG;
+    auto optimizedTree = OrderJoins(tree, state, exprCtx, true);
+    UNIT_ASSERT(optimizedTree != tree);
+    UNIT_ASSERT_STRINGS_EQUAL("Left", optimizedTree->JoinKind->Content());
+}
+
+Y_UNIT_TEST(UnsupportedJoin)
+{
+    TExprContext exprCtx;
+    auto tree = MakeOp({"c", "c_nationkey"}, {"n", "n_nationkey"}, {"c", "n"}, exprCtx);
+    tree->Left = MakeLeaf({"c"}, {"c"}, 1000000, 1233333, exprCtx);
+    tree->Right = MakeLeaf({"n"}, {"n"}, 10000, 12333, exprCtx);
+    tree->JoinKind = exprCtx.NewAtom(exprCtx.AppendPosition({}), "Full");
 
     TYtState::TPtr state = MakeIntrusive<TYtState>();
     state->Configuration->CostBasedOptimizer = ECostBasedOptimizer::PG;

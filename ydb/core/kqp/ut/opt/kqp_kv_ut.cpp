@@ -12,7 +12,7 @@ extern "C" {
 #include "catalog/pg_type_d.h"
 }
 
-namespace 
+namespace
 {
 
 using namespace NYdb;
@@ -42,7 +42,7 @@ void ValidateSinglePgRowResult(T& result, const TString& columnName, const TPgVa
     while( parser.TryNextRow()) {
         gotRows = true;
         auto& col = parser.ColumnParser(columnName);
-        
+
         const auto pgValue = col.GetPg();
         UNIT_ASSERT_VALUES_EQUAL(pgValue.Content_, expectedValue.Content_);
         UNIT_ASSERT_VALUES_EQUAL(pgValue.Kind_, expectedValue.Kind_);
@@ -62,7 +62,7 @@ using namespace NYdb::NTable;
 Y_UNIT_TEST_SUITE(KqpKv) {
     Y_UNIT_TEST(BulkUpsert) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(true);
+            .SetWithSampleTables(false);
         auto kikimr = TKikimrRunner{settings};
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -107,7 +107,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
 
     Y_UNIT_TEST(ReadRows_SpecificKey) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(true);
+            .SetWithSampleTables(false);
         auto kikimr = TKikimrRunner{settings};
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -147,6 +147,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         }
         keys.EndList();
         auto selectResult = db.ReadRows("/Root/TestTable", keys.Build()).GetValueSync();
+        Cerr << "IsSuccess(): " << selectResult.IsSuccess() << " GetStatus(): " << selectResult.GetStatus() << Endl;
         UNIT_ASSERT_C(selectResult.IsSuccess(), selectResult.GetIssues().ToString());
         auto res = FormatResultSetYson(selectResult.GetResultSet());
         CompareYson(R"(
@@ -160,9 +161,119 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         )", res);
     }
 
+    Y_UNIT_TEST(ReadRows_UnknownTable) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        auto kikimr = TKikimrRunner{settings};
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE TestTable (
+                Key Uint64,
+                Data Uint32,
+                Value Utf8,
+                PRIMARY KEY (Key)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder keys;
+        keys.BeginList();
+        for (size_t i = 0; i < 5; ++i) {
+            keys.AddListItem()
+                .BeginStruct()
+                    .AddMember("Key").Uint64(i * 1921763474923857134ull + 1858343823)
+                .EndStruct();
+        }
+        keys.EndList();
+        auto selectResult = db.ReadRows("/Root/WrongTable", keys.Build()).GetValueSync();
+        UNIT_ASSERT_C(!selectResult.IsSuccess(), selectResult.GetIssues().ToString());
+        UNIT_ASSERT_EQUAL(selectResult.GetStatus(), EStatus::SCHEME_ERROR);
+        auto res = FormatResultSetYson(selectResult.GetResultSet());
+        CompareYson("[]", res);
+    }
+
+    Y_UNIT_TEST(ReadRows_NonExistentKeys) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        auto kikimr = TKikimrRunner{settings};
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE TestTable (
+                Key Uint64,
+                Data Uint32,
+                Value Utf8,
+                PRIMARY KEY (Key)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (size_t i = 0; i < 1000; ++i) {
+            rows.AddListItem()
+                .BeginStruct()
+                    .AddMember("Key").Uint64(i + 10)
+                    .AddMember("Data").Uint32(i)
+                    .AddMember("Value").Utf8("abcde")
+                .EndStruct();
+        }
+        rows.EndList();
+
+        auto upsertResult = db.BulkUpsert("/Root/TestTable", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        {
+            NYdb::TValueBuilder keys;
+            keys.BeginList();
+            // there is no keys with i < 5
+            for (size_t i = 0; i < 5; ++i) {
+                keys.AddListItem()
+                    .BeginStruct()
+                        .AddMember("Key").Uint64(i)
+                    .EndStruct();
+            }
+            keys.EndList();
+
+            auto selectResult = db.ReadRows("/Root/TestTable", keys.Build()).GetValueSync();
+            Cerr << "IsSuccess(): " << selectResult.IsSuccess() << " GetStatus(): " << selectResult.GetStatus() << Endl;
+            UNIT_ASSERT_C(selectResult.IsSuccess(), selectResult.GetIssues().ToString());
+            auto res = FormatResultSetYson(selectResult.GetResultSet());
+            Cerr << res << Endl;
+            CompareYson("[]", res);
+        }
+        {
+            NYdb::TValueBuilder keys;
+            keys.BeginList();
+            // there are no keys with i < 10, but 5 keys with i in [10, 15)
+            for (size_t i = 0; i < 15; ++i) {
+                keys.AddListItem()
+                    .BeginStruct()
+                        .AddMember("Key").Uint64(i)
+                    .EndStruct();
+            }
+            keys.EndList();
+
+            auto selectResult = db.ReadRows("/Root/TestTable", keys.Build()).GetValueSync();
+            Cerr << "IsSuccess(): " << selectResult.IsSuccess() << " GetStatus(): " << selectResult.GetStatus() << Endl;
+            UNIT_ASSERT_C(selectResult.IsSuccess(), selectResult.GetIssues().ToString());
+            auto res = FormatResultSetYson(selectResult.GetResultSet());
+            CompareYson(R"([
+                [10u;0u;"abcde"];
+                [11u;1u;"abcde"];
+                [12u;2u;"abcde"];
+                [13u;3u;"abcde"];
+                [14u;4u;"abcde"]
+            ])", res);
+        }
+    }
+
     Y_UNIT_TEST(ReadRows_SpecificReturnValue) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(true);
+            .SetWithSampleTables(false);
         auto kikimr = TKikimrRunner{settings};
 
         auto db = kikimr.GetTableClient();
@@ -211,6 +322,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         keys.EndList();
 
         auto selectResult = db.ReadRows(tableName, keys.Build(), {valueToReturnColumnName_1, valueToReturnColumnName_2}).GetValueSync();
+        Cerr << "IsSuccess(): " << selectResult.IsSuccess() << " GetStatus(): " << selectResult.GetStatus() << Endl;
         UNIT_ASSERT_C(selectResult.IsSuccess(), selectResult.GetIssues().ToString());
 
         auto res = FormatResultSetYson(selectResult.GetResultSet());
@@ -270,12 +382,12 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         {.TypeId = TIMETZOID, .TypeMod="4", .ValueContent="23:59:59.9999+00"},
         {.TypeId = TIMESTAMPOID, .TypeMod="4", .ValueContent="1999-01-01 23:59:59.9999"},
         {.TypeId = TIMESTAMPTZOID, .TypeMod="4", .ValueContent="1999-01-01 23:59:59.9999+00"},
-    }; 
+    };
     ::ReadRowsPgParam readRowsPgNullParam{.TypeId = BOOLOID, .TypeMod={}, .ValueContent=""};
-    
+
     Y_UNIT_TEST(ReadRows_PgValue) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(true);
+            .SetWithSampleTables(false);
         auto kikimr = TKikimrRunner{settings};
 
         auto db = kikimr.GetTableClient();
@@ -300,7 +412,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
 
             auto result = session.CreateTable(tableName, builder.Build()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-  
+
             const ui64 keyValue = 1;
             const TPgValue pgValue(
                 isNull ? TPgValue::VK_NULL : TPgValue::VK_TEXT,
@@ -345,12 +457,12 @@ Y_UNIT_TEST_SUITE(KqpKv) {
     {
         {.TypeId = TEXTOID, .TypeMod={}, .ValueContent="i'm a text"},
         {.TypeId = BITOID, .TypeMod="4", .ValueContent="0110"},
-    }; 
+    };
     ::ReadRowsPgParam readRowsPgNullKeyParam{.TypeId = TEXTOID, .TypeMod={}, .ValueContent=""};
-    
+
     Y_UNIT_TEST(ReadRows_PgKey) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(true);
+            .SetWithSampleTables(false);
         auto kikimr = TKikimrRunner{settings};
 
         auto db = kikimr.GetTableClient();
@@ -375,7 +487,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
 
             auto result = session.CreateTable(tableName, builder.Build()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-  
+
             const TPgValue pgValue(
                 isNull ? TPgValue::VK_NULL : TPgValue::VK_TEXT,
                 testParam.ValueContent,

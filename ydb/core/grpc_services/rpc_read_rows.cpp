@@ -365,9 +365,6 @@ public:
         Y_VERIFY(request.ResultSet.size() == 1);
         const auto& entry = request.ResultSet.front();
 
-        OwnerId = entry.Self->Info.GetSchemeshardId();
-        TableId = entry.Self->Info.GetPathId();
-
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::RPC_REQUEST, "TEvNavigateKeySetResult, " << " OwnerId: " << OwnerId << " TableId: " << TableId);
         switch (entry.Status) {
             case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
@@ -385,6 +382,9 @@ public:
             case NSchemeCache::TSchemeCacheNavigate::EStatus::Unknown:
                 return ReplyWithError(Ydb::StatusIds::GENERIC_ERROR, Sprintf("Unknown error on table '%s'", GetTable().c_str()));
         }
+
+        OwnerId = entry.Self->Info.GetSchemeshardId();
+        TableId = entry.Self->Info.GetPathId();
 
         if (entry.TableId.IsSystemView()) {
             return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR,
@@ -585,7 +585,7 @@ public:
 
     void SendResult(const Ydb::StatusIds::StatusCode& status, const TString& errorMsg) {
         auto* resp = CreateResponse();
-
+        resp->set_status(status);
 
         if (status == Ydb::StatusIds::SUCCESS) {
             Request->SetRuHeader(RuCost);

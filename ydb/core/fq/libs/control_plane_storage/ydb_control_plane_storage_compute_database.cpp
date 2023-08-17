@@ -157,8 +157,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyDatab
 
         TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "ModifyDatabase(write)");
         writeQueryBuilder.AddString("internal", result.SerializeAsString());
+        writeQueryBuilder.AddString("scope", scope);
         writeQueryBuilder.AddText(
-            "UPDATE `" COMPUTE_DATABASES_TABLE_NAME "` SET `" INTERNAL_COLUMN_NAME "` = $internal;"
+            "UPDATE `" COMPUTE_DATABASES_TABLE_NAME "` SET `" INTERNAL_COLUMN_NAME "` = $internal\n"
+            "WHERE `" SCOPE_COLUMN_NAME "` = $scope;"
         );
         const auto writeQuery = writeQueryBuilder.Build();
         return make_pair(writeQuery.Sql, writeQuery.Params);

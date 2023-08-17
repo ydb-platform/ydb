@@ -5,6 +5,8 @@
 #include "node_warden_mock.h"
 
 #include <ydb/core/driver_lib/version/version.h>
+#include <ydb/core/mind/bscontroller/mood.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 struct TEnvironmentSetup {
@@ -679,16 +681,43 @@ struct TEnvironmentSetup {
         UNIT_ASSERT(response.GetSuccess());
     }
 
-    void PutVDiskToReadOnly(ui32 nodeId, ui32 pdiskId, ui32 vslotId, const TVDiskID& vdiskId) {
-        NKikimrBlobStorage::TConfigRequest request;
-        auto *roCmd = request.AddCommand()->MutablePutVDiskToReadOnly();
-        auto *vslot = roCmd->MutableVSlotId();
+    void FillVSlotId(ui32 nodeId, ui32 pdiskId, ui32 vslotId, NKikimrBlobStorage::TVSlotId* vslot) {
         vslot->SetNodeId(nodeId);
         vslot->SetPDiskId(pdiskId);
         vslot->SetVSlotId(vslotId);
+    }
+
+    void PutVDiskToNormal(ui32 nodeId, ui32 pdiskId, ui32 vslotId, const TVDiskID& vdiskId) {
+        NKikimrBlobStorage::TConfigRequest request;
+        auto *roCmd = request.AddCommand()->MutablePutVDiskToNormal();
+        FillVSlotId(nodeId, pdiskId, vslotId, roCmd->MutableVSlotId());
         VDiskIDFromVDiskID(vdiskId, roCmd->MutableVDiskId());
+        Cerr << "Invoking PutVDiskToNormal for vdisk " << vdiskId.ToString() << Endl;
         auto response = Invoke(request);
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+    }
+
+    void PutVDiskToReadOnly(ui32 nodeId, ui32 pdiskId, ui32 vslotId, const TVDiskID& vdiskId) {
+        NKikimrBlobStorage::TConfigRequest request;
+        auto *roCmd = request.AddCommand()->MutablePutVDiskToReadOnly();
+        FillVSlotId(nodeId, pdiskId, vslotId, roCmd->MutableVSlotId());
+        VDiskIDFromVDiskID(vdiskId, roCmd->MutableVDiskId());
+        Cerr << "Invoking PutVDiskToReadOnly for vdisk " << vdiskId.ToString() << Endl;
+        auto response = Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+    }
+
+    void PutVDiskToMood(ui32 nodeId, ui32 pdiskId, ui32 vslotId, const TVDiskID& vdiskId, NKikimr::NBsController::TMood::EValue mood) {
+        switch (mood) {
+        case NKikimr::NBsController::TMood::Normal:
+            PutVDiskToNormal(nodeId, pdiskId, vslotId, vdiskId);
+            break;
+        case NKikimr::NBsController::TMood::ReadOnly:
+            PutVDiskToReadOnly(nodeId, pdiskId, vslotId, vdiskId);
+            break;
+        default:
+            ythrow yexception() << "unsupported mood: " << NKikimr::NBsController::TMood::Name(mood);
+        }
     }
 
     void UpdateDriveStatus(ui32 nodeId, ui32 pdiskId, NKikimrBlobStorage::EDriveStatus status,

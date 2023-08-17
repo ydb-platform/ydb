@@ -480,6 +480,12 @@ message TCancelVirtualGroup {
     uint32 GroupId = 1; // id of a group we are going to cancel
 }
 
+// An attempt to transition to the normal mode, e.g. from the read-only mode.
+message TPutVDiskToNormal {
+    NKikimrBlobStorage.TVSlotId VSlotId = 1;
+    NKikimrBlobStorage.TVDiskID VDiskId = 2;
+}
+
 message TPutVDiskToReadOnly {
     NKikimrBlobStorage.TVSlotId VSlotId = 1;
     NKikimrBlobStorage.TVDiskID VDiskId = 2;
@@ -528,6 +534,7 @@ message TConfigRequest {
             TReadSettings ReadSettings = 43;
             TCancelVirtualGroup CancelVirtualGroup = 44;
             TPutVDiskToReadOnly PutVDiskToReadOnly = 45;
+            TPutVDiskToNormal PutVDiskToNormal = 46;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;

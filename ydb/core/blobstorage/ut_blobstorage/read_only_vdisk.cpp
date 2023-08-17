@@ -61,56 +61,70 @@ Y_UNIT_TEST_SUITE(ReadOnlyVDisk) {
             });
             TInstant getDeadline = env.Now() + TDuration::Seconds(30);
             auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(sender, /* termOnCapture */ false, getDeadline);
-            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
             Cerr << "TEvGetResult: " << res->Get()->ToString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->ResponseSz, 1);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[0].Buffer.size(), data.size());
             UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[0].Buffer.ConvertToString(), data);
+        };
+
+        auto readAllBlobs = [&] (ui32 steps) {
+            Cerr << "=== Read all " << steps << " blob(s) ===" << Endl;
+            for (ui32 step = 0; step < steps; ++step) {
+                sendGet(step);
+            }
         };
 
         Cerr << "=== Trying to put and get a blob ===" << Endl;
         ui32 step = 0;
         sendPut(step, NKikimrProto::OK);
-        sendGet(step);
         ++step;
+        readAllBlobs(step);
 
-        auto putVDiskToRo = [&] (ui32 position) {
+        using NKikimr::NBsController::TMood;
+        auto putVDiskToMood = [&] (ui32 position, TMood::EValue mood) {
             const TVDiskID& someVDisk = info->GetVDiskId(position);
-
             auto baseConfig = env.FetchBaseConfig();
 
             const auto& somePDisk = baseConfig.GetPDisk(position);
             const auto& someVSlot = baseConfig.GetVSlot(position);
-            Cerr << "Issuing PutVDiskToReadOnly for position " << position << Endl;
-            env.PutVDiskToReadOnly(somePDisk.GetNodeId(), somePDisk.GetPDiskId(), someVSlot.GetVSlotId().GetVSlotId(), someVDisk);
+            Cerr << "Putting VDisk to mood " << TMood::Name(mood) << " for position " << position << Endl;
+            env.PutVDiskToMood(somePDisk.GetNodeId(), somePDisk.GetPDiskId(), someVSlot.GetVSlotId().GetVSlotId(), someVDisk, mood);
             env.Sim(TDuration::Seconds(30));
         };
 
         Cerr << "=== Putting VDisk #0 to read-only ===" << Endl;
-        putVDiskToRo(0);
+        putVDiskToMood(0, TMood::ReadOnly);
 
-        Cerr << "=== Write 10 blobs ===" << Endl;
+        Cerr << "=== Write 10 blobs, expect some VDisks refuse parts but writes go through ===" << Endl;
         for (ui32 i = 0; i < 10; ++i) {
             sendPut(step, NKikimrProto::OK);
             ++step;
         }
 
-        Cerr << "=== Read all blobs ===" << Endl;
-        for (ui32 i = 0; i < step; ++i) {
-            sendGet(i);
-        }
+        readAllBlobs(step);
 
         Cerr << "=== Put 2 more VDisks to read-only ===" << Endl;
-        putVDiskToRo(1);
-        putVDiskToRo(2);
+        putVDiskToMood(1, TMood::ReadOnly);
+        putVDiskToMood(2, TMood::ReadOnly);
 
         Cerr << "=== Write 10 more blobs, expect errors ===" << Endl;
         for (ui32 i = 0; i < 10; ++i) {
             sendPut(step, NKikimrProto::ERROR);
             ++step;
         }
+        // Even though previous writes were not successfull, some parts were written which is enough to read the blobs back, at least before GC happens.
+        readAllBlobs(step);
 
-        Cerr << "=== Read all blobs again, expect it to work ===" << Endl;
-        for (ui32 i = 0; i < step; ++i) {
-            sendGet(i);
+        Cerr << "=== Restoring to normal VDisk #0 ===" << Endl;
+        putVDiskToMood(0, TMood::Normal);
+
+        Cerr << "=== Write 10 blobs, expect some VDisks refuse parts but the writes still go through ===" << Endl;
+        for (ui32 i = 0; i < 10; ++i) {
+            sendPut(step, NKikimrProto::OK);
+            ++step;
         }
+
+        readAllBlobs(step);
     }
 }

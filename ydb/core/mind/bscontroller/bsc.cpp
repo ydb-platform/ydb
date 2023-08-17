@@ -329,6 +329,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kWipeVDisk:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kSanitizeGroup:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kCancelVirtualGroup:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kPutVDiskToNormal:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kPutVDiskToReadOnly:
                         return 2; // read-write commands go with higher priority as they are needed to keep cluster intact
 

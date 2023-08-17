@@ -123,17 +123,20 @@ def validate_test(unit, kw):
 
     if not errors:
         for req_name, req_value in requirements.items():
-            error_msg = reqs.validate_requirement(
-                req_name,
-                req_value,
-                size,
-                is_force_sandbox,
-                in_autocheck,
-                is_fuzzing,
-                is_kvm,
-                is_ytexec_run,
-                requirements,
-            )
+            try:
+                error_msg = reqs.validate_requirement(
+                    req_name,
+                    req_value,
+                    size,
+                    is_force_sandbox,
+                    in_autocheck,
+                    is_fuzzing,
+                    is_kvm,
+                    is_ytexec_run,
+                    requirements,
+                )
+            except Exception as e:
+                error_msg = str(e)
             if error_msg:
                 errors += [error_msg]
 

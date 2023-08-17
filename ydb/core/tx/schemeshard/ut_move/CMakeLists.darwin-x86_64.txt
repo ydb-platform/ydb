@@ -37,7 +37,7 @@ target_link_options(ydb-core-tx-schemeshard-ut_move PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-tx-schemeshard-ut_move PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_move.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_move/ut_move.cpp
 )
 set_property(
   TARGET

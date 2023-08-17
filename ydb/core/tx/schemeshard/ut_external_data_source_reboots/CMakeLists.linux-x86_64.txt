@@ -40,7 +40,7 @@ target_link_options(schemeshard-ut_external_data_source_reboots PRIVATE
   -ldl
 )
 target_sources(schemeshard-ut_external_data_source_reboots PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_external_data_source_reboots.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_external_data_source_reboots/ut_external_data_source_reboots.cpp
 )
 set_property(
   TARGET

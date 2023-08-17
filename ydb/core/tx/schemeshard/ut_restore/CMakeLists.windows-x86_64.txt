@@ -29,7 +29,7 @@ target_link_libraries(ydb-core-tx-schemeshard-ut_restore PUBLIC
   yql-sql-pg_dummy
 )
 target_sources(ydb-core-tx-schemeshard-ut_restore PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_restore.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_restore/ut_restore.cpp
 )
 set_property(
   TARGET

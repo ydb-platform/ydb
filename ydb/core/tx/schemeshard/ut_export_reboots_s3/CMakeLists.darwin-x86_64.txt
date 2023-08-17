@@ -37,7 +37,7 @@ target_link_options(ydb-core-tx-schemeshard-ut_export_reboots_s3 PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-tx-schemeshard-ut_export_reboots_s3 PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_export_reboots_s3.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_export_reboots_s3/ut_export_reboots_s3.cpp
 )
 set_property(
   TARGET

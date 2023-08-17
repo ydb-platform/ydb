@@ -24,7 +24,7 @@ target_link_libraries(ydb-core-tx-schemeshard-ut_async_index PUBLIC
   tx-schemeshard-ut_helpers
 )
 target_sources(ydb-core-tx-schemeshard-ut_async_index PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_async_index.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_async_index/ut_async_index.cpp
 )
 set_property(
   TARGET

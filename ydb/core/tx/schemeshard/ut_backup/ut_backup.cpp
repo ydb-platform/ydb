@@ -1,4 +1,4 @@
-#include "ut_backup_restore_common.h"
+#include "ut_helpers/ut_backup_restore_common.h"
 
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>

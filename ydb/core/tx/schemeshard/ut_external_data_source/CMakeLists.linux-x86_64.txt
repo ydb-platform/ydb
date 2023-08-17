@@ -40,7 +40,7 @@ target_link_options(ydb-core-tx-schemeshard-ut_external_data_source PRIVATE
   -ldl
 )
 target_sources(ydb-core-tx-schemeshard-ut_external_data_source PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_external_data_source.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_external_data_source/ut_external_data_source.cpp
 )
 set_property(
   TARGET

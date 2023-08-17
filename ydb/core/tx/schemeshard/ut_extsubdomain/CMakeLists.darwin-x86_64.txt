@@ -36,7 +36,7 @@ target_link_options(ydb-core-tx-schemeshard-ut_extsubdomain PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-tx-schemeshard-ut_extsubdomain PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_extsubdomain.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_extsubdomain/ut_extsubdomain.cpp
 )
 set_property(
   TARGET

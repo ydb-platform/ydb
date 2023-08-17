@@ -40,7 +40,7 @@ target_link_options(ydb-core-tx-schemeshard-ut_rtmr PRIVATE
   -ldl
 )
 target_sources(ydb-core-tx-schemeshard-ut_rtmr PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_rtmr.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_rtmr/ut_rtmr.cpp
 )
 set_property(
   TARGET

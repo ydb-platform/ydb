@@ -30,7 +30,7 @@ target_link_libraries(ydb-core-tx-schemeshard-ut_sequence PUBLIC
   udf-service-exception_policy
 )
 target_sources(ydb-core-tx-schemeshard-ut_sequence PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_sequence.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_sequence/ut_sequence.cpp
 )
 set_property(
   TARGET

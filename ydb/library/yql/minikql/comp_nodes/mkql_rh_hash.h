@@ -7,8 +7,6 @@
 #include <util/digest/city.h>
 #include <util/generic/scope.h>
 
-#include <ydb/library/yql/minikql/primes.h>
-
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -56,10 +54,11 @@ protected:
     explicit TRobinHoodHashBase(const ui64 initialCapacity, THash hash, TEqual equal)
         : HashLocal(std::move(hash))
         , EqualLocal(std::move(equal))
-        , Capacity(FindNearestPrime(initialCapacity))
+        , Capacity(initialCapacity)
         , Allocator()
         , SelfHash(GetSelfHash(this))
     {
+        Y_ENSURE((Capacity & (Capacity - 1)) == 0);
     }
 
     ~TRobinHoodHashBase() {
@@ -165,7 +164,8 @@ private:
     Y_FORCE_INLINE char* InsertImpl(TKey key, const ui64 hash, bool& isNew, ui64 capacity, char* data, char* dataEnd) {
         isNew = false;
         TPSLStorage psl(hash);
-        ui64 bucket = (SelfHash ^ hash) % capacity;
+        // https://probablydance.com/2018/06/16/fibonacci-hashing-the-optimization-that-the-world-forgot-or-a-better-alternative-to-integer-modulo/
+        ui64 bucket = ((SelfHash ^ hash) * 11400714819323198485llu) & (capacity - 1);
         char* ptr = data + AsDeriv().GetCellSize() * bucket;
         char* returnPtr;
         typename TDeriv::TPayloadStore tmpPayload;
@@ -235,7 +235,7 @@ private:
         } else {
             growFactor = 2;
         }
-        auto newCapacity = FindNearestPrime(Capacity * growFactor);
+        auto newCapacity = Capacity * growFactor;
         char *newData, *newDataEnd;
         Allocate(newCapacity, newData, newDataEnd);
         Y_DEFER {

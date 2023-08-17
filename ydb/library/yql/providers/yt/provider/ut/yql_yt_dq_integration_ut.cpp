@@ -8,6 +8,7 @@ using namespace NYql;
 Y_UNIT_TEST_SUITE(TSchedulerTest) {
     Y_UNIT_TEST(Ranges_table4_table5_test0) {
         TYtState::TPtr state = new TYtState;
+        state->Types = new TTypeAnnotationContext;
         auto dqIntegration = CreateYtDqIntegration(state.Get());
         TDqSettings settings;
         settings.DataSizePerJob = 1000;
@@ -42,6 +43,7 @@ Y_UNIT_TEST_SUITE(TSchedulerTest) {
 
     Y_UNIT_TEST(Ranges_table4_table7_test1) {
         TYtState::TPtr state = new TYtState;
+        state->Types = new TTypeAnnotationContext;
         auto dqIntegration = CreateYtDqIntegration(state.Get());
         TDqSettings settings;
         settings.DataSizePerJob = 1000;
@@ -83,6 +85,7 @@ Y_UNIT_TEST_SUITE(TSchedulerTest) {
 
     Y_UNIT_TEST(Ranges_table4_table7_test2) {
         TYtState::TPtr state = new TYtState;
+        state->Types = new TTypeAnnotationContext;
         auto dqIntegration = CreateYtDqIntegration(state.Get());
         TDqSettings settings;
         settings.DataSizePerJob = 1000;

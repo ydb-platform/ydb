@@ -6,40 +6,6 @@ using namespace NYql;
 using namespace NYql::NNodes;
 using namespace NKikimr::NKqp;
 
-namespace {
-
-/**
- * Helper method to fetch statistics from type annotation context
-*/
-std::shared_ptr<TOptimizerStatistics> GetStats( const TExprNode* input, TTypeAnnotationContext* typeCtx ) {
-
-    return typeCtx->StatisticsMap.Value(input, std::shared_ptr<TOptimizerStatistics>(nullptr));
-}
-
-/**
- * Helper method to set statistics in type annotation context
-*/
-void SetStats( const TExprNode* input, TTypeAnnotationContext* typeCtx, std::shared_ptr<TOptimizerStatistics> stats ) {
-
-    typeCtx->StatisticsMap[input] = stats;
-}
-
-/**
- * Helper method to get cost from type annotation context
- * Doesn't check if the cost is in the mapping
-*/
-std::optional<double> GetCost( const TExprNode* input, TTypeAnnotationContext* typeCtx ) {
-    return typeCtx->StatisticsMap[input]->Cost;
-}
-
-/**
- * Helper method to set the cost in type annotation context
-*/
-void SetCost( const TExprNode* input, TTypeAnnotationContext* typeCtx, std::optional<double> cost ) {
-    typeCtx->StatisticsMap[input]->Cost = cost;
-}
-}
-
 /**
  * For Flatmap we check the input and fetch the statistcs and cost from below
  * Then we analyze the filter predicate and compute it's selectivity and apply it
@@ -54,7 +20,7 @@ void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationCont
     }
 
     auto flatmapInput = flatmap.Input();
-    auto inputStats = GetStats(flatmapInput.Raw(), typeCtx);
+    auto inputStats = typeCtx->GetStats(flatmapInput.Raw());
 
     if (! inputStats ) {
         return;
@@ -67,8 +33,8 @@ void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationCont
 
     auto outputStats = TOptimizerStatistics(inputStats->Nrows * selectivity, inputStats->Ncols);
 
-    SetStats(input.Get(), typeCtx, std::make_shared<TOptimizerStatistics>(outputStats) );
-    SetCost(input.Get(), typeCtx, GetCost(flatmapInput.Raw(), typeCtx));
+    typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(outputStats) );
+    typeCtx->SetCost(input.Get(), typeCtx->GetCost(flatmapInput.Raw()));
 }
 
 /**
@@ -82,13 +48,13 @@ void InferStatisticsForSkipNullMembers(const TExprNode::TPtr& input, TTypeAnnota
     auto skipNullMembers = inputNode.Cast<TCoSkipNullMembers>();
     auto skipNullMembersInput = skipNullMembers.Input();
 
-    auto inputStats = GetStats(skipNullMembersInput.Raw(), typeCtx);
+    auto inputStats = typeCtx->GetStats(skipNullMembersInput.Raw());
     if (!inputStats) {
         return;
     }
 
-    SetStats( input.Get(), typeCtx, inputStats );
-    SetCost( input.Get(), typeCtx, GetCost( skipNullMembersInput.Raw(), typeCtx ) );
+    typeCtx->SetStats( input.Get(), inputStats );
+    typeCtx->SetCost( input.Get(), typeCtx->GetCost( skipNullMembersInput.Raw() ) );
 }
 
 /**
@@ -100,7 +66,7 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for read table";
 
     auto outputStats = TOptimizerStatistics(100000, 5, 0.0);
-    SetStats( input.Get(), typeCtx, std::make_shared<TOptimizerStatistics>(outputStats) );
+    typeCtx->SetStats( input.Get(), std::make_shared<TOptimizerStatistics>(outputStats) );
 }
 
 /**
@@ -110,7 +76,7 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
 void InferStatisticsForIndexLookup(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
 
     auto outputStats = TOptimizerStatistics(5, 5, 0.0);
-    SetStats( input.Get(), typeCtx, std::make_shared<TOptimizerStatistics>(outputStats) );
+    typeCtx->SetStats( input.Get(), std::make_shared<TOptimizerStatistics>(outputStats) );
 }
 
 /**

@@ -314,6 +314,35 @@ struct TTypeAnnotationContext: public TThrRefBase {
     }
 
     void Reset();
+
+    /**
+     * Helper method to fetch statistics from type annotation context
+     */
+    std::shared_ptr<TOptimizerStatistics> GetStats(const TExprNode* input) {
+        return StatisticsMap.Value(input, std::shared_ptr<TOptimizerStatistics>(nullptr));
+    }
+
+    /**
+     * Helper method to set statistics in type annotation context
+     */
+    void SetStats(const TExprNode* input, std::shared_ptr<TOptimizerStatistics> stats) {
+        StatisticsMap[input] = stats;
+    }
+
+    /**
+     * Helper method to get cost from type annotation context
+     * Doesn't check if the cost is in the mapping
+     */
+    std::optional<double> GetCost(const TExprNode* input) {
+        return StatisticsMap[input]->Cost;
+    }
+
+    /**
+     * Helper method to set the cost in type annotation context
+     */
+    void SetCost(const TExprNode* input, std::optional<double> cost) {
+        StatisticsMap[input]->Cost = cost;
+    }
 };
 
 template <> inline

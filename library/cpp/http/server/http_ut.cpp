@@ -738,4 +738,122 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
             }
         }
     }
+
+    class TShooter {
+    public:
+        struct TCounters {
+        public:
+            TCounters() = default;
+            TCounters(const TCounters& other)
+                : Fail(other.Fail.load())
+                , Success(other.Success.load())
+            {
+            }
+        public:
+            std::atomic<size_t> Fail = 0;
+            std::atomic<size_t> Success = 0;
+        };
+    public:
+        TShooter(size_t threadCount, ui16 port)
+            : Counters_(threadCount)
+        {
+            for (size_t i = 0; i < threadCount; ++i) {
+                auto func = [i, port, this] () {
+                    for (;;) {
+                        try {
+                            TTestRequest r(port);
+                            r.KeepAliveConnection = true;
+                            for (;;) {
+                                if (Stopped_.load()) {
+                                    return;
+                                }
+                                r.Execute();
+                                Counters_[i].Success++;
+                            }
+                        } catch (TSystemError& e) {
+                            UNIT_ASSERT_C(e.Status() == ECONNRESET || e.Status() == ECONNREFUSED, CurrentExceptionMessage());
+                            Counters_[i].Fail++;
+                        } catch (...) {
+                            UNIT_ASSERT_C(false, CurrentExceptionMessage());
+                        }
+                    }
+                };
+
+                Threads_.push_back(SystemThreadFactory()->Run(func));
+            }
+        }
+
+        void Stop() {
+            Stopped_.store(true);
+            for (auto& thread : Threads_) {
+                thread->Join();
+            }
+        }
+
+        void WaitProgress() const {
+            auto snapshot = Counters_;
+            for (;;) {
+                size_t haveProgress = 0;
+                for (size_t i = 0; i < Counters_.size(); ++i) {
+                    haveProgress += (Counters_[i].Fail.load() + Counters_[i].Success.load()) > (snapshot[i].Fail + snapshot[i].Success);
+                }
+
+                if (haveProgress == Counters_.size()) {
+                    return;
+                }
+                Sleep(TDuration::MilliSeconds(1));
+            }
+        }
+
+        const auto& GetCounters() const {
+            return Counters_;
+        }
+
+        ~TShooter() {
+            Stop();
+        }
+    private:
+        TVector<THolder<IThreadFactory::IThread>> Threads_;
+        std::atomic<bool> Stopped_ = false;
+        TVector<TCounters> Counters_;
+    };
+
+    Y_UNIT_TEST(TestStartStop) {
+        TPortManager pm;
+        const ui16 port = pm.GetPort();
+
+        const size_t threadCount = 5;
+        TShooter shooter(threadCount, port);
+
+        TString res = TestData();
+        TEchoServer serverImpl(res);
+        THttpServer server(&serverImpl, THttpServer::TOptions(port).EnableKeepAlive(true));
+        for (size_t i = 0; i < 100; ++i) {
+            UNIT_ASSERT(server.Start());
+            shooter.WaitProgress();
+
+            {
+                auto before = shooter.GetCounters();
+                shooter.WaitProgress();
+                auto after = shooter.GetCounters();
+                for (size_t i = 0; i < before.size(); ++i) {
+                    UNIT_ASSERT(before[i].Success < after[i].Success);
+                    UNIT_ASSERT(before[i].Fail == after[i].Fail);
+                }
+            }
+
+            server.Stop();
+            shooter.WaitProgress();
+            {
+                auto before = shooter.GetCounters();
+                shooter.WaitProgress();
+                auto after = shooter.GetCounters();
+                for (size_t i = 0; i < before.size(); ++i) {
+                    UNIT_ASSERT(before[i].Success == after[i].Success);
+                    UNIT_ASSERT(before[i].Fail < after[i].Fail);
+                }
+            }
+        }
+
+    }
 }

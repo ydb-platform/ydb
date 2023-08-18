@@ -671,7 +671,7 @@ ui64 Crc(const void* buf, size_t buflen, ui64 crcinit)
 
     const ui64* ptr = (const ui64 *) ptrChar;
 
-    for(; buflen >= 8; buflen -= 8) {
+    for (; buflen >= 8; buflen -= 8) {
         ui64 val = crcinit ^ *ptr++;
 
         crcinit =

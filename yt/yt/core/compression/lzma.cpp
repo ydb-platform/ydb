@@ -159,7 +159,7 @@ void LzmaDecompress(TSource* source, TBlob* output)
 
     {
         auto result = LzmaDec_Allocate(&handle, propsBuffer, LZMA_PROPS_SIZE, &Alloc);
-        if(result != SZ_OK) {
+        if (result != SZ_OK) {
             THROW_ERROR_EXCEPTION("Lzma decompression failed: LzmaDec_Allocate returned an error")
                 << TErrorAttribute("error", result);
         }
@@ -189,7 +189,7 @@ void LzmaDecompress(TSource* source, TBlob* output)
                 &bufferSize, // It's input buffer size before call, read byte count afterwards.
                 LZMA_FINISH_ANY,
                 &status);
-            if(result != SZ_OK) {
+            if (result != SZ_OK) {
                 THROW_ERROR_EXCEPTION("Lzma decompression failed: LzmaDec_DecodeToDic returned an error")
                     << TErrorAttribute("error", result);
             }

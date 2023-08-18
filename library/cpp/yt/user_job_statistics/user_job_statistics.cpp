@@ -35,7 +35,7 @@ void TUserJobStatsProxy::Init(IOutputStream * usingStream) {
         usingStream = CorrectHandle(JobStatisticsHandle);
     }
 
-    if(usingStream == nullptr && GetEnv("YT_JOB_ID").empty()) {
+    if (usingStream == nullptr && GetEnv("YT_JOB_ID").empty()) {
         usingStream = &Cerr;
     }
 

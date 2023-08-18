@@ -204,7 +204,10 @@ def validate_test(unit, kw):
             script_rel_path = valid_kw.get('SCRIPT-REL-PATH')
             if timeout < 0:
                 raise Exception("Timeout must be > 0")
-            if size_timeout[size] < timeout and in_autocheck and script_rel_path != 'java.style':
+
+            skip_timeout_verification = script_rel_path in ('java.style', 'ktlint')
+
+            if size_timeout[size] < timeout and in_autocheck and not skip_timeout_verification:
                 suggested_size = None
                 for s, t in size_timeout.items():
                     if timeout <= t:
@@ -634,6 +637,8 @@ def onadd_check(unit, *args):
 
     if check_type in ["flake8.py2", "flake8.py3", "black"]:
         fork_mode = unit.get('TEST_FORK_MODE') or ''
+    elif check_type == "ktlint":
+        test_timeout = '120'
     elif check_type == "JAVA_STYLE":
         if ymake_java_test and not unit.get('ALL_SRCDIRS') or '':
             return

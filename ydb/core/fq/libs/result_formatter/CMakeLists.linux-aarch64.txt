@@ -18,7 +18,7 @@ target_link_libraries(fq-libs-result_formatter PUBLIC
   yutil
   library-cpp-json
   cpp-json-yson
-  ydb-core-engine
+  ydb-library-mkql_proto
   library-yql-ast
   minikql-computation-llvm
   yql-public-udf

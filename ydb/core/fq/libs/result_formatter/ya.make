@@ -7,7 +7,7 @@ SRCS(
 PEERDIR(
     library/cpp/json
     library/cpp/json/yson
-    ydb/core/engine
+    ydb/library/mkql_proto
     ydb/library/yql/ast
     ydb/library/yql/minikql/computation/llvm
     ydb/library/yql/public/udf

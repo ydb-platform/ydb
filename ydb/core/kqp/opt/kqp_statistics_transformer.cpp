@@ -1,61 +1,11 @@
 #include "kqp_statistics_transformer.h"
 #include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/dq/opt/dq_opt_stat.h>
 
 
 using namespace NYql;
 using namespace NYql::NNodes;
 using namespace NKikimr::NKqp;
-
-/**
- * For Flatmap we check the input and fetch the statistcs and cost from below
- * Then we analyze the filter predicate and compute it's selectivity and apply it
- * to the result.
-*/
-void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
-
-    auto inputNode = TExprBase(input);
-    auto flatmap = inputNode.Cast<TCoFlatMap>();
-    if (!IsPredicateFlatMap(flatmap.Lambda().Body().Ref())) {
-        return;
-    }
-
-    auto flatmapInput = flatmap.Input();
-    auto inputStats = typeCtx->GetStats(flatmapInput.Raw());
-
-    if (! inputStats ) {
-        return;
-    }
-
-    // Selectivity is the fraction of tuples that are selected by this predicate
-    // Currently we just set the number to 10% before we have statistics and parse
-    // the predicate
-    double selectivity = 0.1;
-
-    auto outputStats = TOptimizerStatistics(inputStats->Nrows * selectivity, inputStats->Ncols);
-
-    typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(outputStats) );
-    typeCtx->SetCost(input.Get(), typeCtx->GetCost(flatmapInput.Raw()));
-}
-
-/**
- * Infer statistics and costs for SkipNullMembers
- * We don't have a good idea at this time how many nulls will be discarded, so we just return the
- * input statistics.
-*/
-void InferStatisticsForSkipNullMembers(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
-
-    auto inputNode = TExprBase(input);
-    auto skipNullMembers = inputNode.Cast<TCoSkipNullMembers>();
-    auto skipNullMembersInput = skipNullMembers.Input();
-
-    auto inputStats = typeCtx->GetStats(skipNullMembersInput.Raw());
-    if (!inputStats) {
-        return;
-    }
-
-    typeCtx->SetStats( input.Get(), inputStats );
-    typeCtx->SetCost( input.Get(), typeCtx->GetCost( skipNullMembersInput.Raw() ) );
-}
 
 /**
  * Compute statistics and cost for read table
@@ -98,10 +48,10 @@ IGraphTransformer::TStatus TKqpStatisticsTransformer::DoTransform(TExprNode::TPt
         auto output = input;
 
         if (TCoFlatMap::Match(input.Get())){
-            InferStatisticsForFlatMap(input, typeCtx);
+            NDq::InferStatisticsForFlatMap(input, typeCtx);
         }
         else if(TCoSkipNullMembers::Match(input.Get())){
-            InferStatisticsForSkipNullMembers(input, typeCtx);
+            NDq::InferStatisticsForSkipNullMembers(input, typeCtx);
         }
         else if(TKqlReadTableBase::Match(input.Get()) || TKqlReadTableRangesBase::Match(input.Get())){
             InferStatisticsForReadTable(input, typeCtx);

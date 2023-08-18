@@ -19,6 +19,7 @@ SRCS(
     dq_opt_peephole.cpp
     dq_opt_phy_finalizing.cpp
     dq_opt_phy.cpp
+    dq_opt_stat.cpp
     dq_opt_join_cost_based.cpp
 )
 

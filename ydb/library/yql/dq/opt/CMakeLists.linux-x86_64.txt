@@ -32,5 +32,6 @@ target_sources(yql-dq-opt PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/opt/dq_opt_peephole.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/opt/dq_opt_phy_finalizing.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/opt/dq_opt_phy.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/opt/dq_opt_stat.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/opt/dq_opt_join_cost_based.cpp
 )

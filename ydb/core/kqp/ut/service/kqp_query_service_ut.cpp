@@ -601,6 +601,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT_STRING_CONTAINS(readyOp.Metadata().ScriptContent.Text, "SELECT 42");
 
         ValidatePlan(readyOp.Metadata().ExecStats.query_plan());
+        UNIT_ASSERT(readyOp.Metadata().ExecStats.query_ast());
     }
 
     Y_UNIT_TEST(ParseScript) {
@@ -715,6 +716,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
 
         ValidatePlan(readyOp.Metadata().ExecStats.query_plan());
+        UNIT_ASSERT(readyOp.Metadata().ExecStats.query_ast());
     }
 
     Y_UNIT_TEST(ExecuteScriptStatsBasic) {

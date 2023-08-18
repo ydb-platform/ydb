@@ -1240,6 +1240,7 @@ public:
         if (QueryState->ReportStats()) {
             if (QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
                 response->SetQueryPlan(SerializeAnalyzePlan(*stats));
+                response->SetQueryAst(QueryState->CompileResult->PreparedQuery->GetPhysicalQuery().GetQueryAst());
             }
             response->MutableQueryStats()->Swap(stats);
         }

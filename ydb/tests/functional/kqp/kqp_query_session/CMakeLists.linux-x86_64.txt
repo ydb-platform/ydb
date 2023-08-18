@@ -77,3 +77,5 @@ target_allocator(ydb-tests-functional-kqp-kqp_query_session
   libs-tcmalloc-no_percpu_cache
 )
 vcs_info(ydb-tests-functional-kqp-kqp_query_session)
+add_dependencies(ydb-tests-functional-kqp-kqp_query_session ydb_py_protos)
+

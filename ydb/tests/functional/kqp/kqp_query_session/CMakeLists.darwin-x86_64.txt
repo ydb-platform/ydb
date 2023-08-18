@@ -72,3 +72,5 @@ target_allocator(ydb-tests-functional-kqp-kqp_query_session
   system_allocator
 )
 vcs_info(ydb-tests-functional-kqp-kqp_query_session)
+add_dependencies(ydb-tests-functional-kqp-kqp_query_session ydb_py_protos)
+

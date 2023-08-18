@@ -64,3 +64,5 @@ target_allocator(ydb-tests-functional-kqp-kqp_indexes
   system_allocator
 )
 vcs_info(ydb-tests-functional-kqp-kqp_indexes)
+add_dependencies(ydb-tests-functional-kqp-kqp_indexes ydb_py_protos)
+

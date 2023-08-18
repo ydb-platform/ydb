@@ -230,7 +230,7 @@ class OutputNameGenerator:
             return self._dart_public_file_name('.dart')
 
         if output_type is OutputType.DART_CPP_HEADER:
-            return self._cpp_file_name('_dart_binding.h')
+            return self._cpp_file_name('_dart_binding.h', ['bindings', 'flutter'])
 
         if output_type is OutputType.DART_SOURCE_PRIVATE:
             return self._dart_private_file_name('.dart')
@@ -368,7 +368,6 @@ class DefaultRule(BaseRule):
             result.add(self.context.runtime_include('bindings/flutter/helper.h'))
             result.add(self.context.runtime_include('bindings/flutter/meta_type.h'))
             result.add(self.context.runtime_include('bindings/flutter/native.h'))
-            return result
 
         result.add('yandex/maps/export.h')
         result.add(self.context.runtime_include('assert.h'))
@@ -404,6 +403,7 @@ class CheckRule(BaseRule):
         ios_output_includes=set(),
         android_output_types=set(),
         android_output_includes=set(),
+        dart_output_includes=set(),
     ):
         BaseRule.__init__(self, context)
         self._output_types = output_types
@@ -412,6 +412,7 @@ class CheckRule(BaseRule):
         self._ios_output_includes = ios_output_includes
         self._android_output_types = android_output_types
         self._android_output_includes = android_output_includes
+        self._dart_output_includes = dart_output_includes
 
     def triggered_on_file(self):
         pass
@@ -440,6 +441,9 @@ class CheckRule(BaseRule):
 
             if self.context.is_android:
                 result.update(self._android_output_includes)
+
+            if self.context.is_dart:
+                result.update(self._dart_output_includes)
 
         return result
 
@@ -763,6 +767,7 @@ class IdlFileProcessor:
             output_includes={self._context.runtime_include('image/image_provider.h')},
             android_output_includes={self._context.runtime_include('image/android/image_provider_binding.h')},
             ios_output_includes={self._context.runtime_include('image/ios/image_provider_binding.h'), 'UIKit/UIKit.h'},
+            dart_output_includes={self._context.runtime_include('image/flutter/image_provider_binding.h')},
         )
 
         # animated_image_provider rule
@@ -773,6 +778,9 @@ class IdlFileProcessor:
             ios_output_includes={
                 self._context.runtime_include('image/ios/animated_image_provider_binding.h'),
                 self._context.runtime_objc_import('AnimatedImageProvider.h'),
+            },
+            dart_output_includes={
+                self._context.runtime_include('image/flutter/animated_image_provider_binding.h')
             },
         )
 
@@ -814,6 +822,9 @@ class IdlFileProcessor:
                 self._context.runtime_include('ui_view/ios/view_provider_binding.h'),
                 self._context.runtime_objc_import('ViewProvider.h'),
             },
+            dart_output_includes={
+                self._context.runtime_include('ui_view/flutter/view_provider_binding.h')
+            },
         )
 
         # platform_view rule
@@ -825,6 +836,9 @@ class IdlFileProcessor:
                 self._context.runtime_include('view/ios/to_native.h'),
                 self._context.runtime_objc_import('PlatformView_Fwd.h'),
                 self._context.runtime_objc_import('PlatformView_Private.h'),
+            },
+            dart_output_includes={
+                self._context.runtime_include('view/flutter/to_native.h')
             },
         )
 
@@ -1015,7 +1029,7 @@ def on_process_maps_mobile_idl(unit, *args):
     filter_out = kwds.get('FILTER_OUT', [])
 
     is_java_idl = unit.enabled("JAVA_IDL")
-    is_dart_idl = unit.enabled("MAPKIT_DART_IDL")
+    is_dart_idl = unit.enabled("MAPKIT_DART_IDL") and not is_java_idl
 
     outputs, output_includes = process_files(unit, idl_files)
 

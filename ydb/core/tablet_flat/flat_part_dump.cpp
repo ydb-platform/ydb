@@ -121,15 +121,15 @@ namespace {
                 break;
             }
 
-            auto iter = i == items - 1 ? part.Index.GetLastKeyRecord() : (part.Index->Begin() + i).GetRecord();
+            auto record = part.Index.At(i);
             for (const auto &info: part.Scheme->Groups[0].ColsKeyIdx)
-                Key.push_back(iter->Cell(info));
+                Key.push_back(record->Cell(info));
 
             Out
-                << " | " << (Printf(Out, " %4u", iter->GetPageId()), " ")
-                << (Printf(Out, " %6lu", iter->GetRowId()), " ");
+                << " | " << (Printf(Out, " %4u", record->GetPageId()), " ")
+                << (Printf(Out, " %6lu", record->GetRowId()), " ");
 
-            if (auto *page = Env->TryGetPage(&part, iter->GetPageId())) {
+            if (auto *page = Env->TryGetPage(&part, record->GetPageId())) {
                 Printf(Out, " %6zub  ", page->size());
             } else {
                 Out << "~none~  ";

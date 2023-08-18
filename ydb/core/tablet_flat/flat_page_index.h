@@ -270,6 +270,15 @@ namespace NPage {
             return LastKey;
         }
 
+        const TRecord* At(TRecIdx index) const noexcept
+        {
+            Y_VERIFY(index <= Page.Count);
+            auto it = Page.Begin() + index;
+            return it
+                ? it.GetRecord()
+                : GetLastKeyRecord();
+        }
+
         TRowId GetEndRowId() const noexcept
         {
             return EndRowId;

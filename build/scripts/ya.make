@@ -102,6 +102,7 @@ ELSEIF(PY3)
 
     TEST_SRCS(
         build_info_gen.py
+        copy_clang_profile_rt.py
         gen_yql_python_udf.py
     )
 ENDIF()

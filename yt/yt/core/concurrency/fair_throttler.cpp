@@ -278,7 +278,7 @@ struct TLeakyCounter
     TLeakyCounter(int windowSize, NProfiling::TGauge quotaGauge)
         : Value(std::make_shared<std::atomic<i64>>(0))
         , Window(windowSize)
-        , QuotaGauge_(std::move(quotaGauge))
+        , QuotaGauge(std::move(quotaGauge))
     { }
 
     std::shared_ptr<std::atomic<i64>> Value;
@@ -286,7 +286,7 @@ struct TLeakyCounter
     std::vector<i64> Window;
     int WindowPosition = 0;
 
-    NProfiling::TGauge QuotaGauge_;
+    NProfiling::TGauge QuotaGauge;
 
     i64 Increment(i64 delta)
     {
@@ -312,7 +312,7 @@ struct TLeakyCounter
         }
 
         *Value += delta;
-        QuotaGauge_.Update(Value->load());
+        QuotaGauge.Update(Value->load());
 
         return std::max<i64>(currentValue - maxValue, 0);
     }

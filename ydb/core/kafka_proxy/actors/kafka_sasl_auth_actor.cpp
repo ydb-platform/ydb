@@ -16,11 +16,17 @@ NActors::IActor* CreateKafkaSaslAuthActor(const TContext::TPtr context, const ui
 
 void TKafkaSaslAuthActor::Bootstrap(const NActors::TActorContext& ctx) {
     if (Context->AuthenticationStep != EAuthSteps::WAIT_AUTH) {
-        SendAuthFailedAndDie("Authentication failure. Request is not valid given the current SASL state.", EKafkaErrors::ILLEGAL_SASL_STATE, ctx);
+        SendAuthFailedAndDie(EKafkaErrors::ILLEGAL_SASL_STATE,
+                             "Request is not valid given the current SASL state.",
+                             TStringBuilder() << "Current step: " << static_cast<int>(Context->AuthenticationStep),
+                             ctx);
         return; 
     }
     if (Context->SaslMechanism != "PLAIN") {
-        SendAuthFailedAndDie("Does not support the requested SASL mechanism.", EKafkaErrors::UNSUPPORTED_SASL_MECHANISM, ctx);
+        SendAuthFailedAndDie(EKafkaErrors::UNSUPPORTED_SASL_MECHANISM, 
+                             "Does not support the requested SASL mechanism.", 
+                             TStringBuilder() << "Requested mechanism '" << Context->SaslMechanism << "'",
+                             ctx);
         return;
     }
     Become(&TKafkaSaslAuthActor::StateWork);
@@ -38,7 +44,7 @@ void TKafkaSaslAuthActor::StartPlainAuth(const NActors::TActorContext& ctx) {
 
 void TKafkaSaslAuthActor::Handle(NKikimr::TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const NActors::TActorContext& ctx) {
     if (ev->Get()->Error) {
-        SendAuthFailedAndDie(TStringBuilder() << "Authentication failure. " << ev->Get()->Error.Message, EKafkaErrors::SASL_AUTHENTICATION_FAILED, ctx);
+        SendAuthFailedAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "", ev->Get()->Error.Message, ctx);
         return;
     }
 
@@ -64,12 +70,12 @@ void TKafkaSaslAuthActor::Handle(TEvPrivate::TEvTokenReady::TPtr& ev, const NAct
 }
 
 void TKafkaSaslAuthActor::Handle(TEvPrivate::TEvAuthFailed::TPtr& ev, const NActors::TActorContext& ctx) {
-    SendAuthFailedAndDie(TStringBuilder() << "Authentication failure. " << ev->Get()->ErrorMessage, EKafkaErrors::SASL_AUTHENTICATION_FAILED, ctx);
+    SendAuthFailedAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "", ev->Get()->ErrorMessage, ctx);
 }
 
 bool TKafkaSaslAuthActor::TryParseAuthDataTo(TKafkaSaslAuthActor::TAuthData& authData, const NActors::TActorContext& ctx) {
     if (!AuthenticateRequestData->AuthBytes.has_value()) { 
-        SendAuthFailedAndDie("Authentication failure. AuthBytes is empty.", EKafkaErrors::SASL_AUTHENTICATION_FAILED, ctx);
+        SendAuthFailedAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "", "AuthBytes is empty.",  ctx);
         return false;
     }
 
@@ -77,7 +83,7 @@ bool TKafkaSaslAuthActor::TryParseAuthDataTo(TKafkaSaslAuthActor::TAuthData& aut
     TString auth(rawAuthBytes.data(), rawAuthBytes.size());
     TVector<TString> tokens = StringSplitter(auth).Split('\0');
     if (tokens.size() != 3) {
-        SendAuthFailedAndDie(TStringBuilder() << "Invalid SASL/PLAIN response: expected 3 tokens, got " << tokens.size(), EKafkaErrors::SASL_AUTHENTICATION_FAILED, ctx);
+        SendAuthFailedAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, TStringBuilder() << "Invalid SASL/PLAIN response: expected 3 tokens, got " << tokens.size(), "", ctx);
         return false;
     }
 
@@ -86,7 +92,7 @@ bool TKafkaSaslAuthActor::TryParseAuthDataTo(TKafkaSaslAuthActor::TAuthData& aut
     auto password = tokens[2];
     size_t atPos = userAndDatabase.rfind('@');
     if (atPos == TString::npos) {
-        SendAuthFailedAndDie("Authentication failure. Database not provided.", EKafkaErrors::SASL_AUTHENTICATION_FAILED, ctx);
+        SendAuthFailedAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "Database not provided.", "", ctx);
         return false;
     }
     
@@ -96,10 +102,12 @@ bool TKafkaSaslAuthActor::TryParseAuthDataTo(TKafkaSaslAuthActor::TAuthData& aut
     return true;
 }
 
-void TKafkaSaslAuthActor::SendAuthFailedAndDie(TString errorMessage, EKafkaErrors errorCode, const NActors::TActorContext& ctx) {
+void TKafkaSaslAuthActor::SendAuthFailedAndDie(EKafkaErrors errorCode, const TString& errorMessage, const TString& details, const NActors::TActorContext& ctx) {
+    KAFKA_LOG_ERROR("Authentication failure. " << errorMessage << " " << details);
+
     auto responseToClient = std::make_shared<TSaslAuthenticateResponseData>();
     responseToClient->ErrorCode = errorCode;
-    responseToClient->ErrorMessage = errorMessage; 
+    responseToClient->ErrorMessage = TStringBuilder() << "Authentication failure. " << errorMessage; 
     responseToClient->AuthBytes = TKafkaRawBytes(ERROR_AUTH_BYTES, sizeof(ERROR_AUTH_BYTES));
 
     auto evResponse = std::make_shared<TEvKafka::TEvResponse>(CorrelationId, responseToClient);

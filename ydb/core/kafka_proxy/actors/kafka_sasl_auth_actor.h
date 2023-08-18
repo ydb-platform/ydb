@@ -61,7 +61,7 @@ private:
 
     void StartPlainAuth(const NActors::TActorContext& ctx);
     void SendLoginRequest(TKafkaSaslAuthActor::TAuthData authData, const NActors::TActorContext& ctx);
-    void SendAuthFailedAndDie(TString errorMessage, EKafkaErrors errorCode, const NActors::TActorContext& ctx);
+    void SendAuthFailedAndDie(EKafkaErrors errorCode, const TString& errorMessage, const TString& details, const NActors::TActorContext& ctx);
     bool TryParseAuthDataTo(TKafkaSaslAuthActor::TAuthData& authData, const NActors::TActorContext& ctx);
 
 private:

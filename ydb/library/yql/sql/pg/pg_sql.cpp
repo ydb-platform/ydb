@@ -338,7 +338,13 @@ public:
     using TTraverseNodeStack = TStack<std::pair<const Node*, bool>>;
 
     [[nodiscard]]
-    TAstNode* ParseSelectStmt(const SelectStmt* value, bool inner, TVector <TAstNode*> targetColumns = {}, bool allowEmptyResSet = false) {
+    TAstNode* ParseSelectStmt(
+        const SelectStmt* value,
+        bool inner,
+        TVector <TAstNode*> targetColumns = {},
+        bool allowEmptyResSet = false,
+        bool emitPgStar = false
+    ) {
         CTE.emplace_back();
         Y_DEFER {
             CTE.pop_back();
@@ -420,7 +426,8 @@ public:
         }
 
         TVector<TAstNode*> setItemNodes;
-        for (const auto& x : setItems) {
+        for (size_t id = 0; id < setItems.size(); id++) {
+            const auto& x = setItems[id];
             bool hasDistinctAll = false;
             TVector<TAstNode*> distinctOnItems;
             if (x->distinctClause) {
@@ -661,6 +668,10 @@ public:
 
             TVector<TAstNode*> res;
             ui32 i = 0;
+            if (emitPgStar && id + 1 == setItems.size()) {
+                res.emplace_back(CreatePgStarResultItem());
+                i++;
+            }
             for (int targetIndex = 0; targetIndex < ListLength(x->targetList); ++targetIndex) {
                 auto node = ListNodeNth(x->targetList, targetIndex);
                 if (NodeTag(node) != T_ResTarget) {
@@ -728,7 +739,11 @@ public:
                 val.push_back(QVL(row.data(), row.size()));
             }
 
+
             TVector<TAstNode*> setItemOptions;
+            if (emitPgStar) {
+                setItemOptions.push_back(QL(QA("emit_pg_star")));
+            }
             if (targetColumns) {
                 setItemOptions.push_back(QL(QA("target_columns"), QVL(targetColumns.data(), targetColumns.size())));
             }
@@ -909,6 +924,12 @@ public:
     }
 
     [[nodiscard]]
+    TAstNode* CreatePgStarResultItem() {
+        TAstNode* starLambda = L(A("lambda"), QL(), L(A("PgStar")));
+        return L(A("PgResultItem"), QAX(""), L(A("Void")), starLambda);
+    }
+
+    [[nodiscard]]
     TAstNode* CreatePgResultItem(const ResTarget* r, TAstNode* x, ui32& columnIndex) {
         bool isStar = false;
         if (NodeTag(r->val) == T_ColumnRef) {
@@ -1056,7 +1077,13 @@ public:
             .whereClause = value->whereClause,
             .withClause = value->withClause,
         };
-        const auto select = ParseSelectStmt(&selectStmt, /* inner */ true, {}, /* allowEmptyResSet */ true);
+        const auto select = ParseSelectStmt(
+            &selectStmt,
+            /* inner */ true,
+            /* targetColumns */{},
+            /* allowEmptyResSet */ true,
+            /*emitPgStar=*/true
+        );
         if (!select) {
             return nullptr;
         }
@@ -1732,12 +1759,9 @@ public:
             }
         }
 
-        TAstNode* starLambda = L(A("lambda"), QL(), L(A("PgStar")));
-        TAstNode* resultItem = L(A("PgResultItem"), QAX(""), L(A("Void")), starLambda);
-
         TVector<TAstNode*> setItemOptions;
 
-        setItemOptions.push_back(QL(QA("result"), QVL(resultItem)));
+        setItemOptions.push_back(QL(QA("result"), QVL(CreatePgStarResultItem())));
         setItemOptions.push_back(QL(QA("from"), QVL(fromList.data(), fromList.size())));
         setItemOptions.push_back(QL(QA("join_ops"), QVL(QL())));
 

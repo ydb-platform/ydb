@@ -1676,6 +1676,148 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
+
+    Y_UNIT_TEST(PgUpdate) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        auto db = kikimr.GetQueryClient();
+        auto settings = NYdb::NQuery::TExecuteQuerySettings()
+            .Syntax(NYdb::NQuery::ESyntax::Pg);
+        {
+            auto client = kikimr.GetTableClient();
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            const auto query = Q_(R"(
+                --!syntax_pg
+                CREATE TABLE test (
+                key int4 PRIMARY KEY,
+                value int4
+                ))");
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                INSERT INTO test (key, value) VALUES (120, 120), (121, 121), (122, 122), (123, 123);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                UPDATE test SET value = 122 WHERE key = 123;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT * FROM test;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"(
+                [["120";"120"];["121";"121"];["122";"122"];["123";"122"]]
+            )", FormatResultSetYson(result.GetResultSet(0)));
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                UPDATE test SET key = key, value = 121 WHERE key = 123;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT(result.GetIssues().ToString().Contains("Cannot update primary key column: key"));
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                UPDATE test SET key = 12 WHERE key = 123;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT(result.GetIssues().ToString().Contains("Cannot update primary key column: key"));
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                UPDATE test SET value = key + 10;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {   
+            auto result = db.ExecuteQuery(R"(
+                SELECT * FROM test;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"(
+                [["120";"130"];["121";"131"];["122";"132"];["123";"133"]]
+            )", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(PgUpdateCompoundKey) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        auto db = kikimr.GetQueryClient();
+        auto settings = NYdb::NQuery::TExecuteQuerySettings()
+            .Syntax(NYdb::NQuery::ESyntax::Pg);
+        {
+            auto client = kikimr.GetTableClient();
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            const auto query = Q_(R"(
+                --!syntax_pg
+                CREATE TABLE test (
+                key1 int4,
+                key2 int4,
+                value int4,
+                primary key (key1, key2)
+                ))");
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                INSERT INTO test (key1, key2, value) VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                UPDATE test SET key1 = 1, key2 = 2, value = 2 WHERE key1 = 1;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT(result.GetIssues().ToString().Contains("Cannot update primary key column: key1"));
+            UNIT_ASSERT(result.GetIssues().ToString().Contains("Cannot update primary key column: key2"));
+        }
+        {
+            kikimr.GetTestClient().CreateTable("/Root", R"(
+                Name: "PgTwoShard"
+                Columns { Name: "key", Type: "pgint4", NotNull: true }
+                Columns { Name: "value", Type: "pgint4" }
+                KeyColumnNames: ["key"],
+                SplitBoundary { KeyPrefix { Tuple { Optional { Text: "100" } } } }
+            )");
+            auto db = kikimr.GetTableClient();  
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            auto describeResult = session.DescribeTable(
+                "/Root/PgTwoShard",
+                TDescribeTableSettings().WithTableStatistics(true).WithKeyShardBoundary(true)
+            ).GetValueSync();
+            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());   
+            UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTableDescription().GetPartitionsCount(), 2);
+        }  
+        {
+            auto result = db.ExecuteQuery(R"(
+                INSERT INTO PgTwoShard (key, value) VALUES (10, 10), (110, 110);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                UPDATE PgTwoShard SET value = key + 1;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {   
+            auto result = db.ExecuteQuery(R"(
+                SELECT * FROM PgTwoShard ORDER BY key;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"(
+                [["10";"11"];["110";"111"]]
+            )", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
 }
 
 } // namespace NKqp

@@ -6,6 +6,7 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
 
 #include <ydb/core/scheme_types/scheme_types_defs.h>
 
@@ -152,10 +153,22 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
             break;
         }
         case NScheme::NTypeIds::Pg:
-            // TODO: support pg types
-            CHECK_OR_RETURN_ERROR(false, Sprintf("Unsupported pg type at position %" PRIu32, i));
+        {
+            if (v.HasBytes()) {
+                c = TCell(v.GetBytes().data(), v.GetBytes().size());
+            } else if (v.HasText()) {
+                auto typeDesc = types[i].GetTypeDesc();            
+                auto convert = NPg::PgNativeBinaryFromNativeText(v.GetText(), NPg::PgTypeIdFromTypeDesc(typeDesc));
+                if (convert.Error) {
+                    CHECK_OR_RETURN_ERROR(false, Sprintf("Cannot parse value of type Pg: %s in tuple at position %" PRIu32, convert.Error->data(), i));
+                } else {
+                    c = TCell(convert.Str.data(), convert.Str.size());
+                }
+            } else {
+                CHECK_OR_RETURN_ERROR(false, Sprintf("Cannot parse value of type Pg in tuple at position %" PRIu32, i));
+            }
             break;
-
+        }
         default:
             CHECK_OR_RETURN_ERROR(false, Sprintf("Unsupported typeId %" PRIu16 " at index %" PRIu32, typeId, i));
             break;
@@ -257,10 +270,15 @@ bool CellToValue(NScheme::TTypeInfo type, const TCell& c, NKikimrMiniKQL::TValue
         val.MutableOptional()->SetText(c.Data(), c.Size());
         break;
 
-    case NScheme::NTypeIds::Pg:
-        // TODO: support pg types
-        errStr = "Unknown pg type";
-        return false;
+    case NScheme::NTypeIds::Pg: {
+        auto convert = NPg::PgNativeTextFromNativeBinary(TString(c.Data(), c.Size()), NPg::PgTypeIdFromTypeDesc(type.GetTypeDesc()));
+        if (convert.Error) {
+            errStr = *convert.Error;
+            return false;
+        }
+        val.MutableOptional()->SetText(convert.Str);
+        break;
+    }
 
     default:
         errStr = "Unknown type: " + ToString(typeId);

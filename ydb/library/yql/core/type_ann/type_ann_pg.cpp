@@ -1209,7 +1209,7 @@ void ScanSublinks(TExprNode::TPtr root, TNodeSet& sublinks) {
 
 bool ScanColumns(TExprNode::TPtr root, TInputs& inputs, const THashSet<TString>& possibleAliases,
     bool* hasStar, bool& hasColumnRef, THashSet<TString>& refs, THashMap<TString, THashSet<TString>>* qualifiedRefs,
-    TExtContext& ctx, bool scanColumnsOnly) {
+    TExtContext& ctx, bool scanColumnsOnly, bool hasEmitPgStar = false) {
     bool isError = false;
     VisitExpr(root, [&](const TExprNode::TPtr& node) {
         if (node->IsCallable("PgSubLink")) {
@@ -1290,7 +1290,7 @@ bool ScanColumns(TExprNode::TPtr root, TInputs& inputs, const THashSet<TString>&
                 }
             }
         } else if (node->IsCallable("PgColumnRef")) {
-            if (hasStar && *hasStar) {
+            if (hasStar && *hasStar && !hasEmitPgStar) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()), "Star is incompatible to column reference"));
                 isError = true;
                 return false;
@@ -2591,6 +2591,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
         bool hasDistinctAll = false;
         bool hasDistinctOn = false;
         bool hasFinalExtraSortColumns = false;
+        bool hasEmitPgStar = false;
         TExprNode::TPtr groupExprs;
         TExprNode::TPtr result;
         TExprNode::TPtr targetColumns;
@@ -2619,7 +2620,15 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                 }
 
                 const auto optionName = option->Head().Content();
-                if (optionName == "ext_types" || optionName == "final_ext_types") {
+                if (optionName == "emit_pg_star") {
+                    if (option->ChildrenSize() > 1) {
+                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(option->Head().Pos()),
+                            "Non-empty emit_pg_star option is not allowed"));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    hasEmitPgStar = true;
+                }
+                else if (optionName == "ext_types" || optionName == "final_ext_types") {
                     if (pass != 2) {
                         continue;
                     }
@@ -2720,6 +2729,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         }
                     }
 
+                    THashMap<TString, size_t> outputItemIndex;
                     TVector<const TItemExprType*> outputItems;
                     TExprNode::TListType newResult;
                     bool hasNewResult = false;
@@ -2807,7 +2817,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                             ScanSublinks(lambda.TailPtr(), sublinks);
 
                             if (!ScanColumns(lambda.TailPtr(), joinInputs, possibleAliases, &hasStar, hasColumnRef,
-                                refs, &qualifiedRefs, ctx, scanColumnsOnly)) {
+                                refs, &qualifiedRefs, ctx, scanColumnsOnly, hasEmitPgStar)) {
                                 return IGraphTransformer::TStatus::Error;
                             }
 
@@ -2877,7 +2887,16 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                 TStringBuf columnName = targetColumns
                                     ? targetColumns->Child(index)->Content()
                                     : column->Head().Content();
-                                outputItems.push_back(ctx.Expr.MakeType<TItemExprType>(columnName, column->Tail().GetTypeAnn()));
+                                auto itemExpr = ctx.Expr.MakeType<TItemExprType>(columnName, column->Tail().GetTypeAnn());
+                                if (hasEmitPgStar) {
+                                    if (!outputItemIndex.contains(columnName)) {
+                                        outputItemIndex.emplace(columnName, outputItems.size());
+                                        outputItems.emplace_back();
+                                    }
+                                    outputItems[outputItemIndex[columnName]] = itemExpr;
+                                } else {
+                                    outputItems.emplace_back(itemExpr);
+                                }
                             } else {
                                 // star or qualified star
                                 size_t index = 0;
@@ -2889,7 +2908,16 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                             itemRef->GetItemType()
                                         );
                                     }
-                                    outputItems.push_back(itemRef);
+                                    if (hasEmitPgStar) {
+                                        const auto& name = itemRef->GetName();
+                                        if (!outputItemIndex.contains(name)) {
+                                            outputItemIndex.emplace(name, outputItems.size());
+                                            outputItems.emplace_back();
+                                        }
+                                        outputItems[outputItemIndex[name]] = itemRef;
+                                    } else {
+                                        outputItems.emplace_back(itemRef);
+                                    }
                                 }
                             }
 

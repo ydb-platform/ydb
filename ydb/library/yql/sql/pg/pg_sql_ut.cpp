@@ -408,17 +408,27 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
 
     Y_UNIT_TEST(UpdateStmt) {
         auto res = PgSqlToYql("UPDATE plato.Input SET kind = 'test' where kind = 'testtest'");
+        Cerr << res.Root->ToString();
         TString updateStmtProg = R"(
             (
                 (let world (Configure! world (DataSource 'config) 'OrderedColumns))
                 (let read0 (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"input"))) (Void) '()))
                 (let world (Left! read0))
-                (let world (block '(
-                  (let update_select (PgSelect '('('set_items '((PgSetItem '('('result '((PgResultItem '"kind" (Void) (lambda '() (PgConst '"test" (PgType 'text)))))) '('from '('((Right! read0) '"input" '()))) '('join_ops '('())) '('where (PgWhere (Void) (lambda '() (PgOp '"=" (PgColumnRef '"kind") (PgConst '"testtest" (PgType 'text)))))))))) '('set_ops '('push)))))
-                  (let sink (DataSink '"yt" '"plato"))
-                  (let key (Key '('table (String '"input"))))
-                  (return (Write! world sink key (Void) '('('pg_update update_select) '('mode 'update))))
-                )))
+                (let world (block '((let update_select
+                (PgSelect '(
+                    '('set_items '((PgSetItem
+                        '('('emit_pg_star)
+                        '('result '((PgResultItem '"" (Void) (lambda '() (PgStar)))
+                            (PgResultItem '"kind" (Void) (lambda '() (PgConst '"test" (PgType 'text))))))
+                        '('from '('((Right! read0) '"input" '())))
+                        '('join_ops '('()))
+                        '('where (PgWhere (Void) (lambda '() (PgOp '"=" (PgColumnRef '"kind") (PgConst '"testtest" (PgType 'text))))))))))
+                        '('set_ops '('push)))
+                    )
+                )
+                (let sink (DataSink '"yt" '"plato"))
+                (let key (Key '('table (String '"input"))))
+                (return (Write! world sink key (Void) '('('pg_update update_select) '('mode 'update)))))))
                 (let world (CommitAll! world))
                 (return world)
             )

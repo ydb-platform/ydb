@@ -49,13 +49,16 @@ IGraphTransformer::TStatus OrderForPgSetItem(const TExprNode::TPtr& node, TExprN
         }
     } else {
         auto result = GetSetting(node->Tail(), "result");
+        auto emitPgStar = GetSetting(node->Tail(), "emit_pg_star");
         if (result) {
             for (size_t i = 0; i < result->Tail().ChildrenSize(); i++) {
                 auto col = result->Tail().Child(i);
                 if (col->Head().IsAtom()) {
                     auto alias = TString(col->Head().Content());
                     YQL_ENSURE(!alias.empty());
-                    columnOrder.push_back(alias);
+                    if (!emitPgStar) {
+                        columnOrder.push_back(alias);
+                    }
                 }
                 else {
                     YQL_ENSURE(col->Head().IsList());

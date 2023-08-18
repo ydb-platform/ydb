@@ -208,18 +208,20 @@ private:
                         << "INSERT OR IGNORE is not yet supported for Kikimr."));
                     return TStatus::Error;
                 } else if (mode == "update") {
-                    if (!settings.Filter) {
-                        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Filter option is required for table update."));
-                        return TStatus::Error;
-                    }
-                    if (!settings.Update) {
-                        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Update option is required for table update."));
-                        return TStatus::Error;
+                    if (!settings.PgFilter) {
+                        if (!settings.Filter) {
+                            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Filter option is required for table update."));
+                            return TStatus::Error;
+                        }
+                        if (!settings.Update) {
+                            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Update option is required for table update."));
+                            return TStatus::Error;
+                        }
                     }
                     SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
                     return TStatus::Ok;
                 } else if (mode == "delete") {
-                    if (!settings.PgDelete && !settings.Filter) {
+                    if (!settings.Filter && !settings.PgFilter) {
                         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Filter option is required for table delete."));
                         return TStatus::Error;
                     }
@@ -569,18 +571,32 @@ public:
                 if (mode == "drop") {
                     return MakeKiDropTable(node, settings, key, ctx);
                 } else if (mode == "update") {
-                    YQL_ENSURE(settings.Filter);
-                    YQL_ENSURE(settings.Update);
-                    return Build<TKiUpdateTable>(ctx, node->Pos())
-                        .World(node->Child(0))
-                        .DataSink(node->Child(1))
-                        .Table().Build(key.GetTablePath())
-                        .Filter(settings.Filter.Cast())
-                        .Update(settings.Update.Cast())
-                        .Done()
-                        .Ptr();
+                    if (settings.Filter) {
+                        YQL_ENSURE(settings.Update);
+                        return Build<TKiUpdateTable>(ctx, node->Pos())
+                            .World(node->Child(0))
+                            .DataSink(node->Child(1))
+                            .Table().Build(key.GetTablePath())
+                            .Filter(settings.Filter.Cast())
+                            .Update(settings.Update.Cast())
+                            .Done()
+                            .Ptr();
+                    } else {
+                        YQL_ENSURE(settings.PgFilter);
+                        return Build<TKiWriteTable>(ctx, node->Pos())
+                            .World(node->Child(0))
+                            .DataSink(node->Child(1))
+                            .Table().Build(key.GetTablePath())
+                            .Input(settings.PgFilter.Cast())
+                            .Mode()
+                                .Value("update_on")
+                            .Build()
+                            .Settings(settings.Other)
+                            .Done()
+                            .Ptr();
+                    }
                 } else if (mode == "delete") {
-                    YQL_ENSURE(settings.Filter || settings.PgDelete);
+                    YQL_ENSURE(settings.Filter || settings.PgFilter);
                     if (settings.Filter) {
                         return Build<TKiDeleteTable>(ctx, node->Pos())
                             .World(node->Child(0))
@@ -594,7 +610,7 @@ public:
                             .World(node->Child(0))
                             .DataSink(node->Child(1))
                             .Table().Build(key.GetTablePath())
-                            .Input(settings.PgDelete.Cast())
+                            .Input(settings.PgFilter.Cast())
                             .Mode()
                                 .Value("delete_on")
                             .Build()

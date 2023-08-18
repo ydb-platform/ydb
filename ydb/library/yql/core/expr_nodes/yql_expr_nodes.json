@@ -2367,6 +2367,33 @@
             "Name": "TCoWideFromBlocks",
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "WideFromBlocks"}
+        },
+
+        {
+            "Name": "TCoPgSelect",
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "PgSelect"},
+            "Children": [
+                {"Index": 0, "Name": "SelectOptions", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
+            "Name": "TCoPgSetItem",
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "PgSetItem"},
+            "Children": [
+                {"Index": 0, "Name": "SetItemOptions", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
+            "Name": "TCoPgResultItem",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "PgResultItem"},
+            "Children": [
+                {"Index": 0, "Name": "ExpandedColumns", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Type", "Type": "TCallable"},
+                {"Index": 2, "Name": "Lambda", "Type": "TCoLambda"}
+            ]
         }
     ]
 }

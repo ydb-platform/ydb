@@ -8,7 +8,6 @@
 #define BOOST_LOCALE_IMPL_UCONV_CODEPAGE_HPP
 #include <boost/locale/encoding.hpp>
 #include <boost/locale/hold_ptr.hpp>
-#include "boost/locale/encoding/conv.hpp"
 #include "boost/locale/icu/icu_util.hpp"
 #include "boost/locale/icu/uconv.hpp"
 #include <unicode/ucnv.h>
@@ -16,32 +15,23 @@
 
 namespace boost { namespace locale { namespace conv { namespace impl {
     template<typename CharType>
-    class uconv_to_utf : public converter_to_utf<CharType> {
+    class uconv_to_utf final : public detail::utf_encoder<CharType> {
     public:
-        typedef CharType char_type;
-
-        typedef std::basic_string<char_type> string_type;
-
-        bool open(const char* charset, method_type how) override
+        bool open(const std::string& charset, method_type how)
         {
-            close();
             try {
                 using impl_icu::cpcvt_type;
                 cvt_from_.reset(new from_type(charset, how == skip ? cpcvt_type::skip : cpcvt_type::stop));
                 cvt_to_.reset(new to_type("UTF-8", how == skip ? cpcvt_type::skip : cpcvt_type::stop));
             } catch(const std::exception& /*e*/) {
-                close();
+                cvt_from_.reset();
+                cvt_to_.reset();
                 return false;
             }
             return true;
         }
-        void close()
-        {
-            cvt_from_.reset();
-            cvt_to_.reset();
-        }
 
-        string_type convert(const char* begin, const char* end) override
+        std::basic_string<CharType> convert(const char* begin, const char* end) override
         {
             try {
                 return cvt_to_->std(cvt_from_->icu_checked(begin, end));
@@ -59,26 +49,20 @@ namespace boost { namespace locale { namespace conv { namespace impl {
     };
 
     template<typename CharType>
-    class uconv_from_utf : public converter_from_utf<CharType> {
+    class uconv_from_utf final : public detail::utf_decoder<CharType> {
     public:
-        typedef CharType char_type;
-        bool open(const char* charset, method_type how) override
+        bool open(const std::string& charset, method_type how)
         {
-            close();
             try {
                 using impl_icu::cpcvt_type;
                 cvt_from_.reset(new from_type("UTF-8", how == skip ? cpcvt_type::skip : cpcvt_type::stop));
                 cvt_to_.reset(new to_type(charset, how == skip ? cpcvt_type::skip : cpcvt_type::stop));
             } catch(const std::exception& /*e*/) {
-                close();
+                cvt_from_.reset();
+                cvt_to_.reset();
                 return false;
             }
             return true;
-        }
-        void close()
-        {
-            cvt_from_.reset();
-            cvt_to_.reset();
         }
 
         std::string convert(const CharType* begin, const CharType* end) override
@@ -98,25 +82,20 @@ namespace boost { namespace locale { namespace conv { namespace impl {
         hold_ptr<to_type> cvt_to_;
     };
 
-    class uconv_between : public converter_between {
+    class uconv_between final : public detail::narrow_converter {
     public:
-        bool open(const char* to_charset, const char* from_charset, method_type how) override
+        bool open(const std::string& to_charset, const std::string& from_charset, method_type how)
         {
-            close();
             try {
                 using impl_icu::cpcvt_type;
                 cvt_from_.reset(new from_type(from_charset, how == skip ? cpcvt_type::skip : cpcvt_type::stop));
                 cvt_to_.reset(new to_type(to_charset, how == skip ? cpcvt_type::skip : cpcvt_type::stop));
             } catch(const std::exception& /*e*/) {
-                close();
+                cvt_from_.reset();
+                cvt_to_.reset();
                 return false;
             }
             return true;
-        }
-        void close()
-        {
-            cvt_from_.reset();
-            cvt_to_.reset();
         }
 
         std::string convert(const char* begin, const char* end) override

@@ -1,5 +1,6 @@
 //
 // Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
+// Copyright (c) 2022-2023 Alexander Grund
 //
 // Distributed under the Boost Software License, Version 1.0.
 // https://www.boost.org/LICENSE_1_0.txt
@@ -9,21 +10,66 @@
 #include <boost/locale/localization_backend.hpp>
 #include <boost/locale/util.hpp>
 #include <boost/locale/util/locale_data.hpp>
+#include <boost/assert.hpp>
+#include <boost/core/ignore_unused.hpp>
 #include <algorithm>
 #include <iterator>
 #include <vector>
 
-#if defined(BOOST_WINDOWS)
+#if BOOST_LOCALE_USE_WIN32_API
 #    ifndef NOMINMAX
 #        define NOMINMAX
 #    endif
-#    include "boost/locale/encoding/conv.hpp"
-#    include "boost/locale/util/encoding.hpp"
 #    include "boost/locale/win32/lcid.hpp"
 #    include <windows.h>
 #endif
 #include "boost/locale/std/all_generator.hpp"
+#include "boost/locale/util/encoding.hpp"
 #include "boost/locale/util/gregorian.hpp"
+#include "boost/locale/util/make_std_unique.hpp"
+#include "boost/locale/util/numeric.hpp"
+
+namespace {
+struct windows_name {
+    std::string name, codepage;
+    explicit operator bool() const { return !name.empty() && !codepage.empty(); }
+};
+
+windows_name to_windows_name(const std::string& l)
+{
+#if BOOST_LOCALE_USE_WIN32_API
+    windows_name res;
+    const unsigned lcid = boost::locale::impl_win::locale_to_lcid(l);
+    char win_lang[256]{};
+    if(lcid == 0 || GetLocaleInfoA(lcid, LOCALE_SENGLANGUAGE, win_lang, sizeof(win_lang)) == 0)
+        return res;
+    res.name = win_lang;
+    char win_country[256]{};
+    if(GetLocaleInfoA(lcid, LOCALE_SENGCOUNTRY, win_country, sizeof(win_country)) != 0) {
+        res.name += "_";
+        res.name += win_country;
+    }
+
+    char win_codepage[10]{};
+    if(GetLocaleInfoA(lcid, LOCALE_IDEFAULTANSICODEPAGE, win_codepage, sizeof(win_codepage)) != 0)
+        res.codepage = win_codepage;
+    return res;
+#else
+    boost::ignore_unused(l);
+    return {};
+#endif
+}
+
+bool loadable(const std::string& name)
+{
+    try {
+        std::locale l(name);
+        return true;
+    } catch(const std::exception&) {
+        return false;
+    }
+}
+} // namespace
 
 namespace boost { namespace locale { namespace impl_std {
 
@@ -69,77 +115,54 @@ namespace boost { namespace locale { namespace impl_std {
             }
             in_use_id_ = lid;
             data_.parse(lid);
-            name_ = "C";
 
-#if defined(BOOST_WINDOWS)
-            const std::pair<std::string, int> wl_inf = to_windows_name(lid);
-            const std::string& win_name = wl_inf.first;
-            const int win_codepage = wl_inf.second;
-#endif
+            const auto l_win = to_windows_name(lid);
 
             if(!data_.is_utf8()) {
+                utf_mode_ = utf8_support::none;
                 if(loadable(lid))
                     name_ = lid;
-#if defined(BOOST_WINDOWS)
-                else if(loadable(win_name) && win_codepage == util::encoding_to_windows_codepage(data_.encoding()))
-                    name_ = win_name;
-#endif
-                utf_mode_ = utf8_support::none;
+                else if(l_win && loadable(l_win.name)) {
+                    if(util::are_encodings_equal(l_win.codepage, data_.encoding()))
+                        name_ = l_win.name;
+                    else {
+                        int codepage_int;
+                        if(util::try_to_int(l_win.codepage, codepage_int)
+                           && codepage_int == util::encoding_to_windows_codepage(data_.encoding()))
+                        {
+                            name_ = l_win.name;
+                        } else
+                            name_ = "C";
+                    }
+                } else
+                    name_ = "C";
             } else {
                 if(loadable(lid)) {
                     name_ = lid;
-                    utf_mode_ = utf8_support::native_with_wide;
-#if defined(BOOST_WINDOWS)
-                    // This isn't fully correct:
-                    // It will treat the 2-Byte wchar_t as UTF-16 encoded while it may be UCS-2
-                    // std::basic_filebuf explicitely disallows using suche multi-byte codecvts
-                    // but it works in practice so far, so use it instead of failing for codepoints above U+FFFF
+                    utf_mode_ = utf8_support::native;
+                } else {
+                    std::vector<std::string> alt_names;
+                    if(l_win)
+                        alt_names.push_back(l_win.name);
+                    // Try different spellings
+                    alt_names.push_back(util::locale_data(data_).encoding("UTF-8").to_string());
+                    alt_names.push_back(util::locale_data(data_).encoding("utf8", false).to_string());
+                    // Without encoding, let from_wide classes handle it
+                    alt_names.push_back(util::locale_data(data_).encoding("").to_string());
+                    // Final try: Classic locale, but enable Unicode (if supported)
+                    alt_names.push_back("C.UTF-8");
+                    alt_names.push_back("C.utf8");
+                    // If everything fails rely on the classic locale
+                    alt_names.push_back("C");
+                    for(const std::string& name : alt_names) {
+                        if(loadable(name)) {
+                            name_ = name;
+                            break;
+                        }
+                    }
+                    BOOST_ASSERT(!name_.empty());
                     utf_mode_ = utf8_support::from_wide;
-#endif
                 }
-#if defined(BOOST_WINDOWS)
-                else if(loadable(win_name))
-                {
-                    name_ = win_name;
-                    utf_mode_ = utf8_support::from_wide;
-                }
-#endif
-                else
-                    utf_mode_ = utf8_support::none;
-            }
-        }
-
-#if defined(BOOST_WINDOWS)
-        std::pair<std::string, int> to_windows_name(const std::string& l)
-        {
-            std::pair<std::string, int> res("C", 0);
-            unsigned lcid = impl_win::locale_to_lcid(l);
-            char win_lang[256] = {0};
-            char win_country[256] = {0};
-            char win_codepage[10] = {0};
-            if(GetLocaleInfoA(lcid, LOCALE_SENGLANGUAGE, win_lang, sizeof(win_lang)) == 0)
-                return res;
-            std::string lc_name = win_lang;
-            if(GetLocaleInfoA(lcid, LOCALE_SENGCOUNTRY, win_country, sizeof(win_country)) != 0) {
-                lc_name += "_";
-                lc_name += win_country;
-            }
-
-            res.first = lc_name;
-
-            if(GetLocaleInfoA(lcid, LOCALE_IDEFAULTANSICODEPAGE, win_codepage, sizeof(win_codepage)) != 0)
-                res.second = atoi(win_codepage);
-            return res;
-        }
-#endif
-
-        bool loadable(std::string name)
-        {
-            try {
-                std::locale l(name.c_str());
-                return true;
-            } catch(const std::exception& /*e*/) {
-                return false;
             }
         }
 
@@ -200,9 +223,9 @@ namespace boost { namespace locale { namespace impl_std {
         bool use_ansi_encoding_;
     };
 
-    localization_backend* create_localization_backend()
+    std::unique_ptr<localization_backend> create_localization_backend()
     {
-        return new std_localization_backend();
+        return make_std_unique<std_localization_backend>();
     }
 
 }}} // namespace boost::locale::impl_std

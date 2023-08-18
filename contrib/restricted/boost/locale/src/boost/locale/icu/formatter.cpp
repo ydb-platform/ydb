@@ -1,6 +1,6 @@
 //
 // Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
-// Copyright (c) 2021-2022 Alexander Grund
+// Copyright (c) 2021-2023 Alexander Grund
 //
 // Distributed under the Boost Software License, Version 1.0.
 // https://www.boost.org/LICENSE_1_0.txt
@@ -12,8 +12,13 @@
 #include "boost/locale/icu/icu_util.hpp"
 #include "boost/locale/icu/time_zone.hpp"
 #include "boost/locale/icu/uconv.hpp"
+#include "boost/locale/util/foreach_char.hpp"
 #include <limits>
 #include <memory>
+#ifdef BOOST_MSVC
+#    pragma warning(push)
+#    pragma warning(disable : 4251) // "identifier" : class "type" needs to have dll-interface...
+#endif
 #include <unicode/datefmt.h>
 #include <unicode/decimfmt.h>
 #include <unicode/numfmt.h>
@@ -21,6 +26,7 @@
 #include <unicode/smpdtfmt.h>
 
 #ifdef BOOST_MSVC
+#    pragma warning(pop)
 #    pragma warning(disable : 4244) // lose data
 #endif
 
@@ -36,18 +42,16 @@ namespace boost { namespace locale { namespace impl_icu {
                 precision += nf.getMaximumIntegerDigits();
 #endif
             nf.setMaximumFractionDigits(precision);
-            if(how == std::ios_base::scientific || how == std::ios_base::fixed) {
+            if(how == std::ios_base::scientific || how == std::ios_base::fixed)
                 nf.setMinimumFractionDigits(precision);
-            } else {
+            else
                 nf.setMinimumFractionDigits(0);
-            }
         }
     } // namespace
 
     template<typename CharType>
     class number_format : public formatter<CharType> {
     public:
-        typedef CharType char_type;
         typedef std::basic_string<CharType> string_type;
 
         number_format(icu::NumberFormat& fmt, std::string codepage) : cvt_(codepage), icu_fmt_(fmt) {}
@@ -123,7 +127,6 @@ namespace boost { namespace locale { namespace impl_icu {
     template<typename CharType>
     class date_format : public formatter<CharType> {
     public:
-        typedef CharType char_type;
         typedef std::basic_string<CharType> string_type;
 
         string_type format(double value, size_t& code_points) const override { return do_format(value, code_points); }
@@ -171,7 +174,7 @@ namespace boost { namespace locale { namespace impl_icu {
 
         string_type do_format(double value, size_t& codepoints) const
         {
-            UDate date = value * 1000.0; /// UDate is time_t in milliseconds
+            UDate date = value * 1000.0; // UDate is time_t in milliseconds
             icu::UnicodeString tmp;
             icu_fmt_.format(date, tmp);
             codepoints = tmp.countChar32();
@@ -270,9 +273,9 @@ namespace boost { namespace locale { namespace impl_icu {
                     escaped = false;
                 }
                 result += strftime_symbol_to_icu(c, cache);
-            } else if(c == '\'') {
+            } else if(c == '\'')
                 result += "''";
-            } else {
+            else {
                 if(!escaped) {
                     result += "'";
                     escaped = true;
@@ -374,7 +377,7 @@ namespace boost { namespace locale { namespace impl_icu {
             case strftime: {
                 using namespace flags;
                 std::unique_ptr<icu::DateFormat> new_df;
-                icu::DateFormat* df = 0;
+                icu::DateFormat* df = nullptr;
                 // try to use cached first
                 {
                     icu::SimpleDateFormat* sdf = cache.date_formatter();
@@ -389,7 +392,7 @@ namespace boost { namespace locale { namespace impl_icu {
                                 break;
                             case strftime: {
                                 icu_std_converter<CharType> cvt_(encoding);
-                                const std::basic_string<CharType>& f = info.date_time_pattern<CharType>();
+                                const std::basic_string<CharType> f = info.date_time_pattern<CharType>();
                                 pattern = strftime_to_icu(cvt_.icu(f.c_str(), f.c_str() + f.size()), locale);
                             } break;
                         }
@@ -418,7 +421,7 @@ namespace boost { namespace locale { namespace impl_icu {
                             break;
                         case strftime: {
                             icu_std_converter<CharType> cvt_(encoding);
-                            const std::basic_string<CharType>& f = info.date_time_pattern<CharType>();
+                            const std::basic_string<CharType> f = info.date_time_pattern<CharType>();
                             icu::UnicodeString pattern =
                               strftime_to_icu(cvt_.icu(f.data(), f.data() + f.size()), locale);
                             UErrorCode err = U_ZERO_ERROR;
@@ -444,16 +447,9 @@ namespace boost { namespace locale { namespace impl_icu {
         return nullptr; // LCOV_EXCL_LINE
     }
 
-    template class formatter<char>;
-    template class formatter<wchar_t>;
+#define BOOST_LOCALE_INSTANTIATE(CHAR) template class formatter<CHAR>;
+    BOOST_LOCALE_FOREACH_CHAR(BOOST_LOCALE_INSTANTIATE)
 
-#ifdef BOOST_LOCALE_ENABLE_CHAR16_T
-    template class formatter<char16_t>;
-#endif
-
-#ifdef BOOST_LOCALE_ENABLE_CHAR32_T
-    template class formatter<char32_t>;
-#endif
 }}} // namespace boost::locale::impl_icu
 
 // boostinspect:nominmax

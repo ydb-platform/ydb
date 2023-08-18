@@ -7,12 +7,12 @@
 
 #include <boost/locale/boundary.hpp>
 #include <boost/locale/generator.hpp>
-#include "boost/locale//util/encoding.hpp"
 #include "boost/locale/icu/all_generator.hpp"
 #include "boost/locale/icu/cdata.hpp"
 #include "boost/locale/icu/icu_util.hpp"
 #include "boost/locale/icu/uconv.hpp"
-#if BOOST_LOCALE_ICU_VERSION >= 306
+#include "boost/locale/util/encoding.hpp"
+#if BOOST_LOCALE_ICU_VERSION >= 5502
 #    include <unicode/utext.h>
 #endif
 #include <memory>
@@ -23,6 +23,16 @@
 #ifdef BOOST_MSVC
 #    pragma warning(disable : 4244) // 'argument' : conversion from 'int'
 #    pragma warning(disable : 4267) // 'argument' : conversion from 'size_t'
+#endif
+
+#if BOOST_LOCALE_ICU_VERSION >= 5502
+namespace std {
+template<>
+struct default_delete<UText> {
+    using pointer = UText*;
+    void operator()(pointer ptr) { utext_close(ptr); }
+};
+} // namespace std
 #endif
 
 namespace boost { namespace locale {
@@ -45,12 +55,8 @@ namespace boost { namespace locale {
             int pos = 0;
             while((pos = it->next()) != icu::BreakIterator::DONE) {
                 indx.push_back(break_info(pos));
-                /// Character does not have any specific break types
+                // Character does not have any specific break types
                 if(t != character && rbbi) {
-                    //
-                    // There is a collapse for MSVC: int32_t defined by both boost::cstdint and icu...
-                    // So need to pick one ;(
-                    //
                     std::vector<int32_t> buffer;
                     int32_t membuf[8] = {0}; // try not to use memory allocation if possible
                     int32_t* buf = membuf;
@@ -59,8 +65,8 @@ namespace boost { namespace locale {
                     int n = rbbi->getRuleStatusVec(buf, 8, err);
 
                     if(err == U_BUFFER_OVERFLOW_ERROR) {
-                        buf = &buffer.front();
                         buffer.resize(n, 0);
+                        buf = buffer.data();
                         n = rbbi->getRuleStatusVec(buf, buffer.size(), err);
                     }
 
@@ -97,9 +103,8 @@ namespace boost { namespace locale {
                             case character: BOOST_UNREACHABLE_RETURN(0);
                         }
                     }
-                } else {
-                    indx.back().rule |= character_any; // Baisc mark... for character
-                }
+                } else
+                    indx.back().rule |= character_any; // Basic mark... for character
             }
             return indx;
         }
@@ -127,52 +132,45 @@ namespace boost { namespace locale {
                           const icu::Locale& loc,
                           const std::string& encoding)
         {
-            index_type indx;
             std::unique_ptr<icu::BreakIterator> bi = get_iterator(t, loc);
-
-#if BOOST_LOCALE_ICU_VERSION >= 306
+            // Versions prior to ICU 55.2 returned wrong splits when used with UText input
+#if BOOST_LOCALE_ICU_VERSION >= 5502
             UErrorCode err = U_ZERO_ERROR;
             BOOST_LOCALE_START_CONST_CONDITION
             if(sizeof(CharType) == 2 || (sizeof(CharType) == 1 && util::normalize_encoding(encoding) == "utf8")) {
-                UText* ut = 0;
-                try {
-                    if(sizeof(CharType) == 1)
-                        ut = utext_openUTF8(0, reinterpret_cast<const char*>(begin), end - begin, &err);
-                    else // sizeof(CharType)==2
-                        ut = utext_openUChars(0, reinterpret_cast<const UChar*>(begin), end - begin, &err);
-                    BOOST_LOCALE_END_CONST_CONDITION
-
-                    check_and_throw_icu_error(err);
-                    err = U_ZERO_ERROR;
-                    if(!ut)
-                        throw std::runtime_error("Failed to create UText");
-                    bi->setText(ut, err);
-                    check_and_throw_icu_error(err);
-                    index_type res = map_direct(t, bi.get(), end - begin);
-                    indx.swap(res);
-                } catch(...) {
-                    if(ut)
-                        utext_close(ut);
-                    throw;
+                UText ut_stack = UTEXT_INITIALIZER;
+                std::unique_ptr<UText> ut;
+                if(sizeof(CharType) == 1)
+                    ut.reset(utext_openUTF8(&ut_stack, reinterpret_cast<const char*>(begin), end - begin, &err));
+                else {
+                    static_assert(sizeof(UChar) == 2, "!");
+                    ut.reset(utext_openUChars(&ut_stack, reinterpret_cast<const UChar*>(begin), end - begin, &err));
                 }
-                if(ut)
-                    utext_close(ut);
+                BOOST_LOCALE_END_CONST_CONDITION
+
+                check_and_throw_icu_error(err);
+                err = U_ZERO_ERROR;
+                if(!ut)
+                    throw std::runtime_error("Failed to create UText");
+                bi->setText(ut.get(), err);
+                check_and_throw_icu_error(err);
+                return map_direct(t, bi.get(), end - begin);
             } else
 #endif
             {
                 icu_std_converter<CharType> cvt(encoding);
-                icu::UnicodeString str = cvt.icu(begin, end);
+                const icu::UnicodeString str = cvt.icu(begin, end);
                 bi->setText(str);
-                index_type indirect = map_direct(t, bi.get(), str.length());
-                indx = indirect;
+                const index_type indirect = map_direct(t, bi.get(), str.length());
+                index_type indx = indirect;
                 for(size_t i = 1; i < indirect.size(); i++) {
-                    size_t offset_inderect = indirect[i - 1].offset;
-                    size_t diff = indirect[i].offset - offset_inderect;
-                    size_t offset_direct = indx[i - 1].offset;
-                    indx[i].offset = offset_direct + cvt.cut(str, begin, end, diff, offset_inderect, offset_direct);
+                    const size_t offset_indirect = indirect[i - 1].offset;
+                    const size_t diff = indirect[i].offset - offset_indirect;
+                    const size_t offset_direct = indx[i - 1].offset;
+                    indx[i].offset = offset_direct + cvt.cut(str, begin, end, diff, offset_indirect, offset_direct);
                 }
+                return indx;
             }
-            return indx;
         } // do_map
 
         template<typename CharType>

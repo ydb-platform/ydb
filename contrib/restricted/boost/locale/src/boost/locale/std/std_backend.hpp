@@ -6,10 +6,14 @@
 
 #ifndef BOOST_LOCALE_IMPL_STD_LOCALIZATION_BACKEND_HPP
 #define BOOST_LOCALE_IMPL_STD_LOCALIZATION_BACKEND_HPP
+
+#include <boost/locale/config.hpp>
+#include <memory>
+
 namespace boost { namespace locale {
     class localization_backend;
     namespace impl_std {
-        localization_backend* create_localization_backend();
+        std::unique_ptr<localization_backend> create_localization_backend();
     } // namespace impl_std
 }}    // namespace boost::locale
 #endif

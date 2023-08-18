@@ -8,7 +8,7 @@
 #define BOOST_LOCALE_GENERATOR_HPP
 
 #include <boost/locale/hold_ptr.hpp>
-#include <boost/cstdint.hpp>
+#include <cstdint>
 #include <locale>
 #include <memory>
 #include <string>
@@ -181,12 +181,6 @@ namespace locale {
         std::locale generate(const std::locale& base, const std::string& id) const;
         /// Shortcut to generate(id)
         std::locale operator()(const std::string& id) const { return generate(id); }
-
-        /// Set backend specific option
-        void set_option(const std::string& name, const std::string& value);
-
-        /// Clear backend specific options
-        void clear_options();
 
     private:
         void set_all_options(localization_backend& backend, const std::string& id) const;

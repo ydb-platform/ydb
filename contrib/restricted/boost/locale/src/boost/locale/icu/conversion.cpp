@@ -44,23 +44,22 @@ namespace boost { namespace locale { namespace impl_icu {
     template<typename CharType>
     class converter_impl : public converter<CharType> {
     public:
-        typedef CharType char_type;
-        typedef std::basic_string<char_type> string_type;
+        typedef std::basic_string<CharType> string_type;
 
         converter_impl(const cdata& d) : locale_(d.locale), encoding_(d.encoding) {}
 
         string_type convert(converter_base::conversion_type how,
-                            const char_type* begin,
-                            const char_type* end,
+                            const CharType* begin,
+                            const CharType* end,
                             int flags = 0) const override
         {
-            icu_std_converter<char_type> cvt(encoding_);
+            icu_std_converter<CharType> cvt(encoding_);
             icu::UnicodeString str = cvt.icu(begin, end);
             switch(how) {
                 case converter_base::normalization: normalize_string(str, flags); break;
                 case converter_base::upper_case: str.toUpper(locale_); break;
                 case converter_base::lower_case: str.toLower(locale_); break;
-                case converter_base::title_case: str.toTitle(0, locale_); break;
+                case converter_base::title_case: str.toTitle(nullptr, locale_); break;
                 case converter_base::case_folding: str.foldCase(); break;
             }
             return cvt.std(str);
@@ -85,7 +84,7 @@ namespace boost { namespace locale { namespace impl_icu {
         raii_casemap(const raii_casemap&) = delete;
         void operator=(const raii_casemap&) = delete;
 
-        raii_casemap(const std::string& locale_id) : map_(0)
+        raii_casemap(const std::string& locale_id) : map_(nullptr)
         {
             UErrorCode err = U_ZERO_ERROR;
             map_ = ucasemap_open(locale_id.c_str(), 0, &err);
@@ -105,7 +104,7 @@ namespace boost { namespace locale { namespace impl_icu {
             std::vector<char> buf(max_converted_size);
             UErrorCode err = U_ZERO_ERROR;
             auto size = func(map_,
-                             &buf.front(),
+                             buf.data(),
                              static_cast<size_type>(buf.size()),
                              begin,
                              static_cast<size_type>(end - begin),
@@ -114,14 +113,14 @@ namespace boost { namespace locale { namespace impl_icu {
                 err = U_ZERO_ERROR;
                 buf.resize(size + 1);
                 size = func(map_,
-                            &buf.front(),
+                            buf.data(),
                             static_cast<size_type>(buf.size()),
                             begin,
                             static_cast<size_type>(end - begin),
                             &err);
             }
             check_and_throw_icu_error(err);
-            return std::string(&buf.front(), size);
+            return std::string(buf.data(), size);
         }
         ~raii_casemap() { ucasemap_close(map_); }
 

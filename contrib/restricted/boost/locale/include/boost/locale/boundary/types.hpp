@@ -8,7 +8,7 @@
 #define BOOST_LOCALE_BOUNDARY_TYPES_HPP_INCLUDED
 
 #include <boost/locale/config.hpp>
-#include <boost/cstdint.hpp>
+#include <cstdint>
 
 #ifdef BOOST_MSVC
 #    pragma warning(push)

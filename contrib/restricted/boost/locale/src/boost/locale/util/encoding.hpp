@@ -9,8 +9,10 @@
 #define BOOST_LOCALE_UTIL_ENCODING_HPP
 
 #include <boost/locale/config.hpp>
+#include <boost/utility/string_view.hpp>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace boost { namespace locale { namespace util {
 
@@ -37,17 +39,23 @@ namespace boost { namespace locale { namespace util {
     }
 
     /// Make encoding lowercase and remove all non-alphanumeric characters
-    BOOST_LOCALE_DECL std::string normalize_encoding(const std::string& encoding);
-    BOOST_LOCALE_DECL std::string normalize_encoding(const char* encoding);
+    BOOST_LOCALE_DECL std::string normalize_encoding(string_view encoding);
     /// True if the normalized encodings are equal
     inline bool are_encodings_equal(const std::string& l, const std::string& r)
     {
         return normalize_encoding(l) == normalize_encoding(r);
     }
 
+    BOOST_LOCALE_DECL std::vector<std::string> get_simple_encodings();
+
 #if BOOST_LOCALE_USE_WIN32_API
-    int encoding_to_windows_codepage(const char* encoding);
-    int encoding_to_windows_codepage(const std::string& encoding);
+    int encoding_to_windows_codepage(string_view encoding);
+#else
+    // Requires WinAPI -> Dummy returning invalid
+    inline int encoding_to_windows_codepage(string_view) // LCOV_EXCL_LINE
+    {
+        return -1; // LCOV_EXCL_LINE
+    }
 #endif
 
 }}} // namespace boost::locale::util

@@ -6,9 +6,9 @@ LICENSE(BSL-1.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.82.0)
+VERSION(1.83.0)
 
-ORIGINAL_SOURCE(https://github.com/boostorg/locale/archive/boost-1.82.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/boostorg/locale/archive/boost-1.83.0.tar.gz)
 
 PEERDIR(
     contrib/libs/icu
@@ -18,6 +18,7 @@ PEERDIR(
     contrib/restricted/boost/iterator
     contrib/restricted/boost/predef
     contrib/restricted/boost/thread
+    contrib/restricted/boost/utility
 )
 
 ADDINCL(

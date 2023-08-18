@@ -25,9 +25,8 @@ namespace boost { namespace locale { namespace impl_icu {
 
     static void check_and_throw_dt(UErrorCode& e)
     {
-        if(U_FAILURE(e)) {
+        if(U_FAILURE(e))
             throw date_time_error(u_errorName(e));
-        }
     }
     using period::marks::period_mark;
 
@@ -55,7 +54,7 @@ namespace boost { namespace locale { namespace impl_icu {
             case first_day_of_week:
             case invalid: break;
         }
-        throw std::invalid_argument("Invalid date_time period type");
+        throw std::invalid_argument("Invalid date_time period type"); // LCOV_EXCL_LINE
     }
 
     class calendar_impl : public abstract_calendar {
@@ -95,16 +94,16 @@ namespace boost { namespace locale { namespace impl_icu {
                 guard l(lock_);
                 v = calendar_->getFirstDayOfWeek(err);
             } else {
-                UCalendarDateFields uper = to_icu(p);
+                UCalendarDateFields field = to_icu(p);
                 guard l(lock_);
                 switch(type) {
-                    case absolute_minimum: v = calendar_->getMinimum(uper); break;
-                    case actual_minimum: v = calendar_->getActualMinimum(uper, err); break;
-                    case greatest_minimum: v = calendar_->getGreatestMinimum(uper); break;
-                    case current: v = calendar_->get(uper, err); break;
-                    case least_maximum: v = calendar_->getLeastMaximum(uper); break;
-                    case actual_maximum: v = calendar_->getActualMaximum(uper, err); break;
-                    case absolute_maximum: v = calendar_->getMaximum(uper); break;
+                    case absolute_minimum: v = calendar_->getMinimum(field); break;
+                    case actual_minimum: v = calendar_->getActualMinimum(field, err); break;
+                    case greatest_minimum: v = calendar_->getGreatestMinimum(field); break;
+                    case current: v = calendar_->get(field, err); break;
+                    case least_maximum: v = calendar_->getLeastMaximum(field); break;
+                    case actual_maximum: v = calendar_->getActualMaximum(field, err); break;
+                    case absolute_maximum: v = calendar_->getMaximum(field); break;
                 }
             }
             check_and_throw_dt(err);
@@ -153,11 +152,12 @@ namespace boost { namespace locale { namespace impl_icu {
                 case is_gregorian: throw date_time_error("is_gregorian is not settable options for calendar");
                 case is_dst: throw date_time_error("is_dst is not settable options for calendar");
             }
+            throw std::invalid_argument("Invalid option type"); // LCOV_EXCL_LINE
         }
         int get_option(calendar_option_type opt) const override
         {
             switch(opt) {
-                case is_gregorian: return icu_cast<const icu::GregorianCalendar>(calendar_.get()) != 0;
+                case is_gregorian: return icu_cast<const icu::GregorianCalendar>(calendar_.get()) != nullptr;
                 case is_dst: {
                     guard l(lock_);
                     UErrorCode err = U_ZERO_ERROR;
@@ -166,7 +166,7 @@ namespace boost { namespace locale { namespace impl_icu {
                     return res;
                 }
             }
-            return 0;
+            throw std::invalid_argument("Invalid option type"); // LCOV_EXCL_LINE
         }
         void adjust_value(period::marks::period_mark p, update_type u, int difference) override
         {
@@ -179,15 +179,18 @@ namespace boost { namespace locale { namespace impl_icu {
         }
         int difference(const abstract_calendar& other, period::marks::period_mark m) const override
         {
-            UErrorCode err = U_ZERO_ERROR;
+            // era can't be queried via fieldDifference
+            if(BOOST_UNLIKELY(m == period::marks::era))
+                return get_value(m, value_type::current) - other.get_value(m, value_type::current);
+
             const double other_time_ms = other.get_time_ms();
 
             // fieldDifference has side effect of moving calendar (WTF?)
             // So we clone it for performing this operation
             hold_ptr<icu::Calendar> self(calendar_->clone());
 
-            int diff = self->fieldDifference(other_time_ms, to_icu(m), err);
-
+            UErrorCode err = U_ZERO_ERROR;
+            const int diff = self->fieldDifference(other_time_ms, to_icu(m), err);
             check_and_throw_dt(err);
             return diff;
         }

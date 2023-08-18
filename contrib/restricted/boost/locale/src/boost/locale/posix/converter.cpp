@@ -7,6 +7,7 @@
 #include <boost/locale/conversion.hpp>
 #include <boost/locale/encoding.hpp>
 #include <boost/locale/generator.hpp>
+#include "boost/locale/util/encoding.hpp"
 #include <cctype>
 #include <cstring>
 #include <langinfo.h>
@@ -39,31 +40,28 @@ namespace boost { namespace locale { namespace impl_posix {
     template<typename CharType>
     class std_converter : public converter<CharType> {
     public:
-        typedef CharType char_type;
-        typedef std::basic_string<char_type> string_type;
-        typedef std::ctype<char_type> ctype_type;
+        typedef std::basic_string<CharType> string_type;
+        typedef std::ctype<CharType> ctype_type;
         std_converter(std::shared_ptr<locale_t> lc, size_t refs = 0) : converter<CharType>(refs), lc_(std::move(lc)) {}
         string_type convert(converter_base::conversion_type how,
-                            const char_type* begin,
-                            const char_type* end,
+                            const CharType* begin,
+                            const CharType* end,
                             int /*flags*/ = 0) const override
         {
             switch(how) {
                 case converter_base::upper_case: {
                     string_type res;
                     res.reserve(end - begin);
-                    while(begin != end) {
-                        res += case_traits<char_type>::upper(*begin++, *lc_);
-                    }
+                    while(begin != end)
+                        res += case_traits<CharType>::upper(*begin++, *lc_);
                     return res;
                 }
                 case converter_base::lower_case:
                 case converter_base::case_folding: {
                     string_type res;
                     res.reserve(end - begin);
-                    while(begin != end) {
-                        res += case_traits<char_type>::lower(*begin++, *lc_);
-                    }
+                    while(begin != end)
+                        res += case_traits<CharType>::lower(*begin++, *lc_);
                     return res;
                 }
                 case converter_base::normalization:
@@ -86,22 +84,22 @@ namespace boost { namespace locale { namespace impl_posix {
         {
             switch(how) {
                 case upper_case: {
-                    std::wstring tmp = conv::to_utf<wchar_t>(begin, end, "UTF-8");
+                    const std::wstring tmp = conv::utf_to_utf<wchar_t>(begin, end);
                     std::wstring wres;
                     wres.reserve(tmp.size());
-                    for(unsigned i = 0; i < tmp.size(); i++)
-                        wres += towupper_l(tmp[i], *lc_);
-                    return conv::from_utf<wchar_t>(wres, "UTF-8");
+                    for(const wchar_t c : tmp)
+                        wres += towupper_l(c, *lc_);
+                    return conv::utf_to_utf<char>(wres);
                 }
 
                 case lower_case:
                 case case_folding: {
-                    std::wstring tmp = conv::to_utf<wchar_t>(begin, end, "UTF-8");
+                    const std::wstring tmp = conv::utf_to_utf<wchar_t>(begin, end);
                     std::wstring wres;
                     wres.reserve(tmp.size());
-                    for(unsigned i = 0; i < tmp.size(); i++)
-                        wres += towlower_l(tmp[i], *lc_);
-                    return conv::from_utf<wchar_t>(wres, "UTF-8");
+                    for(const wchar_t c : tmp)
+                        wres += towlower_l(c, *lc_);
+                    return conv::utf_to_utf<char>(wres);
                 }
                 case normalization:
                 case title_case: break;
@@ -118,13 +116,8 @@ namespace boost { namespace locale { namespace impl_posix {
         switch(type) {
             case char_facet_t::nochar: break;
             case char_facet_t::char_f: {
-                std::string encoding = nl_langinfo_l(CODESET, *lc);
-                for(unsigned i = 0; i < encoding.size(); i++)
-                    if('A' <= encoding[i] && encoding[i] <= 'Z')
-                        encoding[i] = encoding[i] - 'A' + 'a';
-                if(encoding == "utf-8" || encoding == "utf8" || encoding == "utf_8") {
+                if(util::normalize_encoding(nl_langinfo_l(CODESET, *lc)) == "utf8")
                     return std::locale(in, new utf8_converter(std::move(lc)));
-                }
                 return std::locale(in, new std_converter<char>(std::move(lc)));
             }
             case char_facet_t::wchar_f: return std::locale(in, new std_converter<wchar_t>(std::move(lc)));

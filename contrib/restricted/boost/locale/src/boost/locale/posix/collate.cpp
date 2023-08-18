@@ -40,39 +40,37 @@ namespace boost { namespace locale { namespace impl_posix {
     template<typename CharType>
     class collator : public std::collate<CharType> {
     public:
-        typedef CharType char_type;
-        typedef std::basic_string<char_type> string_type;
+        typedef std::basic_string<CharType> string_type;
         collator(std::shared_ptr<locale_t> l, size_t refs = 0) : std::collate<CharType>(refs), lc_(std::move(l)) {}
 
-        int
-        do_compare(const char_type* lb, const char_type* le, const char_type* rb, const char_type* re) const override
+        int do_compare(const CharType* lb, const CharType* le, const CharType* rb, const CharType* re) const override
         {
             string_type left(lb, le - lb);
             string_type right(rb, re - rb);
-            int res = coll_traits<char_type>::coll(left.c_str(), right.c_str(), *lc_);
+            int res = coll_traits<CharType>::coll(left.c_str(), right.c_str(), *lc_);
             if(res < 0)
                 return -1;
             if(res > 0)
                 return 1;
             return 0;
         }
-        long do_hash(const char_type* b, const char_type* e) const override
+        long do_hash(const CharType* b, const CharType* e) const override
         {
             string_type s(do_transform(b, e));
             const char* begin = reinterpret_cast<const char*>(s.c_str());
-            const char* end = begin + s.size() * sizeof(char_type);
+            const char* end = begin + s.size() * sizeof(CharType);
             return gnu_gettext::pj_winberger_hash_function(begin, end);
         }
-        string_type do_transform(const char_type* b, const char_type* e) const override
+        string_type do_transform(const CharType* b, const CharType* e) const override
         {
             string_type s(b, e - b);
-            std::vector<char_type> buf((e - b) * 2 + 1);
-            size_t n = coll_traits<char_type>::xfrm(&buf.front(), s.c_str(), buf.size(), *lc_);
+            std::vector<CharType> buf((e - b) * 2 + 1);
+            size_t n = coll_traits<CharType>::xfrm(buf.data(), s.c_str(), buf.size(), *lc_);
             if(n > buf.size()) {
                 buf.resize(n);
-                coll_traits<char_type>::xfrm(&buf.front(), s.c_str(), n, *lc_);
+                coll_traits<CharType>::xfrm(buf.data(), s.c_str(), n, *lc_);
             }
-            return string_type(&buf.front(), n);
+            return string_type(buf.data(), n);
         }
 
     private:

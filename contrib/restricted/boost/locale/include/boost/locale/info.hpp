@@ -8,6 +8,7 @@
 #define BOOST_LOCALE_INFO_HPP_INCLUDED
 
 #include <boost/locale/config.hpp>
+#include <boost/locale/detail/facet_id.hpp>
 #include <locale>
 #include <string>
 
@@ -21,12 +22,8 @@ namespace boost { namespace locale {
     /// \brief a facet that holds general information about locale
     ///
     /// This facet should be always created in order to make all Boost.Locale functions work
-    class BOOST_LOCALE_DECL info : public std::locale::facet {
+    class BOOST_SYMBOL_VISIBLE info : public std::locale::facet, public detail::facet_id<info> {
     public:
-        ~info();
-
-        static std::locale::id id; ///< This member uniquely defines this facet, required by STL
-
         /// String information about the locale
         enum string_propery {
             language_property, ///< ISO 639 language id

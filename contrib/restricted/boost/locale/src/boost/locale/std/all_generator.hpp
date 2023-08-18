@@ -12,32 +12,30 @@
 #include <string>
 
 namespace boost { namespace locale { namespace impl_std {
-    enum class utf8_support { none, native, native_with_wide, from_wide };
+    /// UTF-8 support of the standard library for the requested locale
+    enum class utf8_support {
+        /// No UTF-8 requested or required (e.g. other narrow encoding)
+        none,
+        /// UTF-8 encoding supported by the std-locale
+        native,
+        /// UTF-8 encoding has to be emulated using wchar_t
+        from_wide
+    };
 
-    std::locale create_convert(const std::locale& in,
-                               const std::string& locale_name,
-                               char_facet_t type,
-                               utf8_support utf = utf8_support::none);
+    std::locale
+    create_convert(const std::locale& in, const std::string& locale_name, char_facet_t type, utf8_support utf);
 
-    std::locale create_collate(const std::locale& in,
-                               const std::string& locale_name,
-                               char_facet_t type,
-                               utf8_support utf = utf8_support::none);
+    std::locale
+    create_collate(const std::locale& in, const std::string& locale_name, char_facet_t type, utf8_support utf);
 
-    std::locale create_formatting(const std::locale& in,
-                                  const std::string& locale_name,
-                                  char_facet_t type,
-                                  utf8_support utf = utf8_support::none);
+    std::locale
+    create_formatting(const std::locale& in, const std::string& locale_name, char_facet_t type, utf8_support utf);
 
-    std::locale create_parsing(const std::locale& in,
-                               const std::string& locale_name,
-                               char_facet_t type,
-                               utf8_support utf = utf8_support::none);
+    std::locale
+    create_parsing(const std::locale& in, const std::string& locale_name, char_facet_t type, utf8_support utf);
 
-    std::locale create_codecvt(const std::locale& in,
-                               const std::string& locale_name,
-                               char_facet_t type,
-                               utf8_support utf = utf8_support::none);
+    std::locale
+    create_codecvt(const std::locale& in, const std::string& locale_name, char_facet_t type, utf8_support utf);
 
 }}} // namespace boost::locale::impl_std
 

@@ -23,27 +23,28 @@ namespace boost { namespace locale { namespace conv {
     /// @{
 
     /// Convert a Unicode text in range [begin,end) to other Unicode encoding
+    ///
+    /// \throws conversion_error: Conversion failed (e.g. \a how is \c stop and any character cannot be decoded)
     template<typename CharOut, typename CharIn>
     std::basic_string<CharOut> utf_to_utf(const CharIn* begin, const CharIn* end, method_type how = default_method)
     {
         std::basic_string<CharOut> result;
         result.reserve(end - begin);
-        typedef std::back_insert_iterator<std::basic_string<CharOut>> inserter_type;
-        inserter_type inserter(result);
-        utf::code_point c;
+        std::back_insert_iterator<std::basic_string<CharOut>> inserter(result);
         while(begin != end) {
-            c = utf::utf_traits<CharIn>::template decode<const CharIn*>(begin, end);
+            const utf::code_point c = utf::utf_traits<CharIn>::decode(begin, end);
             if(c == utf::illegal || c == utf::incomplete) {
                 if(how == stop)
                     throw conversion_error();
-            } else {
-                utf::utf_traits<CharOut>::template encode<inserter_type>(c, inserter);
-            }
+            } else
+                utf::utf_traits<CharOut>::encode(c, inserter);
         }
         return result;
     }
 
     /// Convert a Unicode NULL terminated string \a str other Unicode encoding
+    ///
+    /// \throws conversion_error: Conversion failed (e.g. \a how is \c stop and any character cannot be decoded)
     template<typename CharOut, typename CharIn>
     std::basic_string<CharOut> utf_to_utf(const CharIn* str, method_type how = default_method)
     {
@@ -51,6 +52,8 @@ namespace boost { namespace locale { namespace conv {
     }
 
     /// Convert a Unicode string \a str other Unicode encoding
+    ///
+    /// \throws conversion_error: Conversion failed (e.g. \a how is \c stop and any character cannot be decoded)
     template<typename CharOut, typename CharIn>
     std::basic_string<CharOut> utf_to_utf(const std::basic_string<CharIn>& str, method_type how = default_method)
     {

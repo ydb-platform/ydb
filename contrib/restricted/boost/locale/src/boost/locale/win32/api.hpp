@@ -95,18 +95,17 @@ namespace boost { namespace locale { namespace impl_win {
         for(unsigned i = 0; gr[i]; i++) {
             if(gr[i] == L';')
                 continue;
-            if(L'1' <= gr[i] && gr[i] <= L'9') {
+            if(L'1' <= gr[i] && gr[i] <= L'9')
                 res.grouping += char(gr[i] - L'0');
-            } else if(gr[i] == L'0')
+            else if(gr[i] == L'0')
                 inf_group = true;
         }
         if(!inf_group) {
             BOOST_LOCALE_START_CONST_CONDITION
-            if(std::numeric_limits<char>::is_signed) {
+            if(std::numeric_limits<char>::is_signed)
                 res.grouping += std::numeric_limits<char>::min();
-            } else {
+            else
                 res.grouping += std::numeric_limits<char>::max();
-            }
             BOOST_LOCALE_END_CONST_CONDITION
         }
         return res;
@@ -124,8 +123,8 @@ namespace boost { namespace locale { namespace impl_win {
             throw std::length_error("String to long for int type");
         std::vector<wchar_t> buf(len + 1);
         int l2 =
-          LCMapStringW(l.lcid, flags, begin, static_cast<int>(end - begin), &buf.front(), static_cast<int>(buf.size()));
-        res.assign(&buf.front(), l2);
+          LCMapStringW(l.lcid, flags, begin, static_cast<int>(end - begin), buf.data(), static_cast<int>(buf.size()));
+        res.assign(buf.data(), l2);
         return res;
     }
 
@@ -166,10 +165,10 @@ namespace boost { namespace locale { namespace impl_win {
 
         ss << std::setprecision(std::numeric_limits<double>::digits10 + 1) << value;
         std::wstring sval = ss.str();
-        int len = GetCurrencyFormatW(l.lcid, 0, sval.c_str(), 0, 0, 0);
+        const auto len = GetCurrencyFormatW(l.lcid, 0, sval.c_str(), nullptr, nullptr, 0);
         std::vector<wchar_t> buf(len + 1);
-        GetCurrencyFormatW(l.lcid, 0, sval.c_str(), 0, &buf.front(), len);
-        return &buf.front();
+        GetCurrencyFormatW(l.lcid, 0, sval.c_str(), nullptr, buf.data(), len);
+        return buf.data();
     }
 
     ////////////////////////////////////////////////////////////////////////
@@ -180,18 +179,18 @@ namespace boost { namespace locale { namespace impl_win {
 
     inline std::wstring wcs_format_date_l(const wchar_t* format, SYSTEMTIME const* tm, const winlocale& l)
     {
-        int len = GetDateFormatW(l.lcid, 0, tm, format, 0, 0);
+        const auto len = GetDateFormatW(l.lcid, 0, tm, format, nullptr, 0);
         std::vector<wchar_t> buf(len + 1);
-        GetDateFormatW(l.lcid, 0, tm, format, &buf.front(), len);
-        return &buf.front();
+        GetDateFormatW(l.lcid, 0, tm, format, buf.data(), len);
+        return buf.data();
     }
 
     inline std::wstring wcs_format_time_l(const wchar_t* format, SYSTEMTIME const* tm, const winlocale& l)
     {
-        int len = GetTimeFormatW(l.lcid, 0, tm, format, 0, 0);
+        const auto len = GetTimeFormatW(l.lcid, 0, tm, format, nullptr, 0);
         std::vector<wchar_t> buf(len + 1);
-        GetTimeFormatW(l.lcid, 0, tm, format, &buf.front(), len);
-        return &buf.front();
+        GetTimeFormatW(l.lcid, 0, tm, format, buf.data(), len);
+        return buf.data();
     }
 
     inline std::wstring wcsfold(const wchar_t* begin, const wchar_t* end)
@@ -221,8 +220,8 @@ namespace boost { namespace locale { namespace impl_win {
         if(len == std::numeric_limits<int>::max())
             throw std::length_error("String to long for int type");
         std::vector<wchar_t> v(len + 1);
-        len = FoldStringW(flags, begin, static_cast<int>(end - begin), &v.front(), len + 1);
-        return std::wstring(&v.front(), len);
+        len = FoldStringW(flags, begin, static_cast<int>(end - begin), v.data(), len + 1);
+        return std::wstring(v.data(), len);
     }
 
     inline std::wstring wcsxfrm_l(collate_level level, const wchar_t* begin, const wchar_t* end, const winlocale& l)

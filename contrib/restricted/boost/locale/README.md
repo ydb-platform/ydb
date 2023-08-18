@@ -5,7 +5,7 @@ Part of the [Boost C++ Libraries](http://github.com/boostorg).
 Boost.Locale is a library that provides high quality localization facilities in a C++ way.
 It was originally designed a part of [CppCMS](http://cppcms.sourceforge.net/) - a C++ Web Framework project and then contributed to Boost.
 
-Boost.Locale gives powerful tools for development of cross platform localized software - the software that talks to users in their language.
+Boost.Locale gives powerful tools for development of cross-platform localized software - the software that talks to users in their language.
 
 Provided Features:
 
@@ -21,7 +21,7 @@ Provided Features:
 - Support for `char` and `wchar_t`
 - Experimental support for C++11 `char16_t` and `char32_t` strings and streams.
 
-Boost.Locale enhances and unifies the standard library's API the way it becomes useful and convenient for development of cross platform and "cross-culture" software.
+Boost.Locale enhances and unifies the standard library's API the way it becomes useful and convenient for development of cross-platform and "cross-culture" software.
 
 In order to achieve this goal Boost.Locale uses the-state-of-the-art Unicode and Localization library: ICU - International Components for Unicode.
 
@@ -38,7 +38,7 @@ Distributed under the [Boost Software License, Version 1.0](https://www.boost.or
 ### Properties
 
 * C++11
-* Formatted with clang-format, see [`tools/format_source.sh`](https://github.com/boostorg/locale/blob/develop/tools/format_source.sh)
+* Formatted with clang-format, see [`tools/format_sources.sh`](https://github.com/boostorg/locale/blob/develop/tools/format_sources.sh)
 
 ### Build Status
 

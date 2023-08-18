@@ -8,6 +8,7 @@
 #define BOOST_LOCALE_HOLD_PTR_H
 
 #include <boost/locale/config.hpp>
+#include <boost/core/exchange.hpp>
 
 namespace boost { namespace locale {
     /// \brief a smart pointer similar to std::unique_ptr but the
@@ -28,7 +29,7 @@ namespace boost { namespace locale {
         hold_ptr(const hold_ptr&) = delete;
         hold_ptr& operator=(const hold_ptr&) = delete;
         // Movable
-        hold_ptr(hold_ptr&& other) noexcept : ptr_(other.ptr_) { other.ptr_ = nullptr; }
+        hold_ptr(hold_ptr&& other) noexcept : ptr_(exchange(other.ptr_, nullptr)) {}
         hold_ptr& operator=(hold_ptr&& other) noexcept
         {
             swap(other);
@@ -70,7 +71,7 @@ namespace boost { namespace locale {
         }
 
         /// Swap two pointers
-        void swap(hold_ptr& other)
+        void swap(hold_ptr& other) noexcept
         {
             T* tmp = other.ptr_;
             other.ptr_ = ptr_;

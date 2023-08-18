@@ -12,15 +12,22 @@ namespace boost { namespace locale { namespace impl_std {
     template<typename CharType>
     std::locale codecvt_bychar(const std::locale& in, const std::string& locale_name)
     {
-        return std::locale(in, new std::codecvt_byname<CharType, char, std::mbstate_t>(locale_name.c_str()));
+        return std::locale(in, new std::codecvt_byname<CharType, char, std::mbstate_t>(locale_name));
     }
 
     std::locale
     create_codecvt(const std::locale& in, const std::string& locale_name, char_facet_t type, utf8_support utf)
     {
+#if defined(BOOST_WINDOWS)
+        // This isn't fully correct:
+        // It will treat the 2-Byte wchar_t as UTF-16 encoded while it may be UCS-2
+        // std::basic_filebuf explicitely disallows using suche multi-byte codecvts
+        // but it works in practice so far, so use it instead of failing for codepoints above U+FFFF
+        if(utf != utf8_support::none)
+            return util::create_utf8_codecvt(in, type);
+#endif
         if(utf == utf8_support::from_wide)
             return util::create_utf8_codecvt(in, type);
-
         switch(type) {
             case char_facet_t::nochar: break;
             case char_facet_t::char_f: return codecvt_bychar<char>(in, locale_name);

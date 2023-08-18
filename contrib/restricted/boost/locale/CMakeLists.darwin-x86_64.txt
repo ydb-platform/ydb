@@ -28,6 +28,7 @@ target_link_libraries(restricted-boost-locale PUBLIC
   restricted-boost-iterator
   restricted-boost-predef
   restricted-boost-thread
+  restricted-boost-utility
 )
 target_sources(restricted-boost-locale PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/posix/codecvt.cpp

@@ -6,7 +6,6 @@
 // https://www.boost.org/LICENSE_1_0.txt
 
 #include <boost/locale/util/locale_data.hpp>
-#include "boost/locale/encoding/conv.hpp"
 #include "boost/locale/util/encoding.hpp"
 #include "boost/locale/util/string.hpp"
 #include <boost/assert.hpp>
@@ -126,14 +125,7 @@ namespace boost { namespace locale { namespace util {
         if(tmp.empty())
             return false;
         // No assumptions, but uppercase
-        for(char& c : tmp) {
-            if(util::is_lower_ascii(c))
-                c += 'A' - 'a';
-        }
-        encoding_ = tmp;
-
-        utf8_ = util::normalize_encoding(encoding_) == "utf8";
-
+        encoding(std::move(tmp));
         if(end >= input.size())
             return true;
         else {
@@ -155,6 +147,19 @@ namespace boost { namespace locale { namespace util {
                 c += 'a' - 'A';
         }
         return true;
+    }
+
+    locale_data& locale_data::encoding(std::string new_encoding, const bool uppercase)
+    {
+        if(uppercase) {
+            for(char& c : new_encoding) {
+                if(util::is_lower_ascii(c))
+                    c += 'A' - 'a';
+            }
+        }
+        encoding_ = std::move(new_encoding);
+        utf8_ = util::normalize_encoding(encoding_) == "utf8";
+        return *this;
     }
 
 }}} // namespace boost::locale::util

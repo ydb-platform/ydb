@@ -7,11 +7,13 @@
 #include <boost/locale/format.hpp>
 #include <boost/locale/generator.hpp>
 #include <boost/locale/info.hpp>
-#include <cstdlib>
+#include "boost/locale/util/numeric.hpp"
+#include <algorithm>
 #include <iostream>
 #include <limits>
 
 namespace boost { namespace locale { namespace detail {
+
     struct format_parser::data {
         unsigned position;
         std::streamsize precision;
@@ -61,17 +63,11 @@ namespace boost { namespace locale { namespace detail {
     {
         if(key.empty())
             return;
-        unsigned i;
-        for(i = 0; i < key.size(); i++) {
-            if(key[i] < '0' || '9' < key[i])
-                break;
-        }
-        if(i == key.size()) {
-            d->position = atoi(key.c_str()) - 1;
-            return;
-        }
-
-        if(key == "num" || key == "number") {
+        int position;
+        if(util::try_to_int(key, position) && position > 0) {
+            static_assert(sizeof(unsigned) <= sizeof(decltype(d->position)), "Possible lossy conversion");
+            d->position = static_cast<unsigned>(position - 1);
+        } else if(key == "num" || key == "number") {
             as::number(ios_);
 
             if(value == "hex")
@@ -88,9 +84,9 @@ namespace boost { namespace locale { namespace detail {
                 as::currency_iso(ios_);
             else if(value == "nat" || value == "national")
                 as::currency_national(ios_);
-        } else if(key == "per" || key == "percent") {
+        } else if(key == "per" || key == "percent")
             as::percent(ios_);
-        } else if(key == "date") {
+        else if(key == "date") {
             as::date(ios_);
             if(value == "s" || value == "short")
                 as::date_short(ios_);
@@ -125,11 +121,11 @@ namespace boost { namespace locale { namespace detail {
                 as::date_full(ios_);
                 as::time_full(ios_);
             }
-        } else if(key == "spell" || key == "spellout") {
+        } else if(key == "spell" || key == "spellout")
             as::spellout(ios_);
-        } else if(key == "ord" || key == "ordinal") {
+        else if(key == "ord" || key == "ordinal")
             as::ordinal(ios_);
-        } else if(key == "left" || key == "<")
+        else if(key == "left" || key == "<")
             ios_.setf(std::ios_base::left, std::ios_base::adjustfield);
         else if(key == "right" || key == ">")
             ios_.setf(std::ios_base::right, std::ios_base::adjustfield);
@@ -139,23 +135,26 @@ namespace boost { namespace locale { namespace detail {
             as::local_time(ios_);
         else if(key == "timezone" || key == "tz")
             ios_info::get(ios_).time_zone(value);
-        else if(key == "w" || key == "width")
-            ios_.width(atoi(value.c_str()));
-        else if(key == "p" || key == "precision")
-            ios_.precision(atoi(value.c_str()));
-        else if(key == "locale") {
+        else if(key == "w" || key == "width") {
+            int v;
+            if(util::try_to_int(value, v))
+                ios_.width(v);
+        } else if(key == "p" || key == "precision") {
+            int v;
+            if(util::try_to_int(value, v))
+                ios_.precision(v);
+        } else if(key == "locale") {
             if(!d->restore_locale) {
                 d->saved_locale = ios_.getloc();
                 d->restore_locale = true;
             }
 
-            std::string encoding = std::use_facet<info>(d->saved_locale).encoding();
             generator gen;
             gen.categories(category_t::formatting);
 
             std::locale new_loc;
             if(value.find('.') == std::string::npos)
-                new_loc = gen(value + "." + encoding);
+                new_loc = gen(value + "." + std::use_facet<info>(d->saved_locale).encoding());
             else
                 new_loc = gen(value);
 

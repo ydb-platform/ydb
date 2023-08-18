@@ -1,5 +1,6 @@
 //
 // Copyright (c) 2015 Artyom Beilis (Tonkikh)
+// Copyright (c) 2021-2023 Alexander Grund
 //
 // Distributed under the Boost Software License, Version 1.0.
 // https://www.boost.org/LICENSE_1_0.txt
@@ -8,28 +9,37 @@
 #define BOOST_LOCALE_GENERIC_CODECVT_HPP
 
 #include <boost/locale/utf.hpp>
-#include <boost/cstdint.hpp>
+#include <cstdint>
 #include <locale>
 
 namespace boost { namespace locale {
 
-#ifndef BOOST_LOCALE_DOXYGEN
-    //
-    // Make sure that mbstate can keep 16 bit of UTF-16 sequence
-    //
-    static_assert(sizeof(std::mbstate_t) >= 2, "std::mbstate_t is to small");
-#endif
-
-#if defined(_MSC_VER) && _MSC_VER < 1700
-// up to MSVC 11 (2012) do_length is non-standard it counts wide characters instead of narrow and does not change
-// mbstate
-#    define BOOST_LOCALE_DO_LENGTH_MBSTATE_CONST
-#endif
+    static_assert(sizeof(std::mbstate_t) >= 2, "std::mbstate_t is to small to store an UTF-16 codepoint");
+    namespace detail {
+        // Avoid including cstring for std::memcpy
+        inline void copy_uint16_t(void* dst, const void* src)
+        {
+            unsigned char* cdst = static_cast<unsigned char*>(dst);
+            const unsigned char* csrc = static_cast<const unsigned char*>(src);
+            cdst[0] = csrc[0];
+            cdst[1] = csrc[1];
+        }
+        inline uint16_t read_state(const std::mbstate_t& src)
+        {
+            uint16_t dst;
+            copy_uint16_t(&dst, &src);
+            return dst;
+        }
+        inline void write_state(std::mbstate_t& dst, const uint16_t src)
+        {
+            copy_uint16_t(&dst, &src);
+        }
+    } // namespace detail
 
     /// \brief A base class that used to define constants for generic_codecvt
     class generic_codecvt_base {
     public:
-        /// Initial state for converting to or from unicode code points, used by initial_state in derived classes
+        /// Initial state for converting to or from Unicode code points, used by initial_state in derived classes
         enum initial_convertion_state {
             to_unicode_state,  ///< The state would be used by to_unicode functions
             from_unicode_state ///< The state would be used by from_unicode functions
@@ -47,13 +57,13 @@ namespace boost { namespace locale {
     /// that creates initial state
     /// - `int max_encoding_length() const` - a maximal length that one Unicode code point is represented, for UTF-8 for
     /// example it is 4 from ISO-8859-1 it is 1
-    /// - `utf::code_point to_unicode(state_type &state,char const *&begin,char const *end)` - extract first code point
-    /// from the text in range [begin,end), in case of success begin would point to the next character sequence to be
-    /// encoded to next code point, in case of incomplete sequence - utf::incomplete shell be returned, and in case of
-    /// invalid input sequence utf::illegal shell be returned and begin would remain unmodified
-    /// - `utf::code_point from_unicode(state_type &state,utf::code_point u,char *begin,char const *end)` - convert a
-    /// unicode code point `u` into a character sequence at [begin,end). Return the length of the sequence in case of
-    /// success, utf::incomplete in case of not enough room to encode the code point of utf::illegal in case conversion
+    /// - `utf::code_point to_unicode(state_type& state, const char*& begin, const char* end)` - extract first code
+    /// point from the text in range [begin,end), in case of success begin would point to the next character sequence to
+    /// be encoded to next code point, in case of incomplete sequence - utf::incomplete shell be returned, and in case
+    /// of invalid input sequence utf::illegal shell be returned and begin would remain unmodified
+    /// - `utf::len_or_error from_unicode(state_type &state, utf::code_point u, char* begin, const char* end)` - convert
+    /// a Unicode code point `u` into a character sequence at [begin,end). Return the length of the sequence in case of
+    /// success, utf::incomplete in case of not enough room to encode the code point, or utf::illegal in case conversion
     /// can not be performed
     ///
     ///
@@ -62,7 +72,7 @@ namespace boost { namespace locale {
     /// \code
     ///
     /// template<typename CharType>
-    /// class latin1_codecvt :boost::locale::generic_codecvt<CharType,latin1_codecvt<CharType> >
+    /// class latin1_codecvt: boost::locale::generic_codecvt<CharType,latin1_codecvt<CharType> >
     /// {
     /// public:
     ///
@@ -84,15 +94,15 @@ namespace boost { namespace locale {
     ///         return 1;
     ///     }
     ///
-    ///     boost::locale::utf::code_point to_unicode(state_type &,char const *&begin,char const *end) const
+    ///     boost::locale::utf::code_point to_unicode(state_type&, const char*& begin, const char* end) const
     ///     {
     ///        if(begin == end)
     ///           return boost::locale::utf::incomplete;
     ///        return *begin++;
     ///     }
     ///
-    ///     boost::locale::utf::code_point from_unicode(state_type &,boost::locale::utf::code_point u,char *begin,char
-    ///     const *end) const
+    ///     boost::locale::utf::len_or_error from_unicode(state_type&, boost::locale::utf::code_point u,
+    ///                                                   char* begin, const char* end) const
     ///     {
     ///        if(u >= 256)
     ///           return boost::locale::utf::illegal;
@@ -110,23 +120,21 @@ namespace boost { namespace locale {
     ///
     /// \code
     /// template<typename CharType>
-    /// class icu_codecvt :boost::locale::generic_codecvt<CharType,icu_codecvt<CharType> >
+    /// class icu_codecvt: boost::locale::generic_codecvt<CharType,icu_codecvt<CharType>>
     /// {
     /// public:
     ///
     ///     /* Standard codecvt constructor */
     ///     icu_codecvt(std::string const &name,refs = 0):
-    ///         boost::locale::generic_codecvt<CharType,latin1_codecvt<CharType> >(refs)
+    ///         boost::locale::generic_codecvt<CharType,icu_codecvt<CharType>>(refs)
     ///     { ... }
     ///
-    ///     /* State is unused but required by generic_codecvt */
-    ///     struct std::unique_ptr<UConverter,void (*)(UConverter*)> state_type;
+    ///     using state_type = std::unique_ptr<UConverter,void (*)(UConverter*)>;
     ///
-    ///     state_type &&initial_state(generic_codecvt_base::initial_convertion_state /*unused*/) const
+    ///     state_type initial_state(generic_codecvt_base::initial_convertion_state /*unused*/) const
     ///     {
     ///         UErrorCode err = U_ZERO_ERROR;
-    ///         state_type ptr(ucnv_safeClone(converter_,0,0,&err,ucnv_close);
-    ///         return std::move(ptr);
+    ///         return state_type(ucnv_safeClone(converter_,0,0,&err),ucnv_close);
     ///     }
     ///
     ///     boost::locale::utf::code_point to_unicode(state_type &ptr,char const *&begin,char const *end) const
@@ -160,8 +168,7 @@ namespace boost { namespace locale {
     protected:
         std::codecvt_base::result do_unshift(std::mbstate_t& s, char* from, char* /*to*/, char*& next) const override
         {
-            boost::uint16_t& state = *reinterpret_cast<boost::uint16_t*>(&s);
-            if(state != 0)
+            if(*reinterpret_cast<char*>(&s) != 0)
                 return std::codecvt_base::error;
             next = from;
             return std::codecvt_base::ok;
@@ -170,47 +177,28 @@ namespace boost { namespace locale {
         int do_max_length() const noexcept override { return implementation().max_encoding_length(); }
         bool do_always_noconv() const noexcept override { return false; }
 
-        int do_length(
-#ifdef BOOST_LOCALE_DO_LENGTH_MBSTATE_CONST
-          const
-#endif
-          std::mbstate_t& std_state,
-          const char* from,
-          const char* from_end,
-          size_t max) const override
+        int do_length(std::mbstate_t& std_state, const char* from, const char* from_end, size_t max) const override
         {
-#ifndef BOOST_LOCALE_DO_LENGTH_MBSTATE_CONST
+            bool state = *reinterpret_cast<char*>(&std_state) != 0;
             const char* save_from = from;
-            boost::uint16_t& state = *reinterpret_cast<boost::uint16_t*>(&std_state);
-#else
-            const size_t start_max = max;
-            boost::uint16_t state = *reinterpret_cast<const boost::uint16_t*>(&std_state);
-#endif
 
-            typename CodecvtImpl::state_type cvt_state =
-              implementation().initial_state(generic_codecvt_base::to_unicode_state);
+            auto cvt_state = implementation().initial_state(to_unicode_state);
             while(max > 0 && from < from_end) {
                 const char* prev_from = from;
-                boost::uint32_t ch = implementation().to_unicode(cvt_state, from, from_end);
+                const utf::code_point ch = implementation().to_unicode(cvt_state, from, from_end);
                 if(ch == boost::locale::utf::incomplete || ch == boost::locale::utf::illegal) {
                     from = prev_from;
                     break;
                 }
                 max--;
                 if(ch > 0xFFFF) {
-                    if(state == 0) {
+                    if(!state)
                         from = prev_from;
-                        state = 1;
-                    } else {
-                        state = 0;
-                    }
+                    state = !state;
                 }
             }
-#ifndef BOOST_LOCALE_DO_LENGTH_MBSTATE_CONST
+            *reinterpret_cast<char*>(&std_state) = state;
             return static_cast<int>(from - save_from);
-#else
-            return static_cast<int>(start_max - max);
-#endif
         }
 
         std::codecvt_base::result do_in(std::mbstate_t& std_state,
@@ -226,15 +214,14 @@ namespace boost { namespace locale {
             // mbstate_t is POD type and should be initialized to 0 (i.a. state = stateT())
             // according to standard. We use it to keep a flag 0/1 for surrogate pair writing
             //
-            // if 0 no code above >0xFFFF observed, of 1 a code above 0xFFFF observed
+            // if 0/false no codepoint above >0xFFFF observed, else a codepoint above 0xFFFF was observed
             // and first pair is written, but no input consumed
-            boost::uint16_t& state = *reinterpret_cast<boost::uint16_t*>(&std_state);
-            typename CodecvtImpl::state_type cvt_state =
-              implementation().initial_state(generic_codecvt_base::to_unicode_state);
+            bool state = *reinterpret_cast<char*>(&std_state) != 0;
+            auto cvt_state = implementation().initial_state(to_unicode_state);
             while(to < to_end && from < from_end) {
                 const char* from_saved = from;
 
-                uint32_t ch = implementation().to_unicode(cvt_state, from, from_end);
+                utf::code_point ch = implementation().to_unicode(cvt_state, from, from_end);
 
                 if(ch == boost::locale::utf::illegal) {
                     from = from_saved;
@@ -247,9 +234,9 @@ namespace boost { namespace locale {
                     break;
                 }
                 // Normal codepoints go directly to stream
-                if(ch <= 0xFFFF) {
+                if(ch <= 0xFFFF)
                     *to++ = static_cast<uchar>(ch);
-                } else {
+                else {
                     // For other codepoints we do the following
                     //
                     // 1. We can't consume our input as we may find ourselves
@@ -260,22 +247,21 @@ namespace boost { namespace locale {
                     //    once again and then we would consume our input together with writing
                     //    second surrogate pair
                     ch -= 0x10000;
-                    boost::uint16_t w1 = static_cast<boost::uint16_t>(0xD800 | (ch >> 10));
-                    boost::uint16_t w2 = static_cast<boost::uint16_t>(0xDC00 | (ch & 0x3FF));
-                    if(state == 0) {
+                    std::uint16_t w1 = static_cast<std::uint16_t>(0xD800 | (ch >> 10));
+                    std::uint16_t w2 = static_cast<std::uint16_t>(0xDC00 | (ch & 0x3FF));
+                    if(!state) {
                         from = from_saved;
                         *to++ = w1;
-                        state = 1;
-                    } else {
+                    } else
                         *to++ = w2;
-                        state = 0;
-                    }
+                    state = !state;
                 }
             }
             from_next = from;
             to_next = to;
-            if(r == std::codecvt_base::ok && (from != from_end || state != 0))
+            if(r == std::codecvt_base::ok && (from != from_end || state))
                 r = std::codecvt_base::partial;
+            *reinterpret_cast<char*>(&std_state) = state;
             return r;
         }
 
@@ -294,22 +280,21 @@ namespace boost { namespace locale {
             //
             // State: state!=0 - a first surrogate pair was observed (state = first pair),
             // we expect the second one to come and then zero the state
-            boost::uint16_t& state = *reinterpret_cast<boost::uint16_t*>(&std_state);
-            typename CodecvtImpl::state_type cvt_state =
-              implementation().initial_state(generic_codecvt_base::from_unicode_state);
+            std::uint16_t state = detail::read_state(std_state);
+            auto cvt_state = implementation().initial_state(from_unicode_state);
             while(to < to_end && from < from_end) {
-                boost::uint32_t ch = 0;
+                utf::code_point ch = 0;
                 if(state != 0) {
                     // if the state indicates that 1st surrogate pair was written
                     // we should make sure that the second one that comes is actually
                     // second surrogate
-                    boost::uint16_t w1 = state;
-                    boost::uint16_t w2 = *from;
+                    std::uint16_t w1 = state;
+                    std::uint16_t w2 = *from;
                     // we don't forward from as writing may fail to incomplete or
                     // partial conversion
                     if(0xDC00 <= w2 && w2 <= 0xDFFF) {
-                        boost::uint16_t vh = w1 - 0xD800;
-                        boost::uint16_t vl = w2 - 0xDC00;
+                        std::uint16_t vh = w1 - 0xD800;
+                        std::uint16_t vl = w2 - 0xDC00;
                         ch = ((uint32_t(vh) << 10) | vl) + 0x10000;
                     } else {
                         // Invalid surrogate
@@ -338,7 +323,7 @@ namespace boost { namespace locale {
                     r = std::codecvt_base::error;
                     break;
                 }
-                boost::uint32_t len = implementation().from_unicode(cvt_state, ch, to, to_end);
+                const utf::code_point len = implementation().from_unicode(cvt_state, ch, to, to_end);
                 if(len == boost::locale::utf::incomplete) {
                     r = std::codecvt_base::partial;
                     break;
@@ -354,6 +339,7 @@ namespace boost { namespace locale {
             to_next = to;
             if(r == std::codecvt_base::ok && (from != from_end || state != 0))
                 r = std::codecvt_base::partial;
+            detail::write_state(std_state, state);
             return r;
         }
     };
@@ -383,25 +369,13 @@ namespace boost { namespace locale {
         int do_max_length() const noexcept override { return implementation().max_encoding_length(); }
         bool do_always_noconv() const noexcept override { return false; }
 
-        int do_length(
-#ifdef BOOST_LOCALE_DO_LENGTH_MBSTATE_CONST
-          const
-#endif
-          std::mbstate_t& /*state*/,
-          const char* from,
-          const char* from_end,
-          size_t max) const override
+        int do_length(std::mbstate_t& /*state*/, const char* from, const char* from_end, size_t max) const override
         {
-#ifndef BOOST_LOCALE_DO_LENGTH_MBSTATE_CONST
             const char* start_from = from;
-#else
-            const size_t start_max = max;
-#endif
-            typename CodecvtImpl::state_type cvt_state =
-              implementation().initial_state(generic_codecvt_base::to_unicode_state);
+            auto cvt_state = implementation().initial_state(to_unicode_state);
             while(max > 0 && from < from_end) {
                 const char* save_from = from;
-                boost::uint32_t ch = implementation().to_unicode(cvt_state, from, from_end);
+                const utf::code_point ch = implementation().to_unicode(cvt_state, from, from_end);
                 if(ch == boost::locale::utf::incomplete || ch == boost::locale::utf::illegal) {
                     from = save_from;
                     break;
@@ -409,11 +383,7 @@ namespace boost { namespace locale {
                 max--;
             }
 
-#ifndef BOOST_LOCALE_DO_LENGTH_MBSTATE_CONST
             return static_cast<int>(from - start_from);
-#else
-            return static_cast<int>(start_max - max);
-#endif
         }
 
         std::codecvt_base::result do_in(std::mbstate_t& /*state*/,
@@ -426,16 +396,11 @@ namespace boost { namespace locale {
         {
             std::codecvt_base::result r = std::codecvt_base::ok;
 
-            // mbstate_t is POD type and should be initialized to 0 (i.a. state = stateT())
-            // according to standard. We use it to keep a flag 0/1 for surrogate pair writing
-            //
-            // if 0 no code above >0xFFFF observed, of 1 a code above 0xFFFF observed
-            // and first pair is written, but no input consumed
-            auto cvt_state = implementation().initial_state(generic_codecvt_base::to_unicode_state);
+            auto cvt_state = implementation().initial_state(to_unicode_state);
             while(to < to_end && from < from_end) {
                 const char* from_saved = from;
 
-                uint32_t ch = implementation().to_unicode(cvt_state, from, from_end);
+                const utf::code_point ch = implementation().to_unicode(cvt_state, from, from_end);
 
                 if(ch == boost::locale::utf::illegal) {
                     r = std::codecvt_base::error;
@@ -465,15 +430,14 @@ namespace boost { namespace locale {
                                          char*& to_next) const override
         {
             std::codecvt_base::result r = std::codecvt_base::ok;
-            auto cvt_state = implementation().initial_state(generic_codecvt_base::from_unicode_state);
+            auto cvt_state = implementation().initial_state(from_unicode_state);
             while(to < to_end && from < from_end) {
-                boost::uint32_t ch = 0;
-                ch = *from;
+                const std::uint32_t ch = *from;
                 if(!boost::locale::utf::is_valid_codepoint(ch)) {
                     r = std::codecvt_base::error;
                     break;
                 }
-                boost::uint32_t len = implementation().from_unicode(cvt_state, ch, to, to_end);
+                const utf::code_point len = implementation().from_unicode(cvt_state, ch, to, to_end);
                 if(len == boost::locale::utf::incomplete) {
                     r = std::codecvt_base::partial;
                     break;

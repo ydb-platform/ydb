@@ -10,6 +10,7 @@
 #include <boost/locale/generator.hpp>
 #include "boost/locale/win32/all_generator.hpp"
 #include "boost/locale/win32/api.hpp"
+#include <algorithm>
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
@@ -22,20 +23,15 @@
 
 namespace boost { namespace locale { namespace impl_win {
     namespace {
-
         std::ostreambuf_iterator<wchar_t> write_it(std::ostreambuf_iterator<wchar_t> out, const std::wstring& s)
         {
-            for(size_t i = 0; i < s.size(); i++)
-                *out++ = s[i];
-            return out;
+            return std::copy(s.begin(), s.end(), out);
         }
 
         std::ostreambuf_iterator<char> write_it(std::ostreambuf_iterator<char> out, const std::wstring& s)
         {
-            std::string tmp = conv::from_utf(s, "UTF-8");
-            for(size_t i = 0; i < tmp.size(); i++)
-                *out++ = tmp[i];
-            return out;
+            const std::string tmp = conv::utf_to_utf<char>(s);
+            return std::copy(tmp.begin(), tmp.end(), out);
         }
     } // namespace
 
@@ -44,7 +40,6 @@ namespace boost { namespace locale { namespace impl_win {
     public:
         typedef typename std::num_put<CharType>::iter_type iter_type;
         typedef std::basic_string<CharType> string_type;
-        typedef CharType char_type;
 
         num_format(const winlocale& lc, size_t refs = 0) : util::base_num_format<CharType>(refs), lc_(lc) {}
 
@@ -52,19 +47,19 @@ namespace boost { namespace locale { namespace impl_win {
         iter_type do_format_currency(bool /*intl*/,
                                      iter_type out,
                                      std::ios_base& ios,
-                                     char_type fill,
+                                     CharType fill,
                                      long double val) const override
         {
             if(lc_.is_c()) {
                 std::locale loc = ios.getloc();
-                int digits = std::use_facet<std::moneypunct<char_type>>(loc).frac_digits();
+                int digits = std::use_facet<std::moneypunct<CharType>>(loc).frac_digits();
                 while(digits > 0) {
                     val *= 10;
                     digits--;
                 }
                 std::ios_base::fmtflags f = ios.flags();
                 ios.flags(f | std::ios_base::showbase);
-                out = std::use_facet<std::money_put<char_type>>(loc).put(out, false, ios, fill, val);
+                out = std::use_facet<std::money_put<CharType>>(loc).put(out, false, ios, fill, val);
                 ios.flags(f);
                 return out;
             } else {
@@ -76,7 +71,7 @@ namespace boost { namespace locale { namespace impl_win {
     private:
         winlocale lc_;
 
-    }; /// num_format
+    }; // num_format
 
     template<typename CharType>
     class time_put_win : public std::time_put<CharType> {
@@ -84,8 +79,7 @@ namespace boost { namespace locale { namespace impl_win {
         time_put_win(const winlocale& lc, size_t refs = 0) : std::time_put<CharType>(refs), lc_(lc) {}
 
         typedef typename std::time_put<CharType>::iter_type iter_type;
-        typedef CharType char_type;
-        typedef std::basic_string<char_type> string_type;
+        typedef std::basic_string<CharType> string_type;
 
         iter_type do_put(iter_type out,
                          std::ios_base& /*ios*/,
@@ -125,7 +119,7 @@ namespace boost { namespace locale { namespace impl_win {
 
         void to_str(std::wstring& s1, std::wstring& s2) { s2.swap(s1); }
 
-        void to_str(std::wstring& s1, std::string& s2) { s2 = conv::from_utf(s1, "UTF-8"); }
+        void to_str(std::wstring& s1, std::string& s2) { s2 = conv::utf_to_utf<char>(s1); }
         CharType do_decimal_point() const override { return *decimal_point_.c_str(); }
         CharType do_thousands_sep() const override { return *thousands_sep_.c_str(); }
         std::string do_grouping() const override { return grouping_; }

@@ -12,22 +12,22 @@
 
 namespace boost { namespace locale {
 
-    ios_info::string_set::string_set() : type(0), size(0), ptr(0) {}
+    ios_info::string_set::string_set() : type(nullptr), size(0), ptr(nullptr) {}
     ios_info::string_set::~string_set()
     {
         delete[] ptr;
     }
     ios_info::string_set::string_set(const string_set& other)
     {
-        if(other.ptr != 0) {
+        if(other.ptr != nullptr) {
             ptr = new char[other.size];
             size = other.size;
             type = other.type;
             memcpy(ptr, other.ptr, size);
         } else {
-            ptr = 0;
+            ptr = nullptr;
             size = 0;
-            type = 0;
+            type = nullptr;
         }
     }
 

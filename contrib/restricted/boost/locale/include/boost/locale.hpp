@@ -21,5 +21,6 @@
 #include <boost/locale/localization_backend.hpp>
 #include <boost/locale/message.hpp>
 #include <boost/locale/util.hpp>
+#include <boost/locale/util/locale_data.hpp>
 
 #endif

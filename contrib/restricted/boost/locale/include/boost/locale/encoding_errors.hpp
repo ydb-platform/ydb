@@ -33,7 +33,7 @@ namespace boost { namespace locale { namespace conv {
     public:
         /// Create an error for charset \a charset
         invalid_charset_error(const std::string& charset) :
-            std::runtime_error("Invalid or unsupported charset:" + charset)
+            std::runtime_error("Invalid or unsupported charset: " + charset)
         {}
     };
 

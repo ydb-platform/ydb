@@ -27,10 +27,11 @@ namespace boost { namespace locale { namespace util {
         bool utf8_;
 
     public:
-        // Default to C locale with US-ASCII encoding
+        /// Default to C locale with US-ASCII encoding
         locale_data();
-        // Construct from the parsed locale \see \ref parse
-        // Throws `std::invalid_argument` if parsing fails
+        /// Construct from the parsed locale \see \ref parse
+        ///
+        /// \throws std::invalid_argument: parsing failed
         explicit locale_data(const std::string& locale_name);
 
         /// Return language (usually 2 lowercase letters, i.e. ISO-639 or 'C')
@@ -39,24 +40,25 @@ namespace boost { namespace locale { namespace util {
         const std::string& country() const { return country_; }
         /// Return encoding/codeset, e.g. ISO8859-1 or UTF-8
         const std::string& encoding() const { return encoding_; }
+        /// Set encoding, will be made uppercase by default as-if it was parsed
+        /// Returns \c *this for chaining
+        locale_data& encoding(std::string new_encoding, bool uppercase = true);
         /// Return variant/modifier, e.g. euro or stroke
         const std::string& variant() const { return variant_; }
         /// Return iff the encoding is UTF-8
         bool is_utf8() const { return utf8_; }
 
-        /// <summary>
-        /// Parse a locale identifier of the form [language[_territory][.codeset][@modifier]]
-        /// Allows a dash as the delimiter: [language-territory]
+        /// Parse a locale identifier of the form `[language[_territory][.codeset][@modifier]]`
         ///
+        /// Allows a dash as the delimiter: `[language-territory]`
         /// Return true if the identifier is valid:
         ///   - `language` is given and consists of ASCII letters
         ///   - `territory`, if given, consists of ASCII letters
         ///   - Any field started by a delimiter (`_`, `-`, `.`, `@`) is not empty
         /// Otherwise parsing is aborted. Valid values already parsed stay set, other are defaulted.
-        /// </summary>
         bool parse(const std::string& locale_name);
 
-        /// Get a representation in the form [language[_territory][.codeset][@modifier]]
+        /// Get a representation in the form `[language[_territory][.codeset][@modifier]]`
         /// codeset is omitted if it is US-ASCII
         std::string to_string() const;
 

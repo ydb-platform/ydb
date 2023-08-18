@@ -8,6 +8,8 @@
 #define BOOST_LOCALE_BOUNDARY_FACETS_HPP_INCLUDED
 
 #include <boost/locale/boundary/types.hpp>
+#include <boost/locale/detail/facet_id.hpp>
+#include <boost/locale/detail/is_supported_char.hpp>
 #include <locale>
 #include <vector>
 
@@ -49,16 +51,14 @@ namespace boost { namespace locale {
         /// with marks
         typedef std::vector<break_info> index_type;
 
-        template<typename CharType>
-        class boundary_indexing;
-
-#ifdef BOOST_LOCALE_DOXYGEN
-        /// \brief This facet generates an index for boundary analysis
-        /// for a given text.
+        /// \brief This facet generates an index for boundary analysis of a given text.
         ///
-        /// It is specialized for 4 types of characters \c char_t, \c wchar_t, \c char16_t and \c char32_t
+        /// It is implemented for supported character types, at least \c char, \c wchar_t
         template<typename Char>
-        class BOOST_LOCALE_DECL boundary_indexing : public std::locale::facet {
+        class BOOST_SYMBOL_VISIBLE boundary_indexing : public std::locale::facet,
+                                                       public boost::locale::detail::facet_id<boundary_indexing<Char>> {
+            BOOST_LOCALE_ASSERT_IS_SUPPORTED(Char);
+
         public:
             /// Default constructor typical for facets
             boundary_indexing(size_t refs = 0) : std::locale::facet(refs) {}
@@ -69,55 +69,7 @@ namespace boost { namespace locale {
             /// index is never empty, even if the range [begin,end) is empty it consists
             /// of at least one boundary point with the offset 0.
             virtual index_type map(boundary_type t, const Char* begin, const Char* end) const = 0;
-
-            /// Identification of this facet
-            static std::locale::id id;
         };
-
-#else
-
-        template<>
-        class BOOST_LOCALE_DECL boundary_indexing<char> : public std::locale::facet {
-        public:
-            boundary_indexing(size_t refs = 0) : std::locale::facet(refs) {}
-            ~boundary_indexing();
-            virtual index_type map(boundary_type t, const char* begin, const char* end) const = 0;
-            static std::locale::id id;
-        };
-
-        template<>
-        class BOOST_LOCALE_DECL boundary_indexing<wchar_t> : public std::locale::facet {
-        public:
-            boundary_indexing(size_t refs = 0) : std::locale::facet(refs) {}
-            ~boundary_indexing();
-            virtual index_type map(boundary_type t, const wchar_t* begin, const wchar_t* end) const = 0;
-
-            static std::locale::id id;
-        };
-
-#    ifdef BOOST_LOCALE_ENABLE_CHAR16_T
-        template<>
-        class BOOST_LOCALE_DECL boundary_indexing<char16_t> : public std::locale::facet {
-        public:
-            boundary_indexing(size_t refs = 0) : std::locale::facet(refs) {}
-            ~boundary_indexing();
-            virtual index_type map(boundary_type t, const char16_t* begin, const char16_t* end) const = 0;
-            static std::locale::id id;
-        };
-#    endif
-
-#    ifdef BOOST_LOCALE_ENABLE_CHAR32_T
-        template<>
-        class BOOST_LOCALE_DECL boundary_indexing<char32_t> : public std::locale::facet {
-        public:
-            boundary_indexing(size_t refs = 0) : std::locale::facet(refs) {}
-            ~boundary_indexing();
-            virtual index_type map(boundary_type t, const char32_t* begin, const char32_t* end) const = 0;
-            static std::locale::id id;
-        };
-#    endif
-
-#endif
 
         /// @}
     } // namespace boundary

@@ -8,6 +8,7 @@
 #define BOOST_LOCALE_UTIL_STRING_HPP
 
 #include <boost/locale/config.hpp>
+#include <limits>
 
 namespace boost { namespace locale { namespace util {
     /// Return the end of a C-string, i.e. the pointer to the trailing NULL byte
@@ -19,19 +20,25 @@ namespace boost { namespace locale { namespace util {
         return str;
     }
 
-    inline bool is_upper_ascii(const char c)
+    inline constexpr bool is_upper_ascii(const char c)
     {
         return 'A' <= c && c <= 'Z';
     }
 
-    inline bool is_lower_ascii(const char c)
+    inline constexpr bool is_lower_ascii(const char c)
     {
         return 'a' <= c && c <= 'z';
     }
 
-    inline bool is_numeric_ascii(const char c)
+    inline constexpr bool is_numeric_ascii(const char c)
     {
         return '0' <= c && c <= '9';
+    }
+
+    /// Cast an unsigned char to a (possibly signed) char avoiding implementation defined behavior
+    constexpr char to_char(unsigned char c)
+    {
+        return static_cast<char>((c - std::numeric_limits<char>::min()) + std::numeric_limits<char>::min());
     }
 
 }}} // namespace boost::locale::util

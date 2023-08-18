@@ -359,10 +359,10 @@ namespace boost { namespace locale { namespace boundary {
     /// Write the segment to the stream character by character
     template<typename CharType, typename TraitsType, typename Iterator>
     std::basic_ostream<CharType, TraitsType>& operator<<(std::basic_ostream<CharType, TraitsType>& out,
-                                                         const segment<Iterator>& tok)
+                                                         const segment<Iterator>& seg)
     {
-        for(Iterator p = tok.begin(), e = tok.end(); p != e; ++p)
-            out << *p;
+        for(const auto& p : seg)
+            out << p;
         return out;
     }
 

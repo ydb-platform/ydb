@@ -6,6 +6,7 @@
 
 #include <boost/locale/date_time.hpp>
 #include <boost/locale/formatting.hpp>
+#include <boost/core/exchange.hpp>
 #include <boost/thread/locks.hpp>
 #include <boost/thread/mutex.hpp>
 #include <cmath>
@@ -66,12 +67,12 @@ namespace boost { namespace locale {
         return impl_->get_option(abstract_calendar::is_gregorian) != 0;
     }
 
-    std::string calendar::get_time_zone() const
+    const std::string& calendar::get_time_zone() const
     {
         return tz_;
     }
 
-    std::locale calendar::get_locale() const
+    const std::locale& calendar::get_locale() const
     {
         return locale_;
     }
@@ -125,9 +126,8 @@ namespace boost { namespace locale {
     date_time::date_time(const date_time& other, const date_time_period_set& s)
     {
         impl_.reset(other.impl_->clone());
-        for(unsigned i = 0; i < s.size(); i++) {
+        for(unsigned i = 0; i < s.size(); i++)
             impl_->set_value(s[i].type.mark(), s[i].value);
-        }
         impl_->normalize();
     }
 
@@ -154,16 +154,14 @@ namespace boost { namespace locale {
         impl_(std::use_facet<calendar_facet>(std::locale()).create_calendar())
     {
         impl_->set_timezone(time_zone::global());
-        for(unsigned i = 0; i < s.size(); i++) {
+        for(unsigned i = 0; i < s.size(); i++)
             impl_->set_value(s[i].type.mark(), s[i].value);
-        }
         impl_->normalize();
     }
     date_time::date_time(const date_time_period_set& s, const calendar& cal) : impl_(cal.impl_->clone())
     {
-        for(unsigned i = 0; i < s.size(); i++) {
+        for(unsigned i = 0; i < s.size(); i++)
             impl_->set_value(s[i].type.mark(), s[i].value);
-        }
         impl_->normalize();
     }
 
@@ -268,33 +266,29 @@ namespace boost { namespace locale {
 
     date_time& date_time::operator+=(const date_time_period_set& v)
     {
-        for(unsigned i = 0; i < v.size(); i++) {
+        for(unsigned i = 0; i < v.size(); i++)
             *this += v[i];
-        }
         return *this;
     }
 
     date_time& date_time::operator-=(const date_time_period_set& v)
     {
-        for(unsigned i = 0; i < v.size(); i++) {
+        for(unsigned i = 0; i < v.size(); i++)
             *this -= v[i];
-        }
         return *this;
     }
 
     date_time& date_time::operator<<=(const date_time_period_set& v)
     {
-        for(unsigned i = 0; i < v.size(); i++) {
+        for(unsigned i = 0; i < v.size(); i++)
             *this <<= v[i];
-        }
         return *this;
     }
 
     date_time& date_time::operator>>=(const date_time_period_set& v)
     {
-        for(unsigned i = 0; i < v.size(); i++) {
+        for(unsigned i = 0; i < v.size(); i++)
             *this >>= v[i];
-        }
         return *this;
     }
 
@@ -323,6 +317,11 @@ namespace boost { namespace locale {
             nano = ns_in_s - 1;
         ptime.nanoseconds = static_cast<uint32_t>(nano);
         impl_->set_time(ptime);
+    }
+
+    std::string date_time::timezone() const
+    {
+        return impl_->get_timezone();
     }
 
     namespace {
@@ -370,7 +369,7 @@ namespace boost { namespace locale {
         return !(*this > other);
     }
 
-    void date_time::swap(date_time& other)
+    void date_time::swap(date_time& other) noexcept
     {
         impl_.swap(other.impl_);
     }
@@ -409,15 +408,12 @@ namespace boost { namespace locale {
         std::string global()
         {
             boost::unique_lock<boost::mutex> lock(tz_mutex());
-            std::string id = tz_id();
-            return id;
+            return tz_id();
         }
         std::string global(const std::string& new_id)
         {
             boost::unique_lock<boost::mutex> lock(tz_mutex());
-            std::string id = tz_id();
-            tz_id() = new_id;
-            return id;
+            return boost::exchange(tz_id(), new_id);
         }
     } // namespace time_zone
 

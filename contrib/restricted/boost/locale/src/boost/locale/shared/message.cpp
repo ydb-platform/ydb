@@ -1,5 +1,6 @@
 //
 // Copyright (c) 2009-2015 Artyom Beilis (Tonkikh)
+// Copyright (c) 2021-2023 Alexander Grund
 //
 // Distributed under the Boost Software License, Version 1.0.
 // https://www.boost.org/LICENSE_1_0.txt
@@ -15,154 +16,188 @@
 #    endif
 #endif
 
-#include <boost/locale/encoding.hpp>
 #include <boost/locale/gnu_gettext.hpp>
-#include <boost/locale/hold_ptr.hpp>
+
+#include <boost/locale/encoding.hpp>
 #include <boost/locale/message.hpp>
 #include "boost/locale/shared/mo_hash.hpp"
 #include "boost/locale/shared/mo_lambda.hpp"
 #include "boost/locale/util/encoding.hpp"
-#include <boost/version.hpp>
-#include <algorithm>
+#include "boost/locale/util/foreach_char.hpp"
+#include <boost/assert.hpp>
+#include <boost/utility/string_view.hpp>
 #include <cstdio>
-#include <cstring>
-#include <iostream>
 #include <map>
 #include <memory>
+#include <stdexcept>
 #include <unordered_map>
 #include <vector>
 
 namespace boost { namespace locale { namespace gnu_gettext {
 
+    std::vector<std::string> messages_info::get_lang_folders() const
+    {
+        // List of fallbacks: en_US@euro, en@euro, en_US, en.
+        std::vector<std::string> result;
+        if(!language.empty()) {
+            if(!variant.empty() && !country.empty())
+                result.push_back(language + "_" + country + "@" + variant);
+
+            if(!variant.empty())
+                result.push_back(language + "@" + variant);
+
+            if(!country.empty())
+                result.push_back(language + "_" + country);
+
+            result.push_back(language);
+        }
+        return result;
+    }
+
+    std::vector<std::string> messages_info::get_catalog_paths() const
+    {
+        const auto lang_folders = get_lang_folders();
+        std::vector<std::string> result;
+        result.reserve(lang_folders.size() * paths.size());
+        for(const std::string& lang_folder : lang_folders) {
+            for(const std::string& search_path : paths)
+                result.push_back(search_path + "/" + lang_folder + "/" + locale_category);
+        }
+        return result;
+    }
+
     class c_file {
-        c_file(const c_file&);
-        void operator=(const c_file&);
-
     public:
-        FILE* file;
+        FILE* handle;
 
-        c_file() : file(0) {}
-        ~c_file() { close(); }
+        c_file(const c_file&) = delete;
+        void operator=(const c_file&) = delete;
 
-        void close()
+        ~c_file()
         {
-            if(file) {
-                fclose(file);
-                file = 0;
-            }
+            if(handle)
+                fclose(handle);
         }
 
 #if defined(BOOST_WINDOWS)
 
-        bool open(const std::string& file_name, const std::string& encoding)
+        c_file(const std::string& file_name, const std::string& encoding)
         {
-            close();
-
-            // Under windows we have to use "_wfopen" to get
-            // access to path's with Unicode in them
+            // Under windows we have to use "_wfopen" to get access to path's with Unicode in them
             //
             // As not all standard C++ libraries support nonstandard std::istream::open(wchar_t const *)
             // we would use old and good stdio and _wfopen CRTL functions
 
             std::wstring wfile_name = conv::to_utf<wchar_t>(file_name, encoding);
-            file = _wfopen(wfile_name.c_str(), L"rb");
-
-            return file != 0;
+            handle = _wfopen(wfile_name.c_str(), L"rb");
         }
 
 #else // POSIX systems do not have all this Wide API crap, as native codepages are UTF-8
 
         // We do not use encoding as we use native file name encoding
 
-        bool open(const std::string& file_name, const std::string& /* encoding */)
-        {
-            close();
-
-            file = fopen(file_name.c_str(), "rb");
-
-            return file != 0;
-        }
-
+        c_file(const std::string& file_name, const std::string& /* encoding */) : handle(fopen(file_name.c_str(), "rb"))
+        {}
 #endif
     };
 
+    std::vector<char> read_file(FILE* file)
+    {
+        fseek(file, 0, SEEK_END);
+        const auto len = ftell(file);
+        if(BOOST_UNLIKELY(len < 0))
+            throw std::runtime_error("Wrong file object"); // LCOV_EXCL_LINE
+        else {
+            fseek(file, 0, SEEK_SET);
+            std::vector<char> data(len);
+            if(BOOST_LIKELY(!data.empty()) && fread(data.data(), 1, data.size(), file) != data.size())
+                throw std::runtime_error("Failed to read file"); // LCOV_EXCL_LINE
+            return data;
+        }
+    }
+
     class mo_file {
     public:
-        typedef std::pair<const char*, const char*> pair_type;
-
-        mo_file(std::vector<char>& file) : native_byteorder_(true), size_(0)
+        mo_file(std::vector<char> data) : data_(std::move(data))
         {
-            load_file(file);
-            init();
+            if(data_.size() < 4)
+                throw std::runtime_error("invalid 'mo' file format - the file is too short");
+            uint32_t magic;
+            static_assert(sizeof(magic) == 4, "!");
+            memcpy(&magic, data_.data(), sizeof(magic));
+            if(magic == 0x950412de)
+                native_byteorder_ = true;
+            else if(magic == 0xde120495)
+                native_byteorder_ = false;
+            else
+                throw std::runtime_error("Invalid file format - invalid magic number");
+
+            // Read all format sizes
+            size_ = get(8);
+            keys_offset_ = get(12);
+            translations_offset_ = get(16);
+            hash_size_ = get(20);
+            hash_offset_ = get(24);
         }
 
-        mo_file(FILE* file) : native_byteorder_(true), size_(0)
+        string_view find(const char* context_in, const char* key_in) const
         {
-            load_file(file);
-            init();
-        }
+            if(!has_hash())
+                return {};
 
-        pair_type find(const char* context_in, const char* key_in) const
-        {
-            pair_type null_pair((const char*)0, (const char*)0);
-            if(hash_size_ == 0)
-                return null_pair;
-            uint32_t hkey = 0;
-            if(context_in == 0)
-                hkey = pj_winberger_hash_function(key_in);
-            else {
-                pj_winberger_hash::state_type st = pj_winberger_hash::initial_state;
+            pj_winberger_hash::state_type st = pj_winberger_hash::initial_state;
+            if(context_in) {
                 st = pj_winberger_hash::update_state(st, context_in);
                 st = pj_winberger_hash::update_state(st, '\4'); // EOT
-                st = pj_winberger_hash::update_state(st, key_in);
-                hkey = st;
             }
-            uint32_t incr = 1 + hkey % (hash_size_ - 2);
+            st = pj_winberger_hash::update_state(st, key_in);
+            uint32_t hkey = st;
+            const uint32_t incr = 1 + hkey % (hash_size_ - 2);
             hkey %= hash_size_;
-            uint32_t orig = hkey;
+            const uint32_t orig_hkey = hkey;
 
             do {
-                uint32_t idx = get(hash_offset_ + 4 * hkey);
-                /// Not found
+                const uint32_t idx = get(hash_offset_ + 4 * hkey);
+                // Not found
                 if(idx == 0)
-                    return null_pair;
-                /// If equal values return translation
+                    return {};
+                // If equal values return translation
                 if(key_equals(key(idx - 1), context_in, key_in))
                     return value(idx - 1);
-                /// Rehash
+                // Rehash
                 hkey = (hkey + incr) % hash_size_;
-            } while(hkey != orig);
-            return null_pair;
+            } while(hkey != orig_hkey);
+            return {};
         }
 
         static bool key_equals(const char* real_key, const char* cntx, const char* key)
         {
-            if(cntx == 0)
+            if(!cntx)
                 return strcmp(real_key, key) == 0;
             else {
-                size_t real_len = strlen(real_key);
-                size_t cntx_len = strlen(cntx);
-                size_t key_len = strlen(key);
-                if(cntx_len + 1 + key_len != real_len)
+                const size_t real_key_len = strlen(real_key);
+                const size_t cntx_len = strlen(cntx);
+                const size_t key_len = strlen(key);
+                if(cntx_len + 1 + key_len != real_key_len)
                     return false;
                 return memcmp(real_key, cntx, cntx_len) == 0 && real_key[cntx_len] == '\4'
                        && memcmp(real_key + cntx_len + 1, key, key_len) == 0;
             }
         }
 
-        const char* key(int id) const
+        const char* key(unsigned id) const
         {
-            uint32_t off = get(keys_offset_ + id * 8 + 4);
-            return data_ + off;
+            const uint32_t off = get(keys_offset_ + id * 8 + 4);
+            return data_.data() + off;
         }
 
-        pair_type value(int id) const
+        string_view value(unsigned id) const
         {
-            uint32_t len = get(translations_offset_ + id * 8);
-            uint32_t off = get(translations_offset_ + id * 8 + 4);
-            if(off >= file_size_ || off + len >= file_size_)
+            const uint32_t len = get(translations_offset_ + id * 8);
+            const uint32_t off = get(translations_offset_ + id * 8 + 4);
+            if(len > data_.size() || off > data_.size() - len)
                 throw std::runtime_error("Bad mo-file format");
-            return pair_type(&data_[off], &data_[off] + len);
+            return string_view(&data_[off], len);
         }
 
         bool has_hash() const { return hash_size_ != 0; }
@@ -172,77 +207,16 @@ namespace boost { namespace locale { namespace gnu_gettext {
         bool empty() { return size_ == 0; }
 
     private:
-        void init()
-        {
-            // Read all format sizes
-            size_ = get(8);
-            keys_offset_ = get(12);
-            translations_offset_ = get(16);
-            hash_size_ = get(20);
-            hash_offset_ = get(24);
-        }
-
-        void load_file(std::vector<char>& data)
-        {
-            vdata_.swap(data);
-            file_size_ = vdata_.size();
-            data_ = &vdata_[0];
-            if(file_size_ < 4)
-                throw std::runtime_error("invalid 'mo' file format - the file is too short");
-            uint32_t magic = 0;
-            memcpy(&magic, data_, 4);
-            if(magic == 0x950412de)
-                native_byteorder_ = true;
-            else if(magic == 0xde120495)
-                native_byteorder_ = false;
-            else
-                throw std::runtime_error("Invalid file format - invalid magic number");
-        }
-
-        void load_file(FILE* file)
-        {
-            uint32_t magic = 0;
-            // if the size is wrong magic would be wrong
-            // ok to ignore fread result
-            size_t four_bytes = fread(&magic, 4, 1, file);
-            (void)four_bytes; // shut GCC
-
-            if(magic == 0x950412de)
-                native_byteorder_ = true;
-            else if(magic == 0xde120495)
-                native_byteorder_ = false;
-            else
-                throw std::runtime_error("Invalid file format");
-
-            fseek(file, 0, SEEK_END);
-            long len = ftell(file);
-            if(len < 0) {
-                throw std::runtime_error("Wrong file object");
-            }
-            fseek(file, 0, SEEK_SET);
-            vdata_.resize(len + 1, 0); // +1 to make sure the vector is not empty
-            if(fread(&vdata_.front(), 1, len, file) != unsigned(len))
-                throw std::runtime_error("Failed to read file");
-            data_ = &vdata_[0];
-            file_size_ = len;
-        }
-
         uint32_t get(unsigned offset) const
         {
-            uint32_t tmp;
-            if(offset > file_size_ - 4) {
+            if(offset > data_.size() - 4)
                 throw std::runtime_error("Bad mo-file format");
-            }
-            memcpy(&tmp, data_ + offset, 4);
-            convert(tmp);
-            return tmp;
-        }
+            uint32_t v;
+            memcpy(&v, &data_[offset], 4);
+            if(!native_byteorder_)
+                v = ((v & 0xFF) << 24) | ((v & 0xFF00) << 8) | ((v & 0xFF0000) >> 8) | ((v & 0xFF000000) >> 24);
 
-        void convert(uint32_t& v) const
-        {
-            if(native_byteorder_)
-                return;
-            v = ((v & 0xFF) << 24) | ((v & 0xFF00) << 8) | ((v & 0xFF0000) >> 8) | ((v & 0xFF000000) >> 24);
+            return v;
         }
 
         uint32_t keys_offset_;
@@ -250,9 +224,7 @@ namespace boost { namespace locale { namespace gnu_gettext {
         uint32_t hash_size_;
         uint32_t hash_offset_;
 
-        const char* data_;
-        size_t file_size_;
-        std::vector<char> vdata_;
+        const std::vector<char> data_;
         bool native_byteorder_;
         size_t size_;
     };
@@ -260,76 +232,67 @@ namespace boost { namespace locale { namespace gnu_gettext {
     template<typename CharType>
     struct mo_file_use_traits {
         static constexpr bool in_use = false;
-        typedef CharType char_type;
-        typedef std::pair<const char_type*, const char_type*> pair_type;
-        static pair_type use(const mo_file& /*mo*/, const char_type* /*context*/, const char_type* /*key*/)
+        using string_view_type = basic_string_view<CharType>;
+        static string_view_type use(const mo_file&, const CharType*, const CharType*)
         {
-            return pair_type((const char_type*)(0), (const char_type*)(0));
+            throw std::logic_error("Unexpected call"); // LCOV_EXCL_LINE
         }
     };
 
     template<>
     struct mo_file_use_traits<char> {
         static constexpr bool in_use = true;
-        typedef char char_type;
-        typedef std::pair<const char_type*, const char_type*> pair_type;
-        static pair_type use(const mo_file& mo, const char* context, const char* key) { return mo.find(context, key); }
+        typedef char CharType;
+        using string_view_type = basic_string_view<CharType>;
+        static string_view_type use(const mo_file& mo, const char* context, const char* key)
+        {
+            return mo.find(context, key);
+        }
     };
 
     template<typename CharType>
-    class converter {
+    class converter : conv::utf_encoder<CharType> {
+        using encoder = conv::utf_encoder<CharType>;
+
     public:
-        converter(std::string /*out_enc*/, std::string in_enc) : in_(in_enc) {}
+        converter(std::string /*out_enc*/, std::string in_enc) : encoder(in_enc, conv::stop) {}
 
-        std::basic_string<CharType> operator()(const char* begin, const char* end)
-        {
-            return conv::to_utf<CharType>(begin, end, in_, conv::stop);
-        }
-
-    private:
-        std::string in_;
+        using encoder::operator();
     };
 
     template<>
-    class converter<char> {
+    class converter<char> : conv::narrow_converter {
     public:
-        converter(std::string out_enc, std::string in_enc) : out_(out_enc), in_(in_enc) {}
+        converter(const std::string& out_enc, const std::string& in_enc) : narrow_converter(in_enc, out_enc) {}
 
-        std::string operator()(const char* begin, const char* end)
-        {
-            return conv::between(begin, end, out_, in_, conv::stop);
-        }
-
-    private:
-        std::string out_, in_;
+        using narrow_converter::operator();
     };
 
     template<typename CharType>
     struct message_key {
-        typedef CharType char_type;
-        typedef std::basic_string<char_type> string_type;
+        typedef std::basic_string<CharType> string_type;
 
-        message_key(const string_type& c = string_type()) : c_context_(0), c_key_(0)
+        message_key(const string_type& c = string_type()) : c_context_(nullptr), c_key_(nullptr)
         {
-            size_t pos = c.find(char_type(4));
-            if(pos == string_type::npos) {
+            const size_t pos = c.find(CharType(4));
+            if(pos == string_type::npos)
                 key_ = c;
-            } else {
+            else {
                 context_ = c.substr(0, pos);
                 key_ = c.substr(pos + 1);
             }
         }
-        message_key(const char_type* c, const char_type* k) : c_key_(k)
+        message_key(const CharType* c, const CharType* k) : c_key_(k)
         {
-            static const char_type empty = 0;
-            if(c != 0)
+            static const CharType empty = 0;
+            if(c != nullptr)
                 c_context_ = c;
             else
                 c_context_ = &empty;
         }
         bool operator<(const message_key& other) const
         {
-            int cc = compare(context(), other.context());
+            const int cc = compare(context(), other.context());
             if(cc != 0)
                 return cc < 0;
             return compare(key(), other.key()) < 0;
@@ -339,13 +302,13 @@ namespace boost { namespace locale { namespace gnu_gettext {
             return compare(context(), other.context()) == 0 && compare(key(), other.key()) == 0;
         }
         bool operator!=(const message_key& other) const { return !(*this == other); }
-        const char_type* context() const
+        const CharType* context() const
         {
             if(c_context_)
                 return c_context_;
             return context_.c_str();
         }
-        const char_type* key() const
+        const CharType* key() const
         {
             if(c_key_)
                 return c_key_;
@@ -353,12 +316,12 @@ namespace boost { namespace locale { namespace gnu_gettext {
         }
 
     private:
-        static int compare(const char_type* l, const char_type* r)
+        static int compare(const CharType* l, const CharType* r)
         {
-            typedef std::char_traits<char_type> traits_type;
+            typedef std::char_traits<CharType> traits_type;
             for(;;) {
-                char_type cl = *l++;
-                char_type cr = *r++;
+                const CharType cl = *l++;
+                const CharType cr = *r++;
                 if(cl == 0 && cr == 0)
                     return 0;
                 if(traits_type::lt(cl, cr))
@@ -369,8 +332,8 @@ namespace boost { namespace locale { namespace gnu_gettext {
         }
         string_type context_;
         string_type key_;
-        const char_type* c_context_;
-        const char_type* c_key_;
+        const CharType* c_context_;
+        const CharType* c_key_;
     };
 
     template<typename CharType>
@@ -418,54 +381,57 @@ namespace boost { namespace locale { namespace gnu_gettext {
             return msg;
         if(detail::is_us_ascii_string(msg))
             return msg;
-        std::string tmp = conv::between(msg, locale_encoding, key_encoding, conv::skip);
-        buffer.swap(tmp);
+        buffer = conv::between(msg, locale_encoding, key_encoding, conv::skip);
         return buffer.c_str();
     }
 
     template<typename CharType>
     class mo_message : public message_format<CharType> {
-        typedef CharType char_type;
         typedef std::basic_string<CharType> string_type;
         typedef message_key<CharType> key_type;
         typedef std::unordered_map<key_type, string_type, hash_function<CharType>> catalog_type;
-        typedef std::vector<catalog_type> catalogs_set_type;
-        typedef std::map<std::string, int> domains_map_type;
+        struct domain_data_type {
+            std::unique_ptr<mo_file> mo_catalog; /// Message catalog (.mo file) if it can be directly used
+            catalog_type catalog;                /// Converted message catalog when .mo file cannot be directly used
+            lambda::plural_expr plural_form;     /// Expression to determine the plural form index
+        };
 
     public:
-        typedef std::pair<const CharType*, const CharType*> pair_type;
+        using string_view_type = typename mo_file_use_traits<CharType>::string_view_type;
 
-        const char_type* get(int domain_id, const char_type* context, const char_type* in_id) const override
+        const CharType* get(int domain_id, const CharType* context, const CharType* in_id) const override
         {
-            return get_string(domain_id, context, in_id).first;
+            const auto result = get_string(domain_id, context, in_id);
+            return result.empty() ? nullptr : result.data();
         }
 
-        const char_type* get(int domain_id, const char_type* context, const char_type* single_id, int n) const override
+        const CharType*
+        get(int domain_id, const CharType* context, const CharType* single_id, count_type n) const override
         {
-            pair_type ptr = get_string(domain_id, context, single_id);
-            if(!ptr.first)
+            auto result = get_string(domain_id, context, single_id);
+            if(result.empty())
                 return nullptr;
-            int form = 0;
-            if(plural_forms_.at(domain_id))
-                form = (*plural_forms_[domain_id])(n);
-            else
-                form = n == 1 ? 0 : 1; // Fallback to English plural form
 
-            const CharType* p = ptr.first;
-            for(int i = 0; p < ptr.second && i < form; i++) {
-                p = std::find(p, ptr.second, CharType(0));
-                if(p == ptr.second)
+            // domain_id is already checked by get_string -> Would return a null-pair
+            BOOST_ASSERT(domain_id >= 0 && static_cast<size_t>(domain_id) < domain_data_.size());
+            lambda::expr::value_type plural_idx;
+            if(domain_data_[domain_id].plural_form)
+                plural_idx = domain_data_[domain_id].plural_form(n);
+            else
+                plural_idx = n == 1 ? 0 : 1; // Fallback to English plural form
+
+            for(decltype(plural_idx) i = 0; i < plural_idx; ++i) {
+                const auto pos = result.find(CharType(0));
+                if(BOOST_UNLIKELY(pos == string_view_type::npos))
                     return nullptr;
-                ++p;
+                result.remove_prefix(pos + 1);
             }
-            if(p >= ptr.second)
-                return nullptr;
-            return p;
+            return result.empty() ? nullptr : result.data();
         }
 
         int domain(const std::string& domain) const override
         {
-            domains_map_type::const_iterator p = domains_.find(domain);
+            const auto p = domains_.find(domain);
             if(p == domains_.end())
                 return -1;
             return p->second;
@@ -473,61 +439,32 @@ namespace boost { namespace locale { namespace gnu_gettext {
 
         mo_message(const messages_info& inf) : key_conversion_required_(false)
         {
-            std::string language = inf.language;
-            std::string variant = inf.variant;
-            std::string country = inf.country;
-            std::string encoding = inf.encoding;
-            std::string lc_cat = inf.locale_category;
             const std::vector<messages_info::domain>& domains = inf.domains;
-            const std::vector<std::string>& search_paths = inf.paths;
+            domain_data_.resize(domains.size());
 
-            // List of fallbacks: en_US@euro, en@euro, en_US, en.
-            std::vector<std::string> paths;
-
-            if(!variant.empty() && !country.empty())
-                paths.push_back(language + "_" + country + "@" + variant);
-
-            if(!variant.empty())
-                paths.push_back(language + "@" + variant);
-
-            if(!country.empty())
-                paths.push_back(language + "_" + country);
-
-            paths.push_back(language);
-
-            catalogs_.resize(domains.size());
-            mo_catalogs_.resize(domains.size());
-            plural_forms_.resize(domains.size());
-
+            const auto catalog_paths = inf.get_catalog_paths();
             for(unsigned i = 0; i < domains.size(); i++) {
-                std::string domain = domains[i].name;
-                std::string key_encoding = domains[i].encoding;
-                domains_[domain] = i;
-
-                bool found = false;
-                for(unsigned j = 0; !found && j < paths.size(); j++) {
-                    for(unsigned k = 0; !found && k < search_paths.size(); k++) {
-                        std::string full_path = search_paths[k] + "/" + paths[j] + "/" + lc_cat + "/" + domain + ".mo";
-                        found = load_file(full_path, encoding, key_encoding, i, inf.callback);
-                    }
+                const auto& domain = domains[i];
+                domains_[domain.name] = i;
+                const std::string filename = domain.name + ".mo";
+                for(std::string path : catalog_paths) {
+                    path += "/" + filename;
+                    if(load_file(path, inf.encoding, domain.encoding, domain_data_[i], inf.callback))
+                        break;
                 }
             }
         }
 
-        const char_type* convert(const char_type* msg, string_type& buffer) const override
+        const CharType* convert(const CharType* msg, string_type& buffer) const override
         {
-            return runtime_conversion<char_type>(msg,
-                                                 buffer,
-                                                 key_conversion_required_,
-                                                 locale_encoding_,
-                                                 key_encoding_);
+            return runtime_conversion<CharType>(msg, buffer, key_conversion_required_, locale_encoding_, key_encoding_);
         }
 
     private:
         bool load_file(const std::string& file_name,
                        const std::string& locale_encoding,
                        const std::string& key_encoding,
-                       int idx,
+                       domain_data_type& data,
                        const messages_info::callback_type& callback)
         {
             locale_encoding_ = locale_encoding;
@@ -536,44 +473,42 @@ namespace boost { namespace locale { namespace gnu_gettext {
             key_conversion_required_ =
               sizeof(CharType) == 1 && !util::are_encodings_equal(locale_encoding, key_encoding);
 
-            std::shared_ptr<mo_file> mo;
+            std::unique_ptr<mo_file> mo;
 
-            if(callback) {
-                std::vector<char> vfile = callback(file_name, locale_encoding);
-                if(vfile.empty())
+            {
+                std::vector<char> file_data;
+                if(callback)
+                    file_data = callback(file_name, locale_encoding);
+                else {
+                    c_file the_file(file_name, locale_encoding);
+                    if(!the_file.handle)
+                        return false;
+                    file_data = read_file(the_file.handle);
+                }
+                if(file_data.empty())
                     return false;
-                mo.reset(new mo_file(vfile));
-            } else {
-                c_file the_file;
-                the_file.open(file_name, locale_encoding);
-                if(!the_file.file)
-                    return false;
-                mo.reset(new mo_file(the_file.file));
+                mo.reset(new mo_file(std::move(file_data)));
             }
 
-            std::string plural = extract(mo->value(0).first, "plural=", "\r\n;");
-
-            std::string mo_encoding = extract(mo->value(0).first, "charset=", " \r\n;");
+            const std::string plural = extract(mo->value(0), "plural=", "\r\n;");
+            const std::string mo_encoding = extract(mo->value(0), "charset=", " \r\n;");
 
             if(mo_encoding.empty())
                 throw std::runtime_error("Invalid mo-format, encoding is not specified");
 
             if(!plural.empty())
-                plural_forms_[idx] = lambda::compile(plural.c_str());
+                data.plural_form = lambda::compile(plural.c_str());
 
             if(mo_useable_directly(mo_encoding, *mo))
-                mo_catalogs_[idx] = mo;
+                data.mo_catalog = std::move(mo);
             else {
                 converter<CharType> cvt_value(locale_encoding, mo_encoding);
                 converter<CharType> cvt_key(key_encoding, mo_encoding);
                 for(unsigned i = 0; i < mo->size(); i++) {
                     const char* ckey = mo->key(i);
-                    string_type skey = cvt_key(ckey, ckey + strlen(ckey));
-                    key_type key(skey);
+                    const key_type key(cvt_key(ckey));
 
-                    mo_file::pair_type tmp = mo->value(i);
-                    string_type value = cvt_value(tmp.first, tmp.second);
-                    catalogs_[idx][key].swap(value);
+                    data.catalog[key] = cvt_value(mo->value(i));
                 }
             }
             return true;
@@ -594,85 +529,62 @@ namespace boost { namespace locale { namespace gnu_gettext {
                 return false;
             if(!util::are_encodings_equal(mo_encoding, locale_encoding_))
                 return false;
-            if(util::are_encodings_equal(mo_encoding, key_encoding_)) {
+            if(util::are_encodings_equal(mo_encoding, key_encoding_))
                 return true;
-            }
             for(unsigned i = 0; i < mo.size(); i++) {
-                if(!detail::is_us_ascii_string(mo.key(i))) {
+                if(!detail::is_us_ascii_string(mo.key(i)))
                     return false;
-                }
             }
             return true;
         }
 
-        static std::string extract(const std::string& meta, const std::string& key, const char* separator)
+        static std::string extract(boost::string_view meta, const std::string& key, const boost::string_view separators)
         {
-            size_t pos = meta.find(key);
-            if(pos == std::string::npos)
+            const size_t pos = meta.find(key);
+            if(pos == boost::string_view::npos)
                 return "";
-            pos += key.size(); /// size of charset=
-            size_t end_pos = meta.find_first_of(separator, pos);
-            return meta.substr(pos, end_pos - pos);
+            meta.remove_prefix(pos + key.size());
+            const size_t end_pos = meta.find_first_of(separators);
+            return std::string(meta.substr(0, end_pos));
         }
 
-        pair_type get_string(int domain_id, const char_type* context, const char_type* in_id) const
+        string_view_type get_string(int domain_id, const CharType* context, const CharType* in_id) const
         {
-            pair_type null_pair((const CharType*)0, (const CharType*)0);
-            if(domain_id < 0 || size_t(domain_id) >= catalogs_.size())
-                return null_pair;
+            if(domain_id < 0 || static_cast<size_t>(domain_id) >= domain_data_.size())
+                return {};
+            const auto& data = domain_data_[domain_id];
+
             BOOST_LOCALE_START_CONST_CONDITION
-            if(mo_file_use_traits<char_type>::in_use && mo_catalogs_[domain_id]) {
+            if(mo_file_use_traits<CharType>::in_use && data.mo_catalog) {
                 BOOST_LOCALE_END_CONST_CONDITION
-                return mo_file_use_traits<char_type>::use(*mo_catalogs_[domain_id], context, in_id);
+                return mo_file_use_traits<CharType>::use(*data.mo_catalog, context, in_id);
             } else {
-                key_type key(context, in_id);
-                const catalog_type& cat = catalogs_[domain_id];
-                typename catalog_type::const_iterator p = cat.find(key);
-                if(p == cat.end()) {
-                    return null_pair;
-                }
-                return pair_type(p->second.data(), p->second.data() + p->second.size());
+                const key_type key(context, in_id);
+                const catalog_type& cat = data.catalog;
+                const auto p = cat.find(key);
+                if(p == cat.end())
+                    return {};
+                return p->second;
             }
         }
 
-        catalogs_set_type catalogs_;
-        std::vector<std::shared_ptr<mo_file>> mo_catalogs_;
-        std::vector<std::shared_ptr<lambda::plural>> plural_forms_;
-        domains_map_type domains_;
+        std::map<std::string, unsigned> domains_;
+        std::vector<domain_data_type> domain_data_;
 
         std::string locale_encoding_;
         std::string key_encoding_;
         bool key_conversion_required_;
     };
 
-    template<>
-    message_format<char>* create_messages_facet(const messages_info& info)
+    template<typename CharType, class /* enable_if */>
+    message_format<CharType>* create_messages_facet(const messages_info& info)
     {
-        return new mo_message<char>(info);
+        return new mo_message<CharType>(info);
     }
 
-    template<>
-    message_format<wchar_t>* create_messages_facet(const messages_info& info)
-    {
-        return new mo_message<wchar_t>(info);
-    }
+#define BOOST_LOCALE_INSTANTIATE(CHARTYPE) \
+    template BOOST_LOCALE_DECL message_format<CHARTYPE>* create_messages_facet(const messages_info& info);
 
-#ifdef BOOST_LOCALE_ENABLE_CHAR16_T
-
-    template<>
-    message_format<char16_t>* create_messages_facet(const messages_info& info)
-    {
-        return new mo_message<char16_t>(info);
-    }
-#endif
-
-#ifdef BOOST_LOCALE_ENABLE_CHAR32_T
-
-    template<>
-    message_format<char32_t>* create_messages_facet(const messages_info& info)
-    {
-        return new mo_message<char32_t>(info);
-    }
-#endif
+    BOOST_LOCALE_FOREACH_CHAR(BOOST_LOCALE_INSTANTIATE)
 
 }}} // namespace boost::locale::gnu_gettext

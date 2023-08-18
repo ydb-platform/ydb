@@ -9,17 +9,35 @@
 #include <boost/locale/formatting.hpp>
 #include <boost/locale/info.hpp>
 #include <boost/predef/os.h>
+#include <algorithm>
+#include <cerrno>
 #include <cstdlib>
 #include <ctime>
 #include <ios>
+#include <limits>
 #include <locale>
 #include <sstream>
 #include <string>
 #include <vector>
 
-#include "boost/locale/util/timezone.hpp"
+#include "timezone.hpp"
 
 namespace boost { namespace locale { namespace util {
+
+    inline bool try_to_int(const std::string& s, int& res)
+    {
+        if(s.empty())
+            return false;
+        errno = 0;
+        char* end_char{};
+        const auto v = std::strtol(s.c_str(), &end_char, 10);
+        if(errno == ERANGE || end_char != s.c_str() + s.size())
+            return false;
+        if(v < std::numeric_limits<int>::min() || v > std::numeric_limits<int>::max())
+            return false;
+        res = v;
+        return true;
+    }
 
     template<typename CharType>
     struct formatting_size_traits {
@@ -35,16 +53,10 @@ namespace boost { namespace locale { namespace util {
             if(!std::use_facet<info>(l).utf8())
                 return s.size();
             // count code points, poor man's text size
-            size_t res = 0;
-            for(size_t i = 0; i < s.size(); i++) {
-                unsigned char c = s[i];
-                if(c <= 127)
-                    res++;
-                else if((c & 0xC0) == 0xC0) { // first UTF-8 byte
-                    res++;
-                }
-            }
-            return res;
+            return std::count_if(s.begin(), s.end(), [](const unsigned char c) {
+                return (c <= 127)               // ASCII
+                       || ((c & 0xC0) == 0xC0); // first UTF-8 byte
+            });
         }
     };
 
@@ -53,48 +65,47 @@ namespace boost { namespace locale { namespace util {
     public:
         typedef typename std::num_put<CharType>::iter_type iter_type;
         typedef std::basic_string<CharType> string_type;
-        typedef CharType char_type;
 
         base_num_format(size_t refs = 0) : std::num_put<CharType>(refs) {}
 
     protected:
-        iter_type do_put(iter_type out, std::ios_base& ios, char_type fill, long val) const override
+        iter_type do_put(iter_type out, std::ios_base& ios, CharType fill, long val) const override
         {
             return do_real_put(out, ios, fill, val);
         }
-        iter_type do_put(iter_type out, std::ios_base& ios, char_type fill, unsigned long val) const override
+        iter_type do_put(iter_type out, std::ios_base& ios, CharType fill, unsigned long val) const override
         {
             return do_real_put(out, ios, fill, val);
         }
-        iter_type do_put(iter_type out, std::ios_base& ios, char_type fill, double val) const override
+        iter_type do_put(iter_type out, std::ios_base& ios, CharType fill, double val) const override
         {
             return do_real_put(out, ios, fill, val);
         }
-        iter_type do_put(iter_type out, std::ios_base& ios, char_type fill, long double val) const override
+        iter_type do_put(iter_type out, std::ios_base& ios, CharType fill, long double val) const override
         {
             return do_real_put(out, ios, fill, val);
         }
 
-        iter_type do_put(iter_type out, std::ios_base& ios, char_type fill, long long val) const override
+        iter_type do_put(iter_type out, std::ios_base& ios, CharType fill, long long val) const override
         {
             return do_real_put(out, ios, fill, val);
         }
-        iter_type do_put(iter_type out, std::ios_base& ios, char_type fill, unsigned long long val) const override
+        iter_type do_put(iter_type out, std::ios_base& ios, CharType fill, unsigned long long val) const override
         {
             return do_real_put(out, ios, fill, val);
         }
 
     private:
         template<typename ValueType>
-        iter_type do_real_put(iter_type out, std::ios_base& ios, char_type fill, ValueType val) const
+        iter_type do_real_put(iter_type out, std::ios_base& ios, CharType fill, ValueType val) const
         {
-            typedef std::num_put<char_type> super;
+            typedef std::num_put<CharType> super;
 
             ios_info& info = ios_info::get(ios);
 
             switch(info.display_flags()) {
                 case flags::posix: {
-                    typedef std::basic_ostringstream<char_type> sstream_type;
+                    typedef std::basic_ostringstream<CharType> sstream_type;
                     sstream_type ss;
                     ss.imbue(std::locale::classic());
                     ss.flags(ios.flags());
@@ -112,7 +123,7 @@ namespace boost { namespace locale { namespace util {
                                        ios,
                                        fill,
                                        static_cast<std::time_t>(val),
-                                       info.date_time_pattern<char_type>());
+                                       info.date_time_pattern<CharType>());
                 case flags::currency: {
                     bool nat = info.currency_flags() == flags::currency_default
                                || info.currency_flags() == flags::currency_national;
@@ -129,7 +140,7 @@ namespace boost { namespace locale { namespace util {
         }
 
         virtual iter_type
-        do_format_currency(bool intl, iter_type out, std::ios_base& ios, char_type fill, long double val) const
+        do_format_currency(bool intl, iter_type out, std::ios_base& ios, CharType fill, long double val) const
         {
             if(intl)
                 return format_currency<true>(out, ios, fill, val);
@@ -138,34 +149,31 @@ namespace boost { namespace locale { namespace util {
         }
 
         template<bool intl>
-        iter_type format_currency(iter_type out, std::ios_base& ios, char_type fill, long double val) const
+        iter_type format_currency(iter_type out, std::ios_base& ios, CharType fill, long double val) const
         {
             std::locale loc = ios.getloc();
-            int digits = std::use_facet<std::moneypunct<char_type, intl>>(loc).frac_digits();
+            int digits = std::use_facet<std::moneypunct<CharType, intl>>(loc).frac_digits();
             while(digits > 0) {
                 val *= 10;
                 digits--;
             }
             std::ios_base::fmtflags f = ios.flags();
             ios.flags(f | std::ios_base::showbase);
-            out = std::use_facet<std::money_put<char_type>>(loc).put(out, intl, ios, fill, val);
+            out = std::use_facet<std::money_put<CharType>>(loc).put(out, intl, ios, fill, val);
             ios.flags(f);
             return out;
         }
 
-        iter_type format_time(iter_type out, std::ios_base& ios, char_type fill, std::time_t time, char c) const
+        iter_type format_time(iter_type out, std::ios_base& ios, CharType fill, std::time_t time, char c) const
         {
             string_type fmt;
-            fmt += char_type('%');
-            fmt += char_type(c);
+            fmt += CharType('%');
+            fmt += CharType(c);
             return format_time(out, ios, fill, time, fmt);
         }
 
-        iter_type format_time(iter_type out,
-                              std::ios_base& ios,
-                              char_type fill,
-                              std::time_t time,
-                              const string_type& format) const
+        iter_type
+        format_time(iter_type out, std::ios_base& ios, CharType fill, std::time_t time, const string_type& format) const
         {
             std::string tz = ios_info::get(ios).time_zone();
             std::tm tm;
@@ -174,7 +182,7 @@ namespace boost { namespace locale { namespace util {
 #endif
             if(tz.empty()) {
 #ifdef BOOST_WINDOWS
-                /// Windows uses TLS
+                // Windows uses TLS
                 tm = *localtime(&time);
 #else
                 localtime_r(&time, &tm);
@@ -183,7 +191,7 @@ namespace boost { namespace locale { namespace util {
                 int gmtoff = parse_tz(tz);
                 time += gmtoff;
 #ifdef BOOST_WINDOWS
-                /// Windows uses TLS
+                // Windows uses TLS
                 tm = *gmtime(&time);
 #else
                 gmtime_r(&time, &tm);
@@ -193,17 +201,17 @@ namespace boost { namespace locale { namespace util {
                 // These have extra fields to specify timezone
                 if(gmtoff != 0) {
                     // bsd and apple want tm_zone be non-const
-                    tm.tm_zone = &tmp_buf.front();
+                    tm.tm_zone = tmp_buf.data();
                     tm.tm_gmtoff = gmtoff;
                 }
 #endif
             }
-            std::basic_ostringstream<char_type> tmp_out;
-            std::use_facet<std::time_put<char_type>>(ios.getloc())
+            std::basic_ostringstream<CharType> tmp_out;
+            std::use_facet<std::time_put<CharType>>(ios.getloc())
               .put(tmp_out, tmp_out, fill, &tm, format.c_str(), format.c_str() + format.size());
             string_type str = tmp_out.str();
             std::streamsize on_left = 0, on_right = 0;
-            std::streamsize points = formatting_size_traits<char_type>::size(str, ios.getloc());
+            std::streamsize points = formatting_size_traits<CharType>::size(str, ios.getloc());
             if(points < ios.width()) {
                 std::streamsize n = ios.width() - points;
 
@@ -228,7 +236,7 @@ namespace boost { namespace locale { namespace util {
             return out;
         }
 
-    }; /// num_format
+    }; // num_format
 
     template<typename CharType>
     class base_num_parse : public std::num_get<CharType> {
@@ -238,7 +246,6 @@ namespace boost { namespace locale { namespace util {
     protected:
         typedef typename std::num_get<CharType>::iter_type iter_type;
         typedef std::basic_string<CharType> string_type;
-        typedef CharType char_type;
 
         iter_type
         do_get(iter_type in, iter_type end, std::ios_base& ios, std::ios_base::iostate& err, long& val) const override
@@ -317,7 +324,7 @@ namespace boost { namespace locale { namespace util {
         iter_type
         do_real_get(iter_type in, iter_type end, std::ios_base& ios, std::ios_base::iostate& err, ValueType& val) const
         {
-            typedef std::num_get<char_type> super;
+            typedef std::num_get<CharType> super;
 
             ios_info& info = ios_info::get(ios);
 
@@ -364,9 +371,9 @@ namespace boost { namespace locale { namespace util {
                                  long double& val) const
         {
             std::locale loc = ios.getloc();
-            int digits = std::use_facet<std::moneypunct<char_type, intl>>(loc).frac_digits();
+            int digits = std::use_facet<std::moneypunct<CharType, intl>>(loc).frac_digits();
             long double rval;
-            in = std::use_facet<std::money_get<char_type>>(loc).get(in, end, intl, ios, err, rval);
+            in = std::use_facet<std::money_get<CharType>>(loc).get(in, end, intl, ios, err, rval);
             if(!(err & std::ios::failbit)) {
                 while(digits > 0) {
                     rval /= 10;

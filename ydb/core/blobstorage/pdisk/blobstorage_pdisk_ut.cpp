@@ -474,8 +474,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         TVDiskMock vdisk(&testCtx);
         vdisk.InitFull();
 
-        // Fill one log chunk so that on restart it is fully read.
-        for (int i = 0; i < 128; i++) {
+        // Fill log so that one chunk has state LOG_COMMITED on restart.
+        for (int i = 0; i < 256; i++) {
             vdisk.SendEvLogSync(32768);
         }
 
@@ -483,14 +483,14 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
         vdisk.Init();
 
-        // Assert recovery state with readers 1.
+        // Assert recovery state has 2 chunks to be read by vdisk.
         testCtx.SafeRunOnPDisk([](NPDisk::TPDisk* disk) {
-            UNIT_ASSERT_EQUAL(1, disk->LogRecoveryState.Readers.size());
+            UNIT_ASSERT_EQUAL(2, disk->LogRecoveryState.Readers.size());
         });
 
         vdisk.ReadLog();
         
-        // Assert recovery state with readers 0.
+        // Assert recovery state is empty after vdisk read its chunks.
         testCtx.SafeRunOnPDisk([](NPDisk::TPDisk* disk) {
             UNIT_ASSERT_EQUAL(0, disk->LogRecoveryState.Readers.size());
         });

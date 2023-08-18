@@ -1272,16 +1272,18 @@ public:
             ui64 chunkIdx = offset / PDisk->Format.ChunkSize;
             Y_VERIFY(chunkIdx < PDisk->ChunkState.size());
             
-            if ((offset % PDisk->Format.ChunkSize) + completion->GetSize() > PDisk->Format.ChunkSize) {
-                // TODO: split buffer if crossing chunk boundary instead of completely discarding it
-                LOG_INFO_S(
-                    *ActorSystem, NKikimrServices::BS_DEVICE,
-                    "Skip caching log read due to chunk boundary crossing");
-            } else {
-                if (Cache.Size() < MaxCount) {
-                    const char* dataPtr = static_cast<const char*>(completion->GetData());
+            if (TChunkState::LOG_COMMITTED == PDisk->ChunkState[chunkIdx].CommitState) {
+                if ((offset % PDisk->Format.ChunkSize) + completion->GetSize() > PDisk->Format.ChunkSize) {
+                    // TODO: split buffer if crossing chunk boundary instead of completely discarding it
+                    LOG_INFO_S(
+                        *ActorSystem, NKikimrServices::BS_DEVICE,
+                        "Skip caching log read due to chunk boundary crossing");
+                } else {
+                    if (Cache.Size() < MaxCount) {
+                        const char* dataPtr = static_cast<const char*>(completion->GetData());
 
-                    Cache.Insert(dataPtr, completion->GetOffset(), completion->GetSize(), completion->GetBadOffsets());   
+                        Cache.Insert(dataPtr, completion->GetOffset(), completion->GetSize(), completion->GetBadOffsets());   
+                    }
                 }
             }
 

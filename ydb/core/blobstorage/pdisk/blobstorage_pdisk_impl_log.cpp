@@ -1211,6 +1211,8 @@ void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
     TGuard<TMutex> guard(StateMutex);
 
     for (const auto& chunkIdx : req.ChunksToRelease) {
+        LogRecoveryState.Readers.erase(chunkIdx);
+
         BlockDevice->EraseCacheRange(
             Format.Offset(chunkIdx, 0), 
             Format.Offset(chunkIdx + 1, 0));

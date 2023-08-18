@@ -85,7 +85,7 @@ void InsertAllColumnsAndCheckSelectAll(TKikimrRunner* runner) {
     UNIT_ASSERT(*parser.ColumnParser(17).GetOptionalJsonDocument().Get() == TString("[14]"));
     UNIT_ASSERT(*parser.ColumnParser(18).GetOptionalDyNumber().Get() == TString(".1515e2"));
     streamPart = it.ReadNext().GetValueSync();
-    UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
+    UNIT_ASSERT_C(streamPart.EOS() || streamPart.HasQueryStats(), streamPart.GetIssues().ToString());
 }
 
 }

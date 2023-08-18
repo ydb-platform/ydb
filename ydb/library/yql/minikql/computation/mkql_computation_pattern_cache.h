@@ -175,8 +175,8 @@ private:
     mutable std::mutex Mutex;
     THashMap<TString, TMaybe<TVector<NThreading::TPromise<std::shared_ptr<TPatternCacheEntry>>>>> Notify;
 
-    class LRUPatternCacheImpl;
-    std::unique_ptr<LRUPatternCacheImpl> Cache;
+    class TLRUPatternCacheImpl;
+    std::unique_ptr<TLRUPatternCacheImpl> Cache;
 
     THashMap<TString, std::shared_ptr<TPatternCacheEntry>> PatternsToCompile;
 

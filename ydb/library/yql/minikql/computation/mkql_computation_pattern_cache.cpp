@@ -4,10 +4,10 @@
 
 namespace NKikimr::NMiniKQL {
 
-class TComputationPatternLRUCache::LRUPatternCacheImpl
+class TComputationPatternLRUCache::TLRUPatternCacheImpl
 {
 public:
-    LRUPatternCacheImpl(size_t maxPatternsSize,
+    TLRUPatternCacheImpl(size_t maxPatternsSize,
         size_t maxPatternsSizeBytes,
         size_t maxCompiledPatternsSize,
         size_t maxCompiledPatternsSizeBytes)
@@ -97,31 +97,31 @@ public:
         LRUCompiledPatternList.Clear();
     }
 private:
-    struct PatternLRUListTag {};
-    struct CompiledPatternLRUListTag {};
+    struct TPatternLRUListTag {};
+    struct TCompiledPatternLRUListTag {};
 
     /** Cache holder is used to store serialized program and pattern cache entry in intrusive LRU lists.
       * Most recently accessed items are in back of the lists, least recently accessed items are in front of the lists.
       */
-    struct PatternCacheHolder : public TIntrusiveListItem<PatternCacheHolder, PatternLRUListTag>, TIntrusiveListItem<PatternCacheHolder, CompiledPatternLRUListTag> {
-        PatternCacheHolder(TString serializedProgram, std::shared_ptr<TPatternCacheEntry> entry)
+    struct TPatternCacheHolder : public TIntrusiveListItem<TPatternCacheHolder, TPatternLRUListTag>, TIntrusiveListItem<TPatternCacheHolder, TCompiledPatternLRUListTag> {
+        TPatternCacheHolder(TString serializedProgram, std::shared_ptr<TPatternCacheEntry> entry)
             : SerializedProgram(std::move(serializedProgram))
             , Entry(std::move(entry))
         {}
 
         bool LinkedInPatternLRUList() const {
-            return !TIntrusiveListItem<PatternCacheHolder, PatternLRUListTag>::Empty();
+            return !TIntrusiveListItem<TPatternCacheHolder, TPatternLRUListTag>::Empty();
         }
 
         bool LinkedInCompiledPatternLRUList() const {
-            return !TIntrusiveListItem<PatternCacheHolder, CompiledPatternLRUListTag>::Empty();
+            return !TIntrusiveListItem<TPatternCacheHolder, TCompiledPatternLRUListTag>::Empty();
         }
 
         TString SerializedProgram;
         std::shared_ptr<TPatternCacheEntry> Entry;
     };
 
-    void PromoteEntry(PatternCacheHolder* holder) {
+    void PromoteEntry(TPatternCacheHolder* holder) {
         Y_ASSERT(holder->LinkedInPatternLRUList());
         LRUPatternList.Remove(holder);
         LRUPatternList.PushBack(holder);
@@ -134,7 +134,7 @@ private:
         LRUCompiledPatternList.PushBack(holder);
     }
 
-    void RemoveEntryFromLists(PatternCacheHolder* holder) {
+    void RemoveEntryFromLists(TPatternCacheHolder* holder) {
         Y_ASSERT(holder->LinkedInPatternLRUList());
         LRUPatternList.Remove(holder);
 
@@ -160,21 +160,24 @@ private:
     void ClearIfNeeded() {
         /// Remove from pattern LRU list and compiled pattern LRU list
         while (SerializedProgramToPatternCacheHolder.size() > MaxPatternsSize || CurrentPatternsSizeBytes > MaxPatternsSizeBytes) {
-            PatternCacheHolder* holder = LRUPatternList.Front();
+            TPatternCacheHolder* holder = LRUPatternList.Front();
             RemoveEntryFromLists(holder);
             SerializedProgramToPatternCacheHolder.erase(holder->SerializedProgram);
         }
 
         /// Only remove from compiled pattern LRU list
         while (CurrentCompiledPatternsSize > MaxCompiledPatternsSize || CurrentPatternsCompiledCodeSizeInBytes > MaxCompiledPatternsSizeBytes) {
-            PatternCacheHolder * holder = LRUCompiledPatternList.PopFront();
+            TPatternCacheHolder* holder = LRUCompiledPatternList.PopFront();
 
             Y_ASSERT(CurrentCompiledPatternsSize > 0);
             --CurrentCompiledPatternsSize;
 
-            size_t patternCompiledSize = holder->Entry->Pattern->CompiledCodeSize();
+            auto & pattern = holder->Entry->Pattern;
+            size_t patternCompiledSize = pattern->CompiledCodeSize();
             Y_ASSERT(patternCompiledSize <= CurrentPatternsCompiledCodeSizeInBytes);
             CurrentPatternsCompiledCodeSizeInBytes -= patternCompiledSize;
+
+            pattern->RemoveCompiledCode();
         }
     }
 
@@ -187,13 +190,13 @@ private:
     size_t CurrentCompiledPatternsSize = 0;
     size_t CurrentPatternsCompiledCodeSizeInBytes = 0;
 
-    THashMap<TString, PatternCacheHolder> SerializedProgramToPatternCacheHolder;
-    TIntrusiveList<PatternCacheHolder, PatternLRUListTag> LRUPatternList;
-    TIntrusiveList<PatternCacheHolder, CompiledPatternLRUListTag> LRUCompiledPatternList;
+    THashMap<TString, TPatternCacheHolder> SerializedProgramToPatternCacheHolder;
+    TIntrusiveList<TPatternCacheHolder, TPatternLRUListTag> LRUPatternList;
+    TIntrusiveList<TPatternCacheHolder, TCompiledPatternLRUListTag> LRUCompiledPatternList;
 };
 
 TComputationPatternLRUCache::TComputationPatternLRUCache(TComputationPatternLRUCache::Config configuration, NMonitoring::TDynamicCounterPtr counters)
-    : Cache(std::make_unique<LRUPatternCacheImpl>(CacheMaxElementsSize, configuration.MaxSizeBytes, CacheMaxElementsSize, configuration.MaxCompiledSizeBytes))
+    : Cache(std::make_unique<TLRUPatternCacheImpl>(CacheMaxElementsSize, configuration.MaxSizeBytes, CacheMaxElementsSize, configuration.MaxCompiledSizeBytes))
     , Configuration(configuration)
     , Hits(counters->GetCounter("PatternCache/Hits", true))
     , Waits(counters->GetCounter("PatternCache/Waits", true))

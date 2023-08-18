@@ -564,11 +564,11 @@ private:
 
 class TComputationGraph final : public IComputationGraph {
 public:
-    TComputationGraph(TPatternNodes::TPtr& patternNodes, const TComputationOptsFull& compOpts, bool executeLLVM = false)
+    TComputationGraph(TPatternNodes::TPtr& patternNodes, const TComputationOptsFull& compOpts, NYql::NCodegen::ICodegen::TSharedPtr codegen)
         : PatternNodes(patternNodes)
         , MemInfo(MakeIntrusive<TMemoryUsageInfo>("ComputationGraph"))
         , CompOpts(compOpts)
-        , ExecuteLLVM(executeLLVM)
+        , Codegen(std::move(codegen))
     {
 #ifndef NDEBUG
         CompOpts.AllocState.ActiveMemInfo.emplace(MemInfo.Get(), MemInfo);
@@ -600,7 +600,7 @@ public:
                 PatternNodes->GetMutables(),
                 //*ArrowMemoryPool
                 *arrow::default_memory_pool()));
-            Ctx->ExecuteLLVM = ExecuteLLVM;
+            Ctx->ExecuteLLVM = Codegen.get() != nullptr;
             ValueBuilder->SetCalleePositionHolder(Ctx->CalleePosition);
             for (auto& node : PatternNodes->GetNodes()) {
                 node->InitNode(*Ctx);
@@ -713,7 +713,6 @@ public:
     bool SetExecuteLLVM(bool value) override {
         const bool old = Ctx->ExecuteLLVM;
         Ctx->ExecuteLLVM = value;
-        ExecuteLLVM = value;
         return old;
     }
 
@@ -763,8 +762,8 @@ private:
     std::unique_ptr<arrow::MemoryPool> ArrowMemoryPool;
     THolder<TComputationContext> Ctx;
     TComputationOptsFull CompOpts;
+    NYql::NCodegen::ICodegen::TSharedPtr Codegen;
     bool IsPrepared = false;
-    bool ExecuteLLVM = false;
     std::optional<TArrowKernelsTopology> KernelsTopology;
 };
 
@@ -774,9 +773,9 @@ public:
 #if defined(MKQL_DISABLE_CODEGEN)
         : Codegen()
 #elif defined(MKQL_FORCE_USE_CODEGEN)
-        : Codegen(NYql::NCodegen::ICodegen::Make(NYql::NCodegen::ETarget::Native))
+        : Codegen(NYql::NCodegen::ICodegen::MakeShared(NYql::NCodegen::ETarget::Native))
 #else
-        : Codegen(opts.OptLLVM != "OFF" || GetEnv(TString("MKQL_FORCE_USE_LLVM")) ? NYql::NCodegen::ICodegen::Make(NYql::NCodegen::ETarget::Native) : NYql::NCodegen::ICodegen::TPtr())
+        : Codegen(opts.OptLLVM != "OFF" || GetEnv(TString("MKQL_FORCE_USE_LLVM")) ? NYql::NCodegen::ICodegen::MakeShared(NYql::NCodegen::ETarget::Native) : NYql::NCodegen::ICodegen::TPtr())
 #endif
     {
         const auto& nodes = builder->GetNodes();
@@ -901,9 +900,9 @@ public:
 
         timerFull.Release();
         timerFull.Report(stats);
+#endif
 
         IsPatternCompiled.store(true);
-#endif
     }
 
     bool IsCompiled() const {
@@ -919,7 +918,11 @@ public:
     }
 
     THolder<IComputationGraph> Clone(const TComputationOptsFull& compOpts) {
-        return MakeHolder<TComputationGraph>(PatternNodes, compOpts, IsPatternCompiled.load());
+        if (IsPatternCompiled.load()) {
+            return MakeHolder<TComputationGraph>(PatternNodes, compOpts, Codegen);
+        }
+
+        return MakeHolder<TComputationGraph>(PatternNodes, compOpts, nullptr);
     }
 
     bool GetSuitableForCache() const {
@@ -942,7 +945,7 @@ private:
 
     TTypeEnvironment* TypeEnv = nullptr;
     TPatternNodes::TPtr PatternNodes;
-    NYql::NCodegen::ICodegen::TPtr Codegen;
+    NYql::NCodegen::ICodegen::TSharedPtr Codegen;
     std::atomic<bool> IsPatternCompiled = false;
     NYql::NCodegen::TCompileStats CompileStats;
 };

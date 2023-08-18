@@ -64,6 +64,9 @@ public:
 
     using TPtr = std::unique_ptr<ICodegen>;
     static TPtr Make(ETarget target, ESanitize sanitize = ESanitize::Auto);
+
+    using TSharedPtr = std::shared_ptr<ICodegen>;
+    static TSharedPtr MakeShared(ETarget target, ESanitize sanitize = ESanitize::Auto);
 };
 
 }

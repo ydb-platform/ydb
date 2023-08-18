@@ -85,17 +85,17 @@ private:
         THashMap<TString, std::shared_ptr<NMiniKQL::TPatternCacheEntry>> patternsToCompile;
         patternCache->GetPatternsToCompile(patternsToCompile);
 
-        TVector<std::pair<PatternToCompile, size_t>> patternsToCompileWithAccessSize;
+        TVector<std::pair<TPatternToCompile, size_t>> patternsToCompileWithAccessTimes;
         for (auto& [serializedProgram, entry] : patternsToCompile) {
-            patternsToCompileWithAccessSize.emplace_back(PatternToCompile{serializedProgram, entry}, entry->AccessTimes.load());
+            patternsToCompileWithAccessTimes.emplace_back(TPatternToCompile{serializedProgram, entry}, entry->AccessTimes.load());
         }
 
-        std::sort(patternsToCompileWithAccessSize.begin(), patternsToCompileWithAccessSize.end(), [](auto & lhs, auto & rhs) {
+        std::sort(patternsToCompileWithAccessTimes.begin(), patternsToCompileWithAccessTimes.end(), [](auto & lhs, auto & rhs) {
             return lhs.second > rhs.second;
         });
 
-        PatternsToCompile.reserve(patternsToCompileWithAccessSize.size());
-        for (auto& [patternToCompile, _] : patternsToCompileWithAccessSize) {
+        PatternsToCompile.reserve(patternsToCompileWithAccessTimes.size());
+        for (auto& [patternToCompile, _] : patternsToCompileWithAccessTimes) {
             PatternsToCompile.push_back(patternToCompile);
         }
 
@@ -112,12 +112,12 @@ private:
     TDuration WakeupInterval;
     TIntrusivePtr<TKqpCounters> Counters;
 
-    struct PatternToCompile {
+    struct TPatternToCompile {
         TString SerializedProgram;
         std::shared_ptr<NMiniKQL::TPatternCacheEntry> Entry;
     };
 
-    using PatternsToCompileContainer = TVector<PatternToCompile>;
+    using PatternsToCompileContainer = TVector<TPatternToCompile>;
     using PatternsToCompileContainerIterator = PatternsToCompileContainer::iterator;
     PatternsToCompileContainer PatternsToCompile;
     size_t PatternToCompileIndex = 0;

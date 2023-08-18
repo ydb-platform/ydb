@@ -757,5 +757,10 @@ ICodegen::Make(ETarget target, ESanitize sanitize) {
     return std::make_unique<TCodegen>(target, sanitize);
 }
 
+ICodegen::TSharedPtr
+ICodegen::MakeShared(ETarget target, ESanitize sanitize) {
+    return std::make_shared<TCodegen>(target, sanitize);
+}
+
 }
 }

@@ -1151,7 +1151,7 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet) {
             dataCentersGroups = GetDefaultDataCentersPreference(leader.Type);
         }
         if (dataCentersGroups.empty()) {
-            if (leader.Category) {
+            if (leader.Category && leader.Category->StickTogetherInDC) {
                 std::unordered_map<TDataCenterId, ui32> dcTablets;
                 for (TLeaderTabletInfo* tab : leader.Category->Tablets) {
                     if (tab->IsAlive()) {

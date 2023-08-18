@@ -344,8 +344,10 @@ public:
             BLOG_D("THive::TTxLoadEverything loaded " << numTabletCategories << " tablet categories");
         }
 
-        if (Self->CurrentConfig.GetSystemTabletCategoryId() != 0 && Self->TabletCategories.empty()) {
-            db.Table<Schema::TabletCategory>().Key(Self->CurrentConfig.GetSystemTabletCategoryId()).Update<Schema::TabletCategory::StickTogetherInDC>(true);
+        if (auto systemCategoryId = Self->CurrentConfig.GetSystemTabletCategoryId(); systemCategoryId != 0 && Self->TabletCategories.empty()) {
+            db.Table<Schema::TabletCategory>().Key(systemCategoryId).Update<Schema::TabletCategory::StickTogetherInDC>(true);
+            TTabletCategoryInfo& systemCategory = Self->TabletCategories.emplace(systemCategoryId, systemCategoryId).first->second;
+            systemCategory.StickTogetherInDC = true;
         }
 
         TTabletId maxTabletId = 0;

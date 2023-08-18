@@ -1660,6 +1660,7 @@ public:
             initReassignGroups();
 
             var tablets_found;
+            var Nodes = {};
 
             function queryTablets() {
                 var storage_pool = $('#tablet_storage_pool').val();
@@ -1792,7 +1793,7 @@ public:
 
             function drainNode(element, nodeId) {
                 $(element).removeClass('glyphicon-transfer');
-                $.ajax({url:'app?TabletID=' + hiveId + '&node=' + nodeId + '&page=DrainNode', success: function(){ $(element).addClass('blinking'); }});
+                $.ajax({url:'app?TabletID=' + hiveId + '&node=' + nodeId + '&page=DrainNode', success: function(){ $(element).addClass('blinking'); Nodes[nodeId].Drain = true; }});
             }
 
             function rebalanceTablets() {
@@ -1817,7 +1818,6 @@ public:
 
         out << R"___(
 
-            var Nodes = {};
             var Empty = true;
 
             function onFreshData(result) {

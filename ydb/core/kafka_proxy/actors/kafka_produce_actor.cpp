@@ -417,6 +417,16 @@ void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr reque
     }
 }
 
+EKafkaErrors Convert(TEvPartitionWriter::TEvWriteResponse::EErrors value) {
+    switch(value) {
+        case TEvPartitionWriter::TEvWriteResponse::EErrors::PartitionDisconnected:
+        case TEvPartitionWriter::TEvWriteResponse::EErrors::PartitionNotLocal:
+            return EKafkaErrors::NOT_LEADER_OR_FOLLOWER;
+        default:
+            return EKafkaErrors::UNKNOWN_SERVER_ERROR;
+    }
+}
+
 void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
     auto expireTime = ctx.Now() - REQUEST_EXPIRATION_INTERVAL;
 
@@ -474,7 +484,7 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
                             partitionResponse.BaseOffset = lastResult.GetSeqNo();
                         }
                     } else {
-                        partitionResponse.ErrorCode = EKafkaErrors::UNKNOWN_SERVER_ERROR;
+                        partitionResponse.ErrorCode = Convert(msg->GetError().Code);
                         partitionResponse.ErrorMessage = msg->GetError().Reason;
                     }
                 }

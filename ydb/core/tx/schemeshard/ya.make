@@ -213,6 +213,7 @@ SRCS(
     schemeshard_import_flow_proposals.cpp
     schemeshard_import.cpp
     schemeshard_build_index.cpp
+    schemeshard_build_index_tx_base.cpp
     schemeshard_build_index__cancel.cpp
     schemeshard_build_index__forget.cpp
     schemeshard_build_index__list.cpp

@@ -11,6 +11,7 @@ __all__ = [
     "TopicMeteringMode",
     "TopicReader",
     "TopicReaderAsyncIO",
+    "TopicReaderMessage",
     "TopicReaderSelector",
     "TopicReaderSettings",
     "TopicReaderPartitionExpiredError",
@@ -31,6 +32,8 @@ from typing import List, Union, Mapping, Optional, Dict, Callable
 from . import aio, Credentials, _apis, issues
 
 from . import driver
+
+from ._topic_reader.datatypes import PublicMessage as TopicReaderMessage
 
 from ._topic_reader.topic_reader import (
     PublicReaderSettings as TopicReaderSettings,
@@ -318,7 +321,7 @@ class TopicClient:
         if not decoder_executor:
             decoder_executor = self._executor
 
-        args = locals()
+        args = locals().copy()
         del args["self"]
         self._check_closed()
 
@@ -339,7 +342,7 @@ class TopicClient:
         encoders: Optional[Mapping[_ydb_topic_public_types.PublicCodec, Callable[[bytes], bytes]]] = None,
         encoder_executor: Optional[concurrent.futures.Executor] = None,  # default shared client executor pool
     ) -> TopicWriter:
-        args = locals()
+        args = locals().copy()
         del args["self"]
         self._check_closed()
 

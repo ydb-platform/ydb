@@ -147,6 +147,24 @@ MatchRecognizePatternWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& outp
     return IGraphTransformer::TStatus::Ok;
 }
 
+namespace {
+
+bool IsBoolLikeType(const TTypeAnnotationNode* node) {
+    switch (node->GetKind()) {
+        case ETypeAnnotationKind::Null:
+            return true;
+        case ETypeAnnotationKind::Data:
+            return node->Cast<TDataExprType>()->GetSlot() == EDataSlot::Bool;
+        case ETypeAnnotationKind::Optional: {
+            const auto nested = node->Cast<TOptionalExprType>()->GetItemType();
+            return (nested->GetKind() == ETypeAnnotationKind::Data) and (nested->Cast<TDataExprType>()->GetSlot() == EDataSlot::Bool);
+        }
+        default:
+            return false;
+    }
+}
+} //namespace
+
 IGraphTransformer::TStatus
 MatchRecognizeDefinesWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output,
                                  TContext &ctx) {
@@ -186,7 +204,12 @@ MatchRecognizeDefinesWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& outp
             return IGraphTransformer::TStatus::Error;
         }
         if (auto type = lambda->GetTypeAnn()) {
-            items.push_back(ctx.Expr.MakeType<TItemExprType>(names->ChildRef(i)->Content(), type));
+            if (IsBoolLikeType(type)) {
+                items.push_back(ctx.Expr.MakeType<TItemExprType>(names->ChildRef(i)->Content(), type));
+            } else {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambda->Pos()), "DEFINE expression must be a predicate"));
+                return IGraphTransformer::TStatus::Error;
+            }
         } else {
             return IGraphTransformer::TStatus::Repeat;
         }

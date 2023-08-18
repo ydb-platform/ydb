@@ -1,0 +1,92 @@
+OpenLDAP 2.6 README
+    For a description of what this distribution contains, see the
+    ANNOUNCEMENT file in this directory.  For a description of
+    changes from previous releases, see the CHANGES file in this
+    directory.
+
+    This is 2.6 release, it includes significant changes from prior
+    releases.
+
+REQUIRED SOFTWARE
+    Building OpenLDAP Software requires a number of software packages
+    to be preinstalled.  Additional information regarding prerequisite
+    software can be found in the OpenLDAP Administrator's Guide.
+
+    Base system (libraries and tools):
+        Standard C compiler (required)
+        Cyrus SASL 2.1.27+ (recommended)
+        OpenSSL 1.1.1+ (recommended)
+        libevent 2.1.8+ (recommended)
+        libargon2 or libsodium (recommended)
+        Reentrant POSIX REGEX software (required)
+
+    SLAPD:
+        The ARGON2 password hashing module requires either libargon2
+        or libsodium
+    LLOADD:
+        The LLOADD daemon or integrated slapd module requires
+        libevent 2.1.8 or later.
+
+    CLIENTS/CONTRIB ware:
+        Depends on package.  See per package README.
+
+
+MAKING AND INSTALLING THE DISTRIBUTION
+    Please see the INSTALL file for basic instructions.  More
+    detailed instructions can be found in the OpenLDAP Administrator's
+    Guide (see DOCUMENTATION section).
+
+
+DOCUMENTATION
+    The OpenLDAP Administrator's Guide is available in the
+    guide.html file in the doc/guide/admin directory.  The
+    guide and a number of other documents are available at
+    <http://www.openldap.org/doc/admin/guide.html>.
+
+    The distribution also includes manual pages for most programs
+    and library APIs.  See ldap(3) for details.
+
+    The OpenLDAP website is available and contains the latest LDAP
+    news, releases announcements, pointers to other LDAP resources,
+    etc..  It is located at <http://www.OpenLDAP.org/>.
+
+
+SUPPORT / FEEDBACK / PROBLEM REPORTS / DISCUSSIONS
+    OpenLDAP Software is user supported.  If you have problems, please
+    review the OpenLDAP FAQ <http://www.openldap.org/faq/> and
+    archives of the OpenLDAP-software and OpenLDAP-bugs mailing lists
+    <http://www.openldap.org/lists/>.  If you cannot find the answer,
+    please enquire on the OpenLDAP-software list.
+
+    Issues, such as bug reports, should be reported using our
+    Issue Tracking System <http://www.OpenLDAP.org/its/>.  Do not
+    use this system for software enquiries.  Please direct these
+    to an appropriate mailing list.
+
+
+CONTRIBUTING
+    See <http://www.openldap.org/devel/contributing.html> for
+    information regarding how to contribute code or documentation
+    to the OpenLDAP Project for inclusion in OpenLDAP Software.
+    While you are encouraged to coordinate and discuss the development
+    activities on the <openldap-devel@openldap.org> mailing list
+    prior to submission, it is noted that contributions must be
+    submitted using the Issue Tracking System
+    <http://www.openldap.org/its/> to be considered.
+
+---
+
+This work is part of OpenLDAP Software <http://www.openldap.org/>.
+
+Copyright 1998-2022 The OpenLDAP Foundation.
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted only as authorized by the OpenLDAP
+Public License.
+
+A copy of this license is available in the file LICENSE in the
+top-level directory of the distribution or, alternatively, at
+<http://www.OpenLDAP.org/license.html>.
+
+OpenLDAP is a registered trademark of the OpenLDAP Foundation.

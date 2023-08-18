@@ -18,6 +18,7 @@
 #include <util/string/vector.h>
 #include <util/generic/queue.h>
 #include "ticket_parser_log.h"
+#include "ldap_auth_provider.h"
 
 namespace NKikimr {
 
@@ -147,6 +148,7 @@ class TTicketParserImpl : public TActorBootstrapped<TDerived> {
     TPriorityQueue<TTokenRefreshRecord> RefreshQueue;
     std::unordered_map<TString, NLogin::TLoginProvider> LoginProviders;
     bool UseLoginProvider = false;
+    TActorId LdapAuthProvider;
 
     TInstant GetExpireTime(TInstant now) const {
         return now + ExpireTime;
@@ -293,15 +295,18 @@ class TTicketParserImpl : public TActorBootstrapped<TDerived> {
                 if (response.Error) {
                     if (!response.TokenUnrecognized || record.TokenType != TDerived::ETokenType::Unknown) {
                         record.TokenType = TDerived::ETokenType::Login;
-                        TEvTicketParser::TError error;
-                        error.Message = response.Error;
-                        error.Retryable = response.ErrorRetryable;
-                        SetError(key, record, error);
+                        SetError(key, record, {.Message = response.Error, .Retryable = response.ErrorRetryable});
                         CounterTicketsLogin->Inc();
                         return true;
                     }
                 } else {
                     record.TokenType = TDerived::ETokenType::Login;
+                    record.ExpireTime = ToInstant(response.ExpiresAt);
+                    CounterTicketsLogin->Inc();
+                    if (response.ExternalAuth.has_value()) {
+                        HandleExternalAuthentication(key, record, response);
+                        return true;
+                    }
                     TVector<NACLib::TSID> groups;
                     if (response.Groups.has_value()) {
                         const std::vector<TString>& tokenGroups = response.Groups.value();
@@ -310,28 +315,66 @@ class TTicketParserImpl : public TActorBootstrapped<TDerived> {
                         const std::vector<TString> providerGroups = loginProvider.GetGroupsMembership(response.User);
                         groups.assign(providerGroups.begin(), providerGroups.end());
                     }
-                    record.ExpireTime = ToInstant(response.ExpiresAt);
                     SetToken(key, record, new NACLib::TUserToken({
                         .OriginalUserToken = record.Ticket,
                         .UserSID = response.User,
                         .GroupSIDs = groups,
                         .AuthType = record.GetAuthType()
                     }));
-                    CounterTicketsLogin->Inc();
                     return true;
                 }
             } else {
                 if (record.TokenType == TDerived::ETokenType::Login) {
-                    TEvTicketParser::TError error;
-                    error.Message = "Login state is not available yet";
-                    error.Retryable = false;
-                    SetError(key, record, error);
+                    SetError(key, record, {.Message = "Login state is not available yet", .Retryable = false});
                     CounterTicketsLogin->Inc();
                     return true;
                 }
             }
         }
         return false;
+    }
+
+    template <typename TTokenRecord>
+    void HandleExternalAuthentication(const TString& key, TTokenRecord& record, const NLogin::TLoginProvider::TValidateTokenResponse& loginProviderResponse) {
+        if (loginProviderResponse.ExternalAuth.value() == Config.GetLdapAuthenticationDomain()) {
+            SendRequestToLdap(key, record, loginProviderResponse.User);
+        } else {
+            SetError(key, record, {.Message = "Do not have suitable external auth provider"});
+        }
+    }
+
+    template <typename TTokenRecord>
+    void SendRequestToLdap(const TString& key, TTokenRecord& record, const TString& user) {
+        if (LdapAuthProvider) {
+            Send(LdapAuthProvider, new TEvLdapAuthProvider::TEvEnrichGroupsRequest(key, user));
+        } else {
+            SetError(key, record, {.Message = "LdapAuthProvider is not initialized", .Retryable = false});
+        }
+    }
+
+    void Handle(TEvLdapAuthProvider::TEvEnrichGroupsResponse::TPtr& ev) {
+        TEvLdapAuthProvider::TEvEnrichGroupsResponse* response = ev->Get();
+        auto& userTokens = GetDerived()->GetUserTokens();
+        auto it = userTokens.find(response->Key);
+        if (it == userTokens.end()) {
+            // Probably this is unnecessary. Record should be in storage
+            BLOG_ERROR("Ticket " << MaskTicket(response->Key) << " has expired during build");
+        } else {
+            const auto& key = it->first;
+            auto& record = it->second;
+            if (response->Status == TEvLdapAuthProvider::EStatus::SUCCESS) {
+                TVector<NACLib::TSID> groups(response->Groups.cbegin(), response->Groups.cend());
+                SetToken(key, record, new NACLib::TUserToken({
+                    .OriginalUserToken = record.Ticket,
+                    .UserSID = response->User + "@" + Config.GetLdapAuthenticationDomain(),
+                    .GroupSIDs = groups,
+                    .AuthType = record.GetAuthType()
+                }));
+            } else {
+                SetError(key, record, response->Error);
+            }
+            Respond(record);
+        }
     }
 
     void CrackTicket(const TString& ticketBody, TStringBuf& ticket, TStringBuf& ticketType) {
@@ -1372,6 +1415,9 @@ protected:
 
         if (Config.GetUseLoginProvider()) {
             UseLoginProvider = true;
+            if (Config.HasLdapAuthentication()) {
+                LdapAuthProvider = Register(CreateLdapAuthProvider(Config.GetLdapAuthentication()), TMailboxType::Simple, AppData()->IOPoolId);
+            }
         }
     }
 
@@ -1393,6 +1439,9 @@ protected:
         }
         if (ServiceAccountService) {
             Send(ServiceAccountService, new TEvents::TEvPoisonPill);
+        }
+        if (LdapAuthProvider) {
+            Send(LdapAuthProvider, new TEvents::TEvPoisonPill);
         }
         TBase::PassAway();
     }
@@ -1429,6 +1478,7 @@ public:
             hFunc(TEvTicketParser::TEvRefreshTicket, Handle);
             hFunc(TEvTicketParser::TEvDiscardTicket, Handle);
             hFunc(TEvTicketParser::TEvUpdateLoginSecurityState, Handle);
+            hFunc(TEvLdapAuthProvider::TEvEnrichGroupsResponse, Handle);
             hFunc(NCloud::TEvAccessService::TEvAuthenticateResponse, Handle);
             hFunc(NCloud::TEvAccessService::TEvAuthorizeResponse, Handle);
             hFunc(NCloud::TEvUserAccountService::TEvGetUserAccountResponse, Handle);

@@ -165,7 +165,8 @@ struct TKikimrEvents : TEvents {
         ES_IC_NODE_CACHE,
         ES_DATA_OPERATIONS,
         ES_KAFKA,
-        ES_STATISTICS
+        ES_STATISTICS,
+        ES_LDAP_AUTH_PROVIDER,
     };
 };
 

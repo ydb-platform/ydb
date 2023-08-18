@@ -7,13 +7,104 @@
 #include <ydb/library/ycloud/api/user_account_service.h>
 #include <ydb/library/testlib/service_mocks/user_account_service_mock.h>
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
+#include <ydb/library/testlib/service_mocks/ldap_mock/ldap_simple_server.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
+#include "ldap_auth_provider.h"
 #include "ticket_parser.h"
 
 namespace NKikimr {
 
 using TAccessServiceMock = TTicketParserAccessServiceMock;
+
+void InitLdapSettings(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort) {
+    ldapSettings->SetHost("localhost");
+    ldapSettings->SetPort(ldapPort);
+    ldapSettings->SetBaseDn("dc=search,dc=yandex,dc=net");
+    ldapSettings->SetBindDn("cn=robouser,dc=search,dc=yandex,dc=net");
+    ldapSettings->SetBindPassword("robouserPassword");
+    ldapSettings->SetSearchFilter("uid=$username");
+}
+
+void InitLdapSettingsWithInvalidRobotUserLogin(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort) {
+    InitLdapSettings(ldapSettings, ldapPort);
+    ldapSettings->SetBindDn("cn=invalidRobouser,dc=search,dc=yandex,dc=net");
+}
+
+void InitLdapSettingsWithInvalidRobotUserPassword(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort) {
+    InitLdapSettings(ldapSettings, ldapPort);
+    ldapSettings->SetBindPassword("invalidPassword");
+}
+
+void InitLdapSettingsWithInvalidFilter(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort) {
+    InitLdapSettings(ldapSettings, ldapPort);
+    ldapSettings->SetSearchFilter("&(uid=$username)()");
+}
+
+void InitLdapSettingsWithUnavaliableHost(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort) {
+    InitLdapSettings(ldapSettings, ldapPort);
+    ldapSettings->SetHost("unavaliablehost");
+}
+
+class TLdapKikimrServer {
+public:
+    TLdapKikimrServer(std::function<void(NKikimrProto::TLdapAuthentication*, ui16)> initLdapSettings)
+        : InitLdapSettings(std::move(initLdapSettings))
+        , Server(InitSettings()) {
+        Server.EnableGRpc(GrpcPort);
+        Server.GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
+        Server.GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
+    }
+
+    TTestActorRuntime* GetRuntime() const {
+        return Server.GetRuntime();
+    }
+
+    ui16 GetLdapPort() const {
+        return LdapPort;
+    }
+
+private:
+    Tests::TServerSettings InitSettings() {
+        using namespace Tests;
+        TPortManager tp;
+        LdapPort = tp.GetPort(389);
+        ui16 kikimrPort = tp.GetPort(2134);
+        GrpcPort = tp.GetPort(2135);
+        NKikimrProto::TAuthConfig authConfig;
+        authConfig.SetUseBlackBox(false);
+        authConfig.SetUseLoginProvider(true);
+        authConfig.SetRefreshTime("5s");
+
+        InitLdapSettings(authConfig.MutableLdapAuthentication(), LdapPort);
+
+        Tests::TServerSettings settings(kikimrPort, authConfig);
+        settings.SetDomainName("Root");
+        settings.CreateTicketParser = NKikimr::CreateTicketParser;
+        return settings;
+    }
+
+private:
+    std::function<void(NKikimrProto::TLdapAuthentication*, ui16)> InitLdapSettings;
+    Tests::TServer Server;
+    ui16 LdapPort;
+    ui16 GrpcPort;
+};
+
+TAutoPtr<IEventHandle> LdapAuthenticate(TLdapKikimrServer& server, const TString& login, const TString& password) {
+    TTestActorRuntime* runtime = server.GetRuntime();
+    NLogin::TLoginProvider provider;
+    provider.Audience = "/Root";
+    provider.RotateKeys();
+    TActorId sender = runtime->AllocateEdgeActor();
+    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvUpdateLoginSecurityState(provider.GetSecurityState())), 0);
+    auto loginResponse = provider.LoginUser({.User = login, .Password = password, .ExternalAuth = "ldap"});
+    runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
+
+    TAutoPtr<IEventHandle> handle;
+    runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+    return handle;
+}
 
 Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
@@ -333,6 +424,171 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT(!result->Error.empty());
         UNIT_ASSERT(result->Token == nullptr);
         UNIT_ASSERT_VALUES_EQUAL(result->Error.Message, "Ticket is empty");
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsGood) {
+        TString login = "ldapuser";
+        TString password = "ldapUserPassword";
+
+        LdapMock::TLdapMockResponses responses;
+        responses.BindResponses.push_back({{{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "robouserPassword"}}, {.Status = LdapMock::EStatus::SUCCESS}});
+
+        LdapMock::TSearchRequestInfo fetchGroupsSearchRequestInfo {
+            {
+                .BaseDn = "dc=search,dc=yandex,dc=net",
+                .Scope = 2,
+                .DerefAliases = 0,
+                .Filter = {.Type = LdapMock::EFilterType::LDAP_FILTER_EQUALITY, .Attribute = "uid", .Value = login},
+                .Attributes = {"memberOf"}
+            }
+        };
+
+        THashSet<TString> expectedGroups {
+            "ou=groups,dc=search,dc=yandex,dc=net",
+            "cn=people,ou=groups,dc=search,dc=yandex,dc=net",
+            "cn=developers,ou=groups,dc=search,dc=yandex,dc=net"
+        };
+        std::vector<LdapMock::TSearchEntry> fetchGroupsSearchResponseEntries {
+            {
+                .Dn = "uid=" + login + ",dc=search,dc=yandex,dc=net",
+                .AttributeList = {
+                                    {"memberOf", std::vector(expectedGroups.begin(), expectedGroups.end())}
+                                }
+            }
+        };
+        expectedGroups.insert("all-users@well-known");
+
+        LdapMock::TSearchResponseInfo fetchGroupsSearchResponseInfo {
+            .ResponseEntries = fetchGroupsSearchResponseEntries,
+            .ResponseDone = {.Status = LdapMock::EStatus::SUCCESS}
+        };
+        responses.SearchResponses.push_back({fetchGroupsSearchRequestInfo, fetchGroupsSearchResponseInfo});
+
+        TLdapKikimrServer server(InitLdapSettings);
+        LdapMock::TLdapSimpleServer ldapServer(server.GetLdapPort(), responses);
+
+        TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, login, password);
+        TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
+        UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
+        UNIT_ASSERT(ticketParserResult->Token != nullptr);
+        UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + "@ldap");
+        const auto& fetchedGroups = ticketParserResult->Token->GetGroupSIDs();
+        THashSet<TString> groups(fetchedGroups.begin(), fetchedGroups.end());
+        UNIT_ASSERT_VALUES_EQUAL(fetchedGroups.size(), expectedGroups.size());
+        for (const auto& expectedGroup : expectedGroups) {
+            UNIT_ASSERT_C(groups.contains(expectedGroup), "Can not find " + expectedGroup);
+        }
+
+        ldapServer.Stop();
+    }
+
+     Y_UNIT_TEST(LdapFetchGroupsWithInvalidRobotUserLoginBad) {
+        TString login = "ldapuser";
+        TString password = "ldapUserPassword";
+
+        LdapMock::TLdapMockResponses responses;
+        responses.BindResponses.push_back({{{.Login = "cn=invalidRobouser,dc=search,dc=yandex,dc=net", .Password = "robouserPassword"}}, {.Status = LdapMock::EStatus::INVALID_CREDENTIALS}});
+
+        TLdapKikimrServer server(InitLdapSettingsWithInvalidRobotUserLogin);
+        LdapMock::TLdapSimpleServer ldapServer(server.GetLdapPort(), responses);
+
+        TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, login, password);
+        TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
+        UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
+        UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "Could not perform initial LDAP bind for dn cn=invalidRobouser,dc=search,dc=yandex,dc=net on server localhost\nInvalid credentials");
+        UNIT_ASSERT(ticketParserResult->Token == nullptr);
+
+        ldapServer.Stop();
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithInvalidRobotUserPasswordBad) {
+        TString login = "ldapuser";
+        TString password = "ldapUserPassword";
+
+        LdapMock::TLdapMockResponses responses;
+        responses.BindResponses.push_back({{{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "invalidPassword"}}, {.Status = LdapMock::EStatus::INVALID_CREDENTIALS}});
+
+        TLdapKikimrServer server(InitLdapSettingsWithInvalidRobotUserPassword);
+        LdapMock::TLdapSimpleServer ldapServer(server.GetLdapPort(), responses);
+
+        TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, login, password);
+        TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
+        UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
+        UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "Could not perform initial LDAP bind for dn cn=robouser,dc=search,dc=yandex,dc=net on server localhost\nInvalid credentials");
+        UNIT_ASSERT(ticketParserResult->Token == nullptr);
+
+        ldapServer.Stop();
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsWithRemovedUserCredentialsBad) {
+        TString removedUserLogin = "ldapuser";
+        TString removedUserPassword = "ldapUserPassword";
+
+        LdapMock::TLdapMockResponses responses;
+        responses.BindResponses.push_back({{{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "robouserPassword"}}, {.Status = LdapMock::EStatus::SUCCESS}});
+
+        LdapMock::TSearchRequestInfo removedUserSearchRequestInfo {
+            {
+                .BaseDn = "dc=search,dc=yandex,dc=net",
+                .Scope = 2,
+                .DerefAliases = 0,
+                .Filter = {.Type = LdapMock::EFilterType::LDAP_FILTER_EQUALITY, .Attribute = "uid", .Value = removedUserLogin},
+                .Attributes = {"memberOf"}
+            }
+        };
+
+        LdapMock::TSearchResponseInfo removedUserSearchResponseInfo {
+            .ResponseEntries = {}, // Removed user was not found. Return empty list of entries
+            .ResponseDone = {.Status = LdapMock::EStatus::SUCCESS}
+        };
+        responses.SearchResponses.push_back({removedUserSearchRequestInfo, removedUserSearchResponseInfo});
+
+        TLdapKikimrServer server(InitLdapSettings);
+        LdapMock::TLdapSimpleServer ldapServer(server.GetLdapPort(), responses);
+
+        TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, removedUserLogin, removedUserPassword);
+        TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
+        UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
+        UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "LDAP user " + removedUserLogin + " does not exist. "
+                                                                     "LDAP search for filter uid=" + removedUserLogin + " on server localhost return no entries");
+
+        ldapServer.Stop();
+    }
+
+    Y_UNIT_TEST(LdapFetchGroupsUseInvalidSearchFilterBad) {
+        TString login = "ldapuser";
+        TString password = "ldapUserPassword";
+
+        LdapMock::TLdapMockResponses responses;
+        responses.BindResponses.push_back({{{.Login = "uid=" + login + ",dc=search,dc=yandex,dc=net", .Password = password}}, {LdapMock::EStatus::SUCCESS}});
+        responses.BindResponses.push_back({{{.Login = "cn=robouser,dc=search,dc=yandex,dc=net", .Password = "robouserPassword"}}, {.Status = LdapMock::EStatus::SUCCESS}});
+
+        TLdapKikimrServer server(InitLdapSettingsWithInvalidFilter);
+        LdapMock::TLdapSimpleServer ldapServer(server.GetLdapPort(), responses);
+
+        TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, login, password);
+        TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
+        UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
+        UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "Could not search for filter &(uid=" + login + ")() on server localhost\nBad search filter");
+
+        ldapServer.Stop();
+    }
+
+    Y_UNIT_TEST(LdapServerIsUnavaliable) {
+        TLdapKikimrServer server(InitLdapSettingsWithUnavaliableHost);
+
+        LdapMock::TLdapMockResponses responses;
+        LdapMock::TLdapSimpleServer ldapServer(server.GetLdapPort(), responses);
+
+        TString login = "ldapuser";
+        TString password = "ldapUserPassword";
+
+        TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, login, password);
+        TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
+        UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
+        UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "Could not perform initial LDAP bind for dn cn=robouser,dc=search,dc=yandex,dc=net on server unavaliablehost\nCan't contact LDAP server");
+
+        ldapServer.Stop();
     }
 
     Y_UNIT_TEST(AccessServiceAuthenticationOk) {

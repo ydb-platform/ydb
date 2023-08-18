@@ -1,0 +1,109 @@
+Making and Installing the OpenLDAP Distribution
+===============================================
+
+This file provides brief instructions on how to build and install
+OpenLDAP on UNIX (and UNIX-like) systems.  More detailed information
+and instructions can be found in The OpenLDAP Administrator's Guide
+(available from http://www.openldap.org/doc/).
+
+It is recommended that you read, or at least skim through, ALL of the
+instructions in this file before attempting to build the software.
+
+Making and Installing the OpenLDAP Distribution
+-----------------------------------------------
+
+1.   Unpack the distribution and change directory:
+
+        % tar xfz openldap-VERSION.tgz
+        % cd openldap-VERSION
+
+     (replacing VERSION with the appropriate version string).  If you
+     are reading this file, you probably have already done this!
+
+2.   Type:
+
+        % ./configure --help
+
+     to list available configuration options.
+
+     The configure script also looks for compiler/linker options on
+     the command line and in the environment.  These include:
+
+        Variable        Description     Example
+        CC              C compiler      gcc
+        CFLAGS          C flags         -O -g
+        CPPFLAGS        cpp flags       -I/path/include -D__FOO__=42
+        LDFLAGS         ld flags        -L/usr/local/lib
+        LIBS            libraries       -llib
+        PATH            command path    /usr/local/bin:/usr/bin:/bin
+
+     See doc/install/configure for generic configure documentation.
+
+3.   Configure the build system:
+
+        % ./configure [options] [var=value ...]
+
+     If all goes well, the configure script will automatically detect
+     the appropriate settings.  If the configure script fails, you
+     should read the config.log file that it generated to see what it
+     was trying to do and exactly what failed.  You may need to
+     specify additional options and/or variables besides those listed
+     above to obtain desired results, depending on your operating
+     system.
+
+4.   Build dependencies:
+
+        % make depend
+
+5.   Build the system:
+
+        % make
+
+     If all goes well, the system will build as configured.  If not,
+     return to step 3 after reviewing the configuration settings.
+
+6.   Test the standalone system:
+
+     This step requires the standalone LDAP server, slapd(8), with MDB
+     support.
+
+        % make test
+
+     If all goes well, the system has been built as configured.  If
+     not, return to step 2 after reviewing your configuration
+     settings.
+
+7.   Install the software.  You may need to become the super-user
+     (e.g. root) to do this (depending on where you are installing
+     things):
+
+        % su root -c 'make install'
+
+8.   That's it.  Enjoy!
+
+See the OpenLDAP Administrator's Guide and the manual pages for the
+individual applications for configuration and use information. You may
+also want to edit the configuration files used by the various
+components.  These configuration files are located in the OpenLDAP
+configuration directory (normally /usr/local/etc/openldap).
+
+        ldap.conf               client defaults
+        slapd.conf              Standalone LDAP daemon
+        lload.conf              LDAP Load Balancer daemon
+        schema/*.schema         Schema Definitions
+
+---
+This work is part of OpenLDAP Software <http://www.openldap.org/>.
+
+Copyright 1998-2022 The OpenLDAP Foundation.
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted only as authorized by the OpenLDAP
+Public License.
+
+A copy of this license is available in the file LICENSE in the
+top-level directory of the distribution or, alternatively, at
+<http://www.OpenLDAP.org/license.html>.
+
+OpenLDAP is a registered trademark of the OpenLDAP Foundation.

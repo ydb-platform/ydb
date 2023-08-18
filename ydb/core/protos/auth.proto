@@ -44,6 +44,8 @@ message TAuthConfig {
     optional uint32 AccessServiceGrpcKeepAliveTimeoutMs = 71 [default = 1000]; // CLOUD-27573
     optional TStaffApiTvmSettings StaffApiTvmSettings = 72;
     optional TTokenAccessorConfig TokenAccessorConfig = 73;
+    optional TLdapAuthentication LdapAuthentication = 74;
+    optional string LdapAuthenticationDomain = 75 [default = "ldap"];
 }
 
 message TUserRegistryConfig {
@@ -76,4 +78,14 @@ message TTokenAccessorConfig {
     optional string Endpoint = 2; // endpoint of token accessor daemon. If you need to use the grpcs protocol then add a prefix grpcs://
     optional string SslCaCert = 3;
     optional uint64 ConnectionPoolSize = 4 [default = 10];
+}
+
+message TLdapAuthentication {
+    optional string Host = 1;
+    optional uint32 Port = 2;
+    required string BaseDn = 3;
+    required string BindDn = 4;
+    required string BindPassword = 5;
+    optional string SearchFilter = 6;
+    optional string SearchAttribute = 7;
 }

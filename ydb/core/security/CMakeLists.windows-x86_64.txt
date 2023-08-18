@@ -25,7 +25,14 @@ target_link_libraries(ydb-core-security PUBLIC
   ydb-library-login
   ydb-library-security
 )
+target_link_options(ydb-core-security INTERFACE
+  -Wl,-Bstatic
+  wldap32.lib
+  -Wl,-Bdynamic
+)
 target_sources(ydb-core-security PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/security/login_page.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/security/ticket_parser.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/security/ldap_auth_provider.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/security/ldap_auth_provider_win.cpp
 )

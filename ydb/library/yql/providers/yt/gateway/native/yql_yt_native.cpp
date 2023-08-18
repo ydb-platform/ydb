@@ -310,8 +310,12 @@ public:
                 if (r.TableIndicies.empty()) {
                     r.ExecContext = MakeExecCtx(TCanonizePathsOptions(options), session, cluster, nullptr, nullptr);
                 }
-                TString tmpFolder = GetTablesTmpFolder(*options.Config());
-                path.Path(NYql::TransformPath(tmpFolder, path.Path(), false, session->UserName_));
+
+                // Use absolute path to prevent adding YT_PREFFIX
+                if (!path.Path().StartsWith("//") && !path.Path().StartsWith("<")) {
+                    path.Path(TString("//").append(path.Path()));
+                }
+
                 r.TableIndicies.push_back(i);
             }
 
@@ -1305,8 +1309,11 @@ private:
                     batchRes.push_back(batch->CanonizeYPath(canonReq.Path()).Apply([idx, &res] (const TFuture<TRichYPath>& f) {
                         auto& normalizedPath = f.GetValue();
                         TString path = normalizedPath.Path_;
-                        if (path.StartsWith(TConfig::Get()->Prefix)) {
-                            path = path.substr(TConfig::Get()->Prefix.size());
+
+                        // Convert back from absolute path to relative
+                        // All futhrer YT operations will use the path with YT_PREFIX
+                        if (path.StartsWith("//")) {
+                            path = path.substr(2);
                         }
                         res.Data[idx].Path = path;
                         if (normalizedPath.Columns_) {

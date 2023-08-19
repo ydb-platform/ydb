@@ -9,7 +9,6 @@
 
 add_library(restricted-googletest-googletest)
 target_compile_options(restricted-googletest-googletest PUBLIC
-  -DGTEST_HAS_ABSL=0
   -DGTEST_HAS_POSIX_RE=0
   -DGTEST_HAS_STD_WSTRING=1
   -DGTEST_USES_RE2=1

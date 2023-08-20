@@ -131,8 +131,10 @@ private:
     private:
         std::unique_ptr<TEvPrivate::TEvWriteIndex> TxEvent;
         const TIndexationCounters Counters;
+        const ui64 TabletId;
     protected:
         virtual bool DoExecute() override {
+            NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId));
             auto guard = TxEvent->PutResult->StartCpuGuard();
 
             NOlap::TConstructionContext context(TxEvent->IndexInfo, Counters);
@@ -149,9 +151,10 @@ private:
             return std::move(TxEvent);
         }
 
-        TConveyorTask(std::unique_ptr<TEvPrivate::TEvWriteIndex>&& txEvent, const TIndexationCounters& counters)
+        TConveyorTask(std::unique_ptr<TEvPrivate::TEvWriteIndex>&& txEvent, const TIndexationCounters& counters, const ui64 tabletId)
             : TxEvent(std::move(txEvent))
             , Counters(counters)
+            , TabletId(tabletId)
         {
             Y_VERIFY(TxEvent);
         }
@@ -167,7 +170,7 @@ private:
         LOG_S_DEBUG("Granules compaction started at tablet " << TabletId);
         TxEvent->IndexChanges->SetBlobs(std::move(Blobs));
         {
-            std::shared_ptr<TConveyorTask> task = std::make_shared<TConveyorTask>(std::move(TxEvent), GetCurrentCounters());
+            std::shared_ptr<TConveyorTask> task = std::make_shared<TConveyorTask>(std::move(TxEvent), GetCurrentCounters(), TabletId);
             NConveyor::TCompServiceOperator::SendTaskToExecute(task);
         }
     }

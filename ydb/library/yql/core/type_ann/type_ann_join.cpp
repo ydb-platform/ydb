@@ -658,7 +658,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (const auto status = NormalizeTupleOfAtoms(input, 7U, output, ctx.Expr); IGraphTransformer::TStatus::Ok != status) {
+        if (const auto status = NormalizeTupleOfAtoms(input, 7U, output, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
 

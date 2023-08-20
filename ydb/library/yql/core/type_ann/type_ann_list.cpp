@@ -2126,15 +2126,15 @@ namespace {
         if (stepType && IsDataTypeFloat(stepItemType->GetSlot())) {
             commonType = ((beginIsOpt || endIsOpt) && !stepIsOpt)
                 ? ctx.Expr.MakeType<TOptionalExprType>(stepType) : stepType;
-            if (const auto status = TrySilentConvertTo(input->ChildRef(0U), *commonType, ctx.Expr); IGraphTransformer::TStatus::Ok != status) {
-                if (IGraphTransformer::TStatus::Error == status) {
+            if (const auto status = TrySilentConvertTo(input->ChildRef(0U), *commonType, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+                if (status == IGraphTransformer::TStatus::Error) {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(0U)->Pos()), TStringBuilder() << "Impossible silent convert bound of type " <<
                         *input->Child(0U)->GetTypeAnn() << " into " << *commonType));
                 }
                 return status;
             }
-            if (const auto status = TrySilentConvertTo(input->ChildRef(1U), *commonType, ctx.Expr); IGraphTransformer::TStatus::Ok != status) {
-                if (IGraphTransformer::TStatus::Error == status) {
+            if (const auto status = TrySilentConvertTo(input->ChildRef(1U), *commonType, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+                if (status == IGraphTransformer::TStatus::Error) {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1U)->Pos()), TStringBuilder() << "Impossible silent convert bound of type " <<
                         *input->Child(1U)->GetTypeAnn() << " into " << *commonType));
                 }
@@ -2164,9 +2164,9 @@ namespace {
 
         if (const auto stepSlot = IsDataTypeDateOrTzDateOrInterval(slot) ? EDataSlot::Interval : MakeSigned(slot); stepItemType) {
             if (const auto requredStepType = slot == stepSlot ? commonItemType : ctx.Expr.MakeType<TDataExprType>(stepSlot); !IsSameAnnotation(*stepItemType, *requredStepType)) {
-                if (const auto status = TrySilentConvertTo(input->ChildRef(2U), *requredStepType, ctx.Expr); IGraphTransformer::TStatus::Repeat == status)
+                if (const auto status = TrySilentConvertTo(input->ChildRef(2U), *requredStepType, ctx.Expr); status == IGraphTransformer::TStatus::Repeat)
                     return status;
-                else if (IGraphTransformer::TStatus::Error == status && !EnsureSpecificDataType(input->Tail().Pos(), *stepItemType, stepSlot, ctx.Expr))
+                else if (status == IGraphTransformer::TStatus::Error && !EnsureSpecificDataType(input->Tail().Pos(), *stepItemType, stepSlot, ctx.Expr))
                     return status;
             }
         } else {

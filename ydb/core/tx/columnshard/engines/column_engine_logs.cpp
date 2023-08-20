@@ -102,7 +102,7 @@ TColumnEngineStats::TPortionsStats DeltaStats(const TPortionInfo& portionInfo, u
         metadataBytes += rec.GetMeta().GetMetadataSize();
         blobs.insert(rec.BlobRange.BlobId);
         deltaStats.BytesByColumn[rec.ColumnId] += rec.BlobRange.Size;
-        deltaStats.RawBytesByColumn[rec.ColumnId] += rec.GetMeta().GetRawBytes();
+        deltaStats.RawBytesByColumn[rec.ColumnId] += rec.GetMeta().GetRawBytes().value_or(0);
     }
     deltaStats.Rows = portionInfo.NumRows();
     deltaStats.RawBytes = portionInfo.RawBytesSum();

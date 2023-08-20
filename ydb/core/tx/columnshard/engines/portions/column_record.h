@@ -18,11 +18,12 @@ struct TChunkMeta {
 private:
     YDB_READONLY_DEF(std::shared_ptr<arrow::Scalar>, Min);
     YDB_READONLY_DEF(std::shared_ptr<arrow::Scalar>, Max);
-    YDB_READONLY(ui32, NumRows, 0);
-    YDB_READONLY(ui32, RawBytes, 0);
+    YDB_READONLY_DEF(std::optional<ui32>, NumRows);
+    YDB_READONLY_DEF(std::optional<ui32>, RawBytes);
+    TChunkMeta() = default;
 public:
     ui64 GetMetadataSize() const {
-        return sizeof(NumRows) + sizeof(RawBytes) + 8 * 3 * 2;
+        return sizeof(ui32) + sizeof(ui32) + 8 * 3 * 2;
     }
 
     bool HasMinMax() const noexcept {
@@ -30,6 +31,16 @@ public:
     }
 
     NKikimrTxColumnShard::TIndexColumnMeta SerializeToProto() const;
+
+    class TTestInstanceBuilder {
+    public:
+        static TChunkMeta Build(const ui64 numRows, const ui64 rawBytes) {
+            TChunkMeta result;
+            result.NumRows = numRows;
+            result.RawBytes = rawBytes;
+            return result;
+        }
+    };
 
     TChunkMeta(const TColumnChunkLoadContext& context, const TIndexInfo& indexInfo);
 
@@ -39,10 +50,27 @@ public:
 struct TColumnRecord {
 private:
     TChunkMeta Meta;
+    TColumnRecord(TChunkMeta&& meta)
+        : Meta(std::move(meta))
+    {
+
+    }
 public:
     ui32 ColumnId = 0;
     ui16 Chunk = 0;
     TBlobRange BlobRange;
+
+    class TTestInstanceBuilder {
+    public:
+        static TColumnRecord Build(const ui32 columnId, const ui16 chunkId, const ui64 offset, const ui64 size, const ui64 numRows, const ui64 rawBytes) {
+            TColumnRecord result(TChunkMeta::TTestInstanceBuilder::Build(numRows, rawBytes));
+            result.ColumnId = columnId;
+            result.Chunk = chunkId;
+            result.BlobRange.Offset = offset;
+            result.BlobRange.Size = size;
+            return result;
+        }
+    };
 
     const TChunkMeta& GetMeta() const {
         return Meta;

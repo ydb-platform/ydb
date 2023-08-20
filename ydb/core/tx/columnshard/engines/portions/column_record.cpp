@@ -46,8 +46,12 @@ TChunkMeta::TChunkMeta(const std::shared_ptr<arrow::Array>& column, const ui32 c
 
 NKikimrTxColumnShard::TIndexColumnMeta TChunkMeta::SerializeToProto() const {
     NKikimrTxColumnShard::TIndexColumnMeta meta;
-    meta.SetNumRows(NumRows);
-    meta.SetRawBytes(RawBytes);
+    if (NumRows) {
+        meta.SetNumRows(*NumRows);
+    }
+    if (RawBytes) {
+        meta.SetRawBytes(*RawBytes);
+    }
     if (HasMinMax()) {
         ScalarToConstant(*Min, *meta.MutableMinValue());
         ScalarToConstant(*Max, *meta.MutableMaxValue());

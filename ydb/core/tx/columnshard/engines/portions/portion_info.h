@@ -199,7 +199,7 @@ public:
         std::optional<ui32> columnIdFirst;
         for (auto&& i : Records) {
             if (!columnIdFirst || *columnIdFirst == i.ColumnId) {
-                result += i.GetMeta().GetNumRows();
+                result += i.GetMeta().GetNumRows().value_or(0);
                 columnIdFirst = i.ColumnId;
             }
         }
@@ -210,7 +210,7 @@ public:
         ui32 result = 0;
         for (auto&& i : Records) {
             if (columnId == i.ColumnId) {
-                result += i.GetMeta().GetNumRows();
+                result += i.GetMeta().GetNumRows().value_or(0);
             }
         }
         return result;
@@ -221,7 +221,7 @@ public:
     ui64 RawBytesSum() const {
         ui64 result = 0;
         for (auto&& i : Records) {
-            result += i.GetMeta().GetRawBytes();
+            result += i.GetMeta().GetRawBytes().value_or(0);
         }
         return result;
     }
@@ -400,8 +400,8 @@ public:
             auto pos = dataSchema.GetFieldIndex(rec.ColumnId);
             Y_ASSERT(pos >= 0);
             positionsMap[resulPos] = pos;
-            Y_VERIFY(columnChunks[resulPos].emplace(rec.Chunk, rec.BlobRange).second);
-            Y_VERIFY_S(rowsCount == NumRows(rec.ColumnId), TStringBuilder() << "Inconsistent rows " << rowsCount << "/" << NumRows(rec.ColumnId));
+            AFL_VERIFY(columnChunks[resulPos].emplace(rec.Chunk, rec.BlobRange).second)("record", rec.DebugString());
+//            AFL_VERIFY(rowsCount == NumRows(rec.ColumnId))("error", "Inconsistent rows")("portion", DebugString())("record", rec.DebugString())("column_records", NumRows(rec.ColumnId));
         }
 
         // Make chunked arrays for columns

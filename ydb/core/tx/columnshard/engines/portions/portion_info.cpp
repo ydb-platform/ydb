@@ -89,7 +89,7 @@ ui64 TPortionInfo::GetRawBytes(const std::vector<ui32>& columnIds) const {
         } else {
             for (auto&& r : Records) {
                 if (r.ColumnId == i) {
-                    sum += r.GetMeta().GetRawBytes();
+                    sum += r.GetMeta().GetRawBytes().value_or(0);
                 }
             }
         }
@@ -115,7 +115,6 @@ TString TPortionInfo::DebugString() const {
     if (RemoveSnapshot.Valid()) {
         sb << "remove_snapshot:(" << RemoveSnapshot.DebugString() << ");";
     }
-    sb << "meta:(" << Meta.DebugString() << ");";
     sb << "chunks:(" << Records.size() << ");";
     return sb << ")";
 }

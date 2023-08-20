@@ -1,5 +1,4 @@
 #include "abstract.h"
-#include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/blob_manager_db.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>

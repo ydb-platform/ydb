@@ -149,7 +149,7 @@ public:
             return ECompactionClass::NoCompaction;
         }
         if (GetMaxColumnsSize() >= limits.GranuleBlobSplitSize ||
-            GetGranuleSize() >= limits.GranuleSizeForOverloadPrevent)
+            (i64)GetGranuleSize() >= limits.GranuleSizeForOverloadPrevent)
         {
             return ECompactionClass::Split;
         }
@@ -402,7 +402,7 @@ public:
 
     ui64 Size() const;
     bool IsOverloaded(const TCompactionLimits& limits) const {
-        return Size() >= limits.GranuleOverloadSize;
+        return (i64)Size() >= limits.GranuleOverloadSize;
     }
 };
 

@@ -1,5 +1,5 @@
 #pragma once
-#include "abstract.h"
+#include "abstract/abstract.h"
 #include "with_appended.h"
 #include <ydb/core/tx/columnshard/engines/insert_table/data.h>
 #include <util/generic/hash.h>

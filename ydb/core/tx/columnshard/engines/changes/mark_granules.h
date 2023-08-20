@@ -1,5 +1,5 @@
 #pragma once
-#include "mark.h"
+#include "abstract/mark.h"
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 

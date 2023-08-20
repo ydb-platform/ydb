@@ -36,7 +36,7 @@ void TGranulesStorage::UpdateGranuleInfo(const TGranuleMeta& granule) {
     const ui64 pathId = granule.Record.PathId;
 
     // Size exceeds the configured limit. Mark granule as overloaded.
-    if (granule.Size() >= Limits.GranuleOverloadSize) {
+    if ((i64)granule.Size() >= Limits.GranuleOverloadSize) {
         if (PathsGranulesOverloaded[pathId].emplace(granule.GetGranuleId()).second) {
             AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "overloaded")("path_id", pathId)("granule", granule.GetGranuleId());
         }

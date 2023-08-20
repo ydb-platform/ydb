@@ -1,5 +1,6 @@
 #pragma once
-#include "engines/changes/compaction_info.h"
+#include "engines/changes/abstract/compaction_info.h"
+#include "engines/portions/meta.h"
 
 namespace NKikimr::NOlap {
 class TColumnEngineChanges;

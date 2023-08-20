@@ -1,6 +1,6 @@
 #pragma once
 #include "indexation.h"
-#include "compaction_info.h"
+#include "abstract/compaction_info.h"
 #include "mark_granules.h"
 
 namespace NKikimr::NOlap {

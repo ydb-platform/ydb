@@ -1,10 +1,10 @@
 #pragma once
-#include "changes/abstract.h"
+#include "changes/abstract/abstract.h"
 #include "granules_table.h"
 #include "portions/portion_info.h"
 #include "scheme/snapshot_scheme.h"
 #include "predicate/filter.h"
-#include "changes/compaction_info.h"
+#include "changes/abstract/compaction_info.h"
 #include <ydb/core/tx/columnshard/common/reverse_accessor.h>
 
 namespace NKikimr::NColumnShard {

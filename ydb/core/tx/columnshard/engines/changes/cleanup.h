@@ -1,5 +1,5 @@
 #pragma once
-#include "abstract.h"
+#include "abstract/abstract.h"
 
 namespace NKikimr::NOlap {
 

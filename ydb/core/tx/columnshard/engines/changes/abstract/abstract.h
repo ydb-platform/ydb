@@ -39,11 +39,11 @@ struct TCompactionLimits {
     static constexpr const ui64 WARNING_INSERT_TABLE_SIZE_BY_PATH_ID = 0.3 * OVERLOAD_INSERT_TABLE_SIZE_BY_PATH_ID;
     static constexpr const ui64 WARNING_INSERT_TABLE_COUNT_BY_PATH_ID = 100;
 
-    static constexpr const ui64 OVERLOAD_GRANULE_SIZE = 20 * MAX_BLOB_SIZE;
-    static constexpr const ui64 WARNING_OVERLOAD_GRANULE_SIZE = 0.25 * OVERLOAD_GRANULE_SIZE;
+    static constexpr const i64 OVERLOAD_GRANULE_SIZE = 20 * MAX_BLOB_SIZE;
+    static constexpr const i64 WARNING_OVERLOAD_GRANULE_SIZE = 0.25 * OVERLOAD_GRANULE_SIZE;
 
-    static constexpr const ui64 WARNING_INSERTED_PORTIONS_SIZE = 0.5 * WARNING_OVERLOAD_GRANULE_SIZE;
-    static constexpr const ui64 WARNING_INSERTED_PORTIONS_COUNT = 100;
+    static constexpr const i64 WARNING_INSERTED_PORTIONS_SIZE = 0.5 * WARNING_OVERLOAD_GRANULE_SIZE;
+    static constexpr const ui32 WARNING_INSERTED_PORTIONS_COUNT = 100;
     static constexpr const TDuration CompactionTimeout = TDuration::Minutes(3);
 
     ui32 GoodBlobSize{MIN_GOOD_BLOB_SIZE};
@@ -51,9 +51,9 @@ struct TCompactionLimits {
 
     ui32 InGranuleCompactSeconds = 2 * 60; // Trigger in-granule compaction to guarantee no PK intersections
 
-    ui32 GranuleOverloadSize = OVERLOAD_GRANULE_SIZE;
-    ui32 GranuleSizeForOverloadPrevent = WARNING_OVERLOAD_GRANULE_SIZE;
-    ui32 GranuleIndexedPortionsSizeLimit = WARNING_INSERTED_PORTIONS_SIZE;
+    i64 GranuleOverloadSize = OVERLOAD_GRANULE_SIZE;
+    i64 GranuleSizeForOverloadPrevent = WARNING_OVERLOAD_GRANULE_SIZE;
+    i64 GranuleIndexedPortionsSizeLimit = WARNING_INSERTED_PORTIONS_SIZE;
     ui32 GranuleIndexedPortionsCountLimit = WARNING_INSERTED_PORTIONS_COUNT;
 };
 

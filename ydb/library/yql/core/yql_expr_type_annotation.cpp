@@ -4423,7 +4423,7 @@ IGraphTransformer::TStatus ConvertChildrenToType(const TExprNode::TPtr& input, c
         }
 
         status = status.Combine(TryConvertTo(input->ChildRef(i), *targetType, ctx));
-        if (IGraphTransformer::TStatus::Error == status)
+        if (status == IGraphTransformer::TStatus::Error)
             break;
     }
 
@@ -5373,10 +5373,10 @@ IGraphTransformer::TStatus NormalizeTupleOfAtoms(const TExprNode::TPtr& input, u
                 if (1U == item->ChildrenSize() && item->Head().IsAtom()) {
                     needRestart = true;
                     children[i] = item->HeadPtr();
-                } else if (const auto status = NormalizeTupleOfAtoms<Deduplicte, 1U>(input->ChildPtr(index), i, children[i], ctx); IGraphTransformer::TStatus::Error == status)
+                } else if (const auto status = NormalizeTupleOfAtoms<Deduplicte, 1U>(input->ChildPtr(index), i, children[i], ctx); status == IGraphTransformer::TStatus::Error)
                     return status;
                 else
-                    needRestart = needRestart || IGraphTransformer::TStatus::Repeat == status;
+                    needRestart = needRestart || (status == IGraphTransformer::TStatus::Repeat);
             } else if (!EnsureAtom(*item, ctx))
                 return IGraphTransformer::TStatus::Error;
         }

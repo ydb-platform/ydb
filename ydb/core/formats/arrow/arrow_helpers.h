@@ -125,7 +125,11 @@ inline bool HasNulls(const std::shared_ptr<arrow::Array>& column) {
 bool ArrayScalarsEqual(const std::shared_ptr<arrow::Array>& lhs, const std::shared_ptr<arrow::Array>& rhs);
 std::shared_ptr<arrow::Array> BoolVecToArray(const std::vector<bool>& vec);
 
-NJson::TJsonValue DebugJson(std::shared_ptr<arrow::Array> array, const ui32 head = 5, const ui32 tail = 5);
-NJson::TJsonValue DebugJson(std::shared_ptr<arrow::RecordBatch> batch, const ui32 head = 5, const ui32 tail = 5);
+NJson::TJsonValue DebugJson(std::shared_ptr<arrow::Array> array, const ui32 head, const ui32 tail);
+NJson::TJsonValue DebugJson(std::shared_ptr<arrow::RecordBatch> batch, const ui32 head, const ui32 tail);
+
+NJson::TJsonValue DebugJson(std::shared_ptr<arrow::Array> array, const ui32 position);
+TString DebugString(std::shared_ptr<arrow::Array> array, const ui32 position);
+NJson::TJsonValue DebugJson(std::shared_ptr<arrow::RecordBatch> array, const ui32 position);
 
 }

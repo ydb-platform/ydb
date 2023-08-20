@@ -474,7 +474,7 @@ std::vector<std::unique_ptr<arrow::ArrayBuilder>> MakeBuilders(const std::shared
         if (sizeByColumn.size()) {
             auto it = sizeByColumn.find(field->name());
             if (it != sizeByColumn.end()) {
-                Y_VERIFY(NArrow::ReserveData(*builder, it->second));
+                AFL_VERIFY(NArrow::ReserveData(*builder, it->second))("size", it->second)("field", field->name());
             }
         }
 
@@ -765,6 +765,61 @@ std::shared_ptr<arrow::RecordBatch> BuildSingleRecordBatch(const std::shared_ptr
     auto arrays = NArrow::Finish(std::move(builders));
     Y_VERIFY(arrays.size() == builders.size());
     return arrow::RecordBatch::Make(schema, 1, arrays);
+}
+
+NJson::TJsonValue DebugJson(std::shared_ptr<arrow::RecordBatch> array, const ui32 position) {
+    NJson::TJsonValue result = NJson::JSON_ARRAY;
+    for (auto&& i : array->columns()) {
+        result.AppendValue(DebugJson(i, position));
+    }
+    return result;
+}
+
+TString DebugString(std::shared_ptr<arrow::Array> array, const ui32 position) {
+    if (!array) {
+        return "_NO_DATA";
+    }
+    Y_VERIFY(position < array->length());
+    TStringBuilder result;
+    SwitchType(array->type_id(), [&](const auto& type) {
+        using TWrap = std::decay_t<decltype(type)>;
+        using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
+
+        auto& column = static_cast<const TArray&>(*array);
+        if constexpr (arrow::has_string_view<typename TWrap::T>()) {
+            auto value = column.GetString(position);
+            result << TString(value.data(), value.size());
+        }
+        if constexpr (arrow::has_c_type<typename TWrap::T>()) {
+            result << column.Value(position);
+        }
+        return true;
+    });
+    return result;
+}
+
+NJson::TJsonValue DebugJson(std::shared_ptr<arrow::Array> array, const ui32 position) {
+    if (!array) {
+        return NJson::JSON_NULL;
+    }
+    Y_VERIFY(position < array->length());
+    NJson::TJsonValue result = NJson::JSON_MAP;
+    SwitchType(array->type_id(), [&](const auto& type) {
+        using TWrap = std::decay_t<decltype(type)>;
+        using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
+
+        auto& column = static_cast<const TArray&>(*array);
+        result.InsertValue("type", typeid(TArray).name());
+        if constexpr (arrow::has_string_view<typename TWrap::T>()) {
+            auto value = column.GetString(position);
+            result.InsertValue("value", TString(value.data(), value.size()));
+        }
+        if constexpr (arrow::has_c_type<typename TWrap::T>()) {
+            result.InsertValue("value", column.Value(position));
+        }
+        return true;
+    });
+    return result;
 }
 
 NJson::TJsonValue DebugJson(std::shared_ptr<arrow::Array> array, const ui32 head, const ui32 tail) {

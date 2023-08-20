@@ -17,12 +17,35 @@ protected:
     std::vector<std::shared_ptr<arrow::Array>> Columns;
     std::vector<std::shared_ptr<arrow::Field>> Fields;
     std::shared_ptr<arrow::RecordBatch> Batch;
+    static std::optional<ui64> FindPosition(std::shared_ptr<arrow::RecordBatch> batch, const TSortableBatchPosition& forFound, const bool needGreater, const bool include);
+
 public:
     TSortableBatchPosition() = default;
 
     NJson::TJsonValue DebugJson() const;
 
     bool IsSameSchema(const std::shared_ptr<arrow::Schema> schema) const;
+
+    TSortableBatchPosition BuildSame(std::shared_ptr<arrow::RecordBatch> batch, const ui32 position) const {
+        std::vector<std::string> fieldNames;
+        for (auto&& i : Fields) {
+            fieldNames.emplace_back(i->name());
+        }
+        return TSortableBatchPosition(batch, position, fieldNames, ReverseSort);
+    }
+
+    static std::shared_ptr<arrow::RecordBatch> SelectInterval(std::shared_ptr<arrow::RecordBatch> batch, const TSortableBatchPosition& from, const TSortableBatchPosition& to, const bool includeFrom, const bool includeTo) {
+        if (!batch) {
+            return nullptr;
+        }
+        Y_VERIFY(from.Compare(to) != std::partial_ordering::greater);
+        const std::optional<ui32> idxFrom = FindPosition(batch, from, true, includeFrom);
+        const std::optional<ui32> idxTo = FindPosition(batch, to, false, includeTo);
+        if (!idxFrom || !idxTo || *idxTo < *idxFrom) {
+            return nullptr;
+        }
+        return batch->Slice(*idxFrom, *idxTo - *idxFrom + 1);
+    }
 
     TSortableBatchPosition(std::shared_ptr<arrow::RecordBatch> batch, const ui32 position, const std::vector<std::string>& columns, const bool reverseSort)
         : Position(position)

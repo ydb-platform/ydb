@@ -160,7 +160,6 @@ class CordBuffer {
   // for more information on buffer capacities and intended usage.
   static CordBuffer CreateWithDefaultLimit(size_t capacity);
 
-
   // CordBuffer::CreateWithCustomLimit()
   //
   // Creates a CordBuffer instance of the desired `capacity` rounded to an
@@ -336,7 +335,7 @@ class CordBuffer {
     }
 
     // Returns the available area of the internal SSO data
-    y_absl::Span<char> long_available() {
+    y_absl::Span<char> long_available() const {
       assert(!is_short());
       const size_t length = long_rep.rep->length;
       return y_absl::Span<char>(long_rep.rep->Data() + length,
@@ -460,9 +459,7 @@ inline constexpr size_t CordBuffer::MaximumPayload() {
 }
 
 inline constexpr size_t CordBuffer::MaximumPayload(size_t block_size) {
-  // TODO(y_absl-team): Use std::min when C++11 support is dropped.
-  return (kCustomLimit < block_size ? kCustomLimit : block_size) -
-         cord_internal::kFlatOverhead;
+  return (std::min)(kCustomLimit, block_size) - cord_internal::kFlatOverhead;
 }
 
 inline CordBuffer CordBuffer::CreateWithDefaultLimit(size_t capacity) {

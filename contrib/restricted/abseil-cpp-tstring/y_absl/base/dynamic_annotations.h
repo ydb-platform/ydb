@@ -46,11 +46,16 @@
 #define Y_ABSL_BASE_DYNAMIC_ANNOTATIONS_H_
 
 #include <stddef.h>
+#include <stdint.h>
 
 #include "y_absl/base/attributes.h"
 #include "y_absl/base/config.h"
 #ifdef __cplusplus
 #include "y_absl/base/macros.h"
+#endif
+
+#ifdef Y_ABSL_HAVE_HWADDRESS_SANITIZER
+#include <sanitizer/hwasan_interface.h>
 #endif
 
 // TODO(rogeeff): Remove after the backward compatibility period.
@@ -111,7 +116,7 @@
 
 #if Y_ABSL_INTERNAL_RACE_ANNOTATIONS_ENABLED == 1
 // Some of the symbols used in this section (e.g. AnnotateBenignRaceSized) are
-// defined by the compiler-based santizer implementation, not by the Abseil
+// defined by the compiler-based sanitizer implementation, not by the Abseil
 // library. Therefore they do not use Y_ABSL_INTERNAL_C_SYMBOL.
 
 // -------------------------------------------------------------
@@ -455,6 +460,26 @@ Y_ABSL_NAMESPACE_END
 #define Y_ABSL_ADDRESS_SANITIZER_REDZONE(name) static_assert(true, "")
 
 #endif  // Y_ABSL_HAVE_ADDRESS_SANITIZER
+
+// -------------------------------------------------------------------------
+// HWAddress sanitizer annotations
+
+#ifdef __cplusplus
+namespace y_absl {
+#ifdef Y_ABSL_HAVE_HWADDRESS_SANITIZER
+// Under HWASAN changes the tag of the pointer.
+template <typename T>
+T* HwasanTagPointer(T* ptr, uintptr_t tag) {
+  return reinterpret_cast<T*>(__hwasan_tag_pointer(ptr, tag));
+}
+#else
+template <typename T>
+T* HwasanTagPointer(T* ptr, uintptr_t) {
+  return ptr;
+}
+#endif
+}  // namespace y_absl
+#endif
 
 // -------------------------------------------------------------------------
 // Undefine the macros intended only for this file.

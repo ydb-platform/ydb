@@ -877,8 +877,8 @@ struct IndexOfConstructedType<
 template <std::size_t... Is>
 struct ContainsVariantNPos
     : y_absl::negation<std::is_same<  // NOLINT
-          y_absl::integer_sequence<bool, 0 <= Is...>,
-          y_absl::integer_sequence<bool, Is != y_absl::variant_npos...>>> {};
+          std::integer_sequence<bool, 0 <= Is...>,
+          std::integer_sequence<bool, Is != y_absl::variant_npos...>>> {};
 
 template <class Op, class... QualifiedVariants>
 using RawVisitResult =

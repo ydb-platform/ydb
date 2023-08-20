@@ -200,6 +200,7 @@
 #define Y_ABSL_FLAGS_MARSHALLING_H_
 
 #include "y_absl/base/config.h"
+#include "y_absl/numeric/int128.h"
 
 #if defined(Y_ABSL_HAVE_STD_OPTIONAL) && !defined(Y_ABSL_USES_STD_OPTIONAL)
 #include <optional>
@@ -233,6 +234,8 @@ bool AbslParseFlag(y_absl::string_view, unsigned long*, TString*);   // NOLINT
 bool AbslParseFlag(y_absl::string_view, long long*, TString*);       // NOLINT
 bool AbslParseFlag(y_absl::string_view, unsigned long long*,             // NOLINT
                    TString*);
+bool AbslParseFlag(y_absl::string_view, y_absl::int128*, TString*);    // NOLINT
+bool AbslParseFlag(y_absl::string_view, y_absl::uint128*, TString*);   // NOLINT
 bool AbslParseFlag(y_absl::string_view, float*, TString*);
 bool AbslParseFlag(y_absl::string_view, double*, TString*);
 bool AbslParseFlag(y_absl::string_view, TString*, TString*);
@@ -310,6 +313,8 @@ TString Unparse(long v);                // NOLINT
 TString Unparse(unsigned long v);       // NOLINT
 TString Unparse(long long v);           // NOLINT
 TString Unparse(unsigned long long v);  // NOLINT
+TString Unparse(y_absl::int128 v);
+TString Unparse(y_absl::uint128 v);
 TString Unparse(float v);
 TString Unparse(double v);
 

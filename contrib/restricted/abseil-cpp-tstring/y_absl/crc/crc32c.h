@@ -29,6 +29,7 @@
 #include <ostream>
 
 #include "y_absl/crc/internal/crc32c_inline.h"
+#include "y_absl/strings/str_format.h"
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
@@ -61,9 +62,15 @@ class crc32c_t final {
 
   friend bool operator!=(crc32c_t lhs, crc32c_t rhs) { return !(lhs == rhs); }
 
+  template <typename Sink>
+  friend void AbslStringify(Sink& sink, crc32c_t crc) {
+    y_absl::Format(&sink, "%08x", static_cast<uint32_t>(crc));
+  }
+
  private:
   uint32_t crc_;
 };
+
 
 namespace crc_internal {
 // Non-inline code path for `y_absl::ExtendCrc32c()`. Do not call directly.
@@ -174,7 +181,7 @@ crc32c_t RemoveCrc32cSuffix(crc32c_t full_string_crc, crc32c_t suffix_crc,
 //
 // Streams the CRC32C value `crc` to the stream `os`.
 inline std::ostream& operator<<(std::ostream& os, crc32c_t crc) {
-  return os << static_cast<uint32_t>(crc);
+  return os << y_absl::StreamFormat("%08x", static_cast<uint32_t>(crc));
 }
 
 Y_ABSL_NAMESPACE_END

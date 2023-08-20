@@ -20,8 +20,6 @@
 
 #include "y_absl/base/config.h"
 #include "y_absl/base/internal/raw_logging.h"
-#include "y_absl/base/internal/spinlock.h"
-#include "y_absl/synchronization/mutex.h"
 
 namespace y_absl {
 Y_ABSL_NAMESPACE_BEGIN
@@ -34,7 +32,7 @@ namespace cord_internal {
 // has gained visibility into a CordzInfo object, that CordzInfo object will not
 // be deleted prematurely. This allows the profiler to inspect all CordzInfo
 // objects that are alive without needing to hold a global lock.
-class CordzHandle {
+class Y_ABSL_DLL CordzHandle {
  public:
   CordzHandle() : CordzHandle(false) {}
 
@@ -79,37 +77,6 @@ class CordzHandle {
   virtual ~CordzHandle();
 
  private:
-  // Global queue data. CordzHandle stores a pointer to the global queue
-  // instance to harden against ODR violations.
-  struct Queue {
-    constexpr explicit Queue(y_absl::ConstInitType)
-        : mutex(y_absl::kConstInit,
-                y_absl::base_internal::SCHEDULE_COOPERATIVE_AND_KERNEL) {}
-
-    y_absl::base_internal::SpinLock mutex;
-    std::atomic<CordzHandle*> dq_tail Y_ABSL_GUARDED_BY(mutex){nullptr};
-
-    // Returns true if this delete queue is empty. This method does not acquire
-    // the lock, but does a 'load acquire' observation on the delete queue tail.
-    // It is used inside Delete() to check for the presence of a delete queue
-    // without holding the lock. The assumption is that the caller is in the
-    // state of 'being deleted', and can not be newly discovered by a concurrent
-    // 'being constructed' snapshot instance. Practically, this means that any
-    // such discovery (`find`, 'first' or 'next', etc) must have proper 'happens
-    // before / after' semantics and atomic fences.
-    bool IsEmpty() const Y_ABSL_NO_THREAD_SAFETY_ANALYSIS {
-      return dq_tail.load(std::memory_order_acquire) == nullptr;
-    }
-  };
-
-  void ODRCheck() const {
-#ifndef NDEBUG
-    Y_ABSL_RAW_CHECK(queue_ == &global_queue_, "ODR violation in Cord");
-#endif
-  }
-
-  Y_ABSL_CONST_INIT static Queue global_queue_;
-  Queue* const queue_ = &global_queue_;
   const bool is_snapshot_;
 
   // dq_prev_ and dq_next_ require the global queue mutex to be held.

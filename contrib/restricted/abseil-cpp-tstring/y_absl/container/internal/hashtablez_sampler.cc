@@ -23,11 +23,13 @@
 
 #include "y_absl/base/attributes.h"
 #include "y_absl/base/config.h"
+#include "y_absl/base/internal/raw_logging.h"
 #include "y_absl/debugging/stacktrace.h"
 #include "y_absl/memory/memory.h"
 #include "y_absl/profiling/internal/exponential_biased.h"
 #include "y_absl/profiling/internal/sample_recorder.h"
 #include "y_absl/synchronization/mutex.h"
+#include "y_absl/time/clock.h"
 #include "y_absl/utility/utility.h"
 
 namespace y_absl {

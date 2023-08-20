@@ -21,6 +21,7 @@
 #include "y_absl/base/attributes.h"
 #include "y_absl/base/config.h"
 #include "y_absl/base/const_init.h"
+#include "y_absl/base/internal/raw_logging.h"
 #include "y_absl/base/thread_annotations.h"
 #include "y_absl/flags/internal/usage.h"
 #include "y_absl/strings/string_view.h"

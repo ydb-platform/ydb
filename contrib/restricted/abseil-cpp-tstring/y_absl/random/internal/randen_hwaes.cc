@@ -31,7 +31,7 @@
 // a hardware accelerated implementation of randen, or whether it
 // will contain stubs that exit the process.
 #if Y_ABSL_HAVE_ACCELERATED_AES
-// The following plaforms have implemented RandenHwAes.
+// The following platforms have implemented RandenHwAes.
 #if defined(Y_ABSL_ARCH_X86_64) || defined(Y_ABSL_ARCH_X86_32) || \
     defined(Y_ABSL_ARCH_PPC) || defined(Y_ABSL_ARCH_ARM) ||       \
     defined(Y_ABSL_ARCH_AARCH64)

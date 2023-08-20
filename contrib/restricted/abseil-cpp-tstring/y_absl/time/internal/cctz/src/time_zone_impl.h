@@ -78,7 +78,11 @@ class time_zone::Impl {
   TString Description() const { return zone_->Description(); }
 
  private:
+  Impl();
   explicit Impl(const TString& name);
+  Impl(const Impl&) = delete;
+  Impl& operator=(const Impl&) = delete;
+
   static const Impl* UTCImpl();
 
   const TString name_;

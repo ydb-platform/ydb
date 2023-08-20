@@ -19,7 +19,7 @@ namespace y_absl {
 Y_ABSL_NAMESPACE_BEGIN
 namespace flags_internal {
 
-FlagStateInterface::~FlagStateInterface() {}
+FlagStateInterface::~FlagStateInterface() = default;
 
 }  // namespace flags_internal
 Y_ABSL_NAMESPACE_END

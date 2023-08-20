@@ -19,6 +19,7 @@
 
 #include <cmath>
 #include <limits>
+#include <sstream>
 #include <util/generic/string.h>
 #include <type_traits>
 #include <vector>
@@ -26,6 +27,7 @@
 #include "y_absl/base/config.h"
 #include "y_absl/base/log_severity.h"
 #include "y_absl/base/macros.h"
+#include "y_absl/numeric/int128.h"
 #include "y_absl/strings/ascii.h"
 #include "y_absl/strings/match.h"
 #include "y_absl/strings/numbers.h"
@@ -68,8 +70,10 @@ bool AbslParseFlag(y_absl::string_view text, bool* dst, TString*) {
 // puts us in base 16.  But leading 0 does not put us in base 8. It
 // caused too many bugs when we had that behavior.
 static int NumericBase(y_absl::string_view text) {
-  const bool hex = (text.size() >= 2 && text[0] == '0' &&
-                    (text[1] == 'x' || text[1] == 'X'));
+  if (text.empty()) return 0;
+  size_t num_start = (text[0] == '-' || text[0] == '+') ? 1 : 0;
+  const bool hex = (text.size() >= num_start + 2 && text[num_start] == '0' &&
+                    (text[num_start + 1] == 'x' || text[num_start + 1] == 'X'));
   return hex ? 16 : 10;
 }
 
@@ -125,6 +129,32 @@ bool AbslParseFlag(y_absl::string_view text, unsigned long long* dst,
   return ParseFlagImpl(text, *dst);
 }
 
+bool AbslParseFlag(y_absl::string_view text, y_absl::int128* dst, TString*) {
+  text = y_absl::StripAsciiWhitespace(text);
+
+  // check hex
+  int base = NumericBase(text);
+  if (!y_absl::numbers_internal::safe_strto128_base(text, dst, base)) {
+    return false;
+  }
+
+  return base == 16 ? y_absl::SimpleHexAtoi(text, dst)
+                    : y_absl::SimpleAtoi(text, dst);
+}
+
+bool AbslParseFlag(y_absl::string_view text, y_absl::uint128* dst, TString*) {
+  text = y_absl::StripAsciiWhitespace(text);
+
+  // check hex
+  int base = NumericBase(text);
+  if (!y_absl::numbers_internal::safe_strtou128_base(text, dst, base)) {
+    return false;
+  }
+
+  return base == 16 ? y_absl::SimpleHexAtoi(text, dst)
+                    : y_absl::SimpleAtoi(text, dst);
+}
+
 // --------------------------------------------------------------------
 // AbslParseFlag for floating point types.
 
@@ -171,6 +201,17 @@ TString Unparse(long v) { return y_absl::StrCat(v); }
 TString Unparse(unsigned long v) { return y_absl::StrCat(v); }
 TString Unparse(long long v) { return y_absl::StrCat(v); }
 TString Unparse(unsigned long long v) { return y_absl::StrCat(v); }
+TString Unparse(y_absl::int128 v) {
+  std::stringstream ss;
+  ss << v;
+  return ss.str();
+}
+TString Unparse(y_absl::uint128 v) {
+  std::stringstream ss;
+  ss << v;
+  return ss.str();
+}
+
 template <typename T>
 TString UnparseFloatingPointVal(T v) {
   // digits10 is guaranteed to roundtrip correctly in string -> value -> string

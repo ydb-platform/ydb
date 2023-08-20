@@ -48,6 +48,7 @@
     ::y_absl::raw_log_internal::RawLog(Y_ABSL_RAW_LOG_INTERNAL_##severity,         \
                                      absl_raw_log_internal_basename, __LINE__, \
                                      __VA_ARGS__);                             \
+    Y_ABSL_RAW_LOG_INTERNAL_MAYBE_UNREACHABLE_##severity;                        \
   } while (0)
 
 // Similar to CHECK(condition) << message, but for low-level modules:
@@ -77,8 +78,7 @@
     ::y_absl::raw_log_internal::internal_log_function(                      \
         Y_ABSL_RAW_LOG_INTERNAL_##severity, absl_raw_log_internal_filename, \
         __LINE__, message);                                               \
-    if (Y_ABSL_RAW_LOG_INTERNAL_##severity == ::y_absl::LogSeverity::kFatal)  \
-      Y_ABSL_UNREACHABLE();                                                 \
+    Y_ABSL_RAW_LOG_INTERNAL_MAYBE_UNREACHABLE_##severity;                   \
   } while (0)
 
 #define Y_ABSL_INTERNAL_CHECK(condition, message)                    \
@@ -90,12 +90,32 @@
     }                                                              \
   } while (0)
 
+#ifndef NDEBUG
+
+#define Y_ABSL_RAW_DLOG(severity, ...) Y_ABSL_RAW_LOG(severity, __VA_ARGS__)
+#define Y_ABSL_RAW_DCHECK(condition, message) Y_ABSL_RAW_CHECK(condition, message)
+
+#else  // NDEBUG
+
+#define Y_ABSL_RAW_DLOG(severity, ...)                   \
+  while (false) Y_ABSL_RAW_LOG(severity, __VA_ARGS__)
+#define Y_ABSL_RAW_DCHECK(condition, message) \
+  while (false) Y_ABSL_RAW_CHECK(condition, message)
+
+#endif  // NDEBUG
+
 #define Y_ABSL_RAW_LOG_INTERNAL_INFO ::y_absl::LogSeverity::kInfo
 #define Y_ABSL_RAW_LOG_INTERNAL_WARNING ::y_absl::LogSeverity::kWarning
 #define Y_ABSL_RAW_LOG_INTERNAL_ERROR ::y_absl::LogSeverity::kError
 #define Y_ABSL_RAW_LOG_INTERNAL_FATAL ::y_absl::LogSeverity::kFatal
 #define Y_ABSL_RAW_LOG_INTERNAL_LEVEL(severity) \
   ::y_absl::NormalizeLogSeverity(severity)
+
+#define Y_ABSL_RAW_LOG_INTERNAL_MAYBE_UNREACHABLE_INFO
+#define Y_ABSL_RAW_LOG_INTERNAL_MAYBE_UNREACHABLE_WARNING
+#define Y_ABSL_RAW_LOG_INTERNAL_MAYBE_UNREACHABLE_ERROR
+#define Y_ABSL_RAW_LOG_INTERNAL_MAYBE_UNREACHABLE_FATAL Y_ABSL_UNREACHABLE()
+#define Y_ABSL_RAW_LOG_INTERNAL_MAYBE_UNREACHABLE_LEVEL(severity)
 
 namespace y_absl {
 Y_ABSL_NAMESPACE_BEGIN
@@ -109,8 +129,8 @@ void RawLog(y_absl::LogSeverity severity, const char* file, int line,
             const char* format, ...) Y_ABSL_PRINTF_ATTRIBUTE(4, 5);
 
 // Writes the provided buffer directly to stderr, in a signal-safe, low-level
-// manner.
-void AsyncSignalSafeWriteToStderr(const char* s, size_t len);
+// manner.  Preserves errno.
+void AsyncSignalSafeWriteError(const char* s, size_t len);
 
 // compile-time function to get the "base" filename, that is, the part of
 // a filename after the last "/" or "\" path separator.  The search starts at

@@ -131,7 +131,7 @@
 
 // Y_ABSL_RANDOM_INTERNAL_AES_DISPATCH indicates whether the currently active
 // platform has, or should use run-time dispatch for selecting the
-// acclerated Randen implementation.
+// accelerated Randen implementation.
 #define Y_ABSL_RANDOM_INTERNAL_AES_DISPATCH 0
 
 #if defined(Y_ABSL_ARCH_X86_64)

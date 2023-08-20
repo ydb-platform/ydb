@@ -31,8 +31,17 @@ private:
     void OnEraseCommitted(TPathInfo& pathInfo, const ui64 dataSize) noexcept;
     void OnNewInserted(TPathInfo& pathInfo, const ui64 dataSize, const bool load) noexcept;
     void OnEraseInserted(TPathInfo& pathInfo, const ui64 dataSize) noexcept;
-
+    static TAtomicCounter CriticalInserted;
+    i64 LocalInsertedCritical = 0;
 public:
+    static i64 GetCriticalInserted() {
+        return CriticalInserted.Val();
+    }
+
+    ~TInsertionSummary() {
+        CriticalInserted.Sub(LocalInsertedCritical);
+    }
+
     THashSet<TWriteId> GetInsertedByPathId(const ui64 pathId) const;
 
     THashSet<TWriteId> GetDeprecatedInsertions(const TInstant timeBorder) const;
@@ -69,8 +78,6 @@ public:
     void Clear();
 
     bool IsOverloaded(const ui64 pathId) const;
-
-
 
     const std::map<TPathInfoIndexPriority, std::set<const TPathInfo*>>& GetPathPriorities() const {
         return Priorities;

@@ -58,7 +58,6 @@ std::vector<TSaverSplittedChunk> TSimpleSplitter::SplitByRecordsCount(std::share
 }
 
 std::vector<TSaverSplittedChunk> TSimpleSplitter::SplitBySizes(std::shared_ptr<arrow::RecordBatch> data, const TString& dataSerialization, const std::vector<ui64>& splitPartSizesExt) const {
-    Counters->BySizeSplitter.OnTrashSerialized(dataSerialization.size());
     auto splitPartSizesLocal = splitPartSizesExt;
     Y_VERIFY(data);
     {

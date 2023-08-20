@@ -90,6 +90,7 @@ public:
     }
 
     std::optional<TColumnSerializationStat> GetStatsForRecordBatch(const std::shared_ptr<arrow::RecordBatch>& rb) const;
+    std::optional<TColumnSerializationStat> GetStatsForRecordBatch(const std::shared_ptr<arrow::Schema>& schema) const;
 };
 
 }

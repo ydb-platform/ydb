@@ -3,17 +3,27 @@
 
 namespace NKikimr::NOlap {
 
+TAtomicCounter TInsertionSummary::CriticalInserted;
+
 void TInsertionSummary::OnNewCommitted(const ui64 dataSize, const bool load) noexcept {
     if (!load) {
         Counters.Committed.Add(dataSize);
     }
     ++StatsCommitted.Rows;
+    if (StatsCommitted.Bytes <= (i64)2 * 1024 * 1024 * 1024 && StatsCommitted.Bytes + dataSize > (i64)2 * 1024 * 1024 * 1024) {
+        ++LocalInsertedCritical;
+        CriticalInserted.Inc();
+    }
     StatsCommitted.Bytes += dataSize;
 }
 
 void TInsertionSummary::OnEraseCommitted(TPathInfo& /*pathInfo*/, const ui64 dataSize) noexcept {
     Counters.Committed.Erase(dataSize);
     Y_VERIFY(--StatsCommitted.Rows >= 0);
+    if (StatsCommitted.Bytes > (i64)2 * 1024 * 1024 * 1024 && StatsCommitted.Bytes - dataSize <= (i64)2 * 1024 * 1024 * 1024) {
+        --LocalInsertedCritical;
+        CriticalInserted.Dec();
+    }
     StatsCommitted.Bytes -= dataSize;
 }
 

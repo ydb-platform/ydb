@@ -29,7 +29,7 @@ bool TPortionMeta::DeserializeFromProto(const NKikimrTxColumnShard::TIndexPortio
     const bool compositeIndexKey = indexInfo.IsCompositeIndexKey();
     if (Produced != TPortionMeta::EProduced::UNSPECIFIED) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "DeserializeFromProto")("error", "parsing duplication");
-        return false;
+        return true;
     }
     TierName = portionMeta.GetTierName();
     if (portionMeta.GetIsInserted()) {
@@ -107,6 +107,10 @@ TString TPortionMeta::DebugString() const {
     }
     sb << ")";
     return sb;
+}
+
+TString TPortionAddress::DebugString() const {
+    return TStringBuilder() << "(granule_id=" << GranuleId << ";portion_id=" << PortionId << ")";
 }
 
 }

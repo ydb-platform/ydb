@@ -3,9 +3,9 @@
 
 namespace NKikimr::NOlap {
 
-std::optional<NKikimr::NOlap::TColumnSerializationStat> TSerializationStats::GetStatsForRecordBatch(const std::shared_ptr<arrow::RecordBatch>& rb) const {
+std::optional<NKikimr::NOlap::TColumnSerializationStat> TSerializationStats::GetStatsForRecordBatch(const std::shared_ptr<arrow::Schema>& schema) const {
     std::optional<TColumnSerializationStat> result;
-    for (auto&& i : rb->schema()->fields()) {
+    for (auto&& i : schema->fields()) {
         auto columnInfo = GetColumnInfo(i->name());
         if (!columnInfo) {
             return {};
@@ -16,6 +16,10 @@ std::optional<NKikimr::NOlap::TColumnSerializationStat> TSerializationStats::Get
         }
     }
     return result;
+}
+
+std::optional<NKikimr::NOlap::TColumnSerializationStat> TSerializationStats::GetStatsForRecordBatch(const std::shared_ptr<arrow::RecordBatch>& rb) const {
+    return GetStatsForRecordBatch(rb->schema());
 }
 
 }

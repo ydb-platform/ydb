@@ -19,8 +19,6 @@ public:
         return SlicedBatch->num_rows();
     }
 
-    TSaverSplittedChunk() = default;
-
     TSaverSplittedChunk(std::shared_ptr<arrow::RecordBatch> batch, TString&& serializedChunk)
         : SlicedBatch(batch)
         , SerializedChunk(std::move(serializedChunk))

@@ -888,7 +888,7 @@ namespace NUnifiedAgent::NPrivate {
         Counters->GrpcInflightBytes -= GrpcInflightBytes;
         GrpcInflightMessages = 0;
         GrpcInflightBytes = 0;
-        YLOG_DEBUG(Sprintf("grpc call initialized, session_id [%s], last_seq_no [%" PRIu64 "]",
+        YLOG_INFO(Sprintf("grpc call initialized, session_id [%s], last_seq_no [%" PRIu64 "]",
                           sessionId.c_str(), lastSeqNo));
     }
 

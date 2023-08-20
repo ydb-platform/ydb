@@ -266,6 +266,7 @@
   - windef.h
   - windns.h
   - windows.applicationmodel.core.h
+  - windows.globalization.h
   - windows.graphics.display.h
   - windows.h
   - windows.storage.h

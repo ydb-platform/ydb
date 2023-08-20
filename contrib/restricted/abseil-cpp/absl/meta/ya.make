@@ -6,9 +6,9 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(20230125.3)
+VERSION(20230802.0)
 
-ORIGINAL_SOURCE(https://github.com/abseil/abseil-cpp/archive/20230125.3.tar.gz)
+ORIGINAL_SOURCE(https://github.com/abseil/abseil-cpp/archive/20230802.0.tar.gz)
 
 PEERDIR(
     contrib/restricted/abseil-cpp/absl/base

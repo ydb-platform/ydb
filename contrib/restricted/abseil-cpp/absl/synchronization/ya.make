@@ -26,9 +26,15 @@ SRCS(
     barrier.cc
     blocking_counter.cc
     internal/create_thread_identity.cc
+    internal/futex_waiter.cc
     internal/graphcycles.cc
+    internal/kernel_timeout.cc
     internal/per_thread_sem.cc
-    internal/waiter.cc
+    internal/pthread_waiter.cc
+    internal/sem_waiter.cc
+    internal/stdcpp_waiter.cc
+    internal/waiter_base.cc
+    internal/win32_waiter.cc
     mutex.cc
     notification.cc
 )

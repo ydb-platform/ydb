@@ -813,14 +813,14 @@ TAsyncReadRowsResult TTableClient::TImpl::ReadRows(const TString& path, TValue&&
     auto promise = NewPromise<TReadRowsResult>();
 
     auto responseCb = [promise] (Ydb::Table::ReadRowsResponse* response, TPlainStatus status) mutable {
-        Ydb::ResultSet resultSet = response ? std::move(*response->mutable_result_set()) : Ydb::ResultSet{};
-        // can be not ok in case of transport errors
-        if (status.Ok()) {
-            const Ydb::StatusIds::StatusCode msgStatus = response ? response->status() : Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
+        Ydb::ResultSet resultSet;
+        // if there is no response status contains transport errors
+        if (response) {
+            Ydb::StatusIds::StatusCode msgStatus = response->status();
             NYql::TIssues issues;
-            if (response)
-                NYql::IssuesFromMessage(response->issues(), issues);
+            NYql::IssuesFromMessage(response->issues(), issues);
             status = TPlainStatus(static_cast<EStatus>(msgStatus), std::move(issues));
+            resultSet = std::move(*response->mutable_result_set());
         }
         TReadRowsResult val(TStatus(std::move(status)), std::move(resultSet));
         promise.SetValue(std::move(val));

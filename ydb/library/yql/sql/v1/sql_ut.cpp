@@ -106,6 +106,27 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(failed, TVector<TString>{});
     }
 
+    Y_UNIT_TEST(TokensAsHints) {
+        auto failed = ValidateTokens({
+            "AUTOMAP", "CALLABLE", "COLUMNS", "DICT", "ENUM", "FALSE", "FLOW",
+            "GLOBAL", "LIST", "OPTIONAL", "REPEATABLE", "RESOURCE",
+            "SCHEMA", "SET", "STRUCT", "TAGGED", "TRUE", "TUPLE", "VARIANT"
+            },
+            [](const TString& token){ return TString("SELECT * FROM Plato.Input WITH ") + token ;}
+        );
+        UNIT_ASSERT_VALUES_EQUAL(failed, TVector<TString>{});
+    }
+
+    Y_UNIT_TEST(TokensAsWindow) {
+        auto failed = ValidateTokens({
+            "AUTOMAP", "CALLABLE", "DICT", "ENUM", "FALSE", "FLOW", "GLOBAL", "GROUPS", "LIST", "OPTIONAL",
+            "RANGE", "REPEATABLE", "RESOURCE", "ROWS", "SET", "STRUCT", "TAGGED" ,"TRUE", "TUPLE", "VARIANT"
+             },
+             [](const TString& token){ return TString("SELECT * FROM Plato.Input WINDOW ") + token + " AS ()" ;}
+        );
+        UNIT_ASSERT_VALUES_EQUAL(failed, TVector<TString>{});
+    }
+
     Y_UNIT_TEST(TableHints) {
         UNIT_ASSERT(SqlToYql("SELECT * FROM plato.Input WITH INFER_SCHEMA").IsOk());
         UNIT_ASSERT(SqlToYql("SELECT * FROM plato.Input WITH (INFER_SCHEMA)").IsOk());

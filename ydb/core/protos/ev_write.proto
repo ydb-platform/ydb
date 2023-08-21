@@ -1,4 +1,3 @@
-import "ydb/core/scheme/protos/type_info.proto";
 import "ydb/core/protos/tx_datashard.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 

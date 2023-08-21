@@ -1178,7 +1178,7 @@ public:
             res.SetSuccess();
             return res;
         } catch (...) {
-            return ResultFromCurrentException<TGetTablePartitionsResult>();
+            return ResultFromCurrentException<TGetTablePartitionsResult>({}, true);
         }
     }
 

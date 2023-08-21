@@ -53,13 +53,13 @@ NYT::TNode YqlOpOptionsToAttrs(const TYqlOperationOptions& opOpts);
 void CreateParents(const TVector<TString>& tables, NYT::IClientBasePtr tx);
 
 // must be used inside 'catch' because it rethrows current exception to analyze it's type
-void FillResultFromCurrentException(NCommon::TOperationResult& result, TPosition pos = {});
+void FillResultFromCurrentException(NCommon::TOperationResult& result, TPosition pos = {}, bool shortErrors = false);
 
 // must be used inside 'catch' because it rethrows current exception to analyze it's type
 template<typename TResult>
-static TResult ResultFromCurrentException(TPosition pos = {}) {
+static TResult ResultFromCurrentException(TPosition pos = {}, bool shortErrors = false) {
     TResult result;
-    FillResultFromCurrentException(result, pos);
+    FillResultFromCurrentException(result, pos, shortErrors);
     return result;
 }
 

@@ -570,8 +570,10 @@ void CreateParents(const TVector<TString>& tables, NYT::IClientBasePtr tx) {
     }
 }
 
-static void FillResultFromOperationError(NCommon::TOperationResult& result, const NYT::TOperationFailedError& e, TPosition pos) {
-    TString errMsg = GetEnv("YQL_DETERMINISTIC_MODE") ? e.GetError().ShortDescription() : TString(e.what());
+namespace {
+
+void FillResultFromOperationError(NCommon::TOperationResult& result, const NYT::TOperationFailedError& e, TPosition pos, bool shortErrors) {
+    TString errMsg = shortErrors || GetEnv("YQL_DETERMINISTIC_MODE") ? e.GetError().ShortDescription() : TString(e.what());
     EYqlIssueCode rootIssueCode = IssueCodeForYtError(e.GetError());
     TIssue rootIssue = YqlIssue(pos, rootIssueCode, errMsg);
 
@@ -597,8 +599,8 @@ static void FillResultFromOperationError(NCommon::TOperationResult& result, cons
     result.AddIssue(rootIssue);
 }
 
-static void FillResultFromErrorResponse(NCommon::TOperationResult& result, const NYT::TErrorResponse& e, TPosition pos) {
-    TString errMsg = GetEnv("YQL_DETERMINISTIC_MODE") ? e.GetError().ShortDescription() : TString(e.what());
+void FillResultFromErrorResponse(NCommon::TOperationResult& result, const NYT::TErrorResponse& e, TPosition pos, bool shortErrors) {
+    TString errMsg = shortErrors || GetEnv("YQL_DETERMINISTIC_MODE") ? e.GetError().ShortDescription() : TString(e.what());
 
     EYqlIssueCode rootIssueCode = IssueCodeForYtError(e.GetError());
     TIssue rootIssue = YqlIssue(pos, rootIssueCode, errMsg);
@@ -607,13 +609,15 @@ static void FillResultFromErrorResponse(NCommon::TOperationResult& result, const
     result.AddIssue(rootIssue);
 }
 
-void FillResultFromCurrentException(NCommon::TOperationResult& result, TPosition pos) {
+} // unnamed
+
+void FillResultFromCurrentException(NCommon::TOperationResult& result, TPosition pos, bool shortErrors) {
     try {
         throw;
     } catch (const NYT::TOperationFailedError& e) {
-        FillResultFromOperationError(result, e, pos);
+        FillResultFromOperationError(result, e, pos, shortErrors);
     } catch (const NYT::TErrorResponse& e) {
-        FillResultFromErrorResponse(result, e, pos);
+        FillResultFromErrorResponse(result, e, pos, shortErrors);
     } catch (const std::exception& e) {
         result.SetException(e, pos);
     } catch (const NKikimr::TMemoryLimitExceededException&) {

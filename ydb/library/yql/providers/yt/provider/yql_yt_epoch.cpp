@@ -53,7 +53,7 @@ public:
             return status;
         }
 
-        if (State_->Configuration->_EnableWriteReorder.Get().GetOrElse(false)) {
+        if (State_->Configuration->_EnableWriteReorder.Get().GetOrElse(true)) {
             return status.Combine(TYtDependencyUpdater().ReorderGraph(output, output, ctx));
         } else {
             return status.Combine(TYtDependencyUpdaterOld().ReorderGraph(output, output, ctx));

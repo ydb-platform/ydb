@@ -206,6 +206,10 @@ void TKqpScanComputeActor::DoBootstrap() {
         settings.SecureParams[paramsName] = paramsValue;
     }
 
+    for (const auto& readRange : GetTask().GetReadRanges()) {
+        settings.ReadRanges.push_back(readRange);
+    }
+
     NDq::TLogFunc logger;
     if (IsDebugLogEnabled(actorSystem, NKikimrServices::KQP_TASKS_RUNNER)) {
         logger = [actorSystem, txId = TxId, taskId = GetTask().GetId()](const TString& message) {

@@ -434,6 +434,7 @@ private:
         auto event = MakeHolder<TEvTaskRunnerCreateFinished>(
             TaskRunner->GetSecureParams(),
             TaskRunner->GetTaskParams(),
+            TaskRunner->GetReadRanges(),
             TaskRunner->GetTypeEnv(),
             TaskRunner->GetHolderFactory());
 

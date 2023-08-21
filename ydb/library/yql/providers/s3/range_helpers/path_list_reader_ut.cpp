@@ -33,7 +33,7 @@ Y_UNIT_TEST_SUITE(PathListReaderTest) {
 
         TPathList paths;
         ui64 startPathIndex = 42;
-        ReadPathsList(src, {}, paths, startPathIndex);
+        ReadPathsList(src, {}, {}, paths, startPathIndex);
 
         UNIT_ASSERT_VALUES_EQUAL(startPathIndex, 42);
         UNIT_ASSERT_VALUES_EQUAL(paths.size(), 2);
@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(PathListReaderTest) {
 
         TPathList paths;
         ui64 startPathIndex = 0;
-        ReadPathsList(src, MakeParams(range), paths, startPathIndex);
+        ReadPathsList(src, MakeParams(range), {}, paths, startPathIndex);
 
         UNIT_ASSERT_VALUES_EQUAL(startPathIndex, 42);
         UNIT_ASSERT_VALUES_EQUAL(paths.size(), 1);
@@ -112,7 +112,7 @@ Y_UNIT_TEST_SUITE(PathListReaderTest) {
 
         TPathList paths;
         ui64 startPathIndex = 0;
-        ReadPathsList(src, MakeParams(range), paths, startPathIndex);
+        ReadPathsList(src, MakeParams(range), {}, paths, startPathIndex);
 
         UNIT_ASSERT_VALUES_EQUAL(startPathIndex, 42);
         UNIT_ASSERT_VALUES_EQUAL(paths.size(), 5);

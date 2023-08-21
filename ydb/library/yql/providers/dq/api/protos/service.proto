@@ -59,6 +59,7 @@ message TTaskMeta {
     repeated TAttr Settings = 5; // pragmas
     repeated TWorkerInfo WorkerInfo = 6; //debug info
     string ClusterNameHint = 7;
+    repeated string ReadRanges = 8;
 }
 
 message TWorkerFilter {

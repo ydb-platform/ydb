@@ -88,6 +88,10 @@ public:
             settings.SecureParams[paramsName] = paramsValue;
         }
 
+        for (const auto& readRange : GetTask().GetReadRanges()) {
+            settings.ReadRanges.push_back(readRange);
+        }
+
         auto taskRunner = MakeDqTaskRunner(execCtx, settings, logger);
         SetTaskRunner(taskRunner);
 

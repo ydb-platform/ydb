@@ -184,4 +184,5 @@ message TDqTask {
     map<string, string> SecureParams = 14;
     optional uint32 MetaId = 15;
     optional bool UseLlvm = 16;
+    repeated string ReadRanges = 17;
 }

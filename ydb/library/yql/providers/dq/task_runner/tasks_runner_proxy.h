@@ -66,6 +66,7 @@ public:
     virtual NDq::IDqAsyncOutputBuffer::TPtr GetSink(ui64 index) = 0;
 
     virtual const THashMap<TString,TString>& GetTaskParams() const = 0;
+    virtual const TVector<TString>& GetReadRanges() const = 0;
     virtual const THashMap<TString,TString>& GetSecureParams() const = 0;
     virtual const NKikimr::NMiniKQL::TTypeEnvironment& GetTypeEnv() const = 0;
     virtual const NKikimr::NMiniKQL::THolderFactory& GetHolderFactory() const = 0;

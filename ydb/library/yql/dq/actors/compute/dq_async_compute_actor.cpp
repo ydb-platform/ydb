@@ -429,13 +429,14 @@ private:
     void OnTaskRunnerCreated(NTaskRunnerActor::TEvTaskRunnerCreateFinished::TPtr& ev) {
         const auto& secureParams = ev->Get()->SecureParams;
         const auto& taskParams = ev->Get()->TaskParams;
+        const auto& readRanges = ev->Get()->ReadRanges;
         const auto& typeEnv = ev->Get()->TypeEnv;
         const auto& holderFactory = ev->Get()->HolderFactory;
         if (Stat) {
             Stat->AddCounters2(ev->Get()->Sensors);
         }
         TypeEnv = const_cast<NKikimr::NMiniKQL::TTypeEnvironment*>(&typeEnv);
-        FillIoMaps(holderFactory, typeEnv, secureParams, taskParams);
+        FillIoMaps(holderFactory, typeEnv, secureParams, taskParams, readRanges);
 
         {
             // say "Hello" to executer

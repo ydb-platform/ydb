@@ -780,7 +780,7 @@ protected:
             input.SourceSettings = externalSource.GetSettings();
             input.SourceType = externalSource.GetType();
 
-            task.Meta.TaskParams.emplace(externalSource.GetTaskParamKey(), partitionParam);
+            task.Meta.ReadRanges.push_back(partitionParam);
 
             auto sourceName = externalSource.GetSourceName();
             if (sourceName) {

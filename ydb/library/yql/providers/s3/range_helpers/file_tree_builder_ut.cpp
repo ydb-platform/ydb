@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(S3FileTreeBuilderTest) {
 
         TPathList paths;
         ui64 startPathIndex = 0;
-        ReadPathsList({}, MakeParams(range), paths, startPathIndex);
+        ReadPathsList({}, MakeParams(range), {}, paths, startPathIndex);
 
         UNIT_ASSERT_VALUES_EQUAL(paths.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(paths[0].Path, "name");
@@ -125,7 +125,7 @@ Y_UNIT_TEST_SUITE(S3FileTreeBuilderTest) {
 
         TPathList paths;
         ui64 startPathIndex = 0;
-        ReadPathsList({}, MakeParams(range), paths, startPathIndex);
+        ReadPathsList({}, MakeParams(range), {}, paths, startPathIndex);
 
         UNIT_ASSERT_VALUES_EQUAL(paths.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(paths[0].Path, "a///b");
@@ -143,7 +143,7 @@ Y_UNIT_TEST_SUITE(S3FileTreeBuilderTest) {
 
         TPathList paths;
         ui64 startPathIndex = 0;
-        ReadPathsList({}, MakeParams(range), paths, startPathIndex);
+        ReadPathsList({}, MakeParams(range), {}, paths, startPathIndex);
 
         UNIT_ASSERT_VALUES_EQUAL(paths.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(paths[0].Path, "root/name/");
@@ -165,7 +165,7 @@ Y_UNIT_TEST_SUITE(S3FileTreeBuilderTest) {
 
         TPathList paths;
         ui64 startPathIndex = 0;
-        ReadPathsList({}, MakeParams(range), paths, startPathIndex);
+        ReadPathsList({}, MakeParams(range), {}, paths, startPathIndex);
 
         UNIT_ASSERT_VALUES_EQUAL(paths.size(), 2);
 

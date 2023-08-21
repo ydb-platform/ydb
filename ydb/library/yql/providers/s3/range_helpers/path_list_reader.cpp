@@ -33,30 +33,46 @@ static void BuildPathsFromTree(const google::protobuf::RepeatedPtrField<NYql::NS
     }
 }
 
-void ReadPathsList(const NS3::TSource& sourceDesc, const THashMap<TString, TString>& taskParams, TPathList& paths, ui64& startPathIndex) {
-    if (const auto taskParamsIt = taskParams.find(S3ProviderName); taskParamsIt != taskParams.cend()) {
-        NS3::TRange range;
-        TStringInput input(taskParamsIt->second);
-        range.Load(&input);
-        startPathIndex = range.GetStartPathIndex();
+void DecodeS3Range(const NS3::TSource& sourceDesc, const TString& data, TPathList& paths, ui64& startPathIndex) {
+    NS3::TRange range;
+    TStringInput input(data);
+    range.Load(&input);
+    startPathIndex = range.GetStartPathIndex();
 
-        // Modern way
-        if (range.PathsSize()) {
-            TString buf;
-            return BuildPathsFromTree(range.GetPaths(), paths, buf);
-        }
+    // Modern way
+    if (range.PathsSize()) {
+        TString buf;
+        return BuildPathsFromTree(range.GetPaths(), paths, buf);
+    }
 
-        std::unordered_map<TString, size_t> map(sourceDesc.GetDeprecatedPath().size());
-        for (auto i = 0; i < sourceDesc.GetDeprecatedPath().size(); ++i) {
-            map.emplace(sourceDesc.GetDeprecatedPath().Get(i).GetPath(), sourceDesc.GetDeprecatedPath().Get(i).GetSize());
-        }
+    std::unordered_map<TString, size_t> map(sourceDesc.GetDeprecatedPath().size());
+    for (auto i = 0; i < sourceDesc.GetDeprecatedPath().size(); ++i) {
+        map.emplace(sourceDesc.GetDeprecatedPath().Get(i).GetPath(), sourceDesc.GetDeprecatedPath().Get(i).GetSize());
+    }
 
-        for (auto i = 0; i < range.GetDeprecatedPath().size(); ++i) {
-            const auto& path = range.GetDeprecatedPath().Get(i);
-            auto it = map.find(path);
-            YQL_ENSURE(it != map.end());
-            paths.emplace_back(TPath{path, it->second, false});
+    for (auto i = 0; i < range.GetDeprecatedPath().size(); ++i) {
+        const auto& path = range.GetDeprecatedPath().Get(i);
+        auto it = map.find(path);
+        YQL_ENSURE(it != map.end());
+        paths.emplace_back(TPath{path, it->second, false});
+    }
+}
+
+void ReadPathsList(const NS3::TSource& sourceDesc, const THashMap<TString, TString>& taskParams, const TVector<TString>& readRanges, TPathList& paths, ui64& startPathIndex) {
+    if (!readRanges.empty()) {
+        bool firstReadRange = true;
+        for (auto readRange : readRanges) {
+            ui64 rangeStartPathIndex;
+            DecodeS3Range(sourceDesc, readRange, paths, rangeStartPathIndex);
+            if (firstReadRange) {
+                startPathIndex = rangeStartPathIndex;
+                firstReadRange = false;
+            } else {
+                YQL_ENSURE(startPathIndex == rangeStartPathIndex);
+            }
         }
+    } else if (const auto taskParamsIt = taskParams.find(S3ProviderName); taskParamsIt != taskParams.cend()) {
+        DecodeS3Range(sourceDesc, taskParamsIt->second, paths, startPathIndex);
     } else {
         for (auto i = 0; i < sourceDesc.GetDeprecatedPath().size(); ++i) {
             paths.emplace_back(TPath{

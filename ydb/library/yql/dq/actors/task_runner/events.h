@@ -177,12 +177,14 @@ struct TEvTaskRunnerCreateFinished
     TEvTaskRunnerCreateFinished(
         const THashMap<TString, TString>& secureParams,
         const THashMap<TString, TString>& taskParams,
+        const TVector<TString>& readRanges,
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         const TTaskRunnerActorSensors& sensors = {})
         : Sensors(sensors)
         , SecureParams(secureParams)
         , TaskParams(taskParams)
+        , ReadRanges(readRanges)
         , TypeEnv(typeEnv)
         , HolderFactory(holderFactory)
     { }
@@ -192,6 +194,7 @@ struct TEvTaskRunnerCreateFinished
     // for sources/sinks
     const THashMap<TString, TString>& SecureParams;
     const THashMap<TString, TString>& TaskParams;
+    const TVector<TString>& ReadRanges;
     const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
     const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
 };

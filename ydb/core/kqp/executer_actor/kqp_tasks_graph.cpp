@@ -1079,6 +1079,10 @@ void SerializeTaskToProto(const TKqpTasksGraph& tasksGraph, const TTask& task, N
         (*result->MutableTaskParams())[paramName] = paramValue;
     }
 
+    for (const auto& readRange : task.Meta.ReadRanges) {
+        result->AddReadRanges(readRange);
+    }
+
     for (const auto& [paramName, paramValue] : task.Meta.SecureParams) {
         (*result->MutableSecureParams())[paramName] = paramValue;
     }

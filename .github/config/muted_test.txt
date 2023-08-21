@@ -1,5 +1,3 @@
-ydb-apps-ydb-ut-workload-transfer-topic/YdbWorkloadTransferTopicToTable::*
-ydb-apps-ydb-ut/YdbWorkloadTopic::*
 ydb-core-blobstorage-pdisk-ut/TPDiskTest::TestMultipleLogSpliceNonceJump
 ydb-core-blobstorage-pdisk-ut/TYardTest::TestLogMultipleWriteRead
 ydb-core-blobstorage-pdisk-ut/TYardTest::TestMultiYardLogMultipleWriteRead

@@ -49,7 +49,7 @@ private:
     void GetAddressFromString(TConfig& config, TString* result = nullptr);
     bool ParseProtocolNoConfig(TString& message);
     void GetCaCerts(TConfig& config);
-    bool TryGetParamFromProfile(const TString& name, std::shared_ptr<IProfile> profile, std::function<bool(const TString&)> callback);
+    bool TryGetParamFromProfile(const TString& name, std::shared_ptr<IProfile> profile, bool explicitOption, std::function<bool(const TString&, const TString&)> callback);
 
     TString Database;
 

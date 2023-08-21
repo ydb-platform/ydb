@@ -270,9 +270,9 @@ namespace {
     }
 }
 
-bool TClientCommandRootCommon::TryGetParamFromProfile(const TString& name, std::shared_ptr<IProfile> profile, std::function<bool(const TString&)> callback) {
+bool TClientCommandRootCommon::TryGetParamFromProfile(const TString& name, std::shared_ptr<IProfile> profile, bool explicitOption, std::function<bool(const TString&, const TString&)> callback) {
     if (profile && profile->Has(name)) {
-        return callback(profile->GetValue(name).as<TString>());
+        return callback(profile->GetValue(name).as<TString>(), GetProfileSource(profile, explicitOption));
     }
     return false;
 }
@@ -295,13 +295,11 @@ void TClientCommandRootCommon::ParseCaCerts(TConfig& config) {
         return;
     }
     // Priority 2. Explicit --profile option
-    if (Profile && TryGetParamFromProfile("ca-file", Profile,
-        std::bind(getCaFile, std::placeholders::_1, GetProfileSource(Profile, true)))) {
+    if (TryGetParamFromProfile("ca-file", Profile, true, getCaFile)) {
         return;
     }
     // Priority 3. Active profile
-    if (ProfileManager->GetActiveProfile() && TryGetParamFromProfile("ca-file", ProfileManager->GetActiveProfile(),
-        std::bind(getCaFile, std::placeholders::_1, GetProfileSource(ProfileManager->GetActiveProfile(), false)))) {
+    if (TryGetParamFromProfile("ca-file", ProfileManager->GetActiveProfile(), false, getCaFile)) {
         return;
     }
 }
@@ -340,13 +338,11 @@ void TClientCommandRootCommon::ParseAddress(TConfig& config) {
         return;
     }
     // Priority 2. Explicit --profile option
-    if (Profile && TryGetParamFromProfile("endpoint", Profile,
-        std::bind(getAddress, std::placeholders::_1, GetProfileSource(Profile, true)))) {
+    if (TryGetParamFromProfile("endpoint", Profile, true, getAddress)) {
         return;
     }
     // Priority 3. Active profile
-    if (ProfileManager->GetActiveProfile() && TryGetParamFromProfile("endpoint", ProfileManager->GetActiveProfile(),
-        std::bind(getAddress, std::placeholders::_1, GetProfileSource(ProfileManager->GetActiveProfile(), false)))) {
+    if (TryGetParamFromProfile("endpoint", ProfileManager->GetActiveProfile(), false, getAddress)) {
         return;
     }
 }
@@ -426,13 +422,11 @@ void TClientCommandRootCommon::ParseDatabase(TConfig& config) {
         return;
     }
     // Priority 2. Explicit --profile option
-    if (Profile && TryGetParamFromProfile("database", Profile,
-        std::bind(getDatabase, std::placeholders::_1, GetProfileSource(Profile, true)))) {
+    if (TryGetParamFromProfile("database", Profile, true, getDatabase)) {
         return;
     }
     // Priority 3. Active profile
-    if (ProfileManager->GetActiveProfile() && TryGetParamFromProfile("database", ProfileManager->GetActiveProfile(),
-        std::bind(getDatabase, std::placeholders::_1, GetProfileSource(ProfileManager->GetActiveProfile(), false)))) {
+    if (TryGetParamFromProfile("database", ProfileManager->GetActiveProfile(), false, getDatabase)) {
         return;
     }
 }
@@ -454,13 +448,11 @@ void TClientCommandRootCommon::ParseIamEndpoint(TConfig& config) {
         return;
     }
     // Priority 2. Explicit --profile option
-    if (Profile && TryGetParamFromProfile("iam-endpoint", Profile,
-        std::bind(getIamEndpoint, std::placeholders::_1, GetProfileSource(Profile, true)))) {
+    if (TryGetParamFromProfile("iam-endpoint", Profile, true, getIamEndpoint)) {
         return;
     }
     // Priority 3. Active profile
-    if (ProfileManager->GetActiveProfile() && TryGetParamFromProfile("iam-endpoint", ProfileManager->GetActiveProfile(),
-        std::bind(getIamEndpoint, std::placeholders::_1, GetProfileSource(ProfileManager->GetActiveProfile(), false)))) {
+    if (TryGetParamFromProfile("iam-endpoint", ProfileManager->GetActiveProfile(), false, getIamEndpoint)) {
         return;
     }
     // Priority 4. Default value

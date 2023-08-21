@@ -1,8 +1,6 @@
 #pragma once
 
 #include "allocation_tags.h"
-#include "library/cpp/yt/threading/rw_spin_lock.h"
-#include "public.h"
 
 #include <yt/yt/library/tracing/public.h>
 
@@ -14,6 +12,7 @@
 
 #include <yt/yt/core/concurrency/public.h>
 
+#include <library/cpp/yt/threading/rw_spin_lock.h>
 #include <library/cpp/yt/threading/spin_lock.h>
 
 #include <atomic>
@@ -243,9 +242,9 @@ private:
 
     std::vector<std::pair<TString, std::variant<TString, i64>>> ProfilingTags_;
 
-    // Must NOT allocate memory on the heap in callbacks with usage of AllocationTags_ to avoid deadlock with allocator.
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, AllocationTagsRWLock_);
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, AllocationTagsAsRefCountedSpinlock_);
+    // Must NOT allocate memory on the heap in callbacks with modifying AllocationTags_ to avoid deadlock with allocator.
+    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, AllocationTagsLock_);
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, AllocationTagsAsRefCountedLock_);
     TAllocationTagsPtr AllocationTags_;
 
     TTraceContext(
@@ -265,7 +264,6 @@ private:
 
     template <typename TTag>
     std::optional<TTag> DoFindAllocationTag(const TString& key) const;
-
 };
 
 DEFINE_REFCOUNTED_TYPE(TTraceContext)

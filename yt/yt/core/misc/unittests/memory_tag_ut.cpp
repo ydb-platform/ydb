@@ -245,7 +245,7 @@ INSTANTIATE_TEST_SUITE_P(MemoryTagTest, TMemoryTagTest, Values(
 
 using namespace NTracing;
 
-TEST(MemoryTagTest, MemoryTagPropagationViaAllocationTags)
+TEST(TMemoryTagTest, MemoryTagPropagationViaAllocationTags)
 {
     auto localContext = CreateTraceContextFromCurrent("MemoryTagPropagation");
     auto localTag = 1u;
@@ -291,7 +291,7 @@ void TestYield(TMemoryTag tag)
     EXPECT_EQ(currentTag, tag);
 }
 
-TEST(MemoryTagTest, MemoryTagWithYieldContextPropagation)
+TEST(TMemoryTagTest, MemoryTagWithYieldContextPropagation)
 {
     auto localContext = CreateTraceContextFromCurrent("MemoryTagSwitchContextPropagation");
     auto localTag = 1u;

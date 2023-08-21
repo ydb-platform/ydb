@@ -24,15 +24,11 @@ std::optional<TAllocationTags::TValue> TAllocationTags::FindTagValue(
 {
     std::optional<TAllocationTags::TValue> value;
 
-    auto memoryTagIterator = std::find_if(
-        tags.cbegin(),
-        tags.cend(),
-        [&] (const auto& pair) {
-            return pair.first == key;
-        });
-
-    if (memoryTagIterator != tags.cend()) {
-        value = memoryTagIterator->second;
+    for (const auto& [key_, value_] : tags) {
+        if (key_ == key) {
+            value = value_;
+            break;
+        }
     }
 
     return value;

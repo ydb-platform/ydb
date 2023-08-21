@@ -26,25 +26,25 @@ void* CreateAllocationTagsData()
     return static_cast<void*>(allocationTags.Release());
 }
 
-void* CopyAllocationTagsData(void* ptr)
+void* CopyAllocationTagsData(void* userData)
 {
-    if (ptr) {
-        auto* allocationTagsPtr = static_cast<TAllocationTags*>(ptr);
+    if (userData) {
+        auto* allocationTagsPtr = static_cast<TAllocationTags*>(userData);
         allocationTagsPtr->Ref();
     }
-    return ptr;
+    return userData;
 }
 
-void DestroyAllocationTagsData(void* ptr)
+void DestroyAllocationTagsData(void* userData)
 {
-    auto* allocationTagsPtr = static_cast<TAllocationTags*>(ptr);
+    auto* allocationTagsPtr = static_cast<TAllocationTags*>(userData);
     // NB. No need to check for nullptr here, because ScheduleFree already does that.
     FreeList->ScheduleFree(allocationTagsPtr);
 }
 
-const TAllocationTags::TTags& ReadAllocationTagsData(void* ptr)
+const TAllocationTags::TTags& ReadAllocationTagsData(void* userData)
 {
-    auto* allocationTagsPtr = static_cast<TAllocationTags*>(ptr);
+    auto* allocationTagsPtr = static_cast<TAllocationTags*>(userData);
     if (!allocationTagsPtr) {
         static TAllocationTags::TTags emptyTags;
         return emptyTags;

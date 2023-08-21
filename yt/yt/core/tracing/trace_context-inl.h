@@ -84,13 +84,13 @@ void TTraceContext::AddTag(const TString& tagName, const T& tagValue)
 template <typename TTag>
 std::optional<TTag> TTraceContext::DoFindAllocationTag(const TString& key) const
 {
-    VERIFY_SPINLOCK_AFFINITY(AllocationTagsRWLock_);
+    VERIFY_SPINLOCK_AFFINITY(AllocationTagsLock_);
 
-    TAllocationTagsPtr tags = nullptr;
+    TAllocationTagsPtr tags;
 
     {
         // Local guard for copy RefCounted AllocationTags_.
-        auto guard = Guard(AllocationTagsAsRefCountedSpinlock_);
+        auto guard = Guard(AllocationTagsAsRefCountedLock_);
         tags = AllocationTags_;
     }
 
@@ -108,14 +108,14 @@ std::optional<TTag> TTraceContext::DoFindAllocationTag(const TString& key) const
 template <typename TTag>
 std::optional<TTag> TTraceContext::FindAllocationTag(const TString& key) const
 {
-    auto readerGuard = ReaderGuard(AllocationTagsRWLock_);
+    auto readerGuard = ReaderGuard(AllocationTagsLock_);
     return DoFindAllocationTag<TTag>(key);
 }
 
 template <typename TTag>
 std::optional<TTag> TTraceContext::RemoveAllocationTag(const TString& key)
 {
-    auto writerGuard = NThreading::WriterGuard(AllocationTagsRWLock_);
+    auto writerGuard = NThreading::WriterGuard(AllocationTagsLock_);
     auto newTags = DoGetAllocationTags();
 
     auto foundTagIt = std::remove_if(
@@ -143,7 +143,7 @@ std::optional<TTag> TTraceContext::SetAllocationTag(const TString& key, TTag new
 {
     auto newTagString = ToString(newTag);
 
-    auto writerGuard = NThreading::WriterGuard(AllocationTagsRWLock_);
+    auto writerGuard = NThreading::WriterGuard(AllocationTagsLock_);
     auto newTags = DoGetAllocationTags();
 
     if (!newTags.empty()) {

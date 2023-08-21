@@ -508,7 +508,7 @@ public:
         auto* volatile unoptimizedState = state;
         Y_UNUSED(unoptimizedState);
 
-        TMemoryTag memoryTag = GetCurrentMemoryTag();
+        auto memoryTag = GetCurrentMemoryTag();
 
         auto propagatingStorageGuard = state->MakePropagatingStorageGuard();
         Y_UNUSED(propagatingStorageGuard);

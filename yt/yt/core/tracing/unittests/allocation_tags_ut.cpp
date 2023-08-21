@@ -4,10 +4,11 @@
 #include <yt/yt/core/tracing/trace_context.h>
 
 namespace NYT::NTracing {
+namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TestAllocationTags, GetSetAllocationTags)
+TEST(TAllocationTagsTest, GetSetAllocationTags)
 {
     auto traceContext = TTraceContext::NewRoot("Root");
     TTraceContextGuard guard(traceContext);
@@ -41,4 +42,5 @@ TEST(TestAllocationTags, GetSetAllocationTags)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+} // namespace
 } // namespace NYT::NTracing

@@ -914,6 +914,7 @@ public:
     }
 
     void RemoveCompiledCode() {
+        IsPatternCompiled.store(false);
         Codegen.reset();
     }
 

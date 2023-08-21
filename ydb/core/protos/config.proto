@@ -2018,7 +2018,7 @@ message TCompatibilityRule {
         ComponentsCount = 7;
     }
 
-    optional string Build = 1;
+    optional string Application = 1;
     optional TYdbVersion LowerLimit = 2;
     optional TYdbVersion UpperLimit = 3;
 
@@ -2031,20 +2031,20 @@ message TCompatibilityRule {
 }
 
 message TCurrentCompatibilityInfo {
-    required string Build = 1;
+    required string Application = 1;
 
-    // if YdbVersion is empty, build is assumed to be non-stable
-    optional TYdbVersion YdbVersion = 2;
+    // if Version is empty, build is assumed to be non-stable
+    optional TYdbVersion Version = 2;
 
     repeated TCompatibilityRule CanLoadFrom = 3;
     repeated TCompatibilityRule StoresReadableBy = 4;
 }
 
 message TStoredCompatibilityInfo {
-    required string Build = 1;
+    required string Application = 1;
 
-    // if YdbVersion is empty, build is assumed to be non-stable
-    optional TYdbVersion YdbVersion = 2;
+    // if Version is empty, build is assumed to be non-stable
+    optional TYdbVersion Version = 2;
 
     repeated TCompatibilityRule ReadableBy = 3;
 }

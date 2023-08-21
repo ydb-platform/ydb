@@ -11,7 +11,7 @@ Y_UNIT_TEST_SUITE(CompatibilityInfo) {
     using EComponentId = NKikimrConfig::TCompatibilityRule::EComponentId;
 
     using TCurrent = NKikimrConfig::TCurrentCompatibilityInfo;
-    using TYdbVersion = TCompatibilityInfo::TProtoConstructor::TYdbVersion;
+    using TYdbVersion = TCompatibilityInfo::TProtoConstructor::TVersion;
     using TCompatibilityRule = TCompatibilityInfo::TProtoConstructor::TCompatibilityRule;
     using TCurrentConstructor = TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo;
 
@@ -32,8 +32,8 @@ Y_UNIT_TEST_SUITE(CompatibilityInfo) {
         const TString build = "ydb";
     
         auto oldInfoConstructor = TCurrentConstructor{
-            .Build = build,
-            .YdbVersion = TYdbVersion{
+            .Application = build,
+            .Version = TYdbVersion{
                 .Year = std::get<0>(oldVersion),
                 .Major = std::get<1>(oldVersion),
                 .Minor = std::get<2>(oldVersion),
@@ -42,8 +42,8 @@ Y_UNIT_TEST_SUITE(CompatibilityInfo) {
         };
 
         auto newInfoConstructor = TCurrentConstructor{
-            .Build = "ydb",
-            .YdbVersion = TYdbVersion{
+            .Application = "ydb",
+            .Version = TYdbVersion{
                 .Year = std::get<0>(newVersion),
                 .Major = std::get<1>(newVersion),
                 .Minor = std::get<2>(newVersion),
@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(CompatibilityInfo) {
         for (auto component : Components) {
             if (component != componentId) {
                 auto newRule = TCompatibilityRule{
-                    .Build = build,
+                    .Application = build,
                     .LowerLimit = TYdbVersion{ .Year = 0, .Major = 0, .Minor = 0, .Hotfix = 0 },
                     .UpperLimit = TYdbVersion{ .Year = 1000, .Major = 1000, .Minor = 1000, .Hotfix = 1000 },
                     .ComponentId = component,

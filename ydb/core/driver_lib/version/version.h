@@ -16,7 +16,7 @@ public:
     struct TProtoConstructor {
         TProtoConstructor() = delete;
 
-        struct TYdbVersion {
+        struct TVersion {
             std::optional<ui32> Year;
             std::optional<ui32> Major;
             std::optional<ui32> Minor;
@@ -42,16 +42,16 @@ public:
         };
 
         struct TCompatibilityRule {
-            std::optional<std::string> Build;
-            std::optional<TYdbVersion> LowerLimit;
-            std::optional<TYdbVersion> UpperLimit;
+            std::optional<std::string> Application;
+            std::optional<TVersion> LowerLimit;
+            std::optional<TVersion> UpperLimit;
             std::optional<ui32> ComponentId;
             std::optional<bool> Forbidden;
 
             NKikimrConfig::TCompatibilityRule ToPB() {
                 NKikimrConfig::TCompatibilityRule res;
-                if (Build) {
-                    res.SetBuild(Build->data());
+                if (Application) {
+                    res.SetApplication(Application->data());
                 }
                 if (LowerLimit) {
                     res.MutableLowerLimit()->CopyFrom(LowerLimit->ToPB());
@@ -71,17 +71,17 @@ public:
         };
 
         struct TCurrentCompatibilityInfo {
-            std::optional<std::string> Build;
-            std::optional<TYdbVersion> YdbVersion;
+            std::optional<std::string> Application;
+            std::optional<TVersion> Version;
             std::vector<TCompatibilityRule> CanLoadFrom;
             std::vector<TCompatibilityRule> StoresReadableBy;
 
             NKikimrConfig::TCurrentCompatibilityInfo ToPB() {
                 NKikimrConfig::TCurrentCompatibilityInfo res;
-                Y_VERIFY(Build);
-                res.SetBuild(Build->data());
-                if (YdbVersion) {
-                    res.MutableYdbVersion()->CopyFrom(YdbVersion->ToPB());
+                Y_VERIFY(Application);
+                res.SetApplication(Application->data());
+                if (Version) {
+                    res.MutableVersion()->CopyFrom(Version->ToPB());
                 }
 
                 for (auto canLoadFrom : CanLoadFrom) {
@@ -96,17 +96,17 @@ public:
         };
 
         struct TStoredCompatibilityInfo {
-            std::optional<std::string> Build;
-            std::optional<TYdbVersion> YdbVersion;
+            std::optional<std::string> Application;
+            std::optional<TVersion> Version;
             std::vector<TCompatibilityRule> ReadableBy;
 
             NKikimrConfig::TStoredCompatibilityInfo ToPB() {
                 NKikimrConfig::TStoredCompatibilityInfo res;
-                Y_VERIFY(Build);
+                Y_VERIFY(Application);
 
-                res.SetBuild(Build->data());
-                if (YdbVersion) {
-                    res.MutableYdbVersion()->CopyFrom(YdbVersion->ToPB());
+                res.SetApplication(Application->data());
+                if (Version) {
+                    res.MutableVersion()->CopyFrom(Version->ToPB());
                 }
 
                 for (auto readableBy : ReadableBy) {

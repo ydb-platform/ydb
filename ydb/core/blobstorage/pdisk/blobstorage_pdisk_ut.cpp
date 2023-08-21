@@ -896,12 +896,12 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     Y_UNIT_TEST(YdbVersionOldCompatible) {
         TestRestartWithDifferentVersion(
             TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
-                .Build = "ydb",
-                .YdbVersion = TCompatibilityInfo::TProtoConstructor::TYdbVersion{ .Year = 23, .Major = 1, .Minor = 26, .Hotfix = 0 },
+                .Application = "ydb",
+                .Version = TCompatibilityInfo::TProtoConstructor::TVersion{ .Year = 23, .Major = 1, .Minor = 26, .Hotfix = 0 },
             }.ToPB(),
             TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
-                .Build = "ydb",
-                .YdbVersion = TCompatibilityInfo::TProtoConstructor::TYdbVersion{ .Year = 23, .Major = 2, .Minor = 1, .Hotfix = 0 },
+                .Application = "ydb",
+                .Version = TCompatibilityInfo::TProtoConstructor::TVersion{ .Year = 23, .Major = 2, .Minor = 1, .Hotfix = 0 },
             }.ToPB(),
             true
         );
@@ -910,12 +910,12 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     Y_UNIT_TEST(YdbVersionIncompatible) {
         TestRestartWithDifferentVersion(
             TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
-                .Build = "ydb",
-                .YdbVersion = TCompatibilityInfo::TProtoConstructor::TYdbVersion{ .Year = 23, .Major = 1, .Minor = 26, .Hotfix = 0 },
+                .Application = "ydb",
+                .Version = TCompatibilityInfo::TProtoConstructor::TVersion{ .Year = 23, .Major = 1, .Minor = 26, .Hotfix = 0 },
             }.ToPB(),
             TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
-                .Build = "ydb",
-                .YdbVersion = TCompatibilityInfo::TProtoConstructor::TYdbVersion{ .Year = 23, .Major = 3, .Minor = 1, .Hotfix = 0 },
+                .Application = "ydb",
+                .Version = TCompatibilityInfo::TProtoConstructor::TVersion{ .Year = 23, .Major = 3, .Minor = 1, .Hotfix = 0 },
             }.ToPB(),
             false
         );
@@ -924,12 +924,12 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     Y_UNIT_TEST(YdbVersionNewIncompatibleWithDefault) {
         TestRestartWithDifferentVersion(
             TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
-                .Build = "ydb",
-                .YdbVersion = TCompatibilityInfo::TProtoConstructor::TYdbVersion{ .Year = 24, .Major = 3, .Minor = 1, .Hotfix = 0 },
+                .Application = "ydb",
+                .Version = TCompatibilityInfo::TProtoConstructor::TVersion{ .Year = 24, .Major = 3, .Minor = 1, .Hotfix = 0 },
             }.ToPB(),
             TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
-                .Build = "ydb",
-                .YdbVersion = TCompatibilityInfo::TProtoConstructor::TYdbVersion{ .Year = 24, .Major = 4, .Minor = 1, .Hotfix = 0 },
+                .Application = "ydb",
+                .Version = TCompatibilityInfo::TProtoConstructor::TVersion{ .Year = 24, .Major = 4, .Minor = 1, .Hotfix = 0 },
             }.ToPB(),
             true
         );
@@ -938,10 +938,10 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     Y_UNIT_TEST(YdbVersionTrunk) {
         TestRestartWithDifferentVersion(
             TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
-                .Build = "trunk",
+                .Application = "trunk",
             }.ToPB(),
             TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
-                .Build = "trunk",
+                .Application = "trunk",
             }.ToPB(),
             true
         );

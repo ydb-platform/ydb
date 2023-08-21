@@ -746,8 +746,8 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         std::shared_ptr<NKikimrConfig::TCurrentCompatibilityInfo> node0 =
             std::make_shared<NKikimrConfig::TCurrentCompatibilityInfo>();
         {
-            node0->SetBuild("nbs");
-            auto* version = node0->MutableYdbVersion();
+            node0->SetApplication("nbs");
+            auto* version = node0->MutableVersion();
             version->SetYear(22);
             version->SetMajor(4);
             version->SetMinor(1);
@@ -757,8 +757,8 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         std::shared_ptr<NKikimrConfig::TCurrentCompatibilityInfo> node1 =
             std::make_shared<NKikimrConfig::TCurrentCompatibilityInfo>();
         {
-            node1->SetBuild("ydb");
-            auto* version = node1->MutableYdbVersion();
+            node1->SetApplication("ydb");
+            auto* version = node1->MutableVersion();
             version->SetYear(23);
             version->SetMajor(1);
             version->SetMinor(1);
@@ -766,7 +766,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
 
             {
                 auto* nbsRule = node1->AddCanLoadFrom();
-                nbsRule->SetBuild("nbs");
+                nbsRule->SetApplication("nbs");
                 nbsRule->SetComponentId((ui32)NKikimrConfig::TCompatibilityRule::Interconnect);
 
                 auto* lowerLimit = nbsRule->MutableLowerLimit();
@@ -787,8 +787,8 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         std::shared_ptr<NKikimrConfig::TCurrentCompatibilityInfo> node0 =
             std::make_shared<NKikimrConfig::TCurrentCompatibilityInfo>();
         {
-            node0->SetBuild("ydb");
-            auto* version = node0->MutableYdbVersion();
+            node0->SetApplication("ydb");
+            auto* version = node0->MutableVersion();
             version->SetYear(23);
             version->SetMajor(1);
             version->SetMinor(1);

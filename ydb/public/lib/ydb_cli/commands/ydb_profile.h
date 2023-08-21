@@ -18,6 +18,10 @@ public:
 		
     virtual void Config(TConfig& config) override;
     virtual int Run(TConfig& config) override;
+
+private:
+    void PrintInfo(TConfig& config);
+    void PrintVerboseInfo(TConfig& config);
 };
 
 class TCommandProfile : public TClientCommandTree {

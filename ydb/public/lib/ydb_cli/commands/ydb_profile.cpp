@@ -251,46 +251,67 @@ void TCommandConnectionInfo::Config(TConfig& config) {
     TClientCommand::Config(config);
 
     config.NeedToConnect = false;
-
     config.SetFreeArgsNum(0);
 }
 
 int TCommandConnectionInfo::Run(TConfig& config) {
+    if (config.IsVerbose()) {
+        PrintVerboseInfo(config);
+    } else {
+        PrintInfo(config);
+    }
+    return EXIT_SUCCESS;
+}
+
+void TCommandConnectionInfo::PrintInfo(TConfig& config) {
     if (config.Address) {
-        Cout << "  endpoint: " << config.Address << Endl;
+        Cout << "endpoint: " << config.Address << Endl;
     }
     if (config.Database) {
-        Cout << "  database: " << config.Database << Endl;
+        Cout << "database: " << config.Database << Endl;
     }
     if (config.SecurityToken) {
-        Cout << "  token: " << config.SecurityToken << Endl;
+        Cout << "token: " << config.SecurityToken << Endl;
     }
     if (config.UseIamAuth) {
         if (config.YCToken) {
-            Cout << "  yc-token: " << BlurSecret(config.YCToken) << Endl;
+            Cout << "yc-token: " << config.YCToken << Endl;
         }
         if (config.SaKeyFile) {
-            Cout << "  sa-key-file: " << config.SaKeyFile << Endl;
+            Cout << "sa-key-file: " << config.SaKeyFile << Endl;
         }
         if (config.UseMetadataCredentials) {
-            Cout << "  use-metadata-credentials" << Endl;
+            Cout << "use-metadata-credentials" << Endl;
         }
         if (config.IamEndpoint) {
-            Cout << "  iam-endpoint: " << config.IamEndpoint << Endl;
+            Cout << "iam-endpoint: " << config.IamEndpoint << Endl;
         }
     }
     if (config.UseStaticCredentials) {
         if (config.StaticCredentials.User) {
-            Cout << "  user: " << config.StaticCredentials.User << Endl;
+            Cout << "user: " << config.StaticCredentials.User << Endl;
         }
         if (config.StaticCredentials.Password) {
-            Cout << "  password: " << ReplaceWithAsterisks(config.StaticCredentials.Password) << Endl;
+            Cout << "password: " << config.StaticCredentials.Password << Endl;
         }
     }
-    if (config.CaCerts) {
-        Cout << "  ca-file: " << config.CaCertsFile << Endl;
+    if (config.CaCertsFile) {
+        Cout << "ca-file: " << config.CaCertsFile << Endl;
     }
-    return EXIT_SUCCESS;
+}
+
+void TCommandConnectionInfo::PrintVerboseInfo(TConfig& config) {
+    Cout << Endl;
+    PrintInfo(config);
+    Cout << "current auth method: " << (config.ChoosedAuthMethod ? config.ChoosedAuthMethod : "no-auth") << Endl;
+    for (const auto& [name, params] : config.ConnectionParams) {
+        size_t cnt = 1;
+        Cout << Endl << "\"" << name << "\" sources:" << Endl;
+        for (const auto& [value, source] : params) {
+            Cout << "  " << cnt << ". Value: " << value << ". Got from: " << source << Endl;
+            ++cnt;
+        }
+    }
 }
 
 TCommandInit::TCommandInit()

@@ -36,6 +36,11 @@ public:
             NLastGetopt::TOpts* Options;
         };
 
+        struct TConnectionParam {
+            TString Value;
+            TString Source;
+        };
+
     public:
         using TCredentialsGetter = std::function<std::shared_ptr<ICredentialsProviderFactory>(const TClientCommand::TConfig&)>;
 
@@ -90,6 +95,7 @@ public:
         TString Database;
         TString CaCerts;
         TString CaCertsFile;
+        TMap<TString, TVector<TConnectionParam>> ConnectionParams;
         bool EnableSsl = false;
         bool IsNetworkIntensive = false;
 
@@ -110,6 +116,7 @@ public:
         TString SaKeyFile;
         TString IamEndpoint;
         TString YScope;
+        TString ChoosedAuthMethod;
 
         TString ProfileFile;
         bool UseOAuthToken = true;

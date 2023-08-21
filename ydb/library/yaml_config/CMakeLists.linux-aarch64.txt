@@ -9,6 +9,7 @@
 find_package(OpenSSL REQUIRED)
 add_subdirectory(public)
 add_subdirectory(ut)
+add_subdirectory(validator)
 
 add_library(ydb-library-yaml_config)
 target_link_libraries(ydb-library-yaml_config PUBLIC

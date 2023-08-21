@@ -27,6 +27,7 @@ END()
 
 RECURSE(
     public
+    validator
 )
 
 RECURSE_FOR_TESTS(

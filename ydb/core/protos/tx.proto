@@ -399,6 +399,7 @@ message TEvStreamQuotaResponse {
     optional uint64 MessageSizeLimit = 2;
     optional uint32 ReservedMessages = 3;
     optional uint64 RowLimit = 4;
+    optional uint64 MessageRowsLimit = 5;
 }
 
 message TEvStreamQuotaRelease {

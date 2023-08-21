@@ -27,6 +27,8 @@ namespace NTxProxy {
         EReadTableFormat DataFormat = EReadTableFormat::YdbResultSet;
         bool Ordered = false;
         bool RequireResultSet = false;
+        ui64 MaxBatchSizeBytes = Max<ui64>();
+        ui64 MaxBatchSizeRows = Max<ui64>();
     };
 
     IActor* CreateReadTableSnapshotWorker(const TReadTableSettings& settings);

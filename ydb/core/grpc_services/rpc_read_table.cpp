@@ -145,6 +145,8 @@ public:
             InactiveServerTimerPending_ = true;
         }
 
+        MessageSizeLimit = cfg.GetMessageSizeLimit();
+
         SendProposeRequest(ctx);
 
         auto actorId = SelfId();
@@ -481,6 +483,9 @@ private:
             return ReplyFinishStream(StatusIds::BAD_REQUEST, message, ctx);
         }
 
+        MessageSizeLimit = std::min(MessageSizeLimit, req->batch_limit_bytes() ? req->batch_limit_bytes() : Max<ui64>());
+        MessageRowsLimit = req->batch_limit_rows();
+
         // Snapshots are always enabled and cannot be disabled
         switch (req->use_snapshot()) {
             case Ydb::FeatureFlag::STATUS_UNSPECIFIED:
@@ -543,8 +548,6 @@ private:
         LOG_NOTICE_S(ctx, NKikimrServices::READ_TABLE_API,
             SelfId() << " Finish grpc stream, status: " << (int)status);
 
-        auto &cfg = AppData(ctx)->StreamingConfig.GetOutputStreamConfig();
-
         // Answer all pending quota requests.
         while (!QuotaRequestQueue_.empty()) {
             auto request = QuotaRequestQueue_.front();
@@ -554,7 +557,8 @@ private:
             TAutoPtr<TEvTxProcessing::TEvStreamQuotaResponse> response
                 = new TEvTxProcessing::TEvStreamQuotaResponse;
             response->Record.SetTxId(rec.GetTxId());
-            response->Record.SetMessageSizeLimit(cfg.GetMessageSizeLimit());
+            response->Record.SetMessageSizeLimit(MessageSizeLimit);
+            response->Record.SetMessageRowsLimit(MessageRowsLimit);
             response->Record.SetReservedMessages(0);
 
             LOG_DEBUG_S(ctx, NKikimrServices::READ_TABLE_API,
@@ -632,7 +636,8 @@ private:
         TAutoPtr<TEvTxProcessing::TEvStreamQuotaResponse> response
             = new TEvTxProcessing::TEvStreamQuotaResponse;
         response->Record.SetTxId(rec.GetTxId());
-        response->Record.SetMessageSizeLimit(cfg.GetMessageSizeLimit());
+        response->Record.SetMessageSizeLimit(MessageSizeLimit);
+        response->Record.SetMessageRowsLimit(MessageRowsLimit);
         response->Record.SetReservedMessages(quotaSize);
 
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::READ_TABLE_API,
@@ -753,6 +758,9 @@ private:
     TActorId InactiveServerTimer_;
     bool InactiveClientTimerPending_ = false;
     bool InactiveServerTimerPending_ = false;
+
+    ui64 MessageSizeLimit = 0;
+    ui64 MessageRowsLimit = 0;
 
     struct TBuffEntry
     {

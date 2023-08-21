@@ -280,6 +280,7 @@ private:
         ui64 Reserved = 0;
         ui64 Allocated = 0;
         ui64 MessageSize = 0;
+        ui64 MessageRows = 0;
     };
 
 public:
@@ -1697,6 +1698,7 @@ private:
 
         TxProxyMon->ReportStatusStreamData->Inc();
         ctx.Send(Settings.Owner, x.Release(), 0, Settings.Cookie);
+
         SentResultSet = true;
 
         if (state.QuotaReserved > 0) {
@@ -2019,9 +2021,11 @@ private:
 
         Quota.Allocated += record.GetReservedMessages();
         Quota.MessageSize = record.GetMessageSizeLimit();
+        Quota.MessageRows = record.GetMessageRowsLimit();
 
         TXLOG_D("Updated quotas, allocated = " << Quota.Allocated
                 << ", message size = " << Quota.MessageSize
+                << ", message rows = " << Quota.MessageRows
                 << ", available = " << (Quota.Allocated - Quota.Reserved));
 
         ProcessQuotaRequests(ctx);
@@ -2090,6 +2094,7 @@ private:
             response->Record.SetTxId(state.ReadTxId);
             response->Record.SetReservedMessages(available);
             response->Record.SetMessageSizeLimit(Quota.MessageSize);
+            response->Record.SetMessageRowsLimit(Quota.MessageRows);
             if (RemainingRows != Max<ui64>()) {
                 response->Record.SetRowLimit(RemainingRows);
             }
@@ -2121,6 +2126,7 @@ private:
             response->Record.SetTxId(state.ReadTxId);
             response->Record.SetReservedMessages(0);
             response->Record.SetMessageSizeLimit(Quota.MessageSize);
+            response->Record.SetMessageRowsLimit(Quota.MessageRows);
             ctx.Send(state.QuotaActor, response.Release());
         }
 

@@ -1738,10 +1738,12 @@ R"___(<main>: Error: Transaction not found: , code: 2015
 
                 UNIT_ASSERT_VALUES_EQUAL(streamPart.IsSuccess(), true);
 
+                int readRows = 0;
                 auto rsParser = TResultSetParser(streamPart.ExtractPart());
                 while (rsParser.TryNextRow()) {
                     auto columns = rsParser.ColumnsCount();
                     const auto& expRow = expected[row++];
+                    ++readRows;
                     TString tmp = "[";
                     for (size_t c = 0; c < columns; c++) {
                         auto colYson = FormatValueYson(rsParser.GetValue(c));
@@ -1751,6 +1753,9 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                     }
                     tmp += "]";
                     UNIT_ASSERT_VALUES_EQUAL(tmp, expRow);
+                }
+                if (rowLimit) {
+                    UNIT_ASSERT(readRows <= 1);
                 }
             }
         }
@@ -1763,6 +1768,101 @@ R"___(<main>: Error: Transaction not found: , code: 2015
 
     Y_UNIT_TEST(TestReadTableMultiShardWithDescribeAndRowLimit) {
         TestReadTableMultiShardWithDescribe(true);
+    }
+
+
+    void TestReadTable(TSession& session, int rowsTotalCount, int batchLimitBytes, int batchLimitRows) {
+        int row = 0;
+        TReadTableSettings readTableSettings;
+        readTableSettings.Ordered(true);
+        readTableSettings.BatchLimitBytes(batchLimitBytes);
+        readTableSettings.BatchLimitRows(batchLimitRows);
+
+        auto it = session.ReadTable("Root/Test", readTableSettings).ExtractValueSync();
+
+        TStringStream out;
+        while (true) {
+            TReadTableResultPart streamPart = it.ReadNext().GetValueSync();
+
+            if (streamPart.EOS()) {
+                break;
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(streamPart.IsSuccess(), true);
+
+            auto rsParser = TResultSetParser(streamPart.ExtractPart());
+            i64 batchRows = 0;
+            out << "---- batch start ----" << Endl;
+            while (rsParser.TryNextRow()) {
+                auto columns = rsParser.ColumnsCount();
+                ++row;
+                ++batchRows;
+                TString tmp = "[";
+                for (size_t c = 0; c < columns; c++) {
+                    auto colYson = FormatValueYson(rsParser.GetValue(c));
+                    tmp += colYson;
+                    if (c != columns - 1)
+                        tmp += ";";
+                }
+                tmp += "]";
+                out << tmp << Endl;
+            }
+            out << "---- batch end ----" << Endl;
+            UNIT_ASSERT(!batchLimitRows || batchRows <= batchLimitRows);
+        }
+        Cerr << out.Str();
+        UNIT_ASSERT_VALUES_EQUAL(row, rowsTotalCount);
+    }
+
+    Y_UNIT_TEST(TestReadTableBatchLimits) {
+        TKikimrWithGrpcAndRootSchema server;
+        ui16 grpc = server.GetPort();
+
+        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NLog::PRI_TRACE);
+        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::READ_TABLE_API, NLog::PRI_TRACE);
+        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        auto connection = NYdb::TDriver(
+            TDriverConfig()
+                .SetEndpoint(location));
+        NYdb::NTable::TTableClient client(connection);
+        auto session = client.CreateSession().ExtractValueSync().GetSession();
+
+        auto tableBuilder = client.GetTableBuilder();
+        tableBuilder
+            .AddNullableColumn("Key", EPrimitiveType::Uint32)
+            .AddNullableColumn("Key2", EPrimitiveType::Uint32)
+            .AddNullableColumn("Value", EPrimitiveType::String);
+        tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key", "Key2"});
+
+        TCreateTableSettings createTableSettings =
+            TCreateTableSettings()
+                .PartitioningPolicy(TPartitioningPolicy().UniformPartitions(10));
+
+        auto result = session.CreateTable("Root/Test", tableBuilder.Build(), createTableSettings).ExtractValueSync();
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        int rowsTotalCount = 100;
+        TStringStream query;
+        query << R"_(  UPSERT INTO `Root/Test` (Key, Key2, Value) VALUES )_";
+        for (int i = 0; i < rowsTotalCount; ++i) {
+            query << Sprintf(R"_( (%d, %d, "A")%s)_", i, 2 * i, i + 1 < rowsTotalCount ? "," : ";");
+        }
+        result = session.ExecuteDataQuery(query.Str(),
+            TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        // all limits disabled
+        TestReadTable(session, rowsTotalCount, 0, 0);
+        for (int i = 1; i <= rowsTotalCount; i *= 2) {
+            // test BatchLimitRows
+            TestReadTable(session, rowsTotalCount, 0, i);
+        }
+        // test BatchLimitBytes == 1 returns not more than one row
+        TestReadTable(session, rowsTotalCount, 1, 1);
     }
 
     Y_UNIT_TEST(TestReadWrongTable) {

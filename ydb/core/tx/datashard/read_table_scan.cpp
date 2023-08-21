@@ -311,6 +311,7 @@ public:
         , Driver(nullptr)
         , MessageQuota(0)
         , MessageSizeLimit(10 << 20)
+        , MessageRowsLimit(0)
         , TableInfo(tableInfo)
         , Tx(tx)
         , ScanRange(tx.GetRange())
@@ -408,6 +409,7 @@ private:
         auto &rec = ev->Get()->Record;
 
         MessageSizeLimit = rec.GetMessageSizeLimit();
+        MessageRowsLimit = rec.GetMessageRowsLimit();
         MessageQuota += rec.GetReservedMessages();
         RowLimit = rec.GetRowLimit();
 
@@ -433,6 +435,7 @@ private:
         response->Record.SetTxId(TxId);
         response->Record.SetMessageQuota(MessageQuota);
         response->Record.SetMessageSizeLimit(MessageSizeLimit);
+        //response->Record.SetMessageRowsLimit(MessageRowsLimit); for monitoring only
         response->Record.SetRowsLimit(RowLimit);
         response->Record.SetPendingAcks(PendingAcks);
         response->Record.SetResultSize(Writer->GetMessageSize());
@@ -532,6 +535,7 @@ private:
 
         // May collect more rows.
         if (Writer->GetMessageSize() < MessageSizeLimit
+            && (!MessageRowsLimit || MessageRowsLimit > rows)
             && (!RowLimit || RowLimit > rows)
             && !last)
             return EScan::Feed;
@@ -631,6 +635,7 @@ private:
     IDriver *Driver;
     ui64 MessageQuota;
     ui64 MessageSizeLimit;
+    ui64 MessageRowsLimit;
     TString Error;
     THolder<TRowsToResult> Writer;
     TUserTable::TCPtr TableInfo;

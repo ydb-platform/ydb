@@ -1038,6 +1038,9 @@ message ReadTableRequest {
     uint64 row_limit = 6;
     // Use a server-side snapshot
     Ydb.FeatureFlag.Status use_snapshot = 7;
+    // Per-batch limits
+    uint64 batch_limit_bytes = 8;
+    uint64 batch_limit_rows = 9;
 }
 
 // ReadTable doesn't use Operation, returns result directly

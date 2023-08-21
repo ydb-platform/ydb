@@ -1546,6 +1546,10 @@ struct TReadTableSettings : public TRequestSettings<TReadTableSettings> {
     FLUENT_SETTING_OPTIONAL(ui64, RowLimit);
 
     FLUENT_SETTING_OPTIONAL(bool, UseSnapshot);
+
+    FLUENT_SETTING_OPTIONAL(ui64, BatchLimitBytes);
+
+    FLUENT_SETTING_OPTIONAL(ui64, BatchLimitRows);
 };
 
 //! Represents all session operations

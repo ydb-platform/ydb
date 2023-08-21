@@ -208,9 +208,9 @@ TCompactColumnEngineChanges::TCompactColumnEngineChanges(const TCompactionLimits
 
     SwitchedPortions.reserve(GranuleMeta->GetPortions().size());
     for (const auto& [_, portionInfo] : GranuleMeta->GetPortions()) {
-        if (portionInfo.IsActive()) {
-            SwitchedPortions.push_back(portionInfo);
-            Y_VERIFY(portionInfo.GetGranule() == GranuleMeta->GetGranuleId());
+        if (portionInfo->IsActive()) {
+            SwitchedPortions.push_back(*portionInfo);
+            Y_VERIFY(portionInfo->GetGranule() == GranuleMeta->GetGranuleId());
         }
     }
     Y_VERIFY(SwitchedPortions.size());

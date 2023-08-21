@@ -282,7 +282,7 @@ public:
 
 private:
     TMonotonic ModificationLastTime = TMonotonic::Now();
-    THashMap<ui64, TPortionInfo> Portions;
+    THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
     mutable std::optional<TGranuleAdditiveSummary> AdditiveSummaryCache;
     mutable std::optional<TGranuleHardSummary> HardSummaryCache;
 
@@ -296,8 +296,8 @@ private:
     const NColumnShard::TGranuleDataCounters Counters;
     NColumnShard::TEngineLogsCounters::TPortionsInfoGuard PortionInfoGuard;
 
-    void OnBeforeChangePortion(const TPortionInfo* portionBefore, const TPortionInfo* portionAfter);
-    void OnAfterChangePortion();
+    void OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> portionBefore);
+    void OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter);
     void OnAdditiveSummaryChange() const;
 public:
     NOlap::TSerializationStats BuildSerializationStats(ISnapshotSchema::TPtr schema) const {
@@ -368,7 +368,7 @@ public:
 
     void AddColumnRecord(const TIndexInfo& indexInfo, const TPortionInfo& portion, const TColumnRecord& rec, const NKikimrTxColumnShard::TIndexPortionMeta* portionMeta);
 
-    const THashMap<ui64, TPortionInfo>& GetPortions() const {
+    const THashMap<ui64, std::shared_ptr<TPortionInfo>>& GetPortions() const {
         return Portions;
     }
 
@@ -379,7 +379,7 @@ public:
     const TPortionInfo& GetPortionVerified(const ui64 portion) const {
         auto it = Portions.find(portion);
         Y_VERIFY(it != Portions.end());
-        return it->second;
+        return *it->second;
     }
 
     const TPortionInfo* GetPortionPointer(const ui64 portion) const {
@@ -387,7 +387,7 @@ public:
         if (it == Portions.end()) {
             return nullptr;
         }
-        return &it->second;
+        return it->second.get();
     }
 
     bool ErasePortion(const ui64 portion);

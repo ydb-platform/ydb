@@ -13,22 +13,22 @@ public:
     }
 
     template <class TObject>
-    std::vector<ui32> Split(const std::vector<TObject>& objects) {
+    std::vector<TVectorView<TObject>> Split(std::vector<TObject>& objects) {
         ui64 fullSize = 0;
         for (auto&& i : objects) {
             fullSize += i.GetSize();
         }
         if (fullSize <= BottomLimit) {
-            return {(ui32)objects.size()};
+            return {TVectorView<TObject>(objects.begin(), objects.end())};
         }
         ui64 currentSize = 0;
         ui64 currentStart = 0;
-        std::vector<ui32> result;
+        std::vector<TVectorView<TObject>> result;
         for (ui32 i = 0; i < objects.size(); ++i) {
             const ui64 nextSize = currentSize + objects[i].GetSize();
             const ui64 nextOtherSize = fullSize - nextSize;
             if ((nextSize >= BottomLimit && nextOtherSize >= BottomLimit) || (i + 1 == objects.size())) {
-                result.emplace_back(i - currentStart + 1);
+                result.emplace_back(TVectorView<TObject>(objects.begin() + currentStart, objects.begin() + i + 1));
                 currentSize = 0;
                 currentStart = i + 1;
             } else {
@@ -40,33 +40,32 @@ public:
 };
 
 TRBSplitLimiter::TRBSplitLimiter(std::shared_ptr<NColumnShard::TSplitterCounters> counters, ISchemaDetailInfo::TPtr schemaInfo,
-    const std::shared_ptr<arrow::RecordBatch> batch)
+    const std::shared_ptr<arrow::RecordBatch> batch, const TSplitSettings& settings)
     : Counters(counters)
     , Batch(batch)
+    , Settings(settings)
 {
     Y_VERIFY(Batch->num_rows());
     std::vector<TBatchSerializedSlice> slices;
     auto stats = schemaInfo->GetBatchSerializationStats(Batch);
-    ui32 recordsCount = TSplitSettings::MinRecordsCount;
+    ui32 recordsCount = Settings.GetMinRecordsCount();
     if (stats) {
-        const ui32 recordsCountForMinSize = stats->PredictOptimalPackRecordsCount(Batch->num_rows(), TSplitSettings::MinBlobSize).value_or(recordsCount);
-        recordsCount = std::max(recordsCount, recordsCountForMinSize);
+        const ui32 recordsCountForMinSize = stats->PredictOptimalPackRecordsCount(Batch->num_rows(), Settings.GetMinBlobSize()).value_or(recordsCount);
+        const ui32 recordsCountForMaxPortionSize = stats->PredictOptimalPackRecordsCount(Batch->num_rows(), Settings.GetMaxPortionSize()).value_or(recordsCount);
+        recordsCount = std::min(recordsCountForMaxPortionSize, std::max(recordsCount, recordsCountForMinSize));
     }
     auto linearSplitInfo = TSimpleSplitter::GetOptimalLinearSplitting(Batch->num_rows(), recordsCount);
     for (auto it = linearSplitInfo.StartIterator(); it.IsValid(); it.Next()) {
         std::shared_ptr<arrow::RecordBatch> current = batch->Slice(it.GetPosition(), it.GetCurrentPackSize());
-        TBatchSerializedSlice slice(current, schemaInfo, Counters);
+        TBatchSerializedSlice slice(current, schemaInfo, Counters, settings);
         slices.emplace_back(std::move(slice));
     }
 
-    const std::vector<ui32> chunks = TSimilarSlicer(TSplitSettings::MinBlobSize).Split(slices);
+    auto chunks = TSimilarSlicer(Settings.GetMinBlobSize()).Split(slices);
     ui32 chunkStartPosition = 0;
-    for (auto&& i : chunks) {
-        Slices.emplace_back(std::move(slices[chunkStartPosition]));
-        for (ui32 pos = chunkStartPosition + 1; pos < chunkStartPosition + i; ++pos) {
-            Slices.back().MergeSlice(std::move(slices[pos]));
-        }
-        chunkStartPosition += i;
+    for (auto&& spanObjects : chunks) {
+        Slices.emplace_back(TBatchSerializedSlice(std::move(spanObjects)));
+        chunkStartPosition += spanObjects.size();
     }
     Y_VERIFY(chunkStartPosition == slices.size());
     ui32 recordsCountCheck = 0;
@@ -83,6 +82,7 @@ bool TRBSplitLimiter::Next(std::vector<std::vector<TOrderedColumnChunk>>& portio
     std::vector<TSplittedBlob> blobs;
     Slices.front().GroupBlobs(blobs);
     std::vector<std::vector<TOrderedColumnChunk>> result;
+    std::map<ui32, ui32> columnChunks;
     for (auto&& i : blobs) {
         if (blobs.size() == 1) {
             Counters->MonoBlobs.OnBlobData(i.GetSize());
@@ -90,8 +90,10 @@ bool TRBSplitLimiter::Next(std::vector<std::vector<TOrderedColumnChunk>>& portio
             Counters->SplittedBlobs.OnBlobData(i.GetSize());
         }
         std::vector<TOrderedColumnChunk> chunksForBlob;
+        ui64 offset = 0;
         for (auto&& c : i.GetChunks()) {
-            chunksForBlob.emplace_back(c.GetColumnId(), c.GetData().GetSerializedChunk(), c.GetData().GetColumn());
+            chunksForBlob.emplace_back(TChunkAddress(c.GetColumnId(), columnChunks[c.GetColumnId()]++), offset, c.GetData().GetSerializedChunk(), c.GetData().GetColumn());
+            offset += c.GetSize();
         }
         result.emplace_back(std::move(chunksForBlob));
     }

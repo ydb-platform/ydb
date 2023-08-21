@@ -44,10 +44,9 @@ bool TInsertColumnEngineChanges::AddPathIfNotExists(ui64 pathId) {
         return false;
     }
 
-    Y_VERIFY(FirstGranuleId && ReservedGranuleIds);
+    Y_VERIFY(FirstGranuleId);
     ui64 granule = FirstGranuleId;
     ++FirstGranuleId;
-    --ReservedGranuleIds;
 
     NewGranules.emplace(granule, std::make_pair(pathId, DefaultMark));
     PathToGranule[pathId].emplace_back(DefaultMark, granule);

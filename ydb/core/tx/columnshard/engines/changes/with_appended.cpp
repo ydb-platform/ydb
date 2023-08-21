@@ -98,24 +98,13 @@ std::vector<TPortionInfoWithBlobs> TChangesWithAppend::MakeAppendedPortions(
         stats = granuleMeta->BuildSerializationStats(resultSchema);
     }
     auto schema = std::make_shared<TDefaultSchemaDetails>(resultSchema, saverContext, std::move(stats));
-    TRBSplitLimiter limiter(context.Counters.SplitterCounters, schema, batch);
+    TRBSplitLimiter limiter(context.Counters.SplitterCounters, schema, batch, SplitSettings);
 
     std::vector<std::vector<TOrderedColumnChunk>> portionBlobs;
     std::shared_ptr<arrow::RecordBatch> portionBatch;
     while (limiter.Next(portionBlobs, portionBatch)) {
-        TPortionInfo portionInfo(granule, 0, snapshot);
-        portionInfo.AddMetadata(*resultSchema, portionBatch, tierName);
-
-        TPortionInfoWithBlobs infoWithBlob(std::move(portionInfo), portionBlobs.size());
-        std::map<ui32, ui32> chunkIds;
-        THashMap<TBlobRange, TString> srcBlobs;
-        for (auto& blob : portionBlobs) {
-            auto& blobInfo = infoWithBlob.StartBlob(blob.size());
-            for (auto&& chunk : blob) {
-                const TString data = chunk.GetData();
-                srcBlobs.emplace(blobInfo.AddChunk(infoWithBlob, std::move(chunk), resultSchema->GetIndexInfo()).BlobRange, data);
-            }
-        }
+        TPortionInfoWithBlobs infoWithBlob = TPortionInfoWithBlobs::BuildByBlobs(portionBlobs, portionBatch, granule, snapshot, resultSchema->GetIndexInfo());
+        infoWithBlob.GetPortionInfo().AddMetadata(*resultSchema, portionBatch, tierName);
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("portion_appended", infoWithBlob.GetPortionInfo().DebugString());
         out.emplace_back(std::move(infoWithBlob));
     }

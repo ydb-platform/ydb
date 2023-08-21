@@ -10,95 +10,116 @@ class TPortionInfoWithBlobs {
 public:
     class TBlobInfo {
     private:
+        using TBlobChunks = std::map<TChunkAddress, TSimpleOrderedColumnChunk>;
         YDB_READONLY(ui64, Size, 0);
-        YDB_READONLY_DEF(std::vector<TOrderedColumnChunk>, Chunks);
-        const ui32 StartRecordsIndex;
+        YDB_READONLY_DEF(TBlobChunks, Chunks);
+        std::vector<const TSimpleOrderedColumnChunk*> ChunksOrdered;
         mutable std::optional<TString> ResultBlob;
+        const TColumnRecord& AddChunk(TPortionInfoWithBlobs& owner, TOrderedColumnChunk&& chunk, const TIndexInfo& info);
+        void RestoreChunk(const TPortionInfoWithBlobs& owner, TSimpleOrderedColumnChunk&& chunk);
     public:
-        explicit TBlobInfo(const ui32 predictedCount, TPortionInfoWithBlobs& owner)
-            : StartRecordsIndex(owner.GetPortionInfo().Records.size())
-        {
-            Chunks.reserve(predictedCount);
-        }
+        class TBuilder {
+        private:
+            TBlobInfo* OwnerBlob;
+            TPortionInfoWithBlobs* OwnerPortion;
+        public:
+            TBuilder(TBlobInfo& blob, TPortionInfoWithBlobs& portion)
+                : OwnerBlob(&blob)
+                , OwnerPortion(&portion)
+            {
+
+            }
+            const TColumnRecord& AddChunk(TOrderedColumnChunk&& chunk, const TIndexInfo& info) {
+                return OwnerBlob->AddChunk(*OwnerPortion, std::move(chunk), info);
+            }
+            void RestoreChunk(TSimpleOrderedColumnChunk&& chunk) {
+                OwnerBlob->RestoreChunk(*OwnerPortion, std::move(chunk));
+            }
+        };
 
         const TString& GetBlob() const {
             if (!ResultBlob) {
                 TString result;
                 result.reserve(Size);
-                for (auto&& i : Chunks) {
-                    result.append(i.GetData());
+                for (auto&& i : ChunksOrdered) {
+                    result.append(i->GetData());
                 }
                 ResultBlob = std::move(result);
             }
             return *ResultBlob;
         }
 
-        const TColumnRecord& AddChunk(TPortionInfoWithBlobs& owner, TOrderedColumnChunk&& chunk, const TIndexInfo& info);
-
         void RegisterBlobId(TPortionInfoWithBlobs& owner, const TUnifiedBlobId& blobId);
     };
 private:
-    std::map<ui32, ui32> ColumnChunkIds;
     TPortionInfo PortionInfo;
     YDB_READONLY_DEF(std::vector<TBlobInfo>, Blobs);
     mutable std::optional<std::shared_ptr<arrow::RecordBatch>> CachedBatch;
-public:
-    std::shared_ptr<arrow::RecordBatch> GetBatch(const ISnapshotSchema& data, const ISnapshotSchema& result) const {
-        if (!CachedBatch) {
-            THashMap<ui32, ui32> chunkIds;
-            THashMap<std::pair<ui32, ui32>, TString> blobsByColumnChunk;
-            for (auto&& b : Blobs) {
-                for (auto&& i : b.GetChunks()) {
-                    Y_VERIFY(blobsByColumnChunk.emplace(std::make_pair(i.GetColumnId(), chunkIds[i.GetColumnId()]++), i.GetData()).second);
-                }
-            }
-            THashMap<TBlobRange, TString> blobs;
-            for (auto&& i : PortionInfo.Records) {
-                auto it = blobsByColumnChunk.find(std::make_pair(i.ColumnId, i.Chunk));
-                Y_VERIFY(it != blobsByColumnChunk.end());
-                blobs[i.BlobRange] = it->second;
-            }
-            CachedBatch = PortionInfo.AssembleInBatch(data, result, blobs);
-        }
-        return *CachedBatch;
+
+    explicit TPortionInfoWithBlobs(TPortionInfo&& portionInfo, std::optional<std::shared_ptr<arrow::RecordBatch>> batch = {})
+        : PortionInfo(std::move(portionInfo))
+        , CachedBatch(batch) {
     }
 
+    explicit TPortionInfoWithBlobs(const TPortionInfo& portionInfo, std::optional<std::shared_ptr<arrow::RecordBatch>> batch = {})
+        : PortionInfo(portionInfo)
+        , CachedBatch(batch) {
+    }
+
+    void SetPortionInfo(const TPortionInfo& portionInfo) {
+        PortionInfo = portionInfo;
+    }
+
+    TBlobInfo::TBuilder StartBlob() {
+        Blobs.emplace_back(TBlobInfo());
+        return TBlobInfo::TBuilder(Blobs.back(), *this);
+    }
+
+public:
+    static std::vector<TPortionInfoWithBlobs> RestorePortions(const std::vector<TPortionInfo>& portions, const THashMap<TBlobRange, TString>& blobs);
+    static TPortionInfoWithBlobs RestorePortion(const TPortionInfo& portions, const THashMap<TBlobRange, TString>& blobs);
+
+    std::shared_ptr<arrow::RecordBatch> GetBatch(const ISnapshotSchema& data, const ISnapshotSchema& result) const;
+
+    ui64 GetSize() const {
+        return PortionInfo.BlobsBytes();
+    }
+
+    static TPortionInfoWithBlobs BuildByBlobs(std::vector<std::vector<TOrderedColumnChunk>>& chunksByBlobs, std::shared_ptr<arrow::RecordBatch> batch,
+        const ui64 granule, const TSnapshot& snapshot, const TIndexInfo& info);
+
+    std::optional<TPortionInfoWithBlobs> ChangeSaver(ISnapshotSchema::TPtr currentSchema, const TSaverContext& saverContext) const;
+
     const TString& GetBlobByRangeVerified(const ui32 columnId, const ui32 chunkId) const {
-        ui32 columnChunk = 0;
         for (auto&& b : Blobs) {
-            for (auto&& i : b.GetChunks()) {
-                if (i.GetColumnId() == columnId) {
-                    if (columnChunk == chunkId) {
-                        return i.GetData();
-                    }
-                    ++columnChunk;
-                }
+            auto it = b.GetChunks().find(TChunkAddress(columnId, chunkId));
+            if (it == b.GetChunks().end()) {
+                continue;
+            } else {
+                return it->second.GetData();
             }
         }
         Y_VERIFY(false);
     }
 
     ui64 GetBlobFullSizeVerified(const ui32 columnId, const ui32 chunkId) const {
-        ui32 columnChunk = 0;
         for (auto&& b : Blobs) {
-            for (auto&& i : b.GetChunks()) {
-                if (i.GetColumnId() == columnId) {
-                    if (columnChunk == chunkId) {
-                        return b.GetSize();
-                    }
-                    ++columnChunk;
-                }
+            auto it = b.GetChunks().find(TChunkAddress(columnId, chunkId));
+            if (it == b.GetChunks().end()) {
+                continue;
+            } else {
+                return b.GetSize();
             }
         }
         Y_VERIFY(false);
     }
 
-    TString DebugString() const {
-        return TStringBuilder() << PortionInfo.DebugString() << "blobs_count=" << Blobs.size() << ";";
-    }
-
     std::vector<TBlobInfo>& GetBlobs() {
         return Blobs;
+    }
+
+    TString DebugString() const {
+        return TStringBuilder() << PortionInfo.DebugString() << ";blobs_count=" << Blobs.size() << ";";
     }
 
     const TPortionInfo& GetPortionInfo() const {
@@ -107,25 +128,6 @@ public:
 
     TPortionInfo& GetPortionInfo() {
         return PortionInfo;
-    }
-
-    void SetPortionInfo(const TPortionInfo& portionInfo) {
-        PortionInfo = portionInfo;
-    }
-
-    explicit TPortionInfoWithBlobs(TPortionInfo&& portionInfo, const ui32 predictedBlobsCount)
-        : PortionInfo(portionInfo) {
-        Blobs.reserve(predictedBlobsCount);
-    }
-
-    explicit TPortionInfoWithBlobs(const TPortionInfo& portionInfo, const ui32 predictedBlobsCount)
-        : PortionInfo(portionInfo) {
-        Blobs.reserve(predictedBlobsCount);
-    }
-
-    TBlobInfo& StartBlob(const ui32 blobChunksCount) {
-        Blobs.emplace_back(TBlobInfo(blobChunksCount, *this));
-        return Blobs.back();
     }
 
     friend IOutputStream& operator << (IOutputStream& out, const TPortionInfoWithBlobs& info) {

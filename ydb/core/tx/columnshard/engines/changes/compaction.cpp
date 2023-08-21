@@ -68,7 +68,6 @@ bool TCompactColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TAp
         const ui64 granule = portionInfo.GetGranule();
         const ui64 portion = portionInfo.GetPortion();
 
-        // In case of race with eviction portion could become evicted
         const TPortionInfo& oldInfo = self.GetGranulePtrVerified(granule)->GetPortionVerified(portion);
 
         auto& granuleStart = self.Granules[granule]->Record.Mark;
@@ -80,7 +79,6 @@ bool TCompactColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TAp
             self.ColumnsTable->Write(context.DB, portionInfo, record);
         }
     }
-    // Move portions in granules (zero-copy switch + append into new granules)
 
     for (auto& [info, dstGranule] : PortionsToMove) {
         const auto& portionInfo = info;
@@ -140,9 +138,10 @@ void TCompactColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self,
 }
 
 THashMap<ui64, ui64> TCompactColumnEngineChanges::TmpToNewGranules(TFinalizationContext& context, THashMap<ui64, std::pair<ui64, TMark>>& newGranules) const {
+    Y_VERIFY(SrcGranule || TmpGranuleIds.empty());
     THashMap<ui64, ui64> granuleRemap;
     for (const auto& [mark, counter] : TmpGranuleIds) {
-        if (mark == SrcGranule.Mark) {
+        if (mark == SrcGranule->Mark) {
             Y_VERIFY(!counter);
             granuleRemap[counter] = GranuleMeta->GetGranuleId();
         } else {
@@ -200,7 +199,8 @@ ui64 TCompactColumnEngineChanges::SetTmpGranule(ui64 pathId, const TMark& mark) 
 }
 
 TCompactColumnEngineChanges::TCompactColumnEngineChanges(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const TCompactionSrcGranule& srcGranule)
-    : Limits(limits)
+    : TBase(limits.GetSplitSettings())
+    , Limits(limits)
     , GranuleMeta(granule)
     , SrcGranule(srcGranule)
 {
@@ -212,6 +212,22 @@ TCompactColumnEngineChanges::TCompactColumnEngineChanges(const TCompactionLimits
             SwitchedPortions.push_back(portionInfo);
             Y_VERIFY(portionInfo.GetGranule() == GranuleMeta->GetGranuleId());
         }
+    }
+    Y_VERIFY(SwitchedPortions.size());
+}
+
+TCompactColumnEngineChanges::TCompactColumnEngineChanges(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const std::map<ui64, std::shared_ptr<TPortionInfo>>& portions)
+    : TBase(limits.GetSplitSettings())
+    , Limits(limits)
+    , GranuleMeta(granule)
+{
+//    Y_VERIFY(GranuleMeta);
+
+    SwitchedPortions.reserve(portions.size());
+    for (const auto& [_, portionInfo] : portions) {
+        Y_VERIFY(portionInfo->IsActive());
+        SwitchedPortions.push_back(*portionInfo);
+        Y_VERIFY(!GranuleMeta || portionInfo->GetGranule() == GranuleMeta->GetGranuleId());
     }
     Y_VERIFY(SwitchedPortions.size());
 }

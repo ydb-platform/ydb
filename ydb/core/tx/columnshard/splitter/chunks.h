@@ -1,6 +1,7 @@
 #pragma once
 #include "simple.h"
 #include <ydb/core/tx/columnshard/counters/splitter.h>
+#include <ydb/core/tx/columnshard/engines/portions/column_record.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
@@ -8,11 +9,16 @@
 namespace NKikimr::NOlap {
 
 class TSplitSettings {
+private:
+    static const inline i64 DefaultMaxBlobSize = 8 * 1024 * 1024;
+    static const inline i64 DefaultMinBlobSize = 4 * 1024 * 1024;
+    static const inline i64 DefaultMinRecordsCount = 10000;
+    static const inline i64 DefaultMaxPortionSize = 4 * DefaultMaxBlobSize;
+    YDB_ACCESSOR(i64, MaxBlobSize, DefaultMaxBlobSize);
+    YDB_ACCESSOR(i64, MinBlobSize, DefaultMinBlobSize);
+    YDB_ACCESSOR(i64, MinRecordsCount, DefaultMinRecordsCount);
+    YDB_ACCESSOR(i64, MaxPortionSize, DefaultMaxPortionSize);
 public:
-    static const inline i64 MaxBlobSize = 8 * 1024 * 1024;
-    static const inline i64 MaxBlobSizeWithGap = 7 * 1024 * 1024;
-    static const inline i64 MinBlobSize = 4 * 1024 * 1024;
-    static const inline i64 MinRecordsCount = 10000;
 };
 
 class TSplittedColumn;
@@ -28,7 +34,7 @@ public:
     }
     std::vector<TSplittedColumnChunk> InternalSplit(const TColumnSaver& saver, std::shared_ptr<NColumnShard::TSplitterCounters> counters);
 
-    ui64 GetSize() const {
+    i64 GetSize() const {
         return Data.GetSerializedChunk().size();
     }
 
@@ -87,26 +93,45 @@ public:
 
 class TSplittedBlob {
 private:
-    YDB_READONLY(ui64, Size, 0);
+    YDB_READONLY(i64, Size, 0);
     YDB_READONLY_DEF(std::vector<TSplittedColumnChunk>, Chunks);
 public:
-    bool Take(const TSplittedColumnChunk& chunk) {
-        if (Size + chunk.GetSize() < TSplitSettings::MaxBlobSize) {
-            Chunks.emplace_back(chunk);
-            Size += chunk.GetSize();
-            return true;
-        }
-        return false;
+    void Take(const TSplittedColumnChunk& chunk) {
+        Chunks.emplace_back(chunk);
+        Size += chunk.GetSize();
     }
     bool operator<(const TSplittedBlob& item) const {
         return Size > item.Size;
     }
 };
 
-class TOrderedColumnChunk {
+class TSimpleOrderedColumnChunk {
 private:
-    YDB_READONLY(ui32, ColumnId, 0);
+    TChunkAddress ChunkAddress;
     YDB_READONLY_DEF(TString, Data);
+    YDB_READONLY(ui64, Offset, 0);
+public:
+    ui64 GetSize() const {
+        return Data.size();
+    }
+
+    const TChunkAddress& GetChunkAddress() const {
+        return ChunkAddress;
+    }
+
+    TSimpleOrderedColumnChunk(const TChunkAddress& chunkAddress, const ui64 offset, const TString& data)
+        : ChunkAddress(chunkAddress)
+        , Data(std::move(data))
+        , Offset(offset) {
+
+    }
+
+    TString DebugString() const;
+};
+
+class TOrderedColumnChunk: public TSimpleOrderedColumnChunk {
+private:
+    using TBase = TSimpleOrderedColumnChunk;
     std::shared_ptr<arrow::Array> Column;
 public:
     std::shared_ptr<arrow::Array> GetColumn() const {
@@ -117,9 +142,8 @@ public:
         return Column->length();
     }
 
-    TOrderedColumnChunk(const ui32 columnId, const TString& data, std::shared_ptr<arrow::Array> column)
-        : ColumnId(columnId)
-        , Data(std::move(data))
+    TOrderedColumnChunk(const TChunkAddress& chunkAddress, const ui64 offset, const TString& data, std::shared_ptr<arrow::Array> column)
+        : TBase(chunkAddress, offset, data)
         , Column(column)
     {
         Y_VERIFY(Column);

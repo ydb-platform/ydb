@@ -11,6 +11,7 @@ private:
     using TBase = TChangesWithAppend;
     std::shared_ptr<arrow::RecordBatch> AddSpecials(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
         const TIndexInfo& indexInfo, const TInsertedData& inserted) const;
+    std::vector<NOlap::TInsertedData> DataToIndex;
 
 protected:
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
@@ -23,14 +24,17 @@ protected:
 public:
     const TMark DefaultMark;
     THashMap<ui64, std::vector<std::pair<TMark, ui64>>> PathToGranule; // pathId -> {mark, granule}
-    std::vector<NOlap::TInsertedData> DataToIndex;
-    ui32 ReservedGranuleIds{ 0 };
     THashMap<TUnifiedBlobId, std::shared_ptr<arrow::RecordBatch>> CachedBlobs;
 public:
-    TInsertColumnEngineChanges(const TMark& defaultMark)
-        : DefaultMark(defaultMark)
-    {
+    TInsertColumnEngineChanges(const TMark& defaultMark, std::vector<NOlap::TInsertedData>&& dataToIndex, const TSplitSettings& splitSettings)
+        : TBase(splitSettings)
+        , DataToIndex(std::move(dataToIndex))
+        , DefaultMark(defaultMark) {
 
+    }
+
+    const std::vector<NOlap::TInsertedData>& GetDataToIndex() const {
+        return DataToIndex;
     }
 
     virtual THashSet<ui64> GetTouchedGranules() const override {

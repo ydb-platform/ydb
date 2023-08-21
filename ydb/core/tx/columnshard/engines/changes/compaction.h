@@ -15,7 +15,7 @@ private:
 protected:
     const TCompactionLimits Limits;
     std::shared_ptr<TGranuleMeta> GranuleMeta;
-    TCompactionSrcGranule SrcGranule;
+    std::optional<TCompactionSrcGranule> SrcGranule;
 
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
     virtual void DoWriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) override;
@@ -42,6 +42,7 @@ public:
 
     virtual THashSet<ui64> GetTouchedGranules() const override;
 
+    TCompactColumnEngineChanges(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const std::map<ui64, std::shared_ptr<TPortionInfo>>& portions);
     TCompactColumnEngineChanges(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const TCompactionSrcGranule& srcGranule);
     ~TCompactColumnEngineChanges();
 

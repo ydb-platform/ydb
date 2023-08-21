@@ -15,9 +15,10 @@ private:
     std::deque<TBatchSerializedSlice> Slices;
     std::shared_ptr<NColumnShard::TSplitterCounters> Counters;
     std::shared_ptr<arrow::RecordBatch> Batch;
+    TSplitSettings Settings;
 public:
     TRBSplitLimiter(std::shared_ptr<NColumnShard::TSplitterCounters> counters,
-        ISchemaDetailInfo::TPtr schemaInfo, const std::shared_ptr<arrow::RecordBatch> batch);
+        ISchemaDetailInfo::TPtr schemaInfo, const std::shared_ptr<arrow::RecordBatch> batch, const TSplitSettings& settings);
 
     bool Next(std::vector<std::vector<TOrderedColumnChunk>>& portionBlobs, std::shared_ptr<arrow::RecordBatch>& batch);
 };

@@ -5,8 +5,9 @@
 namespace NKikimr::NOlap {
 
 TConclusionStatus TSplitCompactColumnEngineChanges::DoConstructBlobs(TConstructionContext& context) noexcept {
+    Y_VERIFY(SrcGranule);
     const ui64 pathId = GranuleMeta->GetPathId();
-    const TMark ts0 = SrcGranule.Mark;
+    const TMark ts0 = SrcGranule->Mark;
     std::vector<TPortionInfo>& portions = SwitchedPortions;
 
     std::vector<std::pair<TMark, ui64>> tsIds;

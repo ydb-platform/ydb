@@ -41,13 +41,6 @@ std::shared_ptr<NKikimr::NOlap::TTTLColumnEngineChanges> TColumnEngineForLogs::T
     return std::make_shared<TTTLColumnEngineChanges>();
 }
 
-std::shared_ptr<NKikimr::NOlap::TInsertColumnEngineChanges> TColumnEngineForLogs::TChangesConstructor::BuildInsertChanges(const TMark& defaultMark, std::vector<NOlap::TInsertedData>&& blobsToIndex, const TSnapshot& initSnapshot) {
-    auto changes = std::make_shared<TInsertColumnEngineChanges>(defaultMark);
-    changes->DataToIndex = std::move(blobsToIndex);
-    changes->InitSnapshot = initSnapshot;
-    return changes;
-}
-
 TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const TCompactionLimits& limits)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, limits))
     , TabletId(tabletId)
@@ -275,9 +268,9 @@ bool TColumnEngineForLogs::LoadCounters(IDbWrapper& db) {
 std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(std::vector<TInsertedData>&& dataToIndex) noexcept {
     Y_VERIFY(dataToIndex.size());
 
-    auto changes = TChangesConstructor::BuildInsertChanges(DefaultMark(), std::move(dataToIndex), LastSnapshot);
+    auto changes = std::make_shared<TInsertColumnEngineChanges>(DefaultMark(), std::move(dataToIndex), TSplitSettings());
     ui32 reserveGranules = 0;
-    for (const auto& data : changes->DataToIndex) {
+    for (const auto& data : changes->GetDataToIndex()) {
         const ui64 pathId = data.PathId;
 
         if (changes->PathToGranule.contains(pathId)) {
@@ -302,7 +295,6 @@ std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(st
 
     if (reserveGranules) {
         changes->FirstGranuleId = LastGranule + 1;
-        changes->ReservedGranuleIds = reserveGranules;
         LastGranule += reserveGranules;
     }
 
@@ -330,7 +322,7 @@ std::shared_ptr<TCompactColumnEngineChanges> TColumnEngineForLogs::StartCompacti
 std::shared_ptr<TCleanupColumnEngineChanges> TColumnEngineForLogs::StartCleanup(const TSnapshot& snapshot,
                                                                          THashSet<ui64>& pathsToDrop, ui32 maxRecords) noexcept {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanup")("portions_count", CleanupPortions.size());
-    auto changes = TChangesConstructor::BuildCleanupChanges(snapshot);
+    auto changes = std::make_shared<TCleanupColumnEngineChanges>();
     ui32 affectedRecords = 0;
 
     // Add all portions from dropped paths
@@ -544,7 +536,7 @@ std::shared_ptr<TTTLColumnEngineChanges> TColumnEngineForLogs::StartTtl(const TH
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartTtl")("external", pathEviction.size())
         ("internal", EvictionsController.MutableNextCheckInstantForTierings().size())
         ;
-    auto changes = TChangesConstructor::BuildTtlChanges();
+    auto changes = std::make_shared<TTTLColumnEngineChanges>();
 
     TTieringProcessContext context(maxEvictBytes, changes, busyGranules);
     bool hasExternalChanges = false;

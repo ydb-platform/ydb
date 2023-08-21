@@ -14,8 +14,12 @@ std::vector<TSplittedColumnChunk> TSplittedColumnChunk::InternalSplit(const TCol
     return newChunks;
 }
 
+TString TSimpleOrderedColumnChunk::DebugString() const {
+    return TStringBuilder() << "address=" << ChunkAddress.DebugString() << ";data_size=" << Data.size() << ";";
+}
+
 TString TOrderedColumnChunk::DebugString() const {
-    return TStringBuilder() << "column_id=" << ColumnId << ";data_size=" << Data.size() << ";records_count=" << Column->length() << ";data=" << NArrow::DebugJson(Column, 3, 3) << ";";
+    return TStringBuilder() << TBase::DebugString() << "records_count=" << Column->length() << ";data=" << NArrow::DebugJson(Column, 3, 3) << ";";
 }
 
 }

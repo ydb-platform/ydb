@@ -61,10 +61,10 @@ Y_UNIT_TEST_SUITE(Splitter) {
 
         void Execute(std::shared_ptr<arrow::RecordBatch> batch) {
             NKikimr::NColumnShard::TIndexationCounters counters("test");
-            NKikimr::NOlap::TRBSplitLimiter limiter(counters.SplitterCounters, Schema, batch);
+            NKikimr::NOlap::TRBSplitLimiter limiter(counters.SplitterCounters, Schema, batch, NKikimr::NOlap::TSplitSettings());
             std::vector<std::vector<NKikimr::NOlap::TOrderedColumnChunk>> chunksForBlob;
             std::map<std::string, std::vector<std::shared_ptr<arrow::RecordBatch>>> restoredBatch;
-            std::vector<ui64> blobsSize;
+            std::vector<i64> blobsSize;
             bool hasMultiSplit = false;
             ui32 blobsCount = 0;
             ui32 slicesCount = 0;
@@ -81,10 +81,11 @@ Y_UNIT_TEST_SUITE(Splitter) {
                     std::set<ui32> blobColumnChunks;
                     for (auto&& i : chunks) {
                         ++chunksCount;
-                        recordsCountByColumn[i.GetColumnId()] += i.GetRecordsCount();
-                        restoredBatch[Schema->GetColumnName(i.GetColumnId())].emplace_back(*Schema->GetColumnLoader(i.GetColumnId()).Apply(i.GetData()));
+                        const ui32 columnId = i.GetChunkAddress().GetColumnId();
+                        recordsCountByColumn[columnId] += i.GetRecordsCount();
+                        restoredBatch[Schema->GetColumnName(columnId)].emplace_back(*Schema->GetColumnLoader(columnId).Apply(i.GetData()));
                         blobSize += i.GetData().size();
-                        if (i.GetRecordsCount() != NKikimr::NOlap::TSplitSettings::MinRecordsCount && !blobColumnChunks.emplace(i.GetColumnId()).second) {
+                        if (i.GetRecordsCount() != NKikimr::NOlap::TSplitSettings().GetMinRecordsCount() && !blobColumnChunks.emplace(columnId).second) {
                             hasMultiSplit = true;
                         }
                         sb << "(" << i.DebugString() << ")";
@@ -110,8 +111,8 @@ Y_UNIT_TEST_SUITE(Splitter) {
             }
             Y_VERIFY(hasMultiSplit == HasMultiSplit);
             for (auto&& i : blobsSize) {
-                Y_VERIFY(i < NKikimr::NOlap::TSplitSettings::MaxBlobSize);
-                Y_VERIFY(i + 10000 >= NKikimr::NOlap::TSplitSettings::MinBlobSize || blobsSize.size() == 1);
+                Y_VERIFY(i < NKikimr::NOlap::TSplitSettings().GetMaxBlobSize());
+                Y_VERIFY(i + 10000 >= NKikimr::NOlap::TSplitSettings().GetMinBlobSize() || blobsSize.size() == 1);
             }
             Y_VERIFY(restoredBatch.size() == (ui32)batch->num_columns());
             for (auto&& i : batch->schema()->fields()) {

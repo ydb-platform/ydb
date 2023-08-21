@@ -11,10 +11,56 @@ private:
     THashMap<TString, TPathIdBlobs> ExportTierBlobs;
     ui64 ExportNo = 0;
 
-    bool UpdateEvictedPortion(TPortionInfoWithBlobs& portionInfo,
-        TPortionEvictionFeatures& evictFeatures, const THashMap<TBlobRange, TString>& srcBlobs,
+    class TPortionForEviction {
+    private:
+        TPortionInfo PortionInfo;
+        TPortionEvictionFeatures Features;
+        std::optional<TPortionInfoWithBlobs> PortionWithBlobs;
+    public:
+        TPortionForEviction(const TPortionInfo& portion, TPortionEvictionFeatures&& features)
+            : PortionInfo(portion)
+            , Features(std::move(features))
+        {
+
+        }
+
+        TPortionEvictionFeatures& GetFeatures() {
+            return Features;
+        }
+
+        const TPortionEvictionFeatures& GetFeatures() const {
+            return Features;
+        }
+
+        const TPortionInfo& GetPortionInfo() const {
+            Y_VERIFY(!PortionWithBlobs);
+            return PortionInfo;
+        }
+
+        void SetPortionWithBlobs(TPortionInfoWithBlobs&& data) {
+            Y_VERIFY(!PortionWithBlobs);
+            PortionWithBlobs = std::move(data);
+        }
+
+        TPortionInfoWithBlobs& GetPortionWithBlobs() {
+            Y_VERIFY(PortionWithBlobs);
+            return *PortionWithBlobs;
+        }
+
+        const TPortionInfoWithBlobs& GetPortionWithBlobs() const {
+            Y_VERIFY(PortionWithBlobs);
+            return *PortionWithBlobs;
+        }
+
+        const TPortionInfo& GetActualPortionInfo() const {
+            return PortionWithBlobs ? PortionWithBlobs->GetPortionInfo() : PortionInfo;
+        }
+    };
+
+    bool UpdateEvictedPortion(TPortionForEviction& info, const THashMap<TBlobRange, TString>& srcBlobs,
         std::vector<TColumnRecord>& evictedRecords, TConstructionContext& context) const;
-    std::vector<std::pair<TPortionInfoWithBlobs, TPortionEvictionFeatures>> PortionsToEvict; // {portion, TPortionEvictionFeatures}
+
+    std::vector<TPortionForEviction> PortionsToEvict; // {portion, TPortionEvictionFeatures}
 
 protected:
     virtual void DoWriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) override;
@@ -32,8 +78,8 @@ public:
     }
     virtual THashSet<ui64> GetTouchedGranules() const override {
         auto result = TBase::GetTouchedGranules();
-        for (const auto& [portionInfo, _] : PortionsToEvict) {
-            result.emplace(portionInfo.GetPortionInfo().GetGranule());
+        for (auto&& info : PortionsToEvict) {
+            result.emplace(info.GetPortionInfo().GetGranule());
         }
         return result;
     }
@@ -45,7 +91,7 @@ public:
     void AddPortionToEvict(const TPortionInfo& info, TPortionEvictionFeatures&& features) {
         Y_VERIFY(!info.Empty());
         Y_VERIFY(info.IsActive());
-        PortionsToEvict.emplace_back(TPortionInfoWithBlobs(info, 0), std::move(features));
+        PortionsToEvict.emplace_back(info, std::move(features));
     }
 
     ui32 GetPortionsToEvictCount() const {
@@ -57,11 +103,11 @@ public:
     }
     virtual TPortionInfoWithBlobs* GetWritePortionInfo(const ui32 index) override {
         Y_VERIFY(index < PortionsToEvict.size());
-        return &PortionsToEvict[index].first;
+        return &PortionsToEvict[index].GetPortionWithBlobs();
     }
     virtual bool NeedWritePortion(const ui32 index) const override {
         Y_VERIFY(index < PortionsToEvict.size());
-        return PortionsToEvict[index].second.DataChanges;
+        return PortionsToEvict[index].GetFeatures().DataChanges;
     }
 
     virtual TString TypeString() const override {

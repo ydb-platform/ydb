@@ -183,10 +183,11 @@ void TInGranuleCompactColumnEngineChanges::DoWriteIndexComplete(NColumnShard::TC
 }
 
 void TInGranuleCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
+    Y_VERIFY(SrcGranule);
     TBase::DoStart(self);
     auto& g = *GranuleMeta;
     self.CSCounters.OnInternalCompactionInfo(g.GetAdditiveSummary().GetOther().GetPortionsSize(), g.GetAdditiveSummary().GetOther().GetPortionsCount());
-    Y_VERIFY(InitInGranuleMerge(SrcGranule.Mark, SwitchedPortions, Limits, MergeBorders).Ok());
+    Y_VERIFY(InitInGranuleMerge(SrcGranule->Mark, SwitchedPortions, Limits, MergeBorders).Ok());
 }
 
 NColumnShard::ECumulativeCounters TInGranuleCompactColumnEngineChanges::GetCounterIndex(const bool isSuccess) const {

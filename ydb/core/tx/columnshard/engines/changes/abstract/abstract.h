@@ -27,6 +27,7 @@ class TBackgroundActivity;
 namespace NKikimr::NOlap {
 class TColumnEngineForLogs;
 class TVersionedIndex;
+class TPortionInfoWithBlobs;
 
 struct TCompactionLimits {
     static constexpr const ui64 MIN_GOOD_BLOB_SIZE = 256 * 1024; // some BlobStorage constant
@@ -55,6 +56,13 @@ struct TCompactionLimits {
     i64 GranuleSizeForOverloadPrevent = WARNING_OVERLOAD_GRANULE_SIZE;
     i64 GranuleIndexedPortionsSizeLimit = WARNING_INSERTED_PORTIONS_SIZE;
     ui32 GranuleIndexedPortionsCountLimit = WARNING_INSERTED_PORTIONS_COUNT;
+
+    TSplitSettings GetSplitSettings() const {
+        return TSplitSettings()
+            .SetMinBlobSize(0.5 * std::min<ui64>(MAX_BLOB_SIZE, GranuleSizeForOverloadPrevent))
+            .SetMaxBlobSize(std::min<ui64>(MAX_BLOB_SIZE, GranuleSizeForOverloadPrevent))
+            .SetMaxPortionSize(0.5 * GranuleSizeForOverloadPrevent);
+    }
 };
 
 struct TPortionEvictionFeatures {
@@ -247,21 +255,6 @@ public:
             Y_VERIFY(!portionInfo.Empty());
 
             for (const auto& rec : portionInfo.Records) {
-                sameBlobRanges[rec.BlobRange.BlobId].push_back(rec.BlobRange);
-            }
-        }
-        return sameBlobRanges;
-    }
-
-    /// Returns blob-ranges grouped by blob-id.
-    static THashMap<TUnifiedBlobId, std::vector<TBlobRange>> GroupedBlobRanges(const std::vector<std::pair<TPortionInfoWithBlobs, TPortionEvictionFeatures>>& portions) {
-        Y_VERIFY(portions.size());
-
-        THashMap<TUnifiedBlobId, std::vector<TBlobRange>> sameBlobRanges;
-        for (const auto& [portionInfo, _] : portions) {
-            Y_VERIFY(!portionInfo.GetPortionInfo().Empty());
-
-            for (const auto& rec : portionInfo.GetPortionInfo().Records) {
                 sameBlobRanges[rec.BlobRange.BlobId].push_back(rec.BlobRange);
             }
         }

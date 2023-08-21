@@ -38,6 +38,11 @@ public:
     virtual int GetFieldIndex(const ui32 columnId) const = 0;
     std::shared_ptr<arrow::Field> GetFieldByIndex(const int index) const;
     std::shared_ptr<arrow::Field> GetFieldByColumnId(const ui32 columnId) const;
+    std::shared_ptr<arrow::Field> GetFieldByColumnIdVerified(const ui32 columnId) const {
+        auto result = GetFieldByColumnId(columnId);
+        Y_VERIFY(result);
+        return result;
+    }
 
     TString DebugString() const {
         return DoDebugString();

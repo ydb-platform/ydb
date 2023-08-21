@@ -9,6 +9,7 @@ namespace NKikimr::NOlap {
 class TChangesWithAppend: public TColumnEngineChanges {
 private:
     THashMap<ui64, NOlap::TTiering> TieringInfo;
+    TSplitSettings SplitSettings;
 protected:
     virtual void DoDebugString(TStringOutput& out) const override;
     virtual void DoCompile(TFinalizationContext& context) override;
@@ -24,6 +25,12 @@ protected:
         const TSnapshot& snapshot, const TGranuleMeta* granuleMeta, TConstructionContext& context) const;
 
 public:
+    TChangesWithAppend(const TSplitSettings& splitSettings)
+        : SplitSettings(splitSettings)
+    {
+
+    }
+
     virtual THashSet<ui64> GetTouchedGranules() const override {
         return {};
     }

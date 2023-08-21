@@ -6,7 +6,6 @@
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 
 #include <ydb/core/sys_view/common/schema.h>
-#include <ydb/core/tablet_flat/flat_dbase_scheme.h>
 #include <ydb/core/tx/columnshard/common/scalars.h>
 #include <ydb/core/formats/arrow/dictionary/object.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>

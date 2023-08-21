@@ -644,7 +644,7 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
             IsAuthSet = true;
         }
         if (IsVerbose()) {
-            config.ConnectionParams["yc-token-file"].push_back({fileContent, GetProfileSource(profile, explicitOption)});
+            config.ConnectionParams["yc-token"].push_back({fileContent, GetProfileSource(profile, explicitOption)});
         }
     } else if (authMethod == "sa-key-file") {
         TString filePath = authData.as<TString>();
@@ -761,8 +761,8 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
                 config.ConnectionParams["use-metadata-credentials"].push_back({"true", "explicit --use-metadata-credentials option"});
             }
         } else if (SaKeyFile) {
-            config.ChoosedAuthMethod = "sa-key-file";
             config.SaKeyFile = SaKeyFile;
+            config.ChoosedAuthMethod = "sa-key-file";
             if (IsVerbose()) {
                 Cout << "Using service account key file provided with --sa-key-file option" << Endl;
                 config.ConnectionParams["sa-key-file"].push_back({config.SaKeyFile, "explicit --sa-key-file option"});

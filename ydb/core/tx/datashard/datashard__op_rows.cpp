@@ -128,6 +128,10 @@ static void ReadOnly(NKikimrTxDataShard::TEvUploadRowsResponse& response) {
     response.SetStatus(NKikimrTxDataShard::TError::READONLY);
 }
 
+static void Overloaded(NKikimrTxDataShard::TEvUploadRowsResponse& response) {
+    response.SetStatus(NKikimrTxDataShard::TError::SHARD_IS_BLOCKED);
+}
+
 static void OutOfSpace(NKikimrTxDataShard::TEvEraseRowsResponse& response) {
     // NOTE: this function is never called, because erase is allowed when out of space
     response.SetStatus(NKikimrTxDataShard::TEvEraseRowsResponse::WRONG_SHARD_STATE);
@@ -144,6 +148,10 @@ static void WrongShardState(NKikimrTxDataShard::TEvEraseRowsResponse& response) 
 
 static void ExecError(NKikimrTxDataShard::TEvEraseRowsResponse& response) {
     response.SetStatus(NKikimrTxDataShard::TEvEraseRowsResponse::EXEC_ERROR);
+}
+
+static void Overloaded(NKikimrTxDataShard::TEvEraseRowsResponse& response) {
+    response.SetStatus(NKikimrTxDataShard::TEvEraseRowsResponse::SHARD_OVERLOADED);
 }
 
 template <typename TEvResponse>
@@ -168,41 +176,32 @@ template <typename TEvResponse, typename TEvRequest>
 static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& ctx, const TString& txDesc, bool isWrite) {
     NKikimrTxDataShard::TEvProposeTransactionResult::EStatus rejectStatus;
     TString rejectReason;
-    bool reject = self->CheckDataTxReject(txDesc, ctx, rejectStatus, rejectReason);
-    bool outOfSpace = false;
-    bool isDiskSpaceExhausted = false;
-
-
-    if (!reject && isWrite) {
-        if (self->IsAnyChannelYellowStop()) {
-            reject = true;
-            outOfSpace = true;
-            rejectReason = TStringBuilder() << "Cannot perform writes: out of disk space at tablet " << self->TabletID();
-            self->IncCounter(COUNTER_PREPARE_OUT_OF_SPACE);
-        } else if (self->IsSubDomainOutOfSpace()) {
-            reject = true;
-            outOfSpace = true;
-            rejectReason = "Cannot perform writes: database is out of disk space";
-            isDiskSpaceExhausted = true;
-            self->IncCounter(COUNTER_PREPARE_OUT_OF_SPACE);
-        }
-    }
-
-    if (!reject) {
-        return false;
-    }
-
-    if (outOfSpace) {
-        if (isDiskSpaceExhausted) {
-            Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReason, &DiskSpaceExhausted, ctx);
-        } else {
-            Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReason, &OutOfSpace, ctx);
-        }
-    } else {
+    if (self->CheckDataTxReject(txDesc, ctx, rejectStatus, rejectReason)) {
         Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReason, &WrongShardState, ctx);
+        return true;
     }
 
-    return true;
+    if (self->CheckChangesQueueOverflow()) {
+        rejectReason = TStringBuilder() << "Change queue overflow at tablet " << self->TabletID();
+        Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReason, &Overloaded, ctx);
+        return true;
+    }
+
+    if (isWrite) {
+        if (self->IsAnyChannelYellowStop()) {
+            self->IncCounter(COUNTER_PREPARE_OUT_OF_SPACE);
+            rejectReason = TStringBuilder() << "Cannot perform writes: out of disk space at tablet " << self->TabletID();
+            Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReason, &OutOfSpace, ctx);
+            return true;
+        } else if (self->IsSubDomainOutOfSpace()) {
+            self->IncCounter(COUNTER_PREPARE_OUT_OF_SPACE);
+            rejectReason = "Cannot perform writes: database is out of disk space";
+            Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReason, &DiskSpaceExhausted, ctx);
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void TDataShard::Handle(TEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TActorContext& ctx) {

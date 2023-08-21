@@ -2271,6 +2271,39 @@ public:
         return A(varName);
     }
 
+    TAstNode* ParseSQLValueFunction(const SQLValueFunction* value) {
+        AT_LOCATION(value);
+        switch (value->op) {
+        case SVFOP_CURRENT_DATE:
+            return L(A("PgCast"),
+                L(A("PgCall"), QA("now"), QL()),
+                L(A("PgType"), QA("date"))
+            );
+        case SVFOP_CURRENT_TIME:
+            return L(A("PgCast"),
+                L(A("PgCall"), QA("now"), QL()),
+                L(A("PgType"), QA("timetz"))
+            );
+        case SVFOP_CURRENT_TIME_N:
+            return L(A("PgCast"),
+                L(A("PgCall"), QA("now"), QL()),
+                L(A("PgType"), QA("timetz")),
+                L(A("PgConst"), QA(ToString(value->typmod)), L(A("PgType"), QA("int4")))
+            );
+        case SVFOP_CURRENT_TIMESTAMP:
+            return L(A("PgCall"), QA("now"), QL());
+        case SVFOP_CURRENT_TIMESTAMP_N:
+            return L(A("PgCast"),
+                L(A("PgCall"), QA("now"), QL()),
+                L(A("PgType"), QA("timestamptz")),
+                L(A("PgConst"), QA(ToString(value->typmod)), L(A("PgType"), QA("int4")))
+            );
+        default:
+            AddError(TStringBuilder() << "Usupported SQLValueFunction: " << (int)value->op);
+            return nullptr;
+        }
+    }
+
     TAstNode* ParseExpr(const Node* node, const TExprSettings& settings) {
         switch (NodeTag(node)) {
         case T_A_Const: {
@@ -2311,6 +2344,9 @@ public:
         }
         case T_ParamRef: {
             return ParseParamRefExpr(CAST_NODE(ParamRef, node));
+        }
+        case T_SQLValueFunction: {
+            return ParseSQLValueFunction(CAST_NODE(SQLValueFunction, node));
         }
         default:
             NodeNotImplemented(node);

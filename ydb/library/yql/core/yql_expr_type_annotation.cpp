@@ -4971,6 +4971,18 @@ bool IsFlowOrStream(const TExprNode& node) {
     return IsFlowOrStream(*node.GetTypeAnn());
 }
 
+bool IsBoolLike(const TTypeAnnotationNode& type) {
+    if (IsNull(type)) {
+        return true;
+    }
+    const auto itemType = RemoveOptionalType(&type);
+    return (itemType->GetKind() == ETypeAnnotationKind::Data) and (itemType->Cast<TDataExprType>()->GetSlot() == EDataSlot::Bool);
+}
+
+bool IsBoolLike(const TExprNode& node) {
+    return node.GetTypeAnn() && IsBoolLike(*node.GetTypeAnn());
+}
+
 namespace {
 
 using TIndentPrinter = std::function<void(TStringBuilder& res, size_t)>;

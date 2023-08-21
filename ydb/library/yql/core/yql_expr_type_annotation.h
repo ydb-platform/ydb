@@ -293,6 +293,9 @@ bool IsInstantEqual(const TTypeAnnotationNode& type);
 bool IsFlowOrStream(const TTypeAnnotationNode& type);
 bool IsFlowOrStream(const TExprNode& node);
 
+bool IsBoolLike(const TTypeAnnotationNode& type);
+bool IsBoolLike(const TExprNode& node);
+
 TString GetTypeDiff(const TTypeAnnotationNode& left, const TTypeAnnotationNode& right);
 TString GetTypePrettyDiff(const TTypeAnnotationNode& left, const TTypeAnnotationNode& right);
 TExprNode::TPtr ExpandType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);

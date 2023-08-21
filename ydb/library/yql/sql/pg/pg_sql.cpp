@@ -8,6 +8,7 @@
 #include <ydb/library/yql/parser/pg_wrapper/postgresql/src/backend/catalog/pg_type_d.h>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/core/issue/yql_issue.h>
 #include <ydb/library/yql/core/yql_callable_names.h>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <util/string/builder.h>
@@ -1976,17 +1977,36 @@ public:
             return { view->Source, alias, colnames.empty() ? view->ColNames : colnames, false };
         }
 
+        TString schemaname = value->schemaname;
         if (!StrCompare(value->schemaname, "bindings")) {
-            auto s = BuildBindingSource(value);
-            if (!s) {
+            bool isBinding = false;
+            switch (Settings.BindingsMode) {
+            case NSQLTranslation::EBindingsMode::DISABLED:
+                AddError("Please remove 'bindings.' from your query, the support for this syntax has ended");
                 return {};
+            case NSQLTranslation::EBindingsMode::ENABLED:
+                isBinding = true;
+                break;
+            case NSQLTranslation::EBindingsMode::DROP_WITH_WARNING:
+                AddWarning(TIssuesIds::YQL_DEPRECATED_BINDINGS, "Please remove 'bindings.' from your query, the support for this syntax will be dropped soon");
+                [[fallthrough]];
+            case NSQLTranslation::EBindingsMode::DROP:
+                schemaname = Settings.DefaultCluster;
+                break;
             }
-            return { s, alias, colnames, true };
+
+            if (isBinding) {
+                auto s = BuildBindingSource(value);
+                if (!s) {
+                    return {};
+                }
+                return { s, alias, colnames, true };
+            }
         }
 
 
         const auto [source, key] = ParseQualifiedRelationName(
-            value->catalogname, value->schemaname, value->relname,
+            value->catalogname, schemaname, value->relname,
             /* isSink */ false,
             /* isScheme */ false);
         if (source == nullptr || key == nullptr) {
@@ -3483,6 +3503,10 @@ public:
 private:
     void AddError(const TString& value) {
         AstParseResult.Issues.AddIssue(TIssue(Positions.back(), value));
+    }
+
+    void AddWarning(int code, const TString& value) {
+        AstParseResult.Issues.AddIssue(TIssue(Positions.back(), value).SetCode(code, ESeverity::TSeverityIds_ESeverityId_S_WARNING));
     }
 
     struct TLState {

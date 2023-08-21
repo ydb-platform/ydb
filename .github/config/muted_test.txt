@@ -19,6 +19,7 @@ ydb-core-kqp-ut-arrow/KqpScanArrowFormat::AllTypesColumnsCellvec
 ydb-core-kqp-ut-arrow/KqpScanArrowInChanels::AllTypesColumns
 ydb-core-kqp-ut-federated_query/KqpFederatedQuery::*
 ydb-core-kqp-ut-spilling/KqpScanSpilling::SelfJoin
+ydb-core-kqp-ut-service/KqpQueryService::CancelScriptExecution
 ydb-core-tx-schemeshard-ut_external_data_source/TExternalDataSourceTest::SchemeErrors
 ydb-core-tx-schemeshard-ut_reboots/IntermediateDirsReboots::CreateKesusWithIntermediateDirs
 ydb-core-tx-schemeshard-ut_replication_reboots/TReplicationWithRebootsTests::CreateDropRecreate

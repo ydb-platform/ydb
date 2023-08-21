@@ -504,12 +504,12 @@ const THashSet<TStringBuf>& YtDataSinkFunctions() {
 }
 
 bool TYtState::IsHybridEnabled() const {
-    return !OnlyNativeExecution && Types->PureResultDataSource == DqProviderName
+    return Types->PureResultDataSource == DqProviderName
         && Configuration->HybridDqExecution.Get().GetOrElse(DefaultHybridDqExecution) && Types->HiddenMode == EHiddenMode::Disable;
 }
 
 bool TYtState::IsHybridEnabledForCluster(const std::string_view& cluster) const {
-    return Configuration->_EnableDq.Get(TString(cluster)).GetOrElse(true)
+    return !OnlyNativeExecution && Configuration->_EnableDq.Get(TString(cluster)).GetOrElse(true)
         && TimeSpentInHybrid + (HybridInFlightOprations.empty() ? TDuration::Zero() : NMonotonic::TMonotonic::Now() - HybridStartTime)
             < Configuration->HybridDqTimeSpentLimit.Get().GetOrElse(TDuration::Minutes(20));
 }

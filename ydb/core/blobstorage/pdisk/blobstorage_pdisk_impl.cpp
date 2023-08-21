@@ -65,8 +65,10 @@ TPDisk::TPDisk(const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<::NMon
     if (Cfg->SectorMap) {
         auto diskModeParams = Cfg->SectorMap->GetDiskModeParams();
         if (diskModeParams) {
-            SectorMapFirstSectorRate = TControlWrapper(diskModeParams->FirstSectorRate, 0, 100000ull * 1024 * 1024);
-            SectorMapLastSectorRate = TControlWrapper(diskModeParams->LastSectorRate, 0, 100000ull * 1024 * 1024);
+            SectorMapFirstSectorReadRate = TControlWrapper(diskModeParams->FirstSectorReadRate, 0, 100000ull * 1024 * 1024);
+            SectorMapLastSectorReadRate = TControlWrapper(diskModeParams->LastSectorReadRate, 0, 100000ull * 1024 * 1024);
+            SectorMapFirstSectorWriteRate = TControlWrapper(diskModeParams->FirstSectorWriteRate, 0, 100000ull * 1024 * 1024);
+            SectorMapLastSectorWriteRate = TControlWrapper(diskModeParams->LastSectorWriteRate, 0, 100000ull * 1024 * 1024);
             SectorMapSeekSleepMicroSeconds = TControlWrapper(diskModeParams->SeekSleepMicroSeconds, 0, 100ul * 1000 * 1000);
         }
     }
@@ -2557,11 +2559,14 @@ bool TPDisk::Initialize(TActorSystem *actorSystem, const TActorId &pDiskActor) {
             if (Cfg->SectorMap) {
                 auto diskModeParams = Cfg->SectorMap->GetDiskModeParams();
                 if (diskModeParams) {
-                    REGISTER_LOCAL_CONTROL(SectorMapFirstSectorRate);
-                    REGISTER_LOCAL_CONTROL(SectorMapLastSectorRate);
+                    REGISTER_LOCAL_CONTROL(SectorMapFirstSectorReadRate);
+                    REGISTER_LOCAL_CONTROL(SectorMapLastSectorReadRate);
+                    REGISTER_LOCAL_CONTROL(SectorMapFirstSectorWriteRate);
+                    REGISTER_LOCAL_CONTROL(SectorMapLastSectorWriteRate);
                     REGISTER_LOCAL_CONTROL(SectorMapSeekSleepMicroSeconds);
 
-                    LastSectorRateControlName = TStringBuilder() << "PDisk_" << PDiskId << "_SectorMapLastSectorRate";
+                    LastSectorReadRateControlName = TStringBuilder() << "PDisk_" << PDiskId << "_SectorMapLastSectorReadRate";
+                    LastSectorWriteRateControlName = TStringBuilder() << "PDisk_" << PDiskId << "_SectorMapLastSectorWriteRate";
                 }
             }
         }
@@ -3557,13 +3562,22 @@ void TPDisk::Update() {
     if (Cfg->SectorMap) {
         auto diskModeParams = Cfg->SectorMap->GetDiskModeParams();
         if (diskModeParams) {
-            diskModeParams->FirstSectorRate.store(SectorMapFirstSectorRate);
-            if (SectorMapFirstSectorRate < SectorMapLastSectorRate) {
-                TAtomic prevValue;
-                ActorSystem->AppData<TAppData>()->Icb->SetValue(LastSectorRateControlName, SectorMapFirstSectorRate, prevValue);
-                diskModeParams->LastSectorRate.store(SectorMapFirstSectorRate);
+            TAtomic prevValue;
+
+            diskModeParams->FirstSectorReadRate.store(SectorMapFirstSectorReadRate);
+            if (SectorMapFirstSectorReadRate < SectorMapLastSectorReadRate) {
+                ActorSystem->AppData<TAppData>()->Icb->SetValue(LastSectorReadRateControlName, SectorMapFirstSectorReadRate, prevValue);
+                diskModeParams->LastSectorReadRate.store(SectorMapFirstSectorReadRate);
             } else {
-                diskModeParams->LastSectorRate.store(SectorMapLastSectorRate);
+                diskModeParams->LastSectorReadRate.store(SectorMapLastSectorReadRate);
+            }
+
+            diskModeParams->FirstSectorWriteRate.store(SectorMapFirstSectorWriteRate);
+            if (SectorMapFirstSectorWriteRate < SectorMapLastSectorWriteRate) {
+                ActorSystem->AppData<TAppData>()->Icb->SetValue(LastSectorWriteRateControlName, SectorMapFirstSectorWriteRate, prevValue);
+                diskModeParams->LastSectorWriteRate.store(SectorMapFirstSectorWriteRate);
+            } else {
+                diskModeParams->LastSectorWriteRate.store(SectorMapLastSectorWriteRate);
             }
 
             diskModeParams->SeekSleepMicroSeconds.store(SectorMapSeekSleepMicroSeconds);

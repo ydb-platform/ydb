@@ -99,11 +99,14 @@ public:
     TControlWrapper ForsetiOpPieceSizeRot;
 
     // SectorMap Controls
-    TControlWrapper SectorMapFirstSectorRate;
-    TControlWrapper SectorMapLastSectorRate;
-    // to update if SectorMapFirstSectorRate < SectorMapLastSectorRate
-    TString LastSectorRateControlName;
+    TControlWrapper SectorMapFirstSectorReadRate;
+    TControlWrapper SectorMapLastSectorReadRate;
+    TControlWrapper SectorMapFirstSectorWriteRate;
+    TControlWrapper SectorMapLastSectorWriteRate;
     TControlWrapper SectorMapSeekSleepMicroSeconds;
+    // used to store valid value in ICB if SectorMapFirstSector*Rate < SectorMapLastSector*Rate
+    TString LastSectorReadRateControlName;
+    TString LastSectorWriteRateControlName;
 
     ui64 ForsetiMinLogCostNs = 2000000ull;
     i64 ForsetiMaxLogBatchNsCached;

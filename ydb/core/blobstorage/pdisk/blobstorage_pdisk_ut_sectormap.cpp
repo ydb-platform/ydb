@@ -19,9 +19,16 @@ Y_UNIT_TEST_SUITE(TSectorMap) {
         ui64 dataSize = dataSizeMb * 1024 * 1024;
         ui64 deviceSize = diskSizeGb * 1024 * 1024 * 1024;
 
-        ui64 diskRate = toFirstSector ? 
-            NPDisk::NSectorMap::DiskModeParamPresets[(ui32)diskMode][1] : 
-            NPDisk::NSectorMap::DiskModeParamPresets[(ui32)diskMode][2];
+        auto deviceType = NPDisk::NSectorMap::DiskModeToDeviceType(diskMode);
+        ui64 diskRate;
+        if (testRead) {
+            diskRate = toFirstSector ? NPDisk::DevicePerformance.at(deviceType).FirstSectorReadBytesPerSec : 
+                NPDisk::DevicePerformance.at(deviceType).LastSectorReadBytesPerSec;
+        } else {
+            diskRate = toFirstSector ? NPDisk::DevicePerformance.at(deviceType).FirstSectorWriteBytesPerSec : 
+                NPDisk::DevicePerformance.at(deviceType).LastSectorWriteBytesPerSec;
+        }
+
         ui64 sectorsNum = deviceSize / NPDisk::NSectorMap::SECTOR_SIZE;
         ui64 sectorPos = toFirstSector ? 0 : sectorsNum - dataSize / NPDisk::NSectorMap::SECTOR_SIZE - 2;
         double timeExpected = (double)dataSize / diskRate;

@@ -6753,20 +6753,33 @@ void TSchemeShard::Handle(NStat::TEvStatistics::TEvGetStatisticsFromSS::TPtr& ev
 
     for (const auto& pathIdIn : recordIn.GetPathIds()) {
         TPathId pathId(pathIdIn.GetOwnerId(), pathIdIn.GetLocalId());
-        auto pathFound = Tables.find(pathId);
 
         auto& entryOut = *recordOut.AddEntries();
         entryOut.MutablePathId()->CopyFrom(pathIdIn);
-        if (pathFound == Tables.end()) {
-            entryOut.SetSuccess(false);
-            entryOut.SetRowCount(0);
-            entryOut.SetBytesSize(0);
-        } else {
-            const auto& aggregated = pathFound->second->GetStats().Aggregated;
+
+        auto itTable = Tables.find(pathId);
+        if (itTable != Tables.end()) {
+            const auto& aggregated = itTable->second->GetStats().Aggregated;
             entryOut.SetSuccess(true);
             entryOut.SetRowCount(aggregated.RowCount);
             entryOut.SetBytesSize(aggregated.DataSize);
+            continue;
         }
+
+        if (ColumnTables.contains(pathId)) {
+            auto columnTableInfo = ColumnTables.GetVerified(pathId);
+            if (columnTableInfo->IsStandalone()) {
+                const auto& aggregated = columnTableInfo->GetStats().Aggregated;
+                entryOut.SetSuccess(true);
+                entryOut.SetRowCount(aggregated.RowCount);
+                entryOut.SetBytesSize(aggregated.DataSize);
+                continue;
+            }
+        }
+
+        entryOut.SetSuccess(false);
+        entryOut.SetRowCount(0);
+        entryOut.SetBytesSize(0);
     }
 
     ctx.Send(ev->Sender, result.Release(), 0, ev->Cookie);

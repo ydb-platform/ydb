@@ -270,16 +270,17 @@ namespace {
     }
 }
 
-bool TClientCommandRootCommon::TryGetParamFromProfile(const TString& name, std::shared_ptr<IProfile> profile, bool explicitOption, std::function<bool(const TString&, const TString&)> callback) {
+bool TClientCommandRootCommon::TryGetParamFromProfile(const TString& name, std::shared_ptr<IProfile> profile, bool explicitOption, 
+                                                      std::function<bool(const TString&, const TString&, bool)> callback) {
     if (profile && profile->Has(name)) {
-        return callback(profile->GetValue(name).as<TString>(), GetProfileSource(profile, explicitOption));
+        return callback(profile->GetValue(name).as<TString>(), GetProfileSource(profile, explicitOption), explicitOption);
     }
     return false;
 }
 
 void TClientCommandRootCommon::ParseCaCerts(TConfig& config) {
-    auto getCaFile = [this, &config] (const TString& param, const TString& sourceText) {
-        if (!IsCaCertsFileSet) {
+    auto getCaFile = [this, &config] (const TString& param, const TString& sourceText, bool explicitOption) {
+        if (!IsCaCertsFileSet && (explicitOption || !Profile)) {
             config.CaCertsFile = param;
             IsCaCertsFileSet = true;
             GetCaCerts(config);
@@ -291,14 +292,14 @@ void TClientCommandRootCommon::ParseCaCerts(TConfig& config) {
         return false;
     };
     // Priority 1. Explicit --ca-file option
-    if (CaCertsFile && getCaFile(CaCertsFile, "explicit --ca-file option")) {
+    if (CaCertsFile && getCaFile(CaCertsFile, "explicit --ca-file option", true)) {
         return;
     }
     // Priority 2. Explicit --profile option
     if (TryGetParamFromProfile("ca-file", Profile, true, getCaFile)) {
         return;
     }
-    // Priority 3. Active profile
+    // Priority 3. Active profile (if --profile option is not specified)
     if (TryGetParamFromProfile("ca-file", ProfileManager->GetActiveProfile(), false, getCaFile)) {
         return;
     }
@@ -315,9 +316,9 @@ void TClientCommandRootCommon::GetCaCerts(TConfig& config) {
 }
 
 void TClientCommandRootCommon::ParseAddress(TConfig& config) {
-    auto getAddress = [this, &config] (const TString& param, const TString& sourceText) {
+    auto getAddress = [this, &config] (const TString& param, const TString& sourceText, bool explicitOption) {
         TString address;
-        if (!IsAddressSet) {
+        if (!IsAddressSet && (explicitOption || !Profile)) {
             config.Address = param;
             IsAddressSet = true;
             GetAddressFromString(config);
@@ -334,14 +335,14 @@ void TClientCommandRootCommon::ParseAddress(TConfig& config) {
         return false;
     };
     // Priority 1. Explicit --endpoint option
-    if (Address && getAddress(Address, "explicit --endpoint option")) {
+    if (Address && getAddress(Address, "explicit --endpoint option", true)) {
         return;
     }
     // Priority 2. Explicit --profile option
     if (TryGetParamFromProfile("endpoint", Profile, true, getAddress)) {
         return;
     }
-    // Priority 3. Active profile
+    // Priority 3. Active profile (if --profile option is not specified)
     if (TryGetParamFromProfile("endpoint", ProfileManager->GetActiveProfile(), false, getAddress)) {
         return;
     }
@@ -406,8 +407,8 @@ void TClientCommandRootCommon::ParseProfile() {
 }
 
 void TClientCommandRootCommon::ParseDatabase(TConfig& config) {
-    auto getDatabase = [this, &config] (const TString& param, const TString& sourceText) {
-        if (!IsDatabaseSet) {
+    auto getDatabase = [this, &config] (const TString& param, const TString& sourceText, bool explicitOption) {
+        if (!IsDatabaseSet && (explicitOption || !Profile)) {
             config.Database = param;
             IsDatabaseSet = true;
         }
@@ -418,22 +419,22 @@ void TClientCommandRootCommon::ParseDatabase(TConfig& config) {
         return false;
     };
     // Priority 1. Explicit --database option
-    if (Database && getDatabase(Database, "explicit --database option")) {
+    if (Database && getDatabase(Database, "explicit --database option", true)) {
         return;
     }
     // Priority 2. Explicit --profile option
     if (TryGetParamFromProfile("database", Profile, true, getDatabase)) {
         return;
     }
-    // Priority 3. Active profile
+    // Priority 3. Active profile (if --profile option is not specified)
     if (TryGetParamFromProfile("database", ProfileManager->GetActiveProfile(), false, getDatabase)) {
         return;
     }
 }
 
 void TClientCommandRootCommon::ParseIamEndpoint(TConfig& config) {
-    auto getIamEndpoint = [this, &config] (const TString& param, const TString& sourceText) {
-        if (!IsIamEndpointSet) {
+    auto getIamEndpoint = [this, &config] (const TString& param, const TString& sourceText, bool explicitOption) {
+        if (!IsIamEndpointSet && (explicitOption || !Profile)) {
             config.IamEndpoint = param;
             IsIamEndpointSet = true;
         }
@@ -444,14 +445,14 @@ void TClientCommandRootCommon::ParseIamEndpoint(TConfig& config) {
         return false;
     };
     // Priority 1. Explicit --iam-endpoint option
-    if (IamEndpoint && getIamEndpoint(IamEndpoint, "explicit --iam-endpoint option")) {
+    if (IamEndpoint && getIamEndpoint(IamEndpoint, "explicit --iam-endpoint option", true)) {
         return;
     }
     // Priority 2. Explicit --profile option
     if (TryGetParamFromProfile("iam-endpoint", Profile, true, getIamEndpoint)) {
         return;
     }
-    // Priority 3. Active profile
+    // Priority 3. Active profile (if --profile option is not specified)
     if (TryGetParamFromProfile("iam-endpoint", ProfileManager->GetActiveProfile(), false, getIamEndpoint)) {
         return;
     }

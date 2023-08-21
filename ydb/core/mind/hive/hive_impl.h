@@ -830,6 +830,10 @@ public:
         return CurrentConfig.GetNodeRestartsToIgnoreInWarmup();
     }
 
+    NKikimrConfig::THiveConfig::EHiveBootStrategy GetBootStrategy() const {
+        return CurrentConfig.GetBootStrategy();
+    }
+
     static void ActualizeRestartStatistics(google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier);
     static bool IsSystemTablet(TTabletTypes::EType type);
 

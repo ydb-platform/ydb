@@ -1215,6 +1215,7 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet) {
     }
 
     TVector<TSelectedNode> selectedNodes;
+    bool thereAreNodesWithManyStarts = false;
 
     for (auto itCandidateNodes = candidateGroups.begin(); itCandidateNodes != candidateGroups.end(); ++itCandidateNodes) {
         const std::vector<TNodeInfo*>& candidateNodes(*itCandidateNodes);
@@ -1240,8 +1241,11 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet) {
                     }
                 } else {
                     BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " node " << nodeInfo.Id << " is not able to schedule the tablet");
-                    tablet.BootState = BootStateTooManyStarting;
-                    return TBestNodeResult(false);
+                    thereAreNodesWithManyStarts = true;
+                    if (GetBootStrategy() == NKikimrConfig::THiveConfig::HIVE_BOOT_STRATEGY_BALANCED) {
+                        tablet.BootState = BootStateTooManyStarting;
+                        return TBestNodeResult(false);
+                    }
                 }
             } else {
                 BLOG_TRACE("[FBN] Node " << nodeInfo.Id << " is not allowed"
@@ -1256,6 +1260,10 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet) {
         }
     }
     BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " selected nodes count " << selectedNodes.size());
+    if (selectedNodes.empty() && thereAreNodesWithManyStarts) {
+        BLOG_TRACE("[FBN] Tablet " << tablet.ToString() << " all available nodes are booting too many tablets");
+        return TBestNodeResult(false);
+    }
 
     TNodeInfo* selectedNode = nullptr;
     if (!selectedNodes.empty()) {

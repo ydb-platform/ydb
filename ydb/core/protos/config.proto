@@ -1666,6 +1666,11 @@ message THiveConfig {
         HIVE_NODE_SELECT_STRATEGY_RANDOM = 3;
     }
 
+    enum EHiveBootStrategy {
+        HIVE_BOOT_STRATEGY_BALANCED = 0;
+        HIVE_BOOT_STRATEGY_FAST = 1;
+    }
+
     optional uint64 MaxTabletsScheduled = 2 [default = 100];
     optional uint64 MaxResourceCounter = 3 [default = 100000000];
     optional uint64 MaxResourceCPU = 4 [default = 10000000];
@@ -1723,6 +1728,7 @@ message THiveConfig {
     optional uint64 MaxMovementsOnEmergencyBalancer = 57 [default = 2];
     optional bool ContinueEmergencyBalancer = 58 [default = true];
     optional double MinPeriodBetweenEmergencyBalance = 59 [default = 0.1]; // seconds
+    optional EHiveBootStrategy BootStrategy = 60 [default = HIVE_BOOT_STRATEGY_BALANCED];
 }
 
 message TDataShardConfig {

@@ -1,0 +1,20 @@
+package NYT.NTableClient.NProto;
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TColumnFilter
+{
+    repeated int32 indexes = 1;
+}
+
+message TReqLookupRows
+{
+    optional TColumnFilter column_filter = 1;
+}
+
+message TReqVersionedLookupRows
+{
+    optional TColumnFilter column_filter = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////

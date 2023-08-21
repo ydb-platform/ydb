@@ -1,0 +1,327 @@
+package NYT.NTableClient.NProto;
+
+import "yt_proto/yt/client/table_chunk_format/proto/column_meta.proto";
+import "yt_proto/yt/core/misc/proto/guid.proto";
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TLogicalType
+{
+    message TStructField
+    {
+        optional string name = 1;
+        optional TLogicalType type = 2;
+    }
+
+    message TStructLogicalType
+    {
+        repeated TStructField fields = 1;
+    }
+
+    message TTupleLogicalType
+    {
+        repeated TLogicalType elements = 1;
+    }
+
+    message TVariantTupleLogicalType
+    {
+        repeated TLogicalType elements = 1;
+    }
+
+    message TVariantStructLogicalType
+    {
+        repeated TStructField fields = 1;
+    }
+
+    message TDictLogicalType
+    {
+        optional TLogicalType key = 1;
+        optional TLogicalType value = 2;
+    }
+
+    message TTaggedLogicalType
+    {
+        optional string tag = 1;
+        optional TLogicalType element = 2;
+    }
+
+    message TDecimalLogicalType
+    {
+        optional int32 precision = 1;
+        optional int32 scale = 2;
+    }
+
+    oneof type {
+        int32 simple = 1;
+        TLogicalType optional = 2;
+        TLogicalType list = 3;
+        TStructLogicalType struct_ = 4;
+        TTupleLogicalType tuple = 5;
+        TVariantTupleLogicalType variant_tuple = 6;
+        TVariantStructLogicalType variant_struct = 7;
+        TDictLogicalType dict = 8;
+        TTaggedLogicalType tagged = 9;
+        TDecimalLogicalType decimal = 10;
+    }
+}
+
+message TColumnSchema
+{
+    required string name = 1;
+    optional string stable_name = 12;
+
+    // `type', `simple_logical_type` `logical_type' describe type of the column.
+    //
+    // `type' contains value of enumeration NTableClient::EValueType and represents physical type.
+    required int32 type = 2;
+
+    // `simple_logical_type' contains value of enumeration NTableClient::ESimpleLogicalValueType.
+    // It describes logical type and was used before introduction of complex logical types.
+    // We might miss it for very old chunks.
+    optional int32 simple_logical_type = 8;
+    optional bool required = 9 [default = false];
+
+    // `logical_type` contains description of logical type that might be complex
+    optional TLogicalType logical_type = 10;
+
+    optional string lock = 3;
+    optional string expression = 4;
+    optional string aggregate = 5;
+    optional int32 sort_order = 6;
+    optional string group = 7;
+    optional int64 max_inline_hunk_size = 11;
+}
+
+message TDeletedColumn
+{
+    required string stable_name = 1;
+}
+
+message TTableSchemaExt
+{
+    repeated TColumnSchema columns = 1;
+    optional bool strict = 2 [default = true];
+    optional bool unique_keys = 3 [default = false];
+    optional int32 schema_modification = 4 [default = 0]; // ETableSchemaModification
+    repeated TDeletedColumn deleted_columns = 5;
+}
+
+message TSchemaDictionary
+{
+    repeated TColumnSchema columns = 1;
+    repeated TDeletedColumn deleted_columns = 3;
+
+    message TTableSchemaInternal
+    {
+        repeated int32 columns = 1;
+        optional bool strict = 2 [default = true];
+        optional bool unique_keys = 3 [default = false];
+        repeated int32 deleted_columns = 4;
+    }
+
+    repeated TTableSchemaInternal tables = 2;
+}
+
+message TColumnNameFilter
+{
+    repeated string admitted_names = 1;
+}
+
+message TColumnFilterDictionary
+{
+    repeated TColumnNameFilter column_filters = 1;
+}
+
+message TNameTableExt
+{
+    repeated string names = 1;
+}
+
+message TDataBlockMeta
+{
+    required int32 row_count = 1;
+    required int64 uncompressed_size = 2;
+    required int64 chunk_row_count = 3;
+
+    required int32 block_index = 7;
+
+    optional int32 partition_index = 8 [default = -1];
+    optional bytes last_key = 9;
+
+    extensions 100 to max;
+}
+
+message TSimpleVersionedBlockMeta
+{
+    extend TDataBlockMeta
+    {
+        optional TSimpleVersionedBlockMeta block_meta_ext = 100;
+    }
+
+    required int32 value_count = 1;
+    required int32 timestamp_count = 2;
+}
+
+message TDataBlockMetaExt
+{
+    repeated TDataBlockMeta data_blocks = 1;
+
+    reserved 2;
+}
+
+message THashTableChunkIndexSystemBlockMeta
+{
+    extend TSystemBlockMeta
+    {
+        optional THashTableChunkIndexSystemBlockMeta hash_table_chunk_index_system_block_meta_ext = 100;
+    }
+
+    optional uint64 seed = 1;
+    optional int32 slot_count = 2;
+
+    optional bytes last_key = 3;
+}
+
+message TXorFilterSystemBlockMeta
+{
+    extend TSystemBlockMeta
+    {
+        optional TXorFilterSystemBlockMeta xor_filter_system_block_meta_ext = 101;
+    }
+
+    optional bytes last_key = 1;
+}
+
+message TSystemBlockMeta
+{
+    extensions 100 to 199;
+}
+
+message TSystemBlockMetaExt
+{
+    repeated TSystemBlockMeta system_blocks = 1;
+}
+
+// Chunk meta extension.
+message TBoundaryKeysExt
+{
+    required bytes min = 1;
+    required bytes max = 2;
+}
+
+message TSamplesExt
+{
+    repeated bytes entries = 1;
+    repeated int32 weights = 2;
+}
+
+message TPartitionsExt
+{
+    repeated int64 row_counts = 1;
+    repeated int64 uncompressed_data_sizes = 2;
+}
+
+message TKeyColumnsExt
+{
+    repeated string names = 1;
+}
+
+message TSortColumnsExt
+{
+    repeated string names = 1;
+    repeated int32 sort_orders = 2;
+}
+
+message TColumnMetaExt
+{
+    repeated NTableChunkFormat.NProto.TColumnMeta columns = 1;
+}
+
+message TColumnarStatisticsExt
+{
+    repeated int64 column_data_weights = 1;
+    // Total weight of all write and delete timestamps.
+    optional int64 timestamp_total_weight = 2;
+
+    // This field is reserved for consistency with TColumnarStatistics message. It has never been used.
+    reserved 3;
+
+    // Per-column approximate minimum values. For more information check comments in NYT::NTableClient::TColumnarStatistics.
+    optional bytes column_min_values = 4;
+    // Per-column approximate maximum values. For more information check comments in NYT::NTableClient::TColumnarStatistics.
+    optional bytes column_max_values = 5;
+    // Number of non-null values in each column.
+    repeated int64 column_non_null_value_counts = 6;
+
+    // Total number of rows in a chunk.
+    optional int64 chunk_row_count = 7;
+    // This field is reserved for consistency with TColumnarStatistics message. It has never been used.
+    reserved 8;
+}
+
+message TColumnRenameDescriptor
+{
+    required string original_name = 1;
+    required string new_name = 2;
+}
+
+message THeavyColumnStatisticsExt
+{
+    required int32 version = 1;
+
+    // NB(gritukan): fixed32 is used instead of uint32 here intentionally.
+    // It makes weights of two equal chunks equal and more space-efficient on average.
+    optional fixed32 salt = 2;
+
+    optional int64 data_weight_unit = 3;
+
+    repeated fixed32 column_name_hashes = 4;
+
+    optional bytes column_data_weights = 5;
+}
+
+message THunkChunkRef
+{
+    required NYT.NProto.TGuid chunk_id = 1;
+    optional int64 hunk_count = 2;
+    optional int64 total_hunk_length = 3;
+    optional int32 erasure_codec = 4; // NErasure::ECodec
+}
+
+message THunkChunkRefsExt
+{
+    repeated THunkChunkRef refs = 1;
+}
+
+// Bits of hunk chunk metas that are stored into meta of the chunk
+// referencing them. This extension is not stored at master however
+// try to keep it small.
+message THunkChunkMeta
+{
+    required NYT.NProto.TGuid chunk_id = 1;
+
+    // NB: Block sizes equal zero for regular chunks. Also,
+    // block sizes may be equal zero for blocks without relevant hunks.
+    repeated int64 block_sizes = 2;
+}
+
+message THunkChunkMetasExt
+{
+    repeated THunkChunkMeta metas = 1;
+}
+
+message THunkChunkMiscExt
+{
+    optional int64 hunk_count = 1;
+    optional int64 total_hunk_length = 2;
+}
+
+message TVersionedRowDigestExt
+{
+    repeated int64 timestamp_count_log_histogram = 1;
+    repeated uint64 earliest_nth_timestamp = 2;
+    optional bytes last_timestamp_digest = 3;
+    optional bytes all_but_last_timestamp_digest = 4;
+}
+
+////////////////////////////////////////////////////////////////////////////////

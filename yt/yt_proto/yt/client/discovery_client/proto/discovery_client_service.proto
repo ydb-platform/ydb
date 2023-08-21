@@ -1,0 +1,60 @@
+package NYT.NDiscoveryClient.NProto;
+
+import "yt_proto/yt/core/ytree/proto/attributes.proto";
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TMemberInfo
+{
+    required string id = 1;
+    required int64 priority = 2;
+    required int64 revision = 3;
+    optional NYT.NYTree.NProto.TAttributeDictionary attributes = 4;
+}
+
+message TGroupMeta
+{
+    required int32 member_count = 1;
+}
+
+message TListMembersOptions
+{
+    required int32 limit = 1;
+    repeated string attribute_keys = 2;
+}
+
+message TReqListMembers
+{
+    required string group_id = 1;
+    required TListMembersOptions options = 2;
+}
+
+message TRspListMembers
+{
+    repeated TMemberInfo members = 1;
+}
+
+message TReqGetGroupMeta
+{
+    required string group_id = 1;
+}
+
+message TRspGetGroupMeta
+{
+    required TGroupMeta meta = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqHeartbeat
+{
+    required string group_id = 1;
+    required TMemberInfo member_info = 2;
+    required int64 lease_timeout = 3;
+}
+
+message TRspHeartbeat
+{ }
+
+////////////////////////////////////////////////////////////////////////////////
+

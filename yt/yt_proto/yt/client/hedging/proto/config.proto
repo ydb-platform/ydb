@@ -1,0 +1,75 @@
+package NYT.NClient.NHedging.NRpc;
+
+import "yt_proto/yt/core/yson/proto/protobuf_interop.proto";
+
+option (NYT.NYson.NProto.derive_underscore_case_names) = true;
+
+enum ECompressionCodec {
+    None = 0;
+    Lz4 = 1;
+};
+
+// Connection options.
+message TConfig
+{
+    optional string ClusterName = 1;
+    optional string ProxyRole = 2;
+    optional uint32 ChannelPoolSize = 3;
+    optional uint32 ChannelPoolRebalanceIntervalSeconds = 4;
+
+    // All timeouts in milliseconds.
+    optional uint32 DefaultTransactionTimeout = 5;
+    optional uint32 DefaultSelectRowsTimeout = 6;
+    optional uint32 DefaultLookupRowsTimeout = 7;
+    optional uint32 DefaultTotalStreamingTimeout = 8;
+    optional uint32 DefaultStreamingStallTimeout = 9;
+    optional uint32 DefaultPingPeriod = 10;
+    optional uint32 ModifyRowsBatchCapacity = 11;
+
+    optional ECompressionCodec ResponseCodec = 12 [default = None];
+
+    optional bool EnableRetries = 13;
+    optional uint32 RetryBackoffTime = 14;
+    optional uint32 RetryAttempts = 15;
+    optional uint32 RetryTimeout = 16;
+};
+
+message TClustersConfig
+{
+    // In DefaultConfig and ClusterConfigs field .ClusterName is ignored
+    // and field .ProxyRole can be overwritten with explicitly provided in cluster url one.
+
+    // DefaultConfig is used for clusters not mentioned in ClusterConfigs.
+    optional TConfig DefaultConfig = 1;
+    // Per-cluster configs.
+    map<string, TConfig> ClusterConfigs = 2 [
+        (NYT.NYson.NProto.yson_map) = true
+    ];
+};
+
+message THedgingClientConfig
+{
+    // All timeouts also in milliseconds.
+    message TClientOptions {
+        optional TConfig ClientConfig = 1;
+        optional uint32 InitialPenalty = 2;
+    };
+
+    repeated TClientOptions Clients = 1;
+    optional uint32 BanPenalty = 2 [default = 1];  // The penalty increment during ban.
+    optional uint32 BanDuration = 3 [default = 50]; // How long need to ban cllent after error.
+    map<string, string> Tags = 4 [
+        (NYT.NYson.NProto.yson_map) = true
+    ];  // Tags for profiling.
+}
+
+message TReplicationLagPenaltyProviderConfig
+{
+    repeated string ReplicaClusters = 1; // Clusters that need checks for replication lag.
+    optional string TablePath = 2; // Table that needs checks for replication lag.
+    optional uint32 LagPenalty = 3 [default = 10]; // penalty in milliseconds, same as BanPenalty in THedgingClientConfig.
+    optional uint32 MaxTabletLag = 4 [default = 300]; // Tablet is considered "lagged" if CurrentTimestamp - TabletLastReplicationTimestamp >= MaxTabletLag (in seconds).
+    optional float MaxTabletsWithLagFraction = 5 [default = 0.05]; // Real value from 0.0 to 1.0. Replica cluster recieves LagPenalty if NumberOfTabletsWithLag >= MaxTabletsWithLagFraction * TotalNumberOfTablets.
+    optional uint32 CheckPeriod = 6 [default = 60]; // Replication lag check period (in seconds).
+    optional bool ClearPenaltiesOnErrors = 7 [default = false]; // In case of any erros from master client - clear all penalties.
+}

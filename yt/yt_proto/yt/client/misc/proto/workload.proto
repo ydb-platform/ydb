@@ -1,0 +1,23 @@
+package NYT.NProto;
+
+import "yt_proto/yt/core/rpc/proto/rpc.proto";
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TWorkloadDescriptor
+{
+    required int32 category = 1; // EWorkloadCategory
+    required int32 band = 2;
+    optional int64 instant = 3;
+    repeated string annotations = 4;
+}
+
+message TWorkloadDescriptorExt
+{
+    extend NRpc.NProto.TRequestHeader
+    {
+        optional TWorkloadDescriptor workload_descriptor = 114;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////

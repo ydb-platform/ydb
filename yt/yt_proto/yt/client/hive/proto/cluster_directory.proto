@@ -1,0 +1,18 @@
+package NYT.NHiveClient.NProto;
+
+option go_package = "a.yandex-team.ru/yt/go/proto/client/hive";
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TClusterDirectory
+{
+    message TItem
+    {
+        required string name = 1;
+        required bytes config = 2;
+    }
+
+    repeated TItem items = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////

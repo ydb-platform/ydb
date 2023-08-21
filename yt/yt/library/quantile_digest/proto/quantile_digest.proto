@@ -1,0 +1,20 @@
+package NYT.NProto;
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TQuantileDigest
+{
+    extensions 100 to max;
+};
+
+message TTDigest
+{
+    extend TQuantileDigest
+    {
+        optional TTDigest t_digest = 100;
+    }
+
+    optional bytes data = 1;
+};
+
+////////////////////////////////////////////////////////////////////////////////

@@ -1,0 +1,20 @@
+#pragma once
+
+#include <yt/yt/core/misc/public.h>
+
+namespace NYT::NQueryClient {
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NProto {
+
+class TQueryStatistics;
+
+} // namespace NProto
+
+struct TQueryStatistics;
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NQueryClient
+

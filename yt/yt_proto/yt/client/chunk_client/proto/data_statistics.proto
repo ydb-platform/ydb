@@ -1,0 +1,23 @@
+package NYT.NChunkClient.NProto;
+
+option go_package = "a.yandex-team.ru/yt/go/proto/client/chunk_client";
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TDataStatistics
+{
+    optional int64 uncompressed_data_size = 1 [default = 0];
+    optional int64 compressed_data_size = 2 [default = 0];
+    optional int64 row_count = 3 [default = 0];
+    optional int64 chunk_count = 4 [default = 0];
+    optional int64 regular_disk_space = 6 [default = 0];
+    optional int64 erasure_disk_space = 7 [default = 0];
+
+    // For backward compatibility this can be -1 which means "invalid value".
+    optional int64 data_weight = 8 [default = 0];
+
+    optional int64 unmerged_row_count = 9 [default = 0];
+    optional int64 unmerged_data_weight = 10 [default = 0];
+}
+
+////////////////////////////////////////////////////////////////////////////////

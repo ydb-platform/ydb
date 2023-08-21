@@ -1,0 +1,243 @@
+package NYT.NNodeTrackerClient.NProto;
+
+import "yt_proto/yt/core/misc/proto/guid.proto";
+import "yt_proto/yt/core/misc/proto/error.proto";
+
+////////////////////////////////////////////////////////////////////////////////
+
+// TODO(gritukan): Move it to TReqFullChunkHeartbeat after switching to new heartbeats.
+message TMediumChunkStatistics
+{
+    required int32 medium_index = 1;
+    required int32 chunk_count = 2;
+}
+
+message TIOStatistics
+{
+    optional int64 filesystem_read_rate = 1;
+    optional int64 filesystem_write_rate = 2;
+
+    optional int64 disk_read_rate = 3;
+    optional int64 disk_write_rate = 4;
+
+    optional int64 disk_read_capacity = 5;
+    optional int64 disk_write_capacity = 6;
+}
+
+// Describes the current state of a chunk location.
+message TChunkLocationStatistics
+{
+    optional NYT.NProto.TGuid location_uuid = 12;
+    optional string disk_family = 13 [default = "UNKNOWN"];
+    required int32 medium_index = 7;
+    required int64 available_space = 1;
+    required int64 used_space = 2;
+    required int64 low_watermark_space = 8;
+    required int32 chunk_count = 3;
+    required int32 session_count = 4;
+    required bool enabled = 5;
+    required bool full = 6;
+
+    optional bool throttling_reads = 9 [default = false];
+    optional bool throttling_writes = 10 [default = false];
+    optional bool sick = 11 [default = false];
+
+    optional TIOStatistics io_statistics = 14;
+}
+
+// Describes the current state of a slot location.
+message TSlotLocationStatistics
+{
+    required int32 medium_index = 1;
+    optional int64 available_space = 2;
+    optional int64 used_space = 3;
+    repeated int64 slot_space_usages = 4;
+
+    //! If slot location is disabled, this error contains the reason.
+    optional NYT.NProto.TError error = 5;
+}
+
+// Provides detailed information on memory consumption.
+message TMemoryStatistics
+{
+    message TCategory
+    {
+        required int32 type = 1; // EMemoryCategory
+        required int64 used = 2;
+        optional int64 limit = 3;
+    }
+
+    required int64 total_limit = 1;
+    required int64 total_used = 2;
+    repeated TCategory categories = 3;
+}
+
+// Provides detailed information on cpu distribution.
+message TCpuStatistics
+{
+    required double total_used = 1;
+    optional double total_limit = 2;
+    optional double total_guarantee = 6;
+    required double tablet_slots = 3;
+    required double dedicated = 4;
+    required double jobs = 5;
+}
+
+// Describes the current state of a storage medium.
+message TMediumStatistics
+{
+    required int32 medium_index = 1;
+    required double io_weight = 3;
+}
+
+message TNetworkStatistics
+{
+    required string network = 1;
+    required bool throttling_reads = 2 [default = false];
+}
+
+// Describes the current state of the whole node.
+message TNodeStatistics
+{
+    required int64 total_available_space = 1;
+    required int64 total_used_space = 2;
+    required int32 total_stored_chunk_count = 3;
+    required int32 total_cached_chunk_count = 16;
+    required int32 total_user_session_count = 4;
+    required int32 total_replication_session_count = 7;
+    required int32 total_repair_session_count = 8;
+    required int64 total_low_watermark_space = 14;
+    required bool full = 5;
+    repeated TChunkLocationStatistics chunk_locations = 6;
+    required int32 available_tablet_slots = 11;
+    required int32 used_tablet_slots = 12;
+    required TMemoryStatistics memory = 15;
+    repeated TMediumStatistics media = 17;
+    repeated TNetworkStatistics network = 18;
+    repeated TSlotLocationStatistics slot_locations = 19;
+    optional TCpuStatistics cpu = 20;
+}
+
+// Measures limits and utilization of various resources.
+message TNodeResources
+{
+    optional int32 user_slots = 1;
+    optional double cpu = 2;
+    optional int64 user_memory = 3;
+    optional int32 network = 4;
+    optional int32 replication_slots = 5;
+    optional int32 removal_slots = 6;
+    optional int32 repair_slots = 7;
+    optional int32 seal_slots = 8;
+    optional int32 merge_slots = 13;
+    optional int32 autotomy_slots = 15;
+    optional int32 reincarnation_slots = 17;
+    optional int64 replication_data_size = 9;
+    optional int64 repair_data_size = 10;
+    optional int64 merge_data_size = 14;
+    optional int64 system_memory = 11;
+    optional int32 gpu = 12;
+    optional double vcpu = 16;
+}
+
+message TDiskLocationResources
+{
+    required int64 usage = 1;
+    required int64 limit = 2;
+    optional int32 medium_index = 3;
+}
+
+message TDiskResources
+{
+    repeated TDiskLocationResources disk_location_resources = 1;
+    // Default medium that should be used for jobs without specified disk requests.
+    optional int32 default_medium_index = 2;
+}
+
+// Limits overrides pushed from master to node.
+message TNodeResourceLimitsOverrides
+{
+    optional double cpu = 1;
+    optional int32 network = 2;
+    optional int32 replication_slots = 3;
+    optional int64 replication_data_size = 4;
+    optional int64 merge_data_size = 13;
+    optional int32 removal_slots = 5;
+    optional int32 repair_slots = 6;
+    optional int64 repair_data_size = 7;
+    optional int32 seal_slots = 8;
+    optional int32 merge_slots = 12;
+    optional int32 autotomy_slots = 14;
+    optional int32 reincarnation_slots = 15;
+    optional int64 user_memory = 9;
+    optional int64 system_memory = 10;
+    optional int32 gpu = 11;
+}
+
+// A collection of network name to address mappings.
+message TAddressMap
+{
+    message TAddressEntry
+    {
+        required string network = 1;
+        required string address = 2;
+    }
+
+    repeated TAddressEntry entries = 3;
+}
+
+message TNodeAddressMap
+{
+    message TAddressEntry
+    {
+        required int32 address_type = 1;
+        required TAddressMap addresses = 2;
+    }
+
+    repeated TAddressEntry entries = 3;
+}
+
+message TNodeDescriptor
+{
+    required TAddressMap addresses = 1;
+    optional string host = 5;
+    optional string rack = 2;
+    optional string data_center = 3;
+    repeated string tags = 4;
+    optional int64 last_seen_time = 6;
+}
+
+message TClusterNodeStatistics
+{
+    required TMemoryStatistics memory = 1;
+    repeated TNetworkStatistics network = 2;
+    optional TCpuStatistics cpu = 3;
+}
+
+message TDataNodeStatistics
+{
+    required int64 total_available_space = 1;
+    required int64 total_used_space = 2;
+    required int32 total_stored_chunk_count = 3;
+    required int32 total_cached_chunk_count = 4;
+    required int32 total_user_session_count = 5;
+    required int32 total_replication_session_count = 6;
+    required int32 total_repair_session_count = 7;
+    required int64 total_low_watermark_space = 8;
+    required bool full = 9;
+    repeated TChunkLocationStatistics chunk_locations = 10;
+    repeated TMediumStatistics media = 11;
+}
+
+message TExecNodeStatistics
+{
+    repeated TSlotLocationStatistics slot_locations = 1;
+}
+
+message TCellarNodeStatistics
+{
+    required int32 available_cell_slots = 1;
+    required int32 used_cell_slots = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////

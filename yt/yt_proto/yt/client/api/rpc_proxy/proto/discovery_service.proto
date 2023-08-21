@@ -1,0 +1,32 @@
+package NYT.NApi.NRpcProxy.NProto;
+
+option java_package = "tech.ytsaurus";
+option java_outer_classname = "DiscoveryProtos";
+option java_multiple_files = true;
+
+option go_package = "a.yandex-team.ru/yt/go/proto/client/api/rpc_proxy";
+
+//------------------------------------------------------------------------------
+
+enum EAddressType
+{
+    AT_INTERNAL_RPC = 0;
+    AT_MONITORING_HTTP = 1;
+    AT_TVM_ONLY_INTERNAL_RPC = 2;
+}
+
+message TReqDiscoverProxies
+{
+    optional string role = 1;
+    optional EAddressType address_type = 2 [default = AT_INTERNAL_RPC];
+    optional string network_name = 3;
+}
+
+message TRspDiscoverProxies
+{
+    repeated string addresses = 1;
+}
+
+//------------------------------------------------------------------------------
+
+////////////////////////////////////////////////////////////////////////////////

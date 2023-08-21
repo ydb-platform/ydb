@@ -8,6 +8,7 @@ RECURSE(
     s3
     solomon
     ydb
+    yt
     function
     generic
 )

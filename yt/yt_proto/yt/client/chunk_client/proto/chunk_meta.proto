@@ -1,0 +1,166 @@
+package NYT.NChunkClient.NProto;
+
+import "yt_proto/yt/core/misc/proto/protobuf_helpers.proto";
+
+option go_package = "a.yandex-team.ru/yt/go/proto/client/chunk_client";
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TBlockInfo
+{
+    required int64 offset = 1;
+    required int64 size = 2;
+    required uint64 checksum = 3;
+}
+
+// Chunk meta extension.
+message TBlocksExt
+{
+    // Addresses both data and system blocks.
+    repeated TBlockInfo blocks = 1;
+
+    // Whether chunk was written with `sync_on_close` option.
+    optional bool sync_on_close = 2 [default = true];
+}
+
+// Chunk meta extension.
+message TMiscExt
+{
+    // Total size of uncompressed blocks.
+    optional int64 uncompressed_data_size = 1 [default = 0];
+
+    // Total size of blocks with data sent to holder.
+    optional int64 compressed_data_size = 5 [default = 0];
+
+    // Total size of (key column names + values + 1) in each row.
+    // Must be greater than zero.
+    optional int64 data_weight = 7 [default = 1];
+
+    // Size of chunk meta (without TMiscExt), obtained via ByteSize.
+    optional int64 meta_size = 6 [default = 0];
+
+    // Number of rows in this chunk (tables and journals only).
+    optional int64 row_count = 2 [default = 0];
+
+    // ECompressionCodec
+    optional int32 compression_codec = 3 [default = 0];
+
+    // Indicates if the chunk contains a sorted rowset (tables only).
+    optional bool sorted = 4 [default = false];
+
+    // Number of key-value pairs across all rows in the chunk.
+    optional int64 value_count = 8 [default = 0];
+
+    // Uncompressed size of the largest data block.
+    optional int64 max_data_block_size = 9 [default = 0];
+
+    // Min/max timestamps for versioned table chunks.
+    optional uint64 min_timestamp = 10 [default = 0];
+    optional uint64 max_timestamp = 11 [default = 0];
+
+    // Is the chunk sealed (journals only)?
+    optional bool sealed = 13;
+
+    // For overlayed journal chunks, contains the journal-wide index of the first row.
+    optional int64 first_overlayed_row_index = 19 [default = 0];
+
+    // Does this chunk belong to Eden (dynamic tables only)?
+    optional bool eden = 14 [default = false];
+
+    // EErasureCodec
+    optional int32 erasure_codec = 15;
+
+    // Indicates if the chunk contains a sorted rowset with unique keys (tables only).
+    optional bool unique_keys = 16 [default = false];
+
+    // Chunk creation time.
+    optional uint64 creation_time = 17 [default = 0];
+
+    // When set, data nodes allow downloading this chunk by HTTP.
+    optional bool shared_to_skynet = 18 [default = false];
+
+    // System blocks contain internal information (e.g. chunk index).
+    optional int32 system_block_count = 21;
+
+    // Is it a striped erasure chunk?
+    optional bool striped_erasure = 22;
+
+    // If present, is used by corresponding block reader to distinguish between block versions.
+    optional int32 block_format_version = 23;
+
+    reserved 20;
+}
+
+message TPartInfo
+{
+    // Chunk-wide indexes of starting blocks of the stripes of a part.
+    repeated int32 first_block_index_per_stripe = 1;
+
+    // Block sizes.
+    repeated int64 block_sizes = 2;
+}
+
+// Chunk meta extension.
+message TErasurePlacementExt
+{
+    repeated TPartInfo part_infos = 1;
+    required int32 parity_part_count = 2;
+    required int64 parity_block_size = 4;
+
+    // Parity block count for each stripe of a part.
+    repeated int32 parity_block_count_per_stripe = 3;
+
+    // Last parity block size for each stripe of a part.
+    repeated int64 parity_last_block_size_per_stripe = 5;
+
+    // We cannot store checksums in TPartInfo,
+    // since part infos are present only for non-empty data parts.
+    repeated fixed64 part_checksums = 6;
+
+    repeated fixed64 block_checksums = 7;
+}
+
+// Chunk meta extension.
+message TStripedErasurePlacementExt
+{
+    message TPartInfo
+    {
+        // Sizes of segments in given part.
+        repeated int64 segment_sizes = 1;
+
+        // Checksums of segments in given part.
+        repeated fixed64 segment_checksums = 2;
+    }
+    repeated TPartInfo part_infos = 1;
+
+    // Numbers of blocks in segments.
+    repeated int32 segment_block_counts = 2;
+
+    // Sizes of the original blocks.
+    repeated int64 block_sizes = 3;
+
+    // Some of the input blocks can be padded to fit into the segment.
+    repeated int64 block_padding_sizes = 5;
+
+    // Checksums of the original blocks.
+    repeated fixed64 block_checksums = 4;
+}
+
+// TChunkMeta is stored in *.meta files on data nodes
+// and passed around (possibly with a different extension subset).
+message TChunkMeta
+{
+    // The type (EChunkType) of data stored in this chunk (e.g. tabular, file blob etc).
+    required int32 type = 1;
+
+    // Format (EChunkFormat) validated by reader.
+    required int32 format = 3;
+
+    // EChunkFeatures bitmask of the features that are used in this chunk.
+    // Chunk reader validates that it supports all the chunk's features.
+    optional uint64 features = 4;
+
+    required NYT.NProto.TExtensionSet extensions = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////

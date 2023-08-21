@@ -1,0 +1,90 @@
+package NYT.NChunkClient.NProto;
+
+import "yt_proto/yt/core/misc/proto/guid.proto";
+import "yt_proto/yt/client/chunk_client/proto/read_limit.proto";
+import "yt_proto/yt/client/chunk_client/proto/chunk_meta.proto";
+
+option go_package = "a.yandex-team.ru/yt/go/proto/client/chunk_client";
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Describes a portion of table chunk.
+message TChunkSpec
+{
+    // COMPAT(babenko)
+    // The way these fields are used is quite chaotic. Possible encodings are as follows:
+    // 1) chunk_id is the actual chunk id, others are not used (for static tables only);
+    // 2) chunk_id is a tablet id, cell_id is the id of the cell hosting this tablet (for queries);
+    // 3) chunk_id is a dynamic store id, tablet_id is the id of the tablet containing this store, and
+    //    cell_id is the id of the cell hosting this tablet (for dynamic store reads).
+    // In all cases, cell_id could be missing (for legacy clients).
+    required NYT.NProto.TGuid chunk_id = 1;
+    optional NYT.NProto.TGuid tablet_id = 20;
+    optional NYT.NProto.TGuid cell_id = 22;
+
+    // Lower boundary, inclusive.
+    optional TReadLimit lower_limit = 2;
+
+    // Upper boundary, exclusive.
+    optional TReadLimit upper_limit = 3;
+
+    // COMPAT(babenko)
+    // Initial seed replicas. The reader may ask the master for additional ones.
+    // No medium indices.
+    repeated fixed32 legacy_replicas = 4;
+
+    // COMPAT(babenko)
+    // Initial seeds replicas. The reader may ask the master for additional ones.
+    repeated fixed64 replicas = 25;
+
+    optional int32 table_index = 7 [default = 0];
+
+    optional int32 erasure_codec = 9 [default = 0];
+
+    optional int64 table_row_index = 10 [default = 0];
+
+    // Chunk meta can be omitted for intermediate chunks.
+    optional TChunkMeta chunk_meta = 11;
+
+    // Only makes sense as a part of data split.
+    optional uint64 timestamp = 12;
+
+    // Mapping to ranges.
+    optional int32 range_index = 13;
+
+    // Overrides the corresponding values in TMiscExt.
+    optional int64 row_count_override = 14;
+    optional int64 data_weight_override = 15;
+
+    // Tag of the input data slice this chunk spec belongs to (if any).
+    // It helps us restore the correspondence between data slices that
+    // form the job input and the unread data slices returned as a
+    // job interruption result.
+    optional int64 data_slice_tag = 16;
+
+    // Global chunk index for the operation. Helps to identify chunk_spec
+    // if fetch returns the same chunk with different limits
+    // (e.g. the chunk is shared between dynamic table tablets).
+    optional int64 chunk_index = 17;
+
+    // If set, all values should be treated as having this timestamp, regardless of
+    // what is written at chunk meta or versioned values.
+    // May be set by some chunk view.
+    optional uint64 override_timestamp = 18;
+
+    // Denotes that all values with timestamps strictly greater than this timestamp
+    // should not be read. May be set by some chunk view.
+    optional uint64 max_clip_timestamp = 23;
+
+    optional int32 tablet_index = 19;
+
+    // True if row_index upper/lower_limit is absolute (table-wise or tablet-wise)
+    // rather than relative (chunk-wise).
+    optional bool row_index_is_absolute = 21 [default = false];
+
+    optional bool striped_erasure = 24;
+
+    reserved 5, 6, 8;
+}
+
+////////////////////////////////////////////////////////////////////////////////

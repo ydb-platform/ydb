@@ -1,0 +1,73 @@
+package NYT.NChaosClient.NProto;
+
+option go_package = "a.yandex-team.ru/yt/go/proto/client/chaos_client";
+
+import "yt_proto/yt/core/misc/proto/guid.proto";
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReplicationProgress
+{
+    message TSegment
+    {
+        required bytes lower_key = 1;
+        required uint64 timestamp = 2;
+    }
+
+    repeated TSegment segments = 1;
+    required bytes upper_key = 2;
+}
+
+message TReplicaHistoryItem
+{
+    required uint64 era = 1;
+    required uint64 timestamp = 2;
+    required int32 mode = 3;
+    required int32 state = 4;
+}
+
+message TReplicaInfo
+{
+    required string cluster_name = 1;
+    required string replica_path = 2;
+    required int32 content_type = 3; // NTabletClient::ETableReplicaContentType
+    required int32 mode = 4; // NTabletClient::ETableReplicaMode
+    required int32 state = 5; // NTabletClient::ETableReplicaState
+    optional TReplicationProgress progress = 6;
+    repeated TReplicaHistoryItem history = 7;
+    optional bool enable_replicated_table_tracker = 8;
+}
+
+message TReplicationCard
+{
+    message TReplicaEntry
+    {
+        required NYT.NProto.TGuid id = 1;
+        required TReplicaInfo info = 2;
+    }
+    repeated TReplicaEntry replicas = 1;
+    repeated NYT.NProto.TGuid coordinator_cell_ids = 2;
+    required uint64 era = 3;
+    optional NYT.NProto.TGuid table_id = 4;
+    optional string table_path = 5;
+    optional string table_cluster_name = 6;
+    optional uint64 current_timestamp = 7;
+    optional bytes replicated_table_options = 8; // NTabletClient::TReplicatedTableOptions
+    optional NYT.NProto.TGuid replication_card_collocation_id = 9;
+}
+
+message TUpstreamReplicationCard
+{
+    required NYT.NProto.TGuid chaos_cell_id = 1; // NObjectClient::TCellId
+    required NYT.NProto.TGuid replication_card_id = 2; // NChaosClient::TReplicationCardId
+}
+
+message TReplicationCardFetchOptions
+{
+    optional bool include_coordinators = 1;
+    optional bool include_progress = 2;
+    optional bool include_history = 3;
+    optional bool include_replicated_table_options = 4;
+};
+
+////////////////////////////////////////////////////////////////////////////////

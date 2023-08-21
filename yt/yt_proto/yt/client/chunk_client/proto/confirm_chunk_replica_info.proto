@@ -1,0 +1,15 @@
+package NYT.NChunkClient.NProto;
+
+import "yt_proto/yt/core/misc/proto/guid.proto";
+
+option go_package = "a.yandex-team.ru/yt/go/proto/client/chunk_client";
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TConfirmChunkReplicaInfo
+{
+    required fixed64 replica = 1;
+    required NYT.NProto.TGuid location_uuid = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////

@@ -1,0 +1,14 @@
+#include "public.h"
+
+namespace NYT::NJobTrackerClient {
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool IsJobFinished(EJobState state);
+bool IsJobInProgress(EJobState state);
+
+bool IsMasterJobType(EJobType jobType);
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NJobTrackerClient

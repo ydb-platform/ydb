@@ -1,0 +1,19 @@
+package NYT.NCellMasterClient.NProto;
+
+import "yt_proto/yt/core/misc/proto/guid.proto";
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TCellDirectory
+{
+    message TItem
+    {
+        required NYT.NProto.TGuid cell_id = 1;
+        repeated uint32 roles = 2; // EMasterCellRole(s)
+        repeated string addresses = 3;
+    }
+
+    repeated TItem items = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////

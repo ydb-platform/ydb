@@ -1,0 +1,25 @@
+package NYT.NQueryClient.NProto;
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TQueryStatistics
+{
+    required int64 rows_read = 1;
+    optional int64 data_weight_read = 11;
+    required int64 rows_written = 2;
+    required uint64 sync_time = 3;
+    required uint64 async_time = 4;
+    required uint64 execute_time = 5;
+    required uint64 read_time = 6;
+    required uint64 write_time = 7;
+    required uint64 codegen_time = 10;
+    optional uint64 wait_on_ready_event_time = 14 [ default = 0 ];
+
+    required bool incomplete_input = 8;
+    required bool incomplete_output = 9;
+    optional uint64 memory_usage = 13 [ default = 0 ];
+    repeated TQueryStatistics inner_statistics = 12;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+

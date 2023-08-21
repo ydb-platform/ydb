@@ -1,0 +1,77 @@
+package NYT.NTableChunkFormat.NProto;
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TSegmentMeta
+{
+    required int32 version = 1;
+    required int32 type = 2;
+    required int64 row_count = 3;
+    required int32 block_index = 4;
+    required int64 offset = 5;
+    required int64 chunk_row_count = 6;
+    required int64 size = 7;
+
+    extensions 100 to max;
+}
+
+message TColumnMeta
+{
+    repeated TSegmentMeta segments = 1;
+}
+
+message TTimestampSegmentMeta
+{
+    extend TSegmentMeta
+    {
+        optional TTimestampSegmentMeta timestamp_segment_meta = 100;
+    }
+
+    required uint64 min_timestamp = 1;
+
+    required uint32 expected_writes_per_row = 2;
+
+    required uint32 expected_deletes_per_row = 3;
+}
+
+message TIntegerSegmentMeta
+{
+    extend TSegmentMeta
+    {
+        optional TIntegerSegmentMeta integer_segment_meta = 101;
+    }
+
+    required uint64 min_value = 1;
+}
+
+message TStringSegmentMeta
+{
+    extend TSegmentMeta
+    {
+        optional TStringSegmentMeta string_segment_meta = 122;
+    }
+
+    required uint32 expected_length = 1;
+}
+
+message TDenseVersionedSegmentMeta
+{
+    extend TSegmentMeta
+    {
+        optional TDenseVersionedSegmentMeta dense_versioned_segment_meta = 123;
+    }
+
+    required uint32 expected_values_per_row = 1;
+}
+
+message TSchemalessSegmentMeta
+{
+    extend TSegmentMeta
+    {
+        optional TSchemalessSegmentMeta schemaless_segment_meta = 124;
+    }
+
+    required uint32 expected_bytes_per_row = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////

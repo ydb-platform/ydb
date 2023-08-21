@@ -1,0 +1,15 @@
+#pragma once
+
+#include "api_service_proxy.h"
+
+namespace NYT::NApi::NRpcProxy {
+
+////////////////////////////////////////////////////////////////////////////////
+
+IJournalWriterPtr CreateJournalWriter(
+    TApiServiceProxy::TReqWriteJournalPtr request);
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NApi::NRpcProxy
+

@@ -1,0 +1,16 @@
+#pragma once
+
+#include <library/cpp/yt/memory/intrusive_ptr.h>
+#include <library/cpp/yt/memory/ref_counted.h>
+
+namespace NYT {
+
+////////////////////////////////////////////////////////////////////////////////
+
+DECLARE_REFCOUNTED_STRUCT(IQuantileDigest)
+
+DECLARE_REFCOUNTED_CLASS(TTDigestConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT

@@ -1,0 +1,35 @@
+package NYT.NChunkClient.NProto;
+
+option go_package = "a.yandex-team.ru/yt/go/proto/client/chunk_client";
+
+////////////////////////////////////////////////////////////////////////////////
+
+// A boundary can be given by:
+// * row index (for tables and journals only)
+// * chunk index
+// * offset (for files only)
+// * key (for tables only)
+// A boundary is either inclusive or exclusive depending of the context.
+message TReadLimit
+{
+    optional int64 row_index = 1;
+    optional int32 chunk_index = 2;
+    optional int64 offset = 3;
+    optional bytes legacy_key = 4;
+    optional bytes key_bound_prefix = 7;
+    optional bool key_bound_is_inclusive = 8;
+    optional int32 tablet_index = 6;
+
+    // Sometimes keys in read limits are transported in wire format via attachments.
+    // This index indicates the proper key inside attachments' rowset.
+    // Attachment with key bound keyset shares same index.
+    optional int32 key_index = 5;
+}
+
+message TReadRange
+{
+    optional TReadLimit lower_limit = 1;
+    optional TReadLimit upper_limit = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////

@@ -11,6 +11,7 @@ __all__ = [
     "TopicMeteringMode",
     "TopicReader",
     "TopicReaderAsyncIO",
+    "TopicReaderBatch",
     "TopicReaderMessage",
     "TopicReaderSelector",
     "TopicReaderSettings",
@@ -33,7 +34,10 @@ from . import aio, Credentials, _apis, issues
 
 from . import driver
 
-from ._topic_reader.datatypes import PublicMessage as TopicReaderMessage
+from ._topic_reader.datatypes import (
+    PublicBatch as TopicReaderBatch,
+    PublicMessage as TopicReaderMessage,
+)
 
 from ._topic_reader.topic_reader import (
     PublicReaderSettings as TopicReaderSettings,

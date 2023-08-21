@@ -71,20 +71,14 @@ class PartitionSession:
     _ack_waiters: Deque["PartitionSession.CommitAckWaiter"] = field(init=False, default_factory=lambda: deque())
 
     _state_changed: asyncio.Event = field(init=False, default_factory=lambda: asyncio.Event(), compare=False)
-    _loop: Optional[asyncio.AbstractEventLoop] = field(init=False)  # may be None in tests
 
     def __post_init__(self):
         self._next_message_start_commit_offset = self.committed_offset
 
-        try:
-            self._loop = asyncio.get_running_loop()
-        except RuntimeError:
-            self._loop = None
-
     def add_waiter(self, end_offset: int) -> "PartitionSession.CommitAckWaiter":
         self._ensure_not_closed()
 
-        waiter = PartitionSession.CommitAckWaiter(end_offset, self._create_future())
+        waiter = PartitionSession.CommitAckWaiter(end_offset, asyncio.Future())
         if end_offset <= self.committed_offset:
             waiter._finish_ok()
             return waiter
@@ -96,11 +90,6 @@ class PartitionSession:
             bisect.insort(self._ack_waiters, waiter)
 
         return waiter
-
-    def _create_future(self) -> asyncio.Future:
-        if self._loop:
-            return self._loop.create_future()
-        return asyncio.Future()
 
     def ack_notify(self, offset: int):
         self._ensure_not_closed()

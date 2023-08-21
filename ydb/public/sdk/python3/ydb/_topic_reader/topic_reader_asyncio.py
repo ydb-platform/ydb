@@ -88,6 +88,12 @@ class PublicAsyncIOReader:
         if not self._closed:
             self._loop.create_task(self.close(flush=False), name="close reader")
 
+    async def wait_message(self):
+        """
+        Wait at least one message from reader.
+        """
+        await self._reconnector.wait_message()
+
     async def receive_batch(
         self,
     ) -> typing.Union[datatypes.PublicBatch, None]:

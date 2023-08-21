@@ -84,7 +84,7 @@ class TopicReaderSync:
         """
         self._check_closed()
 
-        return self._caller.unsafe_call_with_future(self._async_reader._reconnector.wait_message())
+        return self._caller.unsafe_call_with_future(self._async_reader.wait_message())
 
     def receive_batch(
         self,

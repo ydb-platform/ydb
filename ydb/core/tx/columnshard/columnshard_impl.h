@@ -31,6 +31,7 @@ class TCompactColumnEngineChanges;
 class TInGranuleCompactColumnEngineChanges;
 class TSplitCompactColumnEngineChanges;
 class TInsertColumnEngineChanges;
+class TGeneralCompactColumnEngineChanges;
 }
 
 namespace NKikimr::NColumnShard {
@@ -114,6 +115,7 @@ class TColumnShard
     friend class NOlap::TSplitCompactColumnEngineChanges;
     friend class NOlap::TInsertColumnEngineChanges;
     friend class NOlap::TColumnEngineChanges;
+    friend class NOlap::TGeneralCompactColumnEngineChanges;
 
     friend class TTxController;
 

@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(optimizer)
 get_built_tool_path(
   TOOL_enum_parser_bin
   TOOL_enum_parser_dependency
@@ -20,6 +21,7 @@ target_link_libraries(columnshard-engines-storage PUBLIC
   yutil
   libs-apache-arrow
   ydb-core-protos
+  engines-storage-optimizer
   core-formats-arrow
   tools-enum_parser-enum_serialization_runtime
 )

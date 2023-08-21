@@ -9,6 +9,7 @@ SRCS(
     cleanup.cpp
     mark_granules.cpp
     with_appended.cpp
+    general_compaction.cpp
 )
 
 PEERDIR(

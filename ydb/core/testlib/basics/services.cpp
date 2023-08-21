@@ -28,6 +28,7 @@
 #include <ydb/core/tx/scheme_board/cache.h>
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
+#include <ydb/core/statistics/stat_service.h>
 
 #include <util/system/env.h>
 
@@ -310,6 +311,13 @@ namespace NPDisk {
                 nodeIndex);
     }
 
+    void SetupStatService(TTestActorRuntime& runtime, ui32 nodeIndex)
+    {
+        runtime.AddLocalService(NStat::MakeStatServiceID(),
+                TActorSetupCmd(NStat::CreateStatService().Release(), TMailboxType::HTSwap, 0),
+                nodeIndex);
+    }
+
     void SetupBasicServices(TTestActorRuntime& runtime, TAppPrepare& app, bool mock,
                             NFake::INode* factory, NFake::TStorage storage, NFake::TCaches caches, bool forceFollowers)
     {
@@ -343,6 +351,7 @@ namespace NPDisk {
             SetupBlobCache(runtime, nodeIndex);
             SetupSysViewService(runtime, nodeIndex);
             SetupQuoterService(runtime, nodeIndex);
+            SetupStatService(runtime, nodeIndex);
 
             if (factory)
                 factory->Birth(nodeIndex);

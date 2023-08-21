@@ -23,11 +23,11 @@ import sys
 import platform
 import json
 
-URLS = ['https://proxy.sandbox.yandex-team.ru/4910542326', 'https://storage.yandex-team.ru/get-devtools/1942671/64e25bd1bfaf98ac60ca046793bd2100/by_platform.json']
-MD5 = '64e25bd1bfaf98ac60ca046793bd2100'
+URLS = ['https://proxy.sandbox.yandex-team.ru/4948877968', 'https://storage.yandex-team.ru/get-devtools/1775319/a107fdbf0910a68af3f51188bbfeacd8/by_platform.json']
+MD5 = 'a107fdbf0910a68af3f51188bbfeacd8'
 
-URLS3 = ['https://proxy.sandbox.yandex-team.ru/4910548121', 'https://storage.yandex-team.ru/get-devtools/1809005/bb466a0bd1bc53f76e2db2ef0dbbac06/by_platform.json']
-MD53 = 'bb466a0bd1bc53f76e2db2ef0dbbac06'
+URLS3 = ['https://proxy.sandbox.yandex-team.ru/4948881493', 'https://storage.yandex-team.ru/get-devtools/1775059/5cb66edfbb995306c94afa39a59f1dd8/by_platform.json']
+MD53 = '5cb66edfbb995306c94afa39a59f1dd8'
 
 DEFAULT_PY_VER = 2
 

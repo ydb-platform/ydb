@@ -487,7 +487,7 @@ public:
 
     void Remove(const TNodePairRef& toRemove);
 
-    bool Has(TString key);
+    bool Has(TString key) const;
 
     TMappingIterator Remove(const TMappingIterator& toRemove);
 

@@ -42,6 +42,7 @@ public:
         AddHandler(0, &TCoTakeBase::Match, HNDL(BuildTakeOrTakeSkipStage<false>));
         AddHandler(0, &TCoLength::Match, HNDL(RewriteLengthOfStageOutput<false>));
         AddHandler(0, &TCoExtendBase::Match, HNDL(BuildExtendStage));
+        AddHandler(0, &TDqJoin::Match, HNDL(SuppressSortOnJoinInput));
         AddHandler(0, &TDqJoin::Match, HNDL(RewriteRightJoinToLeft));
         AddHandler(0, &TDqJoin::Match, HNDL(RewriteLeftPureJoin<false>));
         AddHandler(0, &TDqJoin::Match, HNDL(BuildJoin<false>));
@@ -234,6 +235,10 @@ protected:
 
     TMaybeNode<TExprBase> RewriteRightJoinToLeft(TExprBase node, TExprContext& ctx) {
         return DqRewriteRightJoinToLeft(node, ctx);
+    }
+
+    TMaybeNode<TExprBase> SuppressSortOnJoinInput(TExprBase node, TExprContext& ctx) {
+        return DqSuppressSortOnJoinInput(node.Cast<TDqJoin>(),ctx);
     }
 
     template <bool IsGlobal>

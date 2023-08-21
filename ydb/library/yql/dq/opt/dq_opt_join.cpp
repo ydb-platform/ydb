@@ -425,6 +425,48 @@ TExprBase DqRewriteEquiJoin(const TExprBase& node, EHashJoinMode mode, TExprCont
     return projection;
 }
 
+TDqJoin DqSuppressSortOnJoinInput(const TDqJoin& join, TExprContext& ctx) {
+    const bool lOrdered = join.LeftInput().Ref().GetConstraint<TSortedConstraintNode>() || join.LeftInput().Ref().GetConstraint<TChoppedConstraintNode>();
+    const bool rOrdered = join.RightInput().Ref().GetConstraint<TSortedConstraintNode>() || join.RightInput().Ref().GetConstraint<TChoppedConstraintNode>();
+
+    if (lOrdered && rOrdered)
+        return Build<TDqJoin>(ctx, join.Pos())
+            .LeftInput<TCoUnordered>()
+                .Input(join.LeftInput())
+                .Build()
+            .RightInput<TCoUnordered>()
+                .Input(join.RightInput())
+                .Build()
+            .LeftLabel(join.RightLabel())
+            .RightLabel(join.LeftLabel())
+            .JoinType(join.JoinType())
+            .JoinKeys(join.JoinKeys())
+            .Done();
+    else if (lOrdered)
+        return Build<TDqJoin>(ctx, join.Pos())
+            .LeftInput<TCoUnordered>()
+                .Input(join.LeftInput())
+                .Build()
+            .RightInput(join.RightInput())
+            .LeftLabel(join.RightLabel())
+            .RightLabel(join.LeftLabel())
+            .JoinType(join.JoinType())
+            .JoinKeys(join.JoinKeys())
+            .Done();
+    else if (rOrdered)
+        return Build<TDqJoin>(ctx, join.Pos())
+            .LeftInput(join.LeftInput())
+            .RightInput<TCoUnordered>()
+                .Input(join.RightInput())
+                .Build()
+            .LeftLabel(join.RightLabel())
+            .RightLabel(join.LeftLabel())
+            .JoinType(join.JoinType())
+            .JoinKeys(join.JoinKeys())
+            .Done();
+    return join;
+}
+
 TExprBase DqRewriteRightJoinToLeft(const TExprBase node, TExprContext& ctx) {
     if (!node.Maybe<TDqJoin>()) {
         return node;

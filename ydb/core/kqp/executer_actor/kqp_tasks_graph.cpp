@@ -854,6 +854,7 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
 
         switch (tableInfo->TableKind) {
             case ETableKind::Unknown:
+            case ETableKind::External:
             case ETableKind::SysView: {
                 protoTaskMeta.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::CELLVEC);
                 break;

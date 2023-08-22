@@ -178,17 +178,16 @@ public:
     // todo: gvit
     // fill this hash set only once on query compilation.
     void FillTables(const NKqpProto::TKqpPhyTx& phyTx) {
+        auto addTable = [&](const NKqpProto::TKqpPhyTableId& table) {
+            NKikimr::TTableId tableId(table.GetOwnerId(), table.GetTableId());
+            auto it = TableVersions.find(tableId);
+            if (it != TableVersions.end()) {
+                Y_ENSURE(it->second == table.GetVersion());
+            } else {
+                TableVersions.emplace(tableId, table.GetVersion());
+            }
+        };
         for (const auto& stage : phyTx.GetStages()) {
-
-            auto addTable = [&](const NKqpProto::TKqpPhyTableId& table) {
-                NKikimr::TTableId tableId(table.GetOwnerId(), table.GetTableId());
-                auto it = TableVersions.find(tableId);
-                if (it != TableVersions.end()) {
-                    Y_ENSURE(it->second == table.GetVersion());
-                } else {
-                    TableVersions.emplace(tableId, table.GetVersion());
-                }
-            };
             for (const auto& tableOp : stage.GetTableOps()) {
                 addTable(tableOp.GetTable());
             }
@@ -207,6 +206,12 @@ public:
                 if (source.GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
                     addTable(source.GetReadRangesSource().GetTable());
                 }
+            }
+        }
+
+        for (const auto& table : phyTx.GetTables()) {
+            if (table.GetKind() == NKqpProto::EKqpPhyTableKind::TABLE_KIND_EXTERNAL) {
+                addTable(table.GetId());
             }
         }
     }

@@ -19,7 +19,8 @@ enum class ETableKind {
     Unknown = 0,
     Datashard,
     SysView,
-    Olap
+    Olap,
+    External
 };
 
 class TKqpTableKeys {
@@ -99,6 +100,9 @@ public:
                 case NKqpProto::TABLE_KIND_SYS_VIEW:
                     TableKind = ETableKind::SysView;
                     break;
+                case NKqpProto::TABLE_KIND_EXTERNAL:
+                    TableKind = ETableKind::External;
+                    return;
                 default:
                     YQL_ENSURE(false, "Unexpected phy table kind: " << (i64) phyTable.GetKind());
             }

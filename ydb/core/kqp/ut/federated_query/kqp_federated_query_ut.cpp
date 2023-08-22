@@ -12,6 +12,7 @@
 
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h>
 
 #include <fmt/format.h>
@@ -311,6 +312,63 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             }
             UNIT_ASSERT(currentRow > 0);
         }
+    }
+
+        Y_UNIT_TEST(ExecuteScriptWithS3ReadNotCached) {
+        using namespace fmt::literals;
+        const TString externalDataSourceName = "/Root/external_data_source";
+        const TString externalTableName = "/Root/test_binding_resolve";
+        const TString bucket = "test_bucket1";
+        const TString object = "test_object";
+
+        CreateBucketWithObject(bucket, object, TEST_CONTENT);
+
+        auto kikimr = DefaultKikimrRunner();
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+
+        auto tc = kikimr.GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        const TString query = fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{location}",
+                AUTH_METHOD="NONE"
+            );
+            CREATE EXTERNAL TABLE `{external_table}` (
+                key Utf8 NOT NULL,
+                value Utf8 NOT NULL
+            ) WITH (
+                DATA_SOURCE="{external_source}",
+                LOCATION="{object}",
+                FORMAT="json_each_row"
+            );)",
+            "external_source"_a = externalDataSourceName,
+            "external_table"_a = externalTableName,
+            "location"_a = GetBucketLocation(bucket),
+            "object"_a = object
+            );
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto settings = TExecuteScriptSettings().StatsMode(Ydb::Query::STATS_MODE_BASIC);
+
+        const TString sql = fmt::format(R"(
+                SELECT * FROM `{external_table}`
+            )", "external_table"_a=externalTableName);
+
+        auto db = kikimr.GetQueryClient();
+        auto scriptExecutionOperation = db.ExecuteScript(sql, settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+        UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+
+        NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr.GetDriver());
+        UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Completed);
+        UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStats.compilation().from_cache(), false);
+
+        scriptExecutionOperation = db.ExecuteScript(sql, settings).ExtractValueSync();
+        readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr.GetDriver());
+        UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Completed);
+        UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStats.compilation().from_cache(), false);
     }
 
     Y_UNIT_TEST(ExecuteScriptWithDataSource) {
@@ -828,6 +886,107 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         UNIT_ASSERT_STRING_CONTAINS(content, "key\tvalue\n"); // tsv header
         UNIT_ASSERT_STRING_CONTAINS(content, "1\ttrololo\n");
         UNIT_ASSERT_STRING_CONTAINS(content, "2\thello world\n");
+    }
+
+    void ExecuteInsertQuery(TQueryClient& client, const TString& writeTableName, const TString&  readTableName, bool expectCached) {
+        using namespace fmt::literals;
+        const TString sql = fmt::format(R"(
+                INSERT INTO `{write_table}`
+                SELECT * FROM `{read_table}`;
+            )",
+            "write_table"_a = writeTableName,
+            "read_table"_a = readTableName);
+        auto settings = TExecuteQuerySettings().StatsMode(EStatsMode::Basic);
+        auto resultFuture = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings);
+        resultFuture.Wait();
+        UNIT_ASSERT_C(resultFuture.GetValueSync().IsSuccess(), resultFuture.GetValueSync().GetIssues().ToString());
+        auto& stats = NYdb::TProtoAccessor::GetProto(*resultFuture.GetValueSync().GetStats());
+        UNIT_ASSERT_EQUAL_C(stats.compilation().from_cache(), expectCached, "expected: "  << expectCached);
+    }
+
+     Y_UNIT_TEST(InsertIntoBucketCaching) {
+        using namespace fmt::literals;
+        const TString writeDataSourceName = "/Root/write_data_source";
+        const TString writeTableName = "/Root/write_binding";
+        const TString writeBucket = "test_bucket_cache";
+        const TString writeObject = "test_object_write/";
+        const TString writeAnotherObject = "test_another_object_write/";
+        const TString readTableName = "/Root/read_table";
+        {
+            Aws::S3::S3Client s3Client = MakeS3Client();
+            CreateBucket(writeBucket, s3Client);
+        }
+
+        auto kikimr = DefaultKikimrRunner();
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+
+        auto tc = kikimr.GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        {
+            const TString query = fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE `{write_source}` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{write_location}",
+                    AUTH_METHOD="NONE"
+                );
+                CREATE EXTERNAL TABLE `{write_table}` (
+                    key Utf8 NOT NULL,
+                    value Utf8 NOT NULL
+                ) WITH (
+                    DATA_SOURCE="{write_source}",
+                    LOCATION="{write_object}",
+                    FORMAT="tsv_with_names"
+                );
+
+                CREATE TABLE `{read_table}` (
+                    key Utf8 NOT NULL,
+                    value Utf8 NOT NULL,
+                    PRIMARY KEY (key)
+                );
+                )",
+                "write_source"_a = writeDataSourceName,
+                "write_table"_a = writeTableName,
+                "write_location"_a = GetBucketLocation(writeBucket),
+                "write_object"_a = writeObject,
+                "read_table"_a = readTableName);
+
+            
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            const TString query = fmt::format(R"(
+                REPLACE INTO `{read_table}` (key, value) VALUES
+                    ("1", "one")
+                )",
+                "read_table"_a = readTableName);
+            auto result = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        auto db = kikimr.GetQueryClient();
+        ExecuteInsertQuery(db, writeTableName, readTableName, false);
+        ExecuteInsertQuery(db, writeTableName, readTableName, true);
+        {
+            const TString modifyQuery = fmt::format(R"(
+                DROP EXTERNAL TABLE `{write_table}`;
+                CREATE EXTERNAL TABLE `{write_table}` (
+                    key Utf8 NOT NULL,
+                    value Utf8 NOT NULL
+                ) WITH (
+                    DATA_SOURCE="{write_source}",
+                    LOCATION="{write_object}",
+                    FORMAT="tsv_with_names"
+                );
+                )",
+                "write_table"_a = writeTableName,
+                "write_object"_a = writeAnotherObject,
+                "write_source"_a = writeDataSourceName);
+            auto result = session.ExecuteSchemeQuery(modifyQuery).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        ExecuteInsertQuery(db, writeTableName, readTableName, false);
+
+        UNIT_ASSERT_EQUAL(GetObjectKeys(writeBucket).size(), 3);
     }
 
     Y_UNIT_TEST(JoinTwoSources) {

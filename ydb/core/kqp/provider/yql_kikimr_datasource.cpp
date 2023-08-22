@@ -59,6 +59,7 @@ TExprNode::TPtr BuildExternalTableSettings(TPositionHandle pos, TExprContext& ct
 
         items.emplace_back(ctx.NewList(pos, std::move(children)));
     }
+
     return ctx.NewList(pos, std::move(items));
 }
 
@@ -689,7 +690,7 @@ public:
                     .Repeat(TExprStep::RewriteIO);
             TExprNode::TPtr path = ctx.NewCallable(node->Pos(), "String", { ctx.NewAtom(node->Pos(), tableDesc.Metadata->ExternalSource.TableLocation) });
             auto table = ctx.NewList(node->Pos(), {ctx.NewAtom(node->Pos(), "table"), path});
-            auto key = ctx.NewCallable(node->Pos(), "Key", {table});
+            auto newKey = ctx.NewCallable(node->Pos(), "Key", {table});
             auto newRead = Build<TCoRead>(ctx, node->Pos())
                                     .World(read->Child(0))
                                     .DataSource(
@@ -701,9 +702,10 @@ public:
                                         .Done().Ptr()
                                     )
                                     .FreeArgs()
-                                        .Add(ctx.NewCallable(node->Pos(), "MrTableConcat", {key}))
+                                        .Add(ctx.NewCallable(node->Pos(), "MrTableConcat", {newKey}))
                                         .Add(ctx.NewCallable(node->Pos(), "Void", {}))
                                         .Add(BuildExternalTableSettings(node->Pos(), ctx, tableDesc.Metadata->Columns, source, tableDesc.Metadata->ExternalSource.TableContent))
+
                                     .Build()
                                     .Done().Ptr();
             auto retChildren = node->ChildrenList();

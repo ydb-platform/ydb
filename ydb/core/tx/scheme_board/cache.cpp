@@ -1716,7 +1716,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 return SetError(context, entry, TNavigate::EStatus::PathErrorUnknown);
             }
 
-            const bool isTable = Kind == TNavigate::KindTable || Kind == TNavigate::KindColumnTable;
+            const bool isTable = Kind == TNavigate::KindTable || Kind == TNavigate::KindColumnTable ||
+                                 Kind == TNavigate::KindExternalTable || Kind == TNavigate::KindExternalDataSource;
             const bool isTopic = Kind == TNavigate::KindTopic || Kind == TNavigate::KindCdcStream;
 
             if (entry.Operation == TNavigate::OpTable && !isTable) {

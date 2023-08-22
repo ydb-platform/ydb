@@ -518,7 +518,7 @@ public:
             YQL_CVLOG(NLog::ELevel::ERROR, NLog::EComponent::ProviderKikimr) << "Skip RewriteIO for external entity: unknown entity type: " << (int)tableDesc.Metadata->ExternalSource.SourceType;
             return nullptr;
         }
-
+        
         ctx.Step.Repeat(TExprStep::DiscoveryIO)
                 .Repeat(TExprStep::Epochs)
                 .Repeat(TExprStep::Intents)

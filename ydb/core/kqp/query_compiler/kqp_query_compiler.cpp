@@ -107,6 +107,8 @@ NKqpProto::EKqpPhyTableKind GetPhyTableKind(EKikimrTableKind kind) {
             return NKqpProto::TABLE_KIND_OLAP;
         case EKikimrTableKind::SysView:
             return NKqpProto::TABLE_KIND_SYS_VIEW;
+        case EKikimrTableKind::External:
+            return NKqpProto::TABLE_KIND_EXTERNAL; 
         default:
             return NKqpProto::TABLE_KIND_UNSPECIFIED;
     }
@@ -784,6 +786,18 @@ private:
             YQL_ENSURE(tableMeta);
 
             FillTable(*tableMeta, std::move(tableColumns), *txProto.AddTables());
+        }
+
+        for (const auto& [a, desc] : TablesData->GetTables()) {
+            auto tableMeta = desc.Metadata;
+            YQL_ENSURE(tableMeta);
+            if (desc.Metadata->Kind == NYql::EKikimrTableKind::External) {
+                THashSet<TStringBuf> columns;
+                for (const auto& [col, _]: tableMeta->Columns){
+                    columns.emplace(col);
+                }
+                FillTable(*tableMeta, std::move(columns), *txProto.AddTables());
+            }
         }
 
         for (const auto& secretName : SecretNames) {

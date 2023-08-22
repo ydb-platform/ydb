@@ -74,6 +74,7 @@ enum EKqpPhyTableKind {
     TABLE_KIND_DS = 1;
     TABLE_KIND_OLAP = 2;
     TABLE_KIND_SYS_VIEW = 3;
+    TABLE_KIND_EXTERNAL = 4;
 }
 
 message TKqpPhyTableId {

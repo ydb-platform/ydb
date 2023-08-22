@@ -25,6 +25,7 @@
   ".github/scripts/tests/log_parser.py":"ydb/github_toplevel/.github/scripts/tests/log_parser.py",
   ".github/scripts/tests/mute_utils.py":"ydb/github_toplevel/.github/scripts/tests/mute_utils.py",
   ".github/scripts/tests/pytest-postprocess.py":"ydb/github_toplevel/.github/scripts/tests/pytest-postprocess.py",
+  ".github/scripts/tests/templates/summary.html":"ydb/github_toplevel/.github/scripts/tests/templates/summary.html",
   ".github/workflows/allowed_dirs.yml":"ydb/github_toplevel/.github/workflows/allowed_dirs.yml",
   ".github/workflows/build_and_test_ondemand.yml":"ydb/github_toplevel/.github/workflows/build_and_test_ondemand.yml",
   ".github/workflows/build_and_test_provisioned.yml":"ydb/github_toplevel/.github/workflows/build_and_test_provisioned.yml",

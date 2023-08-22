@@ -87,8 +87,12 @@ public:
                             str << "GroupID: " << Info->GroupID << "<br/>" << "Generation: " << Info->GroupGeneration;
                         }
                         DIV() {
-                            str << "MinREALHugeBlobInBytes: ";
-                            str << GroupQueues->MinREALHugeBlobInBytes;
+                            str << "CostModel: ";
+                            if (GroupQueues->CostModel) {
+                                str << GroupQueues->CostModel->ToString();
+                            } else {
+                                str << "None";
+                            }
                         }
                         DIV() TABLE_CLASS("table table-bordered table-condensed") TABLEBODY() {
                             ui32 maxFailDomain = 0;

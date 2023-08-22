@@ -20,12 +20,14 @@ struct TRequestMonItem {
     ::NMonitoring::TDynamicCounters::TCounterPtr RequestBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr GeneratedSubrequests;
     ::NMonitoring::TDynamicCounters::TCounterPtr GeneratedSubrequestBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SentSubrequestCostNs;
     NMonitoring::THistogramPtr ResponseTime;
 
     void Init(TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, NPDisk::EDeviceType type) {
         RequestBytes = counters->GetCounter("requestBytes", true);
         GeneratedSubrequests = counters->GetCounter("generatedSubrequests", true);
         GeneratedSubrequestBytes = counters->GetCounter("generatedSubrequestBytes", true);
+        SentSubrequestCostNs = counters->GetCounter("estimatedDiskTimeConsumptionNs", true);
 
         NMonitoring::TBucketBounds bounds = GetCommonLatencyHistBounds(type);
 
@@ -33,10 +35,12 @@ struct TRequestMonItem {
             NMonitoring::ExplicitHistogram(std::move(bounds)));
     }
 
-    void Register(ui32 requestBytes, ui32 generatedSubrequests, ui32 generatedSubrequestBytes, double durationSeconds) {
+    void Register(ui32 requestBytes, ui32 generatedSubrequests, ui32 generatedSubrequestBytes, ui64 sentSubrequestCostNs,
+            double durationSeconds) {
         *RequestBytes += requestBytes;
         *GeneratedSubrequests += generatedSubrequests;
         *GeneratedSubrequestBytes += generatedSubrequestBytes;
+        *SentSubrequestCostNs += sentSubrequestCostNs;
         ResponseTime->Collect(durationSeconds * 1000.0);
     }
 };

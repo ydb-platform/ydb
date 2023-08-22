@@ -82,6 +82,10 @@ public:
 
             ytConfig->ClearMrJobUdfsDir();
 
+            auto setting = ytConfig->AddDefaultSettings();
+            setting->SetName("NativeYtTypeCompatibility");
+            setting->SetValue("all");
+
             for (const auto& [cluster, address]: options.Clusters) {
                 auto item = ytConfig->AddClusterMapping();
                 item->SetName(cluster);

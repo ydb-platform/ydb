@@ -22,7 +22,7 @@ namespace NKikimr {
                     TActorId ActorId;
                     TIntrusivePtr<NBackpressure::TFlowRecord> FlowRecord;
                     std::optional<bool> ExtraBlockChecksSupport;
-                    std::shared_ptr<const TCostModel> CostModel = nullptr;
+                    ui32 MinREALHugeBlobInBytes = 0;
                     volatile bool IsConnected = false;
                 };
                 TQueue PutTabletLog;
@@ -133,7 +133,7 @@ namespace NKikimr {
             };
 
             TQueues Queues;
-            std::shared_ptr<const TCostModel> CostModel;
+            ui32 MinREALHugeBlobInBytes = 0;
 
             TString ToString() const {
                 return TStringBuilder() << "{Queues# " << Queues.ToString() << "}";
@@ -142,7 +142,7 @@ namespace NKikimr {
 
         struct TFailDomain {
             TStackVec<TVDisk, TypicalDisksInFailDomain> VDisks;
-            std::shared_ptr<const TCostModel> CostModel;
+            ui32 MinREALHugeBlobInBytes = 0;
 
             // Ill-formed because TVDisk is not assignable.
             TFailDomain(const TFailDomain& other) = default;
@@ -162,7 +162,7 @@ namespace NKikimr {
 
         TStackVec<TFailDomain, TypicalFailDomainsInGroup> FailDomains;
         TStackVec<TVDisk*, TypicalDisksInGroup> DisksByOrderNumber;
-        std::shared_ptr<const TCostModel> CostModel;
+        ui32 MinREALHugeBlobInBytes = 0;
 
         TGroupQueues(const TBlobStorageGroupInfo::TTopology& topology)
             : FailDomains(topology.GetTotalFailDomainsNum())
@@ -246,7 +246,7 @@ namespace NKikimr {
         void Poison();
         bool GoodToGo(const TBlobStorageGroupInfo::TTopology& topology, bool waitForAllVDisks);
         void QueueConnectUpdate(ui32 orderNumber, NKikimrBlobStorage::EVDiskQueueId queueId, bool connected,
-            bool extraBlockChecksSupport, std::shared_ptr<const TCostModel> costModel, const TBlobStorageGroupInfo::TTopology& topology);
+            bool extraBlockChecksSupport, ui32 minREALHugeBlobInBytes, const TBlobStorageGroupInfo::TTopology& topology);
         ui32 GetNumUnconnectedDisks();
         ui32 GetMinREALHugeBlobInBytes() const;
     };

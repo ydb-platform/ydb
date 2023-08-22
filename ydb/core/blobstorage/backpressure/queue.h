@@ -116,7 +116,7 @@ class TBlobStorageQueue {
 
     TString& LogPrefix;
 
-    std::shared_ptr<const TCostModel> CostModel;
+    TCostModel CostModel;
     TInstant CostSettingsUpdate;
 
     TBSProxyContextPtr BSProxyCtx;
@@ -184,7 +184,7 @@ public:
             const TBlobStorageGroupType& type);
     void InvalidateCosts();
     bool SetMaxWindowSize(ui64 maxWindowSize);
-    std::shared_ptr<const TCostModel> GetCostModel() const;
+    ui32 GetMinREALHugeBlobInBytes() const;
 
     void SetItemQueue(TItem& item, EItemQueue newQueue);
 

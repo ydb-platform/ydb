@@ -413,7 +413,7 @@ class TManyMultiPuts : public TActorBootstrapped<TManyMultiPuts> {
     void Handle(TEvProxyQueueState::TPtr& ev, const TActorContext& ctx) {
         if (ev->Get()->IsConnected && !Started) {
             // put logo blob
-            MinREALHugeBlobInBytes = ev->Get()->CostModel->MinREALHugeBlobInBytes;
+            MinREALHugeBlobInBytes = ev->Get()->MinREALHugeBlobInBytes;
             Y_VERIFY(MinREALHugeBlobInBytes);
             SendPut(ctx);
             Started = true;

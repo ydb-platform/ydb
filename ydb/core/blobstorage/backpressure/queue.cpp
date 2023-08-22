@@ -11,7 +11,7 @@ TBlobStorageQueue::TBlobStorageQueue(const TIntrusivePtr<::NMonitoring::TDynamic
     , NextMsgId(0)
     , CurrentSequenceId(1)
     , LogPrefix(logPrefix)
-    , CostModel(std::make_shared<const TCostModel>(2000, 100000000, 50000000, 540000, 540000, 500000, gType)) // default cost model
+    , CostModel(2000, 100000000, 50000000, 540000, 540000, 500000, gType) // default cost model
     , BSProxyCtx(bspctx)
     , ClientId(clientId)
     , BytesWaiting(0)
@@ -52,8 +52,8 @@ TBlobStorageQueue::~TBlobStorageQueue() {
 void TBlobStorageQueue::UpdateCostModel(TInstant now, const NKikimrBlobStorage::TVDiskCostSettings& settings,
         const TBlobStorageGroupType& type) {
     TCostModel newCostModel(settings, type);
-    if (newCostModel != *CostModel) {
-        CostModel = std::make_shared<const TCostModel>(std::move(newCostModel));
+    if (newCostModel != CostModel) {
+        CostModel = std::move(newCostModel);
         InvalidateCosts();
     }
     CostSettingsUpdate = now + TDuration::Minutes(1);
@@ -78,8 +78,8 @@ bool TBlobStorageQueue::SetMaxWindowSize(ui64 maxWindowSize) {
     }
 }
 
-std::shared_ptr<const TCostModel> TBlobStorageQueue::GetCostModel() const {
-    return CostModel;
+ui32 TBlobStorageQueue::GetMinREALHugeBlobInBytes() const {
+    return CostModel.MinREALHugeBlobInBytes;
 }
 
 void TBlobStorageQueue::SetItemQueue(TItem& item, EItemQueue newQueue) {
@@ -141,7 +141,7 @@ void TBlobStorageQueue::SendToVDisk(const TActorContext& ctx, const TActorId& re
 
         // update item's cost if it is dirty
         if (item.DirtyCost) {
-            item.Cost = CostModel->CalculateCost(item.CostEssence);
+            item.Cost = CostModel.CalculateCost(item.CostEssence);
             item.DirtyCost = false;
         }
 

@@ -32,6 +32,9 @@ struct TBootQueue {
                 break;
             }
             priority += tablet.Weight;
+            if (tablet.RestartsOften()) {
+               priority -= 5;
+            }
             return priority;
         }
 

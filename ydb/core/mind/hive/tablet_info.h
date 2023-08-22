@@ -277,6 +277,7 @@ public:
 
     void ActualizeTabletStatistics(TInstant now);
     ui64 GetRestartsPerPeriod(TInstant barrier);
+    bool RestartsOften() const;
 };
 
 

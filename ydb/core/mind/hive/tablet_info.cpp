@@ -498,5 +498,13 @@ ui64 TTabletInfo::GetRestartsPerPeriod(TInstant barrier) {
     return restarts;
 }
 
+bool TTabletInfo::RestartsOften() const {
+    // Statistics.RestartTimestamp is a repeated proto field that gets trimmed
+    // upon each update of tablet metrics (or restart).
+    // If its current size is >= RestartsMaxCount, it means the tablet was restarting
+    // often at the time of last update, and thus deserves low booting priority
+    return Statistics.RestartTimestampSize() >= Hive.GetTabletRestartsMaxCount();
+}
+
 } // NHive
 } // NKikimr

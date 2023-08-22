@@ -769,8 +769,11 @@ public:
         return TDuration::MilliSeconds(CurrentConfig.GetTabletRestartsPeriod());
     }
 
-    ui64 GetTabletRestarsMaxCount() const {
-        return CurrentConfig.GetTabletRestarsMaxCount();
+    ui64 GetTabletRestartsMaxCount() const {
+        if (CurrentConfig.HasTabletRestarsMaxCount() && !CurrentConfig.HasTabletRestartsMaxCount()) {
+            return CurrentConfig.GetTabletRestarsMaxCount();
+        }
+        return CurrentConfig.GetTabletRestartsMaxCount();
     }
 
     TDuration GetPostponeStartPeriod() const {

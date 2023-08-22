@@ -132,7 +132,7 @@ public:
                     if (Generation < leader.KnownGeneration) {
                         return true;
                     }
-                    if (leader.GetRestartsPerPeriod(now - Self->GetTabletRestartsPeriod()) >= Self->GetTabletRestarsMaxCount()) {
+                    if (leader.GetRestartsPerPeriod(now - Self->GetTabletRestartsPeriod()) >= Self->GetTabletRestartsMaxCount()) {
                         if (IsGoodStatusForPostpone()) {
                             leader.PostponeStart(now + Self->GetPostponeStartPeriod());
                             BLOG_D("THive::TTxUpdateTabletStatus::Execute for tablet " << tablet->ToString()

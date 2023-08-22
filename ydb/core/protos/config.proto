@@ -1711,7 +1711,7 @@ message THiveConfig {
     optional uint64 SystemTabletCategoryId = 39 [default = 1];
     optional bool EnableFastTabletMove = 40 [default = true];
     optional uint64 TabletRestartsPeriod = 42 [default = 1000]; // milliseconds
-    optional uint64 TabletRestarsMaxCount = 43 [default = 2]; // number
+    optional uint64 TabletRestarsMaxCount = 43 [default = 2]; // deprecated, use TabletRestartsMaxCount instead
     optional uint64 PostponeStartPeriod = 44 [default = 1000]; // milliseconds
     optional EHiveNodeSelectStrategy NodeSelectStrategy = 45 [default = HIVE_NODE_SELECT_STRATEGY_RANDOM_MIN_7P];
     optional bool CheckMoveExpediency = 46 [default = true];
@@ -1729,6 +1729,7 @@ message THiveConfig {
     optional bool ContinueEmergencyBalancer = 58 [default = true];
     optional double MinPeriodBetweenEmergencyBalance = 59 [default = 0.1]; // seconds
     optional EHiveBootStrategy BootStrategy = 60 [default = HIVE_BOOT_STRATEGY_BALANCED];
+    optional uint64 TabletRestartsMaxCount = 61 [default = 2];
 }
 
 message TDataShardConfig {

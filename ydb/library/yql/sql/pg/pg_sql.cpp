@@ -1592,6 +1592,7 @@ public:
                 /* isScheme */ true
             );
 
+            TString mode = (value->missing_ok) ? "drop_if_exists" : "drop";
             for (const auto& name : names) {
                 Statements.push_back(L(
                     A("let"),
@@ -1603,7 +1604,7 @@ public:
                         key,
                         L(A("Void")),
                         QL(
-                            QL(QA("mode"), QA("drop"))
+                            QL(QA("mode"), QA(mode))
                         )
                     )
                 ));

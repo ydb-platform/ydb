@@ -145,7 +145,8 @@
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
                 {"Index": 2, "Name": "Table", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"},
-                {"Index": 4, "Name": "TableType", "Type": "TCoAtom"}
+                {"Index": 4, "Name": "TableType", "Type": "TCoAtom"},
+                {"Index": 5, "Name": "MissingOk", "Type": "TCoAtom"}
             ]
         },
         {

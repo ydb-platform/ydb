@@ -995,6 +995,7 @@ public:
             }
 
             bool prepareOnly = SessionCtx->Query().PrepareOnly;
+            bool missingOk = (maybeDrop.MissingOk().Cast().Value() == "1");
 
             NThreading::TFuture<IKikimrGateway::TGenericResult> future;
             if (prepareOnly) {
@@ -1003,6 +1004,12 @@ public:
                 switch (tableTypeItem) {
                     case ETableType::Table:
                         future = Gateway->DropTable(table.Metadata->Cluster, table.Metadata->Name);
+                        if (missingOk) {
+                            future = future.Apply([](const NThreading::TFuture<IKikimrGateway::TGenericResult>& res) {
+                                Y_UNUSED(res);
+                                return CreateDummySuccess();
+                            });
+                        }
                         break;
                     case ETableType::TableStore:
                         future = Gateway->DropTableStore(cluster, ParseDropTableStoreSettings(maybeDrop.Cast()));

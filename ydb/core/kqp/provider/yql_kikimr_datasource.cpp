@@ -187,7 +187,8 @@ public:
                 IKikimrGateway::TLoadTableMetadataSettings()
                             .WithTableStats(table.GetNeedsStats())
                             .WithPrivateTables(IsInternalCall)
-                            .WithExternalDatasources(SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources()));
+                            .WithExternalDatasources(SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources())
+            );
 
             futures.push_back(future.Apply([result, queryType]
                 (const NThreading::TFuture<IKikimrGateway::TTableMetadataResult>& future) {

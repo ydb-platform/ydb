@@ -1110,14 +1110,17 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
 
 
     virtual TStatus HandleDropTable(TKiDropTable node, TExprContext& ctx) override {
-        auto table = SessionCtx->Tables().EnsureTableExists(TString(node.DataSink().Cluster()), TString(node.Table().Value()), node.Pos(), ctx);
-        if (!table) {
-            return TStatus::Error;
-        }
-
-        if (table->GetTableType() == ETableType::Table) {
-            if (!CheckDocApiModifiation(*table->Metadata, node.Pos(), ctx)) {
+        bool missingOk = (node.MissingOk().Value() == "1");
+        if (!missingOk) {
+            auto table = SessionCtx->Tables().EnsureTableExists(TString(node.DataSink().Cluster()), TString(node.Table().Value()), node.Pos(), ctx);
+            if (!table) {
                 return TStatus::Error;
+            }
+
+            if (table->GetTableType() == ETableType::Table) {
+                if (!CheckDocApiModifiation(*table->Metadata, node.Pos(), ctx)) {
+                    return TStatus::Error;
+                }
             }
         }
 

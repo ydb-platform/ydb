@@ -1818,6 +1818,58 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             )", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
+    
+    Y_UNIT_TEST(DropTableIfExists) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        {
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteSchemeQuery(R"(
+                --!syntax_pg
+                DROP TABLE IF EXISTS test;
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteSchemeQuery(R"(
+                --!syntax_pg
+                CREATE TABLE test (
+                    id int4 primary key
+                );
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto db = kikimr.GetQueryClient();
+            auto settings = NYdb::NQuery::TExecuteQuerySettings()
+                .Syntax(NYdb::NQuery::ESyntax::Pg);
+            auto result = db.ExecuteQuery(R"(
+                SELECT * FROM test;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteSchemeQuery(R"(
+                --!syntax_pg
+                DROP TABLE IF EXISTS test;
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }        
+        {
+            auto db = kikimr.GetQueryClient();
+            auto settings = NYdb::NQuery::TExecuteQuerySettings()
+                .Syntax(NYdb::NQuery::ESyntax::Pg);
+            auto result = db.ExecuteQuery(R"(
+                SELECT * FROM test;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetIssues().ToString().Contains("Cannot find table 'db.[/Root/test]'"));
+        }
+    }
 }
 
 } // namespace NKqp

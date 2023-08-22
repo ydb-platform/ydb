@@ -190,7 +190,7 @@ private:
                 }
                 auto mode = settings.Mode.Cast();
 
-                if (mode == "drop") {
+                if (mode == "drop" || mode == "drop_if_exists") {
                     HandleDropTable(SessionCtx, settings, key, cluster);
                     return TStatus::Ok;
                 } else if (
@@ -267,7 +267,7 @@ private:
 
                     SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath(), tableType);
                     return TStatus::Ok;
-                } else if (mode == "drop") {
+                } else if (mode == "drop" || mode == "drop_if_exists") {
                     HandleDropTable(SessionCtx, settings, key, cluster);
                     return TStatus::Ok;
                 }
@@ -492,12 +492,17 @@ public:
         auto tableType = settings.TableType.IsValid()
             ? settings.TableType.Cast()
             : Build<TCoAtom>(ctx, node->Pos()).Value("table").Done(); // v0, pg support
+        bool missingOk = (settings.Mode.Cast().Value() == "drop_if_exists");
+
         return Build<TKiDropTable>(ctx, node->Pos())
             .World(node->Child(0))
             .DataSink(node->Child(1))
             .Table().Build(key.GetTablePath())
             .Settings(settings.Other)
             .TableType(tableType)
+            .MissingOk<TCoAtom>()
+                .Value(missingOk)
+            .Build()
             .Done()
             .Ptr();
     }
@@ -568,7 +573,7 @@ public:
                 NCommon::TWriteTableSettings settings = NCommon::ParseWriteTableSettings(TExprList(node->Child(4)), ctx);
                 YQL_ENSURE(settings.Mode);
                 auto mode = settings.Mode.Cast();
-                if (mode == "drop") {
+                if (mode == "drop" || mode == "drop_if_exists") {
                     return MakeKiDropTable(node, settings, key, ctx);
                 } else if (mode == "update") {
                     if (settings.Filter) {
@@ -702,7 +707,7 @@ public:
                         .Done()
                         .Ptr();
 
-                 } else if (mode == "drop") {
+                 } else if (mode == "drop" || mode == "drop_if_exists") {
                     return MakeKiDropTable(node, settings, key, ctx);
                 } else {
                     YQL_ENSURE(false, "unknown TableScheme mode \"" << TString(mode) << "\"");

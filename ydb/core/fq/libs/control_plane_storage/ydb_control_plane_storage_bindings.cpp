@@ -214,7 +214,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListBinding
 
         if (request.filter().name()) {
             queryBuilder.AddString("filter_name", request.filter().name());
-            filters.push_back("`" NAME_COLUMN_NAME "` LIKE '%' || $filter_name || '%'");
+            if (event.IsExactNameMatch) {
+                filters.push_back("`" NAME_COLUMN_NAME "` = '$filter_name'");
+            } else {
+                filters.push_back("`" NAME_COLUMN_NAME "` LIKE '%' || $filter_name || '%'");
+            }
         }
 
         if (request.filter().created_by_me()) {

@@ -301,6 +301,25 @@ struct TEvControlPlaneProxy {
     };
 
     template<>
+    struct TControlPlaneRequest<FederatedQuery::CreateConnectionRequest,
+                                EvCreateConnectionRequest> :
+        public TBaseControlPlaneRequest<TEvCreateConnectionRequest,
+                                        FederatedQuery::CreateConnectionRequest,
+                                        EvCreateConnectionRequest> {
+        using TBaseControlPlaneRequest<
+            TControlPlaneRequest<FederatedQuery::CreateConnectionRequest, EvCreateConnectionRequest>,
+            FederatedQuery::CreateConnectionRequest,
+            EvCreateConnectionRequest>::TBaseControlPlaneRequest;
+        
+        bool ComputeYDBIsAlreadyExistFlag = false;
+        // Check that connection does not exist in CPS
+        bool CPSListingFinished = false;
+        size_t CPSConnectionCount = 0;
+        // ??
+        bool IsInDeleteCreateState = false;
+    };
+
+    template<>
     struct TControlPlaneRequest<FederatedQuery::ModifyConnectionRequest, EvModifyConnectionRequest> :
         public TBaseControlPlaneRequest<TEvModifyConnectionRequest,
                                         FederatedQuery::ModifyConnectionRequest,
@@ -310,6 +329,7 @@ struct TEvControlPlaneProxy {
             FederatedQuery::ModifyConnectionRequest,
             EvModifyConnectionRequest>::TBaseControlPlaneRequest;
 
+        bool ComputeYDBIsAlreadyExistFlag = false;
         TMaybe<FederatedQuery::ConnectionContent> OldConnectionContent;
         // ListBindings
         bool OldBindingNamesDiscoveryFinished = false;
@@ -329,6 +349,7 @@ struct TEvControlPlaneProxy {
             FederatedQuery::DeleteConnectionRequest,
             EvDeleteConnectionRequest>::TBaseControlPlaneRequest;
 
+        bool ComputeYDBIsAlreadyExistFlag = false;
         TMaybe<FederatedQuery::ConnectionContent> ConnectionContent;
     };
 
@@ -342,6 +363,7 @@ struct TEvControlPlaneProxy {
             FederatedQuery::CreateBindingRequest,
             EvCreateBindingRequest>::TBaseControlPlaneRequest;
 
+        bool ComputeYDBIsAlreadyExistFlag = false;
         TMaybe<TString> ConnectionName;
     };
 
@@ -355,6 +377,7 @@ struct TEvControlPlaneProxy {
             FederatedQuery::ModifyBindingRequest,
             EvModifyBindingRequest>::TBaseControlPlaneRequest;
 
+        bool ComputeYDBIsAlreadyExistFlag = false;
         TMaybe<FederatedQuery::BindingContent> OldBindingContent;
         TMaybe<TString> ConnectionName;
     };
@@ -369,6 +392,7 @@ struct TEvControlPlaneProxy {
             FederatedQuery::DeleteBindingRequest,
             EvDeleteBindingRequest>::TBaseControlPlaneRequest;
 
+        bool ComputeYDBIsAlreadyExistFlag = false;
         TMaybe<TString> OldBindingName;
     };
 };

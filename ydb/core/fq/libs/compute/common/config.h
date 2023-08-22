@@ -5,7 +5,6 @@
 
 #include <util/digest/multi.h>
 #include <util/generic/algorithm.h>
-#include <util/generic/algorithm.h>
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
 
@@ -103,8 +102,30 @@ public:
                     NFq::NConfig::EComputeType::YDB);
     }
 
+    bool IsYDBSchemaOperationsEnabled(
+        const TString& scope,
+        const FederatedQuery::ConnectionSetting::ConnectionCase& connectionCase) const {
+        return IsConnectionCaseEnabled(connectionCase) &&
+               YdbComputeControlPlaneEnabled(scope);
+    }
+
     const NFq::NConfig::TComputeConfig& GetProto() const {
         return ComputeConfig;
+    }
+
+    bool IsConnectionCaseEnabled(
+        const FederatedQuery::ConnectionSetting::ConnectionCase& connectionCase) const {
+        switch (connectionCase) {
+            case FederatedQuery::ConnectionSetting::kObjectStorage:
+                return true;
+            case FederatedQuery::ConnectionSetting::kYdbDatabase:
+            case FederatedQuery::ConnectionSetting::kClickhouseCluster:
+            case FederatedQuery::ConnectionSetting::kDataStreams:
+            case FederatedQuery::ConnectionSetting::kMonitoring:
+            case FederatedQuery::ConnectionSetting::kPostgresqlCluster:
+            case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
+                return false;
+        }
     }
 
 private:

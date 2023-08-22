@@ -166,10 +166,11 @@ public:
                   hFunc(TEvPrivate::TEvQueryExecutionResponse, Handle);
     )
 
-    void FinishSuccessfully() {
+    void FinishSuccessfully(bool isAlreadyExistSuccessStatus) {
         CPP_LOG_I("TSchemaQueryYDBActor Handling query execution response. Query finished successfully. Actor id: "
                   << TBase::SelfId());
         Request->Get()->ComputeYDBOperationWasPerformed = true;
+        Request->Get()->ComputeYDBIsAlreadyExistFlag    = isAlreadyExistSuccessStatus;
         TBase::SendRequestToSender();
     }
 
@@ -188,13 +189,17 @@ public:
     void Handle(typename TEvPrivate::TEvQueryExecutionResponse::TPtr& event) {
         const auto& executeSchemeQueryStatus = event->Get()->Result;
         auto isRollback                      = event->Get()->Rollback;
-        auto successExecutionRunMode = IsSuccess(executeSchemeQueryStatus) && !isRollback;
-        auto successExecutionRollbackMode = IsSuccess(executeSchemeQueryStatus) && isRollback;
-        auto failedExecutionRunMode = !IsSuccess(executeSchemeQueryStatus) && !isRollback;
+        auto isAlreadyExistSuccessStatus =
+            IsAlreadyExistSuccessStatus(executeSchemeQueryStatus);
+        auto isExecuteStatementSuccessful =
+            executeSchemeQueryStatus.IsSuccess() || isAlreadyExistSuccessStatus;
+        auto successExecutionRunMode      = isExecuteStatementSuccessful && !isRollback;
+        auto successExecutionRollbackMode = isExecuteStatementSuccessful && isRollback;
+        auto failedExecutionRunMode       = !isExecuteStatementSuccessful && !isRollback;
 
         if (successExecutionRunMode) {
             if (!InitiateSchemaQueryExecution(event->Get()->TaskIndex + 1, false, Nothing())) {
-                FinishSuccessfully();
+                FinishSuccessfully(isAlreadyExistSuccessStatus);
                 return;
             }
         } else if (successExecutionRollbackMode) {
@@ -236,8 +241,10 @@ public:
     }
 
 private:
-    bool IsSuccess(const TStatus& status) const {
-        return status.IsSuccess() || (SuccessOnAlreadyExists && (status.GetStatus() == NYdb::EStatus::ALREADY_EXISTS || status.GetIssues().ToOneLineString().Contains("error: path exist")));
+    bool IsAlreadyExistSuccessStatus(const TStatus& status) const {
+        return SuccessOnAlreadyExists &&
+               (status.GetStatus() == NYdb::EStatus::ALREADY_EXISTS ||
+                status.GetIssues().ToOneLineString().Contains("error: path exist"));
     }
 
 private:
@@ -258,10 +265,28 @@ NActors::IActor* MakeCreateConnectionActor(
     auto queryFactoryMethod =
         [objectStorageEndpoint = commonConfig.GetObjectStorageEndpoint(),
          signer                = std::move(signer)](
-            const TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr& request) -> TString {
-        return MakeCreateExternalDataSourceQuery(request->Get()->Request.content(),
-                                                 objectStorageEndpoint,
-                                                 signer);
+            const TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr& request)
+        -> std::vector<TSchemaQueryTask> {
+        auto& connectionContent = request->Get()->Request.content();
+
+        auto createSecretStatement =
+            CreateSecretObjectQuery(connectionContent.setting().object_storage().auth(),
+                                    connectionContent.name(),
+                                    signer);
+
+        std::vector<TSchemaQueryTask> statements;
+        if (createSecretStatement) {
+            statements.push_back(
+                TSchemaQueryTask{.SQL         = *createSecretStatement,
+                                 .RollbackSQL = DropSecretObjectQuery(
+                                     connectionContent.setting().object_storage().auth(),
+                                     connectionContent.name(),
+                                     signer)});
+        }
+        statements.push_back(
+            TSchemaQueryTask{.SQL = TString{MakeCreateExternalDataSourceQuery(
+                                 connectionContent, objectStorageEndpoint, signer)}});
+        return statements;
     };
 
     auto errorMessageFactoryMethod = [](const TStatus& queryStatus) -> TString {
@@ -298,58 +323,86 @@ NActors::IActor* MakeModifyConnectionActor(
         using namespace fmt::literals;
 
         auto& oldConnectionContent = (*request->Get()->OldConnectionContent);
+        auto& oldBindings          = request->Get()->OldBindingContents;
         auto& newConnectionContent = request->Get()->Request.content();
 
-        auto deleteOldEntities = fmt::format(
-            R"(
-                {delete_external_data_tables};
-                {delete_external_data_source};
-            )",
-            "delete_external_data_tables"_a =
-                JoinMapRange("\n",
-                             request->Get()->OldBindingContents.begin(),
-                             request->Get()->OldBindingContents.end(),
-                             [](const FederatedQuery::BindingContent& binding) {
-                                 return MakeDeleteExternalDataTableQuery(binding.name());
-                             }),
-            "delete_external_data_source"_a =
-                MakeDeleteExternalDataSourceQuery(oldConnectionContent, signer));
+        auto dropOldSecret =
+            DropSecretObjectQuery(oldConnectionContent.setting().object_storage().auth(),
+                                  oldConnectionContent.name(),
+                                  signer);
+        auto createNewSecret =
+            CreateSecretObjectQuery(newConnectionContent.setting().object_storage().auth(),
+                                    newConnectionContent.name(),
+                                    signer);
+        std::vector<TSchemaQueryTask> statements;
 
-        auto createOldEntities = fmt::format(
-            R"(
-                {create_external_data_source};
-                {create_external_data_tables};
-            )",
-            "create_external_data_source"_a = MakeCreateExternalDataSourceQuery(
-                oldConnectionContent, objectStorageEndpoint, signer),
-            "create_external_data_tables"_a = JoinMapRange(
-                "\n",
-                request->Get()->OldBindingContents.begin(),
-                request->Get()->OldBindingContents.end(),
-                [&oldConnectionContent](const FederatedQuery::BindingContent& binding) {
-                    return MakeCreateExternalDataTableQuery(binding,
-                                                            oldConnectionContent.name());
-                }));
+        if (!oldBindings.empty()) {
+            statements.push_back(TSchemaQueryTask{
+                .SQL         = JoinMapRange("\n",
+                                    oldBindings.begin(),
+                                    oldBindings.end(),
+                                    [](const FederatedQuery::BindingContent& binding) {
+                                        return MakeDeleteExternalDataTableQuery(
+                                            binding.name());
+                                    }),
+                .RollbackSQL = JoinMapRange(
+                    "\n",
+                    oldBindings.begin(),
+                    oldBindings.end(),
+                    [&oldConnectionContent](const FederatedQuery::BindingContent& binding) {
+                        return MakeCreateExternalDataTableQuery(binding,
+                                                                oldConnectionContent.name());
+                    })});
+        };
 
-        auto createNewEntities = fmt::format(
-            R"(
-                {create_external_data_source};
-                {create_external_data_tables};
-            )",
-            "create_external_data_source"_a = MakeCreateExternalDataSourceQuery(
-                newConnectionContent, objectStorageEndpoint, signer),
-            "create_external_data_tables"_a = JoinMapRange(
-                "\n",
-                request->Get()->OldBindingContents.begin(),
-                request->Get()->OldBindingContents.end(),
-                [&newConnectionContent](const FederatedQuery::BindingContent& binding) {
-                    return MakeCreateExternalDataTableQuery(binding,
-                                                            newConnectionContent.name());
-                }));
+        statements.push_back(TSchemaQueryTask{
+            .SQL = TString{MakeDeleteExternalDataSourceQuery(oldConnectionContent.name())},
+            .RollbackSQL = TString{MakeCreateExternalDataSourceQuery(
+                oldConnectionContent, objectStorageEndpoint, signer)}});
 
-        return {TSchemaQueryTask{.SQL         = TString{deleteOldEntities},
-                                 .RollbackSQL = TString{createOldEntities}},
-                TSchemaQueryTask{.SQL = TString{createNewEntities}}};
+        if (dropOldSecret) {
+            statements.push_back(
+                TSchemaQueryTask{.SQL         = *dropOldSecret,
+                                 .RollbackSQL = CreateSecretObjectQuery(
+                                     oldConnectionContent.setting().object_storage().auth(),
+                                     oldConnectionContent.name(),
+                                     signer)});
+        }
+        if (createNewSecret) {
+            statements.push_back(
+                TSchemaQueryTask{.SQL         = *createNewSecret,
+                                 .RollbackSQL = DropSecretObjectQuery(
+                                     newConnectionContent.setting().object_storage().auth(),
+                                     newConnectionContent.name(),
+                                     signer)});
+        }
+
+        statements.push_back(
+            TSchemaQueryTask{.SQL         = TString{MakeCreateExternalDataSourceQuery(
+                                 newConnectionContent, objectStorageEndpoint, signer)},
+                             .RollbackSQL = TString{MakeDeleteExternalDataSourceQuery(
+                                 newConnectionContent.name())}});
+
+        if (!oldBindings.empty()) {
+            statements.push_back(TSchemaQueryTask{
+                .SQL = JoinMapRange("\n",
+                                    oldBindings.begin(),
+                                    oldBindings.end(),
+                                    [&newConnectionContent](
+                                        const FederatedQuery::BindingContent& binding) {
+                                        return MakeCreateExternalDataTableQuery(
+                                            binding, newConnectionContent.name());
+                                    }),
+                .RollbackSQL =
+                    JoinMapRange("\n",
+                                 request->Get()->OldBindingContents.begin(),
+                                 request->Get()->OldBindingContents.end(),
+                                 [](const FederatedQuery::BindingContent& binding) {
+                                     return MakeDeleteExternalDataTableQuery(binding.name());
+                                 })});
+        };
+
+        return statements;
     };
 
     auto errorMessageFactoryMethod = [](const TStatus& queryStatus) -> TString {
@@ -372,20 +425,39 @@ NActors::IActor* MakeDeleteConnectionActor(
     TEvControlPlaneProxy::TEvDeleteConnectionRequest::TPtr request,
     TDuration requestTimeout,
     TCounters& counters,
+    const NConfig::TCommonConfig& commonConfig,
     TSigner::TPtr signer) {
     auto queryFactoryMethod =
-        [signer = std::move(signer)](
-            const TEvControlPlaneProxy::TEvDeleteConnectionRequest::TPtr& request) -> TString {
-        return MakeDeleteExternalDataSourceQuery(*request->Get()->ConnectionContent,
-                                                 signer);
+        [objectStorageEndpoint = commonConfig.GetObjectStorageEndpoint(),
+         signer                = std::move(signer)](
+            const TEvControlPlaneProxy::TEvDeleteConnectionRequest::TPtr& request)
+        -> std::vector<TSchemaQueryTask> {
+        auto& connectionContent = *request->Get()->ConnectionContent;
+
+        auto dropSecret =
+            DropSecretObjectQuery(connectionContent.setting().object_storage().auth(),
+                                  connectionContent.name(),
+                                  signer);
+
+        std::vector<TSchemaQueryTask> statements = {TSchemaQueryTask{
+            .SQL = TString{MakeDeleteExternalDataSourceQuery(connectionContent.name())},
+            .RollbackSQL = MakeCreateExternalDataSourceQuery(connectionContent,
+                                                             objectStorageEndpoint,
+                                                             signer)}};
+        if (dropSecret) {
+            statements.push_back(
+                TSchemaQueryTask{.SQL         = *dropSecret,
+                                 .RollbackSQL = CreateSecretObjectQuery(
+                                     connectionContent.setting().object_storage().auth(),
+                                     connectionContent.name(),
+                                     signer)});
+        }
+        return statements;
     };
 
     auto errorMessageFactoryMethod = [](const TStatus& queryStatus) -> TString {
-        if (queryStatus.GetStatus() == NYdb::EStatus::ALREADY_EXISTS) {
-            return "External data source with such name already exists";
-        } else {
-            return "Couldn't delete external data source in YDB";
-        }
+        Y_UNUSED(queryStatus);
+        return "Couldn't delete external data source in YDB";
     };
 
     return new TSchemaQueryYDBActor<TEvControlPlaneProxy::TEvDeleteConnectionRequest,
@@ -394,6 +466,39 @@ NActors::IActor* MakeDeleteConnectionActor(
         std::move(request),
         requestTimeout,
         counters.GetCommonCounters(RTC_DELETE_CONNECTION_IN_YDB),
+        queryFactoryMethod,
+        errorMessageFactoryMethod);
+}
+
+NActors::IActor* MakeDropCreateConnectionActor(
+    const TActorId& proxyActorId,
+    TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr request,
+    TDuration requestTimeout,
+    TCounters& counters,
+    const NConfig::TCommonConfig& commonConfig,
+    TSigner::TPtr signer) {
+    auto queryFactoryMethod =
+        [objectStorageEndpoint = commonConfig.GetObjectStorageEndpoint(),
+         signer                = std::move(signer)](
+            const TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr& request)
+        -> std::vector<TSchemaQueryTask> {
+        auto& connectionContent = request->Get()->Request.content();
+        return {TSchemaQueryTask{.SQL = TString{MakeDeleteExternalDataSourceQuery(
+                                     connectionContent.name())}},
+                TSchemaQueryTask{.SQL = TString{MakeCreateExternalDataSourceQuery(
+                                     connectionContent, objectStorageEndpoint, signer)}}};
+    };
+    auto errorMessageFactoryMethod = [](const TStatus& queryStatus) -> TString {
+        Y_UNUSED(queryStatus);
+        return "Couldn't recreate external source in YDB";
+    };
+
+    return new TSchemaQueryYDBActor<TEvControlPlaneProxy::TEvCreateConnectionRequest,
+                                    TEvControlPlaneProxy::TEvCreateConnectionResponse>(
+        proxyActorId,
+        std::move(request),
+        requestTimeout,
+        counters.GetCommonCounters(RTC_CREATE_CONNECTION_IN_YDB),
         queryFactoryMethod,
         errorMessageFactoryMethod);
 }
@@ -477,11 +582,8 @@ NActors::IActor* MakeDeleteBindingActor(
     };
 
     auto errorMessageFactoryMethod = [](const TStatus& queryStatus) -> TString {
-        if (queryStatus.GetStatus() == NYdb::EStatus::ALREADY_EXISTS) {
-            return "External data source with such name already exists";
-        } else {
-            return "Couldn't delete external data source in YDB";
-        }
+        Y_UNUSED(queryStatus);
+        return "Couldn't delete external data source in YDB";
     };
 
     return new TSchemaQueryYDBActor<TEvControlPlaneProxy::TEvDeleteBindingRequest,

@@ -175,19 +175,20 @@ struct TEvControlPlaneStorage {
 
     static_assert(EvEnd <= YqEventSubspaceEnd(NFq::TYqEventSubspace::ControlPlaneStorage), "All events must be in their subspace");
 
-    template<typename ProtoMessage, ui32 EventType>
-    struct TControlPlaneRequest : NActors::TEventLocal<TControlPlaneRequest<ProtoMessage, EventType>, EventType> {
+    template<typename TDerived, typename ProtoMessage, ui32 EventType>
+    struct TBaseControlPlaneRequest : NActors::TEventLocal<TDerived, EventType> {
         using TProto = ProtoMessage;
 
-        explicit TControlPlaneRequest(const TString& scope,
-                                      const ProtoMessage& request,
-                                      const TString& user,
-                                      const TString& token,
-                                      const TString& cloudId,
-                                      TPermissions permissions,
-                                      TMaybe<TQuotaMap> quotas,
-                                      TTenantInfo::TPtr tenantInfo,
-                                      const FederatedQuery::Internal::ComputeDatabaseInternal& computeDatabase)
+        explicit TBaseControlPlaneRequest(
+            const TString& scope,
+            const ProtoMessage& request,
+            const TString& user,
+            const TString& token,
+            const TString& cloudId,
+            TPermissions permissions,
+            TMaybe<TQuotaMap> quotas,
+            TTenantInfo::TPtr tenantInfo,
+            const FederatedQuery::Internal::ComputeDatabaseInternal& computeDatabase)
             : Scope(scope)
             , Request(request)
             , User(user)
@@ -196,9 +197,7 @@ struct TEvControlPlaneStorage {
             , Permissions(permissions)
             , Quotas(std::move(quotas))
             , TenantInfo(tenantInfo)
-            , ComputeDatabase(computeDatabase)
-        {
-        }
+            , ComputeDatabase(computeDatabase) { }
 
         size_t GetByteSize() const {
             return sizeof(*this)
@@ -218,6 +217,50 @@ struct TEvControlPlaneStorage {
         TMaybe<TQuotaMap> Quotas;
         TTenantInfo::TPtr TenantInfo;
         FederatedQuery::Internal::ComputeDatabaseInternal ComputeDatabase;
+    };
+
+    template<typename TProtoMessage, ui32 EventType>
+    struct TControlPlaneRequest :
+        TBaseControlPlaneRequest<TControlPlaneRequest<TProtoMessage, EventType>,
+                                 TProtoMessage,
+                                 EventType> {
+        using TBaseControlPlaneRequest<TControlPlaneRequest<TProtoMessage, EventType>,
+                                       TProtoMessage,
+                                       EventType>::TBaseControlPlaneRequest;
+    };
+
+    template<typename ProtoMessage, ui32 EventType>
+    struct TControlPlaneListRequest :
+        public TBaseControlPlaneRequest<TControlPlaneListRequest<ProtoMessage, EventType>,
+                                        ProtoMessage,
+                                        EventType> {
+        using TProto = ProtoMessage;
+
+        explicit TControlPlaneListRequest(
+            const TString& scope,
+            const ProtoMessage& request,
+            const TString& user,
+            const TString& token,
+            const TString& cloudId,
+            TPermissions permissions,
+            TMaybe<TQuotaMap> quotas,
+            TTenantInfo::TPtr tenantInfo,
+            const FederatedQuery::Internal::ComputeDatabaseInternal& computeDatabase,
+            bool isExactNameMatch = false)
+            : TBaseControlPlaneRequest<TControlPlaneListRequest<ProtoMessage, EventType>,
+                                       ProtoMessage,
+                                       EventType>(scope,
+                                                  request,
+                                                  user,
+                                                  token,
+                                                  cloudId,
+                                                  permissions,
+                                                  std::move(quotas),
+                                                  tenantInfo,
+                                                  computeDatabase)
+            , IsExactNameMatch(isExactNameMatch) { }
+
+        bool IsExactNameMatch = false;
     };
 
     template<typename TDerived, typename ProtoMessage, ui32 EventType>
@@ -326,7 +369,7 @@ struct TEvControlPlaneStorage {
     using TEvDescribeJobResponse = TControlPlaneNonAuditableResponse<FederatedQuery::DescribeJobResult, EvDescribeJobResponse>;
     using TEvCreateConnectionRequest = TControlPlaneRequest<FederatedQuery::CreateConnectionRequest, EvCreateConnectionRequest>;
     using TEvCreateConnectionResponse = TControlPlaneAuditableResponse<FederatedQuery::CreateConnectionResult, FederatedQuery::Connection, EvCreateConnectionResponse>;
-    using TEvListConnectionsRequest = TControlPlaneRequest<FederatedQuery::ListConnectionsRequest, EvListConnectionsRequest>;
+    using TEvListConnectionsRequest = TControlPlaneListRequest<FederatedQuery::ListConnectionsRequest, EvListConnectionsRequest>;
     using TEvListConnectionsResponse = TControlPlaneNonAuditableResponse<FederatedQuery::ListConnectionsResult, EvListConnectionsResponse>;
     using TEvDescribeConnectionRequest = TControlPlaneRequest<FederatedQuery::DescribeConnectionRequest, EvDescribeConnectionRequest>;
     using TEvDescribeConnectionResponse = TControlPlaneNonAuditableResponse<FederatedQuery::DescribeConnectionResult, EvDescribeConnectionResponse>;
@@ -336,7 +379,7 @@ struct TEvControlPlaneStorage {
     using TEvDeleteConnectionResponse = TControlPlaneAuditableResponse<FederatedQuery::DeleteConnectionResult, FederatedQuery::Connection, EvDeleteConnectionResponse>;
     using TEvCreateBindingRequest = TControlPlaneRequest<FederatedQuery::CreateBindingRequest, EvCreateBindingRequest>;
     using TEvCreateBindingResponse = TControlPlaneAuditableResponse<FederatedQuery::CreateBindingResult, FederatedQuery::Binding, EvCreateBindingResponse>;
-    using TEvListBindingsRequest = TControlPlaneRequest<FederatedQuery::ListBindingsRequest, EvListBindingsRequest>;
+    using TEvListBindingsRequest = TControlPlaneListRequest<FederatedQuery::ListBindingsRequest, EvListBindingsRequest>;
     using TEvListBindingsResponse = TControlPlaneNonAuditableResponse<FederatedQuery::ListBindingsResult, EvListBindingsResponse>;
     using TEvDescribeBindingRequest = TControlPlaneRequest<FederatedQuery::DescribeBindingRequest, EvDescribeBindingRequest>;
     using TEvDescribeBindingResponse = TControlPlaneNonAuditableResponse<FederatedQuery::DescribeBindingResult, EvDescribeBindingResponse>;

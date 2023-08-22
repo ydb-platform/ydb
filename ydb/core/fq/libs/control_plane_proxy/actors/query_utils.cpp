@@ -92,9 +92,9 @@ TString SignAccountId(const TString& id, const TSigner::TPtr& signer) {
     return signer ? signer->SignAccountId(id) : TString{};
 }
 
-TString CreateSecretObjectQuery(const FederatedQuery::IamAuth& auth,
-                                const TString& name,
-                                const TSigner::TPtr& signer) {
+TMaybe<TString> CreateSecretObjectQuery(const FederatedQuery::IamAuth& auth,
+                                        const TString& name,
+                                        const TSigner::TPtr& signer) {
     using namespace fmt::literals;
     switch (auth.identity_case()) {
         case FederatedQuery::IamAuth::kServiceAccount: {
@@ -152,7 +152,6 @@ TString MakeCreateExternalDataSourceQuery(
 
     return fmt::format(
         R"(
-                {upsert_object};
                 CREATE EXTERNAL DATA SOURCE {external_source} WITH (
                     SOURCE_TYPE="ObjectStorage",
                     LOCATION="{location}"
@@ -161,19 +160,15 @@ TString MakeCreateExternalDataSourceQuery(
             )",
         "external_source"_a = EncloseAndEscapeString(sourceName, '`'),
         "location"_a = objectStorageEndpoint + "/" + EscapeString(bucketName, '"') + "/",
-        "upsert_object"_a =
-            CreateSecretObjectQuery(connectionContent.setting().object_storage().auth(),
-                                    connectionContent.name(),
-                                    signer),
         "auth_params"_a =
             CreateAuthParamsQuery(connectionContent.setting().object_storage().auth(),
                                   connectionContent.name(),
                                   signer));
 }
 
-TString DropSecretObjectQuery(const FederatedQuery::IamAuth& auth,
-                              const TString& name,
-                              const TSigner::TPtr& signer) {
+TMaybe<TString> DropSecretObjectQuery(const FederatedQuery::IamAuth& auth,
+                                      const TString& name,
+                                      const TSigner::TPtr& signer) {
     using namespace fmt::literals;
     switch (auth.identity_case()) {
         case FederatedQuery::IamAuth::kServiceAccount: {
@@ -192,26 +187,16 @@ TString DropSecretObjectQuery(const FederatedQuery::IamAuth& auth,
     }
 }
 
-TString MakeDeleteExternalDataSourceQuery(
-    const FederatedQuery::ConnectionContent& connectionContent,
-    const TSigner::TPtr& signer) {
-    using namespace fmt::literals;
-    return fmt::format(
-        R"(
-                {drop_secret_statement};
-                DROP EXTERNAL DATA SOURCE {external_source};
-           )",
-        "drop_secret_statement"_a =
-            DropSecretObjectQuery(connectionContent.setting().object_storage().auth(),
-                                  connectionContent.name(),
-                                  signer),
-        "external_source"_a = EncloseAndEscapeString(connectionContent.name(), '`'));
-}
-
 TString MakeDeleteExternalDataTableQuery(const TString& tableName) {
     using namespace fmt::literals;
     return fmt::format("DROP EXTERNAL TABLE {external_table};",
                        "external_table"_a = EncloseAndEscapeString(tableName, '`'));
+}
+
+TString MakeDeleteExternalDataSourceQuery(const TString& sourceName) {
+    using namespace fmt::literals;
+    return fmt::format("DROP EXTERNAL DATA SOURCE {external_source};",
+                       "external_source"_a = EncloseAndEscapeString(sourceName, '`'));
 }
 
 } // namespace NPrivate

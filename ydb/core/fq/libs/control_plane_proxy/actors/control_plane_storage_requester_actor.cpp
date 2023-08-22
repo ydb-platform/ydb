@@ -44,28 +44,37 @@ private:
     using TEventRequestPtr = typename TEventRequest::TPtr;
 
 public:
-    using TCPSRequestFactory =
+    using TCPSProtoRequestFactory =
         std::function<typename TCPSEventRequest::TProto(const TEventRequestPtr& request)>;
-    using TErrorMessageFactoryMethod = std::function<TString(const NYql::TIssues& issues)>;
-    using TEntityNameExtractorFactoryMethod =
+    using TErrorMessageFactory = std::function<TString(const NYql::TIssues& issues)>;
+    using TCPSEventRequestPostProcessor = std::function<void(TCPSEventRequest& eventRequest)>;
+    using TResultHandler =
         std::function<void(const TEventRequestPtr& request,
                            const typename TCPSEventResponse::TProto& response)>;
+    using TIssuesHandler = std::function<void(const TEventRequestPtr& request,
+                                              const typename NYql::TIssues& issues)>;
 
-    TControlPlaneStorageRequesterActor(const TActorId& proxyActorId,
-                            const TEventRequestPtr request,
-                            TDuration requestTimeout,
-                            const NPrivate::TRequestCommonCountersPtr& counters,
-                            TPermissions permissions,
-                            TCPSRequestFactory cpsRequestFactory,
-                            TErrorMessageFactoryMethod errorMessageFactoryMethod,
-                            TEntityNameExtractorFactoryMethod entityNameExtractorFactoryMethod)
-        : TBaseActor<
-              TControlPlaneStorageRequesterActor<TEventRequest, TEventResponse, TCPSEventRequest, TCPSEventResponse>>(
+    TControlPlaneStorageRequesterActor(
+        const TActorId& proxyActorId,
+        const TEventRequestPtr request,
+        TDuration requestTimeout,
+        const NPrivate::TRequestCommonCountersPtr& counters,
+        TPermissions permissions,
+        TCPSProtoRequestFactory cpsProtoRequestFactory,
+        TErrorMessageFactory errorMessageFactory,
+        TResultHandler resultHandler,
+        TCPSEventRequestPostProcessor cpsEventRequestPostProcessor =
+            std::function([](TCPSEventRequest& a) { Y_UNUSED(a); }))
+        : TBaseActor<TControlPlaneStorageRequesterActor<TEventRequest,
+                                                        TEventResponse,
+                                                        TCPSEventRequest,
+                                                        TCPSEventResponse>>(
               proxyActorId, std::move(request), requestTimeout, counters)
         , Permissions(permissions)
-        , CPSRequestFactory(cpsRequestFactory)
-        , ErrorMessageFactoryMethod(errorMessageFactoryMethod)
-        , EntityNameExtractorFactoryMethod(entityNameExtractorFactoryMethod) { }
+        , CPSProtoRequestFactory(cpsProtoRequestFactory)
+        , CPSEventRequestPostProcessor(cpsEventRequestPostProcessor)
+        , ErrorMessageFactory(errorMessageFactory)
+        , ResultHandler(resultHandler) { }
 
     static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY_REQUEST_CONTROL_PLANE_STORAGE";
 
@@ -77,7 +86,7 @@ public:
         CPP_LOG_I("TControlPlaneStorageRequesterActor Sending CPS request. Actor id: " << TBase::SelfId());
         const auto& request = Request;
         auto event = new TCPSEventRequest(request->Get()->Scope,
-                                          CPSRequestFactory(request),
+                                          CPSProtoRequestFactory(request),
                                           request->Get()->User,
                                           request->Get()->Token,
                                           request->Get()->CloudId,
@@ -85,6 +94,7 @@ public:
                                           request->Get()->Quotas,
                                           request->Get()->TenantInfo,
                                           {});
+        CPSEventRequestPostProcessor(*event);
         Send(ControlPlaneStorageServiceActorId(), event);
     }
 
@@ -98,21 +108,22 @@ public:
         auto issues = event->Get()->Issues;
         if (!issues.Empty()) {
             CPP_LOG_I("TControlPlaneStorageRequesterActor Handling CPS response. Request finished with issues. Actor id: " << TBase::SelfId());
-            TString errorMessage = ErrorMessageFactoryMethod(issues);
+            TString errorMessage = ErrorMessageFactory(issues);
             TBase::HandleError(errorMessage, issues);
             return;
         }
 
         CPP_LOG_I("TControlPlaneStorageRequesterActor Handling CPS response. Request finished successfully. Actor id: " << TBase::SelfId());
-        EntityNameExtractorFactoryMethod(Request, event->Get()->Result);
+        ResultHandler(Request, event->Get()->Result);
         TBase::SendRequestToSender();
     }
 
 private:
     TPermissions Permissions;
-    TCPSRequestFactory CPSRequestFactory;
-    TErrorMessageFactoryMethod ErrorMessageFactoryMethod;
-    TEntityNameExtractorFactoryMethod EntityNameExtractorFactoryMethod;
+    TCPSProtoRequestFactory CPSProtoRequestFactory;
+    TCPSEventRequestPostProcessor CPSEventRequestPostProcessor;
+    TErrorMessageFactory ErrorMessageFactory;
+    TResultHandler ResultHandler;
 };
 
 /// Discover connection_name
@@ -120,7 +131,49 @@ TString DescribeConnectionErrorMessageFactoryMethod(const NYql::TIssues& issues)
     Y_UNUSED(issues);
     return "Couldn't resolve connection";
 };
-NActors::IActor* MakeDiscoverYDBConnectionName(
+
+NActors::IActor* MakeListConnectionActor(
+    const TActorId& proxyActorId,
+    const TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr& request,
+    TCounters& counters,
+    TDuration requestTimeout,
+    TPermissions permissions) {
+    auto cpsRequestFactory =
+        [](const TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr& event) {
+            FederatedQuery::ListConnectionsRequest result;
+            auto connectionName = event->Get()->Request.content().name();
+            result.mutable_filter()->set_name(connectionName);
+            result.set_limit(2);
+            return result;
+        };
+    auto cpsRequestPostProcessor =
+        [](TEvControlPlaneStorage::TEvListConnectionsRequest& event) {
+            event.IsExactNameMatch = true;
+        };
+    auto entityNameExtractorFactoryMethod =
+        [](const TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr& event,
+           const FederatedQuery::ListConnectionsResult& result) {
+            event->Get()->CPSListingFinished = true;
+            event->Get()->CPSConnectionCount = result.connection_size();
+        };
+
+    return new TControlPlaneStorageRequesterActor<
+        TEvControlPlaneProxy::TEvCreateConnectionRequest,
+        TEvControlPlaneProxy::TEvCreateConnectionResponse,
+        TEvControlPlaneStorage::TEvListConnectionsRequest,
+        TEvControlPlaneStorage::TEvListConnectionsResponse>(
+        proxyActorId,
+        request,
+        requestTimeout,
+        counters.GetCommonCounters(RTC_DESCRIBE_CPS_ENTITY),
+        permissions,
+        cpsRequestFactory,
+        DescribeConnectionErrorMessageFactoryMethod,
+        entityNameExtractorFactoryMethod,
+        cpsRequestPostProcessor);
+}
+
+NActors::IActor* MakeDiscoverYDBConnectionNameActor(
     const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr& request,
     TCounters& counters,
@@ -153,7 +206,7 @@ NActors::IActor* MakeDiscoverYDBConnectionName(
         entityNameExtractorFactoryMethod);
 }
 
-NActors::IActor* MakeDiscoverYDBConnectionName(
+NActors::IActor* MakeDiscoverYDBConnectionNameActor(
     const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr& request,
     TCounters& counters,
@@ -186,7 +239,7 @@ NActors::IActor* MakeDiscoverYDBConnectionName(
         entityNameExtractorFactoryMethod);
 }
 
-NActors::IActor* MakeDiscoverYDBConnectionName(
+NActors::IActor* MakeDiscoverYDBConnectionNameActor(
     const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvDeleteConnectionRequest::TPtr& request,
     TCounters& counters,
@@ -219,7 +272,7 @@ NActors::IActor* MakeDiscoverYDBConnectionName(
         entityNameExtractorFactoryMethod);
 }
 
-NActors::IActor* MakeDiscoverYDBConnectionName(
+NActors::IActor* MakeDiscoverYDBConnectionNameActor(
     const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr& request,
     TCounters& counters,
@@ -254,7 +307,7 @@ NActors::IActor* MakeDiscoverYDBConnectionName(
 
 /// Discover binding_name
 
-NActors::IActor* MakeDiscoverYDBBindingName(
+NActors::IActor* MakeDiscoverYDBBindingNameActor(
     const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr& request,
     TCounters& counters,
@@ -291,7 +344,7 @@ NActors::IActor* MakeDiscoverYDBBindingName(
         entityNameExtractorFactoryMethod);
 }
 
-NActors::IActor* MakeDiscoverYDBBindingName(
+NActors::IActor* MakeDiscoverYDBBindingNameActor(
     const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvDeleteBindingRequest::TPtr& request,
     TCounters& counters,
@@ -328,7 +381,7 @@ NActors::IActor* MakeDiscoverYDBBindingName(
         entityNameExtractorFactoryMethod);
 }
 
-NActors::IActor* MakeListBindingIds(
+NActors::IActor* MakeListBindingIdsActor(
     const TActorId proxyActorId,
     const TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr& request,
     TCounters& counters,
@@ -381,7 +434,7 @@ NActors::IActor* MakeListBindingIds(
                                                          entityNameExtractorFactoryMethod);
 }
 
-NActors::IActor* MakeDescribeListedBinding(
+NActors::IActor* MakeDescribeListedBindingActor(
     const TActorId proxyActorId,
     const TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr& request,
     TCounters& counters,

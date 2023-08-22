@@ -11,44 +11,51 @@ namespace NPrivate {
 using namespace NActors;
 
 /// Discover connection_name
-NActors::IActor* MakeDiscoverYDBConnectionName(
+NActors::IActor* MakeDiscoverYDBConnectionNameActor(
     const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr& request,
     TCounters& counters,
     TDuration requestTimeout,
     TPermissions permissions);
 
-NActors::IActor* MakeDiscoverYDBConnectionName(
+NActors::IActor* MakeDiscoverYDBConnectionNameActor(
     const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr& request,
     TCounters& counters,
     TDuration requestTimeout,
     TPermissions permissions);
 
-NActors::IActor* MakeDiscoverYDBConnectionName(
+NActors::IActor* MakeDiscoverYDBConnectionNameActor(
     const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvDeleteConnectionRequest::TPtr& request,
     TCounters& counters,
     TDuration requestTimeout,
     TPermissions permissions);
 
-NActors::IActor* MakeDiscoverYDBConnectionName(
+NActors::IActor* MakeDiscoverYDBConnectionNameActor(
     const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr& request,
+    TCounters& counters,
+    TDuration requestTimeout,
+    TPermissions permissions);
+
+NActors::IActor* MakeListConnectionActor(
+    const TActorId& proxyActorId,
+    const TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr& request,
     TCounters& counters,
     TDuration requestTimeout,
     TPermissions permissions);
 
 /// Discover binding_name
 
-NActors::IActor* MakeDiscoverYDBBindingName(
+NActors::IActor* MakeDiscoverYDBBindingNameActor(
     const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr& request,
     TCounters& counters,
     TDuration requestTimeout,
     TPermissions permissions);
 
-NActors::IActor* MakeDiscoverYDBBindingName(
+NActors::IActor* MakeDiscoverYDBBindingNameActor(
     const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvDeleteBindingRequest::TPtr& request,
     TCounters& counters,
@@ -57,14 +64,14 @@ NActors::IActor* MakeDiscoverYDBBindingName(
 
 /// ModifyConnection
 
-NActors::IActor* MakeListBindingIds(
+NActors::IActor* MakeListBindingIdsActor(
     const TActorId sender,
     const TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr& request,
     TCounters& counters,
     TDuration requestTimeout,
     TPermissions permissions);
 
-NActors::IActor* MakeDescribeListedBinding(
+NActors::IActor* MakeDescribeListedBindingActor(
     const TActorId sender,
     const TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr& request,
     TCounters& counters,

@@ -313,18 +313,10 @@ private:
             const auto& meta = connection.meta();
             const auto& content = connection.content();
             const auto& setting = content.setting();
-            switch (setting.connection_case()) {
-            case FederatedQuery::ConnectionSetting::kObjectStorage:
-            break;
-            case FederatedQuery::ConnectionSetting::kYdbDatabase:
-            case FederatedQuery::ConnectionSetting::kClickhouseCluster:
-            case FederatedQuery::ConnectionSetting::kDataStreams:
-            case FederatedQuery::ConnectionSetting::kMonitoring:
-            case FederatedQuery::ConnectionSetting::kPostgresqlCluster:
-            case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
+
+            if (!ComputeConfig.IsConnectionCaseEnabled(setting.connection_case())) {
                 LOG_I("Exclude connection by type: scope = " << Scope << " , id = " << meta.id() << ", type = " << static_cast<int>(setting.connection_case()));
                 excludeIds.push_back(meta.id());
-            break;
             }
 
             switch (content.acl().visibility()) {

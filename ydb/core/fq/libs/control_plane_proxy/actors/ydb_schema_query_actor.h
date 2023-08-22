@@ -10,11 +10,9 @@
 namespace NFq {
 namespace NPrivate {
 
-using namespace NActors;
-
 /// Connection manipulation actors
 NActors::IActor* MakeCreateConnectionActor(
-    const TActorId& proxyActorId,
+    const NActors::TActorId& proxyActorId,
     TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr request,
     TDuration requestTimeout,
     TCounters& counters,
@@ -23,7 +21,7 @@ NActors::IActor* MakeCreateConnectionActor(
     bool successOnAlreadyExists = false);
 
 NActors::IActor* MakeModifyConnectionActor(
-    const TActorId& proxyActorId,
+    const NActors::TActorId& proxyActorId,
     TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr request,
     TDuration requestTimeout,
     TCounters& counters,
@@ -31,28 +29,37 @@ NActors::IActor* MakeModifyConnectionActor(
     TSigner::TPtr signer);
 
 NActors::IActor* MakeDeleteConnectionActor(
-    const TActorId& proxyActorId,
+    const NActors::TActorId& proxyActorId,
     TEvControlPlaneProxy::TEvDeleteConnectionRequest::TPtr request,
     TDuration requestTimeout,
     TCounters& counters,
+    const NConfig::TCommonConfig& commonConfig,
+    TSigner::TPtr signer);
+
+NActors::IActor* MakeDropCreateConnectionActor(
+    const NActors::TActorId& proxyActorId,
+    TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr request,
+    TDuration requestTimeout,
+    TCounters& counters,
+    const NConfig::TCommonConfig& commonConfig,
     TSigner::TPtr signer);
 
 /// Binding manipulation actors
 NActors::IActor* MakeCreateBindingActor(
-    const TActorId& proxyActorId,
+    const NActors::TActorId& proxyActorId,
     TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr request,
     TDuration requestTimeout,
     TCounters& counters,
     bool successOnAlreadyExists = false);
 
 NActors::IActor* MakeModifyBindingActor(
-    const TActorId& proxyActorId,
+    const NActors::TActorId& proxyActorId,
     TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr request,
     TDuration requestTimeout,
     TCounters& counters);
 
 NActors::IActor* MakeDeleteBindingActor(
-    const TActorId& proxyActorId,
+    const NActors::TActorId& proxyActorId,
     TEvControlPlaneProxy::TEvDeleteBindingRequest::TPtr request,
     TDuration requestTimeout,
     TCounters& counters);

@@ -62,8 +62,8 @@ void TNodeBroker::OnActivateExecutor(const TActorContext &ctx)
     SingleDomainAlloc = SingleDomain && appData->FeatureFlags.GetEnableNodeBrokerSingleDomainMode();
 
     MaxStaticId = Min(appData->DynamicNameserviceConfig->MaxStaticNodeId, TActorId::MaxNodeId);
-    MinDynamicId = Min(appData->DynamicNameserviceConfig->MinDynamicNodeId, TActorId::MaxNodeId);
-    MaxDynamicId = Min(appData->DynamicNameserviceConfig->MaxDynamicNodeId, TActorId::MaxNodeId);
+    MinDynamicId = Max(MaxStaticId + 1, (ui64)Min(appData->DynamicNameserviceConfig->MinDynamicNodeId, TActorId::MaxNodeId));
+    MaxDynamicId = Max(MinDynamicId, (ui64)Min(appData->DynamicNameserviceConfig->MaxDynamicNodeId, TActorId::MaxNodeId));
 
     ClearState();
 

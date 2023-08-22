@@ -560,6 +560,7 @@ namespace NTable {
                 Current = { };
 
                 Y_VERIFY(!PrevPageLastKey);
+                Y_VERIFY(!PrevPageData);
             }
         }
 
@@ -700,6 +701,7 @@ namespace NTable {
                  */
 
                 Y_VERIFY(dataPage->Count, "Invalid EPage::DataPage blob");
+                TPgSize keySize = g.FirstKeyIndexSize;
 
                 if (groupId.IsMain()) {
                     Y_VERIFY_DEBUG(NextSliceFirstRowId != Max<TRowId>());
@@ -708,6 +710,7 @@ namespace NTable {
 
                     if (CutIndexKeys) {
                         CutKey(groupId);
+                        keySize = g.Index.CalcSize(Key);
                     }
                 } else if (groupId.Index == 0) {
                     // TODO: Call CutKey here too, but don't touch MVCC columns
@@ -715,6 +718,12 @@ namespace NTable {
                     InitKey(Key, dataPage->Record(0), groupId);
                 } else {
                     Key.clear();
+                }
+
+                if (CutIndexKeys && groupId.IsMain()) {
+                    InitKey(PrevPageLastKey, dataPage->Record(dataPage->Count - 1), groupId);
+                    // Note: keep page alive while we need PrevPageLastKey bytes
+                    PrevPageData = raw;
                 }
 
                 Current.Bytes += raw.size(); /* before encoding */
@@ -730,16 +739,9 @@ namespace NTable {
                 auto page = WritePage(raw, EPage::DataPage, groupId.Index);
 
                 // N.B. non-main groups have no key
-                if (CutIndexKeys) {
-                    Y_VERIFY_DEBUG(g.Index.CalcSize(Key) <= g.FirstKeyIndexSize);
-                } else {
-                    Y_VERIFY_DEBUG(g.Index.CalcSize(Key) == g.FirstKeyIndexSize);
-                }
-                g.Index.Add(g.FirstKeyIndexSize, Key, dataPage.BaseRow(), page);
+                Y_VERIFY_DEBUG(g.Index.CalcSize(Key) == keySize);
 
-                if (CutIndexKeys && groupId.IsMain()) {
-                    InitKey(PrevPageLastKey, dataPage->Record(dataPage->Count - 1), groupId);
-                }
+                g.Index.Add(keySize, Key, dataPage.BaseRow(), page);
 
                 // N.B. hack to save the last row/key for the main group
                 // SliceSize is wrong, but it's a hack for tests right now
@@ -756,6 +758,7 @@ namespace NTable {
                         g.Index.Add(g.LastKeyIndexSize, Key, lastRowId, page);
                         Y_VERIFY(std::exchange(Phase, 2) == 1);
                         PrevPageLastKey.clear(); // new index will be started
+                        PrevPageData = { };
                     }
                 }
 
@@ -979,6 +982,7 @@ namespace NTable {
         TWriteStats WriteStats;
         TStackVec<TCell, 16> Key;
         TStackVec<TCell, 16> PrevPageLastKey;
+        TSharedData PrevPageData;
         ui32 Phase = 0; // 0 - writing rows, 1 - flushing current page collection, 2 - flushed current page collection
 
         struct TRegisteredGlob {

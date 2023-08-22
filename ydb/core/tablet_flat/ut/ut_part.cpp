@@ -658,6 +658,56 @@ Y_UNIT_TEST_SUITE(TPart) {
         auto cooked2 = TCompaction(new TForwardEnv(512, 1024), conf).Do(subset);
     }
 
+    Y_UNIT_TEST(CutKeys_Lz4)
+    {
+        TLayoutCook lay;
+
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0, 1});
+
+        TString prefix(666, 'x');
+        TVector<std::pair<ui32, TString>> fullRows = {
+            {1, prefix + "aaa"}, // -> (1, "aaa")
+            {1, prefix + "aab"},
+            {1, prefix + "aac"},
+
+            {1, prefix + "baaaa"}, // -> (1, "b")
+            {1, prefix + "bab"},
+            {1, prefix + "caa"},
+            
+            {2, prefix + "aaa"}, // -> (2, null)
+            {2, prefix + "bbb"},
+            {2, prefix + "ccc"},
+
+            {2, prefix + "ccx"}, // -> (2, "ccx")
+            {2, prefix + "cxy"},
+            {2, prefix + "cxz"}, // -> (2, "cxz")
+        };
+
+        NPage::TConf conf{ true, 8192 };
+        conf.CutIndexKeys = true;
+        conf.Group(0).Codec = NPage::ECodec::LZ4;
+        conf.Group(0).PageRows = 3;
+
+        TPartCook cook(lay, conf);
+        for (auto r : fullRows) {
+            cook.Add(*TSchemedCookRow(*lay).Col(r.first, r.second));
+        }
+
+        TCheckIt wrap(cook.Finish(), { new TTouchEnv() });
+
+        const auto part = (*wrap).Eggs.Lone();
+
+        const NPage::TCompare<NPage::TIndex::TRecord> cmp(part->Scheme->Groups[0].ColsKeyIdx, *(*lay).Keys);
+        UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*part->Index->Begin(), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(1u, prefix + "aaa"))), 0);
+        UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*(part->Index->Begin() + 1), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(1u, prefix + "b"))), 0);
+        UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*(part->Index->Begin() + 2), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(2u, nullptr))), 0);
+        UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*(part->Index->Begin() + 3), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(2u, prefix + "ccx"))), 0);
+        UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*part->Index.GetLastKeyRecord(), TRowTool(*lay).KeyCells(*TSchemedCookRow(*lay).Col(2u, prefix + "cxz"))), 0);
+    }
+
     Y_UNIT_TEST(CutKeys_Seek)
     {
         TLayoutCook lay;

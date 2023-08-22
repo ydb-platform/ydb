@@ -113,9 +113,9 @@ insert into @out1 select * from Input;
 insert into @out2 select * from Input;
 )",
 R"((
-(let $1 (YtTable '"out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $1 (YtTable '"@out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $2 (Write! world '"yt" $1 (Right! (Read! world '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append) '('"initial"))))
-(let $3 (YtTable '"out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $3 (YtTable '"@out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $4 (Write! world '"yt" $3 (Right! (Read! world '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append) '('"initial"))))
 (return (Commit! (Sync! $2 $4) '"yt" '('('"epoch" '"1"))))
 )
@@ -131,9 +131,9 @@ insert into @out2 select * from Input;
 )",
 R"((
 (let $1 (YtConfigure! world '"yt" '"Attr" '"pool" '"1"))
-(let $2 (YtTable '"out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $2 (YtTable '"@out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $3 (Write! $1 '"yt" $2 (Right! (Read! $1 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append) '('"initial"))))
-(let $4 (YtTable '"out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $4 (YtTable '"@out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $5 (Write! $1 '"yt" $4 (Right! (Read! $1 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append) '('"initial"))))
 (return (Commit! (Sync! $3 $5) '"yt" '('('"epoch" '"1"))))
 )
@@ -149,13 +149,13 @@ insert into @out1 select * from Input;
 insert into @out2 select * from Input;
 )",
 R"((
-(let $1 (YtTable '"out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $1 (YtTable '"@out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $2 (Write! world '"yt" $1 (Right! (Read! world '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append) '('"initial"))))
-(let $3 (YtTable '"out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $3 (YtTable '"@out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $4 (Write! $2 '"yt" $3 (Right! (Read! world '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append))))
-(let $5 (YtTable '"out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $5 (YtTable '"@out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $6 (Write! world '"yt" $5 (Right! (Read! world '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append) '('"initial"))))
-(let $7 (YtTable '"out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $7 (YtTable '"@out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $8 (Write! $6 '"yt" $7 (Right! (Read! world '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append))))
 (return (Commit! (Sync! $4 $8) '"yt" '('('"epoch" '"1"))))
 )
@@ -171,13 +171,13 @@ insert into @out2 select * from Input;
 insert into @out2 select * from Input;
 )",
 R"((
-(let $1 (YtTable '"out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $1 (YtTable '"@out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $2 (Write! world '"yt" $1 (Right! (Read! world '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append) '('"initial"))))
-(let $3 (YtTable '"out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $3 (YtTable '"@out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $4 (Write! $2 '"yt" $3 (Right! (Read! world '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append))))
-(let $5 (YtTable '"out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $5 (YtTable '"@out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $6 (Write! world '"yt" $5 (Right! (Read! world '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append) '('"initial"))))
-(let $7 (YtTable '"out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $7 (YtTable '"@out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $8 (Write! $6 '"yt" $7 (Right! (Read! world '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append))))
 (return (Commit! (Sync! $4 $8) '"yt" '('('"epoch" '"1"))))
 )
@@ -194,14 +194,14 @@ insert into @out2 select * from Input;
 insert into @out2 select * from Input;
 )",
 R"((
-(let $1 (YtTable '"out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $1 (YtTable '"@out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $2 (Write! world '"yt" $1 (Right! (Read! world '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append) '('"initial"))))
-(let $3 (YtTable '"out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $3 (YtTable '"@out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $4 (Write! $2 '"yt" $3 (Right! (Read! world '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append))))
 (let $5 (YtConfigure! world '"yt" '"Attr" '"pool" '"1"))
-(let $6 (YtTable '"out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $6 (YtTable '"@out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $7 (Write! $5 '"yt" $6 (Right! (Read! $5 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append) '('"initial"))))
-(let $8 (YtTable '"out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $8 (YtTable '"@out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $9 (Write! $7 '"yt" $8 (Right! (Read! $5 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append))))
 (return (Commit! (Sync! $4 $9) '"yt" '('('"epoch" '"1"))))
 )
@@ -219,13 +219,13 @@ insert into @out2 select * from Input;
 )",
 R"((
 (let $1 (YtConfigure! world '"yt" '"Attr" '"pool" '"1"))
-(let $2 (YtTable '"out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $2 (YtTable '"@out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $3 (Write! $1 '"yt" $2 (Right! (Read! $1 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append) '('"initial"))))
-(let $4 (YtTable '"out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $4 (YtTable '"@out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $5 (Write! $3 '"yt" $4 (Right! (Read! $1 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append))))
-(let $6 (YtTable '"out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $6 (YtTable '"@out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $7 (Write! $1 '"yt" $6 (Right! (Read! $1 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append) '('"initial"))))
-(let $8 (YtTable '"out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $8 (YtTable '"@out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $9 (Write! $7 '"yt" $8 (Right! (Read! $1 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append))))
 (return (Commit! (Sync! $5 $9) '"yt" '('('"epoch" '"1"))))
 )
@@ -243,13 +243,13 @@ insert into @out2 select * from Input;
 )",
 R"((
 (let $1 (YtConfigure! world '"yt" '"Attr" '"pool" '"1"))
-(let $2 (YtTable '"out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $2 (YtTable '"@out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $3 (Write! world '"yt" $2 (Right! (Read! world '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append) '('"initial"))))
-(let $4 (YtTable '"out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $4 (YtTable '"@out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $5 (Write! (Sync! $1 $3) '"yt" $4 (Right! (Read! $1 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append))))
-(let $6 (YtTable '"out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $6 (YtTable '"@out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $7 (Write! $1 '"yt" $6 (Right! (Read! $1 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append) '('"initial"))))
-(let $8 (YtTable '"out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $8 (YtTable '"@out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $9 (Write! $7 '"yt" $8 (Right! (Read! $1 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append))))
 (return (Commit! (Sync! $5 $9) '"yt" '('('"epoch" '"1"))))
 )
@@ -269,13 +269,13 @@ insert into @out2 select * from Input;
 R"((
 (let $1 (YtConfigure! world '"yt" '"Attr" '"pool" '"1"))
 (let $2 (YtConfigure! $1 '"yt" '"Attr" '"pool" '"2"))
-(let $3 (YtTable '"out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $3 (YtTable '"@out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $4 (Write! $1 '"yt" $3 (Right! (Read! $1 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append) '('"initial"))))
-(let $5 (YtTable '"out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $5 (YtTable '"@out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $6 (Write! (Sync! $2 $4) '"yt" $5 (Right! (Read! $2 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append))))
-(let $7 (YtTable '"out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $7 (YtTable '"@out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $8 (Write! $2 '"yt" $7 (Right! (Read! $2 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append) '('"initial"))))
-(let $9 (YtTable '"out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $9 (YtTable '"@out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $10 (Write! $8 '"yt" $9 (Right! (Read! $2 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append))))
 (return (Commit! (Sync! $6 $10) '"yt" '('('"epoch" '"1"))))
 )
@@ -294,14 +294,14 @@ insert into @out2 select * from Input;
 )",
 R"((
 (let $1 (YtConfigure! world '"yt" '"Attr" '"pool" '"1"))
-(let $2 (YtTable '"out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $2 (YtTable '"@out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $3 (Write! world '"yt" $2 (Right! (Read! world '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append) '('"initial"))))
-(let $4 (YtTable '"out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $4 (YtTable '"@out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $5 (Write! (Sync! $1 $3) '"yt" $4 (Right! (Read! $1 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append))))
 (let $6 (YtConfigure! $1 '"yt" '"Attr" '"pool" '"2"))
-(let $7 (YtTable '"out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $7 (YtTable '"@out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $8 (Write! $1 '"yt" $7 (Right! (Read! $1 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append) '('"initial"))))
-(let $9 (YtTable '"out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $9 (YtTable '"@out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $10 (Write! (Sync! $6 $8) '"yt" $9 (Right! (Read! $6 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append))))
 (return (Commit! (Sync! $5 $10) '"yt" '('('"epoch" '"1"))))
 )
@@ -316,9 +316,9 @@ insert into @out2 select * from Input;
 pragma yt.Pool="1";
 )",
 R"((
-(let $1 (YtTable '"out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $1 (YtTable '"@out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $2 (Write! world '"yt" $1 (Right! (Read! world '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append) '('"initial"))))
-(let $3 (YtTable '"out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $3 (YtTable '"@out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $4 (Write! world '"yt" $3 (Right! (Read! world '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append) '('"initial"))))
 (return (Commit! (Sync! $2 $4) '"yt" '('('"epoch" '"1"))))
 )
@@ -333,10 +333,10 @@ select * from Input;
 insert into @out1 select * from Input;
 )",
 R"((
-(let $1 (YtTable '"out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $1 (YtTable '"@out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $2 (Write! world '"yt" $1 (Right! (Read! world '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append) '('"initial"))))
 (let $3 (Write! world 'result (Key) (Right! (Read! world '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('type) '('autoref))))
-(let $4 (YtTable '"out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $4 (YtTable '"@out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $5 (Write! (Commit! (Sync! $2 $3) 'result) '"yt" $4 (Right! (Read! world '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append))))
 (return (Commit! $5 '"yt" '('('"epoch" '"1"))))
 )
@@ -378,10 +378,10 @@ select * from @temp;
 )",
 R"((
 (let $1 (YtConfigure! world '"yt" '"Attr" '"pool" '"1"))
-(let $2 (YtTable '"temp" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $2 (YtTable '"@temp" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $3 (Write! $1 '"yt" $2 (Right! (Read! $1 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append) '('"initial"))))
 (let $4 (Commit! $3 '"yt" '('('"epoch" '"1"))))
-(let $5 (Write! (Sync! $1 $4) 'result (Key) (Right! (Read! (Sync! $1 $4) '"yt" '((YtTable '"temp" (Void) (Void) (Void) '('('"anonymous")) '1 (Void) '"plato")) (Void) '())) '('('type) '('autoref))))
+(let $5 (Write! (Sync! $1 $4) 'result (Key) (Right! (Read! (Sync! $1 $4) '"yt" '((YtTable '"@temp" (Void) (Void) (Void) '('('"anonymous")) '1 (Void) '"plato")) (Void) '())) '('('type) '('autoref))))
 (return (Commit! (Commit! $5 'result) '"yt" '('('"epoch" '"2"))))
 )
 )"
@@ -406,14 +406,14 @@ R"((
 (let $1 (YtConfigure! world '"yt" '"Attr" '"pool" '"1"))
 (let $2 (YtConfigure! $1 '"yt" '"Attr" '"pool" '"2"))
 (let $3 (YtConfigure! $2 '"yt" '"Attr" '"pool" '"3"))
-(let $4 (YtTable '"out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $4 (YtTable '"@out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $5 (Write! $1 '"yt" $4 (Right! (Read! $1 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append) '('"initial"))))
 (let $6 (Commit! $5 '"yt" '('('"epoch" '"1"))))
-(let $7 (YtTable '"out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '2 '"plato"))
-(let $8 (Write! (Sync! $2 $6) '"yt" $7 (Right! (Read! (Sync! $2 $6) '"yt" '((YtTable '"out1" (Void) (Void) (Void) '('('"anonymous")) '1 (Void) '"plato")) (Void) '())) '('('mode 'append) '('"initial"))))
-(let $9 (Write! (Sync! $2 $6) 'result (Key) (Right! (Read! (Sync! $2 $6) '"yt" '((YtTable '"out1" (Void) (Void) (Void) '('('"anonymous")) '1 (Void) '"plato")) (Void) '())) '('('type) '('autoref))))
+(let $7 (YtTable '"@out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '2 '"plato"))
+(let $8 (Write! (Sync! $2 $6) '"yt" $7 (Right! (Read! (Sync! $2 $6) '"yt" '((YtTable '"@out1" (Void) (Void) (Void) '('('"anonymous")) '1 (Void) '"plato")) (Void) '())) '('('mode 'append) '('"initial"))))
+(let $9 (Write! (Sync! $2 $6) 'result (Key) (Right! (Read! (Sync! $2 $6) '"yt" '((YtTable '"@out1" (Void) (Void) (Void) '('('"anonymous")) '1 (Void) '"plato")) (Void) '())) '('('type) '('autoref))))
 (let $10 (Commit! (Commit! (Sync! $8 $9) 'result) '"yt" '('('"epoch" '"2"))))
-(let $11 (Write! (Sync! $3 $10) 'result (Key) (Right! (Read! (Sync! $3 $10) '"yt" '((YtTable '"out2" (Void) (Void) (Void) '('('"anonymous")) '2 (Void) '"plato")) (Void) '())) '('('type) '('autoref))))
+(let $11 (Write! (Sync! $3 $10) 'result (Key) (Right! (Read! (Sync! $3 $10) '"yt" '((YtTable '"@out2" (Void) (Void) (Void) '('('"anonymous")) '2 (Void) '"plato")) (Void) '())) '('('type) '('autoref))))
 (return (Commit! (Commit! $11 'result) '"yt" '('('"epoch" '"3"))))
 )
 )"
@@ -456,15 +456,15 @@ select * from Input;
 R"((
 (let $1 (YtConfigure! world '"yt" '"Attr" '"pool" '"1"))
 (let $2 (Configure! world '"config" '"DqEngine" '"auto"))
-(let $3 (YtTable '"out" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $3 (YtTable '"@out" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $4 (Write! (Sync! $1 $2) '"yt" $3 (Right! (Read! $1 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append) '('"initial"))))
-(let $5 (YtTable '"out" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $5 (YtTable '"@out" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $6 (Write! $4 '"yt" $5 (Right! (Read! $1 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append))))
-(let $7 (YtTable '"out" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $7 (YtTable '"@out" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $8 (Write! $6 '"yt" $7 (Right! (Read! $1 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append))))
-(let $9 (YtTable '"out" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $9 (YtTable '"@out" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $10 (Write! $8 '"yt" $9 (Right! (Read! $1 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append))))
-(let $11 (YtTable '"out" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $11 (YtTable '"@out" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $12 (Write! $10 '"yt" $11 (Right! (Read! $1 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append))))
 (return (Commit! $12 '"yt" '('('"epoch" '"1"))))
 )
@@ -485,13 +485,13 @@ select * from Input;
 )",
 R"((
 (let $1 (YtConfigure! world '"yt" '"Attr" '"pool" '"1"))
-(let $2 (YtTable '"out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $2 (YtTable '"@out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $3 (Write! $1 '"yt" $2 (Right! (Read! $1 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append) '('"initial"))))
 (let $4 (Write! $1 'result (Key) (Right! (Read! $1 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('type) '('autoref))))
 (let $5 (Commit! (Sync! $3 $4) 'result))
-(let $6 (YtTable '"out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $6 (YtTable '"@out2" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $7 (Write! (Sync! $1 $5) '"yt" $6 (Right! (Read! $1 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append) '('"initial"))))
-(let $8 (YtTable '"out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
+(let $8 (YtTable '"@out1" (Void) (Void) (Void) '('('"anonymous")) (Void) '1 '"plato"))
 (let $9 (Write! (Sync! $1 $5) '"yt" $8 (Right! (Read! $1 '"yt" '((YtTable '"Input" (Void) (Void) (Void) '() (Void) (Void) '"plato")) (Void) '())) '('('mode 'append))))
 (return (Commit! (Sync! $7 $9) '"yt" '('('"epoch" '"1"))))
 )

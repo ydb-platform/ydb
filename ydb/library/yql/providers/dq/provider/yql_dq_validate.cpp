@@ -103,19 +103,23 @@ private:
         if (TDqSource::Match(&node) || TDqTransform::Match(&node) || TDqSink::Match(&node)) {
             return true;
         }
-        
+
         ReportError(Ctx_, node, TStringBuilder() << "Failed to execute callable with name: " << node.Content() << " in DQ");
         return false;
     }
 
 public:
-    TDqExecutionValidator(const TTypeAnnotationContext& typeCtx, TExprContext& ctx, const TDqState::TPtr state) : TypeCtx_(typeCtx), Ctx_(ctx), State_(state) {}
-    
+    TDqExecutionValidator(const TTypeAnnotationContext& typeCtx, TExprContext& ctx, const TDqState::TPtr state)
+        : TypeCtx_(typeCtx)
+        , Ctx_(ctx)
+        , State_(state)
+    {}
+
     bool ValidateDqExecution(const TExprNode& node) {
         YQL_LOG_CTX_SCOPE(__FUNCTION__);
 
         TNodeSet dqNodes;
-        
+
         bool hasJoin = false;
         if (TDqCnResult::Match(&node)) {
             dqNodes.insert(TDqCnResult(&node).Output().Stage().Raw());
@@ -156,7 +160,7 @@ public:
 
         for (auto& [integration, nodes]: ReadsPerProvider_) {
             TMaybe<ui64> size;
-            hasError |= !(size = integration->EstimateReadSize(State_->Settings->DataSizePerJob.Get().GetOrElse(TDqSettings::TDefault::DataSizePerJob), 
+            hasError |= !(size = integration->EstimateReadSize(State_->Settings->DataSizePerJob.Get().GetOrElse(TDqSettings::TDefault::DataSizePerJob),
                 State_->Settings->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage), nodes, Ctx_));
             if (hasError) {
                 break;
@@ -178,7 +182,7 @@ private:
     THashMap<IDqIntegration*, TVector<const TExprNode*>> ReadsPerProvider_;
     size_t DataSize_ = 0;
     const TDqState::TPtr State_;
-    
+
 };
 }
 

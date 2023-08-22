@@ -27,7 +27,9 @@
 `-p, --param` | Выражение в формате `$name=value`, где `$name` — имя параметра YQL-запроса, а `value` — его значение (корректный [JSON value](https://www.json.org/json-ru.html)). Может быть указано несколько раз.<br><br>Все указываемые параметры должны быть декларированы в YQL-запросе [оператором DECLARE](../../yql/reference/syntax/declare.md), иначе будет выдана ошибка «Query does not contain parameter». Если один и тот же параметр указан несколько раз, будет выдана ошибка «Parameter value found in more than one source».<br><br>В зависимости от используемой операционной системы может понадобиться экранирование символа `$` или запись выражения в одинарных кавычках `'`.
 `--param-file` | Имя файла в формате [JSON]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/JSON){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/JSON){% endif %} в кодировке [UTF-8]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/UTF-8){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/UTF-8){% endif %}, в котором заданы значения параметров, сопоставляемые с параметрами YQL-запроса по именам ключей. Может быть указано несколько раз.<br><br>Если значения декларированного в YQL-запросе параметра будут обнаружены одновременно в нескольких файлах, или заданы в командной строке опцией `--param`, будет выдана ошибка «Parameter value found in more than one source».<br><br>Имена ключей в JSON-файле указываются без начального символа `$`. Ключи, которые присутствуют в файле, но не декларированы в YQL-запросе, будут проигнорированы без выдачи сообщения об ошибке.
 `--input-format` | Формат представления значений параметров. Действует на все способы их передачи (через параметр команды, файл или `stdin`).<br>Возможные значения:<ul><li>`json-unicode` (по умолчанию) — [JSON]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/JSON){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/JSON){% endif %}.</li><li>`json-base64` — [JSON]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/JSON){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/JSON){% endif %}, в котором значения параметров с типом «бинарная строка» (`DECLARE $par AS String`) представлены в кодировке [Base64]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Base64){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Base64){% endif %}. Такая возможность позволяет передавать бинарные данные, декодирование которых из Base64 выполнит {{ ydb-short-name }} CLI.</li></ul>
-`--stdin-format` | Формат представления значений параметров на `stdin`.<br>{{ ydb-short-name }} CLI автоматически определяет что на стандартное устройство ввода `stdin` перенаправлен файл или выход другой команды командной оболочки, и в этом случае интерпретирует полученные данные в соответствии с возможными значениями:<ul><li>`json-unicode` — [JSON]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/JSON){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/JSON){% endif %}.</li><li>`json-base64` — [JSON]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/JSON){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/JSON){% endif %}, в котором значения параметров с типом «бинарная строка» (`DECLARE $par AS String`) представлены в кодировке [Base64]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Base64){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Base64){% endif %}.</li><li>`raw` - бинарные данные.</li></ul>Если формат представления параметров на `stdin` не задан, то применяется формат, заданный параметром `--input-format`.
+`--stdin-format` | Формат представления значений параметров на `stdin`.<br>{{ ydb-short-name }} CLI автоматически определяет что на стандартное устройство ввода `stdin` перенаправлен файл или выход другой команды командной оболочки, и в этом случае интерпретирует полученные данные в соответствии с возможными значениями:<ul><li>`json-unicode` — [JSON]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/JSON){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/JSON){% endif %}.</li><li>`json-base64` — [JSON]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/JSON){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/JSON){% endif %}, в котором значения параметров с типом «бинарная строка» (`DECLARE $par AS String`) представлены в кодировке [Base64]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Base64){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Base64){% endif %}.</li><li>`raw` — бинарные данные.</li><li>`csv` — формат [CSV]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/CSV){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/CSV){% endif %}. По умолчанию имена параметров должны находиться в header'е CSV файла. При единичном исполнении запроса допустима только одна строка в файле, не считая header'a.</li><li>`tsv` — формат [TSV]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/TSV){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/TSV){% endif %}.</li></ul>Если формат представления параметров на `stdin` не задан, то применяется формат, заданный параметром `--input-format`.
+`--columns` | Строка с именами колонок, заменяющими header файла, читаемого со stdin'а. При указании опции считается, что в файле header отсутствует. Опция допустима только с форматами stdin'a CSV и TSV.
+`--skip-rows` | Число строк с начала файла, читаемого со stdin'a, которые нужно пропустить, не включая строку header'a, если она имеется. Опция допустима только с форматами stdin'a CSV и TSV.
 `--stdin-par` | Имя параметра, значение которого передано через `stdin`. Указывается без символа `$`. Обязательно при использовании формата `raw` в `--stdin-format`.<br><br>При использовании с JSON-форматами `stdin` интерпретируется не как JSON-документ, а как JSON value, с передачей значения в параметр с указанным именем.
 
 Запрос будет отправлен на исполнение на сервер один раз, если значения заданы для всех параметров [в секции `DECLARE`](../../yql/reference/syntax/declare.md). Если хотя бы для одного параметра значение не задано, запрос не будет выполнен с выдачей сообщения об ошибке "Missing value for parameter".
@@ -128,6 +130,27 @@ curl -Ls http://ydb.tech/docs | {{ ydb-cli }} -p quickstart table query execute 
 └─────────┘
 ```
 
+#### Передача файла в формате csv {#example-csv}
+
+```bash
+echo '10,Some text' | {{ ydb-cli }} -p quickstart table query execute \
+  -q 'declare $a as Int32;
+      declare $b as String
+      select $a, $b' \
+  --stdin-format csv \
+  --columns 'a,b'
+```
+
+Вывод команды:
+
+```text
+┌─────────┬─────────────┐
+| column0 | column1     |
+├─────────┼─────────────┤
+| 10      | "Some text" |
+└─────────┴─────────────┘
+```
+
 ## Итеративная потоковая обработка {#streaming-iterate}
 
 {{ ydb-short-name }} CLI поддерживает возможность многократного исполнения YQL-запроса с разными наборами значений параметров, при их передаче через `stdin`. При этом соединение с базой данных устанавливается однократно, а план исполнения запроса кешируется, что существенно повышает производительность такого подхода по сравнению с отдельными вызовами CLI.
@@ -194,6 +217,47 @@ cat par1.txt | \
 ```
 
 Полученный в таком формате результат можно использовать для передачи на вход команде исполнения следующего YQL-запроса.
+
+#### Потоковая обработка файла в формате csv {#example-iterate-csv}
+
+Запрос можно также выполнить с данными, полученными из CSV файла. Создадим файл с теми же наборами значений параметров в формате CSV:
+
+```bash
+echo -e 'a,b\n10,20\n15,25\n35,48' > par1.txt
+cat par1.txt
+```
+
+Вывод команды:
+
+```text
+a,b
+10,20
+15,25
+35,48
+```
+
+Исполним запрос:
+
+```bash
+cat par1.txt | \
+{{ ydb-cli }} -p quickstart table query execute \
+  -q 'declare $a as Int64;
+      declare $b as Int64;
+      select $a+$b, $a-$b' \
+  --stdin-format newline-delimited \
+  --stdin-format csv \
+  --format csv
+```
+
+Вывод команды:
+
+```text
+30,-10
+40,-10
+83,-13
+```
+
+Полученный в таком формате результат можно использовать для передачи на вход команде исполнения следующего YQL-запроса, задав header данным в CSV формате опцией `--columns`.
 
 #### Потоковая обработка с объединением значений параметров из разных источников {#example-iterate-union}
 

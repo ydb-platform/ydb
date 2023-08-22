@@ -7,8 +7,88 @@
 using namespace NKikimr;
 using namespace NStorage;
 
+void TNodeWarden::RemoveDrivesWithBadSerialsAndReport(TVector<NPDisk::TDriveData>& drives, TStringStream& details) {
+    // Serial number's size definitely won't exceed this number of bytes.
+    size_t maxSerialSizeInBytes = 100;
+
+    auto isValidSerial = [maxSerialSizeInBytes](TString& serial) {
+        if (serial.Size() > maxSerialSizeInBytes) {
+            // Not sensible size.
+            return false;
+        }
+
+        // Check if serial number contains only ASCII characters.
+        for (size_t i = 0; i < serial.Size(); ++i) {
+            i8 c = serial[i];
+
+            if (c <= 0) {
+                // Encountered null terminator earlier than expected or non-ASCII character.
+                return false;
+            }
+
+            if (!isprint(c)) {
+                // Encountered non-printable character.
+                return false;
+            }
+        }
+
+        return true;
+    };
+
+    std::unordered_set<TString> drivePaths;
+
+    for (const auto& drive : drives) {
+        drivePaths.insert(drive.Path);
+    }
+
+    // Remove counters for drives that are no longer present.
+    for (auto countersIt = ByPathDriveCounters.begin(); countersIt != ByPathDriveCounters.end();) {
+        if (drivePaths.find(countersIt->first) == drivePaths.end()) {
+            countersIt = ByPathDriveCounters.erase(countersIt);
+        } else {
+            countersIt++;
+        }
+    }
+
+    // Prepare removal of drives with invalid serials.
+    auto toRemove = std::remove_if(drives.begin(), drives.end(), [&isValidSerial](auto& driveData) {
+        TString& serial = driveData.SerialNumber;
+
+        return !isValidSerial(serial);
+    });
+
+    // Add counters for every drive path.
+    for (auto it = drives.begin(); it != toRemove; ++it) {
+        TString& path = it->Path;
+        ByPathDriveCounters.try_emplace(path, AppData()->Counters, path);
+    }
+
+    // And for drives with invalid serials log serial and report to the monitoring.
+    for (auto it = toRemove; it != drives.end(); ++it) {
+        TString& serial = it->SerialNumber;
+        TString& path = it->Path;
+
+        auto [mapIt, _] = ByPathDriveCounters.try_emplace(path, AppData()->Counters, path);
+
+        // Cut string in case it exceeds max size.
+        size_t size = std::min(serial.Size(), maxSerialSizeInBytes);
+
+        // Encode in case it contains weird symbols.
+        TString encoded = Base64Encode(serial.substr(0, size));
+
+        // Output bad serial number in base64 encoding.
+        STLOG(PRI_WARN, BS_NODE, NW03, "Bad serial number", (Path, path), (SerialBase64, encoded.Quote()), (Details, details.Str()));
+        
+        mapIt->second.BadSerialsRead->Inc();
+    }
+
+    // Remove drives with invalid serials.
+    drives.erase(toRemove, drives.end());
+}
+
 TVector<NPDisk::TDriveData> TNodeWarden::ListLocalDrives() {
-    TVector<NPDisk::TDriveData> drives = ListDevicesWithPartlabel();
+    TStringStream details;
+    TVector<NPDisk::TDriveData> drives = ListDevicesWithPartlabel(details);
 
     try {
         TString raw = TFileInput(MockDevicesPath).ReadAll();
@@ -28,6 +108,8 @@ TVector<NPDisk::TDriveData> TNodeWarden::ListLocalDrives() {
     std::sort(drives.begin(), drives.end(), [] (const auto& lhs, const auto& rhs) {
         return lhs.Path < rhs.Path;
     });
+
+    RemoveDrivesWithBadSerialsAndReport(drives, details);
 
     return drives;
 }

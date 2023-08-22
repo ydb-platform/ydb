@@ -11,7 +11,7 @@ void DetectFileParameters(TString path, ui64 &outDiskSizeBytes, bool &outIsBlock
 
 std::optional<NPDisk::TDriveData> FindDeviceBySerialNumber(const TString& serial, bool partlabelOnly);
 
-TVector<NPDisk::TDriveData> ListDevicesWithPartlabel();
+TVector<NPDisk::TDriveData> ListDevicesWithPartlabel(TStringStream& details);
 
 TVector<NPDisk::TDriveData> ListAllDevices();
 

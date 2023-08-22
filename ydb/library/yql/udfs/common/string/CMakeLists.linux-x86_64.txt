@@ -18,6 +18,7 @@ target_link_libraries(string_udf INTERFACE
   library-cpp-charset
   cpp-deprecated-split
   cpp-html-pcdata
+  cpp-string_utils-base32
   cpp-string_utils-base64
   cpp-string_utils-levenshtein_diff
   cpp-string_utils-quote
@@ -39,6 +40,7 @@ target_link_libraries(string_udf.global PUBLIC
   library-cpp-charset
   cpp-deprecated-split
   cpp-html-pcdata
+  cpp-string_utils-base32
   cpp-string_utils-base64
   cpp-string_utils-levenshtein_diff
   cpp-string_utils-quote
@@ -67,6 +69,7 @@ target_link_libraries(string_udf.dyn PUBLIC
   library-cpp-charset
   cpp-deprecated-split
   cpp-html-pcdata
+  cpp-string_utils-base32
   cpp-string_utils-base64
   cpp-string_utils-levenshtein_diff
   cpp-string_utils-quote

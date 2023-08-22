@@ -16,6 +16,7 @@ target_link_libraries(kqp-ut-common PUBLIC
   yutil
   ydb-core-testlib
   yql-public-udf
+  string_udf
   yql-utils-backtrace
   public-lib-yson_value
   cpp-client-draft

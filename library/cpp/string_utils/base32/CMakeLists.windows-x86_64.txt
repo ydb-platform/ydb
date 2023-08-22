@@ -6,14 +6,12 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(base32)
-add_subdirectory(base64)
-add_subdirectory(csv)
-add_subdirectory(indent_text)
-add_subdirectory(levenshtein_diff)
-add_subdirectory(parse_size)
-add_subdirectory(quote)
-add_subdirectory(relaxed_escaper)
-add_subdirectory(scan)
-add_subdirectory(url)
-add_subdirectory(ztstrbuf)
+
+add_library(cpp-string_utils-base32)
+target_link_libraries(cpp-string_utils-base32 PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+)
+target_sources(cpp-string_utils-base32 PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/string_utils/base32/base32.cpp
+)

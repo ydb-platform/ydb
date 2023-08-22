@@ -3,6 +3,9 @@
 
 **Список функций**
 
+* ```String::Base32Encode(string:String{Flags:AutoMap}) -> String```
+* ```String::Base32Decode(string:String) -> String?```
+* ```String::Base32StrictDecode(string:String) -> String?```
 * ```String::Base64Encode(string:String{Flags:AutoMap}) -> String```
 * ```String::Base64Decode(string:String) -> String?```
 * ```String::Base64StrictDecode(string:String) -> String?```

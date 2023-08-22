@@ -11,6 +11,7 @@ SRCS(
 PEERDIR(
     ydb/core/testlib
     ydb/library/yql/public/udf
+    ydb/library/yql/udfs/common/string
     ydb/library/yql/utils/backtrace
     ydb/public/lib/yson_value
     ydb/public/sdk/cpp/client/draft

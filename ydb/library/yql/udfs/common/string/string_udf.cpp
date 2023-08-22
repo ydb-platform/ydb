@@ -5,6 +5,7 @@
 #include <library/cpp/charset/codepage.h>
 #include <library/cpp/deprecated/split/split_iterator.h>
 #include <library/cpp/html/pcdata/pcdata.h>
+#include <library/cpp/string_utils/base32/base32.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/string_utils/levenshtein_diff/levenshtein_diff.h>
 #include <library/cpp/string_utils/quote/quote.h>
@@ -129,6 +130,7 @@ namespace {
     }
 
 #define STRING_UDF_MAP(XX)           \
+    XX(Base32Encode, Base32Encode)   \
     XX(Base64Encode, Base64Encode)   \
     XX(Base64EncodeUrl, Base64EncodeUrl)   \
     XX(EscapeC, EscapeC)             \
@@ -142,6 +144,8 @@ namespace {
     XX(Collapse, Collapse)
 
 #define STRING_UNSAFE_UDF_MAP(XX)  \
+    XX(Base32Decode, Base32Decode)         \
+    XX(Base32StrictDecode, Base32StrictDecode)         \
     XX(Base64Decode, Base64Decode) \
     XX(Base64StrictDecode, Base64StrictDecode)         \
     XX(HexDecode, HexDecode)

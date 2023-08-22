@@ -7113,7 +7113,7 @@ TExprNode::TPtr ExpandCheckedMinus(const TExprNode::TPtr& node, TExprContext& ct
         .Build();
 }
 
-TExprNode::TPtr DropUnordered(const TExprNode::TPtr& node, TExprContext&) {
+TExprNode::TPtr DropAssume(const TExprNode::TPtr& node, TExprContext&) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << node->Content();
     return node->HeadPtr();
 }
@@ -7264,7 +7264,10 @@ struct TPeepHoleRules {
         {"NarrowMultiMap", &OptimizeWideMaps},
         {"WideMap", &OptimizeWideMaps},
         {"NarrowMap", &OptimizeWideMaps},
-        {"Unordered", &DropUnordered},
+        {"Unordered", &DropAssume},
+        {"AssumeUnique", &DropAssume},
+        {"AssumeDistinct", &DropAssume},
+        {"AssumeChopped", &DropAssume},
         {"Top", &OptimizeTopOrSort<false, true>},
         {"TopSort", &OptimizeTopOrSort<true, true>},
         {"Sort", &OptimizeTopOrSort<true, false>},

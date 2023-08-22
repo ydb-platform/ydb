@@ -280,6 +280,7 @@ public:
                 AddInfo(ctx, TStringBuilder() << "disabled for cluster " << cluster, skipIssues);
                 return false;
             }
+            const auto canUseYtPartitioningApi = State_->Configuration->_EnableYtPartitioning.Get(cluster).GetOrElse(false);
             ui64 chunksCount = 0ull;
             for (auto section: maybeRead.Cast().Input()) {
                 if (HasSettingsExcept(maybeRead.Cast().Input().Item(0).Settings().Ref(), DqReadSupportedSettings)) {
@@ -321,7 +322,14 @@ public:
                         } else if (NYql::HasSetting(tableInfo->Settings.Ref(), EYtSettingType::WithQB)) {
                             AddInfo(ctx, "table with QB2 premapper", skipIssues);
                             return false;
+                        } else if (pathInfo.Ranges && !canUseYtPartitioningApi) {
+                            AddInfo(ctx, "table with ranges", skipIssues);
+                            return false;
+                        } else if (tableInfo->Meta->IsDynamic && !canUseYtPartitioningApi) {
+                            AddInfo(ctx, "dynamic table", skipIssues);
+                            return false;
                         }
+
                         chunksCount += tableInfo->Stat->ChunkCount;
                     }
                 }

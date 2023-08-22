@@ -20,7 +20,6 @@ target_link_libraries(ydb PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  contrib-libs-asmlib
   commands
   library-cpp-resource
 )

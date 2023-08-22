@@ -19,7 +19,6 @@ target_link_libraries(ydb PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-cpuid_check
-  contrib-libs-asmlib
   commands
   library-cpp-resource
 )

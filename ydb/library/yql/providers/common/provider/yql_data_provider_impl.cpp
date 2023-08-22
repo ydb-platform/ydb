@@ -268,7 +268,7 @@ bool TDataProviderBase::ValidateExecution(const TExprNode& node, TExprContext& c
 }
 
 void TDataProviderBase::GetRequiredChildren(const TExprNode& node, TExprNode::TListType& children) {
-    TPlanFormatterBase::GetDependencies(node, children, false);
+    GetDependencies(node, children, false);
 }
 
 IGraphTransformer& TDataProviderBase::GetCallableExecutionTransformer() {

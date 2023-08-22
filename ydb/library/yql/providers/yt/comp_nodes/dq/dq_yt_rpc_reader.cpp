@@ -32,7 +32,7 @@ NYT::NYPath::TRichYPath ConvertYPathFromOld(const NYT::TRichYPath& richYPath) {
                 range.LowerLimit().SetTabletIndex(*rng.LowerLimit_.TabletIndex_);
             }
 
-            if (*rng.LowerLimit_.RowIndex_) {
+            if (rng.LowerLimit_.RowIndex_) {
                 range.LowerLimit().SetRowIndex(*rng.LowerLimit_.RowIndex_);
             }
 
@@ -44,7 +44,7 @@ NYT::NYPath::TRichYPath ConvertYPathFromOld(const NYT::TRichYPath& richYPath) {
                 range.UpperLimit().SetTabletIndex(*rng.UpperLimit_.TabletIndex_);
             }
 
-            if (*rng.UpperLimit_.RowIndex_) {
+            if (rng.UpperLimit_.RowIndex_) {
                 range.UpperLimit().SetRowIndex(*rng.UpperLimit_.RowIndex_);
             }
         }

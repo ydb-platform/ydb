@@ -68,10 +68,6 @@ private:
     std::string DbPath;
     TKvWorkloadParams Params;
     TString BigString;
-
-    std::random_device Rd;
-    std::mt19937_64 Gen;
-    std::uniform_int_distribution<ui64> KeyUniformDistGen;
 };
 
 } // namespace NYdbWorkload

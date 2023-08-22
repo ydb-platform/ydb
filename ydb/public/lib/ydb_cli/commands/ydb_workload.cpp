@@ -6,6 +6,7 @@
 #include "tpch.h"
 #include "topic_workload/topic_workload.h"
 #include "transfer_workload/transfer_workload.h"
+#include "util/random/random.h"
 
 #include <ydb/library/workload/workload_factory.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
@@ -86,6 +87,8 @@ void TWorkloadCommand::Config(TConfig& config) {
 }
 
 void TWorkloadCommand::PrepareForRun(TConfig& config) {
+    SetRandomSeed(Now().MicroSeconds());
+
     auto driverConfig = TDriverConfig()
         .SetEndpoint(config.Address)
         .SetDatabase(config.Database)

@@ -1,4 +1,5 @@
 #include "kv_workload.h"
+#include "util/random/random.h"
 
 #include <util/datetime/base.h>
 
@@ -23,11 +24,7 @@ TKvWorkloadGenerator::TKvWorkloadGenerator(const TKvWorkloadParams* params)
     : DbPath(params->DbPath)
     , Params(*params)
     , BigString(NKikimr::GenDataForLZ4(Params.StringLen))
-    , Rd()
-    , Gen(Rd())
-    , KeyUniformDistGen(0, Params.MaxFirstKey)
 {
-    Gen.seed(Now().MicroSeconds());
 }
 
 TKvWorkloadParams* TKvWorkloadGenerator::GetParams() {
@@ -84,7 +81,7 @@ TQueryInfoList TKvWorkloadGenerator::AddOperation(TString operation) {
     for (size_t row = 0; row < Params.RowsCnt; ++row) {
         TString pkname = "$r" + std::to_string(row);
         ss << "DECLARE " << pkname << " AS Uint64;\n";
-        paramsBuilder.AddParam(pkname).Uint64(KeyUniformDistGen(Gen)).Build();
+        paramsBuilder.AddParam(pkname).Uint64(RandomNumber<ui64>(Params.MaxFirstKey)).Build();
 
         for (size_t col = 1; col < Params.ColumnsCnt; ++col) {
             TString cname = "$c" + std::to_string(row) + std::to_string(col);
@@ -143,7 +140,7 @@ TQueryInfoList TKvWorkloadGenerator::SelectRandom() {
 
     for (size_t row = 0; row < Params.RowsCnt; ++row) {
         ss << "DECLARE $r" << row << " AS Uint64;\n";
-        paramsBuilder.AddParam("$r" + std::to_string(row)).Uint64(KeyUniformDistGen(Gen)).Build();
+        paramsBuilder.AddParam("$r" + std::to_string(row)).Uint64(RandomNumber<ui64>(Params.MaxFirstKey)).Build();
     }
 
     ss << "SELECT ";
@@ -174,7 +171,7 @@ TQueryInfoList TKvWorkloadGenerator::ReadRowsRandom() {
     for (size_t i = 0; i < Params.RowsCnt; ++i) {
         keys.AddListItem()
             .BeginStruct()
-                .AddMember("c0").Uint64(KeyUniformDistGen(Gen))
+                .AddMember("c0").Uint64(RandomNumber<ui64>(Params.MaxFirstKey))
             .EndStruct();
     }
     keys.EndList();

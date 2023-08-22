@@ -300,36 +300,38 @@ void TDataShard::IcbRegister() {
     if (!IcbRegistered) {
         auto* appData = AppData();
 
-        appData->Icb->RegisterSharedControl(DisableByKeyFilter, "DataShardControls.DisableByKeyFilter");
-        appData->Icb->RegisterSharedControl(MaxTxInFly, "DataShardControls.MaxTxInFly");
-        appData->Icb->RegisterSharedControl(MaxTxLagMilliseconds, "DataShardControls.MaxTxLagMilliseconds");
-        appData->Icb->RegisterSharedControl(DataTxProfileLogThresholdMs, "DataShardControls.DataTxProfile.LogThresholdMs");
-        appData->Icb->RegisterSharedControl(DataTxProfileBufferThresholdMs, "DataShardControls.DataTxProfile.BufferThresholdMs");
-        appData->Icb->RegisterSharedControl(DataTxProfileBufferSize, "DataShardControls.DataTxProfile.BufferSize");
+		appData->AtomicIcb->DisableByKeyFilter = DisableByKeyFilter;
+		appData->AtomicIcb->MaxTxInFly = MaxTxInFly;
+		appData->AtomicIcb->MaxTxLagMilliseconds = MaxTxLagMilliseconds;
+		appData->AtomicIcb->DataTxProfileLogThresholdMs = DataTxProfileLogThresholdMs;
+		appData->AtomicIcb->DataTxProfileBufferSize = DataTxProfileBufferSize;
 
-        appData->Icb->RegisterSharedControl(CanCancelROWithReadSets, "DataShardControls.CanCancelROWithReadSets");
-        appData->Icb->RegisterSharedControl(PerShardReadSizeLimit, "TxLimitControls.PerShardReadSizeLimit");
-        appData->Icb->RegisterSharedControl(CpuUsageReportThreshlodPercent, "DataShardControls.CpuUsageReportThreshlodPercent");
-        appData->Icb->RegisterSharedControl(CpuUsageReportIntervalSeconds, "DataShardControls.CpuUsageReportIntervalSeconds");
-        appData->Icb->RegisterSharedControl(HighDataSizeReportThreshlodBytes, "DataShardControls.HighDataSizeReportThreshlodBytes");
-        appData->Icb->RegisterSharedControl(HighDataSizeReportIntervalSeconds, "DataShardControls.HighDataSizeReportIntervalSeconds");
+		appData->AtomicIcb->CanCancelROWithReadSets = CanCancelROWithReadSets;
+		appData->AtomicIcb->PerShardReadSizeLimit = PerShardReadSizeLimit;
+		appData->AtomicIcb->CpuUsageReportThreshlodPercent = CpuUsageReportThreshlodPercent;
+		appData->AtomicIcb->CpuUsageReportIntervalSeconds = CpuUsageReportIntervalSeconds;
+		appData->AtomicIcb->HighDataSizeReportThreshlodBytes = HighDataSizeReportThreshlodBytes;
+		appData->AtomicIcb->HighDataSizeReportIntervalSeconds = HighDataSizeReportIntervalSeconds;
 
-        appData->Icb->RegisterSharedControl(ReadColumnsScanEnabled, "DataShardControls.ReadColumnsScanEnabled");
-        appData->Icb->RegisterSharedControl(ReadColumnsScanInUserPool, "DataShardControls.ReadColumnsScanInUserPool");
+		appData->AtomicIcb->HighDataSizeReportThreshlodBytes = HighDataSizeReportThreshlodBytes;
+		appData->AtomicIcb->HighDataSizeReportIntervalSeconds = HighDataSizeReportIntervalSeconds;
 
-        appData->Icb->RegisterSharedControl(BackupReadAheadLo, "DataShardControls.BackupReadAheadLo");
-        appData->Icb->RegisterSharedControl(BackupReadAheadHi, "DataShardControls.BackupReadAheadHi");
+		appData->AtomicIcb->ReadColumnsScanEnabled = ReadColumnsScanEnabled;
+		appData->AtomicIcb->ReadColumnsScanInUserPool = ReadColumnsScanInUserPool;
 
-        appData->Icb->RegisterSharedControl(TtlReadAheadLo, "DataShardControls.TtlReadAheadLo");
-        appData->Icb->RegisterSharedControl(TtlReadAheadHi, "DataShardControls.TtlReadAheadHi");
+		appData->AtomicIcb->BackupReadAheadLo = BackupReadAheadLo;
+		appData->AtomicIcb->BackupReadAheadHi = BackupReadAheadHi;
 
-        appData->Icb->RegisterSharedControl(EnablePrioritizedMvccSnapshotReads, "DataShardControls.PrioritizedMvccSnapshotReads");
-        appData->Icb->RegisterSharedControl(EnableUnprotectedMvccSnapshotReads, "DataShardControls.UnprotectedMvccSnapshotReads");
-        appData->Icb->RegisterSharedControl(EnableLockedWrites, "DataShardControls.EnableLockedWrites");
-        appData->Icb->RegisterSharedControl(MaxLockedWritesPerKey, "DataShardControls.MaxLockedWritesPerKey");
+		appData->AtomicIcb->TtlReadAheadLo = TtlReadAheadLo;
+		appData->AtomicIcb->TtlReadAheadHi = TtlReadAheadHi;
 
-        appData->Icb->RegisterSharedControl(EnableLeaderLeases, "DataShardControls.EnableLeaderLeases");
-        appData->Icb->RegisterSharedControl(MinLeaderLeaseDurationUs, "DataShardControls.MinLeaderLeaseDurationUs");
+		appData->AtomicIcb->EnablePrioritizedMvccSnapshotReads = EnablePrioritizedMvccSnapshotReads;
+		appData->AtomicIcb->EnableUnprotectedMvccSnapshotReads = EnableUnprotectedMvccSnapshotReads;
+		appData->AtomicIcb->EnableLockedWrites = EnableLockedWrites;
+		appData->AtomicIcb->MaxLockedWritesPerKey = MaxLockedWritesPerKey;
+
+		appData->AtomicIcb->EnableLeaderLeases = EnableLeaderLeases;
+		appData->AtomicIcb->MinLeaderLeaseDurationUs = MinLeaderLeaseDurationUs;
 
         IcbRegistered = true;
     }

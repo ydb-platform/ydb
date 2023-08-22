@@ -121,6 +121,8 @@ struct TAppData {
     NActors::TMon* Mon;
     ::NMonitoring::TDynamicCounterPtr Counters;
     TIntrusivePtr<NKikimr::TControlBoard> Icb;
+	TIntrusivePtr<NKikimr::TAtomicControlBoard> AtomicIcb;
+
     TIntrusivePtr<NGRpcService::TInFlightLimiterRegistry> InFlightLimiterRegistry;
 
     TIntrusivePtr<NInterconnect::TPollerThreads> PollerThreads;

@@ -3,9 +3,43 @@
 #include "defs.h"
 #include "immediate_control_board_wrapper.h"
 
+#include <yt/yt/core/misc/atomic_ptr.h>
 #include <ydb/core/util/concurrent_rw_hash.h>
 
 namespace NKikimr {
+
+struct TAtomicControlBoard final : public TThrRefBase {
+	TControlWrapper DisableByKeyFilter;
+	TControlWrapper MaxTxInFly;
+	TControlWrapper MaxTxLagMilliseconds;
+	TControlWrapper CanCancelROWithReadSets;
+	TControlWrapper PerShardReadSizeLimit;
+	TControlWrapper CpuUsageReportThreshlodPercent;
+	TControlWrapper CpuUsageReportIntervalSeconds;
+	TControlWrapper HighDataSizeReportThreshlodBytes;
+	TControlWrapper HighDataSizeReportIntervalSeconds;
+
+	TControlWrapper DataTxProfileLogThresholdMs;
+	TControlWrapper DataTxProfileBufferThresholdMs;
+	TControlWrapper DataTxProfileBufferSize;
+
+	TControlWrapper ReadColumnsScanEnabled;
+	TControlWrapper ReadColumnsScanInUserPool;
+
+	TControlWrapper BackupReadAheadLo;
+	TControlWrapper BackupReadAheadHi;
+
+	TControlWrapper TtlReadAheadLo;
+	TControlWrapper TtlReadAheadHi;
+
+	TControlWrapper EnablePrioritizedMvccSnapshotReads;
+	TControlWrapper EnableUnprotectedMvccSnapshotReads;
+	TControlWrapper EnableLockedWrites;
+	TControlWrapper MaxLockedWritesPerKey;
+
+	TControlWrapper EnableLeaderLeases;
+	TControlWrapper MinLeaderLeaseDurationUs;
+};
 
 class TControlBoard : public TThrRefBase {
 private:

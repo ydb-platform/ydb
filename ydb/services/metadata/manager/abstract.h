@@ -7,8 +7,6 @@
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/conclusion/status.h>
 #include <ydb/library/conclusion/result.h>
-#include <ydb/library/yql/ast/yql_expr_builder.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/metadata/abstract/parsing.h>

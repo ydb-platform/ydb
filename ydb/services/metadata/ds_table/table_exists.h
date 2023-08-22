@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/services/metadata/common/ss_dialog.h>
+#include <ydb/library/accessor/accessor.h>
 
 namespace NKikimr::NMetadata::NProvider {
 

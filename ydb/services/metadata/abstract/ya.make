@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     common.cpp
     decoder.cpp
+    events.cpp
     fetcher.cpp
     kqp_common.cpp
     initialization.cpp

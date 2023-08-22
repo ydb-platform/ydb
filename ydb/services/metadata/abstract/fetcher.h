@@ -8,8 +8,6 @@
 #include <library/cpp/object_factory/object_factory.h>
 #include <ydb/core/base/events.h>
 #include <ydb/library/accessor/accessor.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/services/metadata/initializer/common.h>
 #include <ydb/services/metadata/manager/common.h>
 #include <ydb/services/metadata/manager/table_record.h>

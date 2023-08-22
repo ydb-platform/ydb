@@ -1033,6 +1033,7 @@ private:
 
             switch (shardResponse.GetStatus()) {
             case NKikimrTxDataShard::TError::WRONG_SHARD_STATE:
+            case NKikimrTxDataShard::TError::SHARD_IS_BLOCKED:
                 ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()));
                 status = Ydb::StatusIds::OVERLOADED;
                 break;

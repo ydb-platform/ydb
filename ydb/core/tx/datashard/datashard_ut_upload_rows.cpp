@@ -780,7 +780,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         });
 
         DoUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::UINT32, Ydb::StatusIds::SUCCESS);
-        DoUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::UINT32, Ydb::StatusIds::GENERIC_ERROR);
+        DoUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::UINT32, Ydb::StatusIds::OVERLOADED);
     }
 
 }

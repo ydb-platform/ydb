@@ -383,6 +383,7 @@ message TTableDescription {
     repeated TSequenceDescription Sequences = 39;
 
     optional TTableReplicationConfig ReplicationConfig = 40;
+    optional bool Temporary = 41;
 }
 
 message TDictionaryEncodingSettings {

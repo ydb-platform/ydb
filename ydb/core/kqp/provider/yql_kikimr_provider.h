@@ -3,6 +3,7 @@
 #include "yql_kikimr_gateway.h"
 #include "yql_kikimr_settings.h"
 
+#include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/library/yql/ast/yql_gc_nodes.h>
@@ -198,8 +199,17 @@ public:
         Tables.clear();
     }
 
+    void SetTempTables(NKikimr::NKqp::TKqpTempTablesState::TConstPtr tempTablesState) {
+        if (tempTablesState) {
+            for (const auto& [path, info] : tempTablesState->TempTables) {
+                TempTables[path.second + *tempTablesState->SessionId] = path.second;
+            }
+        }
+    }
+
 private:
     THashMap<std::pair<TString, TString>, TKikimrTableDescription> Tables;
+    THashMap<TString, TString> TempTables;
 };
 
 enum class TYdbOperation : ui32 {
@@ -276,6 +286,14 @@ public:
         HasUncommittedChangesRead = false;
     }
 
+    void SetTempTables(NKikimr::NKqp::TKqpTempTablesState::TConstPtr tempTablesState) {
+        if (tempTablesState) {
+            for (const auto& [path, info] : tempTablesState->TempTables) {
+                TempTables[path.second] = path.second + *tempTablesState->SessionId;
+            }
+        }
+    }
+
     template<class IterableKqpTableOps, class IterableKqpTableInfos>
     std::pair<bool, TIssues> ApplyTableOperations(const IterableKqpTableOps& operations,
         const IterableKqpTableInfos& tableInfos, EKikimrQueryType queryType)
@@ -303,10 +321,15 @@ public:
         }
 
         for (const auto& op : operations) {
-            const auto& table = op.GetTable();
+            auto table = op.GetTable();
 
             auto newOp = TYdbOperation(op.GetOperation());
             TPosition pos(op.GetPosition().GetColumn(), op.GetPosition().GetRow());
+
+            auto tempTable = TempTables.FindPtr(table);
+            if (tempTable) {
+                table = *tempTable;
+            }
 
             const auto info = tableInfoMap.FindPtr(table);
             if (!info) {
@@ -402,6 +425,7 @@ public:
     const bool EnableImmediateEffects;
     THashMap<TKikimrPathId, TString> TableByIdMap;
     TMaybe<NKikimrKqp::EIsolationLevel> EffectiveIsolationLevel;
+    THashMap<TString, TString> TempTables;
     bool Readonly = false;
     bool Invalidated = false;
     bool Closed = false;
@@ -432,9 +456,13 @@ public:
     TIntrusivePtr<TKikimrQueryContext> QueryPtr() { return QueryCtx; }
     TIntrusivePtr<TKikimrTransactionContextBase> TxPtr() { return TxCtx; }
 
+
     bool HasTx() const { return !!TxCtx; }
     void ClearTx() { TxCtx.Reset(); }
-    void SetTx(TIntrusivePtr<TKikimrTransactionContextBase>& txCtx) { TxCtx.Reset(txCtx); }
+    void SetTx(TIntrusivePtr<TKikimrTransactionContextBase>& txCtx) {
+        TxCtx.Reset(txCtx);
+        TxCtx->SetTempTables(TempTablesState);
+    }
 
     TString GetUserName() const {
         return UserName;
@@ -452,6 +480,10 @@ public:
         Database = database;
     }
 
+    NKikimr::NKqp::TKqpTempTablesState::TConstPtr GetTempTablesState() const {
+        return TempTablesState;
+    }
+
     void Reset(bool keepConfigChanges) {
         TablesData->Reset();
         QueryCtx->Reset();
@@ -462,6 +494,14 @@ public:
         }
     }
 
+    void SetTempTables(NKikimr::NKqp::TKqpTempTablesState::TConstPtr tempTablesState) {
+        TablesData->SetTempTables(tempTablesState);
+        if (TxCtx) {
+            TxCtx->SetTempTables(tempTablesState);
+        }
+        TempTablesState = tempTablesState;
+    }
+
 private:
     TString UserName;
     TString Database;
@@ -469,6 +509,7 @@ private:
     TIntrusivePtr<TKikimrTablesData> TablesData;
     TIntrusivePtr<TKikimrQueryContext> QueryCtx;
     TIntrusivePtr<TKikimrTransactionContextBase> TxCtx;
+    NKikimr::NKqp::TKqpTempTablesState::TConstPtr TempTablesState;
 };
 
 TIntrusivePtr<IDataProvider> CreateKikimrDataSource(

@@ -517,6 +517,8 @@ message CreateTableRequest {
     ReadReplicasSettings read_replicas_settings = 17;
     // Tiering rules name. It specifies how data migrates from one tier (logical storage) to another.
     string tiering = 18;
+    // Is temporary table
+    bool temporary = 19;
 }
 
 message CreateTableResponse {
@@ -714,6 +716,8 @@ message DescribeTableResult {
     repeated ChangefeedDescription changefeeds = 15;
     // Tiering rules name
     string tiering = 16;
+    // Is temporary table
+    bool temporary = 17;
 }
 
 message Query {

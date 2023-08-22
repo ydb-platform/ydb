@@ -178,7 +178,8 @@ private:
 struct TKqpCompileRequest {
     TKqpCompileRequest(const TActorId& sender, const TString& uid, TKqpQueryId query, bool keepInCache,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TInstant& deadline, TKqpDbCountersPtr dbCounters,
-        ui64 cookie, NLWTrace::TOrbit orbit = {}, NWilson::TSpan span = {})
+        ui64 cookie, NLWTrace::TOrbit orbit = {}, NWilson::TSpan span = {},
+        TKqpTempTablesState::TConstPtr tempTablesState = {})
         : Sender(sender)
         , Query(std::move(query))
         , Uid(uid)
@@ -189,6 +190,7 @@ struct TKqpCompileRequest {
         , Orbit(std::move(orbit))
         , CompileServiceSpan(std::move(span))
         , Cookie(cookie)
+        , TempTablesState(std::move(tempTablesState))
     {}
 
     TActorId Sender;
@@ -203,6 +205,7 @@ struct TKqpCompileRequest {
     NLWTrace::TOrbit Orbit;
     NWilson::TSpan CompileServiceSpan;
     ui64 Cookie;
+    TKqpTempTablesState::TConstPtr TempTablesState;
 };
 
 class TKqpRequestsQueue {
@@ -528,7 +531,7 @@ private:
         TKqpCompileRequest compileRequest(ev->Sender, CreateGuidAsString(), std::move(*request.Query),
             request.KeepInCache, request.UserToken, request.Deadline, dbCounters,
             ev->Cookie,
-            std::move(ev->Get()->Orbit), std::move(CompileServiceSpan));
+            std::move(ev->Get()->Orbit), std::move(CompileServiceSpan), std::move(ev->Get()->TempTablesState));
 
         if (!RequestsQueue.Enqueue(std::move(compileRequest))) {
             Counters->ReportCompileRequestRejected(dbCounters);
@@ -579,7 +582,7 @@ private:
                 true, request.UserToken, request.Deadline, dbCounters,
                 ev->Cookie,
                 ev->Get() ? std::move(ev->Get()->Orbit) : NLWTrace::TOrbit(),
-                std::move(CompileServiceSpan));
+                std::move(CompileServiceSpan), std::move(ev->Get()->TempTablesState));
 
             if (!RequestsQueue.Enqueue(std::move(compileRequest))) {
                 Counters->ReportCompileRequestRejected(dbCounters);
@@ -735,7 +738,7 @@ private:
 
     void StartCompilation(TKqpCompileRequest&& request, const TActorContext& ctx) {
         auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, Config, HttpGateway, ModuleResolverState, Counters,
-            CredentialsFactory, request.Uid, request.Query, request.UserToken, request.DbCounters, request.CompileServiceSpan.GetTraceId());
+            CredentialsFactory, request.Uid, request.Query, request.UserToken, request.DbCounters, request.CompileServiceSpan.GetTraceId(), std::move(request.TempTablesState));
         auto compileActorId = ctx.ExecutorThread.RegisterActor(compileActor, TMailboxType::HTSwap,
             AppData(ctx)->UserPoolId);
 

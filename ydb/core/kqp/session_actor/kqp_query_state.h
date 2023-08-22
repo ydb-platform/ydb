@@ -9,6 +9,7 @@
 #include <ydb/core/base/cputime.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/session_actor/kqp_tx.h>
@@ -108,6 +109,8 @@ public:
 
     std::shared_ptr<std::map<TString, Ydb::Type>> QueryParameterTypes;
 
+    TKqpTempTablesState::TConstPtr TempTablesState;
+
     NKikimrKqp::EQueryAction GetAction() const {
         return RequestEv->GetAction();
     }
@@ -142,6 +145,10 @@ public:
 
     bool GetUsePublicResponseDataFormat() const {
         return RequestEv->GetUsePublicResponseDataFormat();
+    }
+
+    void UpdateTempTablesState(const TKqpTempTablesState& tempTablesState) {
+        TempTablesState = std::make_shared<const TKqpTempTablesState>(tempTablesState);
     }
 
     void SetQueryDeadlines(const NKikimrConfig::TTableServiceConfig& service) {

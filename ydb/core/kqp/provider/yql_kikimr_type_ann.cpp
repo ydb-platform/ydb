@@ -658,6 +658,8 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
         }
         meta->TableType = tableTypeEnum;
 
+        meta->Temporary = TString(create.Temporary()) == "true" ? true : false;
+
         for (auto atom : create.PrimaryKey()) {
             meta->KeyColumnNames.emplace_back(atom.Value());
         }

@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
@@ -33,5 +34,7 @@ IActor* CreateKqpSessionActor(const TActorId& owner, const TString& sessionId,
     NYql::IHTTPGateway::TPtr httpGateway, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters);
+
+IActor* CreateKqpTempTablesManager(TKqpTempTablesState tempTablesState, const TActorId& target);
 
 }  // namespace NKikimr::NKqp

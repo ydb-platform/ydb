@@ -3,6 +3,7 @@
 
 #include <library/cpp/actors/core/event_local.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/kqp/common/simple/query_id.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
@@ -10,15 +11,18 @@
 namespace NKikimr::NKqp::NPrivateEvents {
 
 struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCompileRequest> {
-    TEvCompileRequest(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TMaybe<TString>& uid, TMaybe<TKqpQueryId>&& query,
-        bool keepInCache, TInstant deadline, TKqpDbCountersPtr dbCounters, NLWTrace::TOrbit orbit = {})
+    TEvCompileRequest(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TMaybe<TString>& uid,
+        TMaybe<TKqpQueryId>&& query, bool keepInCache, TInstant deadline,
+        TKqpDbCountersPtr dbCounters, NLWTrace::TOrbit orbit = {},
+        TKqpTempTablesState::TConstPtr tempTablesState = nullptr)
         : UserToken(userToken)
         , Uid(uid)
         , Query(std::move(query))
         , KeepInCache(keepInCache)
         , Deadline(deadline)
         , DbCounters(dbCounters)
-        , Orbit(std::move(orbit)) {
+        , Orbit(std::move(orbit))
+        , TempTablesState(std::move(tempTablesState)) {
         Y_ENSURE(Uid.Defined() != Query.Defined());
     }
 
@@ -32,17 +36,22 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
     TMaybe<bool> DocumentApiRestricted;
 
     NLWTrace::TOrbit Orbit;
+
+    TKqpTempTablesState::TConstPtr TempTablesState;
 };
 
 struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::EvRecompileRequest> {
-    TEvRecompileRequest(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TString& uid, const TMaybe<TKqpQueryId>& query,
-        TInstant deadline, TKqpDbCountersPtr dbCounters, NLWTrace::TOrbit orbit = {})
+    TEvRecompileRequest(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TString& uid,
+        const TMaybe<TKqpQueryId>& query, TInstant deadline,
+        TKqpDbCountersPtr dbCounters, NLWTrace::TOrbit orbit = {},
+        TKqpTempTablesState::TConstPtr tempTablesState = nullptr)
         : UserToken(userToken)
         , Uid(uid)
         , Query(query)
         , Deadline(deadline)
         , DbCounters(dbCounters)
-        , Orbit(std::move(orbit)) {
+        , Orbit(std::move(orbit))
+        , TempTablesState(std::move(tempTablesState)) {
     }
 
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
@@ -53,6 +62,8 @@ struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::
     TKqpDbCountersPtr DbCounters;
 
     NLWTrace::TOrbit Orbit;
+
+    TKqpTempTablesState::TConstPtr TempTablesState;
 };
 
 struct TEvCompileResponse: public TEventLocal<TEvCompileResponse, TKqpEvents::EvCompileResponse> {

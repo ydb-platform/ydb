@@ -117,25 +117,39 @@ struct TKikimrData {
 const TKikimrTableDescription* TKikimrTablesData::EnsureTableExists(const TString& cluster,
     const TString& table, TPositionHandle pos, TExprContext& ctx) const
 {
-    auto desc = Tables.FindPtr(std::make_pair(cluster, table));
+    auto tempTable = TempTables.FindPtr(table);
+
+    auto tablePath = table;
+    if (tempTable) {
+        tablePath = *tempTable;
+    }
+
+    auto desc = Tables.FindPtr(std::make_pair(cluster, tablePath));
     if (desc && (desc->GetTableType() != ETableType::Table || desc->DoesExist())) {
         return desc;
     }
 
     ctx.AddError(YqlIssue(ctx.GetPosition(pos), TIssuesIds::KIKIMR_SCHEME_ERROR, TStringBuilder()
-        << "Cannot find table '" << NCommon::FullTableName(cluster, table)
+        << "Cannot find table '" << NCommon::FullTableName(cluster, tablePath)
         << "' because it does not exist or you do not have access permissions."
         << " Please check correctness of table path and user permissions."));
     return nullptr;
 }
 
 TKikimrTableDescription& TKikimrTablesData::GetOrAddTable(const TString& cluster, const TString& database, const TString& table, ETableType tableType) {
-    if (!Tables.FindPtr(std::make_pair(cluster, table))) {
-        auto& desc = Tables[std::make_pair(cluster, table)];
+    auto tempTable = TempTables.FindPtr(table);
+
+    auto tablePath = table;
+    if (tempTable) {
+        tablePath = *tempTable;
+    }
+
+    if (!Tables.FindPtr(std::make_pair(cluster, tablePath))) {
+        auto& desc = Tables[std::make_pair(cluster, tablePath)];
 
         TString error;
         std::pair<TString, TString> pathPair;
-        if (NKikimr::TrySplitPathByDb(table, database, pathPair, error)) {
+        if (NKikimr::TrySplitPathByDb(tablePath, database, pathPair, error)) {
             desc.RelativePath = pathPair.second;
         }
         desc.SetTableType(tableType);
@@ -143,11 +157,18 @@ TKikimrTableDescription& TKikimrTablesData::GetOrAddTable(const TString& cluster
         return desc;
     }
 
-    return Tables[std::make_pair(cluster, table)];
+    return Tables[std::make_pair(cluster, tablePath)];
 }
 
 TKikimrTableDescription& TKikimrTablesData::GetTable(const TString& cluster, const TString& table) {
-    auto desc = Tables.FindPtr(std::make_pair(cluster, table));
+    auto tempTable = TempTables.FindPtr(table);
+
+    auto tablePath = table;
+    if (tempTable) {
+        tablePath = *tempTable;
+    }
+
+    auto desc = Tables.FindPtr(std::make_pair(cluster, tablePath));
     YQL_ENSURE(desc, "Unexpected empty metadata, cluster '" << cluster << "', table '" << table << "'");
 
     return *desc;
@@ -156,7 +177,15 @@ TKikimrTableDescription& TKikimrTablesData::GetTable(const TString& cluster, con
 const TKikimrTableDescription& TKikimrTablesData::ExistingTable(const TStringBuf& cluster,
     const TStringBuf& table) const
 {
-    auto desc = Tables.FindPtr(std::make_pair(TString(cluster), TString(table)));
+    auto tempTable = TempTables.FindPtr(table);
+
+    auto tablePath = table;
+
+    if (tempTable) {
+        tablePath = *tempTable;
+    }
+
+    auto desc = Tables.FindPtr(std::make_pair(TString(cluster), TString(tablePath)));
     YQL_ENSURE(desc);
     YQL_ENSURE(desc->DoesExist());
 

@@ -893,7 +893,7 @@ public:
         TKikimrConfiguration::TPtr config, IModuleResolver::TPtr moduleResolver,
         NYql::IHTTPGateway::TPtr httpGateway,
         const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges,
-        bool isInternalCall, NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory)
+        bool isInternalCall, NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, TKqpTempTablesState::TConstPtr tempTablesState = nullptr)
         : Gateway(gateway)
         , Cluster(cluster)
         , ExprCtx(new TExprContext())
@@ -917,6 +917,7 @@ public:
         }
 
         SessionCtx->SetDatabase(database);
+        SessionCtx->SetTempTables(std::move(tempTablesState));
     }
 
     IAsyncQueryResultPtr ExecuteSchemeQuery(const TKqpQueryRef& query, bool isSql, const TExecSettings& settings) override {
@@ -1653,6 +1654,8 @@ private:
     TIntrusivePtr<TExecuteContext> ExecuteCtx;
     TIntrusivePtr<IKqpRunner> KqpRunner;
     NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory{NExternalSource::CreateExternalSourceFactory()};
+
+    TKqpTempTablesState::TConstPtr TempTablesState;
 };
 
 } // namespace
@@ -1673,10 +1676,10 @@ Ydb::Table::QueryStatsCollection::Mode GetStatsMode(NYql::EKikimrStatsMode stats
 TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway,
     const TString& cluster, const TString& database, TKikimrConfiguration::TPtr config, IModuleResolver::TPtr moduleResolver,
     NYql::IHTTPGateway::TPtr httpGateway, const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges, bool isInternalCall,
-    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory)
+    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, TKqpTempTablesState::TConstPtr tempTablesState)
 {
     return MakeIntrusive<TKqpHost>(gateway, cluster, database, config, moduleResolver, std::move(httpGateway), funcRegistry,
-        keepConfigChanges, isInternalCall, std::move(credentialsFactory));
+        keepConfigChanges, isInternalCall, std::move(credentialsFactory), std::move(tempTablesState));
 }
 
 } // namespace NKqp

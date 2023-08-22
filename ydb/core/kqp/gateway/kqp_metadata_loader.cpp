@@ -20,16 +20,38 @@ using namespace NThreading;
 using TIssuesIds = NYql::TIssuesIds;
 
 
-std::pair<TNavigate::TEntry, TString> CreateNavigateEntry(const TString& path, const NYql::IKikimrGateway::TLoadTableMetadataSettings& settings) {
+struct NavigateEntryResult {
+    TNavigate::TEntry Entry;
+    TString Path;
+    std::optional<TString> QueryName;
+};
+
+NavigateEntryResult CreateNavigateEntry(const TString& cluster, const TString& path,
+        const NYql::IKikimrGateway::TLoadTableMetadataSettings& settings, TKqpTempTablesState::TConstPtr tempTablesState = nullptr) {
     TNavigate::TEntry entry;
-    entry.Path = SplitPath(path);
+    TString currentPath = path;
+    std::optional<TString> queryName = std::nullopt;
+    if (tempTablesState) {
+        auto tempTablesIt = tempTablesState->TempTables.find(std::make_pair(cluster, currentPath));
+        if (tempTablesState->SessionId && tempTablesIt != tempTablesState->TempTables.end()) {
+            queryName = currentPath;
+            currentPath = currentPath + *tempTablesState->SessionId;
+        }
+    }
+    entry.Path = SplitPath(currentPath);
+
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpTable;
     entry.SyncVersion = true;
     entry.ShowPrivatePath = settings.WithPrivateTables_;
-    return {entry, path};
+    return {entry, currentPath, queryName};
 }
 
-std::pair<TNavigate::TEntry, TString> CreateNavigateEntry(const std::pair<TIndexId, TString>& pair, const NYql::IKikimrGateway::TLoadTableMetadataSettings& settings) {
+NavigateEntryResult CreateNavigateEntry(const TString& cluster,
+        const std::pair<TIndexId, TString>& pair,
+        const NYql::IKikimrGateway::TLoadTableMetadataSettings& settings, TKqpTempTablesState::TConstPtr tempTablesState = nullptr) {
+    Y_UNUSED(cluster);
+    Y_UNUSED(tempTablesState);
+
     TNavigate::TEntry entry;
 
     // TODO: Right now scheme cache use TTableId for index
@@ -40,10 +62,10 @@ std::pair<TNavigate::TEntry, TString> CreateNavigateEntry(const std::pair<TIndex
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpList;
     entry.SyncVersion = true;
     entry.ShowPrivatePath = settings.WithPrivateTables_;
-    return {entry, pair.second};
+    return {entry, pair.second, std::nullopt};
 }
 
-std::optional<std::pair<TNavigate::TEntry, TString>> CreateNavigateExternalEntry(const TString& path, bool externalDataSource) {
+std::optional<NavigateEntryResult> CreateNavigateExternalEntry(const TString& path, bool externalDataSource) {
     TNavigate::TEntry entry;
     entry.Path = SplitPath(path);
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown;
@@ -51,10 +73,10 @@ std::optional<std::pair<TNavigate::TEntry, TString>> CreateNavigateExternalEntry
         entry.Kind = NSchemeCache::TSchemeCacheNavigate::EKind::KindExternalDataSource;
     }
     entry.SyncVersion = true;
-    return {{entry, path}};
+    return {{entry, path, std::nullopt}};
 }
 
-std::optional<std::pair<TNavigate::TEntry, TString>> CreateNavigateExternalEntry(const std::pair<TIndexId, TString>& pair, bool externalDataSource) {
+std::optional<NavigateEntryResult> CreateNavigateExternalEntry(const std::pair<TIndexId, TString>& pair, bool externalDataSource) {
     Y_UNUSED(pair, externalDataSource);
     return {};
 }
@@ -108,7 +130,7 @@ TString GetTypeName(const NScheme::TTypeInfoMod& typeInfoMod) {
 }
 
 TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry,
-        const TString& cluster, const TString& tableName) {
+        const TString& cluster, const TString& tableName, std::optional<TString> queryName = std::nullopt) {
     using EKind = NSchemeCache::TSchemeCacheNavigate::EKind;
 
     TTableMetadataResult result;
@@ -144,6 +166,11 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
     }
 
     tableMeta->Attributes = entry.Attributes;
+
+    if (queryName) {
+        tableMeta->Temporary = true;
+        tableMeta->QueryName = queryName;
+    }
 
     std::map<ui32, TString, std::less<ui32>> keyColumns;
     std::map<ui32, TString, std::less<ui32>> columnOrder;
@@ -205,7 +232,7 @@ TTableMetadataResult GetExternalTableMetadataResult(const NSchemeCache::TSchemeC
         const auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(columnDesc.GetTypeId(),
             columnDesc.HasTypeInfo() ? &columnDesc.GetTypeInfo() : nullptr);
         const TString typeName = GetTypeName(typeInfoMod);
-        
+
         tableMeta->Columns.emplace(
             columnDesc.GetName(),
             NYql::TKikimrColumnMetadata(
@@ -247,7 +274,7 @@ TTableMetadataResult GetExternalDataSourceMetadataResult(const NSchemeCache::TSc
 }
 
 TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry,
-        const TString& cluster, const TString& tableName) {
+        const TString& cluster, const TString& tableName, std::optional<TString> queryName = std::nullopt) {
     using TResult = NYql::IKikimrGateway::TTableMetadataResult;
     using EStatus = NSchemeCache::TSchemeCacheNavigate::EStatus;
     using EKind = NSchemeCache::TSchemeCacheNavigate::EKind;
@@ -285,7 +312,7 @@ TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCache
             result = GetExternalDataSourceMetadataResult(entry, cluster, tableName);
             break;
         default:
-            result = GetTableMetadataResult(entry, cluster, tableName);
+            result = GetTableMetadataResult(entry, cluster, tableName, queryName);
     }
     return result;
 }
@@ -636,18 +663,21 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
     const auto externalEntryItem = CreateNavigateExternalEntry(id, settings.WithExternalDatasources_);
     Y_VERIFY(!settings.WithExternalDatasources_ || externalEntryItem, "External data source must be resolved using path only");
-    const auto entry = settings.WithExternalDatasources_ ? *externalEntryItem : CreateNavigateEntry(id, settings);
-    const auto externalEntry = settings.WithExternalDatasources_ ? std::optional<std::pair<TNavigate::TEntry, TString>>{} : externalEntryItem;
+    auto resNavigate = settings.WithExternalDatasources_ ? *externalEntryItem : CreateNavigateEntry(cluster,
+        id, settings, TempTablesState);
+    const auto entry = resNavigate.Entry;
+    const auto queryName = resNavigate.QueryName;
+    const auto externalEntry = settings.WithExternalDatasources_ ? std::optional<NavigateEntryResult>{} : externalEntryItem;
     const ui64 expectedSchemaVersion = GetExpectedVersion(id);
 
     LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_GATEWAY, "Load table metadata from cache by path, request" << GetDebugString(id));
 
     auto navigate = MakeHolder<TNavigate>();
-    navigate->ResultSet.emplace_back(entry.first);
+    navigate->ResultSet.emplace_back(entry);
     if (externalEntry) {
-        navigate->ResultSet.emplace_back(externalEntry->first);
+        navigate->ResultSet.emplace_back(externalEntry->Entry);
     }
-    const TString& table = entry.second;
+    const TString& table = resNavigate.Path;
 
     navigate->DatabaseName = database;
     if (userToken && !userToken->GetSerializedToken().empty()) {
@@ -662,7 +692,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
         ActorSystem,
         schemeCacheId,
         ev.Release(),
-        [userToken, database, cluster, table, settings, expectedSchemaVersion, this]
+        [userToken, database, cluster, table, settings, expectedSchemaVersion, this, queryName]
             (TPromise<TResult> promise, TResponse&& response) mutable
         {
             try {
@@ -740,7 +770,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                     }
                     break;
                     default: {
-                        promise.SetValue(GetLoadTableMetadataResult(entry, cluster, table));
+                        promise.SetValue(GetLoadTableMetadataResult(entry, cluster, table, queryName));
                     }
                 }
             }

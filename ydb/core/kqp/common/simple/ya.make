@@ -6,6 +6,7 @@ SRCS(
     settings.cpp
     services.cpp
     kqp_event_ids.cpp
+    temp_tables.cpp
 )
 
 PEERDIR(

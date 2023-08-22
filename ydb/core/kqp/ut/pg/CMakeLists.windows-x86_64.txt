@@ -29,6 +29,7 @@ target_link_libraries(ydb-core-kqp-ut-pg PUBLIC
   udf-service-exception_policy
   yql-sql-pg
   yql-parser-pg_wrapper
+  public-lib-ut_helpers
 )
 target_sources(ydb-core-kqp-ut-pg PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/pg/kqp_pg_ut.cpp

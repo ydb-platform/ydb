@@ -1966,6 +1966,7 @@ private:
 
         if (!SessionCtx->HasTx()) {
             TKikimrTransactionContextBase emptyCtx(SessionCtx->Config().EnableKqpImmediateEffects);
+            emptyCtx.SetTempTables(SessionCtx->GetTempTablesState());
             return emptyCtx.ApplyTableOperations(tableOps, tableInfo, queryType);
         }
 

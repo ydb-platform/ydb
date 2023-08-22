@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
@@ -23,7 +24,8 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const TString& uid, const TKqpQueryId& query,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-    TKqpDbCountersPtr dbCounters, NWilson::TTraceId traceId = {});
+    TKqpDbCountersPtr dbCounters, NWilson::TTraceId traceId = {},
+    TKqpTempTablesState::TConstPtr tempTablesState = nullptr);
 
 IActor* CreateKqpCompileRequestActor(const TActorId& owner, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TMaybe<TString>& uid,
     TMaybe<TKqpQueryId>&& query, bool keepInCache, const TInstant& deadline, TKqpDbCountersPtr dbCounters,

@@ -101,7 +101,7 @@ public:
 TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway,
     const TString& cluster, const TString& database, NYql::TKikimrConfiguration::TPtr config, NYql::IModuleResolver::TPtr moduleResolver,
     NYql::IHTTPGateway::TPtr httpGateway, const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry = nullptr, bool keepConfigChanges = false, bool isInternalCall = false,
-    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory = nullptr);
+    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory = nullptr, TKqpTempTablesState::TConstPtr tempTablesState = nullptr);
 
 } // namespace NKqp
 } // namespace NKikimr

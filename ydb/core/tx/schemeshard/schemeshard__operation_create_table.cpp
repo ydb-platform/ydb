@@ -524,6 +524,12 @@ public:
 
         TString errStr;
 
+        if ((schema.HasTemporary() && schema.GetTemporary()) && !AppData()->FeatureFlags.GetEnableTempTables()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                TStringBuilder() << "It is not allowed to create temp table: " << schema.GetName());
+            return result;
+        }
+
         if (!CheckColumnTypesConstraints(schema, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;

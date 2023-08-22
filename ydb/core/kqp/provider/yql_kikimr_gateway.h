@@ -375,6 +375,8 @@ struct TKikimrTableMetadata : public TThrRefBase {
     bool DoesExist = false;
     TString Cluster;
     TString Name;
+    std::optional<TString> QueryName = std::nullopt;
+    bool Temporary = false;
     TKikimrPathId PathId;
     TString SysView;
     ui64 SchemaVersion = 0;

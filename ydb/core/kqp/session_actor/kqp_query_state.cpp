@@ -161,7 +161,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest()
     }
 
     return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, uid,
-        std::move(query), keepInCache, compileDeadline, DbCounters, std::move(Orbit));
+        std::move(query), keepInCache, compileDeadline, DbCounters, std::move(Orbit), TempTablesState);
 }
 
 std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileRequest() {
@@ -197,7 +197,7 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
     }
 
     return std::make_unique<TEvKqp::TEvRecompileRequest>(UserToken, CompileResult->Uid,
-        CompileResult->Query, compileDeadline, DbCounters, std::move(Orbit));
+        CompileResult->Query, compileDeadline, DbCounters, std::move(Orbit), TempTablesState);
 }
 
 void TKqpQueryState::AddOffsetsToTransaction() {

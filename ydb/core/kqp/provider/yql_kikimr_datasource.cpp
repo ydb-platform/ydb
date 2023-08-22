@@ -308,10 +308,15 @@ public:
 
             if (res.Success()) {
                 res.ReportIssues(ctx.IssueManager);
-                auto& tableDesc = SessionCtx->Tables().GetTable(it.first.first, it.first.second);
+                TKikimrTableDescription* tableDesc;
+                if (res.Metadata->Temporary) {
+                    tableDesc = &SessionCtx->Tables().GetTable(it.first.first, *res.Metadata->QueryName);
+                } else {
+                    tableDesc = &SessionCtx->Tables().GetTable(it.first.first, it.first.second);
+                }
 
                 YQL_ENSURE(res.Metadata);
-                tableDesc.Metadata = res.Metadata;
+                tableDesc->Metadata = res.Metadata;
 
                 bool sysColumnsEnabled = SessionCtx->Config().SystemColumnsEnabled();
                 YQL_ENSURE(res.Metadata->Indexes.size() == res.Metadata->SecondaryGlobalIndexMetadata.size());
@@ -322,7 +327,7 @@ public:
                     desc.Load(ctx, sysColumnsEnabled);
                 }
 
-                if (!tableDesc.Load(ctx, sysColumnsEnabled)) {
+                if (!tableDesc->Load(ctx, sysColumnsEnabled)) {
                     LoadResults.clear();
                     return TStatus::Error;
                 }

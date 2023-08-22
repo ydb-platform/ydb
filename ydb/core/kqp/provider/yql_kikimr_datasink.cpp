@@ -669,10 +669,15 @@ public:
                         settings.SerialColumns = Build<TCoAtomList>(ctx, node->Pos()).Done();
                     }
 
+                    auto temporary = settings.Temporary.IsValid()
+                        ? settings.Temporary.Cast()
+                        : Build<TCoAtom>(ctx, node->Pos()).Value("false").Done();
+
                     return Build<TKiCreateTable>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .Table().Build(key.GetTablePath())
+                        .Temporary(temporary)
                         .Columns(settings.Columns.Cast())
                         .PrimaryKey(settings.PrimaryKey.Cast())
                         .NotNullColumns(settings.NotNullColumns.Cast())

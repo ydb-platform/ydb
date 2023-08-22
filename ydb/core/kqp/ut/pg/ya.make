@@ -13,6 +13,7 @@ PEERDIR(
     ydb/library/yql/public/udf/service/exception_policy
     ydb/library/yql/sql/pg
     ydb/library/yql/parser/pg_wrapper
+    ydb/public/lib/ut_helpers
 )
 
 ADDINCL(

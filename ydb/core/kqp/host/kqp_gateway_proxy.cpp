@@ -256,6 +256,8 @@ bool ConvertCreateTableSettingsToProto(NYql::TKikimrTableMetadataPtr metadata, Y
         }
     }
 
+    proto.set_temporary(metadata->Temporary);
+
     return true;
 }
 

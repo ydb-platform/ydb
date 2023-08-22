@@ -200,6 +200,8 @@ bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
         tableDesc.MutableTTLSettings()->SetUseTiering(proto.tiering());
     }
 
+    tableDesc.SetTemporary(proto.Gettemporary());
+
     return true;
 }
 

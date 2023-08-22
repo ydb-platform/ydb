@@ -30,11 +30,14 @@ public:
     }
 
     TKqpSchemeExecuter(TKqpPhyTxHolder::TConstPtr phyTx, const TActorId& target, const TString& database,
-        TIntrusiveConstPtr<NACLib::TUserToken> userToken, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc)
+        TIntrusiveConstPtr<NACLib::TUserToken> userToken, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc,
+        bool temporary, TString sessionId)
         : PhyTx(phyTx)
         , Target(target)
         , Database(database)
         , UserToken(userToken)
+        , Temporary(temporary)
+        , SessionId(sessionId)
     {
         YQL_ENSURE(PhyTx);
         YQL_ENSURE(PhyTx->GetType() == NKqpProto::TKqpPhyTx::TYPE_SCHEME);
@@ -52,9 +55,16 @@ public:
         }
 
         const auto& schemeOp = PhyTx->GetSchemeOperation();
+        auto modifyScheme = schemeOp.GetCreateTable();
+
+        if (Temporary) {
+            auto* createTable = modifyScheme.MutableCreateTable();
+            createTable->SetName(createTable->GetName() + SessionId);
+            createTable->SetPath(createTable->GetPath() + SessionId);
+        }
         switch (schemeOp.GetOperationCase()) {
             case NKqpProto::TKqpSchemeOperation::kCreateTable:
-                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(schemeOp.GetCreateTable());
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
 
             default:
@@ -166,14 +176,16 @@ private:
     const TString Database;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
+    bool Temporary;
+    TString SessionId;
 };
 
 } // namespace
 
 IActor* CreateKqpSchemeExecuter(TKqpPhyTxHolder::TConstPtr phyTx, const TActorId& target, const TString& database,
-    TIntrusiveConstPtr<NACLib::TUserToken> userToken, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc)
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc, bool temporary, TString sessionId)
 {
-    return new TKqpSchemeExecuter(phyTx, target, database, userToken, txAlloc);
+    return new TKqpSchemeExecuter(phyTx, target, database, userToken, txAlloc, temporary, sessionId);
 }
 
 } // namespace NKikimr::NKqp

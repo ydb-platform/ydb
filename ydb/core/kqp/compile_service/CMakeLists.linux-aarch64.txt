@@ -18,6 +18,7 @@ target_link_libraries(core-kqp-compile_service PUBLIC
   ydb-core-actorlib_impl
   ydb-core-base
   core-kqp-host
+  kqp-common-simple
   providers-common-http_gateway
 )
 target_sources(core-kqp-compile_service PRIVATE

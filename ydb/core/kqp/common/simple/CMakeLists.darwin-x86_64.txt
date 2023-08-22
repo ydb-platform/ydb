@@ -23,4 +23,5 @@ target_sources(kqp-common-simple PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/simple/settings.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/simple/services.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/simple/kqp_event_ids.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/common/simple/temp_tables.cpp
 )

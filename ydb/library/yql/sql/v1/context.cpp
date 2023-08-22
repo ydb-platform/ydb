@@ -66,6 +66,7 @@ THashMap<TStringBuf, TPragmaMaybeField> CTX_PRAGMA_MAYBE_FIELDS = {
     {"AnsiRankForNullableKeys", &TContext::AnsiRankForNullableKeys},
     {"AnsiOrderByLimitInUnionAll", &TContext::AnsiOrderByLimitInUnionAll},
     {"AnsiInForEmptyOrNullableItemsCollections", &TContext::AnsiInForEmptyOrNullableItemsCollections},
+    {"CompactGroupBy", &TContext::CompactGroupBy},
 };
 
 } // namespace

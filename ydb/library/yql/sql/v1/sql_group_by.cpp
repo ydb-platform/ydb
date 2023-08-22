@@ -11,10 +11,14 @@ const TString TGroupByClause::AutogenerateNamePrefix = "group";
 
 bool TGroupByClause::Build(const TRule_group_by_clause& node) {
     // group_by_clause: GROUP COMPACT? BY opt_set_quantifier grouping_element_list (WITH an_id)?;
-    CompactGroupBy = node.HasBlock2();
-    if (!CompactGroupBy) {
-        auto hints = Ctx.PullHintForToken(Ctx.TokenPosition(node.GetToken1()));
-        CompactGroupBy = AnyOf(hints, [](const NSQLTranslation::TSQLHint& hint) { return to_lower(hint.Name) == "compact"; });
+    if (Ctx.CompactGroupBy.Defined()) {
+        CompactGroupBy = *Ctx.CompactGroupBy;
+    } else {
+        CompactGroupBy = node.HasBlock2();
+        if (!CompactGroupBy) {
+            auto hints = Ctx.PullHintForToken(Ctx.TokenPosition(node.GetToken1()));
+            CompactGroupBy = AnyOf(hints, [](const NSQLTranslation::TSQLHint& hint) { return to_lower(hint.Name) == "compact"; });
+        }
     }
     TPosition distinctPos;
     if (IsDistinctOptSet(node.GetRule_opt_set_quantifier4(), distinctPos)) {

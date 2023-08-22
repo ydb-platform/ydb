@@ -2349,6 +2349,40 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
+
+    Y_UNIT_TEST(PragmaCompactGroupBy) {
+        auto req = "PRAGMA CompactGroupBy; SELECT key, COUNT(*) FROM plato.Input GROUP BY key;";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Aggregate") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'('compact)"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Aggregate"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Aggregate"]);
+    }
+
+    Y_UNIT_TEST(PragmaDisableCompactGroupBy) {
+        auto req = "PRAGMA DisableCompactGroupBy; SELECT key, COUNT(*) FROM plato.Input GROUP /*+ compact() */ BY key;";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Aggregate") {
+                UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("'('compact)"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Aggregate"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Aggregate"]);
+    }
 }
 
 Y_UNIT_TEST_SUITE(ExternalFunction) {

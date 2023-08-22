@@ -1968,6 +1968,12 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
                 return {};
             }
             Ctx.IncrementMonCounter("sql_pragma", "FeatureR010");
+        } else if (normalizedPragma == "compactgroupby") {
+            Ctx.CompactGroupBy = true;
+            Ctx.IncrementMonCounter("sql_pragma", "CompactGroupBy");
+        } else if (normalizedPragma == "disablecompactgroupby") {
+            Ctx.CompactGroupBy = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableCompactGroupBy");
         } else {
             Error() << "Unknown pragma: " << pragma;
             Ctx.IncrementMonCounter("sql_errors", "UnknownPragma");

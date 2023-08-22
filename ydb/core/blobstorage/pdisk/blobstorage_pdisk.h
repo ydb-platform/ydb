@@ -1500,6 +1500,38 @@ struct TEvAskForCutLog : public TEventLocal<TEvAskForCutLog, TEvBlobStorage::EvA
     }
 };
 
+struct TEvReadMetadata : TEventLocal<TEvReadMetadata, TEvBlobStorage::EvReadMetadata> {};
+
+struct TEvReadMetadataResult : TEventLocal<TEvReadMetadataResult, TEvBlobStorage::EvReadMetadataResult> {
+    EPDiskMetadataOutcome Outcome;
+    TRcBuf Metadata;
+
+    TEvReadMetadataResult(EPDiskMetadataOutcome outcome)
+        : Outcome(outcome)
+    {}
+
+    TEvReadMetadataResult(TRcBuf&& metadata)
+        : Outcome(EPDiskMetadataOutcome::OK)
+        , Metadata(std::move(metadata))
+    {}
+};
+
+struct TEvWriteMetadata : TEventLocal<TEvWriteMetadata, TEvBlobStorage::EvWriteMetadata> {
+    TRcBuf Metadata;
+
+    TEvWriteMetadata(TRcBuf&& metadata)
+        : Metadata(std::move(metadata))
+    {}
+};
+
+struct TEvWriteMetadataResult : TEventLocal<TEvWriteMetadataResult, TEvBlobStorage::EvWriteMetadataResult> {
+    EPDiskMetadataOutcome Outcome;
+
+    TEvWriteMetadataResult(EPDiskMetadataOutcome outcome)
+        : Outcome(outcome)
+    {}
+};
+
 } // NPDisk
 } // NKikimr
 

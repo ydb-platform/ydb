@@ -5,11 +5,27 @@
 
 using namespace NYql;
 
+namespace {
+
+struct TTestSetup {
+    TTestSetup()
+        : TypesCtx(MakeHolder<TTypeAnnotationContext>())
+        , State(MakeIntrusive<TYtState>())
+    {
+        State->Types = TypesCtx.Get();
+        State->DqIntegration_ = CreateYtDqIntegration(State.Get());
+
+    }
+
+    THolder<TTypeAnnotationContext> TypesCtx;
+    TYtState::TPtr State;
+};
+
+}
+
 Y_UNIT_TEST_SUITE(TSchedulerTest) {
     Y_UNIT_TEST(Ranges_table4_table5_test0) {
-        TYtState::TPtr state = new TYtState;
-        state->Types = new TTypeAnnotationContext;
-        auto dqIntegration = CreateYtDqIntegration(state.Get());
+        TTestSetup setup;
         TDqSettings settings;
         settings.DataSizePerJob = 1000;
         TVector<TString> partitions;
@@ -35,16 +51,14 @@ Y_UNIT_TEST_SUITE(TSchedulerTest) {
         TExprNode::TPtr exprRoot_;
         UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot_, exprCtx_, nullptr, nullptr));
         TString cluster;
-        const auto result = dqIntegration->Partition(settings, maxTasks, *exprRoot_, partitions, &cluster, exprCtx_, false);
+        const auto result = setup.State->DqIntegration_->Partition(settings, maxTasks, *exprRoot_, partitions, &cluster, exprCtx_, false);
         const auto expected = 428;
         UNIT_ASSERT_VALUES_EQUAL(result, expected);
         UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 3);
     }
 
     Y_UNIT_TEST(Ranges_table4_table7_test1) {
-        TYtState::TPtr state = new TYtState;
-        state->Types = new TTypeAnnotationContext;
-        auto dqIntegration = CreateYtDqIntegration(state.Get());
+        TTestSetup setup;
         TDqSettings settings;
         settings.DataSizePerJob = 1000;
         TVector<TString> partitions;
@@ -77,16 +91,14 @@ Y_UNIT_TEST_SUITE(TSchedulerTest) {
         TExprNode::TPtr exprRoot_;
         UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot_, exprCtx_, nullptr, nullptr));
         TString cluster;
-        const auto result = dqIntegration->Partition(settings, maxTasks, *exprRoot_, partitions, &cluster, exprCtx_, false);
+        const auto result = setup.State->DqIntegration_->Partition(settings, maxTasks, *exprRoot_, partitions, &cluster, exprCtx_, false);
         const auto expected = 642;
         UNIT_ASSERT_VALUES_EQUAL(result, expected);
         UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 2);
     }
 
     Y_UNIT_TEST(Ranges_table4_table7_test2) {
-        TYtState::TPtr state = new TYtState;
-        state->Types = new TTypeAnnotationContext;
-        auto dqIntegration = CreateYtDqIntegration(state.Get());
+        TTestSetup setup;
         TDqSettings settings;
         settings.DataSizePerJob = 1000;
         TVector<TString> partitions;
@@ -119,7 +131,7 @@ Y_UNIT_TEST_SUITE(TSchedulerTest) {
         TExprNode::TPtr exprRoot_;
         UNIT_ASSERT(CompileExpr(*astRes.Root, exprRoot_, exprCtx_, nullptr, nullptr));
         TString cluster;
-        const auto result = dqIntegration->Partition(settings, maxTasks, *exprRoot_, partitions, &cluster, exprCtx_, false);
+        const auto result = setup.State->DqIntegration_->Partition(settings, maxTasks, *exprRoot_, partitions, &cluster, exprCtx_, false);
         const auto expected = 214;
         UNIT_ASSERT_VALUES_EQUAL(result, expected);
         UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 6);

@@ -1162,6 +1162,10 @@ message TBlockStoreAssignOp {
     optional uint64 TokenVersion = 3;
 }
 
+message TDropBlockStoreVolume { 
+    optional uint64 FillGeneration = 1;
+}
+
 message TModifyACL {
     optional string Name = 1;
     optional bytes DiffACL = 2; // NACLibProto.TDiffACL
@@ -1478,6 +1482,8 @@ message TModifyScheme {
     optional TExternalTableDescription CreateExternalTable = 58;
 
     optional TExternalDataSourceDescription CreateExternalDataSource = 59;
+
+    optional TDropBlockStoreVolume DropBlockStoreVolume = 60;
 }
 
 // "Script", used by client to parse text files with multiple DDL commands

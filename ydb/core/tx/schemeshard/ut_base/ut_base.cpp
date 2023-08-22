@@ -2999,7 +2999,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestModificationResult(runtime, txId, NKikimrScheme::StatusMultipleModifications);
         env.TestWaitNotification(runtime, {txId-1, txId});
 
-
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::PathVersionEqual(4)});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Copy4"),
@@ -8069,7 +8068,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume", {NKikimrScheme::StatusPathDoesNotExist});
+        TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume", 0, {NKikimrScheme::StatusPathDoesNotExist});
 
         // Create volume with 1 partition
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
@@ -8173,6 +8172,67 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId-1);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
                            {NLs::PathNotExist});
+    }
+
+    Y_UNIT_TEST(DropBlockStoreVolumeWithFillGeneration) { //+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        auto createVolume = [&](const TString& volumeName) {
+            // Create volume with fill generation 713
+            NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
+            vdescr.SetName(volumeName);
+            auto& vc = *vdescr.MutableVolumeConfig();
+            vc.SetBlockSize(4096);
+            vc.AddPartitions()->SetBlockCount(16);
+            vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+            vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+            vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+            vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+            vc.SetFillGeneration(713);
+
+            TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+            env.TestWaitNotification(runtime, txId);
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/" + volumeName),
+                               {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(2)});
+        };
+
+        auto successfullyDropVolume = [&](const TString& volumeName, ui64 fillGeneration) {
+            TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", volumeName, fillGeneration, {NKikimrScheme::StatusAccepted});
+            env.TestWaitNotification(runtime, txId);
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/" + volumeName),
+                               {NLs::PathNotExist});
+            env.TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1});
+            TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                               {NLs::Finished, NLs::PathsInsideDomain(0), NLs::ShardsInsideDomain(0)});
+        };
+
+        auto failToDropVolume = [&](const TString& volumeName, ui64 fillGeneration) {
+            TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", volumeName, fillGeneration, {NKikimrScheme::StatusSuccess});
+            env.TestWaitNotification(runtime, txId);
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/" + volumeName),
+                               {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(2)});
+        };
+
+        createVolume("BSVolume");
+        // Try to drop the volume using smaller fill generation
+        failToDropVolume("BSVolume", 1);
+        failToDropVolume("BSVolume", 712);
+        // Drop the volume using equal fill generation
+        successfullyDropVolume("BSVolume", 713);
+
+        createVolume("BSVolume_2");
+        // Drop the volume using greater fill generation
+        successfullyDropVolume("BSVolume_2", 714);
+
+        createVolume("BSVolume_3");
+        // Drop the volume using greater fill generation
+        successfullyDropVolume("BSVolume_3", 777);
+
+        createVolume("BSVolume_4");
+        // Drop the volume using zero fill generation (should be successful)
+        successfullyDropVolume("BSVolume_4", 0);
     }
 
     Y_UNIT_TEST(AssignBlockStoreVolume) { //+

@@ -57,14 +57,16 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
             AsyncAssignBlockStoreVolume(runtime, ++t.TxId, "/MyRoot", "BSVolume", "Owner123");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-            TestDropBlockStoreVolume(runtime, ++t.TxId, "/MyRoot", "BSVolume", {NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusAccepted});
+            TestDropBlockStoreVolume(runtime, ++t.TxId, "/MyRoot", "BSVolume", 0,
+                                     {NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusAccepted});
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             t.TestEnv->TestWaitNotification(runtime, t.TxId - 2); // wait Alter
 
             {
                 TInactiveZone inactive(activeZone);
-                TestDropBlockStoreVolume(runtime, ++t.TxId, "/MyRoot", "BSVolume", {NKikimrScheme::StatusPathDoesNotExist, NKikimrScheme::StatusAccepted});
+                TestDropBlockStoreVolume(runtime, ++t.TxId, "/MyRoot", "BSVolume", 0,
+                                         {NKikimrScheme::StatusPathDoesNotExist, NKikimrScheme::StatusAccepted});
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
                                    {NLs::PathNotExist});

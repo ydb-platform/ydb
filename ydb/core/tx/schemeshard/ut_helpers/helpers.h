@@ -252,8 +252,8 @@ namespace NSchemeShardUT_Private {
     // nbs
     GENERIC_HELPERS(CreateBlockStoreVolume);
     GENERIC_HELPERS(AlterBlockStoreVolume);
-    GENERIC_HELPERS(DropBlockStoreVolume);
-    DROP_BY_PATH_ID_HELPERS(DropBlockStoreVolume);
+    void AsyncDropBlockStoreVolume(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name, ui64 fillGeneration = 0);
+    void TestDropBlockStoreVolume(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name, ui64 fillGeneration = 0, const TVector<TExpectedResult>& expectedResults = {NKikimrScheme::StatusAccepted});
     void AsyncAssignBlockStoreVolume(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name, const TString& mountToken, ui64 tokenVersion = 0);
     void TestAssignBlockStoreVolume(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name, const TString& mountToken, ui64 tokenVersion = 0, const TVector<TExpectedResult>& expectedResults = {NKikimrScheme::StatusSuccess});
 

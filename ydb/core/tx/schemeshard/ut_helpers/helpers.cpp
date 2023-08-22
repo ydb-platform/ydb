@@ -886,8 +886,6 @@ namespace NSchemeShardUT_Private {
     // nbs
     GENERIC_HELPERS(CreateBlockStoreVolume, NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlockStoreVolume, &NKikimrSchemeOp::TModifyScheme::MutableCreateBlockStoreVolume)
     GENERIC_HELPERS(AlterBlockStoreVolume, NKikimrSchemeOp::EOperationType::ESchemeOpAlterBlockStoreVolume, &NKikimrSchemeOp::TModifyScheme::MutableAlterBlockStoreVolume)
-    GENERIC_HELPERS(DropBlockStoreVolume, NKikimrSchemeOp::EOperationType::ESchemeOpDropBlockStoreVolume, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
-    DROP_BY_PATH_ID_HELPERS(DropBlockStoreVolume, NKikimrSchemeOp::EOperationType::ESchemeOpDropBlockStoreVolume)
 
     // external table
     GENERIC_HELPERS(CreateExternalTable, NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable, &NKikimrSchemeOp::TModifyScheme::MutableCreateExternalTable)
@@ -919,6 +917,28 @@ namespace NSchemeShardUT_Private {
             const NKikimrSchemeOp::TAlterUserAttributes& userAttrs)
     {
         return TestUserAttrs(runtime, txId, parentPath, name, {NKikimrScheme::StatusAccepted}, userAttrs);
+    }
+
+    void AsyncDropBlockStoreVolume(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name,
+            ui64 fillGeneration)
+    {
+        auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
+        auto transaction = evTx->Record.AddTransaction();
+        transaction->SetWorkingDir(parentPath);
+        transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropBlockStoreVolume);
+
+        transaction->MutableDrop()->SetName(name);
+
+        transaction->MutableDropBlockStoreVolume()->SetFillGeneration(fillGeneration);
+
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, evTx);
+    }
+
+    void TestDropBlockStoreVolume(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name,
+            ui64 fillGeneration, const TVector<TExpectedResult>& expectedResults)
+    {
+        AsyncDropBlockStoreVolume(runtime, txId, parentPath, name, fillGeneration);
+        TestModificationResults(runtime, txId, expectedResults);
     }
 
     void AsyncAssignBlockStoreVolume(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name,

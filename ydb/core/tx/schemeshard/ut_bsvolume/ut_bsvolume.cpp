@@ -176,7 +176,7 @@ Y_UNIT_TEST_SUITE(TBSV) {
         TestCreateBlockStoreVolume(runtime, ++txId, root, descr.DebugString());
         env.TestWaitNotification(runtime, txId);
         // drop should be throttled
-        TestDropBlockStoreVolume(runtime, ++txId, root, name, {throttled});
+        TestDropBlockStoreVolume(runtime, ++txId, root, name, 0, {throttled});
         env.TestWaitNotification(runtime, txId);
 
         mockTimeProvider->Time = TInstant::Seconds(1);
@@ -188,7 +188,7 @@ Y_UNIT_TEST_SUITE(TBSV) {
         TestCreateBlockStoreVolume(runtime, ++txId, root, descr.DebugString());
         env.TestWaitNotification(runtime, txId);
         // next drop should be throttled
-        TestDropBlockStoreVolume(runtime, ++txId, root, name, {throttled});
+        TestDropBlockStoreVolume(runtime, ++txId, root, name, 0, {throttled});
         env.TestWaitNotification(runtime, txId);
 
         // turn off rate limiter

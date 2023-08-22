@@ -95,12 +95,12 @@ TString PrintStoredAndCurrent(const TStored* stored, const TCurrent* current) {
             "Current CompatibilityInfo# { " << currentStr << " } ";
 }
 
-TString PrintStoredAndCurrent(const TOldFormat& stored, const TCurrent* current) {
+TString PrintStoredAndCurrent(const TOldFormat& peer, const TCurrent* current) {
     TStringStream str;
-    str << "Stored CompatibilityInfo# { ";
-    str << "Tag# " << stored.Tag;
+    str << "Peer CompatibilityInfo# { ";
+    str << "Tag# " << peer.Tag;
     str << "AcceptedTag# { ";
-    for (const TString& tag : stored.AcceptedTags) {
+    for (const TString& tag : peer.AcceptedTags) {
         str << tag << " ";
     }
     str << " } } ";
@@ -119,8 +119,7 @@ TStored TCompatibilityInfo::MakeStored(TComponentId componentId, const TCurrent*
         stored.MutableVersion()->CopyFrom(current->GetVersion());
     }
 
-    for (ui32 i = 0; i < current->StoresReadableBySize(); i++) {
-        auto rule = current->GetStoresReadableBy(i);
+    for (const auto& rule : current->GetStoresReadableBy()) {
         const auto ruleComponentId = TComponentId(rule.GetComponentId());
         if (!rule.HasComponentId() || ruleComponentId == componentId || ruleComponentId == EComponentId::Any) {
             auto *newRule = stored.AddReadableBy();
@@ -132,7 +131,6 @@ TStored TCompatibilityInfo::MakeStored(TComponentId componentId, const TCurrent*
             newRule->SetForbidden(rule.GetForbidden());
         }
     }
-
     return stored;
 }
 
@@ -279,18 +277,12 @@ bool TCompatibilityInfo::CheckCompatibility(const TCurrent* current, const TStor
     const auto* storedVersion = stored->HasVersion() ? &stored->GetVersion() : nullptr;
 
     bool permitted = false;
-    bool useDefault = true;
 
-    for (ui32 i = 0; i < current->CanLoadFromSize(); ++i) {
-        const auto rule = current->GetCanLoadFrom(i);
+    for (const auto& rule : current->GetCanLoadFrom()) {
         const auto ruleComponentId = TComponentId(rule.GetComponentId());
         if (!rule.HasComponentId() || ruleComponentId == componentId || ruleComponentId == EComponentId::Any) {
-            bool isForbidding = rule.HasForbidden() && rule.GetForbidden();
-            if ((!rule.HasApplication() || rule.GetApplication() == storedApplication) && !isForbidding) {
-                useDefault = false;
-            }
             if (CheckRule(storedApplication, storedVersion, rule)) {
-                if (isForbidding) {
+                if (rule.HasForbidden() && rule.GetForbidden()) {
                     errorReason = "Stored version is explicitly prohibited, " + PrintStoredAndCurrent(stored, current);
                     return false;
                 } else {
@@ -300,12 +292,10 @@ bool TCompatibilityInfo::CheckCompatibility(const TCurrent* current, const TStor
         }
     }
 
-    for (ui32 i = 0; i < stored->ReadableBySize(); ++i) {
-        const auto rule = stored->GetReadableBy(i);
+    for (const auto& rule : stored->GetReadableBy()) {
         const auto ruleComponentId = TComponentId(rule.GetComponentId());
         if (!rule.HasComponentId() || ruleComponentId == componentId || ruleComponentId == EComponentId::Any) {
             if (CheckRule(currentApplication, currentVersion, rule)) {
-                useDefault = false;
                 if (rule.HasForbidden() && rule.GetForbidden()) {
                     errorReason = "Current version is explicitly prohibited, " + PrintStoredAndCurrent(stored, current);
                     return false;
@@ -319,16 +309,13 @@ bool TCompatibilityInfo::CheckCompatibility(const TCurrent* current, const TStor
     if (permitted) {
         return true;
     } else {
-        if (useDefault) {
-            if (CheckDefaultRules(currentApplication, currentVersion, storedApplication, storedVersion)) {
-                return true;
-            } else {
-                errorReason = "Versions are not compatible by default rules, " + PrintStoredAndCurrent(stored, current);
-                return false;
-            }
+        if (CheckDefaultRules(currentApplication, currentVersion, storedApplication, storedVersion)) {
+            return true;
+        } else {
+            errorReason = "Versions are not compatible neither by common rule nor by provided rule sets, "
+                    + PrintStoredAndCurrent(stored, current);
+            return false;
         }
-        errorReason = "Versions are not compatible by given rule sets, " + PrintStoredAndCurrent(stored, current);
-        return false;
     }
 }
 
@@ -552,6 +539,7 @@ void CheckVersionTag() {
 }
 
 bool TCompatibilityInfo::CheckCompatibility(const TCurrent* current, const TOldFormat& stored, TComponentId componentId, TString& errorReason) const {
+    // stored version is peer version in terms of Interconnect
     Y_VERIFY(current);
 
     std::optional<TString> storedApplication;
@@ -566,18 +554,12 @@ bool TCompatibilityInfo::CheckCompatibility(const TCurrent* current, const TOldF
     }
 
     bool permitted = false;
-    bool useDefault = true;
 
-    for (ui32 i = 0; i < current->CanLoadFromSize(); ++i) {
-        const auto rule = current->GetCanLoadFrom(i);
+    for (const auto& rule : current->GetCanLoadFrom()) {
         const auto ruleComponentId = TComponentId(rule.GetComponentId());
         if (!rule.HasComponentId() || ruleComponentId == componentId || ruleComponentId == EComponentId::Any) {
-            bool isForbidding = rule.HasForbidden() && rule.GetForbidden();
-            if (!rule.HasApplication() && !isForbidding) {
-                useDefault = false;
-            }
             if (CheckRule(storedApplication, &*storedVersion, rule)) {
-                if (isForbidding) {
+                if (rule.HasForbidden() && rule.GetForbidden()) {
                     errorReason = "Stored version is explicitly prohibited, " + PrintStoredAndCurrent(stored, current);
                     return false;
                 } else {
@@ -591,60 +573,55 @@ bool TCompatibilityInfo::CheckCompatibility(const TCurrent* current, const TOldF
         return true;
     }
 
-    const auto* currentVersion = current->HasVersion() ? &current->GetVersion() : nullptr;
     for (const auto& tag : stored.AcceptedTags) {
         auto version = ParseVersionFromTag(tag);
-        if (storedVersion && currentVersion) {
-            if (version->GetYear() == currentVersion->GetYear() &&
-                    version->GetMajor() == currentVersion->GetMajor() &&
-                    version->GetMinor() == currentVersion->GetMinor() &&
-                    version->GetHotfix() == currentVersion->GetHotfix()) {
+        if (version && current->HasVersion()) {
+            if (CompareVersions(*version, current->GetVersion()) == 0) {
                 return true;
             }
-        } else if (!storedVersion && !currentVersion)  {
+        } else if (!version && !current->HasVersion())  {
             if (current->GetApplication() == tag) {
                 return true;
             }
         }
     }
 
-    if (useDefault) {
-        if (current->HasVersion() && storedVersion) {
-            auto currentVersion = current->GetVersion();
-            if (!currentVersion.HasYear() || !storedVersion->HasYear()) {
-                return true;
-            }
-            if (currentVersion.GetYear() != storedVersion->GetYear()) {
-                errorReason = "Default rules used, stored's and current's Year differ, "
-                        + PrintStoredAndCurrent(stored, current);
-                return false;
-            }
-            if (!currentVersion.HasMajor() || !storedVersion->HasMajor()) {
-                return true;
-            }
-            if (std::abs((i32)currentVersion.GetMajor() - (i32)storedVersion->GetMajor()) <= 1) {
-                return true;
-            } else {
-                errorReason = "Default rules used, stored's and current's Major difference is more than 1, "
-                        + PrintStoredAndCurrent(stored, current);
-                return false;
-            }
-        } else if (!current->HasVersion() && !storedVersion) {
-            if (*storedApplication == current->GetApplication()) {
-                return true;
-            } else {
-                errorReason = "Default rules used, both versions are non-stable, stored's and current's Application differ, "
-                        + PrintStoredAndCurrent(stored, current);
-                return false;
-            }
-        } else {
-            errorReason = "Default rules used, stable and non-stable versions are incompatible, "
+    // use common rule
+    if (current->HasVersion() && storedVersion) {
+        const auto& currentVersion = current->GetVersion();
+        if (!currentVersion.HasYear() || !storedVersion->HasYear()) {
+            return true;
+        }
+        if (currentVersion.GetYear() != storedVersion->GetYear()) {
+            errorReason = "Incompatible by common rule: peer's and current's Year differ, "
                     + PrintStoredAndCurrent(stored, current);
             return false;
         }
+        if (!currentVersion.HasMajor() || !storedVersion->HasMajor()) {
+            return true;
+        }
+        if (std::abs((i32)currentVersion.GetMajor() - (i32)storedVersion->GetMajor()) <= 1) {
+            return true;
+        } else {
+            errorReason = "Incompatible by common rule: peer's and current's Major differ by more than 1, "
+                    + PrintStoredAndCurrent(stored, current);
+            return false;
+        }
+    } else if (!current->HasVersion() && !storedVersion) {
+        if (*storedApplication == current->GetApplication()) {
+            return true;
+        } else {
+            errorReason = "Incompatible by common rule: both versions are non-stable, peer's and current's Build differ, "
+                    + PrintStoredAndCurrent(stored, current);
+            return false;
+        }
+    } else {
+        errorReason = "Incompatible by common rule: one tag is stable and other is non-stable, "
+                + PrintStoredAndCurrent(stored, current);
+        return false;
     }
 
-    errorReason = "Version tag doesn't match any current compatibility rule, current version is not in accepted tags list, "
+    errorReason = "Peer version tag doesn't match any current compatibility rule, current version is not in accepted tags list, "
             + PrintStoredAndCurrent(stored, current);
     return false;
 }

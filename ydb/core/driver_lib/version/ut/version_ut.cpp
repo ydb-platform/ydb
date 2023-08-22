@@ -14,6 +14,7 @@ Y_UNIT_TEST_SUITE(VersionParser) {
     }
 }
 
+using TComponentId = NKikimrConfig::TCompatibilityRule::EComponentId;
 using EComponentId = NKikimrConfig::TCompatibilityRule;
 using TOldFormat = NActors::TInterconnectProxyCommon::TVersionInfo;
 using TVersion = TCompatibilityInfo::TProtoConstructor::TVersion;
@@ -23,13 +24,14 @@ using TStoredCompatibilityInfo = TCompatibilityInfo::TProtoConstructor::TStoredC
 
 Y_UNIT_TEST_SUITE(YdbVersion) {
 
-    void Test(TCurrentCompatibilityInfo current, TCurrentCompatibilityInfo store, bool expected) {
+    void Test(TCurrentCompatibilityInfo current, TCurrentCompatibilityInfo store, bool expected,
+            TComponentId componentId = EComponentId::Test1) {
         TString errorReason;
         auto currentPB = current.ToPB();
         auto storePB = store.ToPB();
-        auto storedPB = CompatibilityInfo.MakeStored(EComponentId::Test1, &storePB);
+        auto storedPB = CompatibilityInfo.MakeStored(componentId, &storePB);
         UNIT_ASSERT_EQUAL_C(CompatibilityInfo.CheckCompatibility(&currentPB, &storedPB, 
-            EComponentId::Test1, errorReason), expected, errorReason);
+            componentId, errorReason), expected, errorReason);
     }
 
     Y_UNIT_TEST(DefaultSameVersion) {
@@ -609,6 +611,7 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
                             .Application = "nbs",
                             .LowerLimit = TVersion{ .Year = 23, .Major = 3 },
                             .UpperLimit = TVersion{ .Year = 24, .Major = 2 },
+                            .ComponentId = EComponentId::Interconnect,
                         },
                     },
                     .StoresReadableBy = {
@@ -616,10 +619,12 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
                             .Application = "nbs",
                             .LowerLimit = TVersion{ .Year = 23, .Major = 3 },
                             .UpperLimit = TVersion{ .Year = 24, .Major = 2 },
+                            .ComponentId = EComponentId::Interconnect,
                         },
                     }
                 }, 
-                true
+                true,
+                EComponentId::Interconnect
         );
     }
 
@@ -662,32 +667,6 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
                     }
                 }, 
                 true
-        );
-    }
-
-    Y_UNIT_TEST(RestrictedCompatibilitySameApplication) {
-        Test(
-                TCurrentCompatibilityInfo{
-                    .Application = "ydb",
-                    .Version = TVersion{ .Year = 24, .Major = 3, .Minor = 1, .Hotfix = 0 },
-                    .CanLoadFrom = {
-                        TCompatibilityRule{
-                            .LowerLimit = TVersion{ .Year = 24, .Major = 2, .Minor = 4},
-                            .UpperLimit = TVersion{ .Year = 24, .Major = 3 },
-                        },
-                    },
-                    .StoresReadableBy = {
-                        TCompatibilityRule{
-                            .LowerLimit = TVersion{ .Year = 24, .Major = 2, .Minor = 4},
-                            .UpperLimit = TVersion{ .Year = 24, .Major = 3 },
-                        },
-                    }
-                }, 
-                TCurrentCompatibilityInfo{
-                    .Application = "ydb",
-                    .Version = TVersion{ .Year = 24, .Major = 2, .Minor = 1, .Hotfix = 0 },
-                }, 
-                false
         );
     }
 

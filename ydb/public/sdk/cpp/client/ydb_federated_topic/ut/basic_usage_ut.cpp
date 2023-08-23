@@ -390,6 +390,36 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         // UNIT_ASSERT(std::holds_alternative<NTopic::TSessionClosedEvent>(*event));
     }
 
+    Y_UNIT_TEST(FallbackToSingleDb) {
+        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME, false);
+
+        setup->Start(true, true);
+
+        std::shared_ptr<NYdb::NFederatedTopic::IFederatedReadSession> ReadSession;
+
+        NYdb::NFederatedTopic::TFederatedTopicClient topicClient(setup->GetDriver());
+
+        // Create read session.
+        NYdb::NFederatedTopic::TFederatedReadSessionSettings readSettings;
+        readSettings
+            .ConsumerName("shared/user")
+            .MaxMemoryUsageBytes(1_MB)
+            .AppendTopics(setup->GetTestTopic());
+
+        ReadSession = topicClient.CreateFederatedReadSession(readSettings);
+        Cerr << "Session was created" << Endl;
+
+        ReadSession->WaitEvent().Wait(TDuration::Seconds(1));
+        TMaybe<NYdb::NFederatedTopic::TReadSessionEvent::TEvent> event = ReadSession->GetEvent(false);
+        Y_ASSERT(event);
+        Cerr << "Got new read session event: " << DebugString(*event) << Endl;
+
+        auto* startPartitionSessionEvent = std::get_if<NYdb::NFederatedTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event);
+        Y_ASSERT(startPartitionSessionEvent);
+        startPartitionSessionEvent->Confirm();
+
+        ReadSession->Close(TDuration::MilliSeconds(10));
+    }
 
 
 }

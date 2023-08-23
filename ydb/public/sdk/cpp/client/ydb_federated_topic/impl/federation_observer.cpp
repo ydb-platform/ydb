@@ -126,31 +126,39 @@ void TFederatedDbObserver::OnFederationDiscovery(TStatus&& status, Ydb::Federati
             return;
         }
 
-        if (!status.IsSuccess()) {
-            // if UNIMPLEMENTED - fall back to single db mode:
-            //   - initialize FederatedDbState with original db + endpoint
-            //   - no more updates: no reschedules
+        if (status.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED) {
+            // fall back to single db mode
+            FederatedDbState->Status = TPlainStatus{};  // SUCCESS
+            auto dbState = Connections_->GetDriverState(Nothing(),Nothing(),Nothing(),Nothing(),Nothing());
+            FederatedDbState->ControlPlaneEndpoint = dbState->DiscoveryEndpoint;
+            // FederatedDbState->SelfLocation = ???;
+            auto db = std::make_shared<Ydb::FederationDiscovery::DatabaseInfo>();
+            db->set_path(dbState->Database);
+            db->set_endpoint(dbState->DiscoveryEndpoint);
+            db->set_status(Ydb::FederationDiscovery::DatabaseInfo_Status_AVAILABLE);
+            db->set_weight(100);
+            FederatedDbState->DbInfos.emplace_back(std::move(db));
 
-            // TODO
-            // update counters errors
-
-            if (!FederationDiscoveryRetryState) {
-                FederationDiscoveryRetryState = FederationDiscoveryRetryPolicy->CreateRetryState();
-            }
-            TMaybe<TDuration> retryDelay = FederationDiscoveryRetryState->GetNextRetryDelay(status.GetStatus());
-            if (retryDelay) {
-                ScheduleFederationDiscoveryImpl(*retryDelay);
-                return;
-            }
         } else {
-            ScheduleFederationDiscoveryImpl(REDISCOVERY_DELAY);
+            if (!status.IsSuccess()) {
+                if (!FederationDiscoveryRetryState) {
+                    FederationDiscoveryRetryState = FederationDiscoveryRetryPolicy->CreateRetryState();
+                }
+                TMaybe<TDuration> retryDelay = FederationDiscoveryRetryState->GetNextRetryDelay(status.GetStatus());
+                if (retryDelay) {
+                    ScheduleFederationDiscoveryImpl(*retryDelay);
+                    return;
+                }
+            } else {
+                ScheduleFederationDiscoveryImpl(REDISCOVERY_DELAY);
+            }
+
+            // TODO validate new state and check if differs from previous
+
+            auto newInfo = std::make_shared<TFederatedDbState>(std::move(result), std::move(status));
+            // TODO update only if new state differs
+            std::swap(FederatedDbState, newInfo);
         }
-
-        // TODO validate new state and check if differs from previous
-
-        auto newInfo = std::make_shared<TFederatedDbState>(std::move(result), std::move(status));
-        // TODO update only if new state differs
-        std::swap(FederatedDbState, newInfo);
     }
 
     if (!PromiseToInitState.HasValue()) {

@@ -339,7 +339,7 @@ ParseJoinInputType(const TStructExprType& rowType, TStringBuf tableLabel, TExprC
         if (optional && !memberType->IsOptionalOrNull()) {
             memberType = ctx.MakeType<TOptionalExprType>(memberType);
         }
-        if (!(tableLabel.empty() || isSystemKeyColumn)) {
+        if (!tableLabel.empty()) {
             result[tableLabel][member->GetName()] = memberType;
         } else {
             result[label][column] = memberType;
@@ -402,14 +402,18 @@ const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExp
             return nullptr;
         }
 
-        auto maybeLeftKeyType = leftType[leftKeyColumn.starts_with("_yql_dq_key_left_") ? "" : leftKeyLabel].FindPtr(leftKeyColumn);
+        auto maybeLeftKeyType = leftType[leftKeyLabel].FindPtr(leftKeyColumn);
+        if (!maybeLeftKeyType && leftKeyColumn.starts_with("_yql_dq_key_left"))
+            maybeLeftKeyType = leftType[""].FindPtr(leftKeyColumn);
         if (!maybeLeftKeyType) {
             ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
                 << "Left key " << leftKeyLabel << "." << leftKeyColumn << " not found"));
             return nullptr;
         }
 
-        auto maybeRightKeyType = rightType[rightKeyColumn.starts_with("_yql_dq_key_right_") ? "" : rightKeyLabel].FindPtr(rightKeyColumn);
+        auto maybeRightKeyType = rightType[rightKeyLabel].FindPtr(rightKeyColumn);
+        if (!maybeRightKeyType && rightKeyColumn.starts_with("_yql_dq_key_right"))
+            maybeRightKeyType = rightType[""].FindPtr(rightKeyColumn);
         if (!maybeRightKeyType) {
             ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
                 << "Right key " << rightKeyLabel << "." << rightKeyColumn << " not found"));
@@ -431,7 +435,7 @@ const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExp
     {
         for (const auto& it : type) {
             for (const auto& it2 : it.second) {
-                auto memberName = FullColumnName(it.first, it2.first);
+                const auto memberName = it.first.empty() ? TString(it2.first) : FullColumnName(it.first, it2.first);
                 if (makeOptional && !it2.second->IsOptionalOrNull()) {
                     result->emplace_back(ctx.MakeType<TItemExprType>(memberName, ctx.MakeType<TOptionalExprType>(it2.second)));
                 } else {

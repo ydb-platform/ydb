@@ -73,6 +73,8 @@ private:
             PatternsToCompile.clear();
         }
 
+        Counters->CompileComputationPatternsQueueSize->Set(PatternsToCompile.size());
+
         ScheduleWakeup(ctx);
     }
 
@@ -99,7 +101,7 @@ private:
             PatternsToCompile.push_back(patternToCompile);
         }
 
-        *Counters->CompileQueueSize = PatternsToCompile.size();
+        Counters->CompileComputationPatternsQueueSize->Set(PatternsToCompile.size());
         PatternToCompileIndex = 0;
     }
 
@@ -117,9 +119,8 @@ private:
         std::shared_ptr<NMiniKQL::TPatternCacheEntry> Entry;
     };
 
-    using PatternsToCompileContainer = TVector<TPatternToCompile>;
-    using PatternsToCompileContainerIterator = PatternsToCompileContainer::iterator;
-    PatternsToCompileContainer PatternsToCompile;
+    using TPatternsToCompileContainer = TVector<TPatternToCompile>;
+    TPatternsToCompileContainer PatternsToCompile;
     size_t PatternToCompileIndex = 0;
 };
 

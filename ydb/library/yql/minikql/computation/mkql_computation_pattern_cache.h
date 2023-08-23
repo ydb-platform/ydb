@@ -95,9 +95,9 @@ public:
             : MaxSizeBytes(maxSizeBytes)
         {}
 
-        Config(size_t maxSizeBytes, size_t MaxCompiledSizeBytes, size_t patternAccessTimesBeforeTryToCompile)
+        Config(size_t maxSizeBytes, size_t maxCompiledSizeBytes, size_t patternAccessTimesBeforeTryToCompile)
             : MaxSizeBytes(maxSizeBytes)
-            , MaxCompiledSizeBytes(MaxCompiledSizeBytes)
+            , MaxCompiledSizeBytes(maxCompiledSizeBytes)
             , PatternAccessTimesBeforeTryToCompile(patternAccessTimesBeforeTryToCompile)
         {}
 

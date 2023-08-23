@@ -178,6 +178,7 @@ private:
             CurrentPatternsCompiledCodeSizeInBytes -= patternCompiledSize;
 
             pattern->RemoveCompiledCode();
+            holder->Entry->AccessTimes.store(0);
         }
     }
 

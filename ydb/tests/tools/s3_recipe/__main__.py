@@ -8,9 +8,10 @@ from library.python.testing.recipe import declare_recipe, set_env
 from library.recipes import common as recipes_common
 from yatest.common.network import PortManager
 import yatest.common
+import os
 
 PID_FILENAME = "s3_recipe.pid"
-MOTO_SERVER_PATH = "contrib/python/moto/bin/moto_server"
+MOTO_SERVER_PATH = os.getenv("MOTO_SERVER_EXECUTABLE") or "contrib/python/moto/bin/moto_server"
 
 
 def start(argv):

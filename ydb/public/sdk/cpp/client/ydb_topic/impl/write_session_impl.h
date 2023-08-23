@@ -395,10 +395,10 @@ private:
     void HandleWakeUpImpl();
     void UpdateTimedCountersImpl();
 
-    void ConnectToPreferedPartitionLocation(const TDuration& delay);
+    void ConnectToPreferredPartitionLocation(const TDuration& delay);
     void OnDescribePartition(const TStatus& status, const Ydb::Topic::DescribePartitionResult& proto, const NGrpc::IQueueClientContextPtr& describePartitionContext);
 
-    TMaybe<TEndpointKey> GetPreferedEndpointImpl(ui32 partitionId, ui64 partitionNodeId);
+    TMaybe<TEndpointKey> GetPreferredEndpointImpl(ui32 partitionId, ui64 partitionNodeId);
 
 private:
     TWriteSessionSettings Settings;
@@ -449,7 +449,7 @@ private:
     TAtomic Aborting = 0;
     bool SessionEstablished = false;
     ui32 PartitionId = 0;
-    TPartitionLocation PreferedPartitionLocation = {};
+    TPartitionLocation PreferredPartitionLocation = {};
     ui64 LastSeqNo = 0;
     ui64 MinUnsentSeqNo = 0;
     ui64 SeqNoShift = 0;

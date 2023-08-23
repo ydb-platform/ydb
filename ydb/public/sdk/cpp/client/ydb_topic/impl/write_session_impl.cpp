@@ -90,9 +90,9 @@ void TWriteSessionImpl::Start(const TDuration& delay) {
     if (Settings.PartitionId_.Defined() && Settings.DirectWriteToPartition_)
     {
         with_lock (Lock) {
-            PreferedPartitionLocation = {};
+            PreferredPartitionLocation = {};
 
-            return ConnectToPreferedPartitionLocation(delay);
+            return ConnectToPreferredPartitionLocation(delay);
         }
     }
     else
@@ -131,7 +131,7 @@ TWriteSessionImpl::THandleResult TWriteSessionImpl::RestartImpl(const TPlainStat
     return result;
 }
 
-void TWriteSessionImpl::ConnectToPreferedPartitionLocation(const TDuration& delay)
+void TWriteSessionImpl::ConnectToPreferredPartitionLocation(const TDuration& delay)
 {
     Y_VERIFY(Lock.IsLocked());
     Y_VERIFY(Settings.PartitionId_.Defined() && Settings.DirectWriteToPartition_);
@@ -212,40 +212,40 @@ void TWriteSessionImpl::OnDescribePartition(const TStatus& status, const Ydb::To
         return;
     }
 
-    TMaybe<TEndpointKey> preferedEndpoint;
+    TMaybe<TEndpointKey> preferredEndpoint;
     with_lock (Lock) {
-        preferedEndpoint = GetPreferedEndpointImpl(*Settings.PartitionId_, partition.partition_location().node_id());
+        preferredEndpoint = GetPreferredEndpointImpl(*Settings.PartitionId_, partition.partition_location().node_id());
     }
 
-    if (!preferedEndpoint.Defined()) {
+    if (!preferredEndpoint.Defined()) {
         with_lock (Lock) {
-            handleResult = OnErrorImpl({EStatus::UNAVAILABLE, "Partition prefered endpoint is not found"});
+            handleResult = OnErrorImpl({EStatus::UNAVAILABLE, "Partition preferred endpoint is not found"});
         }
         ProcessHandleResult(handleResult);
         return;
     }
 
     with_lock (Lock) {
-        PreferedPartitionLocation = {*preferedEndpoint, partition.partition_location().generation()};
+        PreferredPartitionLocation = {*preferredEndpoint, partition.partition_location().generation()};
     }
 
     Connect(TDuration::Zero());
 }
 
-TMaybe<TEndpointKey> TWriteSessionImpl::GetPreferedEndpointImpl(ui32 partitionId, ui64 partitionNodeId) {
+TMaybe<TEndpointKey> TWriteSessionImpl::GetPreferredEndpointImpl(ui32 partitionId, ui64 partitionNodeId) {
     Y_VERIFY(Lock.IsLocked());
 
-    TEndpointKey preferedEndpoint{"", partitionNodeId};
+    TEndpointKey preferredEndpoint{"", partitionNodeId};
 
-    bool nodeIsKnown = (bool)DbDriverState->EndpointPool.GetEndpoint(preferedEndpoint, true);
+    bool nodeIsKnown = (bool)DbDriverState->EndpointPool.GetEndpoint(preferredEndpoint, true);
     if (nodeIsKnown)
     {
-        LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "GetPreferedEndpoint: partitionId " << partitionId << ", partitionNodeId " << partitionNodeId << " exists in the endpoint pool.");
-        return preferedEndpoint;
+        LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "GetPreferredEndpoint: partitionId " << partitionId << ", partitionNodeId " << partitionNodeId << " exists in the endpoint pool.");
+        return preferredEndpoint;
     }
     else
     {
-        LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "GetPreferedEndpoint: partitionId " << partitionId << ", nodeId " << partitionNodeId << " does not exist in the endpoint pool.");
+        LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "GetPreferredEndpoint: partitionId " << partitionId << ", nodeId " << partitionNodeId << " does not exist in the endpoint pool.");
         DbDriverState->EndpointPool.UpdateAsync();
         return {};
     }
@@ -424,7 +424,7 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
             return;
         }
 
-        LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Start write session. Will connect to nodeId: " << PreferedPartitionLocation.Endpoint.NodeId);
+        LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Start write session. Will connect to nodeId: " << PreferredPartitionLocation.Endpoint.NodeId);
 
         ++ConnectionGeneration;
         auto subclient = Client;
@@ -461,7 +461,7 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
             NPersQueue::Cancel(prevConnectDelayContext);
         NPersQueue::Cancel(prevConnectTimeoutContext);
 
-        reqSettings = TRpcRequestSettings::Make(Settings, PreferedPartitionLocation.Endpoint);
+        reqSettings = TRpcRequestSettings::Make(Settings, PreferredPartitionLocation.Endpoint);
 
         connectCallback = [sharedThis = shared_from_this(),
                                 wire = Tracker->MakeTrackedWire(),
@@ -570,8 +570,8 @@ void TWriteSessionImpl::InitImpl() {
         if (Settings.DirectWriteToPartition_) {
             auto* partitionWithGeneration = init->mutable_partition_with_generation();
             partitionWithGeneration->set_partition_id(*Settings.PartitionId_);
-            partitionWithGeneration->set_generation(PreferedPartitionLocation.Generation);
-            LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: direct write to partition: " << *Settings.PartitionId_ << ", generation " << PreferedPartitionLocation.Generation);
+            partitionWithGeneration->set_generation(PreferredPartitionLocation.Generation);
+            LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: direct write to partition: " << *Settings.PartitionId_ << ", generation " << PreferredPartitionLocation.Generation);
         }
         else {
             init->set_partition_id(*Settings.PartitionId_);
@@ -706,7 +706,7 @@ TStringBuilder TWriteSessionImpl::LogPrefix() const {
     if (Settings.PartitionId_.Defined()) {
         ret << " PartitionId [" << *Settings.PartitionId_ << "] ";
         if (Settings.DirectWriteToPartition_)
-            ret << " Generation [" << PreferedPartitionLocation.Generation << "] ";
+            ret << " Generation [" << PreferredPartitionLocation.Generation << "] ";
     } else {
         ret << " MessageGroupId [" << Settings.MessageGroupId_ << "] ";
     }

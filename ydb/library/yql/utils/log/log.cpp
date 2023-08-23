@@ -375,6 +375,12 @@ void CleanupLogger() {
     }
 }
 
+void ReopenLog() {
+    with_lock(g_InitLoggerMutex) {
+        TLoggerOperator<TYqlLog>::Log().ReopenLog();
+    }
+}
+
 void AddUnifiedAgentLogger(const NProto::TLoggingConfig& config) {
     std::vector<THolder<TLogBackend>> backends;
 

@@ -183,6 +183,8 @@ void InitLogger(IOutputStream* out);
 
 void CleanupLogger();
 
+void ReopenLog();
+
 class YqlLoggerScope {
 public:
     YqlLoggerScope(const TString& log, bool startAsDaemon = false) { InitLogger(log, startAsDaemon); }

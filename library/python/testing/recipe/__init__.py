@@ -49,6 +49,7 @@ def get_options():
     parser.add_argument("--build-root", type=str, dest="build_root", default=None, help="Build root directory")
     parser.add_argument("--source-root", type=str, dest="source_root", default=None, help="Source root directory")
     parser.add_argument("--output-dir", type=str, dest="output_dir", default=None, help="Output directory")
+    parser.add_argument("--env-file", type=str, dest="env_file", default=None, help="File to read/write environment variables")
 
     args, opts = parser.parse_known_args()
 
@@ -59,7 +60,7 @@ def get_options():
         "test_stderr": args.test_stderr,
     }
 
-    ya = Ya(context=context, build_root=args.build_root, source_root=args.source_root, output_dir=args.output_dir)
+    ya = Ya(context=context, build_root=args.build_root, source_root=args.source_root, output_dir=args.output_dir, env_file=args.env_file)
 
     ya._data_root = ""  # XXX remove
 

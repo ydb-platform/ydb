@@ -56,6 +56,25 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(failed, TVector<TString>{});
     }
 
+    Y_UNIT_TEST(TokensAsWithoutColumnName) { //id_without
+        auto failed = ValidateTokens({
+                "ALL", "AS", "ASSUME", "AUTOMAP", "BETWEEN", "BITCAST",
+                "CALLABLE", "CASE", "CAST", "CUBE", "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP",
+                "DICT", "DISTINCT", "EMPTY_ACTION", "ENUM", "EXCEPT", "EXISTS", "FALSE", "FLOW", "FROM", "FULL", "GLOBAL",
+                "HAVING", "HOP", "INTERSECT", "JSON_EXISTS", "JSON_QUERY", "JSON_VALUE", "LIMIT", "LIST", "LOCAL",
+                "NOT", "NULL", "OPTIONAL", "PROCESS", "REDUCE", "REPEATABLE", "RESOURCE", "RETURN", "ROLLUP",
+                "SELECT", "SET", "STRUCT", "TAGGED", "TRUE", "TUPLE", "UNBOUNDED", "UNION", "VARIANT",
+                "WHEN", "WHERE", "WINDOW", "WITHOUT"
+             },
+             [](const TString& token){
+                 TStringBuilder req;
+                 req << "SELECT * WITHOUT " << token << " FROM Plato.Input";
+                 return req;
+             }
+        );
+        UNIT_ASSERT_VALUES_EQUAL(failed, TVector<TString>{});
+    }
+
     Y_UNIT_TEST(TokensAsColumnNameInAddColumn) {
         auto failed = ValidateTokens({ //id_schema
              "ANY", "AUTOMAP", "CALLABLE", "COLUMN", "DICT", "ENUM", "ERASE", "FALSE", "FLOW",
@@ -123,6 +142,25 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             "RANGE", "REPEATABLE", "RESOURCE", "ROWS", "SET", "STRUCT", "TAGGED" ,"TRUE", "TUPLE", "VARIANT"
              },
              [](const TString& token){ return TString("SELECT * FROM Plato.Input WINDOW ") + token + " AS ()" ;}
+        );
+        UNIT_ASSERT_VALUES_EQUAL(failed, TVector<TString>{});
+    }
+
+    Y_UNIT_TEST(TokensAsIdExprIn) { //id_expr_in
+        auto failed = ValidateTokens({
+                "ALL", "ANY", "AS", "ASSUME", "AUTOMAP", "BETWEEN", "BITCAST",
+                "CALLABLE", "CASE", "CAST", "COMPACT", "CUBE", "CURRENT_DATE", "CURRENT_TIME", "CURRENT_TIMESTAMP",
+                "DICT", "DISTINCT", "ENUM", "ERASE", "EXCEPT", "EXISTS", "FLOW", "FROM", "FULL", "GLOBAL",
+                "HAVING", "HOP", "INTERSECT", "JSON_EXISTS", "JSON_QUERY", "JSON_VALUE", "LIMIT", "LIST", "LOCAL",
+                "NOT", "OPTIONAL", "PROCESS", "REDUCE", "REPEATABLE", "RESOURCE", "RETURN", "ROLLUP",
+                "SELECT", "SET", "STREAM", "STRUCT", "TAGGED", "TUPLE", "UNBOUNDED", "UNION", "VARIANT",
+                "WHEN", "WHERE", "WINDOW", "WITHOUT"
+            },
+            [](const TString& token){
+                TStringBuilder req;
+                req << "SELECT * FROM Plato.Input WHERE q IN " << token;
+                return req;
+            }
         );
         UNIT_ASSERT_VALUES_EQUAL(failed, TVector<TString>{});
     }

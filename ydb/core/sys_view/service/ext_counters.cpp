@@ -21,6 +21,7 @@ class TExtCountersUpdaterActor
     TCounterPtr AnonRssSize;
     TCounterPtr CGroupMemLimit;
     TVector<TCounterPtr> PoolElapsedMicrosec;
+    TVector<TCounterPtr> PoolCurrentThreadCount;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -64,10 +65,12 @@ private:
             CGroupMemLimit = utilsGroup->FindCounter("Process/CGroupMemLimit");
 
             PoolElapsedMicrosec.resize(Config.Pools.size());
+            PoolCurrentThreadCount.resize(Config.Pools.size());
             for (size_t i = 0; i < Config.Pools.size(); ++i) {
                 auto poolGroup = utilsGroup->FindSubgroup("execpool", Config.Pools[i].Name);
                 if (poolGroup) {
                     PoolElapsedMicrosec[i] = poolGroup->FindCounter("ElapsedMicrosec");
+                    PoolCurrentThreadCount[i] = poolGroup->FindCounter("CurrentThreadCount");
                 }
             }
         }
@@ -84,8 +87,15 @@ private:
         }
         for (size_t i = 0; i < Config.Pools.size(); ++i) {
             if (PoolElapsedMicrosec[i]) {
-                CpuUsedCorePercents[i]->Set(PoolElapsedMicrosec[i]->Val() / 10000.);
-                CpuLimitCorePercents[i]->Set(Config.Pools[i].ThreadCount * 100);
+                double usedCore = PoolElapsedMicrosec[i]->Val() / 10000.;
+                CpuUsedCorePercents[i]->Set(usedCore);
+            }
+            if (PoolCurrentThreadCount[i]) {
+                double limitCore = PoolCurrentThreadCount[i]->Val() * 100;
+                CpuLimitCorePercents[i]->Set(limitCore);
+            } else {
+                double limitCore = Config.Pools[i].ThreadCount * 100;
+                CpuLimitCorePercents[i]->Set(limitCore);
             }
         }
     }

@@ -399,6 +399,21 @@ def create_wipe_request(args, vslot):
     return request
 
 
+def create_readonly_request(args, vslot, value):
+    request = create_bsc_request(args)
+    cmd = request.Command.add().SetVDiskReadOnly
+    cmd.VSlotId.NodeId = vslot.VSlotId.NodeId
+    cmd.VSlotId.PDiskId = vslot.VSlotId.PDiskId
+    cmd.VSlotId.VSlotId = vslot.VSlotId.VSlotId
+    cmd.VDiskId.GroupID = vslot.GroupId
+    cmd.VDiskId.GroupGeneration = vslot.GroupGeneration
+    cmd.VDiskId.Ring = vslot.FailRealmIdx
+    cmd.VDiskId.Domain = vslot.FailDomainIdx
+    cmd.VDiskId.VDisk = vslot.VDiskIdx
+    cmd.Value = value
+    return request
+
+
 def invoke_wipe_request(request):
     return invoke_bsc_request(request)
 

@@ -12,6 +12,7 @@ description = 'Create workload to stress failure model'
 
 def add_options(p):
     p.add_argument('--disable-wipes', action='store_true', help='Disable VDisk wipes')
+    p.add_argument('--disable-readonly', action='store_true', help='Disable VDisk SetVDiskReadOnly requests')
     p.add_argument('--disable-evicts', action='store_true', help='Disable VDisk evicts')
     p.add_argument('--disable-restarts', action='store_true', help='Disable node restarts')
     p.add_argument('--enable-pdisk-encryption-keys-changes', action='store_true', help='Enable changes of PDisk encryption keys')
@@ -88,6 +89,12 @@ def do(args):
         for vslot in base_config.VSlot:
             assert not vslot.Ready or vslot.Status == 'READY'
 
+        vslot_readonly = {
+            common.get_vslot_id(vslot.VSlotId)
+            for vslot in base_config.VSlot
+            if vslot.ReadOnly
+        }
+
         if (len(pdisk_keys) == 0):
             # initialize pdisk_keys and pdisk_key_versions
             for node_id in {pdisk.NodeId for pdisk in base_config.PDisk}:
@@ -157,9 +164,17 @@ def do(args):
             assert can_act_on_vslot(*common.get_vslot_id(vslot.VSlotId))
             try:
                 request = common.create_wipe_request(args, vslot)
-                common.invoke_wipe_request(request)
+                common.invoke_bsc_request(request)
             except Exception as e:
                 raise Exception('Failed to perform wipe request: %s' % e)
+
+        def do_readonly(vslot, value):
+            assert not value or can_act_on_vslot(*common.get_vslot_id(vslot.VSlotId))
+            try:
+                request = common.create_readonly_request(args, vslot, value)
+                common.invoke_bsc_request(request)
+            except Exception as e:
+                raise Exception('Failed to perform readonly request: %s' % e)
 
         def do_add_pdisk_key(node_id):
             pdisk_key_versions[node_id] += 1
@@ -181,12 +196,16 @@ def do(args):
         for vslot in base_config.VSlot:
             if common.is_dynamic_group(vslot.GroupId):
                 vslot_id = common.get_vslot_id(vslot.VSlotId)
+                vdisk_id = '[%08x:%d:%d:%d]' % (vslot.GroupId, vslot.FailRealmIdx, vslot.FailDomainIdx, vslot.VDiskIdx)
+                if vslot_id in vslot_readonly and not args.disable_readonly:
+                    possible_actions.append(('un-readonly vslot id: %s, vdisk id: %s' % (vslot_id, vdisk_id), (do_readonly, vslot, False)))
                 if can_act_on_vslot(*vslot_id) and (recent_restarts or args.disable_restarts):
-                    vdisk_id = '[%08x:%d:%d:%d]' % (vslot.GroupId, vslot.FailRealmIdx, vslot.FailDomainIdx, vslot.VDiskIdx)
                     if not args.disable_evicts:
                         possible_actions.append(('evict vslot id: %s, vdisk id: %s' % (vslot_id, vdisk_id), (do_evict, vslot_id)))
                     if not args.disable_wipes:
                         possible_actions.append(('wipe vslot id: %s, vdisk id: %s' % (vslot_id, vdisk_id), (do_wipe, vslot)))
+                    if not args.disable_readonly:
+                        possible_actions.append(('readonly vslot id: %s, vdisk id: %s' % (vslot_id, vdisk_id), (do_readonly, vslot, True)))
 
         if start_time_map and len(recent_restarts) < 3:
             # sort so that the latest restarts come first

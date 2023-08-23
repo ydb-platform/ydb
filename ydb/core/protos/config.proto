@@ -2046,6 +2046,7 @@ message TCurrentCompatibilityInfo {
 
     repeated TCompatibilityRule CanLoadFrom = 3;
     repeated TCompatibilityRule StoresReadableBy = 4;
+    repeated TCompatibilityRule CanConnectTo = 5;
 }
 
 message TStoredCompatibilityInfo {

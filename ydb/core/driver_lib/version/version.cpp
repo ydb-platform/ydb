@@ -110,6 +110,14 @@ TString PrintStoredAndCurrent(const TOldFormat& peer, const TCurrent* current) {
     return str.Str();
 }
 
+bool CheckComponentId(const NKikimrConfig::TCompatibilityRule& rule, TComponentId componentId) {
+    if (!rule.HasComponentId()) {
+        return true;
+    }
+    const auto ruleComponentId = TComponentId(rule.GetComponentId());
+    return ruleComponentId == EComponentId::Any || ruleComponentId == componentId;
+}
+
 TStored TCompatibilityInfo::MakeStored(TComponentId componentId, const TCurrent* current) const {
     Y_VERIFY(current);
 
@@ -119,17 +127,24 @@ TStored TCompatibilityInfo::MakeStored(TComponentId componentId, const TCurrent*
         stored.MutableVersion()->CopyFrom(current->GetVersion());
     }
 
-    for (const auto& rule : current->GetStoresReadableBy()) {
-        const auto ruleComponentId = TComponentId(rule.GetComponentId());
-        if (!rule.HasComponentId() || ruleComponentId == componentId || ruleComponentId == EComponentId::Any) {
-            auto *newRule = stored.AddReadableBy();
-            if (rule.HasApplication()) {
-                newRule->SetApplication(rule.GetApplication());
+    auto copyFromList = [&](const auto& current, auto& stored) {
+        for (const auto& rule : current) {
+            if (CheckComponentId(rule, componentId)) {
+                auto *newRule = stored.AddReadableBy();
+                if (rule.HasApplication()) {
+                    newRule->SetApplication(rule.GetApplication());
+                }
+                newRule->MutableUpperLimit()->CopyFrom(rule.GetUpperLimit());
+                newRule->MutableLowerLimit()->CopyFrom(rule.GetLowerLimit());
+                newRule->SetForbidden(rule.GetForbidden());
             }
-            newRule->MutableUpperLimit()->CopyFrom(rule.GetUpperLimit());
-            newRule->MutableLowerLimit()->CopyFrom(rule.GetLowerLimit());
-            newRule->SetForbidden(rule.GetForbidden());
         }
+    };
+
+    if (componentId == EComponentId::Interconnect) {
+        copyFromList(current->GetCanConnectTo(), stored);
+    } else {
+        copyFromList(current->GetStoresReadableBy(), stored);
     }
     return stored;
 }
@@ -278,32 +293,34 @@ bool TCompatibilityInfo::CheckCompatibility(const TCurrent* current, const TStor
 
     bool permitted = false;
 
-    for (const auto& rule : current->GetCanLoadFrom()) {
-        const auto ruleComponentId = TComponentId(rule.GetComponentId());
-        if (!rule.HasComponentId() || ruleComponentId == componentId || ruleComponentId == EComponentId::Any) {
-            if (CheckRule(storedApplication, storedVersion, rule)) {
-                if (rule.HasForbidden() && rule.GetForbidden()) {
-                    errorReason = "Stored version is explicitly prohibited, " + PrintStoredAndCurrent(stored, current);
-                    return false;
-                } else {
-                    permitted = true;
+    auto checkRuleList = [&](const auto& rules, const TString& application, const NKikimrConfig::TYdbVersion* version, const TString& errorPrefix) {
+        for (const auto& rule : rules) {
+            if (CheckComponentId(rule, componentId)) {
+                if (CheckRule(application, version, rule)) {
+                    if (rule.HasForbidden() && rule.GetForbidden()) {
+                        errorReason = errorPrefix + PrintStoredAndCurrent(stored, current);
+                        return false;
+                    } else {
+                        permitted = true;
+                    }
                 }
             }
+        }
+        return true;
+    };
+    
+    if (componentId == EComponentId::Interconnect) {
+        if (!checkRuleList(current->GetCanConnectTo(), storedApplication, storedVersion, "Peer version is explicitly prohibited, ")) {
+            return false;
+        }
+    } else {
+        if (!checkRuleList(current->GetCanLoadFrom(), storedApplication, storedVersion, "Stored version is explicitly prohibited, ")) {
+            return false;
         }
     }
 
-    for (const auto& rule : stored->GetReadableBy()) {
-        const auto ruleComponentId = TComponentId(rule.GetComponentId());
-        if (!rule.HasComponentId() || ruleComponentId == componentId || ruleComponentId == EComponentId::Any) {
-            if (CheckRule(currentApplication, currentVersion, rule)) {
-                if (rule.HasForbidden() && rule.GetForbidden()) {
-                    errorReason = "Current version is explicitly prohibited, " + PrintStoredAndCurrent(stored, current);
-                    return false;
-                } else {
-                    permitted = true;
-                }
-            }
-        }
+    if (!checkRuleList(stored->GetReadableBy(), currentApplication, currentVersion, "Current version is explicitly prohibited, ")) {
+        return false;
     }
 
     if (permitted) {
@@ -538,29 +555,29 @@ void CheckVersionTag() {
     }
 }
 
-bool TCompatibilityInfo::CheckCompatibility(const TCurrent* current, const TOldFormat& stored, TComponentId componentId, TString& errorReason) const {
+bool TCompatibilityInfo::CheckCompatibility(const TCurrent* current, const TOldFormat& peer, TComponentId componentId, TString& errorReason) const {
     // stored version is peer version in terms of Interconnect
     Y_VERIFY(current);
+    Y_VERIFY(componentId == EComponentId::Interconnect); // old version control is only implemented in IC
 
-    std::optional<TString> storedApplication;
+    std::optional<TString> peerApplication;
 
-    auto storedVersion = ParseVersionFromTag(stored.Tag);
-    if (!storedVersion) {
-        // non-stable version is stored
-        if (current->GetApplication() == stored.Tag) {
+    auto peerVersion = ParseVersionFromTag(peer.Tag);
+    if (!peerVersion) {
+        // non-stable version is peer
+        if (current->GetApplication() == peer.Tag) {
             return true;
         }
-        storedApplication = stored.Tag;
+        peerApplication = peer.Tag;
     }
 
     bool permitted = false;
 
-    for (const auto& rule : current->GetCanLoadFrom()) {
-        const auto ruleComponentId = TComponentId(rule.GetComponentId());
-        if (!rule.HasComponentId() || ruleComponentId == componentId || ruleComponentId == EComponentId::Any) {
-            if (CheckRule(storedApplication, &*storedVersion, rule)) {
+    for (const auto& rule : current->GetCanConnectTo()) {
+        if (CheckComponentId(rule, componentId)) {
+            if (CheckRule(peerApplication, &*peerVersion, rule)) {
                 if (rule.HasForbidden() && rule.GetForbidden()) {
-                    errorReason = "Stored version is explicitly prohibited, " + PrintStoredAndCurrent(stored, current);
+                    errorReason = "Peer version is explicitly prohibited, " + PrintStoredAndCurrent(peer, current);
                     return false;
                 } else {
                     permitted = true;
@@ -573,7 +590,7 @@ bool TCompatibilityInfo::CheckCompatibility(const TCurrent* current, const TOldF
         return true;
     }
 
-    for (const auto& tag : stored.AcceptedTags) {
+    for (const auto& tag : peer.AcceptedTags) {
         auto version = ParseVersionFromTag(tag);
         if (version && current->HasVersion()) {
             if (CompareVersions(*version, current->GetVersion()) == 0) {
@@ -587,47 +604,47 @@ bool TCompatibilityInfo::CheckCompatibility(const TCurrent* current, const TOldF
     }
 
     // use common rule
-    if (current->HasVersion() && storedVersion) {
+    if (current->HasVersion() && peerVersion) {
         const auto& currentVersion = current->GetVersion();
-        if (!currentVersion.HasYear() || !storedVersion->HasYear()) {
+        if (!currentVersion.HasYear() || !peerVersion->HasYear()) {
             return true;
         }
-        if (currentVersion.GetYear() != storedVersion->GetYear()) {
+        if (currentVersion.GetYear() != peerVersion->GetYear()) {
             errorReason = "Incompatible by common rule: peer's and current's Year differ, "
-                    + PrintStoredAndCurrent(stored, current);
+                    + PrintStoredAndCurrent(peer, current);
             return false;
         }
-        if (!currentVersion.HasMajor() || !storedVersion->HasMajor()) {
+        if (!currentVersion.HasMajor() || !peerVersion->HasMajor()) {
             return true;
         }
-        if (std::abs((i32)currentVersion.GetMajor() - (i32)storedVersion->GetMajor()) <= 1) {
+        if (std::abs((i32)currentVersion.GetMajor() - (i32)peerVersion->GetMajor()) <= 1) {
             return true;
         } else {
             errorReason = "Incompatible by common rule: peer's and current's Major differ by more than 1, "
-                    + PrintStoredAndCurrent(stored, current);
+                    + PrintStoredAndCurrent(peer, current);
             return false;
         }
-    } else if (!current->HasVersion() && !storedVersion) {
-        if (*storedApplication == current->GetApplication()) {
+    } else if (!current->HasVersion() && !peerVersion) {
+        if (*peerApplication == current->GetApplication()) {
             return true;
         } else {
             errorReason = "Incompatible by common rule: both versions are non-stable, peer's and current's Build differ, "
-                    + PrintStoredAndCurrent(stored, current);
+                    + PrintStoredAndCurrent(peer, current);
             return false;
         }
     } else {
         errorReason = "Incompatible by common rule: one tag is stable and other is non-stable, "
-                + PrintStoredAndCurrent(stored, current);
+                + PrintStoredAndCurrent(peer, current);
         return false;
     }
 
     errorReason = "Peer version tag doesn't match any current compatibility rule, current version is not in accepted tags list, "
-            + PrintStoredAndCurrent(stored, current);
+            + PrintStoredAndCurrent(peer, current);
     return false;
 }
 
-bool TCompatibilityInfo::CheckCompatibility(const TOldFormat& stored, TComponentId componentId, TString& errorReason) const {
-    return CheckCompatibility(GetCurrent(), stored, componentId, errorReason);
+bool TCompatibilityInfo::CheckCompatibility(const TOldFormat& peer, TComponentId componentId, TString& errorReason) const {
+    return CheckCompatibility(GetCurrent(), peer, componentId, errorReason);
 }
 
 }

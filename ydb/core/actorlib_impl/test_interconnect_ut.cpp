@@ -765,7 +765,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
             version->SetHotfix(0);
 
             {
-                auto* nbsRule = node1->AddCanLoadFrom();
+                auto* nbsRule = node1->AddCanConnectTo();
                 nbsRule->SetApplication("nbs");
                 nbsRule->SetComponentId((ui32)NKikimrConfig::TCompatibilityRule::Interconnect);
 
@@ -795,7 +795,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
             version->SetHotfix(0);
 
             {
-                auto* rule = node0->AddCanLoadFrom();
+                auto* rule = node0->AddCanConnectTo();
                 rule->SetComponentId((ui32)NKikimrConfig::TCompatibilityRule::Interconnect);
 
                 auto* lowerLimit = rule->MutableLowerLimit();

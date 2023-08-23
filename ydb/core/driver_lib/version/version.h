@@ -75,6 +75,7 @@ public:
             std::optional<TVersion> Version;
             std::vector<TCompatibilityRule> CanLoadFrom;
             std::vector<TCompatibilityRule> StoresReadableBy;
+            std::vector<TCompatibilityRule> CanConnectTo;
 
             NKikimrConfig::TCurrentCompatibilityInfo ToPB() {
                 NKikimrConfig::TCurrentCompatibilityInfo res;
@@ -89,6 +90,9 @@ public:
                 }
                 for (auto storesReadableBy : StoresReadableBy) {
                     res.AddStoresReadableBy()->CopyFrom(storesReadableBy.ToPB());
+                }
+                for (auto canConnectTo : CanConnectTo) {
+                    res.AddCanConnectTo()->CopyFrom(canConnectTo.ToPB());
                 }
 
                 return res;

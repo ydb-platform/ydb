@@ -377,15 +377,17 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
                     .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 3, .Hotfix = 1 },
-                    .StoresReadableBy = {
+                    .CanConnectTo = {
                         TCompatibilityRule{
                             .Application = "nbs",
                             .LowerLimit = TVersion{ .Year = 1, .Major = 1 },
-                            .UpperLimit = TVersion{ .Year = 1, .Major = 3, .Minor = 3, .Hotfix = 1 }
+                            .UpperLimit = TVersion{ .Year = 1, .Major = 3, .Minor = 3, .Hotfix = 1 },
+                            .ComponentId = EComponentId::Interconnect,
                         }
                     }
                 }, 
-                true
+                true,
+                EComponentId::Interconnect
         );
     }
     Y_UNIT_TEST(OldNbsIncompatibleStored) {
@@ -397,15 +399,17 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
                     .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 3, .Hotfix = 1 },
-                    .StoresReadableBy = {
+                    .CanConnectTo = {
                         TCompatibilityRule{
                             .Application = "nbs",
                             .LowerLimit = TVersion{ .Year = 1, .Major = 1 },
-                            .UpperLimit = TVersion{ .Year = 1, .Major = 3, .Minor = 3, .Hotfix = 1 }
+                            .UpperLimit = TVersion{ .Year = 1, .Major = 3, .Minor = 3, .Hotfix = 1 },
+                            .ComponentId = EComponentId::Interconnect,
                         }
                     }
                 }, 
-                false
+                false,
+                EComponentId::Interconnect
         );
     }
     Y_UNIT_TEST(NewNbsCurrent) {
@@ -413,11 +417,12 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
                 TCurrentCompatibilityInfo{
                     .Application = "nbs",
                     .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 2, .Hotfix = 0 },
-                    .CanLoadFrom = {
+                    .CanConnectTo = {
                         TCompatibilityRule{
                             .Application = "ydb",
                             .LowerLimit = TVersion{ .Year = 1, .Major = 1 },
-                            .UpperLimit = TVersion{ .Year = 1, .Major = 3, .Minor = 2, .Hotfix = 0 }
+                            .UpperLimit = TVersion{ .Year = 1, .Major = 3, .Minor = 2, .Hotfix = 0 },
+                            .ComponentId = EComponentId::Interconnect,
                         }
                     }
                 }, 
@@ -425,7 +430,8 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
                     .Application = "ydb",
                     .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 3, .Hotfix = 2 },
                 }, 
-                true
+                true,
+                EComponentId::Interconnect
         );
     }
     Y_UNIT_TEST(NewNbsIncompatibleCurrent) {
@@ -433,11 +439,12 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
                 TCurrentCompatibilityInfo{
                     .Application = "nbs",
                     .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 2, .Hotfix = 0 },
-                    .CanLoadFrom = {
+                    .CanConnectTo = {
                         TCompatibilityRule{
                             .Application = "ydb",
                             .LowerLimit = TVersion{ .Year = 1, .Major = 1 },
-                            .UpperLimit = TVersion{ .Year = 1, .Major = 3, .Minor = 2, .Hotfix = 0 }
+                            .UpperLimit = TVersion{ .Year = 1, .Major = 3, .Minor = 2, .Hotfix = 0 },
+                            .ComponentId = EComponentId::Interconnect,
                         }
                     }
                 }, 
@@ -606,15 +613,7 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
                     .Version = TVersion{ .Year = 24, .Major = 2, .Minor = 3, .Hotfix = 0 },
-                    .CanLoadFrom = {
-                        TCompatibilityRule{
-                            .Application = "nbs",
-                            .LowerLimit = TVersion{ .Year = 23, .Major = 3 },
-                            .UpperLimit = TVersion{ .Year = 24, .Major = 2 },
-                            .ComponentId = EComponentId::Interconnect,
-                        },
-                    },
-                    .StoresReadableBy = {
+                    .CanConnectTo = {
                         TCompatibilityRule{
                             .Application = "nbs",
                             .LowerLimit = TVersion{ .Year = 23, .Major = 3 },
@@ -729,6 +728,18 @@ Y_UNIT_TEST_SUITE(OldFormat) {
                             .LowerLimit = TVersion{ .Year = 22, .Major = 5 },
                             .UpperLimit = TVersion{ .Year = 23, .Major = 1, .Minor = 1, .Hotfix = 0 },
                         },
+                    },
+                    .StoresReadableBy = {
+                        TCompatibilityRule{
+                            .LowerLimit = TVersion{ .Year = 22, .Major = 5 },
+                            .UpperLimit = TVersion{ .Year = 23, .Major = 1, .Minor = 1, .Hotfix = 0 },
+                        },
+                    },
+                    .CanConnectTo = {
+                        TCompatibilityRule{
+                            .LowerLimit = TVersion{ .Year = 22, .Major = 5 },
+                            .UpperLimit = TVersion{ .Year = 23, .Major = 1, .Minor = 1, .Hotfix = 0 },
+                        },
                     }
                 }, 
                 TOldFormat{
@@ -785,14 +796,7 @@ Y_UNIT_TEST_SUITE(OldFormat) {
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
                     .Version = TVersion{ .Year = 23, .Major = 1, .Minor = 1, .Hotfix = 0 },
-                    .CanLoadFrom = {
-                        TCompatibilityRule{
-                            .LowerLimit = TVersion{ .Year = 22, .Major = 4 },
-                            .UpperLimit = TVersion{ .Year = 23, .Major = 1, .Minor = 1, .Hotfix = 0 },
-                            .ComponentId = (ui32)EComponentId::Interconnect
-                        },
-                    },
-                    .StoresReadableBy = {
+                    .CanConnectTo = {
                         TCompatibilityRule{
                             .LowerLimit = TVersion{ .Year = 22, .Major = 4 },
                             .UpperLimit = TVersion{ .Year = 23, .Major = 1, .Minor = 1, .Hotfix = 0 },

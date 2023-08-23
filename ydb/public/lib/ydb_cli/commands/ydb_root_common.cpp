@@ -12,6 +12,7 @@
 #include "ydb_service_topic.h"
 #include "ydb_tools.h"
 #include "ydb_yql.h"
+#include "ydb_benchmark.h"
 #include "ydb_workload.h"
 
 #include <ydb/public/lib/ydb_cli/commands/interactive/interactive_cli.h>
@@ -44,6 +45,7 @@ TClientCommandRootCommon::TClientCommandRootCommon(const TString& name, const TC
     AddCommand(std::make_unique<TCommandYql>());
     AddCommand(std::make_unique<TCommandTopic>());
     AddCommand(std::make_unique<TCommandWorkload>());
+    AddCommand(std::make_unique<TCommandBenchmark>());
 }
 
 void TClientCommandRootCommon::ValidateSettings() {

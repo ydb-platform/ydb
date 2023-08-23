@@ -54,7 +54,9 @@ void THistoricUsageAggregator::Reset()
 
 void THistoricUsageAggregator::UpdateAt(TInstant now, double value)
 {
-    YT_VERIFY(now >= LastExponentialMovingAverageUpdateTime_);
+    if (now < LastExponentialMovingAverageUpdateTime_) {
+        return;
+    }
 
     // If LastExponentialMovingAverageUpdateTime_ is zero, this is the first update (after most
     // recent reset) and we just want to leave EMA = 0.0, as if there was no previous usage.

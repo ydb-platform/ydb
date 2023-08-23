@@ -57,6 +57,8 @@ class TAverageHistoricUsageAggregator
 {
 public:
     explicit TAverageHistoricUsageAggregator(TDuration period = TDuration::Seconds(1));
+    TAverageHistoricUsageAggregator(const TAverageHistoricUsageAggregator& other) = default;
+    TAverageHistoricUsageAggregator& operator=(const TAverageHistoricUsageAggregator& other) = default;
 
     void UpdateParameters(THistoricUsageAggregationParameters params);
 
@@ -65,7 +67,7 @@ public:
     void UpdateAt(TInstant now, double value);
 
 private:
-    const TDuration Period_;
+    TDuration Period_;
 
     TInstant IntervalStart_ = TInstant::Zero();
     double CurrentUsage_ = 0;

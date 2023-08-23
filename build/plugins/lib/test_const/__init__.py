@@ -384,6 +384,8 @@ class YaTestTags(Enum):
     SequentialRun = "ya:sequential_run"
     TraceOutput = "ya:trace_output"
     YtRunner = "ya:yt"
+    CopyData = "ya:copydata"
+    CopyDataRO = "ya:copydataro"
 
 
 class ServiceTags(Enum):

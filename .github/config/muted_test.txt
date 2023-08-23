@@ -28,3 +28,4 @@ ydb-services-ydb-sdk_sessions_pool_ut/YdbSdkSessionsPool::StressTestSync10
 ydb-tests-functional-kqp-kqp_indexes/ConsistentIndexRead::InteractiveTx
 ydb-tests-functional-kqp-kqp_indexes/KqpExtTest::SecondaryIndexSelectUsingScripting
 ydb-tests-functional-kqp-kqp_query_session/KqpQuerySession::NoLocalAttach
+ydb-library-yql-providers-yt-codec-codegen-ut/*

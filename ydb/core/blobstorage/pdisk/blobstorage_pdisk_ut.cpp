@@ -466,36 +466,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         vdisk.SendEvLogSync();
     }
 
-    Y_UNIT_TEST(PDiskRestartUsesLogRecoveryState) {
-        TActorTestContext testCtx({
-             .IsBad = false,
-             .ChunkSize = 4 * (1 << 20)
-        });
-        TVDiskMock vdisk(&testCtx);
-        vdisk.InitFull();
-
-        // Fill log so that one chunk has state LOG_COMMITED on restart.
-        for (int i = 0; i < 256; i++) {
-            vdisk.SendEvLogSync(32768);
-        }
-
-        testCtx.RestartPDiskSync();
-
-        vdisk.Init();
-
-        // Assert recovery state has 2 chunks to be read by vdisk.
-        testCtx.SafeRunOnPDisk([](NPDisk::TPDisk* disk) {
-            UNIT_ASSERT_EQUAL(2, disk->LogRecoveryState.Readers.size());
-        });
-
-        vdisk.ReadLog();
-        
-        // Assert recovery state is empty after vdisk read its chunks.
-        testCtx.SafeRunOnPDisk([](NPDisk::TPDisk* disk) {
-            UNIT_ASSERT_EQUAL(0, disk->LogRecoveryState.Readers.size());
-        });
-    }
-
     Y_UNIT_TEST(PDiskRestartManyLogWrites) {
         TActorTestContext testCtx({ false });
         testCtx.TestCtx.SectorMap->ImitateIoErrorProbability = 1e-4;

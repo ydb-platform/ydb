@@ -44,7 +44,7 @@ bool TPDisk::InitCommonLogger() {
         }
         CommonLogger->SwitchToNewChunk(TReqId(TReqId::InitCommonLoggerSwitchToNewChunk, 0), nullptr);
 
-        // Log chunk can be collected as soon as no one needs it
+        // Log chunk can be collected as soon as noone needs it
         ChunkState[chunkIdx].CommitState = TChunkState::DATA_COMMITTED;
     }
     bool isOk = LogNonceJump(InitialPreviousNonce);
@@ -200,7 +200,6 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
             << " Marker# BPD48");
         return false;
     }
-    
     TSysLogRecord *sysLogRecord = (TSysLogRecord*)(lastSysLogRecord.data());
 
     if (sysLogRecord->Version < PDISK_SYS_LOG_RECORD_INCOMPATIBLE_VERSION_1000) {
@@ -482,9 +481,10 @@ TRcBuf TPDisk::ProcessReadSysLogResult(ui64 &outWritePosition, ui64 &outLsn,
 }
 
 void TPDisk::ReadAndParseMainLog(const TActorId &pDiskActor) {
+    TVector<TLogChunkItem> chunksToRead;
     TIntrusivePtr<TLogReaderBase> logReader(new TLogReader(true, this, ActorSystem, pDiskActor, 0, TLogPosition{0, 0},
                 EOwnerGroupType::Static, TLogPosition{0, 0}, (ui64)-1, SysLogRecord.LogHeadChunkPreviousNonce, 0, 0,
-                TReqId(TReqId::ReadAndParseMainLog, 0), TVector<TLogChunkItem>(), 0, 0, TVDiskID::InvalidId));
+                TReqId(TReqId::ReadAndParseMainLog, 0), std::move(chunksToRead), 0, 0, TVDiskID::InvalidId));
     TVector<ui64> badOffsets;
     // Emits subrequests TCompletionLogReadPart which contains TIntrusivePtr to logReader
     logReader->Exec(0, badOffsets, ActorSystem);
@@ -524,7 +524,6 @@ void TPDisk::ProcessLogReadQueue() {
             }
             ui32 endLogChunkIdx = CommonLogger->ChunkIdx;
             ui64 endLogSectorIdx = CommonLogger->SectorIdx;
-
             ownerData.LogReader = new TLogReader(false,
                         this, ActorSystem, logRead.Sender, logRead.Owner, logStartPosition,
                         logRead.OwnerGroupType,logRead.Position,
@@ -1201,7 +1200,7 @@ void TPDisk::OnLogCommitDone(TLogCommitDone &req) {
     if (isChunkReleased) {
         THolder<TCompletionEventSender> completion(new TCompletionEventSender(this));
         if (ReleaseUnusedLogChunks(completion.Get())) {
-            WriteSysLogRestorePoint(completion.Release(), req.ReqId, {});
+            WriteSysLogRestorePoint(completion.Release(), req.ReqId, {}); // FIXME: wilson
         }
     }
     TryTrimChunk(false, 0);
@@ -1211,8 +1210,6 @@ void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
     TGuard<TMutex> guard(StateMutex);
 
     for (const auto& chunkIdx : req.ChunksToRelease) {
-        LogRecoveryState.Readers.erase(chunkIdx);
-
         BlockDevice->EraseCacheRange(
             Format.Offset(chunkIdx, 0), 
             Format.Offset(chunkIdx + 1, 0));
@@ -1247,28 +1244,6 @@ void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
         IsLogChunksReleaseInflight = false;
 
         TryTrimChunk(false, 0);
-    }
-}
-
-void TPDisk::NotifyLogChunkRead(ui32 chunkIdx, TOwner reader) {
-    TGuard<TMutex> guard(StateMutex);
-    auto iter = LogRecoveryState.Readers.find(chunkIdx);
-
-    if (iter == LogRecoveryState.Readers.end()) {
-        return;
-    }
-
-    auto &readers = iter->second;
-
-    if (readers.any()) {
-        // If there's at least one registered reader.
-        readers.set(reader, false);
-
-        if (readers.none()) {
-            LogRecoveryState.Readers.erase(iter);
-
-            BlockDevice->EraseCacheRange(Format.Offset(chunkIdx, 0), Format.Offset(chunkIdx + 1, 0));
-        }
     }
 }
 
@@ -1319,7 +1294,6 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
     switch (InitPhase) {
         case EInitPhase::ReadingSysLog:
         {
-            // Finished reading sys log.
             TString errorReason;
             bool success = ProcessChunk0(evReadLogResult, errorReason);
 
@@ -1341,7 +1315,6 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
         }
         case EInitPhase::ReadingLog:
         {
-            // Finished reading main log.
             InitialLogPosition = evReadLogResult.NextPosition;
             if (InitialLogPosition == TLogPosition{0, 0}) {
                 *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialCommonLogParseError;
@@ -1429,17 +1402,6 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
                     *Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorCalculatingChunkQuotas;
                     ActorSystem->Send(pDiskActor, new TEvLogInitResult(false, errorReason));
                     return;
-                }
-
-                // For every log chunk build a list of readers. These readers will be reading this chunk.
-                for (auto it = LogChunks.begin(); it != LogChunks.end(); ++it) {
-                    auto &readers = LogRecoveryState.Readers[it->ChunkIdx];
-
-                    for (ui32 owner = 0; owner < it->OwnerLsnRange.size(); ++owner) {
-                        if (it->OwnerLsnRange.size() > owner && it->OwnerLsnRange[owner].IsPresent) {
-                            readers.set(owner, true);
-                        }
-                    }
                 }
             }
 

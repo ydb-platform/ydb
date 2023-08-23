@@ -329,7 +329,7 @@ struct TSysLogRecord {
     TChunkIdx LogHeadChunkIdx;
     ui32 Reserved1;
     ui64 LogHeadChunkPreviousNonce;
-    TVDiskID OwnerVDisks[OwnerCount];
+    TVDiskID OwnerVDisks[256];
 
     TSysLogRecord()
         : Version(PDISK_SYS_LOG_RECORD_VERSION_7)
@@ -337,7 +337,7 @@ struct TSysLogRecord {
         , Reserved1(0)
         , LogHeadChunkPreviousNonce((ui64)-1)
     {
-        for (size_t i = 0; i < OwnerCount; ++i) {
+        for (size_t i = 0; i < 256; ++i) {
             OwnerVDisks[i] = TVDiskID::InvalidId;
         }
     }
@@ -354,7 +354,7 @@ struct TSysLogRecord {
         str << " NonceSet# " << Nonces.ToString(isMultiline) << x;
         str << " LogHeadChunkIdx# " << LogHeadChunkIdx << x;
         str << " LogHeadChunkPreviousNonce# " << LogHeadChunkPreviousNonce << x;
-        for (ui32 i = 0; i < OwnerCount; ++i) {
+        for (ui32 i = 0; i < 256; ++i) {
             if (OwnerVDisks[i] != TVDiskID::InvalidId) {
                 str << " Owner[" << i << "]# " << OwnerVDisks[i].ToString() << x;
             }

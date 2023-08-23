@@ -135,7 +135,6 @@ public:
     bool TrimInFly = false; // TChunkTrim request is present somewhere in pdisk
     TAtomic ChunkBeingTrimmed = 0;
     TAtomic TrimOffset = 0;
-    TLogRecoveryState LogRecoveryState; // Recovery state: log chunk readers and log chunks order.
     TList<TLogChunkInfo> LogChunks; // Log chunk list + log-specific information
     bool IsLogChunksReleaseInflight = false;
     ui64 InsaneLogChunks = 0;  // Set when pdisk sees insanely large log, to give vdisks a chance to cut it
@@ -219,13 +218,6 @@ public:
     bool InitCommonLogger();
     bool LogNonceJump(ui64 previousNonce);
     void GetStartingPoints(TOwner owner, TMap<TLogSignature, TLogRecord> &outStartingPoints);
-
-    /**
-     * Notifies that log chunk was read by a VDisk.
-     * @param chunkIdx Chunk's index.
-     * @param reader VDisk that read the chunk.
-     */
-    void NotifyLogChunkRead(ui32 chunkIdx, TOwner reader);
     TString StartupOwnerInfo();
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Destruction

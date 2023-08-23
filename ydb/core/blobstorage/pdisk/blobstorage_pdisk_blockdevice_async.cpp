@@ -1214,19 +1214,18 @@ class TCachedBlockDevice : public TRealBlockDevice {
         for (auto it = ReadsForOffset.begin(); it != ReadsForOffset.end(); it = nextIt) {
             nextIt++;
             TRead &read = it->second;
-
-            bool foundInCache = Cache.Find(read.Offset, read.Size, static_cast<char*>(read.Data), [compAction=read.CompletionAction](auto badOffsets) {
-                for (size_t i = 0; i < badOffsets.size(); ++i) {
-                    compAction->RegisterBadOffset(badOffsets[i]);
+            const TLogCache::TCacheRecord* cached = Cache.Find(read.Offset);
+            if (cached) {
+                if (read.Size <= cached->Data.Size()) {
+                    memcpy(read.Data, cached->Data.GetData(), read.Size);
+                    Mon.DeviceReadCacheHits->Inc();
+                    Y_VERIFY(read.CompletionAction);
+                    for (size_t i = 0; i < cached->BadOffsets.size(); ++i) {
+                        read.CompletionAction->RegisterBadOffset(cached->BadOffsets[i]);
+                    }
+                    NoopAsyncHackForLogReader(read.CompletionAction, read.ReqId);
+                    ReadsForOffset.erase(it);
                 }
-            });
-            
-            if (foundInCache) {
-                Mon.DeviceReadCacheHits->Inc();
-                Y_VERIFY(read.CompletionAction);
-
-                NoopAsyncHackForLogReader(read.CompletionAction, read.ReqId);
-                ReadsForOffset.erase(it);
             }
         }
         if (ReadsInFly >= MaxReadsInFly) {
@@ -1271,19 +1270,22 @@ public:
 
             ui64 chunkIdx = offset / PDisk->Format.ChunkSize;
             Y_VERIFY(chunkIdx < PDisk->ChunkState.size());
-            
-            if (TChunkState::LOG_COMMITTED == PDisk->ChunkState[chunkIdx].CommitState) {
+            if (TChunkState::DATA_COMMITTED == PDisk->ChunkState[chunkIdx].CommitState) {
                 if ((offset % PDisk->Format.ChunkSize) + completion->GetSize() > PDisk->Format.ChunkSize) {
                     // TODO: split buffer if crossing chunk boundary instead of completely discarding it
                     LOG_INFO_S(
                         *ActorSystem, NKikimrServices::BS_DEVICE,
                         "Skip caching log read due to chunk boundary crossing");
                 } else {
-                    if (Cache.Size() < MaxCount) {
-                        const char* dataPtr = static_cast<const char*>(completion->GetData());
-
-                        Cache.Insert(dataPtr, completion->GetOffset(), completion->GetSize(), completion->GetBadOffsets());   
+                    if (Cache.Size() >= MaxCount) {
+                        Cache.Pop();
                     }
+                    const char* dataPtr = static_cast<const char*>(completion->GetData());
+                    Cache.Insert(
+                        TLogCache::TCacheRecord(
+                            completion->GetOffset(),
+                            TRcBuf(TString(dataPtr, dataPtr + completion->GetSize())),
+                            completion->GetBadOffsets()));
                 }
             }
 

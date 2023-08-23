@@ -1,18 +1,19 @@
 #include "fake_llvm_symbolizer.h"
 
 #include <contrib/libs/llvm12/lib/DebugInfo/Symbolize/SymbolizableObjectFile.h>
+#include <util/string/builder.h>
 #include <llvm/DebugInfo/Symbolize/DIPrinter.h>
-#include "llvm/DebugInfo/Symbolize/SymbolizableModule.h"
-#include "llvm/DebugInfo/DWARF/DWARFContext.h"
-#include "llvm/Object/Binary.h"
-#include "llvm/Object/ObjectFile.h"
-#include "llvm/Object/ELFObjectFile.h"
-#include "llvm/Object/COFF.h"
-#include "llvm/Object/MachO.h"
-#include "llvm/Object/MachOUniversal.h"
-#include "llvm/Demangle/Demangle.h"
-#include "llvm/Support/Error.h"
-#include "llvm/Support/CRC.h"
+#include <llvm/DebugInfo/Symbolize/SymbolizableModule.h>
+#include <llvm/DebugInfo/DWARF/DWARFContext.h>
+#include <llvm/Object/Binary.h>
+#include <llvm/Object/ObjectFile.h>
+#include <llvm/Object/ELFObjectFile.h>
+#include <llvm/Object/COFF.h>
+#include <llvm/Object/MachO.h>
+#include <llvm/Object/MachOUniversal.h>
+#include <llvm/Demangle/Demangle.h>
+#include <llvm/Support/Error.h>
+#include <llvm/Support/CRC.h>
 #include <llvm/Support/raw_ostream.h>
 #include <algorithm>
 #include <cstdint>
@@ -476,7 +477,7 @@ private:
 TString SymbolizeAndDumpToString(const std::string &moduleName, llvm::object::SectionedAddress moduleOffset, ui64 offset) {
     llvm::Expected<llvm::symbolize::SymbolizableModule *> InfoOrErr = GetOrCreateModuleInfo(moduleName);
     if (!InfoOrErr)
-        return "Can't create module info";
+        return TStringBuilder() << "Can't create module info for '" << moduleName << "'";
     auto resOrErr = SymbolizeCodeCommon(*InfoOrErr, moduleOffset);
     if (resOrErr) {
         auto value = resOrErr.get();
@@ -492,7 +493,7 @@ TString SymbolizeAndDumpToString(const std::string &moduleName, llvm::object::Se
 
         return ss.str();
     } else {
-        return "LLVMSymbolizer: error reading file...";
+        return TStringBuilder() << "LLVMSymbolizer: error reading file of module '" << moduleName << "'";
     }
 }
 }

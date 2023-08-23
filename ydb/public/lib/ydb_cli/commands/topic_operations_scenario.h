@@ -44,14 +44,14 @@ public:
     TDuration TotalSec;
     TDuration WindowSec;
     TDuration WarmupSec;
-    bool Quiet;
+    bool Quiet = false;
     bool PrintTimestamp;
     double Percentile;
     TString TopicName;
     ui32 TopicPartitionCount = 1;
-    ui32 ProducerThreadCount;
-    ui32 ConsumerThreadCount;
-    ui32 ConsumerCount;
+    ui32 ProducerThreadCount = 0;
+    ui32 ConsumerThreadCount = 0;
+    ui32 ConsumerCount = 0;
     TString ConsumerPrefix;
     size_t MessageSize;
     size_t MessageRate;

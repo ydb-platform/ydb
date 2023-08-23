@@ -31,10 +31,34 @@ void Serialize(const TCrossClusterReference& queueRef, NYson::IYsonConsumer* con
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TProfilingTags
+{
+    TString Cluster;
+    TString LeadingStatus;
+    TString QueueAgentStage;
+
+    bool operator==(const TProfilingTags& other) const = default;
+    bool operator<(const TProfilingTags& other) const = default;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NQueueClient
+
+////////////////////////////////////////////////////////////////////////////////
 
 template <>
 struct THash<NYT::NQueueClient::TCrossClusterReference>
 {
     size_t operator()(const NYT::NQueueClient::TCrossClusterReference& crossClusterRef) const;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct THash<NYT::NQueueClient::TProfilingTags>
+{
+    size_t operator()(const NYT::NQueueClient::TProfilingTags& tag) const;
+};
+
+////////////////////////////////////////////////////////////////////////////////

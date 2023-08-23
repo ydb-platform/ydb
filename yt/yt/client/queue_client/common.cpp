@@ -83,3 +83,18 @@ size_t THash<NYT::NQueueClient::TCrossClusterReference>::operator()(const NYT::N
     HashCombine(result, crossClusterRef.Path);
     return result;
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+size_t THash<NYT::NQueueClient::TProfilingTags>::operator()(const NYT::NQueueClient::TProfilingTags& tag) const
+{
+    using NYT::HashCombine;
+
+    size_t result = 0;
+    HashCombine(result, tag.Cluster);
+    HashCombine(result, tag.LeadingStatus);
+    HashCombine(result, tag.QueueAgentStage);
+    return result;
+}
+
+////////////////////////////////////////////////////////////////////////////////

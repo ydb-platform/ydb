@@ -70,7 +70,7 @@ TString MakeTableDisplayName(NNodes::TExprBase table, bool isOutput) {
         auto ytTable = table.Cast<TYtTable>();
         name << ytTable.Cluster().Value() << ".";
         if (NYql::HasSetting(ytTable.Settings().Ref(), EYtSettingType::Anonymous)) {
-            name << '@' << ytTable.Name().Value();
+            name << ytTable.Name().Value();
         }
         else {
             name << '`' << ytTable.Name().Value() << '`';

@@ -1812,13 +1812,9 @@ private:
         }
 
         const std::vector<const TConstraintSet*> both = { &lambda->GetConstraintSet(), &input->Tail().GetConstraintSet() };
-        TApplyCommonConstraint<TSortedConstraintNode
-            , TPartOfSortedConstraintNode
-            , TChoppedConstraintNode
+        TApplyCommonConstraint<TPartOfSortedConstraintNode
             , TPartOfChoppedConstraintNode
-            , TUniqueConstraintNode
             , TPartOfUniqueConstraintNode
-            , TDistinctConstraintNode
             , TPartOfDistinctConstraintNode
             , TPassthroughConstraintNode
             , TEmptyConstraintNode
@@ -3734,17 +3730,13 @@ private:
         }
     }
 
-    void CheckExpected(const TExprNode& input, TExprContext& ctx) {
+    void CheckExpected(const TExprNode& input, TExprContext&) {
         if constexpr (DisableCheck)
             return;
 
         if (const auto it = Types.ExpectedConstraints.find(input.UniqueId()); it != Types.ExpectedConstraints.cend()) {
-            for (const TConstraintNode* expectedConstr: it->second) {
+            for (const auto expectedConstr: it->second) {
                 if (!Types.DisableConstraintCheck.contains(expectedConstr->GetName())) {
-                    expectedConstr = expectedConstr->OnlySimpleColumns(ctx);
-                    if (!expectedConstr)
-                        continue;
-
                     if (auto newConstr = input.GetConstraint(expectedConstr->GetName())) {
                         if (expectedConstr->GetName() == TMultiConstraintNode::Name()) {
                             YQL_ENSURE(static_cast<const TMultiConstraintNode*>(newConstr)->FilteredIncludes(*expectedConstr, Types.DisableConstraintCheck), "Rewrite error, unequal " << *newConstr

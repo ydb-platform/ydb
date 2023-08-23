@@ -9,4 +9,9 @@ PEERDIR(
     library/recipes/common
 )
 
+FILES(
+    start.sh
+    stop.sh
+)
+
 END()

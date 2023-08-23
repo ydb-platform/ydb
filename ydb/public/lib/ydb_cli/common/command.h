@@ -116,7 +116,7 @@ public:
         TString SaKeyFile;
         TString IamEndpoint;
         TString YScope;
-        TString ChoosedAuthMethod;
+        TString ChosenAuthMethod;
 
         TString ProfileFile;
         bool UseOAuthToken = true;

@@ -197,6 +197,16 @@ namespace {
         }
     }
 
+    TString TryBlurValue(const TString& authMethod, const TString& value) {
+        if (!IsStdoutInteractive() || authMethod == "sa-key-file" || authMethod == "token-file" || authMethod == "yc-token-file") {
+            return value;
+        }
+        if (authMethod == "password") {
+            return ReplaceWithAsterisks(value);
+        }
+        return BlurSecret(value);
+    }
+
     void PrintProfileContent(std::shared_ptr<IProfile> profile) {
         if (profile->Has("endpoint")) {
             Cout << "  endpoint: " << profile->GetValue("endpoint").as<TString>() << Endl;
@@ -210,14 +220,8 @@ namespace {
             Cout << "  " << authMethod;
             if (authMethod == "ydb-token" ||authMethod == "iam-token"
                 || authMethod == "yc-token" || authMethod == "sa-key-file"
-                || authMethod == "token-file" || authMethod == "yc-token-file")
-            {
-                TString authData = authValue["data"].as<TString>();
-                if (authMethod == "sa-key-file" || authMethod == "token-file" || authMethod == "yc-token-file") {
-                    Cout << ": " << authData;
-                } else {
-                    Cout << ": " << BlurSecret(authData);
-                }
+                || authMethod == "token-file" || authMethod == "yc-token-file") {
+                Cout << ": " << TryBlurValue(authMethod, authValue["data"].as<TString>());
             } else if (authMethod == "static-credentials") {
                 auto authData = authValue["data"];
                 if (authData) {
@@ -225,7 +229,7 @@ namespace {
                         Cout << Endl << "    user: " << authData["user"].as<TString>();
                     }
                     if (authData["password"]) {
-                        Cout << Endl << "    password: " << ReplaceWithAsterisks(authData["password"].as<TString>());
+                        Cout << Endl << "    password: " << TryBlurValue("password", authData["password"].as<TString>());
                     }
                     if (authData["password-file"]) {
                         Cout << Endl << "    password file: " << authData["password-file"].as<TString>();
@@ -271,11 +275,11 @@ void TCommandConnectionInfo::PrintInfo(TConfig& config) {
         Cout << "database: " << config.Database << Endl;
     }
     if (config.SecurityToken) {
-        Cout << "token: " << config.SecurityToken << Endl;
+        Cout << "token: " << TryBlurValue("token", config.SecurityToken) << Endl;
     }
     if (config.UseIamAuth) {
         if (config.YCToken) {
-            Cout << "yc-token: " << config.YCToken << Endl;
+            Cout << "yc-token: " << TryBlurValue("yc-token", config.YCToken) << Endl;
         }
         if (config.SaKeyFile) {
             Cout << "sa-key-file: " << config.SaKeyFile << Endl;
@@ -292,7 +296,7 @@ void TCommandConnectionInfo::PrintInfo(TConfig& config) {
             Cout << "user: " << config.StaticCredentials.User << Endl;
         }
         if (config.StaticCredentials.Password) {
-            Cout << "password: " << config.StaticCredentials.Password << Endl;
+            Cout << "password: " << TryBlurValue("password", config.StaticCredentials.Password) << Endl;
         }
     }
     if (config.CaCertsFile) {
@@ -303,12 +307,12 @@ void TCommandConnectionInfo::PrintInfo(TConfig& config) {
 void TCommandConnectionInfo::PrintVerboseInfo(TConfig& config) {
     Cout << Endl;
     PrintInfo(config);
-    Cout << "current auth method: " << (config.ChoosedAuthMethod ? config.ChoosedAuthMethod : "no-auth") << Endl;
+    Cout << "current auth method: " << (config.ChosenAuthMethod ? config.ChosenAuthMethod : "no-auth") << Endl;
     for (const auto& [name, params] : config.ConnectionParams) {
         size_t cnt = 1;
         Cout << Endl << "\"" << name << "\" sources:" << Endl;
         for (const auto& [value, source] : params) {
-            Cout << "  " << cnt << ". Value: " << value << ". Got from: " << source << Endl;
+            Cout << "  " << cnt << ". Value: " << TryBlurValue(name, value) << ". Got from: " << source << Endl;
             ++cnt;
         }
     }

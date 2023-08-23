@@ -534,7 +534,7 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
                 PrintSettingFromProfile("metadata service", profile, explicitOption);
             }
             config.UseMetadataCredentials = true;
-            config.ChoosedAuthMethod = "use-metadata-credentials";
+            config.ChosenAuthMethod = "use-metadata-credentials";
             IsAuthSet = true;
         }
         if (IsVerbose()) {
@@ -547,7 +547,7 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
             if (IsVerbose()) {
                 PrintSettingFromProfile("anonymous authentication", profile, explicitOption);
             }
-            config.ChoosedAuthMethod = "anonymous-auth";
+            config.ChosenAuthMethod = "anonymous-auth";
             IsAuthSet = true;
         }
         if (IsVerbose()) {
@@ -584,7 +584,7 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
                 PrintSettingFromProfile("iam token", profile, explicitOption);
             }
             config.SecurityToken = authData.as<TString>();
-            config.ChoosedAuthMethod = "token";
+            config.ChosenAuthMethod = "token";
             IsAuthSet = true;
         }
         if (IsVerbose()) {
@@ -606,7 +606,7 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
                 PrintSettingFromProfile("token file", profile, explicitOption);
             }
             config.SecurityToken = fileContent;
-            config.ChoosedAuthMethod = "token";
+            config.ChosenAuthMethod = "token";
             IsAuthSet = true;
         }
         if (IsVerbose()) {
@@ -618,7 +618,7 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
                 PrintSettingFromProfile("Yandex.Cloud Passport token (yc-token)", profile, explicitOption);
             }
             config.YCToken = authData.as<TString>();
-            config.ChoosedAuthMethod = "yc-token";
+            config.ChosenAuthMethod = "yc-token";
             IsAuthSet = true;
         }
         if (IsVerbose()) {
@@ -640,7 +640,7 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
                 PrintSettingFromProfile("Yandex.Cloud Passport token file (yc-token-file)", profile, explicitOption);
             }
             config.YCToken = fileContent;
-            config.ChoosedAuthMethod = "yc-token";
+            config.ChosenAuthMethod = "yc-token";
             IsAuthSet = true;
         }
         if (IsVerbose()) {
@@ -656,7 +656,7 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
                 PrintSettingFromProfile("service account key file (sa-key-file)", profile, explicitOption);
             }
             config.SaKeyFile = filePath;
-            config.ChoosedAuthMethod = "sa-key-file";
+            config.ChosenAuthMethod = "sa-key-file";
             IsAuthSet = true;
         }
         if (IsVerbose()) {
@@ -668,7 +668,7 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
                 PrintSettingFromProfile("OAuth token (ydb-token)", profile, explicitOption);
             }
             config.SecurityToken = authData.as<TString>();
-            config.ChoosedAuthMethod = "token";
+            config.ChosenAuthMethod = "token";
             IsAuthSet = true;
         }
         if (IsVerbose()) {
@@ -715,7 +715,7 @@ bool TClientCommandRootCommon::GetCredentialsFromProfile(std::shared_ptr<IProfil
                 config.ConnectionParams["password"].push_back({fileContent, GetProfileSource(profile, explicitOption)});
             }
         }
-        config.ChoosedAuthMethod = "static-credentials";
+        config.ChosenAuthMethod = "static-credentials";
         IsAuthSet = true;
     } else {
         return false;
@@ -734,27 +734,27 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
         // Priority 1. Exactly one explicit auth method. Using it.
         if (config.ParseResult->Has("token-file")) {
             config.SecurityToken = ReadFromFile(TokenFile, "token");
-            config.ChoosedAuthMethod = "token";
+            config.ChosenAuthMethod = "token";
             if (IsVerbose()) {
                 Cout << "Using token from file provided with explicit option" << Endl;
                 config.ConnectionParams["token"].push_back({config.SecurityToken, "file provided with explicit --token-file option"});
             }
         } else if (config.ParseResult->Has("iam-token-file")) {
             config.SecurityToken = ReadFromFile(TokenFile, "token");
-            config.ChoosedAuthMethod = "token";
+            config.ChosenAuthMethod = "token";
             if (IsVerbose()) {
                 Cout << "Using IAM token from file provided with explicit option" << Endl;
                 config.ConnectionParams["token"].push_back({config.SecurityToken, "file provided with explicit --iam-token-file option"});
             }
         } else if (YCTokenFile) {
             config.YCToken = ReadFromFile(YCTokenFile, "token");
-            config.ChoosedAuthMethod = "yc-token";
+            config.ChosenAuthMethod = "yc-token";
             if (IsVerbose()) {
                 Cout << "Using Yandex.Cloud Passport token from file provided with --yc-token-file option" << Endl;
                 config.ConnectionParams["yc-token"].push_back({config.YCToken, "file provided with explicit --yc-token-file option"});
             }
         } else if (UseMetadataCredentials) {
-            config.ChoosedAuthMethod = "use-metadata-credentials";
+            config.ChosenAuthMethod = "use-metadata-credentials";
             config.UseMetadataCredentials = true;
             if (IsVerbose()) {
                 Cout << "Using metadata service due to --use-metadata-credentials option" << Endl;
@@ -762,7 +762,7 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
             }
         } else if (SaKeyFile) {
             config.SaKeyFile = SaKeyFile;
-            config.ChoosedAuthMethod = "sa-key-file";
+            config.ChosenAuthMethod = "sa-key-file";
             if (IsVerbose()) {
                 Cout << "Using service account key file provided with --sa-key-file option" << Endl;
                 config.ConnectionParams["sa-key-file"].push_back({config.SaKeyFile, "explicit --sa-key-file option"});
@@ -785,7 +785,7 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
                     config.ConnectionParams["password"].push_back({config.StaticCredentials.Password, "file provided with explicit --password-file option"});
                 }
             }
-            config.ChoosedAuthMethod = "static-credentials";
+            config.ChosenAuthMethod = "static-credentials";
         }
         IsAuthSet = true;
         if (!IsVerbose()) {
@@ -806,7 +806,7 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
                     if (IsVerbose()) {
                         Cout << "Using iam token from IAM_TOKEN env variable" << Endl;
                     }
-                    config.ChoosedAuthMethod = "token";
+                    config.ChosenAuthMethod = "token";
                     config.SecurityToken = envIamToken;
                     IsAuthSet = true;
                 }
@@ -821,7 +821,7 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
                     if (IsVerbose()) {
                         Cout << "Using Yandex.Cloud Passport token from YC_TOKEN env variable" << Endl;
                     }
-                    config.ChoosedAuthMethod = "yc-token";
+                    config.ChosenAuthMethod = "yc-token";
                     config.YCToken = envYcToken;
                     IsAuthSet = true;
                 }
@@ -835,7 +835,7 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
                     if (IsVerbose()) {
                         Cout << "Using metadata service due to USE_METADATA_CREDENTIALS=\"1\" env variable" << Endl;
                     }
-                    config.ChoosedAuthMethod = "use-metadata-credentials";
+                    config.ChosenAuthMethod = "use-metadata-credentials";
                     config.UseMetadataCredentials = true;
                     IsAuthSet = true;
                 }
@@ -850,7 +850,7 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
                     if (IsVerbose()) {
                         Cout << "Using service account key file from SA_KEY_FILE env variable" << Endl;
                     }
-                    config.ChoosedAuthMethod = "sa-key-file";
+                    config.ChosenAuthMethod = "sa-key-file";
                     config.SaKeyFile = envSaKeyFile;
                     IsAuthSet = true;
                 }
@@ -867,7 +867,7 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
                     if (IsVerbose()) {
                         Cout << "Using OAuth token from YDB_TOKEN env variable" << Endl;
                     }
-                    config.ChoosedAuthMethod = "token";
+                    config.ChosenAuthMethod = "token";
                     config.SecurityToken = envYdbToken;
                     IsAuthSet = true;
                 }
@@ -907,7 +907,7 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
                 }
             }
             if (hasStaticCredentials) {
-                config.ChoosedAuthMethod = "static-credentials";
+                config.ChosenAuthMethod = "static-credentials";
                 IsAuthSet = true;
             }
             if (!IsVerbose() && (!userName.empty() || !password.empty())) {
@@ -930,7 +930,7 @@ void TClientCommandRootCommon::ParseCredentials(TConfig& config) {
                     if (!IsVerbose()) {
                         Cout << "Using auth token from default token file " << defaultTokenFile << Endl;
                     }
-                    config.ChoosedAuthMethod = "token";
+                    config.ChosenAuthMethod = "token";
                     config.SecurityToken = fileContent;
                 }
                 if (IsVerbose()) {

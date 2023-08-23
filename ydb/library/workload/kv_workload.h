@@ -13,6 +13,8 @@ enum KvWorkloadConstants : ui64 {
     MAX_FIRST_KEY = Max<ui64>(),
     STRING_LEN = 8,
     COLUMNS_CNT = 2,
+    INT_COLUMNS_CNT = 1,
+    KEY_COLUMNS_CNT = 1,
     ROWS_CNT = 1,
     PARTITIONS_BY_LOAD = true
 };
@@ -23,6 +25,8 @@ struct TKvWorkloadParams : public TWorkloadParams {
     ui64 MaxFirstKey = KvWorkloadConstants::MAX_FIRST_KEY;
     ui64 StringLen = KvWorkloadConstants::STRING_LEN;
     ui64 ColumnsCnt = KvWorkloadConstants::COLUMNS_CNT;
+    ui64 IntColumnsCnt = KvWorkloadConstants::INT_COLUMNS_CNT;
+    ui64 KeyColumnsCnt = KvWorkloadConstants::KEY_COLUMNS_CNT;
     ui64 RowsCnt = KvWorkloadConstants::ROWS_CNT;
     bool PartitionsByLoad = KvWorkloadConstants::PARTITIONS_BY_LOAD;
 };

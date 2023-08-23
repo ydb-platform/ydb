@@ -1,4 +1,5 @@
 #include "kv_workload.h"
+#include "format"
 #include "util/random/random.h"
 
 #include <util/datetime/base.h>
@@ -37,18 +38,28 @@ std::string TKvWorkloadGenerator::GetDDLQueries() const {
     std::stringstream ss;
 
     ss << "--!syntax_v1\n";
-    ss << "CREATE TABLE `" << DbPath << "/kv_test`(c0 Uint64, ";
+    ss << "CREATE TABLE `" << DbPath << "/kv_test`(";
 
-    for (size_t i = 1; i < Params.ColumnsCnt; ++i) {
-        ss << "c" << i << " " << "String, ";
+    for (size_t i = 0; i < Params.ColumnsCnt; ++i) {
+        if (i < Params.IntColumnsCnt) {
+            ss << "c" << i << " Uint64, ";
+        } else {
+            ss << "c" << i << " String, ";
+        }
     }
 
-    ss << "PRIMARY KEY(c0)) WITH (";
+    ss << "PRIMARY KEY(";
+    for (size_t i = 0; i < Params.KeyColumnsCnt; ++i) {
+        ss << "c" << i;
+        if (i + 1 < Params.KeyColumnsCnt) {
+            ss << ", ";
+        }
+    }
+    ss << ")) WITH (";
 
     if (Params.PartitionsByLoad) {
         ss << "AUTO_PARTITIONING_BY_LOAD = ENABLED, ";
     }
-
     ss << "AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << partsNum << ", "
        << "UNIFORM_PARTITIONS = " << partsNum << ", AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000)";
 
@@ -79,18 +90,24 @@ TQueryInfoList TKvWorkloadGenerator::AddOperation(TString operation) {
     ss << "--!syntax_v1\n";
 
     for (size_t row = 0; row < Params.RowsCnt; ++row) {
-        TString pkname = "$r" + std::to_string(row);
-        ss << "DECLARE " << pkname << " AS Uint64;\n";
-        paramsBuilder.AddParam(pkname).Uint64(RandomNumber<ui64>(Params.MaxFirstKey)).Build();
-
-        for (size_t col = 1; col < Params.ColumnsCnt; ++col) {
-            TString cname = "$c" + std::to_string(row) + std::to_string(col);
-            ss << "DECLARE " << cname << " AS String;\n";
-            paramsBuilder.AddParam(cname).String(BigString).Build();
+        for (size_t col = 0; col < Params.ColumnsCnt; ++col) {
+            TString cname = "$c" + std::to_string(row) + "_" + std::to_string(col);
+            if (col < Params.IntColumnsCnt) {
+                ss << "DECLARE " << cname << " AS Uint64;\n";
+            } else {
+                ss << "DECLARE " << cname << " AS String;\n";
+            }
+            if (col < Params.IntColumnsCnt) {
+                ui64 val = col < Params.KeyColumnsCnt ? RandomNumber<ui64>(Params.MaxFirstKey) : RandomNumber<ui64>();
+                paramsBuilder.AddParam(cname).Uint64(val).Build();
+            } else {
+                TString val = col < Params.KeyColumnsCnt ? TString(std::format("{:x}", RandomNumber<ui64>())) : BigString;
+                paramsBuilder.AddParam(cname).String(val).Build();
+            }
         }
     }
 
-    ss << operation << " INTO `kv_test`(";
+    ss << operation << " INTO `kv_test` (";
 
     for (size_t col = 0; col < Params.ColumnsCnt; ++col) {
         ss << "c" << col;
@@ -99,15 +116,14 @@ TQueryInfoList TKvWorkloadGenerator::AddOperation(TString operation) {
         }
     }
 
-    ss << ") VALUES ";
+    ss << ") VALUES (";
 
     for (size_t row = 0; row < Params.RowsCnt; ++row) {
-
-        ss << "(";
-        ss << "$r" << row;
-
-        for (size_t col = 1; col < Params.ColumnsCnt; ++col) {
-            ss << ", $c" << row << col;
+        for (size_t col = 0; col < Params.ColumnsCnt; ++col) {
+            ss << "$c" << row << "_" << col;
+            if (col + 1 < Params.ColumnsCnt) {
+                ss << ", ";
+            }
         }
 
         ss << ")";
@@ -115,7 +131,6 @@ TQueryInfoList TKvWorkloadGenerator::AddOperation(TString operation) {
         if (row + 1 < Params.RowsCnt) {
             ss << ", ";
         }
-
     }
 
     auto params = paramsBuilder.Build();
@@ -139,8 +154,16 @@ TQueryInfoList TKvWorkloadGenerator::SelectRandom() {
     ss << "--!syntax_v1\n";
 
     for (size_t row = 0; row < Params.RowsCnt; ++row) {
-        ss << "DECLARE $r" << row << " AS Uint64;\n";
-        paramsBuilder.AddParam("$r" + std::to_string(row)).Uint64(RandomNumber<ui64>(Params.MaxFirstKey)).Build();
+        for (size_t col = 0; col < Params.KeyColumnsCnt; ++col) {
+            TString paramName = "$r" + std::to_string(row) + "_" + std::to_string(col);
+            if (col < Params.IntColumnsCnt) {
+                ss << "DECLARE " << paramName << " AS Uint64;\n";
+                paramsBuilder.AddParam(paramName).Uint64(RandomNumber<ui64>(Params.MaxFirstKey)).Build();
+            } else {
+                ss << "DECLARE " << paramName << " AS String;\n";
+                paramsBuilder.AddParam(paramName).String(std::format("{:x}", RandomNumber<ui64>())).Build();
+            }
+        }
     }
 
     ss << "SELECT ";
@@ -154,7 +177,13 @@ TQueryInfoList TKvWorkloadGenerator::SelectRandom() {
 
     ss << "FROM `kv_test` WHERE ";
     for (size_t row = 0; row < Params.RowsCnt; ++row) {
-        ss << "c0 = $r" << row;
+        for (size_t col = 0; col < Params.KeyColumnsCnt; ++col) {
+            TString paramName = "$r" + std::to_string(row) + "_" + std::to_string(col);
+            ss << "c" << col << " = " << paramName;
+            if (col + 1 < Params.KeyColumnsCnt) {
+                ss << " AND ";
+            }
+        }
         if (row + 1 < Params.RowsCnt) {
             ss << " OR ";
         }
@@ -169,10 +198,15 @@ TQueryInfoList TKvWorkloadGenerator::ReadRowsRandom() {
     NYdb::TValueBuilder keys;
     keys.BeginList();
     for (size_t i = 0; i < Params.RowsCnt; ++i) {
-        keys.AddListItem()
-            .BeginStruct()
-                .AddMember("c0").Uint64(RandomNumber<ui64>(Params.MaxFirstKey))
-            .EndStruct();
+        keys.AddListItem().BeginStruct();
+        for (size_t col = 0; col < Params.KeyColumnsCnt; ++col) {
+            if (col < Params.IntColumnsCnt) {
+                keys.AddMember("c" + std::to_string(col)).Uint64(RandomNumber<ui64>(Params.MaxFirstKey));
+            } else {
+                keys.AddMember("c" + std::to_string(col)).String(std::format("{:x}", RandomNumber<ui64>()));
+            }
+        }
+        keys.EndStruct();
     }
     keys.EndList();
 

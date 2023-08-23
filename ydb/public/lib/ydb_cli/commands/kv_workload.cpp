@@ -21,6 +21,8 @@ TCommandKvInit::TCommandKvInit()
     , MaxFirstKey(NYdbWorkload::KvWorkloadConstants::MAX_FIRST_KEY)
     , StringLen(NYdbWorkload::KvWorkloadConstants::STRING_LEN)
     , ColumnsCnt(NYdbWorkload::KvWorkloadConstants::COLUMNS_CNT)
+    , IntColumnsCnt(NYdbWorkload::KvWorkloadConstants::INT_COLUMNS_CNT)
+    , KeyColumnsCnt(NYdbWorkload::KvWorkloadConstants::KEY_COLUMNS_CNT)
     , RowsCnt(NYdbWorkload::KvWorkloadConstants::ROWS_CNT)
     , PartitionsByLoad(NYdbWorkload::KvWorkloadConstants::PARTITIONS_BY_LOAD)
 {}
@@ -42,6 +44,10 @@ void TCommandKvInit::Config(TConfig& config) {
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::STRING_LEN).StoreResult(&StringLen);
     config.Opts->AddLongOption("cols", "Number of columns")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::COLUMNS_CNT).StoreResult(&ColumnsCnt);
+    config.Opts->AddLongOption("int-cols", "Number of int columns")
+        .DefaultValue(NYdbWorkload::KvWorkloadConstants::INT_COLUMNS_CNT).StoreResult(&IntColumnsCnt);
+    config.Opts->AddLongOption("key-cols", "Number of key columns")
+        .DefaultValue(NYdbWorkload::KvWorkloadConstants::KEY_COLUMNS_CNT).StoreResult(&KeyColumnsCnt);
     config.Opts->AddLongOption("rows", "Number of rows")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::ROWS_CNT).StoreResult(&RowsCnt);
 }
@@ -61,6 +67,8 @@ int TCommandKvInit::Run(TConfig& config) {
     params.MaxFirstKey = MaxFirstKey;
     params.StringLen = StringLen;
     params.ColumnsCnt = ColumnsCnt;
+    params.IntColumnsCnt = IntColumnsCnt;
+    params.KeyColumnsCnt = KeyColumnsCnt;
     params.RowsCnt = RowsCnt;
 
     NYdbWorkload::TWorkloadFactory factory;
@@ -117,6 +125,10 @@ void TCommandKvRunUpsertRandom::Config(TConfig& config) {
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::STRING_LEN).StoreResult(&StringLen);
     config.Opts->AddLongOption("cols", "Number of columns to upsert")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::COLUMNS_CNT).StoreResult(&ColumnsCnt);
+    config.Opts->AddLongOption("int-cols", "Number of int columns")
+        .DefaultValue(NYdbWorkload::KvWorkloadConstants::INT_COLUMNS_CNT).StoreResult(&IntColumnsCnt);
+    config.Opts->AddLongOption("key-cols", "Number of key columns")
+        .DefaultValue(NYdbWorkload::KvWorkloadConstants::KEY_COLUMNS_CNT).StoreResult(&KeyColumnsCnt);
     config.Opts->AddLongOption("rows", "Number of rows to upsert")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::ROWS_CNT).StoreResult(&RowsCnt);
 }
@@ -133,6 +145,8 @@ int TCommandKvRunUpsertRandom::Run(TConfig& config) {
     params.MaxFirstKey = MaxFirstKey;
     params.StringLen = StringLen;
     params.ColumnsCnt = ColumnsCnt;
+    params.IntColumnsCnt = IntColumnsCnt;
+    params.KeyColumnsCnt = KeyColumnsCnt;
     params.RowsCnt = RowsCnt;
 
     NYdbWorkload::TWorkloadFactory factory;
@@ -155,6 +169,10 @@ void TCommandKvRunInsertRandom::Config(TConfig& config) {
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::STRING_LEN).StoreResult(&StringLen);
     config.Opts->AddLongOption("cols", "Number of columns insert")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::COLUMNS_CNT).StoreResult(&ColumnsCnt);
+    config.Opts->AddLongOption("int-cols", "Number of int columns")
+        .DefaultValue(NYdbWorkload::KvWorkloadConstants::INT_COLUMNS_CNT).StoreResult(&IntColumnsCnt);
+    config.Opts->AddLongOption("key-cols", "Number of key columns")
+        .DefaultValue(NYdbWorkload::KvWorkloadConstants::KEY_COLUMNS_CNT).StoreResult(&KeyColumnsCnt);
     config.Opts->AddLongOption("rows", "Number of rows to insert")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::ROWS_CNT).StoreResult(&RowsCnt);
 }
@@ -171,6 +189,8 @@ int TCommandKvRunInsertRandom::Run(TConfig& config) {
     params.MaxFirstKey = MaxFirstKey;
     params.StringLen = StringLen;
     params.ColumnsCnt = ColumnsCnt;
+    params.IntColumnsCnt = IntColumnsCnt;
+    params.KeyColumnsCnt = KeyColumnsCnt;
     params.RowsCnt = RowsCnt;
 
     NYdbWorkload::TWorkloadFactory factory;
@@ -191,6 +211,10 @@ void TCommandKvRunSelectRandom::Config(TConfig& config) {
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::MAX_FIRST_KEY).StoreResult(&MaxFirstKey);
     config.Opts->AddLongOption("cols", "Number of columns to select for a single query")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::COLUMNS_CNT).StoreResult(&ColumnsCnt);
+    config.Opts->AddLongOption("int-cols", "Number of int columns")
+        .DefaultValue(NYdbWorkload::KvWorkloadConstants::INT_COLUMNS_CNT).StoreResult(&IntColumnsCnt);
+    config.Opts->AddLongOption("key-cols", "Number of key columns")
+        .DefaultValue(NYdbWorkload::KvWorkloadConstants::KEY_COLUMNS_CNT).StoreResult(&KeyColumnsCnt);
     config.Opts->AddLongOption("rows", "Number of rows to select for a single query")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::ROWS_CNT).StoreResult(&RowsCnt);
 }
@@ -206,6 +230,8 @@ int TCommandKvRunSelectRandom::Run(TConfig& config) {
     params.DbPath = config.Database;
     params.MaxFirstKey = MaxFirstKey;
     params.ColumnsCnt = ColumnsCnt;
+    params.IntColumnsCnt = IntColumnsCnt;
+    params.KeyColumnsCnt = KeyColumnsCnt;
     params.RowsCnt = RowsCnt;
 
     NYdbWorkload::TWorkloadFactory factory;
@@ -226,6 +252,10 @@ void TCommandKvRunReadRowsRandom::Config(TConfig& config) {
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::MAX_FIRST_KEY).StoreResult(&MaxFirstKey);
     config.Opts->AddLongOption("cols", "Number of columns to select for a single query")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::COLUMNS_CNT).StoreResult(&ColumnsCnt);
+    config.Opts->AddLongOption("int-cols", "Number of int columns")
+        .DefaultValue(NYdbWorkload::KvWorkloadConstants::INT_COLUMNS_CNT).StoreResult(&IntColumnsCnt);
+    config.Opts->AddLongOption("key-cols", "Number of key columns")
+        .DefaultValue(NYdbWorkload::KvWorkloadConstants::KEY_COLUMNS_CNT).StoreResult(&KeyColumnsCnt);
     config.Opts->AddLongOption("rows", "Number of rows to select for a single query")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::ROWS_CNT).StoreResult(&RowsCnt);
 }
@@ -241,6 +271,8 @@ int TCommandKvRunReadRowsRandom::Run(TConfig& config) {
     params.DbPath = config.Database;
     params.MaxFirstKey = MaxFirstKey;
     params.ColumnsCnt = ColumnsCnt;
+    params.IntColumnsCnt = IntColumnsCnt;
+    params.KeyColumnsCnt = KeyColumnsCnt;
     params.RowsCnt = RowsCnt;
 
     NYdbWorkload::TWorkloadFactory factory;

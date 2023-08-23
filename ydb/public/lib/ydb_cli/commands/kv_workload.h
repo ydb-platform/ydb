@@ -23,6 +23,8 @@ private:
     ui64 MaxFirstKey;
     ui64 StringLen;
     ui64 ColumnsCnt;
+    ui64 IntColumnsCnt;
+    ui64 KeyColumnsCnt;
     ui64 RowsCnt;
     bool PartitionsByLoad;
 };
@@ -51,6 +53,8 @@ private:
     ui64 MaxFirstKey;
     ui64 StringLen;
     ui64 ColumnsCnt;
+    ui64 IntColumnsCnt;
+    ui64 KeyColumnsCnt;
     ui64 RowsCnt;
 
 };
@@ -66,6 +70,8 @@ private:
     ui64 MaxFirstKey;
     ui64 StringLen;
     ui64 ColumnsCnt;
+    ui64 IntColumnsCnt;
+    ui64 KeyColumnsCnt;
     ui64 RowsCnt;
 
 };
@@ -80,6 +86,8 @@ public:
 private:
     ui64 MaxFirstKey;
     ui64 ColumnsCnt;
+    ui64 IntColumnsCnt;
+    ui64 KeyColumnsCnt;
     ui64 RowsCnt;
 
 };
@@ -94,6 +102,8 @@ public:
 private:
     ui64 MaxFirstKey;
     ui64 ColumnsCnt;
+    ui64 IntColumnsCnt;
+    ui64 KeyColumnsCnt;
     ui64 RowsCnt;
 
 };

@@ -7,6 +7,7 @@
 #include "topic_workload/topic_workload.h"
 #include "transfer_workload/transfer_workload.h"
 #include "util/random/random.h"
+#include "ydb/library/yverify_stream/yverify_stream.h"
 
 #include <ydb/library/workload/workload_factory.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
@@ -184,7 +185,11 @@ int TWorkloadCommand::RunWorkload(TWorkloadQueryGenPtr workloadGen, const int ty
 
     NPar::LocalExecutor().RunAdditionalThreads(Threads);
     auto futures = NPar::LocalExecutor().ExecRangeWithFutures([this, &workloadGen, type](int id) {
-        WorkerFn(id, workloadGen, type);
+        try {
+            WorkerFn(id, workloadGen, type);
+        } catch (std::exception& error) {
+            Y_FAIL_S(error.what());
+        }
     }, 0, Threads, NPar::TLocalExecutor::MED_PRIORITY);
 
     int windowIt = 1;

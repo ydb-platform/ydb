@@ -26,6 +26,7 @@ DEPENDS(
 )
 
 PEERDIR(
+    contrib/python/requests
     contrib/python/tornado/tornado-4
     ydb/tests/library
     ydb/tests/oss/ydb_sdk_import

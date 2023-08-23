@@ -1,5 +1,7 @@
 PY3TEST()
+
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+
 TEST_SRCS(
     conftest.py
     test_db_counters.py
@@ -19,6 +21,7 @@ DEPENDS(
 )
 
 PEERDIR(
+    contrib/python/requests
     ydb/tests/library
     ydb/tests/oss/ydb_sdk_import
     ydb/public/sdk/python

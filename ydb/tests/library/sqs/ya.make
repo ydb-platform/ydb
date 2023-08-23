@@ -16,6 +16,7 @@ ENDIF()
 
 PEERDIR(
     ydb/tests/oss/ydb_sdk_import
+    contrib/python/requests
     contrib/python/xmltodict
 )
 

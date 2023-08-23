@@ -9,6 +9,7 @@ ENDIF()
 PROTO_NAMESPACE(yt)
 
 SRCS(
+    yt/yt/core/rpc/unittests/handle_channel_failure_ut.cpp
     yt/yt/core/rpc/unittests/roaming_channel_ut.cpp
     yt/yt/core/rpc/unittests/rpc_ut.cpp
     yt/yt/core/rpc/unittests/viable_peer_registry_ut.cpp

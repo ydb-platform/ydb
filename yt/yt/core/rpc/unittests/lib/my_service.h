@@ -10,8 +10,8 @@ namespace NYT::NRpc {
 ////////////////////////////////////////////////////////////////////////////////
 
 DEFINE_ENUM(EMyFeature,
-    ((Cool) (0))
-    ((Great)(1))
+    ((Cool)     (0))
+    ((Great)    (1))
 );
 
 class TMyProxy
@@ -46,6 +46,7 @@ public:
         .SetStreamingEnabled(true));
     DEFINE_RPC_PROXY_METHOD(NMyRpc, GetTraceBaggage);
     DEFINE_RPC_PROXY_METHOD(NMyRpc, CustomMetadata);
+    DEFINE_RPC_PROXY_METHOD(NMyRpc, GetChannelFailureError);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -64,7 +65,12 @@ DEFINE_REFCOUNTED_TYPE(IMyService)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IMyServicePtr CreateMyService(IInvokerPtr invoker, bool secure);
+using TTestCreateChannelCallback = TCallback<IChannelPtr(const TString& address)>;
+
+IMyServicePtr CreateMyService(
+    IInvokerPtr invoker,
+    bool secure,
+    TTestCreateChannelCallback createChannel);
 
 ////////////////////////////////////////////////////////////////////////////////
 

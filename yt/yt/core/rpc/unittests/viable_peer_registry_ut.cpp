@@ -166,7 +166,10 @@ IViablePeerRegistryPtr CreateTestRegistry(
 
     config->PeerPriorityStrategy = peerPriorityStrategy;
 
-    return CreateViablePeerRegistry(config, BIND([=] (const TString& address) { return channelFactory->CreateChannel(address); }), Logger);
+    return CreateViablePeerRegistry(
+        config,
+        BIND([=] (const TString& address) { return channelFactory->CreateChannel(address); }),
+        Logger);
 }
 
 std::vector<TString> AddressesFromChannels(const std::vector<IChannelPtr>& channels)

@@ -62,7 +62,10 @@ public:
             TGuid::Create(),
             EndpointDescription_,
             ServiceName_))
-       , ViablePeerRegistry_(CreateViablePeerRegistry(Config_, BIND(&TImpl::CreateChannel, Unretained(this)), Logger))
+       , ViablePeerRegistry_(CreateViablePeerRegistry(
+            Config_,
+            BIND(&TImpl::CreateChannel, Unretained(this)),
+            Logger))
        , RandomPeerRotationExecutor_(New<TPeriodicExecutor>(
            TDispatcher::Get()->GetLightInvoker(),
            BIND(&TDynamicChannelPool::TImpl::MaybeEvictRandomPeer, MakeWeak(this)),
@@ -834,8 +837,17 @@ private:
         ViablePeerRegistry_->UnregisterPeer(address);
     }
 
-    void OnChannelFailed(const TString& address, const IChannelPtr& channel, const TError& error)
+    void OnChannelFailed(
+        const TString& address,
+        const IChannelPtr& channel,
+        const TError& error)
     {
+        if (IsChannelFailureErrorHandled(error)) {
+            YT_LOG_DEBUG(error, "Encountered already handled channel failure error (Address: %v)",
+                address);
+            return;
+        }
+
         bool evicted = ViablePeerRegistry_->UnregisterChannel(address, channel);
 
         YT_LOG_DEBUG(

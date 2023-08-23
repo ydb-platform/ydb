@@ -539,7 +539,7 @@ void TClientResponse::HandleError(const TError& error)
             BIND(&TClientResponse::DoHandleError, MakeStrong(this), error));
     };
 
-    auto optionalEnrichedError = TryEnrichClientRequestErrorWithFeatureName(
+    auto optionalEnrichedError = TryEnrichClientRequestError(
         error,
         ClientContext_->GetFeatureIdFormatter());
     if (optionalEnrichedError) {

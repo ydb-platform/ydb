@@ -28,7 +28,7 @@ int main(int argc, char* argv[])
         auto server = CreateBusServer(busServer);
 
         auto workerPool = CreateThreadPool(4, "Worker");
-        auto service = CreateMyService(workerPool->GetInvoker(), false);
+        auto service = CreateMyService(workerPool->GetInvoker(), false, /*createChannel*/ {});
         server->RegisterService(service);
         server->Start();
 

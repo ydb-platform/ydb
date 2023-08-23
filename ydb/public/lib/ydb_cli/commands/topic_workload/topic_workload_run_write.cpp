@@ -25,7 +25,7 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
         .DefaultValue(1)
         .StoreResult(&Scenario.WindowSec);
     config.Opts->AddLongOption('q', "quiet", "Quiet mode. Doesn't print statistics each second.")
-        .StoreTrue(&Quiet);
+        .StoreTrue(&Scenario.Quiet);
     config.Opts->AddLongOption("print-timestamp", "Print timestamp each second with statistics.")
         .StoreTrue(&Scenario.PrintTimestamp);
     config.Opts->AddLongOption("percentile", "Percentile for output statistics.")

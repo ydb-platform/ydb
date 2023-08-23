@@ -188,6 +188,8 @@ void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSc
             out.set_tiering(in.GetTtlSettings().GetUseTiering());
         }
     }
+
+    out.set_store_type(Ydb::Table::StoreType::STORE_TYPE_COLUMN);
 }
 
 bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, TString& outTypeMod,
@@ -285,6 +287,32 @@ bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
         if (!column.family().empty()) {
             cd->SetFamilyName(column.family());
         }
+    }
+
+    return true;
+}
+
+bool FillColumnDescription(NKikimrSchemeOp::TColumnTableDescription& out,
+    const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in, Ydb::StatusIds::StatusCode& status, TString& error) {
+    auto* schema = out.MutableSchema();
+
+    for (const auto& column : in) {
+        if (column.type().has_pg_type()) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = "Unsupported column type for column: " + column.name();
+            return false;
+        }
+
+        auto* columnDesc = schema->AddColumns();
+        columnDesc->SetName(column.name());
+
+        NScheme::TTypeInfo typeInfo;
+        TString typeMod;
+        if (!ExtractColumnTypeInfo(typeInfo, typeMod, column.type(), status, error)) {
+            return false;
+        }
+        columnDesc->SetType(NScheme::TypeName(typeInfo, typeMod));
+        columnDesc->SetNotNull(column.not_null());
     }
 
     return true;

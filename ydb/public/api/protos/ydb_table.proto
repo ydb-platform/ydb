@@ -477,6 +477,12 @@ message ReadReplicasSettings {
     reserved 3; // cluster_replicas_settings (part of oneof settings)
 }
 
+enum StoreType {
+    STORE_TYPE_UNSPECIFIED = 0;
+    STORE_TYPE_ROW = 1;
+    STORE_TYPE_COLUMN = 2;
+}
+
 message CreateTableRequest {
     // Session identifier
     string session_id = 1;
@@ -519,6 +525,8 @@ message CreateTableRequest {
     string tiering = 18;
     // Is temporary table
     bool temporary = 19;
+    // Is table column or row oriented
+    StoreType store_type = 20;
 }
 
 message CreateTableResponse {
@@ -718,6 +726,8 @@ message DescribeTableResult {
     string tiering = 16;
     // Is temporary table
     bool temporary = 17;
+    // Is table column or row oriented
+    StoreType store_type = 18;
 }
 
 message Query {

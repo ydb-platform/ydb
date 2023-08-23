@@ -455,6 +455,11 @@ private:
 struct TExplicitPartitions;
 struct TDescribeTableSettings;
 
+enum class EStoreType {
+    Row = 0,
+    Column = 1
+};
+
 //! Represents table description
 class TTableDescription {
     friend class TTableBuilder;
@@ -473,6 +478,7 @@ public:
     TVector<TChangefeedDescription> GetChangefeedDescriptions() const;
     TMaybe<TTtlSettings> GetTtlSettings() const;
     TMaybe<TString> GetTiering() const;
+    EStoreType GetStoreType() const;
 
     // Deprecated. Use GetEntry() of TDescribeTableResult instead
     const TString& GetOwner() const;
@@ -554,6 +560,7 @@ private:
     void SetPartitioningSettings(const TPartitioningSettings& settings);
     void SetKeyBloomFilter(bool enabled);
     void SetReadReplicasSettings(TReadReplicasSettings::EMode mode, ui64 readReplicasCount);
+    void SetStoreType(EStoreType type);
     const Ydb::Table::DescribeTableResult& GetProto() const;
 
     class TImpl;
@@ -722,6 +729,8 @@ class TTableBuilder {
 
 public:
     TTableBuilder() = default;
+
+    TTableBuilder& SetStoreType(EStoreType type);
 
     TTableBuilder& AddNullableColumn(const TString& name, const EPrimitiveType& type, const TString& family = TString());
     TTableBuilder& AddNullableColumn(const TString& name, const TDecimalType& type, const TString& family = TString());

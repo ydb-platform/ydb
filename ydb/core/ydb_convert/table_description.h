@@ -18,6 +18,8 @@ void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSc
 // in
 bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
     const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in, Ydb::StatusIds::StatusCode& status, TString& error);
+bool FillColumnDescription(NKikimrSchemeOp::TColumnTableDescription& out,
+    const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in, Ydb::StatusIds::StatusCode& status, TString& error);
 bool ExtractColumnTypeInfo(NScheme::TTypeInfo& outTypeInfo, TString& outTypeMod,
     const Ydb::Type& inType, Ydb::StatusIds::StatusCode& status, TString& error);
 

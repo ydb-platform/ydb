@@ -101,6 +101,46 @@ private:
         );
     }
 
+    bool MakeCreateColumnTable(const Ydb::Table::CreateTableRequest& req, const TString& tableName,
+                            NKikimrSchemeOp::TModifyScheme& schemaProto,
+                            StatusIds::StatusCode& code, NYql::TIssues& issues) {
+        schemaProto.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable);
+        auto tableDesc = schemaProto.MutableCreateColumnTable();
+        tableDesc->SetName(tableName);
+
+        auto schema = tableDesc->MutableSchema();
+        schema->SetEngine(NKikimrSchemeOp::EColumnTableEngine::COLUMN_ENGINE_REPLACING_TIMESERIES);
+
+        TString error;
+        if (!FillColumnDescription(*tableDesc, req.columns(), code, error)) {
+            issues.AddIssue(NYql::TIssue(error));
+            return false;
+        }
+
+        schema->MutableKeyColumnNames()->CopyFrom(req.primary_key());
+
+        auto& hashSharding = *tableDesc->MutableSharding()->MutableHashSharding();
+        hashSharding.SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_MODULO_N);
+
+        if (req.has_partitioning_settings()) {
+            auto& partitioningSettings = req.partitioning_settings();
+            hashSharding.MutableColumns()->CopyFrom(partitioningSettings.partition_by());
+            if (partitioningSettings.min_partitions_count()) {
+                tableDesc->SetColumnShardCount(partitioningSettings.min_partitions_count());
+            }
+        }
+
+        if (req.has_ttl_settings()) {
+            if (!FillTtlSettings(*tableDesc->MutableTtlSettings()->MutableEnabled(), req.ttl_settings(), code, error)) {
+                issues.AddIssue(NYql::TIssue(error));
+                return false;
+            }
+        }
+        tableDesc->MutableTtlSettings()->SetUseTiering(req.tiering());
+
+        return true;
+    }
+
     void SendProposeRequest(const TActorContext &ctx) {
         const auto req = GetProtoRequest();
         std::pair<TString, TString> pathPair;
@@ -129,6 +169,18 @@ private:
         NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record;
         NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
         modifyScheme->SetWorkingDir(workingDir);
+
+        if (req->store_type() == Ydb::Table::StoreType::STORE_TYPE_COLUMN) {
+            StatusIds::StatusCode code = StatusIds::SUCCESS;
+            NYql::TIssues issues;
+            if (MakeCreateColumnTable(*req, name, *modifyScheme, code, issues)) {
+                ctx.Send(MakeTxProxyID(), proposeRequest.release());
+            } else {
+                Reply(code, issues, ctx);
+            }
+            return;
+        }
+
         NKikimrSchemeOp::TTableDescription* tableDesc = nullptr;
         if (req->indexesSize()) {
             modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable);

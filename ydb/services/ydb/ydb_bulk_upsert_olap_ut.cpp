@@ -263,7 +263,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
         }
     }
 
-    Y_UNIT_TEST(ParquetImportBug) {
+    void ParquetImportBug(bool columnTable) {
         NKikimrConfig::TAppConfig appConfig;
         TKikimrWithGrpcAndRootSchema server(appConfig);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
@@ -287,6 +287,8 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
             };
 
         auto tableBuilder = client.GetTableBuilder();
+        auto tableType = columnTable ? NYdb::NTable::EStoreType::Column : NYdb::NTable::EStoreType::Row;
+        tableBuilder.SetStoreType(tableType);
         for (auto& [name, type] : schema) {
             if (name == "id") {
                 tableBuilder.AddNonNullableColumn(name, type);
@@ -295,10 +297,24 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
             }
         }
         tableBuilder.SetPrimaryKeyColumns({"id"});
+        if (columnTable) {
+            NYdb::NTable::TTablePartitioningSettingsBuilder partsBuilder(tableBuilder);
+            partsBuilder.SetMinPartitionsCount(1);
+            partsBuilder.EndPartitioningSettings();
+        }
         auto result = session.CreateTable(tablePath, tableBuilder.Build(), {}).ExtractValueSync();
 
         UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
         UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        {
+            auto descResult = session.DescribeTable(tablePath, {}).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(descResult.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(descResult.GetStatus(), EStatus::SUCCESS);
+
+            Cerr << "Table type: " << (ui32) descResult.GetTableDescription().GetStoreType() << Endl;
+            UNIT_ASSERT_EQUAL(descResult.GetTableDescription().GetStoreType(), tableType);
+        }
 
         auto batchSchema = std::make_shared<arrow::Schema>(
             std::vector<std::shared_ptr<arrow::Field>>{
@@ -342,6 +358,14 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
             auto rows = ScanQuerySelect(client, tablePath, schema);
             UNIT_ASSERT_GT(rows.size(), 0);
         }
+    }
+#if 0 // TODO: KIKIMR-18717
+    Y_UNIT_TEST(ParquetImportBug) {
+        ParquetImportBug(true);
+    }
+#endif
+    Y_UNIT_TEST(ParquetImportBug_Datashard) {
+        ParquetImportBug(false);
     }
 
     Y_UNIT_TEST(UpsertCsvBug) {
@@ -687,9 +711,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
                 tableBuilder.AddNullableColumn(name, type);
             }
             tableBuilder.SetPrimaryKeyColumns({"timestamp"});
-            NYdb::NTable::TCreateTableSettings tableSettings;
-            //tableSettings.PartitioningPolicy(NYdb::NTable::TPartitioningPolicy().UniformPartitions(2));
-            auto result = session.CreateTable(tablePath, tableBuilder.Build(), tableSettings).ExtractValueSync();
+            auto result = session.CreateTable(tablePath, tableBuilder.Build(), {}).ExtractValueSync();
 
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
@@ -796,9 +818,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
                 tableBuilder.AddNullableColumn(name, type);
             }
             tableBuilder.SetPrimaryKeyColumns({"timestamp"});
-            NYdb::NTable::TCreateTableSettings tableSettings;
-            //tableSettings.PartitioningPolicy(NYdb::NTable::TPartitioningPolicy().UniformPartitions(2));
-            auto result = session.CreateTable(tablePath, tableBuilder.Build(), tableSettings).ExtractValueSync();
+            auto result = session.CreateTable(tablePath, tableBuilder.Build(), {}).ExtractValueSync();
 
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);

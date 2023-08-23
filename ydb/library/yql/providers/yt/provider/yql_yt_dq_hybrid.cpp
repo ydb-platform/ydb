@@ -271,9 +271,13 @@ private:
             if (const auto sizeLimit = State_->Configuration->HybridDqDataSizeLimitForOrdered.Get().GetOrElse(DefaultHybridDqDataSizeLimitForOrdered)) {
                 const auto info = TYtTableBaseInfo::Parse(sort.Input().Item(0).Paths().Item(0).Table());
                 const auto chunksLimit = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ);
-                if (const auto stat = CanReadHybrid(sort.Input().Item(0)); stat && stat->front() <= sizeLimit && stat->back() <= chunksLimit) {
-                    YQL_CLOG(INFO, ProviderYt) << "Sort on DQ with equivalent input size " << stat->front() << " and " << stat->back() << " chunks.";
-                    return MakeYtSortByDq(sort, ctx);
+                if (const auto stat = CanReadHybrid(sort.Input().Item(0))) {
+                    if (stat->front() <= sizeLimit && stat->back() <= chunksLimit) {
+                        YQL_CLOG(INFO, ProviderYt) << "Sort on DQ with equivalent input size " << stat->front() << " and " << stat->back() << " chunks.";
+                        PushStat("Hybrid_Sort_try");
+                        return MakeYtSortByDq(sort, ctx);
+                    }
+                    PushStat("Hybrid_Sort_over_limits");
                 }
             }
         }
@@ -286,9 +290,13 @@ private:
             if (const auto sizeLimit = State_->Configuration->HybridDqDataSizeLimitForOrdered.Get().GetOrElse(DefaultHybridDqDataSizeLimitForOrdered)) {
                 const auto info = TYtTableBaseInfo::Parse(merge.Input().Item(0).Paths().Item(0).Table());
                 const auto chunksLimit = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ);
-                if (const auto stat = CanReadHybrid(merge.Input().Item(0)); stat && stat->front() <= sizeLimit && stat->back() <= chunksLimit) {
-                    YQL_CLOG(INFO, ProviderYt) << "Merge on DQ with equivalent input size " << stat->front() << " and " << stat->back() << " chunks.";
-                    return MakeYtSortByDq(merge, ctx);
+                if (const auto stat = CanReadHybrid(merge.Input().Item(0))) {
+                    if (stat->front() <= sizeLimit && stat->back() <= chunksLimit) {
+                        YQL_CLOG(INFO, ProviderYt) << "Merge on DQ with equivalent input size " << stat->front() << " and " << stat->back() << " chunks.";
+                        PushStat("Hybrid_Merge_try");
+                        return MakeYtSortByDq(merge, ctx);
+                    }
+                    PushStat("Hybrid_Merge_over_limits");
                 }
             }
         }
@@ -328,90 +336,94 @@ private:
             const auto sizeLimit = ordered ?
                 State_->Configuration->HybridDqDataSizeLimitForOrdered.Get().GetOrElse(DefaultHybridDqDataSizeLimitForOrdered):
                 State_->Configuration->HybridDqDataSizeLimitForUnordered.Get().GetOrElse(DefaultHybridDqDataSizeLimitForUnordered);
-            if (const auto stat = CanReadHybrid(map.Input().Item(0)); stat && stat->front() <= sizeLimit && stat->back() <= chunksLimit) {
-                if (CanExecuteInHybrid(map.Mapper().Ptr(), chunksLimit, sizeLimit)) {
-                    YQL_CLOG(INFO, ProviderYt) << "Map on DQ with equivalent input size " << stat->front() << " and " << stat->back() << " chunks.";
-                    TSyncMap syncList;
-                    const auto& paths = map.Input().Item(0).Paths();
-                    for (auto i = 0U; i < paths.Size(); ++i) {
-                        if (const auto mayOut = paths.Item(i).Table().Maybe<TYtOutput>()) {
-                            syncList.emplace(GetOutputOp(mayOut.Cast()).Ptr(), syncList.size());
+            if (const auto stat = CanReadHybrid(map.Input().Item(0))) {
+                if (stat->front() <= sizeLimit && stat->back() <= chunksLimit) {
+                    if (CanExecuteInHybrid(map.Mapper().Ptr(), chunksLimit, sizeLimit)) {
+                        YQL_CLOG(INFO, ProviderYt) << "Map on DQ with equivalent input size " << stat->front() << " and " << stat->back() << " chunks.";
+                        PushStat("Hybrid_Map_try");
+                        TSyncMap syncList;
+                        const auto& paths = map.Input().Item(0).Paths();
+                        for (auto i = 0U; i < paths.Size(); ++i) {
+                            if (const auto mayOut = paths.Item(i).Table().Maybe<TYtOutput>()) {
+                                syncList.emplace(GetOutputOp(mayOut.Cast()).Ptr(), syncList.size());
+                            }
                         }
-                    }
-                    auto newWorld = ApplySyncListToWorld(map.World().Ptr(), syncList, ctx);
+                        auto newWorld = ApplySyncListToWorld(map.World().Ptr(), syncList, ctx);
 
-                    auto settings = ctx.NewList(map.Input().Pos(), {});
-                    if (!ordered) {
-                        settings = NYql::AddSetting(*settings, EYtSettingType::Split, nullptr, ctx);
-                    }
+                        auto settings = ctx.NewList(map.Input().Pos(), {});
+                        if (!ordered) {
+                            settings = NYql::AddSetting(*settings, EYtSettingType::Split, nullptr, ctx);
+                        }
 
-                    auto stage = Build<TDqStage>(ctx, map.Pos())
-                        .Inputs().Build()
-                        .Program<TCoLambda>()
-                            .Args({})
-                            .Body<TDqWrite>()
-                                .Input<TExprApplier>()
-                                    .Apply(map.Mapper())
-                                    .With<TCoToFlow>(0)
-                                        .Input<TYtTableContent>()
-                                            .Input<TYtReadTable>()
-                                                .World<TCoWorld>().Build()
-                                                .DataSource<TYtDSource>()
-                                                    .Category(map.DataSink().Category())
-                                                    .Cluster(map.DataSink().Cluster())
+                        auto stage = Build<TDqStage>(ctx, map.Pos())
+                            .Inputs().Build()
+                            .Program<TCoLambda>()
+                                .Args({})
+                                .Body<TDqWrite>()
+                                    .Input<TExprApplier>()
+                                        .Apply(map.Mapper())
+                                        .With<TCoToFlow>(0)
+                                            .Input<TYtTableContent>()
+                                                .Input<TYtReadTable>()
+                                                    .World<TCoWorld>().Build()
+                                                    .DataSource<TYtDSource>()
+                                                        .Category(map.DataSink().Category())
+                                                        .Cluster(map.DataSink().Cluster())
+                                                        .Build()
+                                                    .Input(map.Input())
                                                     .Build()
-                                                .Input(map.Input())
+                                                .Settings(std::move(settings))
                                                 .Build()
-                                            .Settings(std::move(settings))
+                                            .Build()
+                                        .Build()
+                                    .Provider().Value(YtProviderName).Build()
+                                    .Settings<TCoNameValueTupleList>()
+                                        .Add()
+                                            .Name().Value("table", TNodeFlags::Default).Build()
+                                            .Value(map.Output().Item(0)).Build()
+                                        .Build()
+                                    .Build()
+                                .Build()
+                            .Settings(TDqStageSettings{.SinglePartition = ordered}.BuildNode(ctx, map.Pos()))
+                            .Done();
+
+                        if (!ordered) {
+                            stage = Build<TDqStage>(ctx, map.Pos())
+                                .Inputs()
+                                    .Add<TDqCnUnionAll>()
+                                        .Output()
+                                            .Stage(std::move(stage))
+                                            .Index().Build(ctx.GetIndexAsString(0), TNodeFlags::Default)
                                             .Build()
                                         .Build()
                                     .Build()
-                                .Provider().Value(YtProviderName).Build()
-                                .Settings<TCoNameValueTupleList>()
-                                    .Add()
-                                        .Name().Value("table", TNodeFlags::Default).Build()
-                                        .Value(map.Output().Item(0)).Build()
-                                    .Build()
-                                .Build()
-                            .Build()
-                        .Settings(TDqStageSettings{.SinglePartition = ordered}.BuildNode(ctx, map.Pos()))
-                        .Done();
+                                .Program().Args({"pass"}).Body("pass").Build()
+                                .Settings(TDqStageSettings().BuildNode(ctx, map.Pos()))
+                                .Done();
+                        }
 
-                    if (!ordered) {
-                        stage = Build<TDqStage>(ctx, map.Pos())
-                            .Inputs()
-                                .Add<TDqCnUnionAll>()
+                        return Build<TYtTryFirst>(ctx, map.Pos())
+                            .First<TYtDqProcessWrite>()
+                                .World(std::move(newWorld))
+                                .DataSink(map.DataSink())
+                                .Output(map.Output())
+                                .Input<TDqCnResult>()
                                     .Output()
                                         .Stage(std::move(stage))
                                         .Index().Build(ctx.GetIndexAsString(0), TNodeFlags::Default)
                                         .Build()
+                                    .ColumnHints().Build()
                                     .Build()
+                                .Flags().Add().Build("FallbackOnError", TNodeFlags::Default).Build()
                                 .Build()
-                            .Program().Args({"pass"}).Body("pass").Build()
-                            .Settings(TDqStageSettings().BuildNode(ctx, map.Pos()))
+                            .Second<TYtMap>()
+                                .InitFrom(map)
+                                .Settings(NYql::AddSetting(map.Settings().Ref(), EYtSettingType::NoDq, {}, ctx))
+                                .Build()
                             .Done();
                     }
-
-                    return Build<TYtTryFirst>(ctx, map.Pos())
-                        .First<TYtDqProcessWrite>()
-                            .World(std::move(newWorld))
-                            .DataSink(map.DataSink())
-                            .Output(map.Output())
-                            .Input<TDqCnResult>()
-                                .Output()
-                                    .Stage(std::move(stage))
-                                    .Index().Build(ctx.GetIndexAsString(0), TNodeFlags::Default)
-                                    .Build()
-                                .ColumnHints().Build()
-                                .Build()
-                            .Flags().Add().Build("FallbackOnError", TNodeFlags::Default).Build()
-                            .Build()
-                        .Second<TYtMap>()
-                            .InitFrom(map)
-                            .Settings(NYql::AddSetting(map.Settings().Ref(), EYtSettingType::NoDq, {}, ctx))
-                            .Build()
-                        .Done();
                 }
+                PushStat("Hybrid_Map_over_limits");
             }
         }
 
@@ -602,13 +614,17 @@ private:
         if (const auto reduce = node.Cast<TYtReduce>(); CanReplaceOnHybrid(reduce)) {
             const auto chunksLimit = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ);
             const auto sizeLimit = State_->Configuration->HybridDqDataSizeLimitForOrdered.Get().GetOrElse(DefaultHybridDqDataSizeLimitForOrdered);
-            if (const auto stat = CanReadHybrid(reduce.Input().Item(0)); stat && stat->front() <= sizeLimit && stat->back() <= chunksLimit) {
-                if (CanExecuteInHybrid(reduce.Reducer().Ptr(), chunksLimit, sizeLimit)) {
-                    if (ETypeAnnotationKind::Struct == GetSeqItemType(*reduce.Reducer().Args().Arg(0).Ref().GetTypeAnn()).GetKind()) {
-                        YQL_CLOG(INFO, ProviderYt) << "Reduce on DQ with equivalent input size " << stat->front() << " and " << stat->back() << " chunks.";
-                        return MakeYtReduceByDq(reduce, ctx);
+            if (const auto stat = CanReadHybrid(reduce.Input().Item(0))) {
+                if (stat->front() <= sizeLimit && stat->back() <= chunksLimit) {
+                    if (CanExecuteInHybrid(reduce.Reducer().Ptr(), chunksLimit, sizeLimit)) {
+                        if (ETypeAnnotationKind::Struct == GetSeqItemType(*reduce.Reducer().Args().Arg(0).Ref().GetTypeAnn()).GetKind()) {
+                            YQL_CLOG(INFO, ProviderYt) << "Reduce on DQ with equivalent input size " << stat->front() << " and " << stat->back() << " chunks.";
+                            PushStat("Hybrid_Reduce_try");
+                            return MakeYtReduceByDq(reduce, ctx);
+                        }
                     }
                 }
+                PushStat("Hybrid_Reduce_over_limits");
             }
         }
 
@@ -619,18 +635,28 @@ private:
         if (const auto mapReduce = node.Cast<TYtMapReduce>(); CanReplaceOnHybrid(mapReduce)) {
             const auto chunksLimit = State_->Configuration->MaxChunksForDqRead.Get().GetOrElse(DEFAULT_MAX_CHUNKS_FOR_DQ_READ);
             const auto sizeLimit = State_->Configuration->HybridDqDataSizeLimitForOrdered.Get().GetOrElse(DefaultHybridDqDataSizeLimitForOrdered);
-            if (const auto stat = CanReadHybrid(mapReduce.Input().Item(0)); stat && stat->front() <= sizeLimit && stat->back() <= chunksLimit) {
-                if (CanExecuteInHybrid(mapReduce.Reducer().Ptr(), chunksLimit, sizeLimit) && CanExecuteInHybrid(mapReduce.Mapper().Ptr(), chunksLimit, sizeLimit)) {
-                    if (ETypeAnnotationKind::Struct == GetSeqItemType(*mapReduce.Reducer().Args().Arg(0).Ref().GetTypeAnn()).GetKind()) {
-                        YQL_CLOG(INFO, ProviderYt) << "MapReduce on DQ with equivalent input size " << stat->front() << " and " << stat->back() << " chunks.";
-                        return MakeYtReduceByDq(mapReduce, ctx);
+            if (const auto stat = CanReadHybrid(mapReduce.Input().Item(0))) {
+                if (stat->front() <= sizeLimit && stat->back() <= chunksLimit) {
+                    if (CanExecuteInHybrid(mapReduce.Reducer().Ptr(), chunksLimit, sizeLimit) && CanExecuteInHybrid(mapReduce.Mapper().Ptr(), chunksLimit, sizeLimit)) {
+                        if (ETypeAnnotationKind::Struct == GetSeqItemType(*mapReduce.Reducer().Args().Arg(0).Ref().GetTypeAnn()).GetKind()) {
+                            YQL_CLOG(INFO, ProviderYt) << "MapReduce on DQ with equivalent input size " << stat->front() << " and " << stat->back() << " chunks.";
+                            PushStat("Hybrid_MapReduce_try");
+                            return MakeYtReduceByDq(mapReduce, ctx);
+                        }
                     }
                 }
+                PushStat("Hybrid_MapReduce_over_limits");
             }
         }
 
         return node;
     }
+
+    void PushStat(const std::string_view& name) const {
+        with_lock(State_->StatisticsMutex) {
+            State_->Statistics[Max<ui32>()].Entries.emplace_back(TString{name}, 0, 0, 0, 0, 1);
+        }
+    };
 
     const TYtState::TPtr State_;
     const THolder<IGraphTransformer> Finalizer_;

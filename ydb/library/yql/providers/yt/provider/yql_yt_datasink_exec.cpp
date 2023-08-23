@@ -561,8 +561,13 @@ private:
             } else {
                 if (publicId) {
                     YQL_ENSURE(State_->HybridInFlightOprations.erase(*publicId), "Operation " << *publicId << " not found.");
-                    if (State_->HybridInFlightOprations.empty())
-                        State_->TimeSpentInHybrid += NMonotonic::TMonotonic::Now() - State_->HybridStartTime;
+                    if (State_->HybridInFlightOprations.empty()) {
+                        const auto interval = NMonotonic::TMonotonic::Now() - State_->HybridStartTime;
+                        State_->TimeSpentInHybrid += interval;
+                        with_lock(State_->StatisticsMutex) {
+                            State_->Statistics[Max<ui32>()].Entries.emplace_back("HybridTimeSpent", 0, 0, 0, 0, interval.MilliSeconds());
+                        }
+                    }
                 }
 
                 if (result.IsAtom("FallbackOnError"))

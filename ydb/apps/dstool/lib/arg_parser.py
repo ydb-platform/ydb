@@ -543,8 +543,18 @@ class ArgumentParser:
             max_args = free_args_count if not self._subparsers else 'unlimited'
             print()
             print_with_word_wrapping('Free args: min: {0} max: {1}'.format(min_args, max_args))
-            # ! TODO(FREEARGS)
+
+            if self._free_arguments:
+                for free_argument in self._free_arguments:
+                    opt, help = free_argument.make_help_lines()
+                    optional_empty_line = '' if len(opt) < max_length else '\n'
+                    print_with_word_wrapping(
+                        f'{optional_empty_line}{help}',
+                        initial_indent=f'  {opt:<{max_length-2}}',
+                        subsequent_indent=f'{"":<{max_length}}')
             if self._subparsers:
+                if self._free_arguments:
+                    print()
                 line = '  <subcommand>  {0}'.format(', '.join((x.metainfo.name for x in self._subparsers._subparsers)))
                 print_with_word_wrapping(line, subsequent_indent='  ')
 
@@ -755,7 +765,7 @@ class Parser:
         if self._free_arg_idx >= self._free_args_limit:
             print_error_with_usage(self, f'Unexpected free arg {value}')
         if self._free_arg_idx < len(self.parser._free_arguments):
-            self.parser._free_arguments[self._free_arg_idx].apply_value(value)
+            self.parser._free_arguments[self._free_arg_idx].apply(value)
             self._shift()
         else:
             self.parser._subparsers._value.apply_value(value)

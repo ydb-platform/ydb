@@ -81,20 +81,19 @@ Y_UNIT_TEST_SUITE(ReadOnlyVDisk) {
         ++step;
         readAllBlobs(step);
 
-        using NKikimr::NBsController::TMood;
-        auto putVDiskToMood = [&] (ui32 position, TMood::EValue mood) {
+        auto setVDiskReadOnly = [&] (ui32 position, bool value) {
             const TVDiskID& someVDisk = info->GetVDiskId(position);
             auto baseConfig = env.FetchBaseConfig();
 
             const auto& somePDisk = baseConfig.GetPDisk(position);
             const auto& someVSlot = baseConfig.GetVSlot(position);
-            Cerr << "Putting VDisk to mood " << TMood::Name(mood) << " for position " << position << Endl;
-            env.PutVDiskToMood(somePDisk.GetNodeId(), somePDisk.GetPDiskId(), someVSlot.GetVSlotId().GetVSlotId(), someVDisk, mood);
+            Cerr << "Setting VDisk read-only to " << value << " for position " << position << Endl;
+            env.SetVDiskReadOnly(somePDisk.GetNodeId(), somePDisk.GetPDiskId(), someVSlot.GetVSlotId().GetVSlotId(), someVDisk, value);
             env.Sim(TDuration::Seconds(30));
         };
 
         Cerr << "=== Putting VDisk #0 to read-only ===" << Endl;
-        putVDiskToMood(0, TMood::ReadOnly);
+        setVDiskReadOnly(0, true);
 
         Cerr << "=== Write 10 blobs, expect some VDisks refuse parts but writes go through ===" << Endl;
         for (ui32 i = 0; i < 10; ++i) {
@@ -105,8 +104,8 @@ Y_UNIT_TEST_SUITE(ReadOnlyVDisk) {
         readAllBlobs(step);
 
         Cerr << "=== Put 2 more VDisks to read-only ===" << Endl;
-        putVDiskToMood(1, TMood::ReadOnly);
-        putVDiskToMood(2, TMood::ReadOnly);
+        setVDiskReadOnly(1, true);
+        setVDiskReadOnly(2, true);
 
         Cerr << "=== Write 10 more blobs, expect errors ===" << Endl;
         for (ui32 i = 0; i < 10; ++i) {
@@ -117,7 +116,7 @@ Y_UNIT_TEST_SUITE(ReadOnlyVDisk) {
         readAllBlobs(step);
 
         Cerr << "=== Restoring to normal VDisk #0 ===" << Endl;
-        putVDiskToMood(0, TMood::Normal);
+        setVDiskReadOnly(0, false);
 
         Cerr << "=== Write 10 blobs, expect some VDisks refuse parts but the writes still go through ===" << Endl;
         for (ui32 i = 0; i < 10; ++i) {

@@ -927,6 +927,7 @@ namespace NKikimr::NBsController {
                 });
             }
             pb->SetReady(vslot.IsReady);
+            pb->SetReadOnly(vslot.Mood == TMood::ReadOnly);
         }
 
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TBaseConfig::TGroup *pb, const TGroupInfo &group) {

@@ -480,15 +480,10 @@ message TCancelVirtualGroup {
     uint32 GroupId = 1; // id of a group we are going to cancel
 }
 
-// An attempt to transition to the normal mode, e.g. from the read-only mode.
-message TPutVDiskToNormal {
+message TSetVDiskReadOnly {
     NKikimrBlobStorage.TVSlotId VSlotId = 1;
     NKikimrBlobStorage.TVDiskID VDiskId = 2;
-}
-
-message TPutVDiskToReadOnly {
-    NKikimrBlobStorage.TVSlotId VSlotId = 1;
-    NKikimrBlobStorage.TVDiskID VDiskId = 2;
+    bool Value = 3;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -533,8 +528,7 @@ message TConfigRequest {
             TSanitizeGroup SanitizeGroup = 42;
             TReadSettings ReadSettings = 43;
             TCancelVirtualGroup CancelVirtualGroup = 44;
-            TPutVDiskToReadOnly PutVDiskToReadOnly = 45;
-            TPutVDiskToNormal PutVDiskToNormal = 46;
+            TSetVDiskReadOnly SetVDiskReadOnly = 47;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;
@@ -632,6 +626,7 @@ message TBaseConfig {
         string Status = 10; // textual representation of EVDiskStatus or empty string if status is not known/reported
         repeated TDonorDisk Donors = 11;
         bool Ready = 12; // is disk READY in terms of BSC (stable READY status for some period of time)
+        bool ReadOnly = 13;
     }
     message TVirtualGroupInfo {
         NKikimrBlobStorage.EVirtualGroupState State = 1;

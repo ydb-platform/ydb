@@ -370,4 +370,49 @@ NYql::TIssues ValidateProjection(const FederatedQuery::Schema& schema, const TSt
     return issues;
 }
 
+NYql::TIssues ValidateEntityName(const TString& name) {
+    NYql::TIssues issues;
+
+    if (!name) {
+        issues.AddIssue(
+            MakeErrorIssue(TIssuesIds::BAD_REQUEST, "name field is not specified"));
+    }
+
+    if (name.Size() > 255) {
+        issues.AddIssue(
+            MakeErrorIssue(TIssuesIds::BAD_REQUEST,
+                           TStringBuilder{}
+                               << "Incorrect connection name: " << name
+                               << ". Name length must not exceed 255 symbols. Current length is "
+                               << name.Size() << " symbol(s)"));
+    }
+
+    if (name != to_lower(name)) {
+        issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST,
+                                       TStringBuilder{}
+                                           << "Incorrect binding name: " << name
+                                           << ". Please use only lower case"));
+    }
+
+    if (AllOf(name, [](auto& ch) { return ch == '.'; })) {
+        issues.AddIssue(
+            MakeErrorIssue(TIssuesIds::BAD_REQUEST,
+                           TStringBuilder{}
+                               << "Incorrect connection name: " << name
+                               << ". Name is not allowed path part contains only dots"));
+    }
+
+    static const std::regex allowListRegexp(
+        "(?:[a-z0-9]|!|\\\\|#|\\$|%|&|\\(|\\)|\\*|\\+|,|-|\\.|:|;|<|=|>|\\?|@|\\[|\\]|\\^|_|\\{|\\||\\}|~)+");
+    if (!std::regex_match(name.c_str(), allowListRegexp)) {
+        issues.AddIssue(MakeErrorIssue(
+            TIssuesIds::BAD_REQUEST,
+            TStringBuilder{}
+                << "Incorrect connection name: " << name
+                << ". Please make sure that name consists of following symbols: ['a'-'z'], ['0'-'9'], '!', '\\', '#', '$', '%'. '&', '(', ')', '*', '+', ',', '-', '.', ':', ';', '<', '=', '>', '?', '@', '[', ']', '^', '_', '{', '|', '}', '~'"));
+    }
+
+    return issues;
+}
+
 } // namespace NFq

@@ -7,12 +7,13 @@
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
 
+#include <library/cpp/scheme/scheme.h>
 #include <util/generic/fwd.h>
 #include <util/generic/set.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 
-#include <library/cpp/scheme/scheme.h>
+#include <regex>
 
 namespace NFq {
 
@@ -82,6 +83,7 @@ NYql::TIssues ValidateFormatSetting(const TString& format, const google::protobu
 NYql::TIssues ValidateDateFormatSetting(const google::protobuf::Map<TString, TString>& formatSetting, bool matchAllSettings = false);
 NYql::TIssues ValidateProjectionColumns(const FederatedQuery::Schema& schema, const TVector<TString>& partitionedBy);
 NYql::TIssues ValidateProjection(const FederatedQuery::Schema& schema, const TString& projection, const TVector<TString>& partitionedBy, size_t pathsLimit);
+NYql::TIssues ValidateEntityName(const TString& name);
 
 template<typename T>
 NYql::TIssues ValidateBinding(const T& ev, size_t maxSize, const TSet<FederatedQuery::BindingSetting::BindingCase>& availableBindings, size_t pathsLimit)
@@ -95,9 +97,7 @@ NYql::TIssues ValidateBinding(const T& ev, size_t maxSize, const TSet<FederatedQ
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "binding.acl.visibility field is not specified"));
         }
 
-        if (content.name() != to_lower(content.name())) {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, TStringBuilder{} << "Incorrect binding name: " << content.name() << ". Please use only lower case"));
-        }
+        issues.AddIssues(ValidateEntityName(content.name()));
 
         if (!content.has_setting()) {
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "binding.setting field is not specified"));
@@ -179,9 +179,7 @@ NYql::TIssues ValidateConnection(
         issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.acl.visibility field is not specified"));
     }
 
-    if (content.name() != to_lower(content.name())) {
-        issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, TStringBuilder{} << "Incorrect connection name: " << content.name() << ". Please use only lower case"));
-    }
+    issues.AddIssues(ValidateEntityName(content.name()));
 
     if (!content.has_setting()) {
         issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting field is not specified"));

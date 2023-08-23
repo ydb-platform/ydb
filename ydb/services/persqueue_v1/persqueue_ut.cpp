@@ -714,6 +714,22 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         server.EnablePQLogs({ NKikimrServices::KQP_PROXY }, NLog::EPriority::PRI_EMERG);
         server.EnablePQLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD }, NLog::EPriority::PRI_ERROR);
 
+        rcontext.AddMetadata("x-ydb-auth-ticket", "user@" BUILTIN_ACL_DOMAIN);
+
+        TVector<std::pair<TString, TVector<TString>>> permissions;
+        permissions.push_back({"user@" BUILTIN_ACL_DOMAIN, {"ydb.generic.read"}});
+        for (ui32 i = 0; i < 10; ++i) {
+            permissions.push_back({"test_user_" + ToString(i) + "@" + BUILTIN_ACL_DOMAIN, {"ydb.generic.read"}});
+        }
+        server.ModifyTopicACL("/Root/PQ/rt3.dc1--acc--topic1", permissions);
+
+        TVector<std::pair<TString, TVector<TString>>> consumerPermissions;
+        consumerPermissions.push_back({"user@" BUILTIN_ACL_DOMAIN, {"ydb.generic.read", "ydb.granular.write_attributes"}});
+        for (ui32 i = 0; i < 10; ++i) {
+            consumerPermissions.push_back({"test_user_" + ToString(i) + "@" + BUILTIN_ACL_DOMAIN, {"ydb.generic.read", "ydb.granular.write_attributes"}});
+        }
+        server.ModifyTopicACL("/Root/PQ/shared/user", consumerPermissions);
+
         auto readStream = StubP_->StreamRead(&rcontext);
         UNIT_ASSERT(readStream);
 
@@ -735,11 +751,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             // send some reads
             req.Clear();
             req.mutable_read_request()->set_bytes_size(2_KB);
-            // for (ui32 i = 0; i < 10; ++i) {
-                if (!readStream->Write(req)) {
-                    ythrow yexception() << "write fail";
-                }
-            // }
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
         }
 
         // await and confirm CreatePartitionStreamRequest from server
@@ -778,15 +792,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         Ydb::Topic::StreamReadMessage::FromClient req;
         Ydb::Topic::StreamReadMessage::FromServer resp;
 
-        NYdb::NScheme::TSchemeClient schemeClient(*driver);
-        auto modifyPermissionsSettings = NYdb::NScheme::TModifyPermissionsSettings();
-
-        TVector<std::pair<TString, TVector<TString>>> permissions;
-        for (ui32 i = 0; i < 10; ++i) {
-            permissions.push_back({"test_user_" + ToString(i) + "@" + BUILTIN_ACL_DOMAIN, {"ydb.generic.read"}});
-        }
-        server.ModifyTopicACL("/Root/PQ/rt3.dc1--acc--topic1", permissions);
-
         for (ui32 i = 0; i < 10; ++i) {
             resp.Clear();
             UNIT_ASSERT(readStream->Read(&resp));
@@ -812,6 +817,44 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             if (!readStream->Write(req)) {
                 ythrow yexception() << "write fail";
             }
+        }
+
+        {
+            resp.Clear();
+            UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "===Expect ReadResponse, got " << resp << "\n";
+            UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kReadResponse, resp);
+
+            const TString token = "user_without_rights@" BUILTIN_ACL_DOMAIN;
+            req.Clear();
+            resp.Clear();
+            req.mutable_update_token_request()->set_token(token);
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+
+            UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "===Expect UpdateTokenResponse, got response: " << resp.ShortDebugString() << Endl;
+            UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kUpdateTokenResponse, resp);
+
+            req.Clear();
+            req.mutable_read_request()->set_bytes_size(2208);
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+
+            // why successful?
+            resp.Clear();
+            UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "===Expect ReadResponse, got " << resp.ShortDebugString() << "\n";
+            UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kReadResponse, resp);
+
+            // await checking auth because of timeout
+            resp.Clear();
+            UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "===Expect UNAUTHORIZED, got response: " << resp.ShortDebugString() << Endl;
+
+            UNIT_ASSERT_C(resp.status() == Ydb::StatusIds::UNAUTHORIZED, resp);
         }
     }
 

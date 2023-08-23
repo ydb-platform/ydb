@@ -11829,6 +11829,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["NewMTRand"] = &NewMTRandWrapper;
         Functions["NextMTRand"] = &NextMTRandWrapper;
         Functions["FormatType"] = &FormatTypeWrapper;
+        Functions["FormatTypeDiff"] = &FormatTypeDiffWrapper;
         Functions["CastStruct"] = &CastStructWrapper;
         Functions["AggregationTraits"] = &AggregationTraitsWrapper;
         Functions["MultiAggregate"] = &MultiAggregateWrapper;

@@ -1,6 +1,7 @@
 #include "yql_factory.h"
 #include "yql_formatcode.h"
 #include "yql_formattype.h"
+#include "yql_formattypediff.h"
 #include "yql_makecode.h"
 #include "yql_maketype.h"
 #include "yql_parsetypehandle.h"
@@ -22,6 +23,7 @@ struct TYqlCallableComputationNodeBuilderFuncMapFiller {
     TYqlCallableComputationNodeBuilderFuncMapFiller()
     {
         Map["FormatType"] = &WrapFormatType;
+        Map["FormatTypeDiff"] = &WrapFormatTypeDiff;
         Map["ParseTypeHandle"] = &WrapParseTypeHandle;
         Map["SerializeTypeHandle"] = &WrapSerializeTypeHandle;
         Map["TypeHandle"] = &WrapTypeHandle;

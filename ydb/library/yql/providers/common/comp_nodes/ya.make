@@ -7,6 +7,8 @@ SRCS(
     yql_formatcode.cpp
     yql_formattype.cpp
     yql_formattype.h
+    yql_formattypediff.cpp
+    yql_formattypediff.h
     yql_makecode.h
     yql_makecode.cpp
     yql_maketype.h

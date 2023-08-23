@@ -34,6 +34,7 @@ target_sources(providers-common-comp_nodes PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_factory.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_formatcode.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_formattype.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_formattypediff.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_makecode.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_maketype.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/comp_nodes/yql_parsetypehandle.cpp

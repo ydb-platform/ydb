@@ -2,6 +2,7 @@
 #include "yql_type_mkql.h"
 
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
+#include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/core/yql_join.h>
@@ -2198,6 +2199,23 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             str = ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(FormatType(node.Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType()));
         }
         return str;
+    });
+
+    AddCallable("FormatTypeDiff", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        if (node.Child(0)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Resource) { // if we got resource + resource
+            YQL_ENSURE(node.Child(1)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Resource);
+            TCallableBuilder call(ctx.ProgramBuilder.GetTypeEnvironment(), node.Content(), ctx.ProgramBuilder.NewDataType(NUdf::TDataType<char*>::Id));
+            call.Add(MkqlBuildExpr(*node.Child(0), ctx));
+            call.Add(MkqlBuildExpr(*node.Child(1), ctx));
+            call.Add(ctx.ProgramBuilder.NewDataLiteral(FromString<bool>(*node.Child(2), NUdf::EDataSlot::Bool)));
+            return TRuntimeNode(call.Build(), false);
+        } else { // if we got type + type 
+            bool pretty = FromString<bool>(*node.Child(2), NUdf::EDataSlot::Bool);
+            const auto type_left = node.Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            const auto type_right = node.Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            return pretty ? ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(NYql::GetTypePrettyDiff(*type_left, *type_right)) :
+                ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(NYql::GetTypeDiff(*type_left, *type_right));
+        }
     });
 
     AddCallable("Void", [](const TExprNode&, TMkqlBuildContext& ctx) {

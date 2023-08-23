@@ -1074,6 +1074,33 @@ public:
     }
 };
 
+template<bool Pretty>
+class TFormatTypeDiff final: public TCallNode {
+public:
+    TFormatTypeDiff(TPosition pos, const TString& opName, const TVector<TNodePtr>& args)
+        : TCallNode(pos, opName, 3, 3, args)
+    {}
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        if (Args.size() != 2) {
+            ctx.Error(Pos) << OpName << " requires exactly 2 arguments";
+            return false;
+        }
+        for (const auto& arg : Args) {
+            if (!arg->Init(ctx, src)) {
+                return false;
+            }
+        }
+        Args.push_back(Q(Pretty ? "true" : "false"));
+        OpName = "FormatTypeDiff";
+        return TCallNode::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TFormatTypeDiff<Pretty>(GetPos(), OpName, CloneContainer(Args));
+    }
+};
+
 class TAddMember final: public TCallNode {
 public:
     TAddMember(TPosition pos, const TString& opName, const TVector<TNodePtr>& args)
@@ -2899,6 +2926,8 @@ struct TBuiltinFuncData {
             {"just", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Just", 1, 1) },
             {"nothing", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Nothing", 1, 1) },
             {"formattype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("FormatType", 1, 1) },
+            {"formattypediff", BuildNamedBuiltinFactoryCallback<TFormatTypeDiff<false>>("FormatTypeDiff") },
+            {"formattypediffpretty", BuildNamedBuiltinFactoryCallback<TFormatTypeDiff<true>>("FormatTypeDiffPretty") },
             {"pgtype", BuildSimpleBuiltinFactoryCallback<TYqlPgType>() },
             {"pgconst", BuildSimpleBuiltinFactoryCallback<TYqlPgConst>() },
             {"pgop", BuildSimpleBuiltinFactoryCallback<TYqlPgOp>() },

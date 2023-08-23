@@ -3691,6 +3691,18 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return node;
     };
 
+    map["FormatTypeDiff"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext&) {
+        auto left = node->ChildPtr(0);
+        auto right = node->ChildPtr(1);
+        if (left->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Resource && right->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Resource) {
+            return ctx.ChangeChild(*node, 0, ctx.NewCallable(node->Pos(), "TypeHandle", {left}));
+        } 
+        if (left->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Resource && right->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Resource) {
+            return ctx.ChangeChild(*node, 1, ctx.NewCallable(node->Pos(), "TypeHandle", {right}));
+        }
+        return node;
+    };
+
     map["Lookup"] = std::bind(&OptimizeContains<false, true>, _1, _2);
     map["Contains"] = std::bind(&OptimizeContains<false>, _1, _2);
     map["ListHas"] = std::bind(&OptimizeContains<true>, _1, _2);

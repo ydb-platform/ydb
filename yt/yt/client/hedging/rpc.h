@@ -10,8 +10,6 @@
 
 namespace NYT::NClient::NHedging::NRpc {
 
-////////////////////////////////////////////////////////////////////////////////
-
 using NYT::NClient::NCache::TConfig;
 using NYT::NClient::NCache::TClustersConfig;
 using NYT::NClient::NCache::ECompressionCodec;

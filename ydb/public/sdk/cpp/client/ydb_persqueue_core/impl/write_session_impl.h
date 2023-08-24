@@ -365,7 +365,8 @@ private:
     //TString GetDebugIdentity() const;
     Ydb::PersQueue::V1::StreamingWriteClientMessage GetInitClientMessage();
     bool CleanupOnAcknowledged(ui64 sequenceNumber);
-    bool IsReadyToSendNextImpl() const;
+    bool IsReadyToSendNextImpl();
+    void DumpState();
     ui64 GetNextSeqNoImpl(const TMaybe<ui64>& seqNo);
     void SendImpl();
     void AbortImpl();
@@ -442,6 +443,8 @@ private:
     TInstant LastCountersLogTs;
     TWriterCounters::TPtr Counters;
     TDuration WakeupInterval;
+
+    TString StateStr;
 
 protected:
     ui64 MessagesAcquired = 0;

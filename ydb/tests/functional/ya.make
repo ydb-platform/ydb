@@ -12,6 +12,7 @@ RECURSE(
     kqp
     large_serializable
     limits
+    kv_workload
     open_source
     postgresql
     rename

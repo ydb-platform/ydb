@@ -286,7 +286,7 @@ int TCommandKvRunReadRowsRandom::Run(TConfig& config) {
 }
 
 TCommandKvRunMixed::TCommandKvRunMixed()
-    : TWorkloadCommand("mixed", {}, "Writes and SELECT/ReadsRows rows randomly")
+    : TWorkloadCommand("mixed", {}, "Writes and SELECT/ReadsRows rows randomly, verifies them")
 {}
 
 void TCommandKvRunMixed::Config(TConfig& config) {
@@ -297,17 +297,17 @@ void TCommandKvRunMixed::Config(TConfig& config) {
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::MAX_FIRST_KEY).StoreResult(&MaxFirstKey);
     config.Opts->AddLongOption("len", "String len")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::STRING_LEN).StoreResult(&StringLen);
-    config.Opts->AddLongOption("cols", "Number of columns to select for a single query")
+    config.Opts->AddLongOption("cols", "Number of columns")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::COLUMNS_CNT).StoreResult(&ColumnsCnt);
     config.Opts->AddLongOption("int-cols", "Number of int columns")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::INT_COLUMNS_CNT).StoreResult(&IntColumnsCnt);
     config.Opts->AddLongOption("key-cols", "Number of key columns")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::KEY_COLUMNS_CNT).StoreResult(&KeyColumnsCnt);
-    config.Opts->AddLongOption("change-partitions-size", "Apply random changes of AUTO_PARTITIONING_PARTITION_SIZE_MB setting.")
+    config.Opts->AddLongOption("change-partitions-size", "Apply random changes of AUTO_PARTITIONING_PARTITION_SIZE_MB setting")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::MIXED_CHANGE_PARTITIONS_SIZE).StoreResult(&ChangePartitionsSize);
-    config.Opts->AddLongOption("do-select", "Do SELECT operations.")
+    config.Opts->AddLongOption("do-select", "Do SELECT operations")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::MIXED_DO_SELECT).StoreResult(&DoSelect);
-    config.Opts->AddLongOption("do-read-rows", "Do ReadRows operations.")
+    config.Opts->AddLongOption("do-read-rows", "Do ReadRows operations")
         .DefaultValue(NYdbWorkload::KvWorkloadConstants::MIXED_DO_READ_ROWS).StoreResult(&DoReadRows);
 }
 

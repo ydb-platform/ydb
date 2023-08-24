@@ -6,6 +6,7 @@ import os
 import json
 import random
 import string
+import typing  # noqa: F401
 
 from ydb.tests.library.common import yatest_common
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
@@ -300,6 +301,12 @@ def deploy(arguments):
         optionals.update({'grpc_ssl_enable': enable_tls()})
     pdisk_store_path = arguments.ydb_working_dir if arguments.ydb_working_dir else None
 
+    enable_feature_flags = arguments.enabled_feature_flags.copy()  # type: typing.List[str]
+    if 'YDB_FEATURE_FLAGS' in os.environ:
+        flags = os.environ['YDB_FEATURE_FLAGS'].split(",")
+        for flag_name in flags:
+            enable_feature_flags.append(flag_name)
+
     configuration = KikimrConfigGenerator(
         parse_erasure(arguments),
         arguments.ydb_binary_path,
@@ -319,7 +326,7 @@ def deploy(arguments):
         auth_config_path=arguments.auth_config_path,
         use_log_files=not arguments.dont_use_log_files,
         default_users=default_users(),
-        extra_feature_flags=arguments.enabled_feature_flags,
+        extra_feature_flags=enable_feature_flags,
         extra_grpc_services=arguments.enabled_grpc_services,
         **optionals
     )

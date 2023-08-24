@@ -153,4 +153,26 @@ namespace NKikimr {
         return cost;
     }
 
+    TString TCostModel::ToString() const {
+        TStringStream str;
+        str << "{SeekTimeUs# " << SeekTimeUs;
+        str << " ReadSpeedBps# " << ReadSpeedBps;
+        str << " WriteSpeedBps# " << WriteSpeedBps;
+        str << " ReadBlockSize# " << ReadBlockSize;
+        str << " WriteBlockSize# " << WriteBlockSize;
+        str << " MinREALHugeBlobInBytes# " << MinREALHugeBlobInBytes;
+        str << " GType# " << GType.ToString();
+        str << "}";
+        return str.Str();
+    }
+
+    void TCostModel::PessimisticComposition(const TCostModel& other) {
+        SeekTimeUs = std::max(SeekTimeUs, other.SeekTimeUs);
+        ReadSpeedBps = std::min(ReadSpeedBps, other.ReadSpeedBps);
+        WriteSpeedBps = std::min(WriteSpeedBps, other.WriteSpeedBps);
+        ReadBlockSize = std::min(ReadBlockSize, other.ReadBlockSize);
+        WriteBlockSize = std::min(WriteBlockSize, other.WriteBlockSize);
+        MinREALHugeBlobInBytes = std::max(MinREALHugeBlobInBytes, other.MinREALHugeBlobInBytes);
+    }
+
 } // NKikimr

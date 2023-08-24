@@ -216,6 +216,11 @@ namespace NKikimr {
         ui64 MovedPatchCostBySize(ui32 blobSize) const;
         ui64 ReadCostBySize(ui64 size) const;
         ui64 ReadCost(const TEvBlobStorage::TEvVGet &ev) const;
+
+    public:
+        TString ToString() const;
+        void PessimisticComposition(const TCostModel& other);
+
     };
 
 } // NKikimr

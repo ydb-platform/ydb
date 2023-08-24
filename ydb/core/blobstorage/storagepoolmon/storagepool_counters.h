@@ -149,6 +149,8 @@ private:
     TRequestMonItem RequestMon[HcCount][MaxSizeClassBucketIdx + 1];
     TString StoragePoolName;
 
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> PoolGroup;
+
 public:
     TRequestMonItem& GetItem(EHandleClass handleClass, ui32 requestBytes) {
         Y_VERIFY((ui32)handleClass < (ui32)HcCount);
@@ -164,12 +166,13 @@ public:
     }
 
     TStoragePoolCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters, const TString &storagePoolName,
-            NPDisk::EDeviceType type) {
-        StoragePoolName = storagePoolName;
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> poolGroup = counters->GetSubgroup("storagePool", storagePoolName);
+            NPDisk::EDeviceType type)
+        : StoragePoolName(storagePoolName)
+        , PoolGroup(counters->GetSubgroup("storagePool", storagePoolName))
+    {
         for (ui32 handleClass = 0; handleClass < (ui32)HcCount; ++handleClass) {
             TString handleClassName = GetHandleClassName((EHandleClass)handleClass);
-            TIntrusivePtr<::NMonitoring::TDynamicCounters> hcGroup = poolGroup->GetSubgroup("handleClass", handleClassName);
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> hcGroup = PoolGroup->GetSubgroup("handleClass", handleClassName);
             if (IsReducedHandleClass((EHandleClass)handleClass)) {
                 for (ui32 sizeClassIdx = 0; sizeClassIdx <= MaxReducedSizeClassBucketIdx; ++sizeClassIdx) {
                     TString sizeClassName = ReducedSizeClassName(sizeClassIdx);
@@ -182,8 +185,17 @@ public:
                 }
             }
         }
+
+        // request cost counters
+        {
+            auto group = PoolGroup->GetSubgroup("subsystem", "cost");
+            DSProxyDiskCostCounter = group->GetCounter("DSProxyDiskCostNs", true);
+        }
     }
 
+public:
+    // request cost counters
+    ::NMonitoring::TDynamicCounters::TCounterPtr DSProxyDiskCostCounter;
 };
 
 class TDsProxyPerPoolCounters : public TThrRefBase {

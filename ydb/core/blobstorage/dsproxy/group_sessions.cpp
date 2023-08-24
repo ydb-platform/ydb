@@ -116,49 +116,80 @@ bool TGroupSessions::GoodToGo(const TBlobStorageGroupInfo::TTopology& topology, 
 }
 
 void TGroupSessions::QueueConnectUpdate(ui32 orderNumber, NKikimrBlobStorage::EVDiskQueueId queueId, bool connected,
-        bool extraGroupChecksSupport, ui32 minREALHugeBlobInBytes, const TBlobStorageGroupInfo::TTopology& topology) {
+        bool extraGroupChecksSupport, std::shared_ptr<const TCostModel> costModel, const TBlobStorageGroupInfo::TTopology& topology) {
     const auto v = topology.GetVDiskId(orderNumber);
     const ui32 fdom = topology.GetFailDomainOrderNumber(v);
     auto& f = GroupQueues->FailDomains[fdom];
     auto& vdisk = f.VDisks[v.VDisk];
     auto& q = vdisk.Queues.GetQueue(queueId);
 
+    bool updated = false;
+
     if (connected) {
         ConnectedQueuesMask[orderNumber] |= 1 << queueId;
         q.ExtraBlockChecksSupport = extraGroupChecksSupport;
-        q.MinREALHugeBlobInBytes = minREALHugeBlobInBytes;
+        Y_VERIFY(costModel);
+        if (!q.CostModel || *q.CostModel != *costModel) {
+            updated = true;
+            q.CostModel = costModel;
+        }
     } else {
         ConnectedQueuesMask[orderNumber] &= ~(1 << queueId);
         q.ExtraBlockChecksSupport.reset();
-        q.MinREALHugeBlobInBytes = 0;
+        if (q.CostModel) {
+            updated = true;
+            q.CostModel = nullptr;
+        }
     }
     q.IsConnected = connected;
 
-    auto update = [](auto& current, const auto& next) {
-        if (next.MinREALHugeBlobInBytes && (!current.MinREALHugeBlobInBytes || next.MinREALHugeBlobInBytes < current.MinREALHugeBlobInBytes)) {
-            current.MinREALHugeBlobInBytes = next.MinREALHugeBlobInBytes;
+    if (updated) {
+        auto iterate = [](auto& currentCostModel, const auto& next) {
+            if (next.CostModel) {
+                if (!currentCostModel) {
+                    currentCostModel.emplace(*next.CostModel);
+                } else {
+                    currentCostModel->PessimisticComposition(*next.CostModel);
+                }
+            }
+        };
+
+        auto update = [](std::shared_ptr<const TCostModel>& current, const std::optional<TCostModel>& recalculated) {
+            if (!recalculated) {
+                current.reset();
+            } else {
+                if (!current || *current != *recalculated) {
+                    current = std::make_shared<const TCostModel>(*recalculated);
+                }
+            }
+        };
+
+        // recalculate CostModel for the whole VDisk
+        std::optional<TCostModel> pessimistic;
+        vdisk.CostModel.reset();
+        vdisk.Queues.ForEachQueue([&](auto& q) { iterate(pessimistic, q); });
+        update(vdisk.CostModel, pessimistic);
+
+        // do the same for the fail domain
+        f.CostModel.reset();
+        pessimistic.reset();
+        for (const auto& vdisk : f.VDisks) {
+            iterate(pessimistic, vdisk);
         }
-    };
+        update(f.CostModel, pessimistic);
 
-    // recalculate MinREALHugeBlobInBytes for the whole VDisk
-    vdisk.MinREALHugeBlobInBytes = 0;
-    vdisk.Queues.ForEachQueue([&](auto& q) { update(vdisk, q); });
-
-    // do the same for the fail domain
-    f.MinREALHugeBlobInBytes = 0;
-    for (const auto& vdisk : f.VDisks) {
-        update(f, vdisk);
-    }
-
-    // and for the whole group
-    GroupQueues->MinREALHugeBlobInBytes = 0;
-    for (const auto& fdom : GroupQueues->FailDomains) {
-        update(*GroupQueues, fdom);
+        // and for the whole group
+        GroupQueues->CostModel.reset();
+        pessimistic.reset();
+        for (const auto& fdom : GroupQueues->FailDomains) {
+            iterate(pessimistic, fdom);
+        }
+        update(GroupQueues->CostModel, pessimistic);
     }
 }
 
 ui32 TGroupSessions::GetMinREALHugeBlobInBytes() const {
-    return GroupQueues->MinREALHugeBlobInBytes;
+    return GroupQueues->CostModel ? GroupQueues->CostModel->MinREALHugeBlobInBytes : 0;
 }
 
 ui32 TGroupSessions::GetNumUnconnectedDisks() {

@@ -178,6 +178,7 @@ public:
         , LogCtx(logComponent, logAccEnabled)
         , Span(TWilson::BlobStorage, std::move(traceId), std::move(name))
         , RestartCounter(restartCounter)
+        , CostModel(GroupQueues->CostModel)
         , Source(source)
         , Cookie(cookie)
         , LatencyQueueKind(latencyQueueKind)
@@ -189,6 +190,8 @@ public:
         Span
             .Attribute("GroupId", Info->GroupID)
             .Attribute("RestartCounter", RestartCounter);
+
+        Y_VERIFY(CostModel);
     }
 
     void Registered(TActorSystem *as, const TActorId& parentId) override {
@@ -366,7 +369,14 @@ public:
     void SendToQueue(std::unique_ptr<T> event, ui64 cookie, bool timeStatsEnabled = false) {
         if constexpr (!std::is_same_v<T, TEvBlobStorage::TEvVStatus> && !std::is_same_v<T, TEvBlobStorage::TEvVAssimilate>) {
             event->MessageRelevanceTracker = MessageRelevanceTracker;
+            if constexpr (std::is_same_v<T, TEvBlobStorage::TEvVMultiPut>) {
+                bool internalQueue;
+                SentSubrequestCost += CostModel->GetCost(*event, &internalQueue);
+            } else {
+                SentSubrequestCost += CostModel->GetCost(*event);
+            }
         }
+
         const TActorId queueId = GroupQueues->Send(*this, Info->GetTopology(), std::move(event), cookie, Span.GetTraceId(),
             timeStatsEnabled);
         ++RequestsInFlight;
@@ -499,6 +509,7 @@ public:
         if (RequestHandleClass && PoolCounters) {
             PoolCounters->GetItem(*RequestHandleClass, RequestBytes).Register(
                 RequestBytes, GeneratedSubrequests, GeneratedSubrequestBytes, Timer.Passed());
+            *PoolCounters->DSProxyDiskCostCounter += SentSubrequestCost;
         }
 
         if (timeStats) {
@@ -570,8 +581,10 @@ protected:
     ui32 RequestBytes = 0;
     ui32 GeneratedSubrequests = 0;
     ui32 GeneratedSubrequestBytes = 0;
+    ui64 SentSubrequestCost = 0;
     bool Dead = false;
     const ui32 RestartCounter = 0;
+    std::shared_ptr<const TCostModel> CostModel;
 
 private:
     const TActorId Source;

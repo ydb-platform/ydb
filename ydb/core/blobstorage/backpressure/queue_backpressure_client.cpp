@@ -456,7 +456,7 @@ private:
             case EState::READY:
                 QLOG_NOTICE_S("BSQ96", "connection lost status# " << NKikimrProto::EReplyStatus_Name(status)
                     << " errorReason# " << errorReason << " timeout# " << timeout);
-                ctx.Send(BlobStorageProxy, new TEvProxyQueueState(VDiskId, QueueId, false, false, 0));
+                ctx.Send(BlobStorageProxy, new TEvProxyQueueState(VDiskId, QueueId, false, false, nullptr));
                 Queue.DrainQueue(status, TStringBuilder() << "BS_QUEUE: " << errorReason, ctx);
                 DrainStatus(status, ctx);
                 DrainAssimilate(status, errorReason, ctx);
@@ -563,7 +563,7 @@ private:
                 Queue.UpdateCostModel(ctx.Now(), record.GetCostSettings(), GType);
             }
             ctx.Send(BlobStorageProxy, new TEvProxyQueueState(VDiskId, QueueId, true, ExtraBlockChecksSupport,
-                Queue.GetMinREALHugeBlobInBytes()));
+                Queue.GetCostModel()));
             Queue.OnConnect();
             State = EState::READY;
         } else {
@@ -799,7 +799,7 @@ private:
             << " VDiskId# " << VDiskId
             << " IsConnected# " << isConnected);
         ctx.Send(ev->Sender, new TEvProxyQueueState(VDiskId, QueueId, isConnected, isConnected && ExtraBlockChecksSupport,
-            Queue.GetMinREALHugeBlobInBytes()));
+            Queue.GetCostModel()));
     }
 
 #define QueueRequestHFunc(TEvType) \

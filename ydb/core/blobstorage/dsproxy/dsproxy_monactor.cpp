@@ -87,8 +87,13 @@ public:
                             str << "GroupID: " << Info->GroupID << "<br/>" << "Generation: " << Info->GroupGeneration;
                         }
                         DIV() {
-                            str << "MinREALHugeBlobInBytes: ";
-                            str << GroupQueues->MinREALHugeBlobInBytes;
+                            str << "CostModel: ";
+                            auto costModel = GroupQueues->CostModel; // acquire owning pointer
+                            if (costModel) {
+                                str << costModel->ToString();
+                            } else {
+                                str << "None";
+                            }
                         }
                         DIV() TABLE_CLASS("table table-bordered table-condensed") TABLEBODY() {
                             ui32 maxFailDomain = 0;

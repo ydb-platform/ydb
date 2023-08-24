@@ -1267,6 +1267,11 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
         return isTableFormat ? ReadYsonValueInTableFormatPg(pgType, cmd, buf) : ReadYsonValuePg(pgType, cmd, buf);
     }
 
+    case TType::EKind::Tagged: {
+        auto taggedType = static_cast<TTaggedType*>(type);
+        return ReadYsonValue(taggedType->GetBaseType(), holderFactory, cmd, buf, isTableFormat);
+    }
+
     default:
         YQL_ENSURE(false, "Unsupported type: " << type->GetKindAsStr());
     }

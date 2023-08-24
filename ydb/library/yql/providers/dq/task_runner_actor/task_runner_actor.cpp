@@ -452,6 +452,14 @@ private:
         }
         ParentId = ev->Sender;
 
+        {
+            Yql::DqsProto::TTaskMeta taskMeta;
+            ev->Get()->Task.GetMeta().UnpackTo(&taskMeta);
+            Settings->Dispatch(taskMeta.GetSettings());
+            Settings->FreezeDefaults();
+            StageId = taskMeta.GetStageId();
+        }
+
         try {
             NDq::TDqTaskSettings settings(&ev->Get()->Task);
             TaskRunner = Factory->GetOld(settings, TraceId);
@@ -462,13 +470,6 @@ private:
         }
 
         auto* actorSystem = TActivationContext::ActorSystem();
-        {
-            Yql::DqsProto::TTaskMeta taskMeta;
-            ev->Get()->Task.GetMeta().UnpackTo(&taskMeta);
-            Settings->Dispatch(taskMeta.GetSettings());
-            Settings->FreezeDefaults();
-            StageId = taskMeta.GetStageId();
-        }
         Invoker->Invoke([taskRunner=TaskRunner, replyTo, selfId, cookie, actorSystem, settings=Settings, stageId=StageId, startTime, clusterName = ClusterName](){
             try {
                 //auto guard = taskRunner->BindAllocator(); // only for local mode

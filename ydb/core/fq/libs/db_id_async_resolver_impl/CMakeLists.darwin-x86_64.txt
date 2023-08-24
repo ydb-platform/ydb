@@ -21,5 +21,5 @@ target_link_libraries(fq-libs-db_id_async_resolver_impl PUBLIC
 )
 target_sources(fq-libs-db_id_async_resolver_impl PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/db_id_async_resolver_impl/mdb_host_transformer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.cpp
 )

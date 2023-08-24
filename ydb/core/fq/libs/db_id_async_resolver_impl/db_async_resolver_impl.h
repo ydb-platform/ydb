@@ -2,7 +2,7 @@
 
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
-#include <ydb/library/yql/providers/common/db_id_async_resolver/mdb_host_transformer.h>
+#include <ydb/library/yql/providers/common/db_id_async_resolver/mdb_endpoint_generator.h>
 #include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
 
 namespace NFq {
@@ -14,7 +14,7 @@ public:
         const NActors::TActorId& recipient,
         const TString& ydbMvpEndpoint,
         const TString& mdbGateway,
-        NYql::IMdbHostTransformer::TPtr&& mdbHostTransformer, 
+        NYql::IMdbEndpointGenerator::TPtr&& endpointGenerator, 
         const TString& traceId = ""
     );
 
@@ -24,7 +24,7 @@ private:
     const NActors::TActorId Recipient;
     const TString YdbMvpEndpoint;
     const TString MdbGateway;
-    NYql::IMdbHostTransformer::TPtr MdbHostTransformer;
+    NYql::IMdbEndpointGenerator::TPtr mdbEndpointGenerator;
     const TString TraceId;
 };
 

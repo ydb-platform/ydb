@@ -9,7 +9,7 @@
 
 #include <ydb/core/fq/libs/control_plane_storage/message_builders.h>
 #include <ydb/core/fq/libs/actors/database_resolver.h>
-#include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_host_transformer.h>
+#include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
@@ -860,7 +860,7 @@ Y_UNIT_TEST_SUITE(Yq_2) {
     // use fork for data test due to ch initialization problem
     Y_UNIT_TEST(Test_HostNameTrasformation) {
         {
-            auto transformer = ::NFq::MakeTMdbHostTransformerLegacy();
+            auto transformer = ::NFq::MakeMdbEndpointGeneratorLegacy();
             UNIT_ASSERT_VALUES_EQUAL(transformer->ToEndpoint(NYql::EDatabaseType::ClickHouse, "rc1c-p5waby2y5y1kb5ue.db.yandex.net"),
                                     "rc1c-p5waby2y5y1kb5ue.db.yandex.net:8443");
             UNIT_ASSERT_VALUES_EQUAL(transformer->ToEndpoint(NYql::EDatabaseType::ClickHouse, "ya.ru"),
@@ -868,11 +868,19 @@ Y_UNIT_TEST_SUITE(Yq_2) {
         }
 
         {
-            auto transformer = ::NFq::MakeTMdbHostTransformerGeneric();
-            UNIT_ASSERT_VALUES_EQUAL(::NFq::MakeTMdbHostTransformerGeneric()->ToEndpoint(NYql::EDatabaseType::ClickHouse, "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net"),
+            auto transformer = ::NFq::MakeMdbEndpointGeneratorGeneric(false);
+            UNIT_ASSERT_VALUES_EQUAL(transformer->ToEndpoint(NYql::EDatabaseType::ClickHouse, "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net"),
                                     "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net:8443");
-            UNIT_ASSERT_VALUES_EQUAL(::NFq::MakeTMdbHostTransformerGeneric()->ToEndpoint(NYql::EDatabaseType::PostgreSQL, "rc1b-eyt6dtobu96rwydq.mdb.yandexcloud.net"),
+            UNIT_ASSERT_VALUES_EQUAL(transformer->ToEndpoint(NYql::EDatabaseType::PostgreSQL, "rc1b-eyt6dtobu96rwydq.mdb.yandexcloud.net"),
                                     "rc1b-eyt6dtobu96rwydq.mdb.yandexcloud.net:6432");
+        }
+
+        {
+            auto transformer = ::NFq::MakeMdbEndpointGeneratorGeneric(true);
+            UNIT_ASSERT_VALUES_EQUAL(transformer->ToEndpoint(NYql::EDatabaseType::ClickHouse, "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net"),
+                                    "rc1a-d6dv17lv47v5mcop.db.yandex.net:8443");
+            UNIT_ASSERT_VALUES_EQUAL(transformer->ToEndpoint(NYql::EDatabaseType::PostgreSQL, "rc1b-eyt6dtobu96rwydq.mdb.yandexcloud.net"),
+                                    "rc1b-eyt6dtobu96rwydq.db.yandex.net:6432");
         }
     }
 

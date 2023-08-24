@@ -2,7 +2,7 @@ LIBRARY()
 
 SRCS(
     db_async_resolver.h
-    mdb_host_transformer.h
+    mdb_endpoint_generator.h
 )
 
 PEERDIR(

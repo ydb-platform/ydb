@@ -2,7 +2,7 @@ LIBRARY()
 
 SRCS(
     db_async_resolver_impl.cpp
-    mdb_host_transformer.cpp
+    mdb_endpoint_generator.cpp
 )
 
 PEERDIR(

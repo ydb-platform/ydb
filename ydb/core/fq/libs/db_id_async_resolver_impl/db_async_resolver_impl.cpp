@@ -10,13 +10,13 @@ TDatabaseAsyncResolverImpl::TDatabaseAsyncResolverImpl(
     const NActors::TActorId& recipient,
     const TString& ydbMvpEndpoint,
     const TString& mdbGateway,
-    NYql::IMdbHostTransformer::TPtr&& mdbHostTransformer, 
+    NYql::IMdbEndpointGenerator::TPtr&& mdbEndpointGenerator, 
     const TString& traceId)
     : ActorSystem(actorSystem)
     , Recipient(recipient)
     , YdbMvpEndpoint(ydbMvpEndpoint)
     , MdbGateway(mdbGateway)
-    , MdbHostTransformer(std::move(mdbHostTransformer))
+    , mdbEndpointGenerator(std::move(mdbEndpointGenerator))
     , TraceId(traceId)
 {
 }
@@ -45,7 +45,7 @@ TFuture<NYql::TDatabaseResolverResponse> TDatabaseAsyncResolverImpl::ResolveIds(
 
     ActorSystem->Send(new NActors::IEventHandle(Recipient, callbackId,
         new TEvents::TEvEndpointRequest(ids, YdbMvpEndpoint, MdbGateway,
-            TraceId, MdbHostTransformer)));
+            TraceId, mdbEndpointGenerator)));
 
     return promise.GetFuture();
 }

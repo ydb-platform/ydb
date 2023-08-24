@@ -9,7 +9,7 @@
 #include <ydb/core/fq/libs/common/util.h>
 #include <ydb/core/fq/libs/config/yq_issue.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
-#include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_host_transformer.h>
+#include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
 #include <ydb/core/fq/libs/control_plane_storage/config.h>
 
 #include <ydb/library/security/util.h>
@@ -144,7 +144,7 @@ public:
         DbResolver = std::make_shared<NFq::TDatabaseAsyncResolverImpl>(
                         NActors::TActivationContext::ActorSystem(), DatabaseResolverActor,
                         CommonConfig.GetYdbMvpCloudEndpoint(), CommonConfig.GetMdbGateway(),
-                        NFq::MakeTMdbHostTransformerGeneric()
+                        NFq::MakeMdbEndpointGeneratorGeneric(CommonConfig.GetMdbTransformHost())
                         );
 
         Become(&TTestConnectionActor::StateFunc);

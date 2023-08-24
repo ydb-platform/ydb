@@ -3,7 +3,7 @@
 
 #include <ydb/library/yql/core/facade/yql_facade.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
-#include <ydb/library/yql/providers/common/db_id_async_resolver/mdb_host_transformer.h>
+#include <ydb/library/yql/providers/common/db_id_async_resolver/mdb_endpoint_generator.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
@@ -116,19 +116,19 @@ struct TEvents {
         TString YdbMvpEndpoint;
         TString MdbGateway;
         TString TraceId;
-        const NYql::IMdbHostTransformer::TPtr MdbHostTransformer;
+        const NYql::IMdbEndpointGenerator::TPtr MdbEndpointGenerator;
 
         TEvEndpointRequest(
             const NYql::IDatabaseAsyncResolver::TDatabaseAuthMap& databaseIds,
             const TString& ydbMvpEndpoint,
             const TString& mdbGateway,
             const TString& traceId,
-            const NYql::IMdbHostTransformer::TPtr& mdbHostTransformer)
+            const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator)
             : DatabaseIds(databaseIds)
             , YdbMvpEndpoint(ydbMvpEndpoint)
             , MdbGateway(mdbGateway)
             , TraceId(traceId)
-            , MdbHostTransformer(mdbHostTransformer)
+            , MdbEndpointGenerator(mdbEndpointGenerator)
         { }
     };
 

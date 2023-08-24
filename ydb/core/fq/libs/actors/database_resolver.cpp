@@ -20,7 +20,7 @@ using namespace NYql;
 
 using TEndpoint = NYql::TDatabaseResolverResponse::TEndpoint;
 
-using TParser = std::function<TEndpoint(NJson::TJsonValue& body, const NYql::IMdbHostTransformer::TPtr& mdbHostTransformer)>;
+using TParser = std::function<TEndpoint(NJson::TJsonValue& body, const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator)>;
 using TParsers = THashMap<NYql::EDatabaseType, TParser>;
 using TCache = TTtlCache<std::tuple<TString, NYql::EDatabaseType, NYql::TDatabaseAuth>, std::variant<TEndpoint, TString>>;
 
@@ -38,13 +38,13 @@ public:
         const TDatabaseResolverResponse::TDatabaseEndpointsMap& ready,
         const THashMap<NHttp::THttpOutgoingRequestPtr, std::tuple<TString, NYql::EDatabaseType, NYql::TDatabaseAuth>>& requests,
         const TString& traceId,
-        const NYql::IMdbHostTransformer::TPtr& mdbHostTransformer,
+        const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
         const TParsers& parsers)
         : Sender(sender)
         , Cache(cache)
         , Requests(requests)
         , TraceId(traceId)
-        , MdbHostTransformer(mdbHostTransformer)
+        , MdbEndpointGenerator(mdbEndpointGenerator)
         , DatabaseId2Endpoint(ready)
         , Parsers(parsers)
     { }
@@ -127,7 +127,7 @@ private:
                 TParsers::const_iterator parserIt;
                 if (parseJsonOk && (parserIt = Parsers.find(databaseType)) != Parsers.end()) {
                     try {
-                        auto res = parserIt->second(databaseInfo, MdbHostTransformer);
+                        auto res = parserIt->second(databaseInfo, MdbEndpointGenerator);
                         LOG_D("Got db_id: " << databaseId
                             << ", db type: " << static_cast<std::underlying_type<NYql::EDatabaseType>::type>(databaseType)
                             << ", endpoint: " << res.Endpoint
@@ -184,7 +184,7 @@ private:
     TCache& Cache;
     const THashMap<NHttp::THttpOutgoingRequestPtr, std::tuple<TString, NYql::EDatabaseType, NYql::TDatabaseAuth>> Requests;
     const TString TraceId;
-    const NYql::IMdbHostTransformer::TPtr MdbHostTransformer;
+    const NYql::IMdbEndpointGenerator::TPtr MdbEndpointGenerator;
     TDatabaseResolverResponse::TDatabaseEndpointsMap DatabaseId2Endpoint;
     size_t HandledIds = 0;
     bool Success = true;
@@ -205,7 +205,7 @@ public:
             .SetErrorTtl(TDuration::Minutes(1))
             .SetMaxSize(1000000))
     {
-        auto ydbParser = [](NJson::TJsonValue& databaseInfo, const NYql::IMdbHostTransformer::TPtr&) {
+        auto ydbParser = [](NJson::TJsonValue& databaseInfo, const NYql::IMdbEndpointGenerator::TPtr&) {
             bool secure = false;
             TString endpoint = databaseInfo.GetMap().at("endpoint").GetStringRobust();
             TString prefix("/?database=");
@@ -227,9 +227,9 @@ public:
             return TEndpoint{endpoint, database, secure};
         };
         Parsers[NYql::EDatabaseType::Ydb] = ydbParser;
-        Parsers[NYql::EDatabaseType::DataStreams] = [ydbParser](NJson::TJsonValue& databaseInfo, const NYql::IMdbHostTransformer::TPtr& mdbHostTransformer)
+        Parsers[NYql::EDatabaseType::DataStreams] = [ydbParser](NJson::TJsonValue& databaseInfo, const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator)
         {
-            auto ret = ydbParser(databaseInfo, mdbHostTransformer);
+            auto ret = ydbParser(databaseInfo, mdbEndpointGenerator);
             // TODO: Take explicit field from MVP
             if (ret.Endpoint.StartsWith("ydb.")) {
                 // Replace "ydb." -> "yds."
@@ -237,7 +237,7 @@ public:
             }
             return ret;
         };
-        Parsers[NYql::EDatabaseType::ClickHouse] = [](NJson::TJsonValue& databaseInfo, const NYql::IMdbHostTransformer::TPtr& mdbHostTransformer) {
+        Parsers[NYql::EDatabaseType::ClickHouse] = [](NJson::TJsonValue& databaseInfo, const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator) {
             TString endpoint;
             TVector<TString> aliveHosts;
             for (const auto& host : databaseInfo.GetMap().at("hosts").GetArraySafe()) {
@@ -246,7 +246,7 @@ public:
                 }
             }
             if (!aliveHosts.empty()) {
-                endpoint = mdbHostTransformer->ToEndpoint(
+                endpoint = mdbEndpointGenerator->ToEndpoint(
                     NYql::EDatabaseType::ClickHouse,
                     aliveHosts[std::rand() % static_cast<int>(aliveHosts.size())]
                 );
@@ -257,7 +257,7 @@ public:
             return TEndpoint{endpoint, "", true};
         };
 
-        Parsers[NYql::EDatabaseType::PostgreSQL] = [](NJson::TJsonValue& databaseInfo, const NYql::IMdbHostTransformer::TPtr& mdbHostTransformer) {
+        Parsers[NYql::EDatabaseType::PostgreSQL] = [](NJson::TJsonValue& databaseInfo, const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator) {
             TString endpoint;
             TVector<TString> aliveHosts;
             for (const auto& host : databaseInfo.GetMap().at("hosts").GetArraySafe()) {
@@ -276,7 +276,7 @@ public:
                 }
             }
             if (!aliveHosts.empty()) {
-                endpoint = mdbHostTransformer->ToEndpoint(
+                endpoint = mdbEndpointGenerator->ToEndpoint(
                     NYql::EDatabaseType::PostgreSQL,
                     aliveHosts[std::rand() % static_cast<int>(aliveHosts.size())]
                 );
@@ -375,7 +375,7 @@ private:
 
         if (!requests.empty()) {
             auto helper = Register(
-                    new TResponseProcessor(ev->Sender, Cache, ready, requests, TraceId, ev->Get()->MdbHostTransformer, Parsers));
+                    new TResponseProcessor(ev->Sender, Cache, ready, requests, TraceId, ev->Get()->MdbEndpointGenerator, Parsers));
 
             for (const auto& [request, _] : requests) {
                 TActivationContext::Send(new IEventHandle(HttpProxy, helper, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(request)));

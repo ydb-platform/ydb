@@ -27,6 +27,7 @@ TCommandConfig::TCommandConfig()
     : TClientCommandTree("config", {}, "Manage YDB CLI configuration")
 {
     AddCommand(std::make_unique<TCommandProfile>());
+    AddCommand(std::make_unique<TCommandConnectionInfo>());
 }
 
 void TCommandConfig::Config(TConfig& config) {
@@ -196,6 +197,16 @@ namespace {
         }
     }
 
+    TString TryBlurValue(const TString& authMethod, const TString& value) {
+        if (!IsStdoutInteractive() || authMethod == "sa-key-file" || authMethod == "token-file" || authMethod == "yc-token-file") {
+            return value;
+        }
+        if (authMethod == "password") {
+            return ReplaceWithAsterisks(value);
+        }
+        return BlurSecret(value);
+    }
+
     void PrintProfileContent(std::shared_ptr<IProfile> profile) {
         if (profile->Has("endpoint")) {
             Cout << "  endpoint: " << profile->GetValue("endpoint").as<TString>() << Endl;
@@ -209,14 +220,8 @@ namespace {
             Cout << "  " << authMethod;
             if (authMethod == "ydb-token" ||authMethod == "iam-token"
                 || authMethod == "yc-token" || authMethod == "sa-key-file"
-                || authMethod == "token-file" || authMethod == "yc-token-file")
-            {
-                TString authData = authValue["data"].as<TString>();
-                if (authMethod == "sa-key-file" || authMethod == "token-file" || authMethod == "yc-token-file") {
-                    Cout << ": " << authData;
-                } else {
-                    Cout << ": " << BlurSecret(authData);
-                }
+                || authMethod == "token-file" || authMethod == "yc-token-file") {
+                Cout << ": " << TryBlurValue(authMethod, authValue["data"].as<TString>());
             } else if (authMethod == "static-credentials") {
                 auto authData = authValue["data"];
                 if (authData) {
@@ -224,7 +229,7 @@ namespace {
                         Cout << Endl << "    user: " << authData["user"].as<TString>();
                     }
                     if (authData["password"]) {
-                        Cout << Endl << "    password: " << ReplaceWithAsterisks(authData["password"].as<TString>());
+                        Cout << Endl << "    password: " << TryBlurValue("password", authData["password"].as<TString>());
                     }
                     if (authData["password-file"]) {
                         Cout << Endl << "    password file: " << authData["password-file"].as<TString>();
@@ -238,6 +243,77 @@ namespace {
         }
         if (profile->Has("ca-file")) {
             Cout << "  ca-file: " << profile->GetValue("ca-file").as<TString>() << Endl;
+        }
+    }
+}
+
+TCommandConnectionInfo::TCommandConnectionInfo()
+    : TClientCommand("info", {}, "List current connection parameters")
+{}
+
+void TCommandConnectionInfo::Config(TConfig& config) {
+    TClientCommand::Config(config);
+
+    config.NeedToConnect = false;
+    config.SetFreeArgsNum(0);
+}
+
+int TCommandConnectionInfo::Run(TConfig& config) {
+    if (config.IsVerbose()) {
+        PrintVerboseInfo(config);
+    } else {
+        PrintInfo(config);
+    }
+    return EXIT_SUCCESS;
+}
+
+void TCommandConnectionInfo::PrintInfo(TConfig& config) {
+    if (config.Address) {
+        Cout << "endpoint: " << config.Address << Endl;
+    }
+    if (config.Database) {
+        Cout << "database: " << config.Database << Endl;
+    }
+    if (config.SecurityToken) {
+        Cout << "token: " << TryBlurValue("token", config.SecurityToken) << Endl;
+    }
+    if (config.UseIamAuth) {
+        if (config.YCToken) {
+            Cout << "yc-token: " << TryBlurValue("yc-token", config.YCToken) << Endl;
+        }
+        if (config.SaKeyFile) {
+            Cout << "sa-key-file: " << config.SaKeyFile << Endl;
+        }
+        if (config.UseMetadataCredentials) {
+            Cout << "use-metadata-credentials" << Endl;
+        }
+        if (config.IamEndpoint) {
+            Cout << "iam-endpoint: " << config.IamEndpoint << Endl;
+        }
+    }
+    if (config.UseStaticCredentials) {
+        if (config.StaticCredentials.User) {
+            Cout << "user: " << config.StaticCredentials.User << Endl;
+        }
+        if (config.StaticCredentials.Password) {
+            Cout << "password: " << TryBlurValue("password", config.StaticCredentials.Password) << Endl;
+        }
+    }
+    if (config.CaCertsFile) {
+        Cout << "ca-file: " << config.CaCertsFile << Endl;
+    }
+}
+
+void TCommandConnectionInfo::PrintVerboseInfo(TConfig& config) {
+    Cout << Endl;
+    PrintInfo(config);
+    Cout << "current auth method: " << (config.ChosenAuthMethod ? config.ChosenAuthMethod : "no-auth") << Endl;
+    for (const auto& [name, params] : config.ConnectionParams) {
+        size_t cnt = 1;
+        Cout << Endl << "\"" << name << "\" sources:" << Endl;
+        for (const auto& [value, source] : params) {
+            Cout << "  " << cnt << ". Value: " << TryBlurValue(name, value) << ". Got from: " << source << Endl;
+            ++cnt;
         }
     }
 }

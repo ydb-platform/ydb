@@ -64,6 +64,9 @@ void TCommandWorkloadTopicRunFull::Config(TConfig& config)
         .Optional()
         .DefaultValue((TStringBuilder() << NTopic::ECodec::RAW))
         .StoreMappedResultT<TString>(&Scenario.Codec, &TCommandWorkloadTopicParams::StrToCodec);
+    config.Opts->AddLongOption("direct", "Direct write to a partition node.")
+        .Hidden()
+        .StoreTrue(&Scenario.Direct);
 
     config.Opts->MutuallyExclusive("message-rate", "byte-rate");
 

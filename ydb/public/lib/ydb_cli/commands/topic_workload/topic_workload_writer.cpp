@@ -225,6 +225,7 @@ void TTopicWorkloadWriterWorker::CreateWorker() {
     settings.Path(Params.TopicName);
     settings.ProducerId(Params.ProducerId);
     settings.PartitionId(Params.PartitionId);
+    settings.DirectWriteToPartition(Params.Direct);
     WriteSession = NYdb::NTopic::TTopicClient(Params.Driver).CreateWriteSession(settings);
 }
 

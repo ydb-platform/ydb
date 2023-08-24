@@ -52,6 +52,7 @@ public:
     ui32 ProducerThreadCount = 0;
     ui32 ConsumerThreadCount = 0;
     ui32 ConsumerCount = 0;
+    bool Direct = false;
     TString ConsumerPrefix;
     size_t MessageSize;
     size_t MessageRate;

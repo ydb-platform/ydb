@@ -212,6 +212,7 @@ void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void
             .WriterIdx = writerIdx,
             .ProducerId = TGUID::CreateTimebased().AsGuidString(),
             .PartitionId = (partitionSeed + writerIdx) % partitionCount,
+            .Direct = Direct,
             .Codec = Codec
         };
 

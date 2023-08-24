@@ -118,17 +118,28 @@ void TWorkloadCommand::WorkerFn(int taskId, TWorkloadQueryGenPtr workloadGen, co
     NYdbWorkload::TQueryInfo queryInfo;
     auto runQuery = [this, &queryInfo, &querySettings, &retryCount] (NYdb::NTable::TSession session) -> NYdb::TStatus {
         ++retryCount;
-        TStatus result(EStatus::SUCCESS, NYql::TIssues());
-        if (queryInfo.UseReadRows) {
-            result = TableClient->ReadRows(queryInfo.TablePath, std::move(*queryInfo.KeyToRead))
+        if (queryInfo.AlterTable) {
+            auto result = TableClient->RetryOperationSync([&queryInfo](NTable::TSession session) {
+                return session.AlterTable(queryInfo.TablePath, queryInfo.AlterTable.value()).GetValueSync();
+            });
+            return result;
+        } else if (queryInfo.UseReadRows) {
+            auto result = TableClient->ReadRows(queryInfo.TablePath, std::move(*queryInfo.KeyToRead))
                 .GetValueSync();
+            if (queryInfo.ReadRowsResultCallback) {
+                queryInfo.ReadRowsResultCallback.value()(result);
+            }
+            return result;
         } else {
-            result = session.ExecuteDataQuery(queryInfo.Query.c_str(),
+            auto result = session.ExecuteDataQuery(queryInfo.Query.c_str(),
                 NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx(),
                 queryInfo.Params, querySettings
             ).GetValueSync();
+            if (queryInfo.DataQueryResultCallback) {
+                queryInfo.DataQueryResultCallback.value()(result);
+            }
+            return result;
         }
-        return result;
     };
 
     while (Now() < StopTime) {

@@ -443,23 +443,24 @@ ListFlatten(List<List<T>?>)->List<T>
 ListFlatten(List<List<T>?>?)->List<T>?
 ```
 
-## ListUniq {#listuniq}
+## ListUniq и ListUniqStable {#listuniq}
 
-Возвращает копию списка, в котором оставлен только уникальный набор элементов.
+Возвращает копию списка, в котором оставлен только уникальный набор элементов. В случае ListUniq порядок элементов результирующего набора не определен, в случае ListUniqStable элементы находятся в порядке вхождения в исходный список.
 
-{% if feature_column_container_type %}
 **Примеры**
 ``` yql
-SELECT
-    ListUniq(list_column)
-FROM my_table;
+SELECT ListUniq([1, 2, 3, 2, 4, 5, 1]) -- [5, 4, 2, 1, 3]
+SELECT ListUniqStable([1, 2, 3, 2, 4, 5, 1]) -- [1, 2, 3, 4, 5]
+SELECT ListUniqStable([1, 2, null, 7, 2, 8, null]) -- [1, 2, null, 7, 8]
 ```
-{% endif %}
 
 **Сигнатура**
 ```
 ListUniq(List<T>)->List<T>
 ListUniq(List<T>?)->List<T>?
+
+ListUniqStable(List<T>)->List<T>
+ListUniqStable(List<T>?)->List<T>?
 ```
 
 ## ListAny и ListAll {#listany}

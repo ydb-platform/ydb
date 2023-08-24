@@ -2,7 +2,7 @@ PY3TEST()
 
 DATA(
     arcadia/ydb/tests/functional/postgresql/cases
-    sbr://4298147653=psql
+    sbr://4966407557=psql
 )
 
 DEPENDS(

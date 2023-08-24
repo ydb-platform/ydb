@@ -10,9 +10,12 @@ import yatest.common
 import os
 import pytest
 import re
+import time
+
 
 arcadia_root = yatest.common.source_path('')
 DATA_PATH = os.path.join(arcadia_root, yatest.common.test_source_path('cases'))
+pm = yatest.common.network.PortManager()
 
 
 def get_unique_path_case(sub_folder, file):
@@ -94,11 +97,13 @@ class TestPgwireSidecar(object):
         cls.cluster = kikimr_cluster_factory()
         cls.cluster.start()
         cls.endpoint = '%s:%s' % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port)
+        cls.pgwireListenPort = pm.get_port()
         cls.pgwire, _, _, _ = execute_binary(
             'pgwire',
-            [pgwire_binary_path(), '--endpoint={}'.format(cls.endpoint), '--stderr'],
+            [pgwire_binary_path(), '--endpoint={}'.format(cls.endpoint), '--port={}'.format(cls.pgwireListenPort), '--stderr'],
             wait=False
         )
+        time.sleep(1)
 
     @classmethod
     def teardown_class(cls):
@@ -109,7 +114,7 @@ class TestPgwireSidecar(object):
     def test_pgwire_sidecar(self, sql, out):
         _, _, psql_stderr, psql_stdout = execute_binary(
             'psql',
-            [psql_binary_path(), 'postgresql://root:1234@localhost:5432/Root', '-w', '-a', '-f', sql],
+            [psql_binary_path(), 'postgresql://root:1234@localhost:{}/Root'.format(self.pgwireListenPort), '-w', '-a', '-f', sql],
             wait=True,
             join_stderr=True
         )
@@ -123,7 +128,7 @@ class TestPostgresSuite(BasePostgresTest):
     def test_postgres_suite(self, sql, out):
         _, _, psql_stderr, psql_stdout = execute_binary(
             'psql',
-            [psql_binary_path(), 'host=localhost port=5432 dbname=Root user=root password=1234', '-w', '-a', '-f', sql],
+            [psql_binary_path(), 'postgresql://root:1234@localhost:5432/Root', '-w', '-a', '-f', sql],
             wait=True,
             join_stderr=True
         )

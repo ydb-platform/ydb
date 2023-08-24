@@ -5,7 +5,7 @@ syntax = "proto3";
 
 package NLWTrace;
 
-option go_package = "a.yandex-team.ru/library/cpp/lwtrace/protos";
+option go_package = "github.com/ydb-platform/ydb/library/cpp/lwtrace/protos";
 
 message TProbeDesc {
     string Name = 1; // Use either name+provider

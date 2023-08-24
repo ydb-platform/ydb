@@ -3,7 +3,7 @@ package NYT.NYTree.NProto;
 import "yt_proto/yt/core/rpc/proto/rpc.proto";
 import "yt_proto/yt/core/ytree/proto/attributes.proto";
 
-option go_package = "a.yandex-team.ru/yt/go/proto/core/ytree";
+option go_package = "github.com/ydb-platform/ydb/yt/go/proto/core/ytree";
 
 ////////////////////////////////////////////////////////////////////////////////
 

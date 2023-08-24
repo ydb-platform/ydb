@@ -1,6 +1,6 @@
 package NACLibProto;
 
-option go_package = "a.yandex-team.ru/ydb/library/aclib/protos;aclibpb";
+option go_package = "github.com/ydb-platform/ydb/ydb/library/aclib/protos;aclibpb";
 
 message TACE {
     optional uint32 AccessType = 1;

@@ -4,7 +4,7 @@ import "google/protobuf/descriptor.proto";
 package NUnifiedAgentProto;
 
 option java_package = "com.yandex.unified_agent";
-option go_package = "a.yandex-team.ru/library/cpp/unified_agent_client/proto;unifiedagent";
+option go_package = "github.com/ydb-platform/ydb/library/cpp/unified_agent_client/proto;unifiedagent";
 
 extend google.protobuf.FileOptions {
     bool GenerateYaStyle = 66777;

@@ -563,7 +563,7 @@ message TGenericClusterConfig {
     // you should either set (ServiceAccountId, ServiceAccountIdSignature) pair,
     // or set IAM Token.
     // The names of these fields must satisfy this template function:
-    // https://a.yandex-team.ru/arcadia/contrib/ydb/core/fq/libs/actors/clusters_from_connections.cpp?rev=r11823087#L19
+    // https://github.com/ydb-platform/ydb/arcadia/contrib/ydb/core/fq/libs/actors/clusters_from_connections.cpp?rev=r11823087#L19
     optional string ServiceAccountId = 6;
     optional string ServiceAccountIdSignature = 7;
     optional string Token = 11;

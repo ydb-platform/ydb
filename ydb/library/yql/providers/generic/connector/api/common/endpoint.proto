@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package NYql.NConnector.NApi;
 
-option go_package = "a.yandex-team.ru/ydb/library/yql/providers/generic/connector/api/common";
+option go_package = "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/api/common";
 
 // TEndpoint represents the network address of a data source instance
 message TEndpoint {

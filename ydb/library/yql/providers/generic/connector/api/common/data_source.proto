@@ -4,7 +4,7 @@ package NYql.NConnector.NApi;
 
 import "ydb/library/yql/providers/generic/connector/api/common/endpoint.proto";
 
-option go_package = "a.yandex-team.ru/ydb/library/yql/providers/generic/connector/api/common";
+option go_package = "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/api/common";
 
 // TCredentials represents various ways of user authentication in the data source instance
 message TCredentials {

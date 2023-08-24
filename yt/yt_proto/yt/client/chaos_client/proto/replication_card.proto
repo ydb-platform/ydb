@@ -1,6 +1,6 @@
 package NYT.NChaosClient.NProto;
 
-option go_package = "a.yandex-team.ru/yt/go/proto/client/chaos_client";
+option go_package = "github.com/ydb-platform/ydb/yt/go/proto/client/chaos_client";
 
 import "yt_proto/yt/core/misc/proto/guid.proto";
 

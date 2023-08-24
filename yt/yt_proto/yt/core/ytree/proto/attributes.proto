@@ -5,7 +5,7 @@ import "yt_proto/yt/core/yson/proto/protobuf_interop.proto";
 option java_package = "tech.ytsaurus.ytree";
 option java_multiple_files = true;
 
-option go_package = "a.yandex-team.ru/yt/go/proto/core/ytree";
+option go_package = "github.com/ydb-platform/ydb/yt/go/proto/core/ytree";
 
 ////////////////////////////////////////////////////////////////////////////////
 

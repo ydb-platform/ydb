@@ -2,7 +2,7 @@ import "google/protobuf/descriptor.proto";
 
 package NYT;
 
-option go_package = "a.yandex-team.ru/yt/yt_proto/yt/formats";
+option go_package = "github.com/ydb-platform/ydb/yt/yt_proto/yt/formats";
 
 message EWrapperFieldFlag
 {

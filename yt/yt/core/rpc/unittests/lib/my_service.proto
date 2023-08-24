@@ -2,7 +2,7 @@ package NMyRpc;
 
 import "yt_proto/yt/core/misc/proto/guid.proto";
 
-option go_package = "a.yandex-team.ru/yt/go/proto/core/rpc/unittests;myservice";
+option go_package = "github.com/ydb-platform/ydb/yt/go/proto/core/rpc/unittests;myservice";
 
 
 ////////////////////////////////////////////////////////////////////////////////

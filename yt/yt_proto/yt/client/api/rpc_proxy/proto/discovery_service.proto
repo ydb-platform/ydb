@@ -4,7 +4,7 @@ option java_package = "tech.ytsaurus";
 option java_outer_classname = "DiscoveryProtos";
 option java_multiple_files = true;
 
-option go_package = "a.yandex-team.ru/yt/go/proto/client/api/rpc_proxy";
+option go_package = "github.com/ydb-platform/ydb/yt/go/proto/client/api/rpc_proxy";
 
 //------------------------------------------------------------------------------
 

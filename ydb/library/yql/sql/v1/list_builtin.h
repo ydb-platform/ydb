@@ -112,20 +112,6 @@ protected:
     virtual TNodePtr GetFilterLambda();
 };
 
-class TListUniqBuiltin final: public TListBuiltin {
-public:
-    TListUniqBuiltin(TPosition pos,
-                     const TVector<TNodePtr>& args)
-        : TListBuiltin(pos, "ListUniq", args)
-    {}
-
-    bool DoInit(TContext& ctx, ISource* src) override;
-
-    TNodePtr DoClone() const final {
-        return new TListUniqBuiltin(Pos, CloneContainer(Args));
-    }
-};
-
 class TListCreateBuiltin final: public TListBuiltin {
 public:
     TListCreateBuiltin(TPosition pos,

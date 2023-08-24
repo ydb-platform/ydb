@@ -12020,6 +12020,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["ListAny"] = &ListAllAnyWrapper<false>;
         Functions["ListNotNull"] = &ListNotNullWrapper;
         Functions["ListFlatten"] = &ListFlattenWrapper;
+        Functions["ListUniq"] = &ListUniqWrapper;
+        Functions["ListUniqStable"] = &ListUniqWrapper;
 
         Functions["ExpandMap"] = &ExpandMapWrapper;
         Functions["WideMap"] = &WideMapWrapper;

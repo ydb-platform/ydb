@@ -85,18 +85,6 @@ TNodePtr TListFilterBuiltin::GetFilterLambda() {
     return BuildLambda(Pos, Y("item"), Y("Coalesce", Y("Apply", Args[1], "item"), Y("Bool", Q("false"))));
 }
 
-bool TListUniqBuiltin::DoInit(TContext& ctx, ISource* src) {
-    if (Args.size() != 1) {
-        ctx.Error(Pos) << OpName << " requires only one parameter";
-        return false;
-    }
-    if (!Args[0]->Init(ctx, src)) {
-        return false;
-    }
-    Node = Y("DictKeys", Y("ToDict", Args[0], GetIdentityLambda(), BuildLambda(Pos, Y("item"), Y("Void")), Q(Y(Q("Hashed"), Q("One")))));
-    return true;
-}
-
 bool TListCreateBuiltin::DoInit(TContext& ctx, ISource* src) {
     if (Args.size() != 1) {
         ctx.Error(Pos) << OpName << " requires only one parameter";

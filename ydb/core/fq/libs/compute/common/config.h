@@ -32,21 +32,22 @@ public:
 
     NFq::NConfig::EComputeType GetComputeType(const FederatedQuery::QueryContent::QueryType queryType, const TString& scope) const {
         for (const auto& mapping : ComputeConfig.GetComputeMapping()) {
-            if (mapping.GetQueryType() == queryType) {
-                if (mapping.HasActivation()) {
-                    const auto& activation    = mapping.GetActivation();
-                    const auto& includeScopes = activation.GetIncludeScopes();
-                    const auto& excludeScopes = activation.GetExcludeScopes();
-                    auto isActivatedCase1 =
-                        activation.GetPercentage() == 0 &&
-                        Find(includeScopes, scope) == includeScopes.end();
-                    auto isActivatedCase2 =
-                        activation.GetPercentage() == 100 &&
-                        Find(excludeScopes, scope) != excludeScopes.end();
-                    if (isActivatedCase1 || isActivatedCase2) {
-                        return mapping.GetCompute();
-                    }
-                }
+            if (mapping.GetQueryType() != queryType) {
+                continue;
+            }
+            if (!mapping.HasActivation()) {
+                return mapping.GetCompute();
+            }
+            const auto& activation    = mapping.GetActivation();
+            const auto& includeScopes = activation.GetIncludeScopes();
+            const auto& excludeScopes = activation.GetExcludeScopes();
+            auto isActivatedCase1 =
+                activation.GetPercentage() == 0 &&
+                Find(includeScopes, scope) == includeScopes.end();
+            auto isActivatedCase2 =
+                activation.GetPercentage() == 100 &&
+                Find(excludeScopes, scope) != excludeScopes.end();
+            if (isActivatedCase1 || isActivatedCase2) {
                 return mapping.GetCompute();
             }
         }

@@ -156,6 +156,8 @@ void TReadQuoter::HandleUpdateAccountQuotaCounters(NAccountReadQuoterEvents::TEv
 void TReadQuoter::UpdateCounters(const TActorContext& ctx) {
     if (!WaitingInflightReadRequests.empty()) {
         InflightLimitSlidingWindow.Update((ctx.Now() - InflightIsFullStartTime).MicroSeconds(), ctx.Now());
+    } else {
+        InflightLimitSlidingWindow.Update(ctx.Now());
     }
     Send(PartitionActor, new NReadQuoterEvents::TEvQuotaCountersUpdated(InflightLimitSlidingWindow.GetValue() / 60));
 }

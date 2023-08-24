@@ -56,11 +56,10 @@ class BaseTestScriptingService(object):
         return result
 
     @staticmethod
-    def canonical_result(output_result):
-        output_file_name = "result.output"
-        with open(output_file_name, "w") as f:
+    def canonical_result(output_result, tmp_path):
+        with open(str(tmp_path / "result.output"), "w") as f:
             f.write(output_result.decode('utf-8'))
-        return yatest_common.canonical_file(output_file_name, local=True, universal_lines=True)
+        return yatest_common.canonical_file(str(tmp_path / "result.output"), local=True, universal_lines=True)
 
 
 class BaseTestScriptingServiceWithDatabase(BaseTestScriptingService):
@@ -96,15 +95,18 @@ class TestExecuteScriptWithParams(BaseTestScriptingServiceWithDatabase):
     @classmethod
     def setup_class(cls):
         BaseTestScriptingServiceWithDatabase.setup_class()
+        cls.session = cls.driver.table_client.session().create()
 
-        session = cls.driver.table_client.session().create()
-        cls.table_path = cls.root_dir + "/scripting_params"
-        create_table_with_data(session, cls.table_path)
+    @pytest.fixture(autouse=True, scope='function')
+    def init_test(self, tmp_path):
+        self.tmp_path = tmp_path
+        self.table_path = self.root_dir + "/" + self.tmp_path.name
+        create_table_with_data(self.session, self.table_path)
 
     def test_uint32(self):
         script = "DECLARE $par1 AS Uint32; SELECT * FROM `{}` WHERE key = $par1;".format(self.table_path)
         output = self.execute_ydb_cli_command_with_db(["scripting", "yql", "-s", script, "--param", "$par1=1"])
-        return self.canonical_result(output)
+        return self.canonical_result(output, self.tmp_path)
 
     def test_uint64_and_string(self):
         script = "DECLARE $id AS Uint64; "\
@@ -114,12 +116,12 @@ class TestExecuteScriptWithParams(BaseTestScriptingServiceWithDatabase):
             ["scripting", "yql", "-s", script, "--param", "$id=2222",
              "--param", "$value=\"seven\""]
         )
-        return self.canonical_result(output)
+        return self.canonical_result(output, self.tmp_path)
 
     def test_list(self):
         script = "DECLARE $values AS List<Uint64?>; SELECT $values AS values;"
         output = self.execute_ydb_cli_command_with_db(["scripting", "yql", "-s", script, "--param", "$values=[1,2,3]"])
-        return self.canonical_result(output)
+        return self.canonical_result(output, self.tmp_path)
 
     def test_struct(self):
         script = "DECLARE $values AS List<Struct<key:Uint64, value:Utf8>>; "\
@@ -131,41 +133,44 @@ class TestExecuteScriptWithParams(BaseTestScriptingServiceWithDatabase):
             ["scripting", "yql", "-s", script, "--param",
              "$values=[{\"key\":1,\"value\":\"one\"},{\"key\":2,\"value\":\"two\"}]"]
         )
-        return self.canonical_result(output)
+        return self.canonical_result(output, self.tmp_path)
 
 
 class TestScriptingServiceHelp(BaseTestScriptingService):
-    def test_help(self):
+    def test_help(self, tmp_path):
         output = self.execute_ydb_cli_command(["scripting", "yql", "--help"])
-        return self.canonical_result(output)
+        return self.canonical_result(output, tmp_path)
 
-    def test_help_ex(self):
+    def test_help_ex(self, tmp_path):
         output = self.execute_ydb_cli_command(["scripting", "yql", "--help-ex"])
-        return self.canonical_result(output)
+        return self.canonical_result(output, tmp_path)
 
 
 class TestExecuteScriptWithFormats(BaseTestScriptingServiceWithDatabase):
     @classmethod
     def setup_class(cls):
         BaseTestScriptingServiceWithDatabase.setup_class()
+        cls.session = cls.driver.table_client.session().create()
 
-        session = cls.driver.table_client.session().create()
-        cls.table_path = cls.root_dir + "/scripting_formats"
-        create_table_with_data(session, cls.table_path)
+    @pytest.fixture(autouse=True, scope='function')
+    def init_test(self, tmp_path):
+        self.tmp_path = tmp_path
+        self.table_path = self.root_dir + "/" + self.tmp_path.name
+        create_table_with_data(self.session, self.table_path)
 
     def yql_script(self, format):
         script = "SELECT * FROM `{path}` WHERE key < 4;" \
             "SELECT id FROM `{path}` WHERE key = 4;" \
             "SELECT value FROM `{path}` WHERE key > 5".format(path=self.table_path)
         output = self.execute_ydb_cli_command_with_db(["scripting", "yql", "-s", script, "--format", format])
-        return self.canonical_result(output)
+        return self.canonical_result(output, self.tmp_path)
 
     def stream_yql_script(self, format):
         script = "SELECT * FROM `{path}` WHERE key < 4;" \
             "SELECT id FROM `{path}` WHERE key = 4;" \
             "SELECT value FROM `{path}` WHERE key > 5".format(path=self.table_path)
         output = self.execute_ydb_cli_command_with_db(["yql", "-s", script, "--format", format])
-        return self.canonical_result(output)
+        return self.canonical_result(output, self.tmp_path)
 
     # YqlScript
 
@@ -206,13 +211,16 @@ class TestExecuteScriptWithParamsFromJson(BaseTestScriptingServiceWithDatabase):
     @classmethod
     def setup_class(cls):
         BaseTestScriptingServiceWithDatabase.setup_class()
+        cls.session = cls.driver.table_client.session().create()
 
-        session = cls.driver.table_client.session().create()
-        cls.table_path = cls.root_dir + "/scripting_params_from_json"
-        create_table_with_data(session, cls.table_path)
+    @pytest.fixture(autouse=True, scope='function')
+    def init_test(self, tmp_path):
+        self.tmp_path = tmp_path
+        self.table_path = self.root_dir + "/" + self.tmp_path.name
+        create_table_with_data(self.session, self.table_path)
 
     @staticmethod
-    def write_data(data, filename="params.json"):
+    def write_data(data, filename):
         with open(filename, "w") as file:
             file.write(data)
 
@@ -221,9 +229,9 @@ class TestExecuteScriptWithParamsFromJson(BaseTestScriptingServiceWithDatabase):
             '   "par1": 1\n' \
             '}'
         script = "DECLARE $par1 AS Uint32; SELECT * FROM `{}` WHERE key = $par1;".format(self.table_path)
-        self.write_data(param_data)
-        output = self.execute_ydb_cli_command_with_db(command + ["--param-file", "params.json", "-s", script])
-        return self.canonical_result(output)
+        self.write_data(param_data, str(self.tmp_path / "params.json"))
+        output = self.execute_ydb_cli_command_with_db(command + ["--param-file", str(self.tmp_path / "params.json"), "-s", script])
+        return self.canonical_result(output, self.tmp_path)
 
     def uint64_and_string(self, command):
         param_data = '{\n' \
@@ -233,18 +241,18 @@ class TestExecuteScriptWithParamsFromJson(BaseTestScriptingServiceWithDatabase):
         script = "DECLARE $id AS Uint64; "\
                  "DECLARE $value AS String; "\
                  "SELECT * FROM `{}` WHERE id = $id OR value = $value;".format(self.table_path)
-        self.write_data(param_data)
-        output = self.execute_ydb_cli_command_with_db(command + ["--param-file", "params.json", "-s", script])
-        return self.canonical_result(output)
+        self.write_data(param_data, str(self.tmp_path / "params.json"))
+        output = self.execute_ydb_cli_command_with_db(command + ["--param-file", str(self.tmp_path / "params.json"), "-s", script])
+        return self.canonical_result(output, self.tmp_path)
 
     def list(self, command):
         param_data = '{\n' \
             '   "values": [1, 2, 3]\n' \
             '}'
         script = "DECLARE $values AS List<Uint64?>; SELECT $values AS values;"
-        self.write_data(param_data)
-        output = self.execute_ydb_cli_command_with_db(command + ["--param-file", "params.json", "-s", script])
-        return self.canonical_result(output)
+        self.write_data(param_data, str(self.tmp_path / "params.json"))
+        output = self.execute_ydb_cli_command_with_db(command + ["--param-file", str(self.tmp_path / "params.json"), "-s", script])
+        return self.canonical_result(output, self.tmp_path)
 
     def struct(self, command):
         param_data = '{\n' \
@@ -264,9 +272,9 @@ class TestExecuteScriptWithParamsFromJson(BaseTestScriptingServiceWithDatabase):
                  "Table.key AS key, "\
                  "Table.value AS value "\
                  "FROM (SELECT $values AS lst) FLATTEN BY lst AS Table;"
-        self.write_data(param_data)
-        output = self.execute_ydb_cli_command_with_db(command + ["--param-file", "params.json", "-s", script])
-        return self.canonical_result(output)
+        self.write_data(param_data, str(self.tmp_path / "params.json"))
+        output = self.execute_ydb_cli_command_with_db(command + ["--param-file", str(self.tmp_path / "params.json"), "-s", script])
+        return self.canonical_result(output, self.tmp_path)
 
     def multiple_files(self, command):
         param_data1 = '{\n' \
@@ -282,13 +290,14 @@ class TestExecuteScriptWithParamsFromJson(BaseTestScriptingServiceWithDatabase):
                  "DECLARE $num AS Uint64; "\
                  "DECLARE $date AS Date; "\
                  "SELECT $str AS str, $num as num, $date as date; "
-        self.write_data(param_data1, "param1.json")
-        self.write_data(param_data2, "param2.json")
-        self.write_data(param_data3, "param3.json")
+        self.write_data(param_data1, str(self.tmp_path / "param1.json"))
+        self.write_data(param_data2, str(self.tmp_path / "param2.json"))
+        self.write_data(param_data3, str(self.tmp_path / "param3.json"))
         output = self.execute_ydb_cli_command_with_db(
-            command + ["--param-file", "param1.json", "--param-file", "param2.json", "--param-file", "param3.json", "-s", script]
+            command + ["--param-file", str(self.tmp_path / "param1.json"), "--param-file", str(self.tmp_path / "param2.json"), 
+                       "--param-file", str(self.tmp_path / "param3.json"), "-s", script]
         )
-        return self.canonical_result(output)
+        return self.canonical_result(output, self.tmp_path)
 
     def ignore_excess_parameters(self, command):
         param_data = '{\n' \
@@ -297,20 +306,20 @@ class TestExecuteScriptWithParamsFromJson(BaseTestScriptingServiceWithDatabase):
             '}'
         script = "DECLARE $a AS Uint64; " \
                  "SELECT $a AS a; "
-        self.write_data(param_data)
+        self.write_data(param_data, str(self.tmp_path / "params.json"))
         output = self.execute_ydb_cli_command_with_db(
-            command + ["-s", script, "--param-file", "params.json"]
+            command + ["-s", script, "--param-file", str(self.tmp_path / "params.json")]
         )
-        return self.canonical_result(output)
+        return self.canonical_result(output, self.tmp_path)
 
     def script_from_file(self, command):
         script = "DECLARE $a AS Uint64; " \
                  "SELECT $a AS a; "
-        self.write_data(script, "script.yql")
+        self.write_data(script, str(self.tmp_path / "script.yql"))
         output = self.execute_ydb_cli_command_with_db(
-            command + ["-f", "script.yql", "--param", "$a=3"]
+            command + ["-f", str(self.tmp_path / "script.yql"), "--param", "$a=3"]
         )
-        return self.canonical_result(output)
+        return self.canonical_result(output, self.tmp_path)
 
     def test_uint32(self):
         return self.uint32(["scripting", "yql"])
@@ -360,13 +369,16 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
     @classmethod
     def setup_class(cls):
         BaseTestScriptingServiceWithDatabase.setup_class()
+        cls.session = cls.driver.table_client.session().create()
 
-        session = cls.driver.table_client.session().create()
-        cls.table_path = cls.root_dir + "/scripting_params_from_stdin"
-        create_table_with_data(session, cls.table_path)
+    @pytest.fixture(autouse=True, scope='function')
+    def init_test(self, tmp_path):
+        self.tmp_path = tmp_path
+        self.table_path = self.root_dir + "/" + self.tmp_path.name
+        create_table_with_data(self.session, self.table_path)
 
     @staticmethod
-    def write_data(data, filename="stdin.txt"):
+    def write_data(data, filename):
         with open(filename, "w") as file:
             file.write(data)
 
@@ -386,14 +398,12 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
             return ["yql"]
         raise RuntimeError("Unknown command name: {}".format(name))
 
-    @classmethod
-    def get_stdin(cls):
-        cls.stdin = open("stdin.txt", "r")
-        return cls.stdin
+    def get_stdin(self):
+        self.stdin = open(str(self.tmp_path / "stdin.txt"), "r")
+        return self.stdin
 
-    @classmethod
-    def close_stdin(cls):
-        cls.stdin.close()
+    def close_stdin(self):
+        self.stdin.close()
 
     def simple_json(self, command):
         param_data = '{\n' \
@@ -403,10 +413,10 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
         script = "DECLARE $s AS Utf8; " \
                  "DECLARE $val AS Uint64; " \
                  "SELECT $s AS s, $val AS val; "
-        self.write_data(param_data)
+        self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
         output = self.execute_ydb_cli_command_with_db(command + ["-s", script], self.get_stdin())
         self.close_stdin()
-        return self.canonical_result(output)
+        return self.canonical_result(output, self.tmp_path)
 
     def simple_csv_tsv(self, command, format):
         param_data = 's{0}val\n' \
@@ -415,10 +425,10 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
         script = "DECLARE $s AS Utf8; " \
                  "DECLARE $val AS Uint64; " \
                  "SELECT $s AS s, $val AS val; "
-        self.write_data(param_data)
+        self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
         output = self.execute_ydb_cli_command_with_db(command + ["-s", script, "--stdin-format", format], self.get_stdin())
         self.close_stdin()
-        return self.canonical_result(output)
+        return self.canonical_result(output, self.tmp_path)
 
     def stdin_par_raw(self, command):
         param_data = 'Line1\n' \
@@ -426,19 +436,19 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
             'Line3\n'
         script = "DECLARE $s AS Utf8; " \
                  "SELECT $s AS s; "
-        self.write_data(param_data)
+        self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
         output = self.execute_ydb_cli_command_with_db(command + ["-s", script, "--stdin-format", "raw", "--stdin-par", "s"], self.get_stdin())
         self.close_stdin()
-        return self.canonical_result(output)
+        return self.canonical_result(output, self.tmp_path)
 
     def stdin_par_json(self, command):
         param_data = "[1, 2, 3, 4]"
         script = "DECLARE $arr AS List<Uint64>; " \
                  "SELECT $arr AS arr; "
-        self.write_data(param_data)
+        self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
         output = self.execute_ydb_cli_command_with_db(command + ["-s", script, "--stdin-par", "arr"], self.get_stdin())
         self.close_stdin()
-        return self.canonical_result(output)
+        return self.canonical_result(output, self.tmp_path)
 
     def stdin_par_csv_tsv(self, command, format):
         param_data = 'id{0}value\n' \
@@ -446,10 +456,10 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
         param_data = param_data.format(self.get_delim(format))
         script = "DECLARE $s AS Struct<id:UInt64,value:Utf8>; " \
                  "SELECT $s AS s; "
-        self.write_data(param_data)
+        self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
         output = self.execute_ydb_cli_command_with_db(command + ["-s", script, "--stdin-format", format, "--stdin-par", "s"], self.get_stdin())
         self.close_stdin()
-        return self.canonical_result(output)
+        return self.canonical_result(output, self.tmp_path)
 
     def mix_json_and_binary(self, command):
         param_data1 = 'Строка номер 1\n' \
@@ -463,12 +473,12 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
                  "DECLARE $date AS Date; " \
                  "DECLARE $val AS Uint64; " \
                  "SELECT $s AS s, $date AS date, $val AS val; "
-        self.write_data(param_data1)
-        self.write_data(param_data2, "params.json")
-        output = self.execute_ydb_cli_command_with_db(command + ["-s", script, "--stdin-par", "s", "--stdin-format", "raw", "--param-file", "params.json"],
+        self.write_data(param_data1, str(self.tmp_path / "stdin.txt"))
+        self.write_data(param_data2, str(self.tmp_path / "params.json"))
+        output = self.execute_ydb_cli_command_with_db(command + ["-s", script, "--stdin-par", "s", "--stdin-format", "raw", "--param-file", str(self.tmp_path / "params.json")],
                                                       self.get_stdin())
         self.close_stdin()
-        return self.canonical_result(output)
+        return self.canonical_result(output, self.tmp_path)
 
     def different_sources_json(self, command):
         param_data1 = '{\n' \
@@ -481,11 +491,11 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
                  "DECLARE $date AS Date; " \
                  "DECLARE $val AS Uint64; " \
                  "SELECT $s AS s, $date AS date, $val AS val; "
-        self.write_data(param_data1)
-        self.write_data(param_data2, "params.json")
-        output = self.execute_ydb_cli_command_with_db(command + ["-s", script, "--param-file", "params.json", "--param", "$val=100"], self.get_stdin())
+        self.write_data(param_data1, str(self.tmp_path / "stdin.txt"))
+        self.write_data(param_data2, str(self.tmp_path / "params.json"))
+        output = self.execute_ydb_cli_command_with_db(command + ["-s", script, "--param-file", str(self.tmp_path / "params.json"), "--param", "$val=100"], self.get_stdin())
         self.close_stdin()
-        return self.canonical_result(output)
+        return self.canonical_result(output, self.tmp_path)
 
     def different_sources_csv_tsv(self, command, format):
         param_data1 = 's\n' \
@@ -498,12 +508,12 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
                  "DECLARE $date AS Date; " \
                  "DECLARE $val AS Uint64; " \
                  "SELECT $s AS s, $date AS date, $val AS val; "
-        self.write_data(param_data1)
-        self.write_data(param_data2, "params.json")
-        output = self.execute_ydb_cli_command_with_db(command + ["-s", script, "--stdin-format", format, "--param-file", "params.json", "--param", "$val=100"],
+        self.write_data(param_data1, str(self.tmp_path / "stdin.txt"))
+        self.write_data(param_data2, str(self.tmp_path / "params.json"))
+        output = self.execute_ydb_cli_command_with_db(command + ["-s", script, "--stdin-format", format, "--param-file", str(self.tmp_path / "params.json"), "--param", "$val=100"],
                                                       self.get_stdin())
         self.close_stdin()
-        return self.canonical_result(output)
+        return self.canonical_result(output, self.tmp_path)
 
     def framing_newline_delimited_json(self, command):
         param_data = '{"s": "Some text", "num": 1}\n' \
@@ -512,10 +522,10 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
         script = "DECLARE $s AS Utf8; " \
                  "DECLARE $num AS Uint64; " \
                  "SELECT $s AS s, $num AS num; "
-        self.write_data(param_data)
+        self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
         output = self.execute_ydb_cli_command_with_db(command + ["-s", script, "--stdin-format", "newline-delimited"], self.get_stdin())
         self.close_stdin()
-        return self.canonical_result(output)
+        return self.canonical_result(output, self.tmp_path)
 
     def framing_newline_delimited_csv_tsv(self, command, format):
         param_data = 's{0}num\n' \
@@ -526,11 +536,11 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
         script = "DECLARE $s AS Utf8; " \
                  "DECLARE $num AS Uint64; " \
                  "SELECT $s AS s, $num AS num; "
-        self.write_data(param_data)
+        self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
         output = self.execute_ydb_cli_command_with_db(command + ["-s", script, "--stdin-format", format, "--stdin-format", "newline-delimited"],
                                                       self.get_stdin())
         self.close_stdin()
-        return self.canonical_result(output)
+        return self.canonical_result(output, self.tmp_path)
 
     def framing_newline_delimited_raw(self, command):
         param_data = 'Line1\n' \
@@ -538,13 +548,13 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
             'Line3\n'
         script = "DECLARE $s AS Utf8; " \
                  "SELECT $s AS s; "
-        self.write_data(param_data)
+        self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
         output = self.execute_ydb_cli_command_with_db(
             command + ["-s", script, "--stdin-format", "raw", "--stdin-par", "s", "--stdin-format", "newline-delimited"],
             self.get_stdin()
         )
         self.close_stdin()
-        return self.canonical_result(output)
+        return self.canonical_result(output, self.tmp_path)
 
     def batching_full_raw(self, command):
         param_data = 'Line1\n' \
@@ -552,13 +562,13 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
             'Line3\n'
         script = "DECLARE $s AS List<Utf8>; " \
                  "SELECT $s AS s; "
-        self.write_data(param_data)
+        self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
         output = self.execute_ydb_cli_command_with_db(
             command + ["-s", script, "--stdin-format", "raw", "--stdin-par", "s", "--stdin-format", "newline-delimited", "--batch", "full"],
             self.get_stdin()
         )
         self.close_stdin()
-        return self.canonical_result(output)
+        return self.canonical_result(output, self.tmp_path)
 
     def batching_full_json(self, command):
         param_data = '{"s": "Line1", "id": 1}\n' \
@@ -572,13 +582,13 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
             '{"s": "Line9", "id": 9}\n'
         script = "DECLARE $arr as List<Struct<s:Utf8, id:Uint64>>; " \
                  "SELECT $arr as arr; "
-        self.write_data(param_data)
+        self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
         output = self.execute_ydb_cli_command_with_db(
             command + ["-s", script, "--stdin-par", "arr", "--stdin-format", "newline-delimited", "--batch", "full"],
             self.get_stdin()
         )
         self.close_stdin()
-        return self.canonical_result(output)
+        return self.canonical_result(output, self.tmp_path)
 
     def batching_full_csv_tsv(self, command, format):
         param_data = 's{0}id\n' \
@@ -594,13 +604,13 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
         param_data = param_data.format(self.get_delim(format))
         script = "DECLARE $arr as List<Struct<s:Utf8, id:Uint64>>; " \
                  "SELECT $arr as arr; "
-        self.write_data(param_data)
+        self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
         output = self.execute_ydb_cli_command_with_db(
             command + ["-s", script, "--stdin-format", format, "--stdin-par", "arr", "--stdin-format", "newline-delimited", "--batch", "full"],
             self.get_stdin()
         )
         self.close_stdin()
-        return self.canonical_result(output)
+        return self.canonical_result(output, self.tmp_path)
 
     def batching_adaptive_raw(self, command):
         param_data = 'Line1\n' \
@@ -614,13 +624,13 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
             'Line9\n'
         script = "DECLARE $s AS List<Utf8>; " \
                  "SELECT $s AS s; "
-        self.write_data(param_data)
+        self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
         output = self.execute_ydb_cli_command_with_db(
             command + ["-s", script, "--stdin-format", "raw", "--stdin-par", "s", "--stdin-format", "newline-delimited", "--batch", "adaptive", "--batch-max-delay", "0", "--batch-limit", "3"],
             self.get_stdin()
         )
         self.close_stdin()
-        return self.canonical_result(output)
+        return self.canonical_result(output, self.tmp_path)
 
     def batching_adaptive_json(self, command):
         param_data = '{"s": "Line1", "id": 1}\n' \
@@ -634,14 +644,14 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
             '{"s": "Line9", "id": 9}\n'
         script = "DECLARE $arr as List<Struct<s:Utf8, id:Uint64>>; " \
                  "SELECT $arr as arr; "
-        self.write_data(param_data)
+        self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
         output = self.execute_ydb_cli_command_with_db(
             command + ["-s", script, "--stdin-par", "arr", "--stdin-format", "newline-delimited",
                        "--batch", "adaptive", "--batch-max-delay", "0", "--batch-limit", "3"],
             self.get_stdin()
         )
         self.close_stdin()
-        return self.canonical_result(output)
+        return self.canonical_result(output, self.tmp_path)
 
     def batching_adaptive_csv_tsv(self, command, format):
         param_data = 's{0}id\n' \
@@ -657,14 +667,14 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
         param_data = param_data.format(self.get_delim(format))
         script = "DECLARE $arr as List<Struct<s:Utf8, id:Uint64>>; " \
                  "SELECT $arr as arr; "
-        self.write_data(param_data)
+        self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
         output = self.execute_ydb_cli_command_with_db(
             command + ["-s", script, "--stdin-format", format, "--stdin-par", "arr", "--stdin-format", "newline-delimited",
                                      "--batch", "adaptive", "--batch-max-delay", "0", "--batch-limit", "3"],
             self.get_stdin()
         )
         self.close_stdin()
-        return self.canonical_result(output)
+        return self.canonical_result(output, self.tmp_path)
 
     def ignore_excess_parameters_json(self, command):
         param_data = '{\n' \
@@ -673,10 +683,10 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
             '}'
         script = "DECLARE $a AS Uint64; " \
                  "SELECT $a AS a; "
-        self.write_data(param_data)
+        self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
         output = self.execute_ydb_cli_command_with_db(command + ["-s", script], self.get_stdin())
         self.close_stdin()
-        return self.canonical_result(output)
+        return self.canonical_result(output, self.tmp_path)
 
     def ignore_excess_parameters_csv_tsv(self, command, format):
         param_data = 'a{0}b\n' \
@@ -685,10 +695,10 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
         print(param_data)
         script = "DECLARE $a AS Uint64; " \
                  "SELECT $a AS a; "
-        self.write_data(param_data)
+        self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
         output = self.execute_ydb_cli_command_with_db(command + ["-s", script, "--stdin-format", format], self.get_stdin())
         self.close_stdin()
-        return self.canonical_result(output)
+        return self.canonical_result(output, self.tmp_path)
 
     def columns_bad_header(self, command, format):
         param_data = 'x{0}y\n' \
@@ -699,14 +709,14 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
         script = "DECLARE $a AS Uint64; " \
                  "DECLARE $b AS Uint64; " \
                  "SELECT $a AS a, $b AS b; "
-        self.write_data(param_data)
+        self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
         output = self.execute_ydb_cli_command_with_db(
             command + ["-s", script, "--stdin-format", format, "--stdin-format", "newline-delimited",
                        "--columns", "a{0}b".format(self.get_delim(format)), "--skip-rows", "1"],
             self.get_stdin()
         )
         self.close_stdin()
-        return self.canonical_result(output)
+        return self.canonical_result(output, self.tmp_path)
 
     def columns_no_header(self, command, format):
         param_data = '1{0}1\n' \
@@ -716,14 +726,14 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
         script = "DECLARE $a AS Uint64; " \
                  "DECLARE $b AS Uint64; " \
                  "SELECT $a AS a, $b AS b; "
-        self.write_data(param_data)
+        self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
         output = self.execute_ydb_cli_command_with_db(
             command + ["-s", script, "--stdin-format", format, "--stdin-format", "newline-delimited",
                        "--columns", "a{0}b".format(self.get_delim(format))],
             self.get_stdin()
         )
         self.close_stdin()
-        return self.canonical_result(output)
+        return self.canonical_result(output, self.tmp_path)
 
     def skip_rows(self, command, format):
         param_data = 'a{0}b\n' \
@@ -737,12 +747,12 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
         script = "DECLARE $a AS Uint64; " \
                  "DECLARE $b AS Uint64; " \
                  "SELECT $a AS a, $b AS b; "
-        self.write_data(param_data)
+        self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
         output = self.execute_ydb_cli_command_with_db(
             command + ["-s", script, "--stdin-format", format, "--stdin-format", "newline-delimited", "--skip-rows", "3"], self.get_stdin()
         )
         self.close_stdin()
-        return self.canonical_result(output)
+        return self.canonical_result(output, self.tmp_path)
 
     def test_simple_json(self, command):
         return self.simple_json(self.get_command(command))

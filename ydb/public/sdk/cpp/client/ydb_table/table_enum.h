@@ -20,6 +20,8 @@ enum class EBuildIndexState {
     Done = 4,
     Cancellation = 5,
     Cancelled = 6,
+    Rejection = 7,
+    Rejected = 8,
 };
 
 enum class EIndexType {

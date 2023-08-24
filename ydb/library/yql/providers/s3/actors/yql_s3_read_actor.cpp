@@ -346,9 +346,9 @@ public:
         , PatternType(patternType) {
         for (size_t i = 0; i < paths.size(); ++i) {
             if (paths[i].IsDirectory) {
-                Directories.emplace_back(paths[i].Path, 0, i);
+                Directories.emplace_back(paths[i].Path, 0, paths[i].PathIndex);
             } else {
-                Objects.emplace_back(paths[i].Path, paths[i].Size, i);
+                Objects.emplace_back(paths[i].Path, paths[i].Size, paths[i].PathIndex);
             }
         }
     }
@@ -677,7 +677,6 @@ public:
         ES3PatternVariant patternVariant,
         TPathList&& paths,
         bool addPathIndex,
-        ui64 startPathIndex,
         const NActors::TActorId& computeActorId,
         ui64 sizeLimit,
         const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
@@ -699,7 +698,6 @@ public:
         , PatternVariant(patternVariant)
         , Paths(std::move(paths))
         , AddPathIndex(addPathIndex)
-        , StartPathIndex(startPathIndex)
         , SizeLimit(sizeLimit)
         , Counters(counters)
         , TaskCounters(taskCounters)
@@ -756,7 +754,7 @@ public:
         DownloadInflight++;
         const auto& [path, size, index] = ReadPathFromCache();
         auto url = Url + path;
-        auto id = index + StartPathIndex;
+        auto id = index;
         const TString requestId = CreateGuidAsString();
         LOG_D("TS3ReadActor", "Download: " << url << ", ID: " << id << ", request id: [" << requestId << "]");
         Gateway->Download(
@@ -968,7 +966,6 @@ private:
     size_t CompletedFiles = 0;
     NActors::TActorId FileQueueActor;
     const bool AddPathIndex;
-    const ui64 StartPathIndex;
     const ui64 SizeLimit;
     ui64 IngressBytes = 0;
     TDuration CpuTime;
@@ -2227,7 +2224,6 @@ public:
         ES3PatternVariant patternVariant,
         TPathList&& paths,
         bool addPathIndex,
-        ui64 startPathIndex,
         const TReadSpec::TPtr& readSpec,
         const NActors::TActorId& computeActorId,
         const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
@@ -2249,7 +2245,6 @@ public:
         , PatternVariant(patternVariant)
         , Paths(std::move(paths))
         , AddPathIndex(addPathIndex)
-        , StartPathIndex(startPathIndex)
         , ReadSpec(readSpec)
         , Counters(std::move(counters))
         , TaskCounters(std::move(taskCounters))
@@ -2363,7 +2358,7 @@ public:
             TxId,
             requestId,
             RetryPolicy);
-        auto pathIndex = objectPath.PathIndex + StartPathIndex;
+        auto pathIndex = objectPath.PathIndex;
         if (TaskCounters) {
             HttpInflightLimit->Add(Gateway->GetBuffersSizePerStream());
         }
@@ -2670,7 +2665,6 @@ private:
     bool IsObjectQueueEmpty = false;
     bool IsWaitingObjectQueueResponse = false;
     const bool AddPathIndex;
-    const ui64 StartPathIndex;
     size_t ListedFiles = 0;
     size_t CompletedFiles = 0;
     const TReadSpec::TPtr ReadSpec;
@@ -2864,8 +2858,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     const IFunctionRegistry& functionRegistry = *holderFactory.GetFunctionRegistry();
 
     TPathList paths;
-    ui64 startPathIndex = 0;
-    ReadPathsList(params, taskParams, readRanges, paths, startPathIndex);
+    ReadPathsList(params, taskParams, readRanges, paths);
 
     const auto token = secureParams.Value(params.GetToken(), TString{});
     const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
@@ -3005,7 +2998,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
 #undef SET_FLAG
 #undef SUPPORTED_FLAGS
         const auto actor = new TS3StreamReadActor(inputIndex, txId, std::move(gateway), holderFactory, params.GetUrl(), authToken, pathPattern, pathPatternVariant,
-                                                  std::move(paths), addPathIndex, startPathIndex, readSpec, computeActorId, retryPolicy,
+                                                  std::move(paths), addPathIndex, readSpec, computeActorId, retryPolicy,
                                                   cfg, counters, taskCounters, fileSizeLimit, memoryQuotaManager);
 
         return {actor, actor};
@@ -3015,7 +3008,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
             sizeLimit = FromString<ui64>(it->second);
 
         const auto actor = new TS3ReadActor(inputIndex, txId, std::move(gateway), holderFactory, params.GetUrl(), authToken, pathPattern, pathPatternVariant,
-                                            std::move(paths), addPathIndex, startPathIndex, computeActorId, sizeLimit, retryPolicy,
+                                            std::move(paths), addPathIndex, computeActorId, sizeLimit, retryPolicy,
                                             cfg, counters, taskCounters, fileSizeLimit);
         return {actor, actor};
     }

@@ -13,15 +13,17 @@ struct TPath {
     TString Path;
     size_t Size = 0;
     bool IsDirectory = false;
+    ui64 PathIndex = 0;
 
-    TPath(TString path, size_t size, bool isDirectory)
+    TPath(TString path, size_t size, bool isDirectory, ui64 pathIndex)
         : Path(std::move(path))
         , Size(size)
-        , IsDirectory(isDirectory) { }
+        , IsDirectory(isDirectory)
+        , PathIndex(pathIndex) { }
 };
 using TPathList = std::vector<TPath>;
 
-void ReadPathsList(const NS3::TSource& sourceDesc, const THashMap<TString, TString>& taskParams, const TVector<TString>& readRanges, TPathList& paths, ui64& startPathIndex);
+void ReadPathsList(const NS3::TSource& sourceDesc, const THashMap<TString, TString>& taskParams, const TVector<TString>& readRanges, TPathList& paths);
 
 void PackPathsList(const TPathList& paths, TString& packed, bool& isTextEncoded);
 void UnpackPathsList(TStringBuf packed, bool isTextEncoded, TPathList& paths);

@@ -57,7 +57,7 @@ class BaseTestScriptingService(object):
 
     @staticmethod
     def canonical_result(output_result, tmp_path):
-        with open(str(tmp_path / "result.output"), "w") as f:
+        with (tmp_path / "result.output").open("w") as f:
             f.write(output_result.decode('utf-8'))
         return yatest_common.canonical_file(str(tmp_path / "result.output"), local=True, universal_lines=True)
 
@@ -399,7 +399,7 @@ class TestExecuteScriptWithParamsFromStdin(BaseTestScriptingServiceWithDatabase)
         raise RuntimeError("Unknown command name: {}".format(name))
 
     def get_stdin(self):
-        self.stdin = open(str(self.tmp_path / "stdin.txt"), "r")
+        self.stdin = (self.tmp_path / "stdin.txt").open("r")
         return self.stdin
 
     def close_stdin(self):

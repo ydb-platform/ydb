@@ -130,7 +130,123 @@ FROM Input MATCH_RECOGNIZE(
         //TODO https://st.yandex-team.ru/YQL-16186
     }
     Y_UNIT_TEST(SkipAfterMatch) {
-        //TODO https://st.yandex-team.ru/YQL-16186
+        {
+            const auto stmt = R"(
+USE plato;
+SELECT *
+FROM Input MATCH_RECOGNIZE(
+    AFTER MATCH SKIP TO NEXT ROW
+    PATTERN (A)
+    DEFINE A as A
+)
+)";
+            auto r = MatchRecognizeSqlToYql(stmt);
+            UNIT_ASSERT(r.IsOk());
+            auto skipTo = FindMatchRecognizeParam(r.Root, "skipTo");
+            UNIT_ASSERT_VALUES_EQUAL("AfterMatchSkip_NextRow", skipTo->GetChild(1)->GetChild(0)->GetChild(1)->GetContent());
+        }
+        {
+            const auto stmt = R"(
+USE plato;
+SELECT *
+FROM Input MATCH_RECOGNIZE(
+    AFTER MATCH SKIP PAST LAST ROW
+    PATTERN (A)
+    DEFINE A as A
+)
+)";
+            auto r = MatchRecognizeSqlToYql(stmt);
+            UNIT_ASSERT(r.IsOk());
+            auto skipTo = FindMatchRecognizeParam(r.Root, "skipTo");
+            UNIT_ASSERT_VALUES_EQUAL("AfterMatchSkip_PastLastRow", skipTo->GetChild(1)->GetChild(0)->GetChild(1)->GetContent());
+        }
+        {
+            const auto stmt = R"(
+USE plato;
+SELECT *
+FROM Input MATCH_RECOGNIZE(
+    AFTER MATCH SKIP TO FIRST Y
+    PATTERN (A | (U | (Q | Y)) | ($ B)+ C D)
+    DEFINE A as A
+)
+)";
+            auto r = MatchRecognizeSqlToYql(stmt);
+            UNIT_ASSERT(r.IsOk());
+            auto skipTo = FindMatchRecognizeParam(r.Root, "skipTo");
+            UNIT_ASSERT_VALUES_EQUAL("AfterMatchSkip_ToFirst", skipTo->GetChild(1)->GetChild(0)->GetChild(1)->GetContent());
+            UNIT_ASSERT_VALUES_EQUAL("Y", skipTo->GetChild(1)->GetChild(1)->GetChild(1)->GetContent());
+        }
+        {
+            const auto stmt = R"(
+USE plato;
+SELECT *
+FROM Input MATCH_RECOGNIZE(
+    AFTER MATCH SKIP TO FIRST T -- unknown pattern var
+    PATTERN (A | (U | (Q | Y)) | ($ B)+ C D)
+    DEFINE A as A
+)
+)";
+            auto r = MatchRecognizeSqlToYql(stmt);
+            UNIT_ASSERT(not r.IsOk());
+        }
+        {
+            const auto stmt = R"(
+USE plato;
+SELECT *
+FROM Input MATCH_RECOGNIZE(
+    AFTER MATCH SKIP TO LAST Y
+    PATTERN (A | (U | (Q | Y)) | ($ B)+ C D)
+    DEFINE A as A
+)
+)";
+            auto r = MatchRecognizeSqlToYql(stmt);
+            UNIT_ASSERT(r.IsOk());
+            auto skipTo = FindMatchRecognizeParam(r.Root, "skipTo");
+            UNIT_ASSERT_VALUES_EQUAL("AfterMatchSkip_ToLast", skipTo->GetChild(1)->GetChild(0)->GetChild(1)->GetContent());
+            UNIT_ASSERT_VALUES_EQUAL("Y", skipTo->GetChild(1)->GetChild(1)->GetChild(1)->GetContent());
+        }
+        {
+            const auto stmt = R"(
+USE plato;
+SELECT *
+FROM Input MATCH_RECOGNIZE(
+    AFTER MATCH SKIP TO LAST T -- unknown pattern var
+    PATTERN (A | (U | (Q | Y)) | ($ B)+ C D)
+    DEFINE A as A
+)
+)";
+            auto r = MatchRecognizeSqlToYql(stmt);
+            UNIT_ASSERT(not r.IsOk());
+        }
+        {
+            const auto stmt = R"(
+USE plato;
+SELECT *
+FROM Input MATCH_RECOGNIZE(
+    AFTER MATCH SKIP TO Y
+    PATTERN (A | (U | (Q | Y)) | ($ B)+ C D)
+    DEFINE A as A
+)
+)";
+            auto r = MatchRecognizeSqlToYql(stmt);
+            UNIT_ASSERT(r.IsOk());
+            auto skipTo = FindMatchRecognizeParam(r.Root, "skipTo");
+            UNIT_ASSERT_VALUES_EQUAL("AfterMatchSkip_To", skipTo->GetChild(1)->GetChild(0)->GetChild(1)->GetContent());
+            UNIT_ASSERT_VALUES_EQUAL("Y", skipTo->GetChild(1)->GetChild(1)->GetChild(1)->GetContent());
+        }
+        {
+            const auto stmt = R"(
+USE plato;
+SELECT *
+FROM Input MATCH_RECOGNIZE(
+    AFTER MATCH SKIP TO T -- unknown pattern var
+    PATTERN (A | (U | (Q | Y)) | ($ B)+ C D)
+    DEFINE A as A
+)
+)";
+            auto r = MatchRecognizeSqlToYql(stmt);
+            UNIT_ASSERT(not r.IsOk());
+        }
     }
     Y_UNIT_TEST(row_pattern_initial_or_seek) {
         //TODO https://st.yandex-team.ru/YQL-16186

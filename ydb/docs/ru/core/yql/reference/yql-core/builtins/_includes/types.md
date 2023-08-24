@@ -14,9 +14,23 @@ SELECT CAST($foo AS ListType($itemType));  -- каст $foo к типу List<$it
 **Сигнатура**
 ```
 FormatType(Type)->String
+FormatType(TypeHandle)->String
 ```
 
 Сериализация типа {% if feature_codegen %} или хендла типа{% endif %} в человекочитаемую строку. Это полезно для отладки, а также будет использоваться в последующих примерах данного раздела. [Документация по формату](../../types/type_string.md).
+
+## FormatTypeDiff и FormatTypeDiffPretty {#formattypediff}
+
+**Сигнатура**
+```
+FormatTypeDiff(Type, Type)->String
+FormatTypeDiff(TypeHandle, TypeHandle)->String
+
+FormatTypeDiffPretty(Type, Type)->String
+FormatTypeDiffPretty(TypeHandle, TypeHandle)->String
+```
+
+Получение строкового представления разницы двух типов или двух хендлов типов. Pretty-версия делает результирующую строку более читаемой путем добавления переводов строк и пробелов.
 
 ## ParseType {#parsetype}
 

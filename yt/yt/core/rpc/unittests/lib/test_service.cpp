@@ -1,4 +1,4 @@
-#include "my_service.h"
+#include "test_service.h"
 
 #include <gtest/gtest.h>
 
@@ -20,24 +20,25 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TMyService
-    : public IMyService
+class TTestService
+    : public ITestService
     , public TServiceBase
 {
 public:
-    TMyService(
+    TTestService(
         IInvokerPtr invoker,
         bool secure,
         TTestCreateChannelCallback createChannel)
         : TServiceBase(
             invoker,
-            TMyProxy::GetDescriptor(),
+            TTestProxy::GetDescriptor(),
             NLogging::TLogger("Main"))
         , Secure_(secure)
         , CreateChannel_(createChannel)
     {
         RegisterMethod(RPC_SERVICE_METHOD_DESC(SomeCall));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(PassCall));
+        RegisterMethod(RPC_SERVICE_METHOD_DESC(AllocationCall));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(RegularAttachments));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(NullAndEmptyAttachments));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(Compression));
@@ -70,10 +71,10 @@ public:
         RegisterMethod(RPC_SERVICE_METHOD_DESC(GetChannelFailureError));
         // NB: NotRegisteredCall is not registered intentionally
 
-        DeclareServerFeature(EMyFeature::Great);
+        DeclareServerFeature(ETestFeature::Great);
     }
 
-    DECLARE_RPC_SERVICE_METHOD(NMyRpc, SomeCall)
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, SomeCall)
     {
         context->SetRequestInfo();
         int a = request->a();
@@ -81,7 +82,7 @@ public:
         context->Reply();
     }
 
-    DECLARE_RPC_SERVICE_METHOD(NMyRpc, PassCall)
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, PassCall)
     {
         context->SetRequestInfo();
         WriteAuthenticationIdentityToProto(response, context->GetAuthenticationIdentity());
@@ -90,7 +91,14 @@ public:
         context->Reply();
     }
 
-    DECLARE_RPC_SERVICE_METHOD(NMyRpc, RegularAttachments)
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, AllocationCall)
+    {
+        context->SetRequestInfo();
+        response->set_allocated_string(TString("r", request->size()));
+        context->Reply();
+    }
+
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, RegularAttachments)
     {
         for (const auto& attachment : request->Attachments()) {
             auto data = TBlob();
@@ -101,7 +109,7 @@ public:
         context->Reply();
     }
 
-    DECLARE_RPC_SERVICE_METHOD(NMyRpc, NullAndEmptyAttachments)
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, NullAndEmptyAttachments)
     {
         const auto& attachments = request->Attachments();
         EXPECT_EQ(2u, attachments.size());
@@ -112,7 +120,7 @@ public:
         context->Reply();
     }
 
-    DECLARE_RPC_SERVICE_METHOD(NMyRpc, Compression)
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, Compression)
     {
         auto requestCodecId = CheckedEnumCast<NCompression::ECodec>(request->request_codec());
         auto serializedRequestBody = SerializeProtoToRefWithCompression(*request, requestCodecId);
@@ -133,26 +141,26 @@ public:
         context->Reply();
     }
 
-    DECLARE_RPC_SERVICE_METHOD(NMyRpc, DoNothing)
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, DoNothing)
     {
         context->SetRequestInfo();
         context->Reply();
     }
 
-    DECLARE_RPC_SERVICE_METHOD(NMyRpc, CustomMessageError)
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, CustomMessageError)
     {
         context->SetRequestInfo();
         context->Reply(TError(NYT::EErrorCode(42), "Some Error"));
     }
 
-    DECLARE_RPC_SERVICE_METHOD(NMyRpc, SlowCall)
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, SlowCall)
     {
         context->SetRequestInfo();
         TDelayedExecutor::WaitForDuration(TDuration::Seconds(1));
         context->Reply();
     }
 
-    DECLARE_RPC_SERVICE_METHOD(NMyRpc, SlowCanceledCall)
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, SlowCanceledCall)
     {
         try {
             context->SetRequestInfo();
@@ -169,15 +177,15 @@ public:
         return SlowCallCanceled_.ToFuture();
     }
 
-    DECLARE_RPC_SERVICE_METHOD(NMyRpc, RequestBytesThrottledCall)
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, RequestBytesThrottledCall)
     {
         context->Reply();
     }
 
-    DECLARE_RPC_SERVICE_METHOD(NMyRpc, NoReply)
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, NoReply)
     { }
 
-    DECLARE_RPC_SERVICE_METHOD(NMyRpc, StreamingEcho)
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, StreamingEcho)
     {
         context->SetRequestInfo();
 
@@ -215,7 +223,7 @@ public:
         context->Reply();
     }
 
-    DECLARE_RPC_SERVICE_METHOD(NMyRpc, ServerStreamsAborted)
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, ServerStreamsAborted)
     {
         context->SetRequestInfo();
 
@@ -244,7 +252,7 @@ public:
         ServerStreamsAborted_.Set();
     }
 
-    DECLARE_RPC_SERVICE_METHOD(NMyRpc, ServerNotReading)
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, ServerNotReading)
     {
         context->SetRequestInfo();
 
@@ -266,7 +274,7 @@ public:
         }
     }
 
-    DECLARE_RPC_SERVICE_METHOD(NMyRpc, ServerNotWriting)
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, ServerNotWriting)
     {
         context->SetRequestInfo();
 
@@ -289,7 +297,7 @@ public:
         }
     }
 
-    DECLARE_RPC_SERVICE_METHOD(NMyRpc, FlakyCall)
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, FlakyCall)
     {
         static std::atomic<int> callCount;
 
@@ -302,14 +310,14 @@ public:
         }
     }
 
-    DECLARE_RPC_SERVICE_METHOD(NMyRpc, RequireCoolFeature)
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, RequireCoolFeature)
     {
         context->SetRequestInfo();
-        context->ValidateClientFeature(EMyFeature::Cool);
+        context->ValidateClientFeature(ETestFeature::Cool);
         context->Reply();
     }
 
-    DECLARE_RPC_SERVICE_METHOD(NMyRpc, GetTraceBaggage)
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, GetTraceBaggage)
     {
         context->SetRequestInfo();
         auto* traceContext = NTracing::TryGetCurrentTraceContext();
@@ -317,7 +325,7 @@ public:
         context->Reply();
     }
 
-    DECLARE_RPC_SERVICE_METHOD(NMyRpc, CustomMetadata)
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, CustomMetadata)
     {
         auto customMetadataExt = context->GetRequestHeader().GetExtension(NRpc::NProto::TCustomMetadataExt::custom_metadata_ext);
         for (const auto& [key, value] : customMetadataExt.entries()) {
@@ -326,13 +334,13 @@ public:
         context->Reply();
     }
 
-    DECLARE_RPC_SERVICE_METHOD(NMyRpc, GetChannelFailureError)
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, GetChannelFailureError)
     {
         context->SetRequestInfo();
 
         if (request->has_redirection_address()) {
             YT_VERIFY(CreateChannel_);
-            TMyProxy proxy(CreateChannel_(request->redirection_address()));
+            TTestProxy proxy(CreateChannel_(request->redirection_address()));
             auto req = proxy.GetChannelFailureError();
             context->ReplyFrom(req->Invoke().AsVoid());
         } else {
@@ -367,12 +375,12 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IMyServicePtr CreateMyService(
+ITestServicePtr CreateTestService(
     IInvokerPtr invoker,
     bool secure,
     TTestCreateChannelCallback createChannel)
 {
-    return New<TMyService>(invoker, secure, createChannel);
+    return New<TTestService>(invoker, secure, createChannel);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

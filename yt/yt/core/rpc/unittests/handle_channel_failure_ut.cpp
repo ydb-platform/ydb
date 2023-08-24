@@ -60,7 +60,7 @@ TYPED_TEST(THandleChannelFailureTest, HandleChannelFailureTest)
 
     {
         auto channel = this->CreateChannel(outerServer.GetAddress());
-        TMyProxy proxy(channel);
+        TTestProxy proxy(channel);
         auto req = proxy.GetChannelFailureError();
         auto error = req->Invoke().Get();
         ASSERT_FALSE(error.IsOK());
@@ -79,7 +79,7 @@ TYPED_TEST(THandleChannelFailureTest, HandleChannelFailureTest)
                 ASSERT_FALSE(IsChannelFailureErrorHandled(error));
             }));
 
-        TMyProxy proxy(channel);
+        TTestProxy proxy(channel);
         auto req = proxy.GetChannelFailureError();
         auto error = req->Invoke().Get();
         ASSERT_FALSE(error.IsOK());
@@ -99,7 +99,7 @@ TYPED_TEST(THandleChannelFailureTest, HandleChannelFailureTest)
                 ASSERT_TRUE(IsChannelFailureErrorHandled(error));
             }));
 
-        TMyProxy proxy(channel);
+        TTestProxy proxy(channel);
         auto req = proxy.GetChannelFailureError();
         req->set_redirection_address(innerServer.GetAddress());
         auto error = req->Invoke().Get();

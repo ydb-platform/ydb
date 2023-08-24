@@ -19,32 +19,50 @@ Y_TEST_HOOK_BEFORE_RUN(GTEST_YT_RPC_SHUTDOWN)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class TMyProxy>
+template <class TTestProxy>
 void TestShutdown(const IChannelPtr& channel)
 {
-    TMyProxy proxy(channel);
+    TTestProxy proxy(channel);
 
-    std::vector<NYT::TFuture<typename TTypedClientResponse<NMyRpc::TRspSomeCall>::TResult>> futures;
-    futures.reserve(100000);
-    for (int i = 0; i < 100000; ++i) {
+    constexpr int numberOfRequests = 1000;
+    std::vector<TFuture<typename TTypedClientResponse<NTestRpc::TRspSomeCall>::TResult>> futures;
+    futures.reserve(numberOfRequests);
+
+    for (int i = 0; i < numberOfRequests; ++i) {
         auto req = proxy.SomeCall();
         req->SetTimeout(TDuration::Seconds(1));
         req->set_a(42);
         futures.push_back(req->Invoke());
     }
 
-    NYT::Shutdown();
+    Shutdown(TShutdownOptions{TDuration::Seconds(30), true, 127});
 
-    for (auto& future : futures) {
-        future.Cancel(TError{});
+    if (!NYT::IsShutdownStarted()) {
+        Cerr << "Shutdown was not started" << Endl;
+        _exit(2);
     }
 
-    _exit(0);
+    TFileInput shutdownLogInput((GetOutputPath() / "shutdown.log").GetPath());
+    TString buffer;
+    int exitCode = 1;
+
+    while (shutdownLogInput.ReadLine(buffer)) {
+        Cerr << buffer << Endl;
+        if (exitCode && buffer == "*** Shutdown completed") {
+            exitCode = 0;
+        }
+    }
+
+    if (exitCode) {
+        Cerr << "Shutdown was NOT completed" << Endl;
+    }
+
+    _exit(exitCode);
 }
 
 TYPED_TEST(TRpcShutdownTest, Shutdown)
 {
-    EXPECT_EXIT(TestShutdown<TMyProxy>(this->CreateChannel()), testing::ExitedWithCode(0), "");
+    EXPECT_EXIT(TestShutdown<TTestProxy>(this->CreateChannel()), ::testing::ExitedWithCode(0), "");
 }
 
 ////////////////////////////////////////////////////////////////////////////////

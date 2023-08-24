@@ -31,7 +31,7 @@
 #include <yt/yt/core/rpc/service_detail.h>
 #include <yt/yt/core/rpc/stream.h>
 
-#include <yt/yt/core/rpc/unittests/lib/my_service.h>
+#include <yt/yt/core/rpc/unittests/lib/test_service.h>
 #include <yt/yt/core/rpc/unittests/lib/no_baggage_service.h>
 
 #include <yt/yt/core/rpc/grpc/config.h>
@@ -74,10 +74,9 @@ public:
         TTestCreateChannelCallback createChannel)
     {
         Server_ = server;
-        MyService_ = CreateMyService(invoker, secure, createChannel);
+        TestService_ = CreateTestService(invoker, secure, createChannel);
         NoBaggageService_ = CreateNoBaggageService(invoker);
-
-        Server_->RegisterService(MyService_);
+        Server_->RegisterService(TestService_);
         Server_->RegisterService(NoBaggageService_);
         Server_->Start();
     }
@@ -102,7 +101,7 @@ protected:
     NTesting::TPortHolder Port_;
     TString Address_;
 
-    IMyServicePtr MyService_;
+    ITestServicePtr TestService_;
     IServicePtr NoBaggageService_;
     IServerPtr Server_;
 };

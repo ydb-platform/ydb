@@ -147,7 +147,7 @@ TYPED_TEST(TRpcTest, RoamingChannelNever)
 {
     auto channel = CreateRoamingChannel(New<TOneChannelProvider>(CreateRoamingChannel(New<TNeverProvider>())));
 
-    TMyProxy proxy(std::move(channel));
+    TTestProxy proxy(std::move(channel));
     auto req = proxy.SomeCall();
     req->set_a(42);
 
@@ -167,7 +167,7 @@ TYPED_TEST(TRpcTest, RoamingChannelManual)
     auto manualProviderWeak = MakeWeak(manualProvider);
     manualProvider.Reset();
 
-    TMyProxy proxy(std::move(channel));
+    TTestProxy proxy(std::move(channel));
     auto req = proxy.SomeCall();
     req->set_a(42);
     auto asyncRspOrError = req->Invoke()

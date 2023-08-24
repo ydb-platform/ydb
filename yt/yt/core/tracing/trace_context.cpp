@@ -304,6 +304,16 @@ TAllocationTagsPtr TTraceContext::GetAllocationTagsPtr() const noexcept
     return AllocationTags_;
 }
 
+void TTraceContext::SetAllocationTagsPtr(TAllocationTagsPtr allocationTags) noexcept
+{
+    auto writerGuard = WriterGuard(AllocationTagsLock_);
+
+    // Local guard for setting RefCounted AllocationTags_.
+    auto guard = Guard(AllocationTagsAsRefCountedLock_);
+
+    AllocationTags_ = std::move(allocationTags);
+}
+
 void TTraceContext::DoSetAllocationTags(TAllocationTags::TTags&& tags)
 {
     VERIFY_SPINLOCK_AFFINITY(AllocationTagsLock_);

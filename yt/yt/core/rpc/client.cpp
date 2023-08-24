@@ -40,8 +40,7 @@ TClientContext::TClientContext(
     TFeatureIdFormatter featureIdFormatter,
     bool responseIsHeavy,
     TAttachmentsOutputStreamPtr requestAttachmentsStream,
-    TAttachmentsInputStreamPtr responseAttachmentsStream,
-    TMemoryTag responseMemoryTag)
+    TAttachmentsInputStreamPtr responseAttachmentsStream)
     : RequestId_(requestId)
     , TraceContext_(std::move(traceContext))
     , Service_(std::move(service))
@@ -50,7 +49,6 @@ TClientContext::TClientContext(
     , ResponseHeavy_(responseIsHeavy)
     , RequestAttachmentsStream_(std::move(requestAttachmentsStream))
     , ResponseAttachmentsStream_(std::move(responseAttachmentsStream))
-    , ResponseMemoryTag_(responseMemoryTag)
 { }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -349,8 +347,7 @@ TClientContextPtr TClientRequest::CreateClientContext()
         FeatureIdFormatter_,
         ResponseHeavy_,
         RequestAttachmentsStream_,
-        ResponseAttachmentsStream_,
-        GetResponseMemoryTag().value_or(GetCurrentMemoryTag()));
+        ResponseAttachmentsStream_);
 }
 
 void TClientRequest::OnPullRequestAttachmentsStream()

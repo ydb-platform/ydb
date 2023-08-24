@@ -54,11 +54,13 @@ TFuture<typename TResponse::TResult> TTypedClientRequest<TRequestMessage, TRespo
     auto context = CreateClientContext();
     auto requestAttachmentsStream = context->GetRequestAttachmentsStream();
     auto responseAttachmentsStream = context->GetResponseAttachmentsStream();
+
     typename TResponse::TResult response;
     {
-        TMemoryTagGuard guard(context->GetResponseMemoryTag());
+        auto traceContextGuard = NTracing::TCurrentTraceContextGuard(context->GetTraceContext());
         response = New<TResponse>(std::move(context));
     }
+
     auto promise = response->GetPromise();
     auto requestControl = Send(std::move(response));
     if (requestControl) {
@@ -126,7 +128,7 @@ void TTypedClientResponse<TResponseMessage>::SetPromise(const TError& error)
 template <class TResponseMessage>
 bool TTypedClientResponse<TResponseMessage>::TryDeserializeBody(TRef data, std::optional<NCompression::ECodec> codecId)
 {
-    TMemoryTagGuard guard(ClientContext_->GetResponseMemoryTag());
+    auto traceContextGuard = NTracing::TCurrentTraceContextGuard(ClientContext_->GetTraceContext());
 
     return codecId
         ? TryDeserializeProtoWithCompression(this, data, *codecId)
@@ -149,7 +151,6 @@ TIntrusivePtr<T> TProxyBase::CreateRequest(const TMethodDescriptor& methodDescri
     request->SetResponseCodec(DefaultResponseCodec_);
     request->SetEnableLegacyRpcCodecs(DefaultEnableLegacyRpcCodecs_);
     request->SetMultiplexingBand(methodDescriptor.MultiplexingBand);
-    request->SetResponseMemoryTag(GetCurrentMemoryTag());
 
     if (methodDescriptor.StreamingEnabled) {
         request->ClientAttachmentsStreamingParameters() =

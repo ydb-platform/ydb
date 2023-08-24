@@ -126,6 +126,8 @@ public:
 
     TAllocationTagsPtr GetAllocationTagsPtr() const noexcept;
 
+    void SetAllocationTagsPtr(TAllocationTagsPtr allocationTags) noexcept;
+
     void ClearAllocationTagsPtr() noexcept;
 
     template <typename TTag>

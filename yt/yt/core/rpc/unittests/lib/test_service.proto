@@ -1,8 +1,8 @@
-package NMyRpc;
+package NTestRpc;
 
 import "yt_proto/yt/core/misc/proto/guid.proto";
 
-option go_package = "github.com/ydb-platform/ydb/yt/go/proto/core/rpc/unittests;myservice";
+option go_package = "github.com/ydb-platform/ydb/yt/go/proto/core/rpc/unittests;testservice";
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -29,6 +29,18 @@ message TRspPassCall
     optional string user_tag = 2;
     required NYT.NProto.TGuid mutation_id = 3;
     required bool retry = 4;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqAllocationCall
+{
+    required int64 size = 1;
+}
+
+message TRspAllocationCall
+{
+    optional bytes allocated_string = 1;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

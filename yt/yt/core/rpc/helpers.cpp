@@ -425,14 +425,23 @@ TTraceContextPtr GetOrCreateHandlerTraceContext(
 
 TTraceContextPtr CreateCallTraceContext(std::string service, std::string method)
 {
-    auto context = TryGetCurrentTraceContext();
-    if (!context) {
+    auto oldTraceContext = TryGetCurrentTraceContext();
+    if (!oldTraceContext) {
         return nullptr;
     }
-    if (!context->IsRecorded()) {
-        return context;
+    if (!oldTraceContext->IsRecorded()) {
+        return oldTraceContext;
     }
-    return context->CreateChild(ConcatToString(TStringBuf("RpcClient:"), service, TStringBuf("."), method));
+
+    auto traceContext = oldTraceContext->CreateChild(Format("RpcClient:%v.%v", service, method));
+
+    traceContext->SetAllocationTagsPtr(oldTraceContext->GetAllocationTagsPtr());
+
+    if (GetCurrentMemoryTag() && !traceContext->FindAllocationTag<TMemoryTag>(NTracing::MemoryTagLiteral)) {
+        traceContext->SetAllocationTag<TMemoryTag>(NTracing::MemoryTagLiteral, GetCurrentMemoryTag());
+    }
+
+    return traceContext;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

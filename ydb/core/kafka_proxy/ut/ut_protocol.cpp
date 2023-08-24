@@ -62,9 +62,11 @@ public:
 
     TTestServer() {
         TPortManager portManager;
-        Port = 9090; // portManager.GetTcpPort();
+        Port = portManager.GetTcpPort();
 
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableAuthConfig()->SetUseLoginProvider(true);
+        appConfig.MutableAuthConfig()->SetUseBlackBox(false);
         appConfig.MutablePQConfig()->SetTopicsAreFirstClassCitizen(true);
         appConfig.MutablePQConfig()->SetEnabled(true);
         // NOTE(shmel1k@): KIKIMR-14221
@@ -114,7 +116,15 @@ public:
         if (secure) {
             appConfig.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
         }
-        KikimrServer = std::make_unique<TKikimr>(std::move(appConfig));
+        KikimrServer = std::unique_ptr<TKikimr>(new TKikimr(
+            std::move(appConfig),
+            {},
+            {},
+            false,
+            nullptr,
+            nullptr,
+            0)
+        );
         KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::KAFKA_PROXY, NActors::NLog::PRI_DEBUG);
 
         ui16 grpc = KikimrServer->GetPort();
@@ -145,8 +155,8 @@ public:
                                                                           {"cloud_id", DEFAULT_CLOUD_ID},
                                                                           {"database_id", "root"}}));
 
-        //auto status = client.CreateUser("/Root", "ouruser", "ourUserPassword");
-        //UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
+        auto status = client.CreateUser("/Root", "ouruser", "ourUserPassword");
+        UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
     }
 
 public:
@@ -271,7 +281,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         {
             Cerr << ">>>>> SaslAuthenticateRequestData";
-            char authBytes[] = "ignored\0ourUser@/Root\0ourUserPassword";
+            char authBytes[] = "ignored\0ouruser@/Root\0ourUserPassword";
 
             TRequestHeaderData header;
             header.RequestApiKey = NKafka::EApiKey::SASL_AUTHENTICATE;
@@ -286,9 +296,9 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
             auto response = Read(si, &header);
             Y_UNUSED(response);
-            //auto* msg = dynamic_cast<TSaslAuthenticateResponseData*>(response.get());
+            auto* msg = dynamic_cast<TSaslAuthenticateResponseData*>(response.get());
 
-            //UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
         }
     }
 }

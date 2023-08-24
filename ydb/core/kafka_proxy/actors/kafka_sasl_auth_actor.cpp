@@ -61,7 +61,7 @@ void TKafkaSaslAuthActor::Handle(NKikimr::TEvTicketParser::TEvAuthorizeTicketRes
     Die(ctx);
 }
 
-void TKafkaSaslAuthActor::Handle(TEvPrivate::TEvTokenReady::TPtr& ev, const NActors::TActorContext&) {
+void TKafkaSaslAuthActor::Handle(TEvPrivate::TEvTokenReady::TPtr& ev, const NActors::TActorContext& /*ctx*/) {
     Send(NKikimr::MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
         .Database = ev->Get()->Database,
         .Ticket = ev->Get()->LoginResult.token(),
@@ -133,7 +133,7 @@ void TKafkaSaslAuthActor::SendLoginRequest(TKafkaSaslAuthActor::TAuthData authDa
             auto tokenReadyEvent = std::make_unique<TEvPrivate::TEvTokenReady>();
             response.operation().result().UnpackTo(&(tokenReadyEvent->LoginResult));
             tokenReadyEvent->Database = authData.Database;
-            actorSystem->Send(selfId, tokenReadyEvent.release());
+            actorSystem->Schedule(TDuration::Seconds(1), new IEventHandle(selfId, selfId, tokenReadyEvent.release())); // FIXME(savnik): replace Schedule to Send
         } else {
             auto authFailedEvent = std::make_unique<TEvPrivate::TEvAuthFailed>();
             if (response.operation().issues_size() > 0) {

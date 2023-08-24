@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/minikql/arrow/arrow_defs.h>
 
-#include <arrow/array/builder_primitive.h>
+#include <ydb/library/yql/minikql/computation/mkql_block_builder.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -16,25 +16,22 @@ struct TState {
 class TColumnBuilder : public IAggColumnBuilder {
 public:
     TColumnBuilder(ui64 size, TComputationContext& ctx)
-        : Builder_(arrow::uint64(), &ctx.ArrowMemoryPool)
+        : Builder_(TTypeInfoHelper(), arrow::uint64(), ctx.ArrowMemoryPool, size)
         , Ctx_(ctx)
     {
-        ARROW_OK(Builder_.Reserve(size));
     }
 
     void Add(const void* state) final {
         auto typedState = static_cast<const TState*>(state);
-        Builder_.UnsafeAppend(typedState->Count_);
+        Builder_.Add(TBlockItem(typedState->Count_));
     }
 
     NUdf::TUnboxedValue Build() final {
-        std::shared_ptr<arrow::ArrayData> result;
-        ARROW_OK(Builder_.FinishInternal(&result));
-        return Ctx_.HolderFactory.CreateArrowBlock(result);
+        return Ctx_.HolderFactory.CreateArrowBlock(Builder_.Build(true));
     }
 
 private:
-    arrow::UInt64Builder Builder_;
+    NYql::NUdf::TFixedSizeArrayBuilder<ui64, false> Builder_;
     TComputationContext& Ctx_;
 };
 

@@ -15,6 +15,8 @@
 #include <ydb/library/yql/minikql/arrow/arrow_util.h>
 #include <ydb/library/yql/minikql/arrow/mkql_bit_utils.h>
 
+#include <ydb/library/yql/utils/prefetch.h>
+
 #include <arrow/scalar.h>
 #include <arrow/array/array_primitive.h>
 #include <arrow/array/builder_primitive.h>
@@ -32,12 +34,14 @@ constexpr bool InlineAggState = false;
 #ifdef USE_STD_UNORDERED
 template <typename TKey, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>, typename TSettings = void>
 class TDynamicHashMapImpl {
+public:
     using TMapType = std::unordered_map<TKey, std::vector<char>, THash, TEqual>;
     using const_iterator = typename TMapType::const_iterator;
     using iterator = typename TMapType::iterator;
-public:
-    TDynamicHashMapImpl(size_t stateSize)
+
+    TDynamicHashMapImpl(size_t stateSize, const THash& hasher, const TEqual& equal)
         : StateSize_(stateSize)
+        , Map_(0, hasher, equal)
     {}
 
     ui64 GetSize() const {
@@ -70,6 +74,15 @@ public:
         return res.first;
     }
 
+    template <typename TSink>
+    void BatchInsert(std::span<TRobinHoodBatchRequestItem<TKey>> batchRequest, TSink&& sink) {
+        for (size_t index = 0; index < batchRequest.size(); ++index) {
+            bool isNew;
+            auto iter = Insert(batchRequest[index].GetKey(), isNew);
+            sink(index, iter, isNew);
+        }
+    }
+
     const TKey& GetKey(const_iterator it) const {
         return it->first;
     }
@@ -92,10 +105,15 @@ private:
 
 template <typename TKey, typename TPayload, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>, typename TSettings = void>
 class TFixedHashMapImpl {
+public:
     using TMapType = std::unordered_map<TKey, TPayload, THash, TEqual>;
     using const_iterator = typename TMapType::const_iterator;
     using iterator = typename TMapType::iterator;
-public:
+
+    TFixedHashMapImpl(const THash& hasher, const TEqual& equal)
+        : Map_(0, hasher, equal)
+    {}
+
     ui64 GetSize() const {
         return Map_.size();
     }
@@ -122,6 +140,15 @@ public:
         return res.first;
     }
 
+    template <typename TSink>
+    void BatchInsert(std::span<TRobinHoodBatchRequestItem<TKey>> batchRequest, TSink&& sink) {
+        for (size_t index = 0; index < batchRequest.size(); ++index) {
+            bool isNew;
+            auto iter = Insert(batchRequest[index].GetKey(), isNew);
+            sink(index, iter, isNew);
+        }
+    }
+
     const TKey& GetKey(const_iterator it) const {
         return it->first;
     }
@@ -143,10 +170,15 @@ private:
 
 template <typename TKey, typename TEqual = std::equal_to<TKey>, typename THash = std::hash<TKey>, typename TAllocator = std::allocator<char>, typename TSettings = void>
 class THashSetImpl {
+public:
     using TSetType = std::unordered_set<TKey, THash, TEqual>;
     using const_iterator = typename TSetType::const_iterator;
     using iterator = typename TSetType::iterator;
-public:
+
+    THashSetImpl(const THash& hasher, const TEqual& equal)
+        : Set_(0, hasher, equal)
+    {}
+
     ui64 GetSize() const {
         return Set_.size();
     }
@@ -171,6 +203,15 @@ public:
         auto res = Set_.emplace(key);
         isNew = res.second;
         return res.first;
+    }
+
+    template <typename TSink>
+    void BatchInsert(std::span<TRobinHoodBatchRequestItem<TKey>> batchRequest, TSink&& sink) {
+        for (size_t index = 0; index < batchRequest.size(); ++index) {
+            bool isNew;
+            auto iter = Insert(batchRequest[index].GetKey(), isNew);
+            sink(index, iter, isNew);
+        }
     }
 
     void CheckGrow() {
@@ -219,10 +260,11 @@ struct TKey16 {
 };
 
 class TSSOKey {
-private:
+public:
     static constexpr size_t SSO_Length = 15;
     static_assert(SSO_Length < 128); // should fit into 7 bits
 
+private:
     struct TExternal {
         ui64 Length_;
         const char* Ptr_;
@@ -234,6 +276,10 @@ private:
     };
 
 public:
+    TSSOKey(const TSSOKey& other) {
+        memcpy(U.A, other.U.A, SSO_Length + 1);
+    }
+
     static bool CanBeInplace(TStringBuf data) {
         return data.Size() + 1 <= sizeof(TSSOKey);
     }
@@ -278,8 +324,11 @@ private:
     union {
         TExternal E;
         TInplace I;
+        char A[SSO_Length + 1];
     } U;
 };
+
+static_assert(sizeof(TSSOKey) == TSSOKey::SSO_Length + 1);
 
 }
 }
@@ -725,8 +774,93 @@ public:
                     keysDatum.emplace_back(TArrowBlock::From(s.Values_[Keys_[i].Index]).GetDatum());
                 }
 
-                TOutputBuffer out;
-                out.Resize(sizeof(TKey));
+                std::array<TOutputBuffer, PrefetchBatchSize> out;
+                for (ui32 i = 0; i < PrefetchBatchSize; ++i) {
+                    out[i].Resize(sizeof(TKey));
+                }
+
+                std::array<TRobinHoodBatchRequestItem<TKey>, PrefetchBatchSize> insertBatch;
+                std::array<ui64, PrefetchBatchSize> insertBatchRows;
+                std::array<char*, PrefetchBatchSize> insertBatchPayloads;
+                std::array<bool, PrefetchBatchSize> insertBatchIsNew;
+                ui32 insertBatchLen = 0;
+
+                auto processInsertBatch = [&]() {
+                    for (ui32 i = 0; i < insertBatchLen; ++i) {
+                        auto& r = insertBatch[i];
+                        TStringBuf str = out[i].Finish();
+                        TKey key = MakeKey<TKey>(str, KeyLength_);
+                        r.ConstructKey(key);
+                    }
+
+                    if constexpr (UseSet) {
+                        s.HashSet_->BatchInsert({insertBatch.data(), insertBatchLen},[&](size_t index, typename TState::TSetImpl::iterator iter, bool isNew) {
+                            Y_UNUSED(index);
+                            if (isNew) {
+                                if constexpr (std::is_same<TKey, TSSOKey>::value || std::is_same<TKey, TExternalFixedSizeKey>::value) {
+                                    MoveKeyToArena(s.HashSet_->GetKey(iter), s.Arena_, KeyLength_);
+                                }
+                            }
+                        });
+                    } else {
+                        using THashTable = std::conditional_t<InlineAggState, typename TState::TDynMapImpl, typename TState::TFixedMapImpl>;
+                        THashTable* hash;
+                        if constexpr (!InlineAggState) {
+                            hash = s.HashFixedMap_.get();
+                        } else {
+                            hash = s.HashMap_.get();
+                        }
+
+                        hash->BatchInsert({insertBatch.data(), insertBatchLen}, [&](size_t index, typename THashTable::iterator iter, bool isNew) {
+                            if (isNew) {
+                                if constexpr (std::is_same<TKey, TSSOKey>::value || std::is_same<TKey, TExternalFixedSizeKey>::value) {
+                                    MoveKeyToArena(hash->GetKey(iter), s.Arena_, KeyLength_);
+                                }
+                            }
+
+                            if constexpr (UseArena) {
+                                // prefetch payloads only
+                                auto payload = hash->GetPayload(iter);
+                                char* ptr;
+                                if (isNew) {
+                                    ptr = (char*)s.Arena_.Alloc(s.TotalStateSize_);
+                                    *(char**)payload = ptr;
+                                } else {
+                                    ptr = *(char**)payload;
+                                }
+
+                                insertBatchIsNew[index] = isNew;
+                                insertBatchPayloads[index] = ptr;
+                                NYql::PrefetchForWrite(ptr);
+                            } else {
+                                // process insert
+                                auto payload = (char*)hash->GetPayload(iter);
+                                auto row = insertBatchRows[index];
+                                ui32 streamIndex = 0;
+                                if constexpr (Many) {
+                                    streamIndex = streamIndexScalar ? *streamIndexScalar : streamIndexData[row];
+                                }
+
+                                Insert(row, payload, isNew, streamIndex, output, s);
+                            }
+                        });
+
+                        if constexpr (UseArena) {
+                            for (ui32 i = 0; i < insertBatchLen; ++i) {
+                                auto row = insertBatchRows[i];
+                                ui32 streamIndex = 0;
+                                if constexpr (Many) {
+                                    streamIndex = streamIndexScalar ? *streamIndexScalar : streamIndexData[row];
+                                }
+
+                                bool isNew = insertBatchIsNew[i];
+                                char* payload = insertBatchPayloads[i];
+                                Insert(row, payload, isNew, streamIndex, output, s);
+                            }
+                        }
+                    }
+                };
+
                 for (ui64 row = 0; row < batchLength; ++row) {
                     if constexpr (UseFilter) {
                         if (filterBitmap && !filterBitmap[row]) {
@@ -734,36 +868,21 @@ public:
                         }
                     }
 
-                    out.Rewind();
                     // encode key
+                    out[insertBatchLen].Rewind();
                     for (ui32 i = 0; i < keysDatum.size(); ++i) {
-                        s.Readers_[i]->SaveItem(*keysDatum[i].array(), row, out);
+                        s.Readers_[i]->SaveItem(*keysDatum[i].array(), row, out[insertBatchLen]);
                     }
 
-                    auto str = out.Finish();
-                    TKey key = MakeKey<TKey>(str, KeyLength_);
-                    if constexpr (UseSet) {
-                        bool isNew;
-                        auto iter = s.HashSet_->Insert(key, isNew);
-                        if (isNew) {
-                            if constexpr (std::is_same<TKey, TSSOKey>::value || std::is_same<TKey, TExternalFixedSizeKey>::value) {
-                                MoveKeyToArena(s.HashSet_->GetKey(iter), s.Arena_, KeyLength_);
-                            }
-
-                            s.HashSet_->CheckGrow();
-                        }
-                    } else {
-                        ui32 streamIndex = 0;
-                        if constexpr (Many) {
-                            streamIndex = streamIndexScalar ? *streamIndexScalar : streamIndexData[row];
-                        }
-                        if (!InlineAggState) {
-                            Insert(*s.HashFixedMap_, key, row, streamIndex, output, s);
-                        } else {
-                            Insert(*s.HashMap_, key, row, streamIndex, output, s);
-                        }
+                    insertBatchRows[insertBatchLen] = row;
+                    ++insertBatchLen;
+                    if (insertBatchLen == PrefetchBatchSize) {
+                        processInsertBatch();
+                        insertBatchLen = 0;
                     }
                 }
+
+                processInsertBatch();
             } else {
                 if (!s.HasValues_) {
                     s.IsFinished_ = true;
@@ -853,11 +972,11 @@ private:
         ui32 TotalStateSize_ = 0;
         size_t OutputBlockSize_ = 0;
         std::unique_ptr<TDynMapImpl> HashMap_;
-        typename TDynMapImpl::iterator HashMapIt_;
+        typename TDynMapImpl::const_iterator HashMapIt_;
         std::unique_ptr<TSetImpl> HashSet_;
-        typename TSetImpl::iterator HashSetIt_;
+        typename TSetImpl::const_iterator HashSetIt_;
         std::unique_ptr<TFixedMapImpl> HashFixedMap_;
-        typename TFixedMapImpl::iterator HashFixedMapIt_;
+        typename TFixedMapImpl::const_iterator HashFixedMapIt_;
         TPagedArena Arena_;
 
         TState(TMemoryUsageInfo* memInfo, ui32 keyLength, size_t width, std::optional<ui32>, const TVector<TAggParams<TAggregator>>& params,
@@ -960,21 +1079,10 @@ private:
         return *static_cast<TState*>(state.AsBoxed().Get());
     }
 
-    template <typename THash>
-    void Insert(THash& hash, const TKey& key, ui64 row, ui32 currentStreamIndex, NUdf::TUnboxedValue*const* output, TState& s) const {
-        bool isNew;
-        auto iter = hash.Insert(key, isNew);
-        char* payload = (char*)hash.GetMutablePayload(iter);
-        char* ptr;
+    void Insert(ui64 row, char* payload, bool isNew, ui32 currentStreamIndex, NUdf::TUnboxedValue*const* output, TState& s) const {
+        char* ptr = payload;
 
         if (isNew) {
-            if constexpr (UseArena) {
-                ptr = (char*)s.Arena_.Alloc(s.TotalStateSize_);
-                *(char**)payload = ptr;
-            } else {
-                ptr = payload;
-            }
-
             if constexpr (Many) {
                 static_assert(Finalize);
                 MKQL_ENSURE(currentStreamIndex < Streams_.size(), "Invalid stream index");
@@ -999,19 +1107,7 @@ private:
                     ptr += s.Aggs_[i]->StateSize;
                 }
             }
-
-            if constexpr (std::is_same<TKey, TSSOKey>::value || std::is_same<TKey, TExternalFixedSizeKey>::value) {
-                MoveKeyToArena(hash.GetKey(iter), s.Arena_, KeyLength_);
-            }
-
-            hash.CheckGrow();
         } else {
-            if constexpr (UseArena) {
-                ptr = *(char**)payload;
-            } else {
-                ptr = payload;
-            }
-
             if constexpr (Many) {
                 static_assert(Finalize);
                 MKQL_ENSURE(currentStreamIndex < Streams_.size(), "Invalid stream index");
@@ -1045,49 +1141,82 @@ private:
     }
 
     template <typename THash>
-    bool Iterate(THash& hash, typename THash::iterator& iter, NUdf::TUnboxedValue*const* output, TState& s) const {
+    bool Iterate(THash& hash, typename THash::const_iterator& iter, NUdf::TUnboxedValue*const* output, TState& s) const {
         MKQL_ENSURE(s.WritingOutput_, "Supposed to be called at the end");
+        std::array<typename THash::const_iterator, PrefetchBatchSize> iters;
+        ui32 itersLen = 0;
+        auto iterateBatch = [&]() {
+            for (ui32 i = 0; i < itersLen; ++i) {
+                auto iter = iters[i];
+                const TKey& key = hash.GetKey(iter);
+                auto payload = (char*)hash.GetPayload(iter);
+                char* ptr;
+                if constexpr (UseArena) {
+                    ptr = *(char**)payload;
+                } else {
+                    ptr = payload;
+                }
+
+                TInputBuffer in(GetKeyView<TKey>(key, KeyLength_));
+                for (auto& kb : s.Builders_) {
+                    kb->Add(in);
+                }
+
+                if constexpr (Many) {
+                    for (ui32 i = 0; i < Streams_.size(); ++i) {
+                        MKQL_ENSURE(ptr[i], "Missing partial aggregation state");
+                    }
+
+                    ptr += Streams_.size();
+                }
+
+                for (size_t i = 0; i < s.Aggs_.size(); ++i) {
+                    if (output[Keys_.size() + i]) {
+                        s.AggBuilders_[i]->Add(ptr);
+                        s.Aggs_[i]->DestroyState(ptr);
+                    }
+
+                    ptr += s.Aggs_[i]->StateSize;
+                }
+            }
+        };
+
         for (; iter != hash.End(); hash.Advance(iter)) {
             if (!hash.IsValid(iter)) {
                 continue;
             }
 
             if (s.OutputBlockSize_ == MaxBlockLen_) {
+                iterateBatch();
                 return false;
             }
 
-            const TKey& key = hash.GetKey(iter);
-            auto payload = (char*)hash.GetMutablePayload(iter);
-            char* ptr;
-            if constexpr (UseArena) {
-                ptr = *(char**)payload;
-            } else {
-                ptr = payload;
+            if (itersLen == iters.size()) {
+                iterateBatch();
+                itersLen = 0;
             }
 
-            TInputBuffer in(GetKeyView<TKey>(key, KeyLength_));
-            for (auto& kb : s.Builders_) {
-                kb->Add(in);
-            }
-
-            if constexpr (Many) {
-                for (ui32 i = 0; i < Streams_.size(); ++i) {
-                    MKQL_ENSURE(ptr[i], "Missing partial aggregation state");
-                }
-
-                ptr += Streams_.size();
-            }
-
-            for (size_t i = 0; i < s.Aggs_.size(); ++i) {
-                if (output[Keys_.size() + i]) {
-                    s.AggBuilders_[i]->Add(ptr);
-                    s.Aggs_[i]->DestroyState(ptr);
-                }
-
-                ptr += s.Aggs_[i]->StateSize;
-            }
+            iters[itersLen] = iter;
+            ++itersLen;
             s.OutputBlockSize_++;
+            if constexpr (UseArena) {
+                auto payload = (char*)hash.GetPayload(iter);
+                auto ptr = *(char**)payload;
+                NYql::PrefetchForWrite(ptr);
+            }
+
+            if constexpr (std::is_same<TKey, TSSOKey>::value) {
+                const auto& key = hash.GetKey(iter);
+                if (!key.IsInplace()) {
+                    NYql::PrefetchForRead(key.AsView().Data());
+                }
+            } else if constexpr (std::is_same<TKey, TExternalFixedSizeKey>::value) {
+                const auto& key = hash.GetKey(iter);
+                NYql::PrefetchForRead(key.Data);
+            }
         }
+
+        iterateBatch();
         return true;
     }
 

@@ -138,6 +138,10 @@ PEERDIR(
     library/cpp/actors/core
 )
 
+CFLAGS(
+    -mprfchw
+)
+
 YQL_LAST_ABI_VERSION()
 
 PROVIDES(mkql_comp_nodes)

@@ -77,11 +77,12 @@ public:
 
     void Add(const void* state) final {
         auto typedState = static_cast<const TAvgState*>(state);
+        auto tupleBuilder = static_cast<NUdf::TTupleArrayBuilder<true>*>(Builder_.get());
         if (typedState->Count_) {
             TBlockItem tupleItems[] = { TBlockItem(typedState->Sum_), TBlockItem(typedState->Count_)} ;
-            Builder_->Add(TBlockItem(tupleItems));
+            tupleBuilder->Add(TBlockItem(tupleItems));
         } else {
-            Builder_->Add(TBlockItem());
+            tupleBuilder->Add(TBlockItem());
         }
     }
 

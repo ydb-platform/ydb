@@ -9,6 +9,7 @@
 
 add_library(minikql-comp_nodes-llvm)
 target_compile_options(minikql-comp_nodes-llvm PRIVATE
+  -mprfchw
   -DUSE_CURRENT_UDF_ABI_VERSION
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )

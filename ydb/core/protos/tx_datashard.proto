@@ -865,12 +865,14 @@ message TEvUploadRowsRequest {
     repeated TSerializedRowToLoad Rows = 3;
     optional uint64 CancelDeadlineMs = 4; // Wallclock timestamp (not duration)
     optional bool WriteToTableShadow = 5;
+    optional uint64 OverloadSubscribe = 7;
 }
 
 message TEvUploadRowsResponse {
     optional uint64 TabletID = 1;
     optional uint32 Status = 2;
     optional string ErrorDescription = 3;
+    optional uint64 OverloadSubscribed = 4;
 }
 
 message TEvReadColumnsRequest {
@@ -1297,6 +1299,7 @@ message TEvEraseRowsRequest {
     repeated uint32 KeyColumnIds = 2;
     repeated bytes KeyColumns = 3; // SerilializedCellVector
     optional uint64 SchemaVersion = 5;
+    optional uint64 OverloadSubscribe = 6;
 
     oneof Condition {
         TExpirationCondition Expiration = 4;
@@ -1328,6 +1331,7 @@ message TEvEraseRowsResponse {
     optional uint64 TabletID = 1;
     optional EStatus Status = 2;
     optional string ErrorDescription = 3;
+    optional uint64 OverloadSubscribed = 4;
 }
 
 message TEvConditionalEraseRowsRequest {
@@ -1904,4 +1908,15 @@ message TTxVolatileDetails {
 
     // When true all preceding transactions are dependencies
     optional bool CommitOrdered = 8;
+}
+
+// Sent by datashard when some overload reason stopped being relevant
+message TEvOverloadReady {
+    optional uint64 TabletID = 1;
+    optional uint64 SeqNo = 2;
+}
+
+// Sent by overload subscribers to unsubscribe and free memory
+message TEvOverloadUnsubscribe {
+    optional uint64 SeqNo = 1;
 }

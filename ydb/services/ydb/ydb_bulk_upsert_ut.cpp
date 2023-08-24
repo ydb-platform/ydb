@@ -1080,6 +1080,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
         bool gotOverload = false;
         bool gotSuccess = false;
         TString blob(100, 'a');
+        TMonotonic start = TMonotonic::Now();
         for (ui64 count = 0; (!gotOverload || !gotSuccess) && count < 100000; count++) {
             TValueBuilder rows;
 
@@ -1115,9 +1116,13 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
                     gotOverload = true;
                 }
             }
+            auto elapsed = TMonotonic::Now() - start;
+            if (elapsed >= TDuration::Seconds(5)) {
+                break;
+            }
         }
-        UNIT_ASSERT(gotOverload);
         UNIT_ASSERT(gotSuccess);
+        UNIT_ASSERT(!gotOverload);
     }
 
     void CreateTestTable(NYdb::NTable::TTableClient& client) {

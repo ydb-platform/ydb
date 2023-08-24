@@ -44,6 +44,8 @@
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
+static constexpr ui64 MaxTxInFly = 10000;
+
 LWTRACE_USING(TABLET_FLAT_PROVIDER)
 
 struct TCompactionChangesCtx {
@@ -226,7 +228,14 @@ void TExecutor::ReflectSchemeSettings() noexcept
 }
 
 void TExecutor::OnYellowChannels(TVector<ui32> yellowMoveChannels, TVector<ui32> yellowStopChannels) {
+    size_t oldMoveCount = Stats->YellowMoveChannels.size();
+    size_t oldStopCount = Stats->YellowStopChannels.size();
     CheckYellow(std::move(yellowMoveChannels), std::move(yellowStopChannels));
+    if (oldMoveCount != Stats->YellowMoveChannels.size() ||
+        oldStopCount != Stats->YellowStopChannels.size())
+    {
+        Owner->OnYellowChannelsChanged();
+    }
 }
 
 void TExecutor::CheckYellow(TVector<ui32> &&yellowMoveChannels, TVector<ui32> &&yellowStopChannels, bool terminal) {
@@ -328,12 +337,20 @@ void TExecutor::Handle(TEvTablet::TEvCheckBlobstorageStatusResult::TPtr &ev) {
         }
     }
 
+    auto prevMoveChannels = Stats->YellowMoveChannels;
+    auto prevStopChannels = Stats->YellowStopChannels;
     Stats->YellowMoveChannels.clear();
     Stats->YellowStopChannels.clear();
     Stats->IsAnyChannelYellowMove = false;
     Stats->IsAnyChannelYellowStop = false;
 
     CheckYellow(std::move(lightYellowMoveChannels), std::move(yellowStopChannels));
+
+    if (prevMoveChannels != Stats->YellowMoveChannels ||
+        prevStopChannels != Stats->YellowStopChannels)
+    {
+        Owner->OnYellowChannelsChanged();
+    }
 }
 
 void TExecutor::ActivateFollower(const TActorContext &ctx) {
@@ -1221,8 +1238,11 @@ void TExecutor::AdvancePendingPartSwitches() {
         }
     }
 
-    if (PendingPartSwitches.empty()) // could be border change
+    // could be border change
+    if (PendingPartSwitches.empty()) {
         PlanTransactionActivation();
+        MaybeRelaxRejectProbability();
+    }
 }
 
 bool TExecutor::ApplyReadyPartSwitches() {
@@ -2341,6 +2361,8 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
         ResourceMetrics->CPU.Increment(bookkeepingTimeuS + execTimeuS, Time->Now());
         ResourceMetrics->TryUpdate(ctx);
     }
+
+    MaybeRelaxRejectProbability();
 }
 
 void TExecutor::MakeLogSnapshot() {
@@ -2820,6 +2842,8 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
 
     ActiveTransaction = false;
     PlanTransactionActivation();
+
+    MaybeRelaxRejectProbability();
 }
 
 void TExecutor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
@@ -3375,6 +3399,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
     }
 
     Owner->CompactionComplete(tableId, OwnerCtx());
+    MaybeRelaxRejectProbability();
 
     ActiveTransaction = false;
 
@@ -3535,8 +3560,10 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
 float TExecutor::GetRejectProbability() const {
     // Limit number of in-flight TXs
     // TODO: make configurable
-    if (Stats->TxInFly > 10000)
+    if (Stats->TxInFly > MaxTxInFly) {
+        HadRejectProbabilityByTxInFly = true;
         return 1.0;
+    }
 
     // Followers do not control compaction so let's always allow to read the data from follower
     if (Stats->IsFollower)
@@ -3561,7 +3588,26 @@ float TExecutor::GetRejectProbability() const {
     const float overloadFactor = CompactionLogic->GetOverloadFactor();
     const float rejectProbability = calcProbability(overloadFactor);
 
+    if (rejectProbability > 0.0f) {
+        HadRejectProbabilityByOverload = true;
+    }
+
     return rejectProbability;
+}
+
+void TExecutor::MaybeRelaxRejectProbability() {
+    if (HadRejectProbabilityByTxInFly && Stats->TxInFly <= MaxTxInFly ||
+        HadRejectProbabilityByOverload)
+    {
+        HadRejectProbabilityByTxInFly = false;
+        HadRejectProbabilityByOverload = false;
+        GetRejectProbability();
+        if (!HadRejectProbabilityByTxInFly &&
+            !HadRejectProbabilityByOverload)
+        {
+            Owner->OnRejectProbabilityRelaxed();
+        }
+    }
 }
 
 

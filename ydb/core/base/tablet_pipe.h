@@ -141,15 +141,18 @@ namespace NKikimr {
         };
 
         struct TEvServerConnected : public TEventLocal<TEvServerConnected, EvServerConnected> {
-            TEvServerConnected(ui64 tabletId, const TActorId& clientId, const TActorId& serverId)
+            TEvServerConnected(ui64 tabletId, const TActorId& clientId, const TActorId& serverId,
+                    const TActorId& interconnectSession = {})
                 : TabletId(tabletId)
                 , ClientId(clientId)
                 , ServerId(serverId)
+                , InterconnectSession(interconnectSession)
             {}
 
             const ui64 TabletId;
             const TActorId ClientId;
             const TActorId ServerId;
+            const TActorId InterconnectSession;
         };
 
         struct TEvClientDestroyed : public TEventLocal<TEvClientDestroyed, EvClientDestroyed> {

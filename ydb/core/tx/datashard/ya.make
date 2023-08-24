@@ -98,6 +98,7 @@ SRCS(
     datashard_failpoints.h
     datashard_dep_tracker.cpp
     datashard_dep_tracker.h
+    datashard_overload.cpp
     datashard_pipeline.cpp
     datashard_pipeline.h
     datashard_s3_downloads.cpp

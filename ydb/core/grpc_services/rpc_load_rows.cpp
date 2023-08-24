@@ -122,6 +122,17 @@ public:
     {}
 
 private:
+    void OnBeforeStart(const TActorContext& ctx) override {
+        Request->SetFinishAction([selfId = ctx.SelfID, as = ctx.ExecutorThread.ActorSystem]() {
+            as->Send(selfId, new TEvents::TEvPoison);
+        });
+    }
+
+    void OnBeforePoison(const TActorContext&) override {
+        // Client is gone, but we need to "reply" anyway?
+        Request->SendResult(Ydb::StatusIds::CANCELLED, {});
+    }
+
     bool ReportCostInfoEnabled() const {
         return GetProtoRequest(Request.get())->operation_params().report_cost_info() == Ydb::FeatureFlag::ENABLED;
     }
@@ -274,6 +285,17 @@ public:
     {}
 
 private:
+    void OnBeforeStart(const TActorContext& ctx) override {
+        Request->SetFinishAction([selfId = ctx.SelfID, as = ctx.ExecutorThread.ActorSystem]() {
+            as->Send(selfId, new TEvents::TEvPoison);
+        });
+    }
+
+    void OnBeforePoison(const TActorContext&) override {
+        // Client is gone, but we need to "reply" anyway?
+        Request->SendResult(Ydb::StatusIds::CANCELLED, {});
+    }
+
     bool ReportCostInfoEnabled() const {
         return GetProtoRequest(Request.get())->operation_params().report_cost_info() == Ydb::FeatureFlag::ENABLED;
     }

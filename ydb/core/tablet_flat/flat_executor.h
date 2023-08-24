@@ -460,6 +460,9 @@ class TExecutor
     bool HadFollowerAttached = false;
     bool NeedFollowerSnapshot = false;
 
+    mutable bool HadRejectProbabilityByTxInFly = false;
+    mutable bool HadRejectProbabilityByOverload = false;
+
     THashMap<ui32, TIntrusivePtr<TBarrier>> InFlyCompactionGcBarriers;
     TDeque<THolder<TEvTablet::TFUpdateBody>> PostponedFollowerUpdates;
     THashMap<ui32, TVector<TIntrusivePtr<TBarrier>>> InFlySnapCollectionBarriers;
@@ -694,6 +697,7 @@ public:
     ui64 TabletId() const { return Owner->TabletID(); }
 
     float GetRejectProbability() const override;
+    void MaybeRelaxRejectProbability();
 
     TActorId GetLauncher() const { return Launcher; }
 };

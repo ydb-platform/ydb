@@ -37,6 +37,14 @@ namespace NFlatExecutorSetup {
         return true;
     }
 
+    void ITablet::OnYellowChannelsChanged() {
+        // nothing by default
+    }
+
+    void ITablet::OnRejectProbabilityRelaxed() {
+        // nothing by default
+    }
+
     void ITablet::UpdateTabletInfo(TIntrusivePtr<TTabletStorageInfo> info, const TActorId& launcherID) {
         if (info)
             TabletInfo = info;

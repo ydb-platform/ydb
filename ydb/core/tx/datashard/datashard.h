@@ -323,6 +323,9 @@ struct TEvDataShard {
         EvCdcStreamScanRequest,
         EvCdcStreamScanResponse,
 
+        EvOverloadReady,
+        EvOverloadUnsubscribe,
+
         EvEnd
     };
 
@@ -877,6 +880,33 @@ struct TEvDataShard {
         explicit TEvUploadRowsResponse(ui64 tabletId, ui32 status = NKikimrTxDataShard::TError::OK) {
             Record.SetTabletID(tabletId);
             Record.SetStatus(status);
+        }
+    };
+
+    struct TEvOverloadReady
+        : public TEventPB<
+            TEvOverloadReady,
+            NKikimrTxDataShard::TEvOverloadReady,
+            EvOverloadReady>
+    {
+        TEvOverloadReady() = default;
+
+        explicit TEvOverloadReady(ui64 tabletId, ui64 seqNo) {
+            Record.SetTabletID(tabletId);
+            Record.SetSeqNo(seqNo);
+        }
+    };
+
+    struct TEvOverloadUnsubscribe
+        : public TEventPB<
+            TEvOverloadUnsubscribe,
+            NKikimrTxDataShard::TEvOverloadUnsubscribe,
+            EvOverloadUnsubscribe>
+    {
+        TEvOverloadUnsubscribe() = default;
+
+        explicit TEvOverloadUnsubscribe(ui64 seqNo) {
+            Record.SetSeqNo(seqNo);
         }
     };
 

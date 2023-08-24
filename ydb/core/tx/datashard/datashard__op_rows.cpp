@@ -158,45 +158,66 @@ template <typename TEvResponse>
 using TSetStatusFunc = void(*)(typename TEvResponse::ProtoRecordType&);
 
 template <typename TEvResponse, typename TEvRequest>
-static void Reject(TDataShard* self, TEvRequest& ev, const TString& txDesc, const TString& reason,
+static void Reject(TDataShard* self, TEvRequest& ev, const TString& txDesc,
+        ERejectReasons rejectReasons, const TString& rejectDescription,
         TSetStatusFunc<TEvResponse> setStatusFunc, const TActorContext& ctx)
 {
     LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "Rejecting " << txDesc << " request on datashard"
         << ": tablet# " << self->TabletID()
-        << ", error# " << reason);
+        << ", error# " << rejectDescription);
 
     auto response = MakeHolder<TEvResponse>();
     setStatusFunc(response->Record);
     response->Record.SetTabletID(self->TabletID());
-    response->Record.SetErrorDescription(reason);
+    response->Record.SetErrorDescription(rejectDescription);
+
+    if (ev->Get()->Record.HasOverloadSubscribe() && self->HasPipeServer(ev->Recipient)) {
+        ui64 seqNo = ev->Get()->Record.GetOverloadSubscribe();
+        auto allowed = (
+            ERejectReasons::OverloadByProbability |
+            ERejectReasons::YellowChannels |
+            ERejectReasons::ChangesQueueOverflow);
+        if ((rejectReasons & allowed) != ERejectReasons::None &&
+            (rejectReasons - allowed) == ERejectReasons::None)
+        {
+            if (self->AddOverloadSubscriber(ev->Recipient, ev->Sender, seqNo, rejectReasons)) {
+                response->Record.SetOverloadSubscribed(seqNo);
+            }
+        }
+    }
+
     ctx.Send(ev->Sender, std::move(response));
 }
 
 template <typename TEvResponse, typename TEvRequest>
 static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& ctx, const TString& txDesc, bool isWrite) {
     NKikimrTxDataShard::TEvProposeTransactionResult::EStatus rejectStatus;
-    TString rejectReason;
-    if (self->CheckDataTxReject(txDesc, ctx, rejectStatus, rejectReason)) {
-        Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReason, &WrongShardState, ctx);
+    ERejectReasons rejectReasons = ERejectReasons::None;
+    TString rejectDescription;
+    if (self->CheckDataTxReject(txDesc, ctx, rejectStatus, rejectReasons, rejectDescription)) {
+        Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReasons, rejectDescription, &WrongShardState, ctx);
         return true;
     }
 
     if (self->CheckChangesQueueOverflow()) {
-        rejectReason = TStringBuilder() << "Change queue overflow at tablet " << self->TabletID();
-        Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReason, &Overloaded, ctx);
+        rejectReasons = ERejectReasons::ChangesQueueOverflow;
+        rejectDescription = TStringBuilder() << "Change queue overflow at tablet " << self->TabletID();
+        Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReasons, rejectDescription, &Overloaded, ctx);
         return true;
     }
 
     if (isWrite) {
         if (self->IsAnyChannelYellowStop()) {
             self->IncCounter(COUNTER_PREPARE_OUT_OF_SPACE);
-            rejectReason = TStringBuilder() << "Cannot perform writes: out of disk space at tablet " << self->TabletID();
-            Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReason, &OutOfSpace, ctx);
+            rejectReasons = ERejectReasons::YellowChannels;
+            rejectDescription = TStringBuilder() << "Cannot perform writes: out of disk space at tablet " << self->TabletID();
+            Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReasons, rejectDescription, &OutOfSpace, ctx);
             return true;
         } else if (self->IsSubDomainOutOfSpace()) {
             self->IncCounter(COUNTER_PREPARE_OUT_OF_SPACE);
-            rejectReason = "Cannot perform writes: database is out of disk space";
-            Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReason, &DiskSpaceExhausted, ctx);
+            rejectReasons = ERejectReasons::DiskSpace;
+            rejectDescription = "Cannot perform writes: database is out of disk space";
+            Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReasons, rejectDescription, &DiskSpaceExhausted, ctx);
             return true;
         }
     }
@@ -212,7 +233,7 @@ void TDataShard::Handle(TEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TAct
     }
     if (IsReplicated()) {
         return Reject<TEvDataShard::TEvUploadRowsResponse>(this, ev, "bulk upsert",
-            "Can't execute bulk upsert at replicated table", &ReadOnly, ctx);
+            ERejectReasons::WrongState, "Can't execute bulk upsert at replicated table", &ReadOnly, ctx);
     }
     if (!MaybeReject<TEvDataShard::TEvUploadRowsResponse>(this, ev, ctx, "bulk upsert", true)) {
         Executor()->Execute(new TTxUploadRows(this, ev), ctx);
@@ -229,7 +250,7 @@ void TDataShard::Handle(TEvDataShard::TEvEraseRowsRequest::TPtr& ev, const TActo
     }
     if (IsReplicated()) {
         return Reject<TEvDataShard::TEvEraseRowsResponse>(this, ev, "erase",
-            "Can't execute erase at replicated table", &ExecError, ctx);
+            ERejectReasons::WrongState, "Can't execute erase at replicated table", &ExecError, ctx);
     }
     if (!MaybeReject<TEvDataShard::TEvEraseRowsResponse>(this, ev, ctx, "erase", false)) {
         Executor()->Execute(new TTxEraseRows(this, ev), ctx);

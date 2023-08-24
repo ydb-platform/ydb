@@ -22,6 +22,7 @@
 #include "read_iterator.h"
 #include "volatile_tx.h"
 #include "conflicts_cache.h"
+#include "reject_reason.h"
 
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_processing.h>
@@ -1216,6 +1217,7 @@ class TDataShard
     void HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvEraseRowsRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvOverloadUnsubscribe::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvConditionalEraseRowsRegistered::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ctx);
@@ -1510,7 +1512,8 @@ public:
     bool CheckDataTxReject(const TString& opDescr,
                            const TActorContext &ctx,
                            NKikimrTxDataShard::TEvProposeTransactionResult::EStatus& rejectStatus,
-                           TString &reason);
+                           ERejectReasons& rejectReasons,
+                           TString& rejectDescription);
     bool CheckDataTxRejectAndReply(TEvDataShard::TEvProposeTransaction* msg, const TActorContext& ctx);
 
     TSysLocks& SysLocksTable() { return SysLocks; }
@@ -1665,7 +1668,13 @@ public:
 
     void ScanComplete(NTable::EAbort status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext &ctx) override;
     bool ReassignChannelsEnabled() const override;
+    void OnYellowChannelsChanged() override;
+    void OnRejectProbabilityRelaxed() override;
     ui64 GetMemoryUsage() const override;
+
+    bool HasPipeServer(const TActorId& pipeServerId);
+    bool AddOverloadSubscriber(const TActorId& pipeServerId, const TActorId& actorId, ui64 seqNo, ERejectReasons reasons);
+    void NotifyOverloadSubscribers(ERejectReason reason);
 
     bool HasSharedBlobs() const;
     void CheckInitiateBorrowedPartsReturn(const TActorContext& ctx);
@@ -1921,6 +1930,7 @@ public:
     bool CheckTxNeedWait(const TEvDataShard::TEvProposeTransaction::TPtr& ev) const;
 
     bool CheckChangesQueueOverflow() const;
+    void CheckChangesQueueNoOverflow();
 
     void DeleteReadIterator(TReadIteratorsMap::iterator it);
     void CancelReadIterators(Ydb::StatusIds::StatusCode code, const TString& issue, const TActorContext& ctx);
@@ -2301,6 +2311,31 @@ private:
     TTxProgressIdempotentScalarQueue<TEvPrivate::TEvProgressTransaction> PlanQueue;
     TTxProgressIdempotentScalarScheduleQueue<TEvPrivate::TEvCleanupTransaction> CleanupQueue;
     TTxProgressQueue<ui64, TNoOpDestroy, TEvPrivate::TEvProgressResendReadSet> ResendReadSetQueue;
+
+    struct TPipeServerInfoOverloadSubscribersTag {};
+
+    struct TOverloadSubscriber {
+        ui64 SeqNo = 0;
+        ERejectReasons Reasons = ERejectReasons::None;
+    };
+
+    struct TPipeServerInfo
+        : public TIntrusiveListItem<TPipeServerInfo, TPipeServerInfoOverloadSubscribersTag>
+    {
+        TPipeServerInfo() = default;
+
+        TActorId InterconnectSession;
+        THashMap<TActorId, TOverloadSubscriber> OverloadSubscribers;
+    };
+
+    using TPipeServers = THashMap<TActorId, TPipeServerInfo>;
+    using TPipeServersWithOverloadSubscribers = TIntrusiveList<TPipeServerInfo, TPipeServerInfoOverloadSubscribersTag>;
+
+    TPipeServers PipeServers;
+    TPipeServersWithOverloadSubscribers PipeServersWithOverloadSubscribers;
+    size_t OverloadSubscribersByReason[RejectReasonCount] = { 0 };
+
+    void DiscardOverloadSubscribers(TPipeServerInfo& pipeServer);
 
     class TProposeQueue : private TTxProgressIdempotentScalarQueue<TEvPrivate::TEvDelayedProposeTransaction> {
     public:
@@ -2831,6 +2866,7 @@ protected:
             HFunc(TEvDataShard::TEvKqpScan, Handle);
             HFunc(TEvDataShard::TEvUploadRowsRequest, Handle);
             HFunc(TEvDataShard::TEvEraseRowsRequest, Handle);
+            HFunc(TEvDataShard::TEvOverloadUnsubscribe, Handle);
             HFunc(TEvDataShard::TEvConditionalEraseRowsRequest, Handle);
             HFunc(TEvPrivate::TEvConditionalEraseRowsRegistered, Handle);
             HFunc(TEvDataShard::TEvRead, Handle);

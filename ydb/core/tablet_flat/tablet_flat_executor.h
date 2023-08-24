@@ -455,6 +455,8 @@ namespace NFlatExecutorSetup {
         virtual void ScanComplete(NTable::EAbort status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext &ctx);
 
         virtual bool ReassignChannelsEnabled() const;
+        virtual void OnYellowChannelsChanged();
+        virtual void OnRejectProbabilityRelaxed();
 
         // memory usage excluding transactions and executor cache.
         virtual ui64 GetMemoryUsage() const { return 50 << 10; }

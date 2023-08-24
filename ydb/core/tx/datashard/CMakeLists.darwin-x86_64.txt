@@ -233,6 +233,7 @@ target_sources(core-tx-datashard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_distributed_erase.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_failpoints.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_dep_tracker.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_overload.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_pipeline.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_s3_downloads.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/datashard_s3_uploads.cpp

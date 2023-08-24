@@ -103,13 +103,19 @@ private:
 
     static constexpr TDuration DEFAULT_TIMEOUT = TDuration::Seconds(5*60);
 
+    struct TShardUploadRetryState {
+        // Contains basic request settings like table ids and columns
+        NKikimrTxDataShard::TEvUploadRowsRequest Headers;
+        TVector<std::pair<TString, TString>> Rows;
+        ui64 LastOverloadSeqNo = 0;
+        ui64 SentOverloadSeqNo = 0;
+    };
+
     TActorId SchemeCache;
     TActorId LeaderPipeCache;
     TDuration Timeout;
     TInstant StartTime;
     TActorId TimeoutTimerActorId;
-    bool WaitingResolveReply;
-    bool Finished;
 
     TAutoPtr<NSchemeCache::TSchemeCacheRequest> ResolvePartitionsResult;
     std::shared_ptr<NSchemeCache::TSchemeCacheNavigate> ResolveNamesResult;
@@ -119,6 +125,7 @@ private:
     TVector<NScheme::TTypeInfo> ValueColumnTypes;
     NSchemeCache::TSchemeCacheNavigate::EKind TableKind = NSchemeCache::TSchemeCacheNavigate::KindUnknown;
     THashSet<TTabletId> ShardRepliesLeft;
+    THashMap<TTabletId, TShardUploadRetryState> ShardUploadRetryStates;
     Ydb::StatusIds::StatusCode Status;
     TString ErrorMessage;
     std::shared_ptr<NYql::TIssues> Issues = std::make_shared<NYql::TIssues>();
@@ -171,20 +178,23 @@ public:
         , SchemeCache(MakeSchemeCacheID())
         , LeaderPipeCache(MakePipePeNodeCacheID(false))
         , Timeout((timeout && timeout <= DEFAULT_TIMEOUT) ? timeout : DEFAULT_TIMEOUT)
-        , WaitingResolveReply(false)
-        , Finished(false)
         , Status(Ydb::StatusIds::SUCCESS)
         , DiskQuotaExceeded(diskQuotaExceeded)
     {}
 
     void Bootstrap(const NActors::TActorContext& ctx) {
         StartTime = TAppData::TimeProvider->Now();
+        OnBeforeStart(ctx);
         ResolveTable(GetTable(), ctx);
     }
 
     void Die(const NActors::TActorContext& ctx) override {
-        Y_VERIFY(Finished);
-        Y_VERIFY(!WaitingResolveReply);
+        for (auto& pr : ShardUploadRetryStates) {
+            if (pr.second.SentOverloadSeqNo) {
+                auto* msg = new TEvDataShard::TEvOverloadUnsubscribe(pr.second.SentOverloadSeqNo);
+                ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(msg, pr.first, false));
+            }
+        }
         ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
         if (TimeoutTimerActorId) {
             ctx.Send(TimeoutTimerActorId, new TEvents::TEvPoisonPill());
@@ -244,6 +254,14 @@ protected:
     }
 
 private:
+    virtual void OnBeforeStart(const TActorContext&) {
+        // nothing by default
+    }
+
+    virtual void OnBeforePoison(const TActorContext&) {
+        // nothing by default
+    }
+
     virtual TString GetDatabase() = 0;
     virtual const TString& GetTable() = 0;
     virtual const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const = 0;
@@ -269,10 +287,17 @@ private:
     }
 
 private:
+    void Handle(TEvents::TEvPoison::TPtr&, const TActorContext& ctx) {
+        OnBeforePoison(ctx);
+        Die(ctx);
+    }
+
+private:
     STFUNC(StateWaitResolveTable) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            HFunc(TEvents::TEvPoison, Handle);
 
             default:
                 break;
@@ -507,7 +532,6 @@ private:
             new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup()));
 
         TBase::Become(&TThis::StateWaitResolveTable);
-        WaitingResolveReply = true;
     }
 
     void HandleTimeout(const TActorContext& ctx) {
@@ -518,11 +542,6 @@ private:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
-        WaitingResolveReply = false;
-        if (Finished) {
-            return Die(ctx);
-        }
-
         const NSchemeCache::TSchemeCacheNavigate& request = *ev->Get()->Request;
 
         Y_VERIFY(request.ResultSet.size() == 1);
@@ -657,6 +676,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             HFunc(NLongTxService::TEvLongTxService::TEvBeginTxResult, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            HFunc(TEvents::TEvPoison, Handle);
         }
     }
 
@@ -773,6 +793,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvents::TEvCompleted, HandleWriteBatchResult);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            HFunc(TEvents::TEvPoison, Handle);
         }
     }
 
@@ -783,7 +804,6 @@ private:
             for (const auto& issue: *Issues) {
                 RaiseIssue(issue);
             }
-            Finished = true;
             return ReplyWithResult(status, ctx);
         }
 
@@ -800,13 +820,12 @@ private:
         switch (ev->GetTypeRewrite()) {
             HFunc(NLongTxService::TEvLongTxService::TEvCommitTxResult, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            HFunc(TEvents::TEvPoison, Handle);
         }
     }
 
     void Handle(NLongTxService::TEvLongTxService::TEvCommitTxResult::TPtr& ev, const NActors::TActorContext& ctx) {
         const auto* msg = ev->Get();
-
-        Finished = true;
 
         if (msg->Record.GetStatus() == Ydb::StatusIds::SUCCESS) {
             // We are done with the transaction, forget it
@@ -875,13 +894,13 @@ private:
         ctx.Send(SchemeCache, resolveReq.Release());
 
         TBase::Become(&TThis::StateWaitResolveShards);
-        WaitingResolveReply = true;
     }
 
     STFUNC(StateWaitResolveShards) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            HFunc(TEvents::TEvPoison, Handle);
 
             default:
                 break;
@@ -889,11 +908,6 @@ private:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, const TActorContext &ctx) {
-        WaitingResolveReply = false;
-        if (Finished) {
-            return Die(ctx);
-        }
-
         TEvTxProxySchemeCache::TEvResolveKeySetResult *msg = ev->Get();
         ResolvePartitionsResult = msg->Request;
 
@@ -922,12 +936,32 @@ private:
         MakeShardRequests(ctx);
     }
 
+    void RetryShardRequest(ui64 shardId, TShardUploadRetryState* state, const TActorContext& ctx) {
+        Y_VERIFY(ShardRepliesLeft.contains(shardId));
+
+        auto ev = std::make_unique<TEvDataShard::TEvUploadRowsRequest>();
+        ev->Record = state->Headers;
+        for (const auto& pr : state->Rows) {
+            auto* row = ev->Record.AddRows();
+            row->SetKeyColumns(pr.first);
+            row->SetValueColumns(pr.second);
+        }
+
+        // Mark our request as supporting overload subscriptions
+        ui64 seqNo = ++state->LastOverloadSeqNo;
+        ev->Record.SetOverloadSubscribe(seqNo);
+        state->SentOverloadSeqNo = seqNo;
+
+        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.release(), shardId, true), IEventHandle::FlagTrackDelivery);
+    }
+
     void MakeShardRequests(const NActors::TActorContext& ctx) {
         const auto* keyRange = GetKeyRange();
 
         Y_VERIFY(!keyRange->GetPartitions().empty());
 
         // Group rows by shard id
+        TVector<TShardUploadRetryState*> uploadRetryStates(keyRange->GetPartitions().size());
         TVector<std::unique_ptr<TEvDataShard::TEvUploadRowsRequest>> shardRequests(keyRange->GetPartitions().size());
         for (const auto& keyValue : GetRows()) {
             // Find partition for the key
@@ -941,6 +975,12 @@ private:
                 });
 
             size_t shardIdx = it - keyRange->GetPartitions().begin();
+
+            auto* retryState = uploadRetryStates[shardIdx];
+            if (!retryState) {
+                TTabletId shardId = it->ShardId;
+                retryState = uploadRetryStates[shardIdx] = &ShardUploadRetryStates[shardId];
+            }
 
             TEvDataShard::TEvUploadRowsRequest* ev = shardRequests[shardIdx].get();
             if (!ev) {
@@ -958,23 +998,37 @@ private:
                 if (WriteToTableShadow) {
                     ev->Record.SetWriteToTableShadow(true);
                 }
+                // Copy protobuf settings without rows
+                retryState->Headers = ev->Record;
             }
 
+            TString keyColumns = keyValue.first.GetBuffer();
+            TString valueColumns = keyValue.second;
+
+            // We expect to keep a reference to existing key and value data here
+            uploadRetryStates[shardIdx]->Rows.emplace_back(keyColumns, valueColumns);
+
             auto* row = ev->Record.AddRows();
-            row->SetKeyColumns(keyValue.first.GetBuffer());
-            row->SetValueColumns(keyValue.second);
+            row->SetKeyColumns(std::move(keyColumns));
+            row->SetValueColumns(std::move(valueColumns));
         }
 
         // Send requests to the shards
         for (size_t idx = 0; idx < shardRequests.size(); ++idx) {
-            if (!shardRequests[idx])
+            auto& ev = shardRequests[idx];
+            if (!ev)
                 continue;
 
             TTabletId shardId = keyRange->GetPartitions()[idx].ShardId;
 
             LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Sending request to shards " << shardId);
 
-            ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(shardRequests[idx].release(), shardId, true), IEventHandle::FlagTrackDelivery);
+            // Mark our request as supporting overload subscriptions
+            ui64 seqNo = ++uploadRetryStates[idx]->LastOverloadSeqNo;
+            ev->Record.SetOverloadSubscribe(seqNo);
+            uploadRetryStates[idx]->SentOverloadSeqNo = seqNo;
+
+            ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.release(), shardId, true), IEventHandle::FlagTrackDelivery);
 
             auto res = ShardRepliesLeft.insert(shardId);
             if (!res.second) {
@@ -1009,9 +1063,11 @@ private:
     STFUNC(StateWaitResults) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvDataShard::TEvUploadRowsResponse, Handle);
+            HFunc(TEvDataShard::TEvOverloadReady, Handle);
             HFunc(TEvents::TEvUndelivered, Handle);
             HFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            HFunc(TEvents::TEvPoison, Handle);
 
             default:
                 break;
@@ -1021,8 +1077,7 @@ private:
     void Handle(TEvDataShard::TEvUploadRowsResponse::TPtr& ev, const NActors::TActorContext& ctx) {
         const auto& shardResponse = ev->Get()->Record;
 
-        // Notify the cache that we are done with the pipe
-        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(shardResponse.GetTabletID()));
+        ui64 shardId = shardResponse.GetTabletID();
 
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Upload rows: got "
                     << NKikimrTxDataShard::TError::EKind_Name((NKikimrTxDataShard::TError::EKind)shardResponse.GetStatus())
@@ -1052,12 +1107,39 @@ private:
                 break;
             };
 
+            if (auto* state = ShardUploadRetryStates.FindPtr(shardId)) {
+                if (!shardResponse.HasOverloadSubscribed()) {
+                    // Shard doesn't support overload subscriptions for this request
+                    state->SentOverloadSeqNo = 0;
+                } else if (shardResponse.GetOverloadSubscribed() == state->SentOverloadSeqNo) {
+                    // Wait until shard notifies us it is possible to write again
+                    LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Upload rows: subscribed to overload change at shard " << shardId);
+                    return;
+                }
+            }
+
             SetError(status, shardResponse.GetErrorDescription());
         }
 
-        ShardRepliesLeft.erase(shardResponse.GetTabletID());
+        // Notify the cache that we are done with the pipe
+        ctx.Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(shardId));
+
+        ShardRepliesLeft.erase(shardId);
+        ShardUploadRetryStates.erase(shardId);
 
         ReplyIfDone(ctx);
+    }
+
+    void Handle(TEvDataShard::TEvOverloadReady::TPtr& ev, const TActorContext& ctx) {
+        auto& record = ev->Get()->Record;
+        ui64 shardId = record.GetTabletID();
+        ui64 seqNo = record.GetSeqNo();
+
+        if (auto* state = ShardUploadRetryStates.FindPtr(shardId)) {
+            if (state->SentOverloadSeqNo && state->SentOverloadSeqNo == seqNo && ShardRepliesLeft.contains(shardId)) {
+                RetryShardRequest(shardId, state, ctx);
+            }
+        }
     }
 
     void SetError(::Ydb::StatusIds::StatusCode status, const TString& message) {
@@ -1074,8 +1156,6 @@ private:
             LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Upload rows: waiting for " << ShardRepliesLeft.size() << " shards replies");
             return;
         }
-
-        Finished = true;
 
         if (!ErrorMessage.empty()) {
             RaiseIssue(NYql::TIssue(ErrorMessage));
@@ -1105,9 +1185,7 @@ private:
             RollbackLongTx(ctx);
         }
 
-        if (!WaitingResolveReply) {
-            Die(ctx);
-        }
+        Die(ctx);
     }
 };
 

@@ -744,7 +744,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         DoUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::UINT32, Ydb::StatusIds::GENERIC_ERROR);
     }
 
-    Y_UNIT_TEST(ShouldRejectOnChangeQueueOverflow) {
+    void DoShouldRejectOnChangeQueueOverflow(bool overloadSubscribe) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
@@ -771,16 +771,86 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
             })
         );
 
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == NDataShard::TEvChangeExchange::EvEnqueueRecords) {
-                return TTestActorRuntime::EEventAction::DROP;
+        TVector<ui32> observedUploadStatus;
+        TVector<THolder<IEventHandle>> blockedEnqueueRecords;
+        auto prevObserverFunc = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case NDataShard::TEvChangeExchange::EvEnqueueRecords:
+                    blockedEnqueueRecords.emplace_back(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                case TEvDataShard::TEvUploadRowsRequest::EventType:
+                    if (!overloadSubscribe) {
+                        ev->Get<TEvDataShard::TEvUploadRowsRequest>()->Record.ClearOverloadSubscribe();
+                    }
+                    break;
+                case TEvDataShard::TEvUploadRowsResponse::EventType:
+                    observedUploadStatus.push_back(ev->Get<TEvDataShard::TEvUploadRowsResponse>()->Record.GetStatus());
+                    break;
             }
 
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
         DoUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::UINT32, Ydb::StatusIds::SUCCESS);
-        DoUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::UINT32, Ydb::StatusIds::OVERLOADED);
+
+        UNIT_ASSERT(!observedUploadStatus.empty());
+        UNIT_ASSERT(observedUploadStatus.back() == NKikimrTxDataShard::TError::OK);
+        observedUploadStatus.clear();
+
+        if (!overloadSubscribe) {
+            DoUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::UINT32, Ydb::StatusIds::OVERLOADED);
+            return;
+        }
+
+        TVector<THolder<TEvTxUserProxy::TEvUploadRowsResponse>> responses;
+        auto responseAwaiter = runtime.Register(new TLambdaActor([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvTxUserProxy::TEvUploadRowsResponse::EventType: {
+                    auto msg = ev->Release<TEvTxUserProxy::TEvUploadRowsResponse>();
+                    responses.push_back(std::move(msg));
+                    break;
+                }
+            }
+        }));
+
+        DoStartUploadTestRows(server, responseAwaiter, "/Root/table-1", Ydb::Type::UINT32);
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT(!blockedEnqueueRecords.empty());
+        UNIT_ASSERT(!observedUploadStatus.empty());
+        UNIT_ASSERT(observedUploadStatus.back() == NKikimrTxDataShard::TError::SHARD_IS_BLOCKED);
+        observedUploadStatus.clear();
+        UNIT_ASSERT(responses.empty());
+
+        runtime.SetObserverFunc(prevObserverFunc);
+        for (auto& ev : blockedEnqueueRecords) {
+            runtime.Send(ev.Release(), 0, true);
+        }
+        blockedEnqueueRecords.clear();
+
+        auto waitFor = [&](const auto& condition, const TString& description) {
+            if (!condition()) {
+                Cerr << "... waiting for " << description << Endl;
+                TDispatchOptions options;
+                options.CustomFinalCondition = [&]() {
+                    return condition();
+                };
+                runtime.DispatchEvents(options);
+                UNIT_ASSERT_C(condition(), "... failed to wait for " << description);
+            }
+        };
+
+        waitFor([&]{ return !responses.empty(); }, "upload rows response");
+
+        UNIT_ASSERT_VALUES_EQUAL(responses.back()->Status, Ydb::StatusIds::SUCCESS);
+    }
+
+    Y_UNIT_TEST(ShouldRejectOnChangeQueueOverflow) {
+        DoShouldRejectOnChangeQueueOverflow(false);
+    }
+
+    Y_UNIT_TEST(ShouldRejectOnChangeQueueOverflowAndRetry) {
+        DoShouldRejectOnChangeQueueOverflow(true);
     }
 
 }

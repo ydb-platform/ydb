@@ -9,6 +9,8 @@ PY_SRCS(
     yatest_tools.py
 )
 
+STYLE_PYTHON()
+
 PEERDIR(
     contrib/python/attrs
     contrib/python/python-dateutil

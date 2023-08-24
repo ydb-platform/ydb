@@ -1,0 +1,48 @@
+package NYT.NClient.NCache;
+
+import "yt_proto/yt/core/yson/proto/protobuf_interop.proto";
+
+option (NYT.NYson.NProto.derive_underscore_case_names) = true;
+
+enum ECompressionCodec {
+    None = 0;
+    Lz4 = 1;
+};
+
+// Connection options.
+message TConfig
+{
+    optional string ClusterName = 1;
+    optional string ProxyRole = 2;
+    optional uint32 ChannelPoolSize = 3;
+    optional uint32 ChannelPoolRebalanceIntervalSeconds = 4;
+
+    // All timeouts in milliseconds.
+    optional uint32 DefaultTransactionTimeout = 5;
+    optional uint32 DefaultSelectRowsTimeout = 6;
+    optional uint32 DefaultLookupRowsTimeout = 7;
+    optional uint32 DefaultTotalStreamingTimeout = 8;
+    optional uint32 DefaultStreamingStallTimeout = 9;
+    optional uint32 DefaultPingPeriod = 10;
+    optional uint32 ModifyRowsBatchCapacity = 11;
+
+    optional ECompressionCodec ResponseCodec = 12 [default = None];
+
+    optional bool EnableRetries = 13;
+    optional uint32 RetryBackoffTime = 14;
+    optional uint32 RetryAttempts = 15;
+    optional uint32 RetryTimeout = 16;
+};
+
+message TClustersConfig
+{
+    // In DefaultConfig and ClusterConfigs field .ClusterName is ignored
+    // and field .ProxyRole can be overwritten with explicitly provided in cluster url one.
+
+    // DefaultConfig is used for clusters not mentioned in ClusterConfigs.
+    optional TConfig DefaultConfig = 1;
+    // Per-cluster configs.
+    map<string, TConfig> ClusterConfigs = 2 [
+        (NYT.NYson.NProto.yson_map) = true
+    ];
+};

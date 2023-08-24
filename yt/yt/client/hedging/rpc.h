@@ -3,6 +3,8 @@
 #include <yt/yt/client/api/public.h>
 #include <yt/yt/client/api/rpc_proxy/config.h>
 
+#include <yt/yt_proto/yt/client/hedging/proto/config.pb.h>
+
 #include <util/generic/strbuf.h>
 
 
@@ -10,7 +12,11 @@ namespace NYT::NClient::NHedging::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TConfig;
+using NYT::NClient::NCache::TConfig;
+using NYT::NClient::NCache::TClustersConfig;
+using NYT::NClient::NCache::ECompressionCodec;
+
+////////////////////////////////////////////////////////////////////////////////
 
 NApi::NRpcProxy::TConnectionConfigPtr GetConnectionConfig(const TConfig& config);
 

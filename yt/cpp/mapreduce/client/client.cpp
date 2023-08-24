@@ -1224,7 +1224,7 @@ void TClient::ResumeOperation(
 
 TYtPoller& TClient::GetYtPoller()
 {
-    auto g = Guard(YtPollerLock_);
+    auto g = Guard(Lock_);
     if (!YtPoller_) {
         CheckShutdown();
         // We don't use current client and create new client because YtPoller_ might use
@@ -1237,7 +1237,7 @@ TYtPoller& TClient::GetYtPoller()
 
 void TClient::Shutdown()
 {
-    auto g = Guard(YtPollerLock_);
+    auto g = Guard(Lock_);
 
     if (!Shutdown_.exchange(true) && YtPoller_) {
         YtPoller_->Stop();
@@ -1246,6 +1246,7 @@ void TClient::Shutdown()
 
 ITransactionPingerPtr TClient::GetTransactionPinger()
 {
+    auto g = Guard(Lock_);
     if (!TransactionPinger_) {
         TransactionPinger_ = CreateTransactionPinger(Context_.Config);
     }

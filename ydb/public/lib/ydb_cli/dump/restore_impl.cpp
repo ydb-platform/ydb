@@ -85,6 +85,7 @@ bool HasRunningIndexBuilds(TOperationClient& client, const TString& dbPath) {
                 case EBuildIndexState::TransferData:
                 case EBuildIndexState::Applying:
                 case EBuildIndexState::Cancellation:
+                case EBuildIndexState::Rejection:
                     return true;
                 default:
                     break;

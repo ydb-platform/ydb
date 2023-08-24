@@ -909,4 +909,29 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
             }
         }
     }
+
+    Y_UNIT_TEST(StartFail) {
+        TString res = TestData();
+        TEchoServer serverImpl(res);
+        {
+            THttpServer server(&serverImpl, THttpServer::TOptions(1));
+
+            UNIT_ASSERT(!server.GetErrorCode());
+            UNIT_ASSERT(!server.Start());
+            UNIT_ASSERT(server.GetErrorCode());
+        }
+
+        {
+            TPortManager pm;
+            const ui16 port = pm.GetPort();
+            THttpServer server1(&serverImpl, THttpServer::TOptions(port));
+            UNIT_ASSERT(server1.Start());
+            UNIT_ASSERT(!server1.GetErrorCode());
+
+            THttpServer server2(&serverImpl, THttpServer::TOptions(port));
+            UNIT_ASSERT(!server2.Start());
+            UNIT_ASSERT(server2.GetErrorCode());
+        }
+
+    }
 }

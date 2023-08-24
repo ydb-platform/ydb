@@ -359,11 +359,11 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
             UNIT_ASSERT_GT(rows.size(), 0);
         }
     }
-#if 0 // TODO: KIKIMR-18717
+
     Y_UNIT_TEST(ParquetImportBug) {
         ParquetImportBug(true);
     }
-#endif
+
     Y_UNIT_TEST(ParquetImportBug_Datashard) {
         ParquetImportBug(false);
     }

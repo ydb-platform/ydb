@@ -1,0 +1,34 @@
+syntax = "proto3";
+package NYql.Connector.App.Config;
+
+import "ydb/library/yql/providers/generic/connector/api/common/endpoint.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/config";
+
+// Connector server configuration
+message ServerConfig {
+    // Network address server will be listening on
+    NYql.NConnector.NApi.TEndpoint endpoint = 1;
+    // TLS settings.
+    // Leave it empty for insecure connections.
+    ServerTLSConfig tls = 2;
+    // This is a rough restriction for YQ memory consumption until
+    // https://st.yandex-team.ru/YQ-2057 is implemented.
+    // Leave it empty if you want to avoid any memory limits.
+    ServerReadLimit read_limit = 3;
+}
+
+message ServerTLSConfig {
+    // TLS private key path
+    string key = 2;
+    // TLS public cert path
+    string cert = 3;
+
+    reserved 1;
+}
+
+// ServerReadLimit limitates the amount of data extracted from the data source on every read request. 
+message ServerReadLimit {
+    // The number of rows extracted from the data source
+    uint64 rows = 1;
+}

@@ -7,8 +7,7 @@ import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/library/yql/providers/generic/connector/api/common/data_source.proto";
 
-// NOTE: Protobuf-generated code for Go will appear in yql (non-public) path
-option go_package = "github.com/ydb-platform/ydb/yql/providers/connector/api/service/protos";
+option go_package = "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos";
 
 // ---------- API Requests ----------
 

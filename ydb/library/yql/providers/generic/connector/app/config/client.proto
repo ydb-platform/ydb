@@ -1,0 +1,23 @@
+syntax = "proto3";
+package NYql.Connector.App.Config;
+
+import "ydb/library/yql/providers/generic/connector/api/common/data_source.proto";
+import "ydb/library/yql/providers/generic/connector/api/common/endpoint.proto";
+import "ydb/library/yql/providers/generic/connector/app/config/server.proto";
+
+option go_package = "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/config";
+
+// Connector client configuration
+message ClientConfig {
+    // Connector service instance network address we connect to
+    NYql.NConnector.NApi.TEndpoint endpoint = 1;
+    // TLS credentials for Connector
+    ClientTLSConfig tls = 2;
+    // Data source instance we read data from
+    NYql.NConnector.NApi.TDataSourceInstance data_source_instance = 3;
+}
+
+message ClientTLSConfig {
+    // CA certificate path
+    string ca = 1;
+}

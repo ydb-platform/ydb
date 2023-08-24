@@ -110,6 +110,8 @@ public:
 
     TYPath GetWorkingDir() const;
 
+    static TString GetYtProxy();
+
 private:
     TConfigSaverGuard ConfigGuard_;
     IClientPtr Client_;

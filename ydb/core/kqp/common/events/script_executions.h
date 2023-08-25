@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
+#include <ydb/core/protos/kqp.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/public/api/protos/ydb_operation.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -47,8 +48,10 @@ struct TEvGetScriptExecutionOperation : public NActors::TEventLocal<TEvGetScript
 };
 
 struct TEvGetScriptExecutionOperationResponse : public NActors::TEventLocal<TEvGetScriptExecutionOperationResponse, TKqpScriptExecutionEvents::EvGetScriptExecutionOperationResponse> {
-    TEvGetScriptExecutionOperationResponse(bool ready, Ydb::StatusIds::StatusCode status, NYql::TIssues issues, TMaybe<google::protobuf::Any> metadata)
+    TEvGetScriptExecutionOperationResponse(bool ready, bool leaseExpired, TActorId runScriptActorId, Ydb::StatusIds::StatusCode status, NYql::TIssues issues, TMaybe<google::protobuf::Any> metadata)
         : Ready(ready)
+        , LeaseExpired(leaseExpired)
+        , RunScriptActorId(runScriptActorId)
         , Status(status)
         , Issues(std::move(issues))
         , Metadata(std::move(metadata))
@@ -57,12 +60,15 @@ struct TEvGetScriptExecutionOperationResponse : public NActors::TEventLocal<TEvG
 
     TEvGetScriptExecutionOperationResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
         : Ready(false)
+        , LeaseExpired(false)
         , Status(status)
         , Issues(std::move(issues))
     {
     }
 
     bool Ready;
+    bool LeaseExpired;
+    TActorId RunScriptActorId;
     Ydb::StatusIds::StatusCode Status;
     NYql::TIssues Issues;
     TMaybe<google::protobuf::Any> Metadata;
@@ -102,16 +108,24 @@ struct TEvListScriptExecutionOperationsResponse : public NActors::TEventLocal<TE
 };
 
 struct TEvScriptLeaseUpdateResponse : public NActors::TEventLocal<TEvScriptLeaseUpdateResponse, TKqpScriptExecutionEvents::EvScriptLeaseUpdateResponse> {
-    TEvScriptLeaseUpdateResponse(bool executionEntryExists, Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
+    TEvScriptLeaseUpdateResponse(bool executionEntryExists, TInstant currentDeadline, Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
         : ExecutionEntryExists(executionEntryExists)
+        , CurrentDeadline(currentDeadline)
         , Status(status)
         , Issues(std::move(issues))
     {
     }
 
     bool ExecutionEntryExists;
+    TInstant CurrentDeadline;
     Ydb::StatusIds::StatusCode Status;
     NYql::TIssues Issues;
+};
+
+struct TEvCheckAliveRequest : public NActors::TEventPB<TEvCheckAliveRequest, NKikimrKqp::TEvCheckAliveRequest, TKqpScriptExecutionEvents::EvCheckAliveRequest> {
+};
+
+struct TEvCheckAliveResponse : public NActors::TEventPB<TEvCheckAliveResponse, NKikimrKqp::TEvCheckAliveResponse, TKqpScriptExecutionEvents::EvCheckAliveResponse> {
 };
 
 struct TEvCancelScriptExecutionOperation : public NActors::TEventLocal<TEvCancelScriptExecutionOperation, TKqpScriptExecutionEvents::EvCancelScriptExecutionOperation> {

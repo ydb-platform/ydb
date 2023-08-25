@@ -139,6 +139,8 @@ struct TKqpScriptExecutionEvents {
         EvForgetScriptExecutionOperationResponse,
         EvSaveScriptResultMetaFinished,
         EvSaveScriptResultFinished,
+        EvCheckAliveRequest,
+        EvCheckAliveResponse,
     };
 };
 

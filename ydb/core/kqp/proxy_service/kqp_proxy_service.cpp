@@ -659,7 +659,7 @@ public:
 
     void Handle(TEvKqp::TEvScriptRequest::TPtr& ev) {
         if (CheckScriptExecutionsTablesReady<TEvKqp::TEvScriptResponse>(ev)) {
-            Register(CreateScriptExecutionCreatorActor(std::move(ev)));
+            Register(CreateScriptExecutionCreatorActor(std::move(ev)), TMailboxType::HTSwap, AppData()->SystemPoolId);
         }
     }
 
@@ -1464,7 +1464,7 @@ private:
         switch (ScriptExecutionsCreationStatus) {
             case EScriptExecutionsCreationStatus::NotStarted:
                 ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::Pending;
-                Register(CreateScriptExecutionsTablesCreator(MakeHolder<TEvPrivate::TEvScriptExecutionsTablesCreationFinished>()));
+                Register(CreateScriptExecutionsTablesCreator(MakeHolder<TEvPrivate::TEvScriptExecutionsTablesCreationFinished>()), TMailboxType::HTSwap, AppData()->SystemPoolId);
                 [[fallthrough]];
             case EScriptExecutionsCreationStatus::Pending:
                 if (DelayedEventsQueue.size() < 10000) {
@@ -1490,25 +1490,25 @@ private:
 
     void Handle(NKqp::TEvForgetScriptExecutionOperation::TPtr& ev) {
         if (CheckScriptExecutionsTablesReady<TEvForgetScriptExecutionOperationResponse>(ev)) {
-            Register(CreateForgetScriptExecutionOperationActor(std::move(ev)));
+            Register(CreateForgetScriptExecutionOperationActor(std::move(ev)), TMailboxType::HTSwap, AppData()->SystemPoolId);
         }
     }
 
     void Handle(NKqp::TEvGetScriptExecutionOperation::TPtr& ev) {
         if (CheckScriptExecutionsTablesReady<TEvGetScriptExecutionOperationResponse>(ev)) {
-            Register(CreateGetScriptExecutionOperationActor(std::move(ev)));
+            Register(CreateGetScriptExecutionOperationActor(std::move(ev)), TMailboxType::HTSwap, AppData()->SystemPoolId);
         }
     }
 
     void Handle(NKqp::TEvListScriptExecutionOperations::TPtr& ev) {
         if (CheckScriptExecutionsTablesReady<TEvListScriptExecutionOperationsResponse>(ev)) {
-            Register(CreateListScriptExecutionOperationsActor(std::move(ev)));
+            Register(CreateListScriptExecutionOperationsActor(std::move(ev)), TMailboxType::HTSwap, AppData()->SystemPoolId);
         }
     }
 
     void Handle(NKqp::TEvCancelScriptExecutionOperation::TPtr& ev) {
         if (CheckScriptExecutionsTablesReady<TEvCancelScriptExecutionOperationResponse>(ev)) {
-            Register(CreateCancelScriptExecutionOperationActor(std::move(ev)));
+            Register(CreateCancelScriptExecutionOperationActor(std::move(ev)), TMailboxType::HTSwap, AppData()->SystemPoolId);
         }
     }
 

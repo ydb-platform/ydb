@@ -676,6 +676,13 @@ message TEvCancelScriptExecutionResponse {
     repeated Ydb.Issue.IssueMessage Issues = 2;
 }
 
+// Request that is sent to run script actor to check his existence.
+message TEvCheckAliveRequest {
+}
+
+message TEvCheckAliveResponse {
+}
+
 // stored in column "meta" of .metadata/script_executions table
 message TScriptExecutionOperationMeta {
     optional google.protobuf.Duration OperationTtl = 1;

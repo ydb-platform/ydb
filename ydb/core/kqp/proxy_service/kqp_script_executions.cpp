@@ -403,14 +403,16 @@ public:
             return;
         }
 
+        LeaseDeadline = TInstant::Now() + LeaseDuration;
+
         TString sql = R"(
             -- TScriptLeaseUpdater::OnGetLeaseInfo
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
-            DECLARE $lease_deadline AS Timestamp;
+            DECLARE $lease_duration AS Interval;
 
             UPDATE `.metadata/script_execution_leases`
-            SET lease_deadline=$lease_deadline
+            SET lease_deadline=(CurrentUtcTimestamp() + $lease_duration)
             WHERE database = $database AND execution_id = $execution_id;
         )";
 
@@ -422,8 +424,8 @@ public:
             .AddParam("$execution_id")
                 .Utf8(ExecutionId)
                 .Build()
-            .AddParam("$lease_deadline")
-                .Timestamp(TInstant::Now() + LeaseDuration)
+            .AddParam("$lease_duration")
+                .Interval(static_cast<i64>(LeaseDuration.MicroSeconds()))
                 .Build();
 
         RunDataQuery(sql, &params, TTxControl::ContinueAndCommitTx());
@@ -435,13 +437,14 @@ public:
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        Send(Owner, new TEvScriptLeaseUpdateResponse(LeaseExists, status, std::move(issues)));
+        Send(Owner, new TEvScriptLeaseUpdateResponse(LeaseExists, LeaseDeadline, status, std::move(issues)));
     }
 
 private:
     const TString Database;
     const TString ExecutionId;
     const TDuration LeaseDuration;
+    TInstant LeaseDeadline;
     bool LeaseExists = true;
 };
 
@@ -1022,10 +1025,12 @@ private:
     NYql::TIssues Issues;
 };
 
-class TGetScriptExecutionOperationActor : public TScriptExecutionFinisherBase {
+class TGetScriptExecutionOperationQueryActor : public TScriptExecutionFinisherBase {
 public:
-    explicit TGetScriptExecutionOperationActor(TEvGetScriptExecutionOperation::TPtr ev)
-        : Request(std::move(ev))
+    TGetScriptExecutionOperationQueryActor(const TString& database, const NOperationId::TOperationId& operationId, bool finishIfLeaseExpired)
+        : Database(database)
+        , OperationId(operationId)
+        , FinishIfLeaseExpired(finishIfLeaseExpired)
         , StartActorTime(TInstant::Now())
     {}
 
@@ -1036,6 +1041,7 @@ public:
             DECLARE $execution_id AS Text;
 
             SELECT
+                run_script_actor_id,
                 operation_status,
                 execution_status,
                 query_text,
@@ -1057,21 +1063,21 @@ public:
             WHERE database = $database AND execution_id = $execution_id;
         )";
 
-        TMaybe<TString> maybeExecutionId = ScriptExecutionIdFromOperation(Request->Get()->OperationId);
+        TMaybe<TString> maybeExecutionId = ScriptExecutionIdFromOperation(OperationId);
         Y_ENSURE(maybeExecutionId, "No execution id specified");
         ExecutionId = *maybeExecutionId;
 
         NYdb::TParamsBuilder params;
         params
             .AddParam("$database")
-                .Utf8(Request->Get()->Database)
+                .Utf8(Database)
                 .Build()
             .AddParam("$execution_id")
                 .Utf8(ExecutionId)
                 .Build();
 
         RunDataQuery(sql, &params, TTxControl::BeginTx());
-        SetQueryResultHandler(&TGetScriptExecutionOperationActor::OnGetInfo);
+        SetQueryResultHandler(&TGetScriptExecutionOperationQueryActor::OnGetInfo);
     }
 
     void OnGetInfo() {
@@ -1092,7 +1098,7 @@ public:
             Ready = true;
         }
 
-        Metadata.set_execution_id(*ScriptExecutionIdFromOperation(Request->Get()->OperationId));
+        Metadata.set_execution_id(*ScriptExecutionIdFromOperation(OperationId));
 
         const TMaybe<i32> executionStatus = result.ColumnParser("execution_status").GetOptionalInt32();
         if (executionStatus) {
@@ -1151,6 +1157,11 @@ public:
             }
         }
 
+        const TMaybe<TString> runScriptActorIdString = result.ColumnParser("run_script_actor_id").GetOptionalUtf8();
+        if (runScriptActorIdString) {
+            ScriptExecutionRunnerActorIdFromString(*runScriptActorIdString, RunScriptActorId);
+        }
+
         if (!operationStatus) {
             // Check lease deadline
             NYdb::TResultSetParser deadlineResult(ResultSets[1]);
@@ -1180,14 +1191,14 @@ public:
                 return;
             }
 
-            if (*leaseDeadline < StartActorTime) {
-                LeaseExpired = true;
-                FinishScriptExecution(Request->Get()->Database, Metadata.execution_id(), Ydb::StatusIds::ABORTED, Ydb::Query::EXEC_STATUS_ABORTED, operationTtl, resultsTtl, Issues);
-                SetQueryResultHandler(&TGetScriptExecutionOperationActor::OnFinishOperation);
+            LeaseExpired = *leaseDeadline < StartActorTime;
+            if (LeaseExpired && FinishIfLeaseExpired) {
+                FinishScriptExecution(Database, Metadata.execution_id(), Ydb::StatusIds::ABORTED, Ydb::Query::EXEC_STATUS_ABORTED, operationTtl, resultsTtl, Issues);
+                SetQueryResultHandler(&TGetScriptExecutionOperationQueryActor::OnFinishOperation);
             }
         }
 
-        if (!LeaseExpired) {
+        if (!LeaseExpired || !FinishIfLeaseExpired) {
             CommitTransaction();
         }
     }
@@ -1205,20 +1216,112 @@ public:
             TMaybe<google::protobuf::Any> metadata;
             metadata.ConstructInPlace().PackFrom(Metadata);
 
-            Send(Request->Sender, new TEvGetScriptExecutionOperationResponse(Ready, Ydb::StatusIds::SUCCESS, std::move(Issues), std::move(metadata)));
+            Send(Owner, new TEvGetScriptExecutionOperationResponse(Ready, LeaseExpired, RunScriptActorId, Ydb::StatusIds::SUCCESS, std::move(Issues), std::move(metadata)));
         } else {
-            Send(Request->Sender, new TEvGetScriptExecutionOperationResponse(false, status, std::move(issues), Nothing()));
+            Send(Owner, new TEvGetScriptExecutionOperationResponse(false, LeaseExpired, RunScriptActorId, status, std::move(issues), Nothing()));
         }
     }
 
 private:
-    TEvGetScriptExecutionOperation::TPtr Request;
+    TString Database;
+    NOperationId::TOperationId OperationId;
+    bool FinishIfLeaseExpired;
     TInstant StartActorTime;
     TString ExecutionId;
     bool Ready = false;
     bool LeaseExpired = false;
+    TActorId RunScriptActorId;
     NYql::TIssues Issues;
     Ydb::Query::ExecuteScriptMetadata Metadata;
+};
+
+class TGetScriptExecutionOperationActor : public TActorBootstrapped<TGetScriptExecutionOperationActor> {
+    using TBase = TActorBootstrapped<TGetScriptExecutionOperationActor>;
+
+    inline static const TDuration CHECK_ALIVE_REQUEST_TIMEOUT = TDuration::Seconds(60);
+
+public:
+    explicit TGetScriptExecutionOperationActor(TEvGetScriptExecutionOperation::TPtr ev)
+        : Request(std::move(ev))
+    {}
+
+    void Bootstrap() {
+        CreateGetScriptExecutionOperationQuery(false);
+        Become(&TGetScriptExecutionOperationActor::StateFunc);
+    }
+
+private:
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvGetScriptExecutionOperationResponse, Handle);
+        hFunc(TEvCheckAliveResponse, Handle);
+        hFunc(TEvents::TEvWakeup, Handle);
+        hFunc(NActors::TEvents::TEvUndelivered, Handle);
+        hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
+    )
+
+    void CreateGetScriptExecutionOperationQuery(bool finishIfLeaseExpired) {
+        Register(new TGetScriptExecutionOperationQueryActor(Request->Get()->Database, Request->Get()->OperationId, finishIfLeaseExpired));
+    }
+
+    void CreateFinishScriptExecutionOperationQuery() {
+        if (!WaitFinishQuery) {
+            WaitFinishQuery = true;
+            CreateGetScriptExecutionOperationQuery(true);
+        }
+    }
+
+    void Handle(TEvGetScriptExecutionOperationResponse::TPtr& ev) {
+        Response = std::move(ev);
+
+        if (WaitFinishQuery || !Response->Get()->LeaseExpired) {
+            Reply();
+            return;
+        }
+
+        Schedule(CHECK_ALIVE_REQUEST_TIMEOUT, new TEvents::TEvWakeup());
+
+        NActors::TActorId runScriptActor = Response->Get()->RunScriptActorId;
+        ui64 flags = IEventHandle::FlagTrackDelivery;
+        if (runScriptActor.NodeId() != SelfId().NodeId()) {
+            flags |= IEventHandle::FlagSubscribeOnSession;
+            SubscribedOnSession = runScriptActor.NodeId();
+        }
+        Send(runScriptActor, new TEvCheckAliveRequest(), flags);
+    }
+
+    void Handle(TEvCheckAliveResponse::TPtr&) {
+        Reply();
+    }
+
+    void Handle(TEvents::TEvWakeup::TPtr&) {
+        CreateFinishScriptExecutionOperationQuery();
+    }
+
+    void Handle(NActors::TEvents::TEvUndelivered::TPtr&) {
+        CreateFinishScriptExecutionOperationQuery();
+    }
+
+    void Handle(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr&) {
+        CreateFinishScriptExecutionOperationQuery();
+    }
+
+    void Reply() {
+        Send(Request->Sender, Response->Release().Release());
+        PassAway();
+    }
+
+    void PassAway() override {
+        if (SubscribedOnSession) {
+            Send(TActivationContext::InterconnectProxy(*SubscribedOnSession), new TEvents::TEvUnsubscribe());
+        }
+        TBase::PassAway();
+    }
+
+private:
+    TEvGetScriptExecutionOperation::TPtr Request;
+    TEvGetScriptExecutionOperationResponse::TPtr Response;
+    bool WaitFinishQuery = false;
+    TMaybe<ui32> SubscribedOnSession;
 };
 
 class TListScriptExecutionOperationsQuery : public TQueryBase {

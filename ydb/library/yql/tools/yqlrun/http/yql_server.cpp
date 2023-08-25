@@ -6,8 +6,6 @@
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/comp_nodes/yql_factory.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
-#include <yql/providers/rtmr/gateway/yql_rtmr_dummy_gateway.h>
-#include <yql/providers/rtmr/provider/yql_rtmr_provider.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
 #include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file.h>
 #include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.h>

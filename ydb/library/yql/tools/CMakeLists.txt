@@ -8,3 +8,4 @@
 
 add_subdirectory(astdiff)
 add_subdirectory(mrjob)
+add_subdirectory(yqlrun)

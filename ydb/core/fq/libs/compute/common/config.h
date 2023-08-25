@@ -43,7 +43,7 @@ public:
             const auto& excludeScopes = activation.GetExcludeScopes();
             auto isActivatedCase1 =
                 activation.GetPercentage() == 0 &&
-                Find(includeScopes, scope) == includeScopes.end();
+                Find(includeScopes, scope) != includeScopes.end();
             auto isActivatedCase2 =
                 activation.GetPercentage() == 100 &&
                 Find(excludeScopes, scope) != excludeScopes.end();

@@ -1,5 +1,7 @@
 #!/usr/bin/env sh
 
+# Please keep this script in sync with arcadia/devtools/ya/opensource/ya
+
 # Shell commands follow
 # Next line is bilingual: it starts a comment in Python, but do nothing in shell
 """:"

@@ -273,6 +273,8 @@ namespace NHyperscan {
         if (status != HS_SUCCESS) {
             if (status == HS_DB_PLATFORM_ERROR) {
                 ythrow yexception() << "Serialized Hyperscan database is incompatible with current CPU";
+            } else if (status == HS_DB_VERSION_ERROR) {
+                ythrow yexception() << "Need recreate Hyperscan database with new version Hyperscan";
             } else {
                 ythrow yexception() << "Failed to deserialize hyperscan database (status = " << status << ")";
             }

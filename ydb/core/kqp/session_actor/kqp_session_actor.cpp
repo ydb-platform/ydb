@@ -272,7 +272,7 @@ public:
         YQL_ENSURE(txControl.tx_selector_case() == Ydb::Table::TransactionControl::kTxId, "Can't commit transaction - "
             << " there is no TxId in Query's TxControl");
 
-        QueryState->Commit = txControl.commit_tx();
+        QueryState->Commit = true;
 
         auto txId = TTxId::FromString(txControl.tx_id());
         auto txCtx = Transactions.Find(txId);

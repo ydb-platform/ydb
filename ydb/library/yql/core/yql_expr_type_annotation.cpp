@@ -2792,41 +2792,62 @@ bool EnsureWideStreamType(TPositionHandle position, const TTypeAnnotationNode& t
     return true;
 }
 
-bool EnsureWideFlowBlockType(const TExprNode& node, TTypeAnnotationNode::TListType& blockItemTypes, TExprContext& ctx, bool allowScalar) {
-    if (!EnsureWideFlowType(node, ctx)) {
+bool EnsureWideBlockType(TPositionHandle position, const TTypeAnnotationNode& type, TTypeAnnotationNode::TListType& blockItemTypes, TExprContext& ctx, bool allowScalar) {
+    if (HasError(&type, ctx)) {
         return false;
     }
 
-    auto& items = node.GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
+    if (type.GetKind() != ETypeAnnotationKind::Multi) {
+        ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected wide type, but got: " << type));
+        return false;
+    }
+
+    auto& items = type.Cast<TMultiExprType>()->GetItems();
     if (items.empty()) {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Expected at least one column"));
-        return IGraphTransformer::TStatus::Error;
+        ctx.AddError(TIssue(ctx.GetPosition(position), "Expected at least one column"));
+        return false;
     }
 
     bool isScalar;
     for (ui32 i = 0; i < items.size(); ++i) {
-        const auto& type = items[i];
-        if (!EnsureBlockOrScalarType(node.Pos(), *type, ctx)) {
+        const auto& itemType = items[i];
+        if (!EnsureBlockOrScalarType(position, *itemType, ctx)) {
             return false;
         }
 
-        blockItemTypes.push_back(GetBlockItemType(*type, isScalar));
+        blockItemTypes.push_back(GetBlockItemType(*itemType, isScalar));
         if (!allowScalar && isScalar && (i + 1 != items.size())) {
-            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Scalars are not allowed"));
+            ctx.AddError(TIssue(ctx.GetPosition(position), "Scalars are not allowed"));
             return false;
         }
     }
 
     if (!isScalar) {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Last column should be a scalar"));
+        ctx.AddError(TIssue(ctx.GetPosition(position), "Last column should be a scalar"));
         return false;
     }
 
-    if (!EnsureSpecificDataType(node.Pos(), *blockItemTypes.back(), EDataSlot::Uint64, ctx)) {
+    if (!EnsureSpecificDataType(position, *blockItemTypes.back(), EDataSlot::Uint64, ctx)) {
         return false;
     }
 
     return true;
+}
+
+bool EnsureWideFlowBlockType(const TExprNode& node, TTypeAnnotationNode::TListType& blockItemTypes, TExprContext& ctx, bool allowScalar) {
+    if (!EnsureWideFlowType(node, ctx)) {
+        return false;
+    }
+
+    return EnsureWideBlockType(node.Pos(), *node.GetTypeAnn()->Cast<TFlowExprType>()->GetItemType(), blockItemTypes, ctx, allowScalar);
+}
+
+bool EnsureWideStreamBlockType(const TExprNode& node, TTypeAnnotationNode::TListType& blockItemTypes, TExprContext& ctx, bool allowScalar) {
+    if (!EnsureWideStreamType(node, ctx)) {
+        return false;
+    }
+
+    return EnsureWideBlockType(node.Pos(), *node.GetTypeAnn()->Cast<TStreamExprType>()->GetItemType(), blockItemTypes, ctx, allowScalar);
 }
 
 bool EnsureOptionalType(const TExprNode& node, TExprContext& ctx) {
@@ -2957,6 +2978,13 @@ bool EnsureDictType(TPositionHandle position, const TTypeAnnotationNode& type, T
     return true;
 }
 
+bool IsVoidType(const TExprNode& node, TExprContext& ctx) {
+    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+        return false;
+    }
+    return node.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Void;
+}
+
 bool EnsureVoidType(const TExprNode& node, TExprContext& ctx) {
     if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
@@ -2964,7 +2992,7 @@ bool EnsureVoidType(const TExprNode& node, TExprContext& ctx) {
         return false;
     }
 
-    if (node.GetTypeAnn()->GetKind() != ETypeAnnotationKind::Void) {
+    if (!IsVoidType(node, ctx)) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected void type, but got: " << *node.GetTypeAnn()));
         return false;
     }
@@ -5487,7 +5515,7 @@ bool HasContextFuncs(const TExprNode& input) {
             return false;
         }
 
-        if (node.IsCallable({"AggApply","AggApplyState","AggApplyManyState","AggBlockApply","AggBlockApplyState"}) && 
+        if (node.IsCallable({"AggApply","AggApplyState","AggApplyManyState","AggBlockApply","AggBlockApplyState"}) &&
             node.Head().Content().StartsWith("pg_")) {
             needCtx = true;
             return false;

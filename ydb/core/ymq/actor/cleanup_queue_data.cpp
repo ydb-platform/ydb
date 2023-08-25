@@ -5,6 +5,7 @@
 #include <ydb/core/ymq/queues/common/key_hashes.h>
 
 
+
 namespace NKikimr::NSQS {
     constexpr TDuration LOCK_PERIOD = TDuration::Seconds(30);
     constexpr TDuration UPDATE_LOCK_PERIOD = TDuration::Seconds(20);
@@ -99,9 +100,14 @@ namespace NKikimr::NSQS {
         LOG_DEBUG_S(ctx, NKikimrServices::SQS, "[cleanup removed queues] getting queues...");
         State = state;
 
-        NClient::TParameters params;
-        params["$StartProcessTimestamp"] = StartProcessTimestamp.Seconds();
-        params["$NodeId"] = SelfId().NodeId();
+        NYdb::TParams params = NYdb::TParamsBuilder()
+            .AddParam("$StartProcessTimestamp")
+                .Uint64(StartProcessTimestamp.Seconds())
+                .Build()
+            .AddParam("$NodeId")
+                .Uint32(SelfId().NodeId())
+                .Build()
+            .Build();
 
         RunYqlQuery(SelectQueuesQuery, std::move(params), true, sendAfter, Cfg().GetRoot(), ctx);
     }
@@ -173,11 +179,19 @@ namespace NKikimr::NSQS {
     void TCleanupQueueDataActor::LockQueueToRemove(TDuration runAfter, const TActorContext& ctx) {
         State = EState::LockQueue;
 
-        NClient::TParameters params;
         StartProcessTimestamp = ctx.Now();
-        params["$StartProcessTimestamp"] = StartProcessTimestamp.Seconds();
-        params["$LockFreeTimestamp"] = (StartProcessTimestamp - LOCK_PERIOD).Seconds();
-        params["$NodeId"] = SelfId().NodeId();
+
+        NYdb::TParams params = NYdb::TParamsBuilder()
+            .AddParam("$StartProcessTimestamp")
+                .Uint64(StartProcessTimestamp.Seconds())
+                .Build()
+            .AddParam("$LockFreeTimestamp")
+                .Uint64((StartProcessTimestamp - LOCK_PERIOD).Seconds())
+                .Build()
+            .AddParam("$NodeId")
+                .Uint32(SelfId().NodeId())
+                .Build()
+            .Build();
 
         RunYqlQuery(LockQueueQuery, std::move(params), false, runAfter, Cfg().GetRoot(), ctx);
     }
@@ -186,13 +200,28 @@ namespace NKikimr::NSQS {
         LOG_DEBUG_S(ctx, NKikimrServices::SQS, "[cleanup removed queues] update queue lock...");
         State = EState::UpdateLockQueue;
 
-        NClient::TParameters params;
-        params["$StartProcessTimestamp"] = StartProcessTimestamp.Seconds();
-        params["$NodeId"] = SelfId().NodeId();
-        params["$RemoveTimestamp"] = RemoveQueueTimetsamp;
-        params["$QueueIdNumber"] = QueueIdNumber;
+        NYdb::TParamsBuilder paramsBuilder;
+        paramsBuilder
+            .AddParam("$StartProcessTimestamp")
+                .Uint64(StartProcessTimestamp.Seconds())
+                .Build()
+            .AddParam("$NodeId")
+                .Uint32(SelfId().NodeId())
+                .Build()
+            .AddParam("$RemoveTimestamp")
+                .Uint64(RemoveQueueTimetsamp)
+                .Build()
+            .AddParam("$QueueIdNumber")
+                .Uint64(QueueIdNumber)
+                .Build();
+
         StartProcessTimestamp = ctx.Now();
-        params["$Now"] = StartProcessTimestamp.Seconds();
+        paramsBuilder
+            .AddParam("$Now")
+                .Uint64(StartProcessTimestamp.Seconds())
+                .Build();
+
+        NYdb::TParams params = paramsBuilder.Build();
 
         RunYqlQuery(UpdateLockQueueQuery, std::move(params), false, TDuration::Zero(), Cfg().GetRoot(), ctx);
     }
@@ -252,9 +281,15 @@ namespace NKikimr::NSQS {
     void TCleanupQueueDataActor::Finish(const TActorContext& ctx) {
         State = EState::Finish;
 
-        NClient::TParameters params;
-        params["$RemoveTimestamp"] = RemoveQueueTimetsamp;
-        params["$QueueIdNumber"] = QueueIdNumber;
+        NYdb::TParams params = NYdb::TParamsBuilder()
+            .AddParam("$RemoveTimestamp")
+                .Uint64(RemoveQueueTimetsamp)
+                .Build()
+            .AddParam("$QueueIdNumber")
+                .Uint64(QueueIdNumber)
+                .Build()
+            .Build();
+
         RunYqlQuery(RemoveQueueFromListQuery, std::move(params), false, TDuration::Zero(), Cfg().GetRoot(), ctx);
     }
     
@@ -272,12 +307,22 @@ namespace NKikimr::NSQS {
             return;
         }
 
-        NClient::TParameters params;
         ui32 shard = ShardsToRemove ? (ShardsToRemove - 1) : 0;
-        params["$QueueIdNumberAndShardHash"] = GetKeysHash(QueueIdNumber, shard);
-        params["$Shard"] = shard;
-        params["$QueueIdNumberHash"] = GetKeysHash(QueueIdNumber);
-        params["$QueueIdNumber"] = QueueIdNumber;
+
+        NYdb::TParams params = NYdb::TParamsBuilder()
+            .AddParam("$QueueIdNumberAndShardHash")
+                .Uint64(GetKeysHash(QueueIdNumber, shard))
+                .Build()
+            .AddParam("$Shard")
+                .Uint32(shard)
+                .Build()
+            .AddParam("$QueueIdNumberHash")
+                .Uint64(GetKeysHash(QueueIdNumber))
+                .Build()
+            .AddParam("$QueueIdNumber")
+                .Uint64(QueueIdNumber)
+                .Build()
+            .Build();
 
         RunYqlQuery(RemoveDataQuery, std::move(params), false, TDuration::Zero(), Cfg().GetRoot(), ctx);
     }

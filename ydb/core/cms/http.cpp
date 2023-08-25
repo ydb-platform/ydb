@@ -194,6 +194,15 @@ private:
             return;
         }
 
+        if (msg->Request.GetPathInfo() == "/yaml-config-enabled") {
+
+            ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(TString(NMonitoring::HTTPOKJSON)
+                                                          + R"({"enabled":)" + (AppData()->YamlConfigEnabled ? "true" : "false") + "}",
+                                                          0,
+                                                          NMon::IEvHttpInfoRes::EContentType::Custom));
+            return;
+        }
+
         ReplyWithFile(ev, ctx, TString{msg->Request.GetPathInfo()});
     }
 

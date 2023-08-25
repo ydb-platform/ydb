@@ -20,7 +20,14 @@ public:
     using TBase::PassAway;
 
     TBaseComputeActor(const ::NYql::NCommon::TServiceCounters& queryCounters, const TString& stepName)
-        : Counters(MakeIntrusive<TComputeRequestCounters>("Total", queryCounters.Counters->GetSubgroup("step", stepName)))
+        : BaseCounters(queryCounters.Counters)
+        , Counters(MakeIntrusive<TComputeRequestCounters>("Total", queryCounters.Counters->GetSubgroup("step", stepName)))
+        , TotalStartTime(TInstant::Now())
+    {}
+
+    TBaseComputeActor(const ::NMonitoring::TDynamicCounterPtr& baseCounters, const TString& stepName)
+        : BaseCounters(baseCounters)
+        , Counters(MakeIntrusive<TComputeRequestCounters>("Total", baseCounters->GetSubgroup("step", stepName)))
         , TotalStartTime(TInstant::Now())
     {}
 
@@ -53,7 +60,12 @@ public:
         return Counters->Counters;
     }
 
+    ::NMonitoring::TDynamicCounterPtr GetBaseCounters() const {
+        return BaseCounters;
+    }
+
 private:
+    ::NMonitoring::TDynamicCounterPtr BaseCounters;
     TComputeRequestCountersPtr Counters;
     TInstant TotalStartTime;
 };

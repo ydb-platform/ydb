@@ -100,10 +100,11 @@ class TBoardPublishActor : public TActorBootstrapped<TBoardPublishActor> {
     const ui32 StateStorageGroupId;
     const ui32 TtlMs;
     const bool Register;
+    const TBoardRetrySettings BoardRetrySettings;
 
     struct TRetryState {
         NMonotonic::TMonotonic LastRetryAt = TMonotonic::Zero();
-        TDuration CurrentDelay = TDuration::MilliSeconds(100);
+        TDuration CurrentDelay = TDuration::Zero();
     };
 
     struct TReplicaPublishActorState {
@@ -113,13 +114,20 @@ class TBoardPublishActor : public TActorBootstrapped<TBoardPublishActor> {
 
     THashMap<TActorId, TReplicaPublishActorState> ReplicaPublishActors; // replica -> publish actor
 
+    const TDuration& GetCurrentDelay(TRetryState& state) {
+        if (state.CurrentDelay == TDuration::Zero()) {
+            state.CurrentDelay = BoardRetrySettings.StartDelayMs;
+        }
+        return state.CurrentDelay;
+    }
+
     TDuration GetRetryDelay(TRetryState& state) {
         auto newDelay = state.CurrentDelay;
         newDelay *= 2;
-        if (newDelay > TDuration::Seconds(1)) {
-            newDelay = TDuration::Seconds(1);
+        if (newDelay > BoardRetrySettings.MaxDelayMs) {
+            newDelay = BoardRetrySettings.MaxDelayMs;
         }
-        newDelay *= AppData()->RandomProvider->Uniform(10, 200);
+        newDelay *= AppData()->RandomProvider->Uniform(50, 200);
         newDelay /= 100;
         state.CurrentDelay = newDelay;
         return state.CurrentDelay;
@@ -183,7 +191,7 @@ class TBoardPublishActor : public TActorBootstrapped<TBoardPublishActor> {
             const TActorId replica = ev->Get()->Replica;
             auto& retryState = ReplicaPublishActors[replica].RetryState;
 
-            if (now - retryState.LastRetryAt < retryState.CurrentDelay) {
+            if (now - retryState.LastRetryAt < GetCurrentDelay(retryState)) {
                 auto at = retryState.LastRetryAt + GetRetryDelay(retryState);
                 Schedule(at - now, new TEvPrivate::TEvRetryPublishActor(replica));
                 return;
@@ -196,11 +204,19 @@ class TBoardPublishActor : public TActorBootstrapped<TBoardPublishActor> {
     void Handle(TEvPrivate::TEvRetryPublishActor::TPtr &ev) {
         const auto& replica = ev->Get()->Replica;
 
-        RetryReplica(replica);
+        RetryReplica(replica, true);
     }
 
 
-    void RetryReplica(const TActorId& replica) {
+    void RetryReplica(const TActorId& replica, bool fromRetry = false) {
+        if (!fromRetry) {
+            auto delay = TDuration::Seconds(2);
+            delay *= AppData()->RandomProvider->Uniform(50, 200);
+            delay /= 100;
+            Schedule(delay, new TEvPrivate::TEvRetryPublishActor(replica));
+            return;
+       }
+
         auto replicaPublishActorsIt = ReplicaPublishActors.find(replica);
         if (replicaPublishActorsIt == ReplicaPublishActors.end()) {
             return;
@@ -221,13 +237,16 @@ public:
         return NKikimrServices::TActivity::BOARD_PUBLISH_ACTOR;
     }
 
-    TBoardPublishActor(const TString &path, const TString &payload, const TActorId &owner, ui32 groupId, ui32 ttlMs, bool reg)
+    TBoardPublishActor(
+        const TString &path, const TString &payload, const TActorId &owner, ui32 groupId, ui32 ttlMs, bool reg,
+        TBoardRetrySettings boardRetrySettings)
         : Path(path)
         , Payload(payload)
         , Owner(owner)
         , StateStorageGroupId(groupId)
         , TtlMs(ttlMs)
         , Register(reg)
+        , BoardRetrySettings(std::move(boardRetrySettings))
     {
         Y_UNUSED(TtlMs);
         Y_UNUSED(Register);
@@ -257,8 +276,10 @@ public:
     }
 };
 
-IActor* CreateBoardPublishActor(const TString &path, const TString &payload, const TActorId &owner, ui32 groupId, ui32 ttlMs, bool reg) {
-    return new TBoardPublishActor(path, payload, owner, groupId, ttlMs, reg);
+IActor* CreateBoardPublishActor(
+        const TString &path, const TString &payload, const TActorId &owner, ui32 groupId, ui32 ttlMs, bool reg,
+        TBoardRetrySettings boardRetrySettings) {
+    return new TBoardPublishActor(path, payload, owner, groupId, ttlMs, reg, std::move(boardRetrySettings));
 }
 
 TString MakeEndpointsBoardPath(const TString &database) {

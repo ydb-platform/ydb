@@ -151,6 +151,11 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
     case ETypeAnnotationKind::Tagged: {
         auto tagged = annotation.Cast<TTaggedExprType>();
         auto base = BuildType(*tagged->GetBaseType(), pgmBuilder, err);
+
+        if constexpr (NKikimr::NMiniKQL::RuntimeVersion < 34U) {
+            return base;
+        }
+
         return pgmBuilder.NewTaggedType(base, tagged->GetTag());
     }
 

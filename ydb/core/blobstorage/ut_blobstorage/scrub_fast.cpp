@@ -39,7 +39,7 @@ void Test() {
         auto& r = res->Get()->Responses[0];
         UNIT_ASSERT_VALUES_EQUAL(r.Status, status);
         if (status == NKikimrProto::OK) {
-            UNIT_ASSERT_VALUES_EQUAL(r.Buffer, data);
+            UNIT_ASSERT_VALUES_EQUAL(r.Buffer.ConvertToString(), data);
         }
     };
 

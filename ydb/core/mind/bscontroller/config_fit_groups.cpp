@@ -16,6 +16,7 @@ namespace NKikimr {
             const bool IgnoreVSlotQuotaCheck;
             const bool AllowUnusableDisks;
             const bool SettleOnlyOnOperationalDisks;
+            const bool IsSelfHealReasonDecommit;
             std::deque<ui64> ExpectedSlotSize;
             const ui32 PDiskSpaceMarginPromille;
             const TGroupGeometryInfo Geometry;
@@ -38,6 +39,7 @@ namespace NKikimr {
                 , IgnoreVSlotQuotaCheck(cmd.GetIgnoreVSlotQuotaCheck())
                 , AllowUnusableDisks(cmd.GetAllowUnusableDisks())
                 , SettleOnlyOnOperationalDisks(cmd.GetSettleOnlyOnOperationalDisks())
+                , IsSelfHealReasonDecommit(cmd.GetIsSelfHealReasonDecommit())
                 , ExpectedSlotSize(expectedSlotSize)
                 , PDiskSpaceMarginPromille(pdiskSpaceMarginPromille)
                 , Geometry(TBlobStorageGroupType(storagePool.ErasureSpecies), storagePool.GetGroupGeometry())
@@ -423,7 +425,7 @@ namespace NKikimr {
                         for (const auto& domain : realm) {
                             for (const TPDiskId id : domain) {
                                 if (id != TPDiskId()) {
-                                    if (auto *info = State.PDisks.Find(id); info && RegisterPDisk(id, *info, false)) {
+                                    if (auto *info = State.PDisks.Find(id); info && RegisterPDisk(id, *info, false, "X")) {
                                         removeQ.push_back(id);
                                     }
                                 }
@@ -449,7 +451,7 @@ namespace NKikimr {
                         for (const auto& domain : realm) {
                             for (const TPDiskId id : domain) {
                                 if (id != TPDiskId()) {
-                                    if (auto *info = State.PDisks.Find(id); info && RegisterPDisk(id, *info, false)) {
+                                    if (auto *info = State.PDisks.Find(id); info && RegisterPDisk(id, *info, false, "X")) {
                                         removeQ.push_back(id);
                                     }
                                 }
@@ -486,7 +488,7 @@ namespace NKikimr {
                 });
             }
 
-            bool RegisterPDisk(TPDiskId id, const TPDiskInfo& info, bool usable) {
+            bool RegisterPDisk(TPDiskId id, const TPDiskInfo& info, bool usable, TString whyUnusable = {}) {
                 // calculate number of used slots on this PDisk, also counting the static ones
                 ui32 numSlots = info.NumActiveSlots + info.StaticSlotUsage;
 
@@ -528,10 +530,17 @@ namespace NKikimr {
 
                 if (!info.AcceptsNewSlots()) {
                     usable = false;
+                    whyUnusable.append('S');
                 }
 
                 if (SettleOnlyOnOperationalDisks && !info.Operational) {
                     usable = false;
+                    whyUnusable.append('O');
+                }
+
+                if (!info.UsableInTermsOfDecommission(IsSelfHealReasonDecommit)) {
+                    usable = false;
+                    whyUnusable.append('D');
                 }
 
                 // register PDisk in the mapper
@@ -545,6 +554,7 @@ namespace NKikimr {
                     .SpaceAvailable = availableSpace,
                     .Operational = info.Operational,
                     .Decommitted = info.Decommitted(),
+                    .WhyUnusable = std::move(whyUnusable),
                 });
             }
 

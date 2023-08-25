@@ -653,39 +653,7 @@ public:
                 if (!x) {
                     return nullptr;
                 }
-
-                bool isStar = false;
-                if (NodeTag(r->val) == T_ColumnRef) {
-                    auto ref = CAST_NODE(ColumnRef, r->val);
-                    for (int fieldNo = 0; fieldNo < ListLength(ref->fields); ++fieldNo) {
-                        if (NodeTag(ListNodeNth(ref->fields, fieldNo)) == T_A_Star) {
-                            isStar = true;
-                            break;
-                        }
-                    }
-                }
-
-                TString name;
-                if (!isStar) {
-                    name = r->name;
-                    if (name.empty()) {
-                        if (NodeTag(r->val) == T_ColumnRef) {
-                            auto ref = CAST_NODE(ColumnRef, r->val);
-                            auto field = ListNodeNth(ref->fields, ListLength(ref->fields) - 1);
-                            if (NodeTag(field) == T_String) {
-                                name = StrVal(field);
-                            }
-                        }
-                    }
-
-                    if (name.empty()) {
-                        name = "column" + ToString(i++);
-                    }
-                }
-
-                auto lambda = L(A("lambda"), QL(), x);
-                auto columnName = QAX(name);
-                res.push_back(L(A("PgResultItem"), columnName, L(A("Void")), lambda));
+                res.push_back(CreatePgResultItem(r, x, i));
             }
 
             TVector<TAstNode*> val;
@@ -909,15 +877,89 @@ public:
     }
 
     [[nodiscard]]
+    TAstNode* CreatePgResultItem(const ResTarget* r, TAstNode* x, ui32& columnIndex) {
+        bool isStar = false;
+        if (NodeTag(r->val) == T_ColumnRef) {
+            auto ref = CAST_NODE(ColumnRef, r->val);
+            for (int fieldNo = 0; fieldNo < ListLength(ref->fields); ++fieldNo) {
+                if (NodeTag(ListNodeNth(ref->fields, fieldNo)) == T_A_Star) {
+                    isStar = true;
+                    break;
+                }
+            }
+        }
+
+        TString name;
+        if (!isStar) {
+            name = r->name;
+            if (name.empty()) {
+                if (NodeTag(r->val) == T_ColumnRef) {
+                    auto ref = CAST_NODE(ColumnRef, r->val);
+                    auto field = ListNodeNth(ref->fields, ListLength(ref->fields) - 1);
+                    if (NodeTag(field) == T_String) {
+                        name = StrVal(field);
+                    }
+                }
+            }
+
+            if (name.empty()) {
+                name = "column" + ToString(columnIndex++);
+            }
+        }
+
+        const auto lambda = L(A("lambda"), QL(), x);
+        const auto columnName = QAX(name);
+        return L(A("PgResultItem"), columnName, L(A("Void")), lambda);
+    }
+
+    [[nodiscard]]
+    std::optional<TVector<TAstNode*>> ParseReturningList(const List* returningList) {
+        TVector <TAstNode*> list;
+        if (ListLength(returningList) == 0) {
+            return {};
+        }
+        ui32 index = 0;
+        for (size_t i = 0; i < ListLength(returningList); i++) {
+            auto node = ListNodeNth(returningList, i);
+            if (NodeTag(node) != T_ResTarget) {
+                NodeNotImplemented(returningList, node);
+                return std::nullopt;
+            }
+            auto r = CAST_NODE(ResTarget, node);
+            if (!r->val) {
+                AddError("SelectStmt: expected value");
+                return std::nullopt;
+            }
+            if (NodeTag(r->val) != T_ColumnRef) {
+                NodeNotImplemented(r, r->val);
+                return std::nullopt;
+            }
+            TExprSettings settings;
+            settings.AllowColumns = true;
+            auto columnRef = ParseColumnRef(CAST_NODE(ColumnRef, r->val), settings);
+            if (!columnRef) {
+                return std::nullopt;
+            }
+            list.emplace_back(CreatePgResultItem(r, columnRef, index));
+        }
+        return list;
+    }
+
+    [[nodiscard]]
     TAstNode* ParseInsertStmt(const InsertStmt* value) {
         if (value->onConflictClause) {
             AddError("InsertStmt: not supported onConflictClause");
             return nullptr;
         }
 
-        if (ListLength(value->returningList) > 0) {
-            AddError("InsertStmt: not supported returningList");
-            return nullptr;
+        TVector <TAstNode*> returningList;
+        if (value->returningList) {
+            auto list = ParseReturningList(value->returningList);
+            if (list.has_value()) {
+                returningList = list.value();
+            } else {
+                return nullptr;
+            }
         }
 
         if (value->withClause) {
@@ -954,7 +996,7 @@ public:
             return nullptr;
         }
 
-        const auto writeOptions = BuildWriteOptions(value);
+        const auto writeOptions = BuildWriteOptions(value, std::move(returningList));
 
         Statements.push_back(L(
             A("let"),
@@ -1046,6 +1088,7 @@ private:
         std::vector<TAstNode*> NotNullColumns;
         std::unordered_set<TString> NotNullColSet;
         bool isTemporary;
+        std::vector<TAstNode*> SerialColumns;
     };
 
     bool CheckConstraintSupported(const Constraint* pk) {
@@ -1113,7 +1156,7 @@ private:
         return inserted;
     }
 
-    const TString& FindColumnTypeAlias(const TString& colType) {
+    const TString& FindColumnTypeAlias(const TString& colType, bool& isTypeSerial) {
         const static std::unordered_map<TString, TString> aliasMap {
             {"smallserial", "int2"},
             {"serial2", "int2"},
@@ -1122,10 +1165,12 @@ private:
             {"bigserial", "int8"},
             {"serial8", "int8"},
         };
-        const auto aliasIt = aliasMap.find(ToLowerUTF8(colType));
+        const auto aliasIt = aliasMap.find(to_lower(colType));
         if (aliasIt == aliasMap.end()) {
+            isTypeSerial = false;
             return colType;
         }
+        isTypeSerial = true;
         return aliasIt->second;
     }
 
@@ -1170,7 +1215,12 @@ private:
         // for now we pass just the last part of the type name
         auto colTypeVal = StrVal( ListNodeNth(node->typeName->names,
                                            ListLength(node->typeName->names) - 1));
-        const auto colType = FindColumnTypeAlias(colTypeVal);
+        bool isTypeSerial = false;
+        const auto colType = FindColumnTypeAlias(colTypeVal, isTypeSerial);
+
+        if (isTypeSerial) {
+            ctx.SerialColumns.push_back(QA(node->colname));
+        }
 
         ctx.Columns.push_back(
                 QL(QA(node->colname), L(A("PgType"), QA(colType)))
@@ -1213,19 +1263,26 @@ private:
         if (!ctx.NotNullColumns.empty()) {
             options.push_back(QL(QA("notnull"), QVL(ctx.NotNullColumns.data(), ctx.NotNullColumns.size())));
         }
+        if (!ctx.SerialColumns.empty()) {
+            options.push_back(QL(QA("serialColumns"), QVL(ctx.SerialColumns.data(), ctx.SerialColumns.size())));
+        }
         if (ctx.isTemporary) {
             options.push_back(QL(QA("temporary")));
         }
         return QVL(options.data(), options.size());
     }
 
-    TAstNode* BuildWriteOptions(const InsertStmt* value) {
+    TAstNode* BuildWriteOptions(const InsertStmt* value, TVector<TAstNode*> returningList = {}) {
         std::vector<TAstNode*> options;
 
         const auto insertMode = (ProviderToInsertModeMap.contains(Provider))
             ? ProviderToInsertModeMap.at(Provider)
             : "append";
         options.push_back(QL(QA("mode"), QA(insertMode)));
+
+        if (!returningList.empty()) {
+            options.push_back(QL(QA("returning"), QVL(returningList.data(), returningList.size())));
+        }
 
         if (!value->selectStmt) {
             options.push_back(QL(QA("default_values")));
@@ -1555,9 +1612,14 @@ public:
             AddError("using is not supported");
             return nullptr;
         }
+        TVector <TAstNode*> returningList;
         if (value->returningList) {
-            AddError("returning is not supported");
-            return nullptr;
+            auto list = ParseReturningList(value->returningList);
+            if (list.has_value()) {
+                returningList = list.value();
+            } else {
+                return nullptr;
+            }
         }
         if (value->withClause) {
             AddError("with is not supported");
@@ -1613,6 +1675,12 @@ public:
 
         auto [sink, key] = ParseWriteRangeVar(value->relation);
 
+        std::vector<TAstNode*> options;
+        options.push_back(QL(QA("pg_delete"), select));
+        options.push_back(QL(QA("mode"), QA("delete")));
+        if (!returningList.empty()) {
+            options.push_back(QL(QA("returning"), QVL(returningList.data(), returningList.size())));
+        }
         Statements.push_back(L(
             A("let"),
             A("world"),
@@ -1622,10 +1690,7 @@ public:
                 sink,
                 key,
                 L(A("Void")),
-                QL(
-                    QL(QA("pg_delete"), select),
-                    QL(QA("mode"), QA("delete"))
-                )
+                QVL(options.data(), options.size())
             )
         ));
         return Statements.back();

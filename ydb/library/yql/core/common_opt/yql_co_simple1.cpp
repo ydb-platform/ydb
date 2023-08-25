@@ -5883,7 +5883,16 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
     map["RangeMultiply"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
         if (node->ChildrenSize() == 2 && node->Tail().IsCallable("RangeMultiply")) {
-            auto minLimit = ctx.NewCallable(node->Pos(), "Min", { node->HeadPtr(), node->Tail().HeadPtr() });
+            auto first = node->HeadPtr();
+            auto second = node->Tail().HeadPtr();
+            TExprNode::TPtr minLimit;
+            if (first->IsCallable("Void")) {
+                minLimit = second;
+            } else if (second->IsCallable("Void")) {
+                minLimit = first;
+            } else {
+                minLimit = ctx.NewCallable(node->Pos(), "Min", { first , second });
+            }
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Tail().Content();
             return ctx.ChangeChild(node->Tail(), 0, std::move(minLimit));
         }

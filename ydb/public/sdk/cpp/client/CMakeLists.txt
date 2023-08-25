@@ -8,6 +8,7 @@
 
 add_subdirectory(draft)
 add_subdirectory(extensions)
+add_subdirectory(helpers)
 add_subdirectory(iam)
 add_subdirectory(iam_private)
 add_subdirectory(impl)

@@ -43,6 +43,7 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvents::TEvWakeup, HandleReady);
+                hFunc(NKqp::TEvKqp::TEvCloseSessionResponse, HandleReady);
                 default:
                     UnexpectedEvent(__func__, ev);
             }
@@ -78,6 +79,7 @@ private:
 
         if (CheckSession(sessionId, req)) {
             ev->Record.MutableRequest()->SetSessionId(sessionId);
+            ActorIdToProto(SelfId(), ev->Record.MutableRequest()->MutableExtSessionCtrlActorId());
             SessionId = sessionId;
         } else {
             return ReplyFinishStream(Ydb::StatusIds::BAD_REQUEST);
@@ -92,12 +94,28 @@ private:
         ReplyFinishStream(Ydb::StatusIds::SUCCESS);
     }
 
+    void HandleReady(NKqp::TEvKqp::TEvCloseSessionResponse::TPtr& ev) {
+        const auto &event = ev->Get()->Record;
+        if (event.GetResponse().GetSessionId() == SessionId &&
+            event.GetResponse().GetClosed() &&
+            event.GetStatus() == Ydb::StatusIds::SUCCESS)
+        {
+            ReplyFinishStream(Ydb::StatusIds::SUCCESS);
+        } else {
+            InternalError("unexpected TEvCloseSessionResponse response");
+        }
+    }
+
     void HandleAttaching(NKqp::TEvKqp::TEvPingSessionResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         // Do not try to attach to closing session
         const bool sessionExpired = record.GetWorkerIsClosing();
         if (sessionExpired) {
             return ReplyFinishStream(Ydb::StatusIds::NOT_FOUND);
+        }
+
+        if (record.GetResponse().GetSessionStatus() != Ydb::Table::KeepAliveResult::SESSION_STATUS_READY) {
+            return ReplyFinishStream(Ydb::StatusIds::SESSION_BUSY);
         }
 
         SubscribeClientLost();

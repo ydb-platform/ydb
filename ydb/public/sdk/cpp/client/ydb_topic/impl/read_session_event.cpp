@@ -25,7 +25,7 @@ TReadSessionEvent::TDataReceivedEvent::TMessageInformation::TMessageInformation(
     TInstant createTime,
     TInstant writeTime,
     TWriteSessionMeta::TPtr meta,
-    TWriteSessionMeta::TPtr messageMeta,
+    TMessageMeta::TPtr messageMeta,
     ui64 uncompressedSize,
     TString messageGroupId
 )
@@ -163,7 +163,7 @@ const TWriteSessionMeta::TPtr& TReadSessionEvent::TDataReceivedEvent::TMessage::
     return Information.Meta;
 }
 
-const TWriteSessionMeta::TPtr& TReadSessionEvent::TDataReceivedEvent::TMessage::GetMessageMeta() const {
+const TMessageMeta::TPtr& TReadSessionEvent::TDataReceivedEvent::TMessage::GetMessageMeta() const {
     return Information.MessageMeta;
 }
 
@@ -223,7 +223,7 @@ const TWriteSessionMeta::TPtr& TReadSessionEvent::TDataReceivedEvent::TCompresse
     return Information.Meta;
 }
 
-const TWriteSessionMeta::TPtr& TReadSessionEvent::TDataReceivedEvent::TCompressedMessage::GetMessageMeta() const {
+const TMessageMeta::TPtr& TReadSessionEvent::TDataReceivedEvent::TCompressedMessage::GetMessageMeta() const {
     return Information.MessageMeta;
 }
 

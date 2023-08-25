@@ -21,6 +21,18 @@
 
 namespace NKikimr {
 
+inline bool IsRetryableGrpcError(const NGrpc::TGrpcStatus& status) {
+    switch (status.GRpcStatusCode) {
+    case grpc::StatusCode::UNAUTHENTICATED:
+    case grpc::StatusCode::PERMISSION_DENIED:
+    case grpc::StatusCode::INVALID_ARGUMENT:
+    case grpc::StatusCode::NOT_FOUND:
+        return false;
+    }
+    return true;
+}
+
+
 template <typename TDerived>
 class TTicketParserImpl : public TActorBootstrapped<TDerived> {
     using TThis = TTicketParserImpl;
@@ -62,16 +74,6 @@ class TTicketParserImpl : public TActorBootstrapped<TDerived> {
         return key.Str();
     }
 
-    static bool IsRetryableGrpcError(const NGrpc::TGrpcStatus& status) {
-        switch (status.GRpcStatusCode) {
-        case grpc::StatusCode::UNAUTHENTICATED:
-        case grpc::StatusCode::PERMISSION_DENIED:
-        case grpc::StatusCode::INVALID_ARGUMENT:
-        case grpc::StatusCode::NOT_FOUND:
-            return false;
-        }
-        return true;
-    }
 
     struct TPermissionRecord {
         TString Subject;

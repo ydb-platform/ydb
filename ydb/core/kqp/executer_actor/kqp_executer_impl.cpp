@@ -23,8 +23,13 @@ void TEvKqpExecuter::TEvTxResponse::InitTxResult(const TKqpPhyTxHolder::TConstPt
         const auto& result = tx->GetResults(i);
         const auto& resultMeta = tx->GetTxResultsMeta()[i];
 
+        TMaybe<ui32> queryResultIndex;
+        if (result.HasQueryResultIndex()) {
+            queryResultIndex = result.GetQueryResultIndex();
+        }
+
         TxResults.emplace_back(result.GetIsStream(), resultMeta.MkqlItemType, &resultMeta.ColumnOrder,
-            result.GetQueryResultIndex());
+            queryResultIndex);
     }
 }
 

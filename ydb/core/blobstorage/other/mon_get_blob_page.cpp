@@ -59,7 +59,7 @@ namespace {
                 } else {
                     result.LogoBlobId = msg->Responses[0].Id;
                     result.Status = msg->Responses[0].Status;
-                    result.Buffer = msg->Responses[0].Buffer;
+                    result.Buffer = msg->Responses[0].Buffer.ConvertToString();
                     result.PartMap = std::move(msg->Responses[0].PartMap);
                 }
                 result.DebugInfo = std::move(msg->DebugInfo);

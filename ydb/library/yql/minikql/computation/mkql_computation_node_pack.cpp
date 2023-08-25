@@ -809,14 +809,16 @@ void PackImpl(const TType* type, TBuf& buffer, const NUdf::TUnboxedValuePod& val
                         dictBuffer.emplace_back(std::move(key), std::move(payload));
                     }
 
-                    Sort(dictBuffer.begin(), dictBuffer.end(), TKeyPayloadPairLess(types, isTuple, useIHash ? MakeCompareImpl(keyType) : nullptr));
+                    NUdf::ICompare::TPtr cmp = useIHash ? MakeCompareImpl(keyType) : nullptr;
+                    Sort(dictBuffer.begin(), dictBuffer.end(), TKeyPayloadPairLess(types, isTuple, cmp.Get()));
+
                     for (const auto& p: dictBuffer) {
                         PackImpl<Fast, Stable>(keyType, buffer, p.first, s);
                         PackImpl<Fast, Stable>(payloadType, buffer, p.second, s);
                     }
                     dictBuffer.clear();
                     s.DictBuffers.push_back(std::move(dictBuffer));
-                }    
+                }
             } else {
                 for (NUdf::TUnboxedValue key, payload; iter.NextPair(key, payload);) {
                     PackImpl<Fast, Stable>(keyType, buffer, key, s);
@@ -931,7 +933,7 @@ TStringBuf TValuePackerGeneric<Fast>::Pack(const NUdf::TUnboxedValuePod& value) 
         Buffer_.Proceed(delta);
         Buffer_.Append((const char*)&length, sizeof(length));
     }
-    return TStringBuf(Buffer_.Data() + delta, len - delta);    
+    return TStringBuf(Buffer_.Data() + delta, len - delta);
 }
 
 

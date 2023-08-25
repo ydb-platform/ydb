@@ -1,7 +1,6 @@
 #pragma once
 
 #include "defs.h"
-#include "cms_state.h"
 #include "pdiskid.h"
 #include "pdisk_state.h"
 
@@ -172,7 +171,5 @@ private:
     const ui32 RackRatio;
 
 }; // TGuardian
-
-IActor* CreateBSCClientActor(const TCmsStatePtr& cmsState);
 
 } // namespace NKikimr::NCms::NSentinel

@@ -58,7 +58,6 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
         auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(location).SetDatabase("/Root").SetAuthToken(token));
-        NKqp::WaitForKqpProxyInit(connection);
         return connection;
     }
 

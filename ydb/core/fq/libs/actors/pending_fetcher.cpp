@@ -25,7 +25,6 @@
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 #include <ydb/library/yql/dq/integration/transform/yql_dq_task_transform.h>
 #include <ydb/library/yql/providers/ydb/provider/yql_ydb_provider.h>
-#include <ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_provider.h>
 #include <ydb/library/yql/sql/settings/translation_settings.h>
 #include <library/cpp/yson/node/node_io.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>
@@ -42,7 +41,6 @@
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/public/lib/fq/scope.h>
 
 #include <ydb/core/fq/libs/common/compression.h>
 #include <ydb/core/fq/libs/common/entity_id.h>
@@ -158,7 +156,6 @@ public:
     }
 
     void Bootstrap() {
-
         if (Monitoring) {
             Monitoring->RegisterActorPage(Monitoring->RegisterIndexPage("fq_diag", "Federated Query diagnostics"),
                 "fetcher", "Pending Fetcher", false, TActivationContext::ActorSystem(), SelfId());
@@ -395,18 +392,24 @@ private:
             resources,
             task.execution_id(),
             task.operation_id(),
-            computeConnection
+            computeConnection,
+            NProtoInterop::CastFromProto(task.result_ttl())
             );
 
         auto runActorId =
-            ComputeConfig.GetComputeType(task) == NConfig::EComputeType::YDB
-                ? Register(CreateYdbRunActor(SelfId(), queryCounters, std::move(params), CreateActorFactory(params, queryCounters)))
+            ComputeConfig.GetComputeType(task.query_type(), task.scope()) == NConfig::EComputeType::YDB
+                ? Register(CreateYdbRunActor(std::move(params), queryCounters))
                 : Register(CreateRunActor(SelfId(), queryCounters, std::move(params)));
 
         RunActorMap[runActorId] = TRunActorInfo { .QueryId = queryId, .QueryName = task.query_name() };
         if (!task.automatic()) {
             CountersMap[queryId] = { rootCountersParent, publicCountersParent, runActorId };
         }
+    }
+
+    NActors::IActor* CreateYdbRunActor(TRunActorParams&& params, const ::NYql::NCommon::TServiceCounters& queryCounters) const {
+        auto actorFactory = CreateActorFactory(params, queryCounters);
+        return ::NFq::CreateYdbRunActor(SelfId(), queryCounters, std::move(params), actorFactory);
     }
 
     STRICT_STFUNC(StateFunc,

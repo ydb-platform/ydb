@@ -27,10 +27,14 @@ using namespace NKikimrClient;
 using grpc::Status;
 
 
+
 namespace NKikimr::NDataStreams::V1 {
     const TString YDS_SERVICE_TYPE = "data-streams";
     const i32 DEFAULT_STREAM_DAY_RETENTION = TDuration::Days(1).Hours();
     const i32 DEFAULT_STREAM_WEEK_RETENTION = TDuration::Days(7).Hours();
+
+    const i64 TIMESTAMP_DELTA_ALLOWED_MS = 10'000;
+
 
     using namespace NGRpcService;
     using namespace NGRpcProxy::V1;
@@ -1217,11 +1221,16 @@ namespace NKikimr::NDataStreams::V1 {
             }
             break;
         case TIteratorType::AT_TIMESTAMP:
-            if (GetProtoRequest()->timestamp() == 0 ||
-                GetProtoRequest()->timestamp() > static_cast<i64>(TInstant::Now().MilliSeconds())) {
+            if (GetProtoRequest()->timestamp() == 0) {
                 return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT),
                                       TStringBuilder() << "Shard iterator type is AT_TIMESTAMP, " <<
-                                      "but timestamp is either missed or too old or in future", ctx);
+                                      "but a timestamp is missed", ctx);
+
+            }
+            if (GetProtoRequest()->timestamp() > static_cast<i64>(TInstant::Now().MilliSeconds()) + TIMESTAMP_DELTA_ALLOWED_MS) {
+                return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT),
+                                      TStringBuilder() << "Shard iterator type is AT_TIMESTAMP, " <<
+                                      "but a timestamp is in the future", ctx);
             }
             ReadTimestampMs = GetProtoRequest()->timestamp();
             break;

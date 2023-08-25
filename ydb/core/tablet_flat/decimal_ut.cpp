@@ -356,8 +356,13 @@ Y_UNIT_TEST_SUITE(TFlatTableDecimals) {
             }
         };
 
+        void DefaultSignalTabletActive(const TActorContext &) override {
+            // must be empty
+        }
+
         void OnActivateExecutor(const TActorContext &ctx) override {
             Become(&TThis::StateWork);
+            SignalTabletActive(ctx);
             Execute(new TTxSchema(*this), ctx);
         }
 

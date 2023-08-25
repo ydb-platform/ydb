@@ -26,6 +26,7 @@ namespace NSharedCache {
         EvRequest,
         EvResult,
         EvUpdated,
+        EvMem,
 
         EvEnd
 
@@ -128,6 +129,9 @@ namespace NSharedCache {
         };
 
         THashMap<TLogoBlobID, TActions> Actions;
+    };
+
+    struct TEvMem : public TEventLocal<TEvMem, EvMem> {
     };
 
 }

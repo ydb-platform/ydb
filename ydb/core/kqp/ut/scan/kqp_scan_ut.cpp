@@ -96,7 +96,13 @@ void CreateNullSampleTables(TKikimrRunner& kikimr) {
 Y_UNIT_TEST_SUITE(KqpScan) {
 
     Y_UNIT_TEST(StreamExecuteScanQueryCancelation) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig appConfig;
+        // This test expects SourceRead is enabled for ScanQuery
+        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig);
+        TKikimrRunner kikimr{settings};
+
         NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
 
         NDataShard::gSkipReadIteratorResultFailPoint.Enable(-1);
@@ -115,7 +121,9 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                 Sleep(TDuration::Seconds(1));
             }
 
-            UNIT_ASSERT_C(count, "Unable to wait second session actor (executing compiled program) start");
+            UNIT_ASSERT_C(count,
+                "Unable to wait second session actor (executing compiled program) start, cur count: "
+                << counters.GetActiveSessionActors()->Val());
         }
 
         NDataShard::gSkipRepliesFailPoint.Disable();
@@ -1813,6 +1821,100 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
             UNIT_ASSERT_C(itIndex.IsSuccess(), itIndex.GetIssues().ToString());
             CompareYson(R"([[["Payload1"]];[["Payload2"]]])", StreamResultToYson(itIndex));
+        }
+    }
+
+    Y_UNIT_TEST(SecondaryIndexCustomColumnOrder) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTablesWithIndex(session);
+
+        {  // prepare table
+            auto res = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/SecondaryKeysCustomOrder` (
+                    Key2 Int32,
+                    Key1 String,
+                    Fk2 Int32,
+                    Fk1 String,
+                    Value String,
+                    PRIMARY KEY (Key2, Key1),
+                    INDEX Index GLOBAL ON (Fk2, Fk1)
+                );
+            )").GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+            auto result = session.ExecuteDataQuery(R"(
+
+            REPLACE INTO `/Root/SecondaryKeysCustomOrder` (Key2, Key1, Fk2, Fk1, Value) VALUES
+                (1u, "One", 1u, "Fk1", "Value1"),
+                (2u, "Two", 2u, "Fk2", "Value2"),
+                (3u, "Three", 3u, "Fk3", Null),
+                (NULL, "Four", 4u, Null, "Value4"),
+                (5u, Null, 5u, "Fk5",  "Value5");
+            )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto itIndex = db.StreamExecuteScanQuery(R"(
+                SELECT Value, Fk1
+                FROM `/Root/SecondaryKeysCustomOrder` VIEW Index
+                WHERE Fk2 = 2u;
+            )").GetValueSync();
+
+            UNIT_ASSERT_C(itIndex.IsSuccess(), itIndex.GetIssues().ToString());
+            CompareYson(R"([
+                [["Value2"];["Fk2"]]
+            ])", StreamResultToYson(itIndex));
+        }
+
+        {
+            auto itIndex = db.StreamExecuteScanQuery(R"(
+                SELECT Value, Fk1, Key2
+                FROM `/Root/SecondaryKeysCustomOrder` VIEW Index
+                WHERE Fk2 >= 4u AND Fk1 IS NULL;
+            )").GetValueSync();
+
+            UNIT_ASSERT_C(itIndex.IsSuccess(), itIndex.GetIssues().ToString());
+            CompareYson(R"([
+                [["Value4"];#;#]
+            ])", StreamResultToYson(itIndex));
+        }
+
+        {
+            auto itIndex = db.StreamExecuteScanQuery(R"(
+                PRAGMA AnsiInForEmptyOrNullableItemsCollections;
+                SELECT Value, Fk1, Key1
+                FROM `/Root/SecondaryKeysCustomOrder` VIEW Index
+                WHERE (Fk2, Fk1) IN AsList((1u, "Fk1"), (2u, "Fk2"), (5u, "Fk5"))
+                ORDER BY Value;
+            )").GetValueSync();
+
+            UNIT_ASSERT_C(itIndex.IsSuccess(), itIndex.GetIssues().ToString());
+            CompareYson(R"([
+                [["Value1"];["Fk1"];["One"]];
+                [["Value2"];["Fk2"];["Two"]];
+                [["Value5"];["Fk5"];#]
+            ])", StreamResultToYson(itIndex));
+        }
+
+        {
+            auto itIndex = db.StreamExecuteScanQuery(R"(
+                SELECT r.Value, l.Value
+                FROM `/Root/SecondaryKeys` VIEW Index AS l
+                INNER JOIN `/Root/SecondaryKeysCustomOrder` VIEW Index AS r
+                ON l.Fk = r.Fk2 ORDER BY r.Value;
+            )").GetValueSync();
+
+            UNIT_ASSERT_C(itIndex.IsSuccess(), itIndex.GetIssues().ToString());
+            CompareYson(R"([
+                [["Value1"];["Payload1"]];
+                [["Value2"];["Payload2"]];
+                [["Value5"];["Payload5"]]
+            ])", StreamResultToYson(itIndex));
         }
     }
 

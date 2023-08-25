@@ -389,7 +389,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
             }
             TEvBlobStorage::TEvPut *put;
 
-            DecryptInplace(item.Buffer, item.BlobId, *Info);
+            DecryptInplace(item.Buffer, 0, 0, item.Buffer.size(), item.BlobId, *Info);
 
             ev->Bunch.emplace_back(new IEventHandle(
                 TActorId() /*recipient*/,

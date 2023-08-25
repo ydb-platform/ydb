@@ -1028,9 +1028,11 @@ private:
 
             switch (shardResponse.GetStatus()) {
             case NKikimrTxDataShard::TError::WRONG_SHARD_STATE:
+            case NKikimrTxDataShard::TError::SHARD_IS_BLOCKED:
                 ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()));
                 status = Ydb::StatusIds::OVERLOADED;
                 break;
+            case NKikimrTxDataShard::TError::DISK_SPACE_EXHAUSTED:
             case NKikimrTxDataShard::TError::OUT_OF_SPACE:
                 status = Ydb::StatusIds::UNAVAILABLE;
                 break;

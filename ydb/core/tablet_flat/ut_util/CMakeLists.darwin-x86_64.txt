@@ -27,6 +27,7 @@ target_link_options(ydb-core-tablet_flat-ut_util PRIVATE
 )
 target_sources(ydb-core-tablet_flat-ut_util PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/util_pool_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/util_string_ut.cpp
 )
 set_property(
   TARGET

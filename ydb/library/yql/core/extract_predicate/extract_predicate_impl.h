@@ -17,7 +17,7 @@ public:
         return Range;
     }
 
-    TBuildResult BuildComputeNode(const TVector<TString>& indexKeys, TExprContext& ctx) const override final;
+    TBuildResult BuildComputeNode(const TVector<TString>& indexKeys, TExprContext& ctx, TTypeAnnotationContext& typesCtx) const override final;
 private:
     const TPredicateExtractorSettings Settings;
     TExprNode::TPtr FilterLambda;

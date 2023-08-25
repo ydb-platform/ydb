@@ -122,7 +122,7 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(response.Status, NKikimrProto::OK);
         UNIT_ASSERT_EQUAL(response.Status, NKikimrProto::OK);
         if (Committed.count(response.Id)) {
-            UNIT_ASSERT_VALUES_EQUAL(Committed.at(response.Id), response.Buffer);
+            UNIT_ASSERT_VALUES_EQUAL(Committed.at(response.Id), response.Buffer.ConvertToString());
             Committed.erase(response.Id);
         }
         if (!--ReadsInFlight) {

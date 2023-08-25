@@ -361,7 +361,11 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr RmExtraMemAllocs;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmInternalError;
     NMonitoring::THistogramPtr RmSnapshotLatency;
+    NMonitoring::THistogramPtr NodeServiceStartEventDelivery;
+    NMonitoring::THistogramPtr NodeServiceProcessTime;
+    NMonitoring::THistogramPtr NodeServiceProcessCancelTime;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmMaxSnapshotLatency;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmNodeNumberInSnapshot;
 
     // Spilling counters
     ::NMonitoring::TDynamicCounters::TCounterPtr SpillingWriteBlobs;
@@ -384,6 +388,9 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr SentIteratorCancels;
     ::NMonitoring::TDynamicCounters::TCounterPtr CreatedIterators;
     ::NMonitoring::TDynamicCounters::TCounterPtr ReadActorsCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ReadActorRemoteFirstFetch;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ReadActorRemoteFetch;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ReadActorAbsentNodeId;
     ::NMonitoring::TDynamicCounters::TCounterPtr StreamLookupActorsCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr ReadActorRetries;
     ::NMonitoring::TDynamicCounters::TCounterPtr DataShardIteratorFails;

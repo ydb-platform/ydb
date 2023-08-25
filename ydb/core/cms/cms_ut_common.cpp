@@ -1,7 +1,7 @@
 #include "cms_impl.h"
 #include "cms_ut_common.h"
-#include "ut_helpers.h"
 #include "sentinel.h"
+#include "ut_helpers.h"
 
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/blobstorage/crypto/default.h>
@@ -56,7 +56,7 @@ void TFakeNodeWhiteboardService::Handle(TEvBlobStorage::TEvControllerConfigReque
 {
     TGuard<TMutex> guard(Mutex);
     auto &rec = ev->Get()->Record;
-    auto *resp = new TEvBlobStorage::TEvControllerConfigResponse;
+    auto resp = MakeHolder<TEvBlobStorage::TEvControllerConfigResponse>();
     if (rec.GetRequest().CommandSize() && rec.GetRequest().GetCommand(0).HasQueryBaseConfig()) {
         resp->Record.CopyFrom(Config);
     } else if (rec.GetRequest().CommandSize() && rec.GetRequest().GetCommand(0).HasReadDriveStatus()) {
@@ -69,27 +69,27 @@ void TFakeNodeWhiteboardService::Handle(TEvBlobStorage::TEvControllerConfigReque
         driveStatus.MutableHostKey()->SetIcPort(drive.GetHostKey().GetIcPort());
         driveStatus.SetPath(drive.GetPath());
         driveStatus.SetStatus(NKikimrBlobStorage::ACTIVE);
-    } else if (rec.GetRequest().CommandSize() && rec.GetRequest().GetCommand(0).HasUpdateDriveStatus()) { // assume that all commands are UpdateDriveStatus
+    } else if (rec.GetRequest().CommandSize() && rec.GetRequest().GetCommand(0).HasUpdateDriveStatus()) {
+        // assume that all commands are UpdateDriveStatus
         if (NoisyBSCPipe && ++NoisyBSCPipeCounter % 3) {
             ctx.Send(ev->Sender, new TEvSentinel::TEvBSCPipeDisconnected, 0);
-            delete resp;
             return;
         }
         bool success = true;
         for (ui32 i = 0; i < rec.GetRequest().CommandSize(); ++i) {
-            auto cmd = rec.GetRequest().GetCommand(i).GetUpdateDriveStatus();
-            auto id = NCms::TPDiskID(cmd.GetHostKey().GetNodeId(), cmd.GetPDiskId());
-            if (auto& pattern = BSControllerResponsePatterns[id]; !pattern.empty() && !pattern[0]) {
-                success = false;
+            const auto &cmd = rec.GetRequest().GetCommand(i).GetUpdateDriveStatus();
+            const auto id = NCms::TPDiskID(cmd.GetHostKey().GetNodeId(), cmd.GetPDiskId());
+            if (auto& pattern = BSControllerResponsePatterns[id]; !pattern.empty()) {
+                success = success && pattern[0];
+                resp->Record.MutableResponse()->AddStatus()->SetSuccess(pattern[0]);
                 pattern.erase(pattern.begin());
-                resp->Record.MutableResponse()->AddStatus()->SetSuccess(false);
             } else {
                 resp->Record.MutableResponse()->AddStatus()->SetSuccess(true);
             }
         }
         resp->Record.MutableResponse()->SetSuccess(success);
     }
-    ctx.Send(ev->Sender, resp, 0, ev->Cookie);
+    ctx.Send(ev->Sender, std::move(resp), 0, ev->Cookie);
 }
 
 void TFakeNodeWhiteboardService::Handle(TEvWhiteboard::TEvTabletStateRequest::TPtr &ev,
@@ -505,6 +505,7 @@ static void SetupServices(TTestActorRuntime &runtime,
     runtime.Initialize(app.Unwrap());
     auto dnsConfig = new TDynamicNameserviceConfig();
     dnsConfig->MaxStaticNodeId = 1000;
+    dnsConfig->MinDynamicNodeId = 1001;
     dnsConfig->MaxDynamicNodeId = 2000;
     runtime.GetAppData().DynamicNameserviceConfig = dnsConfig;
     runtime.GetAppData().DisableCheckingSysNodesCms = true;
@@ -1177,10 +1178,10 @@ NKikimrCms::TGetLogTailResponse TCmsTestEnv::GetLogTail(ui32 type,
     return rec;
 }
 
-void TCmsTestEnv::AddBSCFailures(const NCms::TPDiskID& id, TVector<bool> failuresPattern) {
+void TCmsTestEnv::AddBSCFailures(const NCms::TPDiskID& id, TVector<bool> &&failuresPattern) {
     TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
     auto& vec = TFakeNodeWhiteboardService::BSControllerResponsePatterns[id];
-    vec.insert(vec.end(), failuresPattern.begin(), failuresPattern.end());
+    std::move(failuresPattern.begin(), failuresPattern.end(), std::back_inserter(vec));
 }
 
 void TCmsTestEnv::EnableNoisyBSCPipe() {

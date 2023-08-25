@@ -52,9 +52,10 @@ TString GetSerializedData(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEv
     }
     auto& fields = message.GetMessageMeta()->Fields;
     if (!fields.empty()) {
-        auto& messageMeta = *proto.MutableMessageMeta();
         for (const auto& item : fields) {
-            messageMeta[item.first] = item.second;
+            auto& metaItem = *proto.AddMessageMeta();
+            metaItem.set_key(item.first);
+            metaItem.set_value(item.second);
         }
     }
     proto.SetSeqNo(message.GetSeqNo());

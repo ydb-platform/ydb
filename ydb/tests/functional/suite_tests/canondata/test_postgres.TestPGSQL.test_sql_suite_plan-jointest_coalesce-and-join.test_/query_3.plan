@@ -29,7 +29,7 @@
                                             {
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": "row.pv_x"
+                                                "TopSortBy": "argument.pv.x"
                                             },
                                             {
                                                 "Name": "LeftJoin (MapJoin)"
@@ -105,7 +105,7 @@
                                     }
                                 ],
                                 "SortColumns": [
-                                    "pv_x (Asc)"
+                                    "pv.x (Asc)"
                                 ]
                             }
                         ]

@@ -129,21 +129,68 @@ bool IsListReorder(const TExprNode& node) {
     return node.IsCallable({"Sort", "Reverse"});
 }
 
+// Check if the flat map is a simple rename flat map
 bool IsRenameFlatMap(const NNodes::TCoFlatMapBase& node, TExprNode::TPtr& structNode) {
+        
     auto lambda = node.Lambda();
     if (!IsJustOrSingleAsList(lambda.Body().Ref())) {
         return false;
     }
 
     structNode = lambda.Body().Ref().Child(0);
-    if (!structNode->IsCallable("AsStruct")) {
+
+    auto asStruct = TExprBase(structNode);
+    if (!asStruct.Maybe<TCoAsStruct>()) {
         return false;
     }
 
-    for (auto& child : structNode->Children()) {
-        auto item = child->Child(1);
-        if (!item->IsCallable("Member") || item->Child(0) != lambda.Args().Arg(0).Raw()) {
+    for (auto child : asStruct.Cast<TCoAsStruct>()) {
+        
+        if (!child.Item(1).Maybe<TCoMember>()) {
             return false;
+        }
+
+        auto member = child.Item(1).Cast<TCoMember>();
+        if(member.Struct().Raw() != lambda.Args().Arg(0).Raw()) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// Check if the flat map is a simple rename flat map and compute the mapping from new names to original ones
+bool IsRenameFlatMapWithMapping(const NNodes::TCoFlatMapBase& node, TExprNode::TPtr& structNode, 
+    THashMap<TString, TString> & mapping) {
+        
+    auto lambda = node.Lambda();
+    if (!IsJustOrSingleAsList(lambda.Body().Ref())) {
+        return false;
+    }
+
+    structNode = lambda.Body().Ref().Child(0);
+
+    auto asStruct = TExprBase(structNode);
+    if (!asStruct.Maybe<TCoAsStruct>()) {
+        return false;
+    }
+
+    for (auto child : asStruct.Cast<TCoAsStruct>()) {
+
+        if (!child.Item(1).Maybe<TCoMember>()) {
+            return false;
+        }
+
+        auto member = child.Item(1).Cast<TCoMember>();
+        if(member.Struct().Raw() != lambda.Args().Arg(0).Raw()) {
+            return false;
+        }
+
+        auto to = child.Item(0).Cast<TCoAtom>();
+        auto from = member.Name();
+
+        if (to != from){
+            mapping[to.StringValue()] = from.StringValue();
         }
     }
 

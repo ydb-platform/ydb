@@ -71,6 +71,10 @@ IActor* CreateViewerRequestHandler(TEvViewer::TEvViewerRequest::TPtr request) {
             return new TViewerWhiteboardRequest<TEvWhiteboard::TEvTabletStateRequest, TEvWhiteboard::TEvTabletStateResponse>(request);
         case NKikimrViewer::TEvViewerRequest::kSystemRequest:
             return new TViewerWhiteboardRequest<TEvWhiteboard::TEvSystemStateRequest, TEvWhiteboard::TEvSystemStateResponse>(request);
+        case NKikimrViewer::TEvViewerRequest::kReserved13:
+        case NKikimrViewer::TEvViewerRequest::kReserved14:
+        case NKikimrViewer::TEvViewerRequest::kReserved15:
+        case NKikimrViewer::TEvViewerRequest::kReserved16:
         case NKikimrViewer::TEvViewerRequest::REQUEST_NOT_SET:
             return nullptr;
     }

@@ -23,6 +23,7 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/public/lib/base/msgbus_status.h>
+#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/persqueue_v1/rpc_calls.h>
@@ -1296,84 +1297,6 @@ public:
         }
     }
 
-    TFuture<TGenericResult> CreateExternalDataSource(const TString& cluster,
-                                                     const NYql::TCreateExternalDataSourceSettings& settings,
-                                                     bool createDir) override {
-        using TRequest = TEvTxUserProxy::TEvProposeTransaction;
-
-        try {
-            if (!CheckCluster(cluster)) {
-                return InvalidCluster<TGenericResult>(cluster);
-            }
-
-            std::pair<TString, TString> pathPair;
-            {
-                TString error;
-                if (!GetPathPair(settings.ExternalDataSource, pathPair, error, createDir)) {
-                    return MakeFuture(ResultFromError<TGenericResult>(error));
-                }
-            }
-
-            auto ev = MakeHolder<TRequest>();
-            ev->Record.SetDatabaseName(Database);
-            if (UserToken) {
-                ev->Record.SetUserToken(UserToken->GetSerializedToken());
-            }
-            auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
-            schemeTx.SetWorkingDir(pathPair.first);
-            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateExternalDataSource);
-
-            NKikimrSchemeOp::TExternalDataSourceDescription& dataSourceDesc = *schemeTx.MutableCreateExternalDataSource();
-            FillCreateExternalDataSourceDesc(dataSourceDesc, pathPair.second, settings);
-            return SendSchemeRequest(ev.Release(), true);
-        }
-        catch (yexception& e) {
-            return MakeFuture(ResultFromException<TGenericResult>(e));
-        }
-    }
-
-    TFuture<TGenericResult> AlterExternalDataSource(const TString& cluster,
-                                                    const NYql::TAlterExternalDataSourceSettings& settings) override {
-        Y_UNUSED(cluster, settings);
-        return MakeErrorFuture<TGenericResult>(std::make_exception_ptr(yexception() << "The alter is not supported for the external data source"));
-    }
-
-    TFuture<TGenericResult> DropExternalDataSource(const TString& cluster,
-                                                   const NYql::TDropExternalDataSourceSettings& settings) override {
-        using TRequest = TEvTxUserProxy::TEvProposeTransaction;
-
-        try {
-            if (!CheckCluster(cluster)) {
-                return InvalidCluster<TGenericResult>(cluster);
-            }
-
-            std::pair<TString, TString> pathPair;
-            {
-                TString error;
-                if (!GetPathPair(settings.ExternalDataSource, pathPair, error, false)) {
-                    return MakeFuture(ResultFromError<TGenericResult>(error));
-                }
-            }
-
-            auto ev = MakeHolder<TRequest>();
-            ev->Record.SetDatabaseName(Database);
-            if (UserToken) {
-                ev->Record.SetUserToken(UserToken->GetSerializedToken());
-            }
-
-            auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
-            schemeTx.SetWorkingDir(pathPair.first);
-            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropExternalDataSource);
-
-            NKikimrSchemeOp::TDrop& drop = *schemeTx.MutableDrop();
-            drop.SetName(pathPair.second);
-            return SendSchemeRequest(ev.Release());
-        }
-        catch (yexception& e) {
-            return MakeFuture(ResultFromException<TGenericResult>(e));
-        }
-    }
-
     TFuture<TGenericResult> AlterUser(const TString& cluster, const NYql::TAlterUserSettings& settings) override {
         using TRequest = TEvTxUserProxy::TEvProposeTransaction;
 
@@ -1507,6 +1430,7 @@ public:
                     context.SetUserToken(*GetUserToken());
                 }
                 context.SetDatabase(Owner.Database);
+                context.SetActorSystem(Owner.ActorSystem);
                 return DoExecute(cBehaviour, settings, context).Apply([](const NThreading::TFuture<TYqlConclusionStatus>& f) {
                     if (f.HasValue() && !f.HasException() && f.GetValue().Ok()) {
                         TGenericResult result;
@@ -1777,6 +1701,55 @@ public:
         }
     }
 
+    TFuture<TExecuteLiteralResult> ExecuteLiteral(const TString& program, const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) override {
+        auto preparedQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
+        auto& phyQuery = *preparedQuery->MutablePhysicalQuery();
+        NKikimr::NKqp::IKqpGateway::TExecPhysicalRequest literalRequest(txAlloc);
+
+        literalRequest.NeedTxId = false;
+        literalRequest.MaxAffectedShards = 0;
+        literalRequest.TotalReadSizeLimitBytes = 0;
+        literalRequest.MkqlMemoryLimit = 100_MB;
+
+        auto& transaction = *phyQuery.AddTransactions();
+        transaction.SetType(NKqpProto::TKqpPhyTx::TYPE_COMPUTE);
+
+        auto& stage = *transaction.AddStages();
+        auto& stageProgram = *stage.MutableProgram();
+        stageProgram.SetRuntimeVersion(NYql::NDqProto::RUNTIME_VERSION_YQL_1_0);
+        stageProgram.SetRaw(program);
+        stage.SetOutputsCount(1);
+
+        auto& taskResult = *transaction.AddResults();
+        *taskResult.MutableItemType() = resultType;
+        auto& taskConnection = *taskResult.MutableConnection();
+        taskConnection.SetStageIndex(0);
+
+        NKikimr::NKqp::TPreparedQueryHolder queryHolder(preparedQuery.release(), txAlloc->HolderFactory.GetFunctionRegistry());
+
+        NKikimr::NKqp::TQueryData::TPtr params = std::make_shared<NKikimr::NKqp::TQueryData>(txAlloc);
+
+        literalRequest.Transactions.emplace_back(queryHolder.GetPhyTx(0), params);
+
+        return ExecuteLiteral(std::move(literalRequest), params, 0).Apply([](const auto& future) {
+            const auto& result = future.GetValue();
+
+            TExecuteLiteralResult literalResult;
+
+            if (result.Success()) {
+                YQL_ENSURE(result.Results.size() == 1);
+                literalResult.SetSuccess();
+                literalResult.Result = result.Results[0];
+            } else {
+                literalResult.SetStatus(result.Status());
+                literalResult.AddIssues(result.Issues());
+            }
+
+            return literalResult;
+        });
+    }
+
+
     TFuture<TExecPhysicalResult> ExecuteLiteral(TExecPhysicalRequest&& request, TQueryData::TPtr params, ui32 txIndex) override {
         YQL_ENSURE(!request.Transactions.empty());
         YQL_ENSURE(request.DataShardLocks.empty());
@@ -1825,7 +1798,7 @@ public:
         ev->Record.MutableRequest()->SetKeepSession(false);
         ev->Record.MutableRequest()->SetCollectStats(settings.CollectStats);
 
-        FillParameters(params, *ev->Record.MutableRequest()->MutableParameters());
+        FillParameters(params, ev->Record.MutableRequest()->MutableYdbParameters());
 
         return SendKqpScanQueryRequest(ev.Release(), rowsLimit,
             [] (TPromise<TQueryResult> promise, TResponse&& responseEv) {
@@ -1857,7 +1830,7 @@ public:
         ev->Record.MutableRequest()->SetKeepSession(false);
         ev->Record.MutableRequest()->SetCollectStats(settings.CollectStats);
 
-        FillParameters(std::move(params), *ev->Record.MutableRequest()->MutableParameters());
+        FillParameters(std::move(params), ev->Record.MutableRequest()->MutableYdbParameters());
 
         auto& txControl = *ev->Record.MutableRequest()->MutableTxControl();
         txControl.mutable_begin_tx()->CopyFrom(txSettings);
@@ -1898,7 +1871,7 @@ public:
         );
 
         // TODO: Rewrite CollectParameters at kqp_host
-        FillParameters(std::move(params), *ev->Record.MutableRequest()->MutableParameters());
+        FillParameters(std::move(params), ev->Record.MutableRequest()->MutableYdbParameters());
 
         return SendKqpScanQueryStreamRequest(ev.Release(), target,
             [](TPromise<TQueryResult> promise, TResponse&& responseEv) {
@@ -1956,7 +1929,7 @@ public:
         ev->Record.MutableRequest()->SetKeepSession(false);
         ev->Record.MutableRequest()->SetCollectStats(settings.CollectStats);
 
-        FillParameters(std::move(params), *ev->Record.MutableRequest()->MutableParameters());
+        FillParameters(std::move(params), ev->Record.MutableRequest()->MutableYdbParameters());
 
         auto& txControl = *ev->Record.MutableRequest()->MutableTxControl();
         txControl.mutable_begin_tx()->CopyFrom(txSettings);
@@ -2220,39 +2193,13 @@ private:
         externalTableDesc.SetContent(general.SerializeAsString());
     }
 
-    static void FillCreateExternalDataSourceDesc(NKikimrSchemeOp::TExternalDataSourceDescription& externaDataSourceDesc,
-                                                 const TString& name,
-                                                 const NYql::TCreateExternalDataSourceSettings& settings)
-    {
-        externaDataSourceDesc.SetName(name);
-        externaDataSourceDesc.SetSourceType(settings.SourceType);
-        externaDataSourceDesc.SetLocation(settings.Location);
-        externaDataSourceDesc.SetInstallation(settings.Installation);
-
-        if (settings.AuthMethod == "NONE") {
-            externaDataSourceDesc.MutableAuth()->MutableNone();
-        }
-    }
-
-    static void FillParameters(TQueryData::TPtr params, NKikimrMiniKQL::TParams& output) {
+    static void FillParameters(TQueryData::TPtr params, ::google::protobuf::Map<TBasicString<char>, Ydb::TypedValue>* output) {
         if (!params) {
             return;
         }
 
-        if (params->GetParams().empty()) {
-            return;
-        }
-
-        output.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Struct);
-        auto type = output.MutableType()->MutableStruct();
-        auto value = output.MutableValue();
-        for (auto& pair : params->GetParams()) {
-            auto typeMember = type->AddMember();
-            typeMember->SetName(pair.first);
-
-            typeMember->MutableType()->CopyFrom(pair.second.GetType());
-            value->AddStruct()->CopyFrom(pair.second.GetValue());
-        }
+        auto& paramsMap = params->GetParamsProtobuf();
+        output->insert(paramsMap.begin(), paramsMap.end());
     }
 
     static bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,

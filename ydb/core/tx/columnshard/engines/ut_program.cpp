@@ -5,6 +5,7 @@
 #include <ydb/core/tx/columnshard/columnshard_ut_common.h>
 #include <ydb/core/tx/program/program.h>
 #include <ydb/core/formats/arrow/converter.h>
+#include <ydb/core/formats/arrow/ssa_runtime_version.h>
 
 #include <ydb/library/yql/core/arrow_kernels/request/request.h>
 #include <ydb/library/yql/core/arrow_kernels/registry/registry.h>
@@ -467,10 +468,18 @@ Y_UNIT_TEST_SUITE(TestProgram) {
     }
 
     Y_UNIT_TEST(JsonExists) {
+        if constexpr (NSsa::RuntimeVersion < 3U) {
+            return;
+        }
+
         JsonExistsImpl(false);
     }
 
     Y_UNIT_TEST(JsonExistsBinary) {
+        if constexpr (NSsa::RuntimeVersion < 3U) {
+            return;
+        }
+
         JsonExistsImpl(true);
     }
 
@@ -608,6 +617,10 @@ Y_UNIT_TEST_SUITE(TestProgram) {
     }
 
     Y_UNIT_TEST(JsonValue) {
+        if constexpr (NSsa::RuntimeVersion < 3U) {
+            return;
+        }
+
         JsonValueImpl(false, NYql::EDataSlot::Utf8);
         JsonValueImpl(false, NYql::EDataSlot::Bool);
         JsonValueImpl(false, NYql::EDataSlot::Int64);
@@ -617,6 +630,10 @@ Y_UNIT_TEST_SUITE(TestProgram) {
     }
 
     Y_UNIT_TEST(JsonValueBinary) {
+        if constexpr (NSsa::RuntimeVersion < 3U) {
+            return;
+        }
+
         JsonValueImpl(true, NYql::EDataSlot::Utf8);
         JsonValueImpl(true, NYql::EDataSlot::Bool);
         JsonValueImpl(true, NYql::EDataSlot::Int64);

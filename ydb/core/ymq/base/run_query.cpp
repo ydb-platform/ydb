@@ -6,7 +6,7 @@ namespace NKikimr::NSQS {
 
     void RunYqlQuery(
         const TString& query,
-        std::optional<NKikimr::NClient::TParameters> params,
+        std::optional<NYdb::TParams> params,
         bool readonly,
         TDuration sendAfter,
         const TString& database,
@@ -34,7 +34,7 @@ namespace NKikimr::NSQS {
         request->MutableTxControl()->set_commit_tx(true);
 
         if (params) {
-            request->MutableParameters()->Swap(&params.value());
+            request->MutableYdbParameters()->swap(*(NYdb::TProtoAccessor::GetProtoMapPtr(params.value())));
         }
 
         auto kqpActor = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());

@@ -11,7 +11,7 @@
 #include <ydb/core/ymq/base/counters.h>
 #include <ydb/core/ymq/base/probes.h>
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/quoter.h>
+#include <ydb/core/quoter/public/quoter.h>
 #include <ydb/core/ymq/queues/common/queries.h>
 #include <ydb/core/ymq/queues/common/key_hashes.h>
 #include <ydb/core/ymq/queues/common/db_queries_maker.h>

@@ -46,6 +46,7 @@ namespace NActors {
     enum class EXdcCommand : ui8 {
         DECLARE_SECTION = 1,
         PUSH_DATA,
+        DECLARE_SECTION_INLINE,
     };
 
     struct TExSerializedEventTooLarge : std::exception {
@@ -133,7 +134,8 @@ namespace NActors {
         TCoroutineChunkSerializer Chunker;
         TEventSerializationInfo SerializationInfoContainer;
         const TEventSerializationInfo *SerializationInfo = nullptr;
-        bool EventInExternalDataChannel;
+        bool IsPartInline = false;
+        size_t PartLenRemain = 0;
         size_t SectionIndex = 0;
         std::vector<char> XdcData;
 
@@ -141,8 +143,8 @@ namespace NActors {
         bool SerializeEvent(TTcpPacketOutTask& task, TEventHolder& event, size_t *bytesSerialized);
 
         bool FeedPayload(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed);
-        bool FeedInlinePayload(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed);
-        bool FeedExternalPayload(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed);
+        std::optional<bool> FeedInlinePayload(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed);
+        std::optional<bool> FeedExternalPayload(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed);
 
         bool FeedDescriptor(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed);
 

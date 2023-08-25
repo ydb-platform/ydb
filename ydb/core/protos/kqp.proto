@@ -2,6 +2,7 @@ package NKikimrKqp;
 option java_package = "ru.yandex.kikimr.proto";
 option cc_enable_arenas = true;
 
+import "google/protobuf/duration.proto";
 import "library/cpp/actors/protos/actors.proto";
 import "ydb/core/protos/type_info.proto";
 import "ydb/core/protos/kqp_physical.proto";
@@ -82,7 +83,7 @@ message TQueryRequest {
     reserved 4; // (deprecated) KqlSettings
     optional bool KeepSession = 5;
     reserved 6; // (deprecated) Cluster
-    optional NKikimrMiniKQL.TParams Parameters = 7;
+    reserved 7; // (deprecated) Parameters
     reserved 8; // (deprecated) SqlAutoCommit
     optional EQueryAction Action = 9;
     reserved 10; // (deprecated) Profile
@@ -325,6 +326,8 @@ message TEvCreateSessionResponse {
 message TPingSessionRequest {
     optional bytes SessionId = 1;
     optional uint32 TimeoutMs = 2 [default = 5000];
+    optional bool deprecated = 3;
+    optional NActorsProto.TActorId ExtSessionCtrlActorId = 4;
 }
 
 message TEvPingSessionRequest {
@@ -633,7 +636,7 @@ message TKqpSequencerSettings {
 }
 
 message TEvFetchScriptResultsRequest {
-    optional uint64 ResultSetId = 3;
+    optional uint64 ResultSetIndex = 3;
     optional uint64 RowsOffset = 1;
     optional uint64 RowsLimit = 2;
 }
@@ -663,4 +666,10 @@ message TEvCancelScriptExecutionRequest {
 message TEvCancelScriptExecutionResponse {
     optional Ydb.StatusIds.StatusCode Status = 1;
     repeated Ydb.Issue.IssueMessage Issues = 2;
+}
+
+// stored in column "meta" of .metadata/script_executions table
+message TScriptExecutionOperationMeta {
+    optional google.protobuf.Duration OperationTtl = 1;
+    optional google.protobuf.Duration ResultsTtl = 2;
 }

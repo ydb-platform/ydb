@@ -1601,6 +1601,23 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         UNIT_ASSERT(res);
     }
 
+    Y_UNIT_TEST(BadTopic) {
+        NPersQueue::TTestServer server;
+        server.AnnoyingClient->CreateTopic("rt3.dc1--topic", 1);
+
+        auto driver = server.AnnoyingClient->GetDriver();
+
+        auto writer = CreateSimpleWriter(*driver, "/topic/", "test source ID");
+        bool gotException = false;
+        try {
+        writer->GetInitSeqNo();
+        } catch(...) {
+            gotException = true;
+        }
+        UNIT_ASSERT(gotException);
+    }
+
+
     Y_UNIT_TEST(SetupWriteSessionOnDisabledCluster) {
         TPersQueueV1TestServer server;
         SET_LOCALS;
@@ -6180,12 +6197,17 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
         NYdb::NTopic::TWriteSessionSettings wSettings {topicFullName, "srcId", "srcId"};
         auto writer = topicClient.CreateSimpleBlockingWriteSession(wSettings);
-        std::unordered_map<TString, TString> metadata = {{"key1", "val1"}, {"key2", "val2"}};
-/*        writer->Write("Somedata", Nothing(), Nothing(), TDuration::Max(), metadata);
+        TVector<std::pair<TString, TString>> metadata = {{"key1", "val1"}, {"key2", "val2"}};
+        {
+            auto message = NYdb::NTopic::TWriteMessage{"Somedata"}.MessageMeta(metadata);
+            writer->Write(std::move(message));
+        }
         metadata = {{"key3", "val3"}};
-        writer->Write("Somedata2", Nothing(), Nothing(), TDuration::Max(), metadata);
+        {
+            auto message = NYdb::NTopic::TWriteMessage{"Somedata2"}.MessageMeta(metadata);
+            writer->Write(std::move(message));
+        }
         writer->Write("Somedata3");
-*/
         writer->Close();
         NYdb::NTopic::TReadSessionSettings rSettings;
         rSettings.ConsumerName("debug").AppendTopics({topicFullName});

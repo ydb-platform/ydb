@@ -221,6 +221,16 @@ void SetHashToTxParams(NClient::TParameters& parameters, const TEncodedSourceId&
     }
 }
 
+void SetHashToTParamsBuilder(NYdb::TParamsBuilder& builder, const TEncodedSourceId& encodedSrcId) {
+    switch (encodedSrcId.Generation) {
+        case ESourceIdTableGeneration::PartitionMapping:
+            builder.AddParam("$Hash").Uint64(encodedSrcId.KeysHash).Build();
+            return;
+        case ESourceIdTableGeneration::SrcIdMeta2:
+            builder.AddParam("$Hash").Uint32(encodedSrcId.Hash).Build();
+            return;
+    }
+}
 
 } // NSourceIdEncoding
 } // NPQ

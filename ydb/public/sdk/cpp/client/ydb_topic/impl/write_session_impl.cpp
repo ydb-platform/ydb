@@ -244,15 +244,15 @@ NThreading::TFuture<void> TWriteSessionImpl::WaitEvent() {
 }
 
 // Client method.
-void TWriteSessionImpl::WriteInternal(
-            TContinuationToken&&, TStringBuf data, TMaybe<ECodec> codec, ui32 originalSize, TMaybe<ui64> seqNo, TMaybe<TInstant> createTimestamp
-        ) {
-    TInstant createdAtValue = createTimestamp.Defined() ? *createTimestamp : TInstant::Now();
+void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& message) {
+    TInstant createdAtValue = message.CreateTimestamp_.Defined() ? *message.CreateTimestamp_ : TInstant::Now();
     bool readyToAccept = false;
-    size_t bufferSize = data.size();
+    size_t bufferSize = message.Data.size();
     with_lock(Lock) {
-        //ToDo[message-meta] - Pass message meta here.
-        CurrentBatch.Add(GetNextSeqNoImpl(seqNo), createdAtValue, data, codec, originalSize, {});
+        CurrentBatch.Add(
+                GetNextSeqNoImpl(message.SeqNo_), createdAtValue, message.Data, message.Codec, message.OriginalSize,
+                message.MessageMeta_
+        );
 
         FlushWriteIfRequiredImpl();
         readyToAccept = OnMemoryUsageChangedImpl(bufferSize).NowOk;
@@ -263,16 +263,8 @@ void TWriteSessionImpl::WriteInternal(
 }
 
 // Client method.
-void TWriteSessionImpl::WriteEncoded(
-            TContinuationToken&& token, TStringBuf data, ECodec codec, ui32 originalSize, TMaybe<ui64> seqNo, TMaybe<TInstant> createTimestamp
-        ) {
-    WriteInternal(std::move(token), data, codec, originalSize, seqNo, createTimestamp);
-}
-
-void TWriteSessionImpl::Write(
-            TContinuationToken&& token, TStringBuf data, TMaybe<ui64> seqNo, TMaybe<TInstant> createTimestamp
-        ) {
-    WriteInternal(std::move(token), data, {}, 0, seqNo, createTimestamp);
+void TWriteSessionImpl::Write(TContinuationToken&& token, TWriteMessage&& message) {
+    WriteInternal(std::move(token), std::move(message));
 }
 
 
@@ -1021,9 +1013,10 @@ void TWriteSessionImpl::SendImpl() {
                 *msgData->mutable_created_at() = ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(message.CreatedAt.MilliSeconds());
 
                 if (!message.MessageMeta.empty()) {
-                    auto* meta = msgData->mutable_message_meta();
                     for (auto& [k, v] : message.MessageMeta) {
-                        (*meta)[k] = v;
+                        auto* pair = msgData->add_metadata_items();
+                        pair->set_key(k);
+                        pair->set_value(v);
                     }
                 }
                 SentOriginalMessages.emplace(std::move(message));

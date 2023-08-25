@@ -12,6 +12,7 @@ import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/http_config.proto";
 import "ydb/core/protos/hive.proto";
 import "ydb/core/protos/kqp.proto";
+import "ydb/core/protos/local.proto";
 import "ydb/core/protos/netclassifier.proto";
 import "ydb/core/protos/node_broker.proto";
 import "ydb/core/protos/pqconfig.proto";
@@ -171,6 +172,9 @@ message TDynamicNameserviceConfig {
     optional uint32 MaxStaticNodeId = 1 [default = 1000];
     optional uint32 MaxDynamicNodeId = 2 [default = 200000];
     optional uint64 LeaseDuration = 3 [default = 3600000000]; // DEPRECATED
+    // Soft limit, new dynamic nodes will be registered in range [MinDynamicNodeId, MaxDynamicNodeId],
+    // but already existing dynamic nodes in range (MaxStaticNodeId, MaxDynamicNodeId) will be handled properly
+    optional uint32 MinDynamicNodeId = 4 [default = 50000];
 }
 
 message TDomainsConfig {
@@ -700,6 +704,7 @@ message TDynamicNodeConfig {
     optional NKikimrNodeBroker.TNodeInfo NodeInfo = 4;
     optional string NodeAddress = 5; //DEPRECATED
     optional string NodeHost = 6; //DEPRECATED
+    repeated NKikimrLocal.TTabletAvailability TabletAvailability = 7;
 }
 
 message TFeatureFlags {
@@ -783,11 +788,11 @@ message TFeatureFlags {
     // enable http handle for self termination
     optional bool EnableFailureInjectionTermination = 71 [default = false];
     optional bool EnableChunkLocking = 72 [default = false];
-    optional bool EnableNotNullDataColumns = 73 [default = true];
+    optional bool EnableNotNullDataColumns = 73 [default = false];
     optional bool EnableGrpcAudit = 74 [default = false];
     reserved 75; // EnableKqpDataQueryStreamLookup
     optional bool EnableBorrowedSplitCompaction = 76 [default = true];
-    optional bool EnableChangefeedInitialScan = 77 [default = false];
+    optional bool EnableChangefeedInitialScan = 77 [default = true];
     reserved 78; // EnableKqpScanQuerySourceRead
     optional bool EnableDynamicNodeAuthorization = 79 [default = false];
     reserved 80; // EnableKqpImmediateEffect
@@ -808,7 +813,7 @@ message TFeatureFlags {
     optional bool EnableImplicitQueryParameterTypes = 93 [default = true];
     optional bool EnableForceImmediateEffectsExecution = 94 [default = false];
     optional bool EnableTopicSplitMerge = 95 [default = false];
-    optional bool EnableChangefeedDynamoDBStreamsFormat = 96 [default = false];
+    optional bool EnableChangefeedDynamoDBStreamsFormat = 96 [default = true];
     optional bool ForceColumnTablesCompositeMarks = 97 [default = false];
     optional bool EnableSubscriptionsInDiscovery = 98 [default = false];
     optional bool EnableGetNodeLabels = 99 [default = false];
@@ -1109,6 +1114,15 @@ message TTableServiceConfig {
     }
 
     message TResourceManager {
+        message TRetrySettings {
+            optional uint32 StartDelayMs = 1;
+            optional uint32 MaxDelayMs = 2;
+        }
+        message TInfoExchangerSettings {
+            optional TRetrySettings PublisherSettings = 1;
+            optional TRetrySettings SubscriberSettings = 2;
+            optional TRetrySettings ExchangerSettings = 3;
+        }
         optional uint32 ComputeActorsCount = 1 [default = 1000];
         optional uint64 ChannelBufferSize = 2 [default = 8388608];              //  8 MB
         reserved 3;
@@ -1127,7 +1141,8 @@ message TTableServiceConfig {
         reserved 14;
         optional TShardsScanningPolicy ShardsScanningPolicy = 16;
         optional uint64 KqpPatternCacheCapacityBytes = 17 [default = 104857600]; // 100 MiB, 0 is for disable
-        optional bool EnablePublishResourcesByExchanger = 18 [default = true];
+        optional bool EnablePublishResourcesByExchanger = 18 [default = false];
+        optional TInfoExchangerSettings InfoExchangerSettings = 19;
     }
 
     message TSpillingServiceConfig {
@@ -1268,6 +1283,11 @@ message TTableServiceConfig {
         optional uint32 MaxTotalRetries = 7;
     }
 
+    message TIteratorReadQuotaSettings {
+        optional uint32 MaxRows = 1;
+        optional uint32 MaxBytes = 2;
+    }
+
     optional uint32 QueryLimitBytes = 1;
     optional uint32 ParametersLimitBytes = 2;
     optional uint32 SessionsLimitPerNode = 3;
@@ -1295,7 +1315,7 @@ message TTableServiceConfig {
     reserved 25; // optional bool EnableKqpPatternCacheCompute = 25 [default = false];
 
     optional bool EnableKqpScanQuerySourceRead = 26 [default = false];
-    optional bool EnableKqpDataQuerySourceRead = 27 [default = true];
+    optional bool EnableKqpDataQuerySourceRead = 27 [default = false];
     optional uint64 SessionIdleDurationSeconds = 28 [default = 600];
     optional TAggregationConfig AggregationConfig = 29;
     optional bool EnableKqpScanQueryStreamLookup = 30 [default = true];
@@ -1309,6 +1329,7 @@ message TTableServiceConfig {
     optional bool EnableKqpImmediateEffects = 38 [default = true];
     optional bool EnableSequentialReads = 39 [default = false];
     optional bool EnablePreparedDdl = 42 [default = false];
+    optional bool EnableSequences = 43 [default = false];
 
     enum EBindingsMode {
         BM_ENABLED = 0;
@@ -1319,6 +1340,8 @@ message TTableServiceConfig {
 
     optional EBindingsMode BindingsMode = 40 [default = BM_ENABLED];
     optional TIteratorReadsRetrySettings IteratorReadsRetrySettings = 41;
+    optional bool PredicateExtract20 = 44 [default = false];
+    optional TIteratorReadQuotaSettings IteratorReadQuotaSettings = 45;
 };
 
 // Config describes immediate controls and allows
@@ -1559,7 +1582,7 @@ message TAuditConfig {
 
 message THiveTabletLimit {
     optional NKikimrTabletBase.TTabletTypes.EType Type = 1;
-    optional uint64 MaxCount = 2;
+    optional uint64 MaxCount = 2 [default = 1000000]; // Default value here should match the one in NkikimrLocal.TTabletAvailability
 }
 
 message THiveTabletPreference {
@@ -1844,7 +1867,7 @@ message TLocalPgWireConfig {
 }
 
 message TKafkaProxyConfig {
-    optional bool EnableKafkaProxy = 1 [default = true];
+    optional bool EnableKafkaProxy = 1 [default = false];
 
     optional int32 ListeningPort = 2 [default = 9092];
     optional string SslCertificate = 3;

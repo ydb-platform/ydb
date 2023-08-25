@@ -23,7 +23,7 @@ Y_UNIT_TEST_SUITE(Discover) {
         UNIT_ASSERT_VALUES_EQUAL(getResult->ResponseSz, 1);
         UNIT_ASSERT_VALUES_EQUAL(getResult->Responses[0].Status, status);
         if (status == NKikimrProto::EReplyStatus::OK) {
-            UNIT_ASSERT_VALUES_EQUAL(getResult->Responses[0].Buffer, data);
+            UNIT_ASSERT_VALUES_EQUAL(getResult->Responses[0].Buffer.ConvertToString(), data);
         }
     }
 

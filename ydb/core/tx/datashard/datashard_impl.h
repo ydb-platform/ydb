@@ -233,6 +233,9 @@ class TDataShard
     class TTxReadViaPipeline;
     class TReadOperation;
 
+    class TTxHandleSafeKqpScan;
+    class TTxHandleSafeBuildIndexScan;
+
     ITransaction *CreateTxMonitoring(TDataShard *self,
                                      NMon::TEvRemoteHttpInfo::TPtr ev);
     ITransaction *CreateTxGetInfo(TDataShard *self,
@@ -1148,7 +1151,6 @@ class TDataShard
     }
 
     void Handle(TEvents::TEvGone::TPtr &ev);
-    void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvGetShardState::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvSchemaChangedResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvStateChangedResult::TPtr &ev, const TActorContext &ctx);
@@ -1187,6 +1189,7 @@ class TDataShard
     void Handle(TEvDataShard::TEvGetTableStats::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext& ctx);
+    void HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvEraseRowsRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev, const TActorContext& ctx);
@@ -1215,6 +1218,7 @@ class TDataShard
     void Handle(TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanRegistered::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanProgress::TPtr& ev, const TActorContext& ctx);
@@ -2710,11 +2714,7 @@ protected:
     // Redundant init state required by flat executor implementation
     void StateInit(TAutoPtr<NActors::IEventHandle> &ev) {
         TRACE_EVENT(NKikimrServices::TX_DATASHARD);
-        switch (ev->GetTypeRewrite()) {
-            HFuncTraced(TEvents::TEvPoisonPill, Handle);
-        default:
-            StateInitImpl(ev, SelfId());
-        }
+        StateInitImpl(ev, SelfId());
     }
 
     void Enqueue(STFUNC_SIG) override {
@@ -2731,7 +2731,6 @@ protected:
             HFuncTraced(TEvMediatorTimecast::TEvNotifyPlanStep, Handle);
             HFuncTraced(TEvPrivate::TEvMediatorRestoreBackup, Handle);
             HFuncTraced(TEvPrivate::TEvRemoveLockChangeRecords, Handle);
-            HFuncTraced(TEvents::TEvPoisonPill, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateInactive unhandled event type: " << ev->GetTypeRewrite()
@@ -2746,7 +2745,6 @@ protected:
         TRACE_EVENT(NKikimrServices::TX_DATASHARD);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvGone, Handle);
-            HFuncTraced(TEvents::TEvPoisonPill, Handle);
             HFuncTraced(TEvDataShard::TEvGetShardState, Handle);
             HFuncTraced(TEvDataShard::TEvSchemaChangedResult, Handle);
             HFuncTraced(TEvDataShard::TEvStateChangedResult, Handle);
@@ -2867,7 +2865,6 @@ protected:
         TRACE_EVENT(NKikimrServices::TX_DATASHARD);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvGone, Handle);
-            HFuncTraced(TEvents::TEvPoisonPill, Handle);
             HFuncTraced(TEvDataShard::TEvProposeTransaction, HandleAsFollower);
             HFuncTraced(TEvPrivate::TEvDelayedProposeTransaction, Handle);
             HFuncTraced(TEvDataShard::TEvReadColumnsRequest, Handle);
@@ -2882,21 +2879,6 @@ protected:
                 ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateWorkAsFollower unhandled event type: " << ev->GetTypeRewrite()
                            << " event: " << ev->ToString());
             }
-            break;
-        }
-    }
-
-    // State after tablet takes poison pill
-    void StateBroken(TAutoPtr<NActors::IEventHandle> &ev) {
-        TRACE_EVENT(NKikimrServices::TX_DATASHARD);
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvents::TEvGone, Handle);
-            HFuncTraced(TEvTablet::TEvTabletDead, HandleTabletDead);
-        default:
-            ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::BrokenState at tablet " << TabletID()
-                       << " unhandled event type: " << ev->GetTypeRewrite()
-                       << " event: " << ev->ToString());
-            Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::ReasonActorUnknown));
             break;
         }
     }
@@ -2927,12 +2909,6 @@ protected:
         Y_VERIFY(LoanReturnTracker.Empty());
         SplitSrcSnapshotSender.Shutdown(ctx);
         return IActor::Die(ctx);
-    }
-
-    void BecomeBroken(const TActorContext &ctx)
-    {
-        Become(&TThis::StateBroken);
-        ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
     }
 
     void SendViaSchemeshardPipe(const TActorContext &ctx, ui64 tabletId, THolder<TEvDataShard::TEvSchemaChanged> event) {

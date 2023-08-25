@@ -61,13 +61,20 @@ const TTypeAnnotationNode* GetColumnType(const TDqConnection& node, const TStruc
                 TStringBuilder() << "Expecting integer as column name, but got '" << name << "'"));
             return nullptr;
         }
-        if (idx >= multiType->GetSize()) {
+        const bool isBlock = AnyOf(multiType->GetItems(), [](const TTypeAnnotationNode* item) { return item->IsBlockOrScalar(); });
+        const ui32 width = isBlock ? (multiType->GetSize() - 1) : multiType->GetSize();
+        if (idx >= width) {
             ctx.AddError(TIssue(ctx.GetPosition(pos),
-                TStringBuilder() << "Column index too big: " << name << " >= " << multiType->GetSize()));
+                TStringBuilder() << "Column index too big: " << name << " >= " << width));
             return nullptr;
         }
 
-        return multiType->GetItems()[idx];
+        auto itemType = multiType->GetItems()[idx];
+        if (isBlock) {
+            itemType = itemType->IsBlock() ? itemType->Cast<TBlockExprType>()->GetItemType() :
+                                             itemType->Cast<TScalarExprType>()->GetItemType();
+        }
+        return itemType;
     }
 
     auto result = structType.FindItemType(name);
@@ -233,17 +240,25 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
         }
         YQL_ENSURE(programResultTypesTuple.size() == 1);
         auto multiType = programLambda->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>();
-        if (multiType->GetSize() != outputNarrowType->GetSize()) {
+        const bool isBlock = AnyOf(multiType->GetItems(), [](const TTypeAnnotationNode* item) { return item->IsBlockOrScalar(); });
+        TTypeAnnotationNode::TListType blockItemTypes;
+        if (isBlock && !EnsureWideStreamBlockType(*programLambda, blockItemTypes, ctx)) {
+            return TStatus::Error;
+        }
+
+        const ui32 width = isBlock ? (blockItemTypes.size() - 1) : multiType->GetSize();
+        if (width != outputNarrowType->GetSize()) {
             ctx.AddError(TIssue(ctx.GetPosition(programLambda->Pos()),TStringBuilder() << "Wide/narrow types has different number of items: " <<
-                multiType->GetSize() << " vs " << outputNarrowType->GetSize()));
+                width << " vs " << outputNarrowType->GetSize()));
             return TStatus::Error;
         }
 
         for (size_t i = 0; i < outputNarrowType->GetSize(); ++i) {
             auto structItem = outputNarrowType->GetItems()[i];
-            if (!IsSameAnnotation(*structItem->GetItemType(), *(multiType->GetItems()[i]))) {
+            auto wideItem = isBlock ? blockItemTypes[i] : multiType->GetItems()[i];
+            if (!IsSameAnnotation(*structItem->GetItemType(), *wideItem)) {
                 ctx.AddError(TIssue(ctx.GetPosition(programLambda->Pos()),TStringBuilder() << "Wide/narrow types mismatch for column '" <<
-                    structItem->GetName() << "' : " << *(multiType->GetItems()[i]) << " vs " << *structItem->GetItemType()));
+                    structItem->GetName() << "' : " << *wideItem << " vs " << *structItem->GetItemType()));
                 return TStatus::Error;
             }
         }

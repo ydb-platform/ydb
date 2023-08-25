@@ -310,6 +310,7 @@ public:
         auto &dnConfig = Config.GetDynamicNameserviceConfig();
         TIntrusivePtr<TDynamicNameserviceConfig> config = new TDynamicNameserviceConfig;
         config->MaxStaticNodeId = dnConfig.GetMaxStaticNodeId();
+        config->MinDynamicNodeId = dnConfig.GetMinDynamicNodeId();
         config->MaxDynamicNodeId = dnConfig.GetMaxDynamicNodeId();
         appData->DynamicNameserviceConfig = config;
     }
@@ -364,10 +365,26 @@ public:
     }
 };
 
+class TYamlConfigInitializer : public IAppDataInitializer {
+    const NKikimrConfig::TAppConfig& Config;
+
+public:
+    TYamlConfigInitializer(const TKikimrRunConfig& runConfig)
+        : Config(runConfig.AppConfig)
+    {
+    }
+
+    virtual void Initialize(NKikimr::TAppData* appData) override
+    {
+        appData->YamlConfigEnabled = Config.GetYamlConfigEnabled();
+    }
+};
+
 TKikimrRunner::TKikimrRunner(std::shared_ptr<TModuleFactories> factories)
     : ModuleFactories(std::move(factories))
     , Counters(MakeIntrusive<::NMonitoring::TDynamicCounters>())
     , PollerThreads(new NInterconnect::TPollerThreads)
+    , MemObserver(MakeIntrusive<TMemObserver>())
 {
 }
 
@@ -907,19 +924,13 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             opts.SetUseAuth(appConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement());
         }
 
-        if (grpcConfig.HasKeepAliveEnable()) {
-            if (grpcConfig.GetKeepAliveEnable()) {
-                Y_VERIFY(grpcConfig.HasKeepAliveIdleTimeoutTriggerSec(), "KeepAliveIdleTimeoutTriggerSec not set");
-                Y_VERIFY(grpcConfig.HasKeepAliveMaxProbeCount(), "KeepAliveMaxProbeCount not set");
-                Y_VERIFY(grpcConfig.HasKeepAliveProbeIntervalSec(), "KeepAliveProbeIntervalSec not set");
-                opts.SetKeepAliveEnable(true);
-                opts.SetKeepAliveIdleTimeoutTriggerSec(grpcConfig.GetKeepAliveIdleTimeoutTriggerSec());
-                opts.SetKeepAliveMaxProbeCount(grpcConfig.GetKeepAliveMaxProbeCount());
-                opts.SetKeepAliveProbeIntervalSec(grpcConfig.GetKeepAliveProbeIntervalSec());
-            }
-            else {
-                opts.SetKeepAliveEnable(false);
-            }
+        if (grpcConfig.GetKeepAliveEnable()) {
+            opts.SetKeepAliveEnable(true);
+            opts.SetKeepAliveIdleTimeoutTriggerSec(grpcConfig.GetKeepAliveIdleTimeoutTriggerSec());
+            opts.SetKeepAliveMaxProbeCount(grpcConfig.GetKeepAliveMaxProbeCount());
+            opts.SetKeepAliveProbeIntervalSec(grpcConfig.GetKeepAliveProbeIntervalSec());
+        } else {
+            opts.SetKeepAliveEnable(false);
         }
 
         NConsole::SetGRpcLibraryFunction();
@@ -1147,6 +1158,8 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     appDataInitializers.AddAppDataInitializer(new TLabelsInitializer(runConfig));
     // setup cluster name
     appDataInitializers.AddAppDataInitializer(new TClusterNameInitializer(runConfig));
+    // setup yaml config info
+    appDataInitializers.AddAppDataInitializer(new TYamlConfigInitializer(runConfig));
 
     appDataInitializers.Initialize(AppData.Get());
 }
@@ -1396,7 +1409,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TLocalServiceInitializer(runConfig));
     }
     if (serviceMask.EnableSharedCache) {
-        sil->AddServiceInitializer(new TSharedCacheInitializer(runConfig));
+        sil->AddServiceInitializer(new TSharedCacheInitializer(runConfig, MemObserver));
     }
     if (serviceMask.EnableBlobCache) {
         sil->AddServiceInitializer(new TBlobCacheInitializer(runConfig));
@@ -1493,7 +1506,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TNetClassifierInitializer(runConfig));
     }
 
-    sil->AddServiceInitializer(new TMemProfMonitorInitializer(runConfig));
+    sil->AddServiceInitializer(new TMemProfMonitorInitializer(runConfig, MemObserver));
 
 #if defined(ENABLE_MEMORY_TRACKING)
     sil->AddServiceInitializer(new TMemoryTrackerInitializer(runConfig));

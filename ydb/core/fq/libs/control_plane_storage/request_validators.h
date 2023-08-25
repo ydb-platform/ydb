@@ -153,10 +153,19 @@ NYql::TIssues ValidateBinding(const T& ev, size_t maxSize, const TSet<FederatedQ
     return issues;
 }
 
-NYql::TIssues ValidateConnectionSetting(const FederatedQuery::ConnectionSetting& setting, const TSet<FederatedQuery::ConnectionSetting::ConnectionCase>& availableConnections, bool disableCurrentIam,  bool clickHousePasswordRequire = true);
+NYql::TIssues ValidateConnectionSetting(
+    const FederatedQuery::ConnectionSetting& setting,
+    const TSet<FederatedQuery::ConnectionSetting::ConnectionCase>& availableConnections,
+    bool disableCurrentIam,
+    bool passwordRequired = true);
 
 template<typename T>
-NYql::TIssues ValidateConnection(const T& ev, size_t maxSize, const TSet<FederatedQuery::ConnectionSetting::ConnectionCase>& availableConnections, bool disableCurrentIam,  bool clickHousePasswordRequire = true)
+NYql::TIssues ValidateConnection(
+    const T& ev,
+    size_t maxSize,
+    const TSet<FederatedQuery::ConnectionSetting::ConnectionCase>& availableConnections,
+    bool disableCurrentIam,
+    bool passwordRequired = true)
 {
     const auto& request = ev->Get()->Request;
     NYql::TIssues issues = ValidateEvent(ev, maxSize);
@@ -179,7 +188,7 @@ NYql::TIssues ValidateConnection(const T& ev, size_t maxSize, const TSet<Federat
     }
 
     const FederatedQuery::ConnectionSetting& setting = content.setting();
-    issues.AddIssues(ValidateConnectionSetting(setting, availableConnections, disableCurrentIam, clickHousePasswordRequire));
+    issues.AddIssues(ValidateConnectionSetting(setting, availableConnections, disableCurrentIam, passwordRequired));
     return issues;
 }
 

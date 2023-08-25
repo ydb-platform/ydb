@@ -5,7 +5,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/kesus/tablet/events.h>
-#include <ydb/core/util/time_series_vec.h>
+#include <ydb/library/time_series_vec/time_series_vec.h>
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 

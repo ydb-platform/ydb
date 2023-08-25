@@ -73,7 +73,8 @@ struct TRunActorParams { // TODO2 : Change name
         const Fq::Private::TaskResources& resources,
         const TString& executionId,
         const TString& operationId,
-        const NFq::NConfig::TYdbStorageConfig& computeConnection
+        const NFq::NConfig::TYdbStorageConfig& computeConnection,
+        TDuration resultTtl
     );
 
     TRunActorParams(const TRunActorParams& params) = default;
@@ -133,6 +134,7 @@ struct TRunActorParams { // TODO2 : Change name
     TString ExecutionId;
     NYdb::TOperation::TOperationId OperationId;
     NFq::NConfig::TYdbStorageConfig ComputeConnection;
+    TDuration ResultTtl;
 };
 
 } /* NFq */

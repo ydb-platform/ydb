@@ -986,7 +986,18 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
         {
             auto result = session.DescribeTable("/Root/TestTable/Index/indexImplTable").ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+
+            const THashMap<std::string_view, std::string_view> columnTypes = {
+                {"Key", "String?"},
+                {"Index2", "String?"}
+            };
+
+            const auto& columns = result.GetTableDescription().GetTableColumns();
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), columnTypes.size());
+            for (const auto& column : columns) {
+                UNIT_ASSERT_VALUES_EQUAL_C(column.Type.ToString(), columnTypes.at(column.Name), column.Name);
+            }
         }
 
         {
@@ -1306,10 +1317,14 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-    Y_UNIT_TEST(SecondaryIndexOrderBy) {
+    Y_UNIT_TEST_TWIN(SecondaryIndexOrderBy, SourceRead) {
         auto setting = NKikimrKqp::TKqpSetting();
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(SourceRead);
         auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+            .SetKqpSettings({setting})
+            .SetAppConfig(appConfig);
+
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1507,7 +1522,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     query)
                     .ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-                UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\"") || SourceRead, result.GetAst());
                 UNIT_ASSERT_C(!result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
             }
 
@@ -1533,7 +1548,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     query)
                     .ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-                UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\"") || SourceRead, result.GetAst());
                 UNIT_ASSERT_C(!result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
             }
 
@@ -1560,7 +1575,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     query)
                     .ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-                UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\""), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().Contains("('\"ItemsLimit\"") || SourceRead, result.GetAst());
                 UNIT_ASSERT_C(!result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
             }
 
@@ -1602,10 +1617,13 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-    Y_UNIT_TEST(SecondaryIndexOrderBy2) {
+    Y_UNIT_TEST_TWIN(SecondaryIndexOrderBy2, SourceRead) {
         auto setting = NKikimrKqp::TKqpSetting();
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(SourceRead);
         auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+            .SetKqpSettings({setting})
+            .SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1705,7 +1723,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString().c_str());
 
-                UNIT_ASSERT_C(result.GetAst().Contains("'('\"ItemsLimit"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().Contains("'('\"ItemsLimit") || SourceRead, result.GetAst());
                 UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
             }
 
@@ -1752,7 +1770,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                     .ExtractValueSync();
 
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString().c_str());
-                UNIT_ASSERT_C(result.GetAst().Contains("'('\"ItemsLimit"), result.GetAst());
+                UNIT_ASSERT_C(result.GetAst().Contains("'('\"ItemsLimit") || SourceRead, result.GetAst());
                 UNIT_ASSERT_C(result.GetAst().Contains("'('\"Reverse\")"), result.GetAst());
             }
 
@@ -3153,9 +3171,12 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
     }
 
     Y_UNIT_TEST(MultipleModifications) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+            .SetKqpSettings({setting})
+            .SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

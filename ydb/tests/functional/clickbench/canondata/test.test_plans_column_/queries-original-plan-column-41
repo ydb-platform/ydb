@@ -54,7 +54,7 @@
                                                                     {
                                                                         "Limit": "10 + 10000",
                                                                         "Name": "TopSort",
-                                                                        "TopSortBy": "$15.PageViews"
+                                                                        "TopSortBy": "argument.Count0"
                                                                     },
                                                                     {
                                                                         "Name": "Aggregate"
@@ -292,7 +292,7 @@
                                                                                                     }
                                                                                                 }
                                                                                             ],
-                                                                                            "Version": 3
+                                                                                            "Version": 2
                                                                                         },
                                                                                         "Table": "clickbench/plans/column/hits"
                                                                                     }
@@ -308,7 +308,7 @@
                                                             }
                                                         ],
                                                         "SortColumns": [
-                                                            "PageViews (Desc)"
+                                                            "Count0 (Desc)"
                                                         ]
                                                     }
                                                 ]

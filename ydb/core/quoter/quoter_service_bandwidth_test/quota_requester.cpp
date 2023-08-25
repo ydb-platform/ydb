@@ -1,5 +1,5 @@
 #include "quota_requester.h"
-#include <ydb/core/base/quoter.h>
+#include <ydb/core/quoter/public/quoter.h>
 
 #include <cmath>
 

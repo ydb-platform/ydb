@@ -43,7 +43,7 @@ class TTableConflictsCache {
     struct TKeyHash {
         using is_transparent = void;
 
-        bool operator()(TConstArrayRef<TCell> key) const {
+        size_t operator()(TConstArrayRef<TCell> key) const {
             return absl::Hash<THashableKey>()(THashableKey{ key });
         }
     };
@@ -155,7 +155,7 @@ private:
     TDistributedWrites DistributedWrites;
     NTable::ITransactionObserverPtr TxObserver;
     std::vector<TRollbackOp> RollbackOps;
-    bool RollbackAllowed = false;
+    bool RollbackAllowed = true;
 };
 
 class TConflictsCache {

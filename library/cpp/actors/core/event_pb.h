@@ -6,6 +6,7 @@
 #include <google/protobuf/io/zero_copy_stream.h>
 #include <google/protobuf/arena.h>
 #include <library/cpp/actors/protos/actors.pb.h>
+#include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/deque.h>
 #include <util/system/context.h>
 #include <util/system/filemap.h>
@@ -13,6 +14,9 @@
 #include <util/thread/lfstack.h>
 #include <array>
 #include <span>
+
+// enable only when patch with this macro was successfully deployed
+#define USE_EXTENDED_PAYLOAD_FORMAT 0
 
 namespace NActors {
 
@@ -144,6 +148,7 @@ namespace NActors {
     class TEventPBBase: public TEventBase<TEv, TEventType> , public TRecHolder {
         // a vector of data buffers referenced by record; if filled, then extended serialization mechanism applies
         TVector<TRope> Payload;
+        size_t TotalPayloadSize = 0;
 
     public:
         using TRecHolder::Record;
@@ -191,8 +196,8 @@ namespace NActors {
                 result += SerializeNumber(Payload.size(), buf);
                 for (const TRope& rope : Payload) {
                     result += SerializeNumber(rope.GetSize(), buf);
-                    result += rope.GetSize();
                 }
+                result += TotalPayloadSize;
             }
             return result;
         }
@@ -207,9 +212,20 @@ namespace NActors {
 
                 if (const auto& info = input->GetSerializationInfo(); info.IsExtendedFormat) {
                     // check marker
-                    if (!iter.Valid() || *iter.ContiguousData() != PayloadMarker) {
+                    if (!iter.Valid() || (*iter.ContiguousData() != PayloadMarker && *iter.ContiguousData() != ExtendedPayloadMarker)) {
                         Y_FAIL("invalid event");
                     }
+
+                    const bool dataIsSeparate = *iter.ContiguousData() == ExtendedPayloadMarker; // ropes go after sizes
+
+                    auto fetchRope = [&](size_t len) {
+                        TRope::TConstIterator begin = iter;
+                        iter += len;
+                        size -= len;
+                        ev->Payload.emplace_back(begin, iter);
+                        ev->TotalPayloadSize += len;
+                    };
+
                     // skip marker
                     iter += 1;
                     --size;
@@ -218,6 +234,10 @@ namespace NActors {
                     if (numRopes == Max<size_t>()) {
                         Y_FAIL("invalid event");
                     }
+                    TStackVec<size_t, 16> ropeLens;
+                    if (dataIsSeparate) {
+                        ropeLens.reserve(numRopes);
+                    }
                     while (numRopes--) {
                         // parse length of the rope
                         const size_t len = DeserializeNumber(iter, size);
@@ -225,10 +245,14 @@ namespace NActors {
                             Y_FAIL("invalid event len# %zu size# %" PRIu64, len, size);
                         }
                         // extract the rope
-                        TRope::TConstIterator begin = iter;
-                        iter += len;
-                        size -= len;
-                        ev->Payload.emplace_back(begin, iter);
+                        if (dataIsSeparate) {
+                            ropeLens.push_back(len);
+                        } else {
+                            fetchRope(len);
+                        }
+                    }
+                    for (size_t len : ropeLens) {
+                        fetchRope(len);
                     }
                 }
 
@@ -261,6 +285,10 @@ namespace NActors {
             return CreateSerializationInfoImpl(0);
         }
 
+        bool AllowExternalDataChannel() const {
+            return TotalPayloadSize >= 4096;
+        }
+
     public:
         void ReservePayload(size_t size) {
             Payload.reserve(size);
@@ -268,6 +296,7 @@ namespace NActors {
 
         ui32 AddPayload(TRope&& rope) {
             const ui32 id = Payload.size();
+            TotalPayloadSize += rope.size();
             Payload.push_back(std::move(rope));
             InvalidateCachedByteSize();
             return id;
@@ -284,37 +313,49 @@ namespace NActors {
 
         void StripPayload() {
             Payload.clear();
+            TotalPayloadSize = 0;
         }
 
     protected:
         TEventSerializationInfo CreateSerializationInfoImpl(size_t preserializedSize) const {
             TEventSerializationInfo info;
+            info.IsExtendedFormat = static_cast<bool>(Payload);
 
-            if (Payload) {
-                char temp[MaxNumberBytes];
-                info.Sections.push_back(TEventSectionInfo{0, 1 + SerializeNumber(Payload.size(), temp), 0, 0}); // payload marker and rope count
-                for (const TRope& rope : Payload) {
-                    const size_t ropeSize = rope.GetSize();
-                    info.Sections.back().Size += SerializeNumber(ropeSize, temp);
-                    info.Sections.push_back(TEventSectionInfo{0, ropeSize, 0, 0}); // data as a separate section
+            if (static_cast<const TEv&>(*this).AllowExternalDataChannel()) {
+                if (Payload) {
+                    char temp[MaxNumberBytes];
+#if USE_EXTENDED_PAYLOAD_FORMAT
+                    size_t headerLen = 1 + SerializeNumber(Payload.size(), temp);
+                    for (const TRope& rope : Payload) {
+                        headerLen += SerializeNumber(rope.size(), temp);
+                    }
+                    info.Sections.push_back(TEventSectionInfo{0, headerLen, 0, 0, true});
+                    for (const TRope& rope : Payload) {
+                        info.Sections.push_back(TEventSectionInfo{0, rope.size(), 0, 0, false});
+                    }
+#else
+                    info.Sections.push_back(TEventSectionInfo{0, 1 + SerializeNumber(Payload.size(), temp), 0, 0, true}); // payload marker and rope count
+                    for (const TRope& rope : Payload) {
+                        const size_t ropeSize = rope.GetSize();
+                        info.Sections.back().Size += SerializeNumber(ropeSize, temp);
+                        info.Sections.push_back(TEventSectionInfo{0, ropeSize, 0, 0, false}); // data as a separate section
+                    }
+#endif
                 }
-                info.IsExtendedFormat = true;
-            } else {
-                info.IsExtendedFormat = false;
-            }
 
-            const size_t byteSize = Max<ssize_t>(0, Record.ByteSize()) + preserializedSize;
-            info.Sections.push_back(TEventSectionInfo{0, byteSize, 0, 0}); // protobuf itself
+                const size_t byteSize = Max<ssize_t>(0, Record.ByteSize()) + preserializedSize;
+                info.Sections.push_back(TEventSectionInfo{0, byteSize, 0, 0, true}); // protobuf itself
 
 #ifndef NDEBUG
-            size_t total = 0;
-            for (const auto& section : info.Sections) {
-                total += section.Size;
-            }
-            size_t serialized = CalculateSerializedSize();
-            Y_VERIFY(total == serialized, "total# %zu serialized# %zu byteSize# %zd Payload.size# %zu", total,
-                serialized, byteSize, Payload.size());
+                size_t total = 0;
+                for (const auto& section : info.Sections) {
+                    total += section.Size;
+                }
+                size_t serialized = CalculateSerializedSize();
+                Y_VERIFY(total == serialized, "total# %zu serialized# %zu byteSize# %zd Payload.size# %zu", total,
+                    serialized, byteSize, Payload.size());
 #endif
+            }
 
             return info;
         }
@@ -343,6 +384,27 @@ namespace NActors {
                     char buf[MaxNumberBytes];
                     return append(buf, SerializeNumber(number, buf));
                 };
+
+#if USE_EXTENDED_PAYLOAD_FORMAT
+                char marker = ExtendedPayloadMarker;
+                append(&marker, 1);
+                if (!appendNumber(Payload.size())) {
+                    return false;
+                }
+                for (const TRope& rope : Payload) {
+                    if (!appendNumber(rope.GetSize())) {
+                        return false;
+                    }
+                }
+                if (size) {
+                    chunker->BackUp(std::exchange(size, 0));
+                }
+                for (const TRope& rope : Payload) {
+                    if (!chunker->WriteRope(&rope)) {
+                        return false;
+                    }
+                }
+#else
                 char marker = PayloadMarker;
                 append(&marker, 1);
                 if (!appendNumber(Payload.size())) {
@@ -364,6 +426,7 @@ namespace NActors {
                 if (size) {
                     chunker->BackUp(size);
                 }
+#endif
             }
 
             if (preserialized && !chunker->WriteString(&preserialized)) {
@@ -376,6 +439,7 @@ namespace NActors {
     protected:
         mutable size_t CachedByteSize = 0;
 
+        static constexpr char ExtendedPayloadMarker = 0x06;
         static constexpr char PayloadMarker = 0x07;
         static constexpr size_t MaxNumberBytes = (sizeof(size_t) * CHAR_BIT + 6) / 7;
 

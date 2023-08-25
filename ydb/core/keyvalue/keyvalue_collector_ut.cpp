@@ -117,7 +117,7 @@ Y_UNIT_TEST(TestKeyValueCollectorEmpty) {
 
     TVector<TLogoBlobID> keep;
     TVector<TLogoBlobID> doNotKeep;
-    TIntrusivePtr<NKeyValue::TCollectOperation> operation(new NKeyValue::TCollectOperation(100, 100, std::move(keep), std::move(doNotKeep)));
+    TIntrusivePtr<NKeyValue::TCollectOperation> operation(new NKeyValue::TCollectOperation(100, 100, std::move(keep), std::move(doNotKeep), {}));
     context.SetActor(CreateKeyValueCollector(
                 context.GetTabletActorId(), operation, context.GetTabletInfo().Get(), 200, 200, true));
 
@@ -144,7 +144,7 @@ Y_UNIT_TEST(TestKeyValueCollectorSingle) {
     TVector<TLogoBlobID> keep;
     keep.emplace_back(0x10010000001000Bull, 5, 58949, NKeyValue::BLOB_CHANNEL, 1209816, 10);
     TVector<TLogoBlobID> doNotKeep;
-    TIntrusivePtr<NKeyValue::TCollectOperation> operation(new NKeyValue::TCollectOperation(100, 100, std::move(keep), std::move(doNotKeep)));
+    TIntrusivePtr<NKeyValue::TCollectOperation> operation(new NKeyValue::TCollectOperation(100, 100, std::move(keep), std::move(doNotKeep), {}));
     context.SetActor(CreateKeyValueCollector(
                 context.GetTabletActorId(), operation, context.GetTabletInfo().Get(), 200, 200, true));
 
@@ -180,7 +180,7 @@ Y_UNIT_TEST(TestKeyValueCollectorSingleWithOneError) {
     TVector<TLogoBlobID> keep;
     keep.emplace_back(0x10010000001000Bull, 5, 58949, NKeyValue::BLOB_CHANNEL, 1209816, 10);
     TVector<TLogoBlobID> doNotKeep;
-    TIntrusivePtr<NKeyValue::TCollectOperation> operation(new NKeyValue::TCollectOperation(100, 100, std::move(keep), std::move(doNotKeep)));
+    TIntrusivePtr<NKeyValue::TCollectOperation> operation(new NKeyValue::TCollectOperation(100, 100, std::move(keep), std::move(doNotKeep), {}));
     context.SetActor(CreateKeyValueCollector(
                 context.GetTabletActorId(), operation, context.GetTabletInfo().Get(), 200, 200, true));
 
@@ -242,7 +242,7 @@ Y_UNIT_TEST(TestKeyValueCollectorMultiple) {
         ids.insert(doNotKeep[i]);
     }
 
-    TIntrusivePtr<NKeyValue::TCollectOperation> operation(new NKeyValue::TCollectOperation(100, 100, std::move(keep), std::move(doNotKeep)));
+    TIntrusivePtr<NKeyValue::TCollectOperation> operation(new NKeyValue::TCollectOperation(100, 100, std::move(keep), std::move(doNotKeep), {}));
     context.SetActor(CreateKeyValueCollector(
                 context.GetTabletActorId(), operation, context.GetTabletInfo().Get(), 200, 200, true));
 
@@ -275,16 +275,6 @@ Y_UNIT_TEST(TestKeyValueCollectorMultiple) {
 
         context.Send(new TEvBlobStorage::TEvCollectGarbageResult(NKikimrProto::OK, collect->TabletId,
                     collect->RecordGeneration, collect->PerGenerationCounter, collect->Channel));
-
-        if (collect && collect->DoNotKeep && collect->DoNotKeep->size()) {
-            auto complete = context.GrabEvent<TEvKeyValue::TEvPartialCompleteGC>(handle);
-            THashSet<TLogoBlobID> uniqueBlobs;
-            uniqueBlobs.insert(complete->CollectedDoNotKeep.begin(), complete->CollectedDoNotKeep.end());
-            UNIT_ASSERT_VALUES_EQUAL(uniqueBlobs.size(), complete->CollectedDoNotKeep.size());
-            complete->CollectedDoNotKeep.clear();
-            auto cont = std::make_unique<TEvKeyValue::TEvContinueGC>(std::move(complete->CollectedDoNotKeep));
-            context.Send(cont.release());
-        }
     }
     UNIT_ASSERT(erased == 8);
 
@@ -307,11 +297,11 @@ Y_UNIT_TEST(TestKeyValueCollectorMany) {
         keep.emplace_back(0x10010000001000Bull, idx, 58949, NKeyValue::BLOB_CHANNEL, 1209816, 10);
     }
 
-    TIntrusivePtr<NKeyValue::TCollectOperation> operation(new NKeyValue::TCollectOperation(100, 100, std::move(keep), std::move(doNotKeep)));
+    TIntrusivePtr<NKeyValue::TCollectOperation> operation(new NKeyValue::TCollectOperation(100, 100, std::move(keep), std::move(doNotKeep), {}));
     context.SetActor(CreateKeyValueCollector(
                 context.GetTabletActorId(), operation, context.GetTabletInfo().Get(), 200, 200, true));
 
-    auto handleGC = [&](bool withContinueGC, ui32 keepSize, ui32 doNotKeepSize) {
+    auto handleGC = [&](ui32 keepSize, ui32 doNotKeepSize) {
         TAutoPtr<IEventHandle> handle;
         auto collect = context.GrabEvent<TEvBlobStorage::TEvCollectGarbage>(handle);
         UNIT_ASSERT(collect);
@@ -319,24 +309,17 @@ Y_UNIT_TEST(TestKeyValueCollectorMany) {
         UNIT_ASSERT_VALUES_EQUAL((collect->DoNotKeep ? collect->DoNotKeep->size() : 0), doNotKeepSize);
         context.Send(new TEvBlobStorage::TEvCollectGarbageResult(NKikimrProto::OK, collect->TabletId,
                     collect->RecordGeneration, collect->PerGenerationCounter, collect->Channel));
-
-        if (withContinueGC) {
-            auto complete = context.GrabEvent<TEvKeyValue::TEvPartialCompleteGC>(handle);
-            complete->CollectedDoNotKeep.clear();
-            auto cont = std::make_unique<TEvKeyValue::TEvContinueGC>(std::move(complete->CollectedDoNotKeep));
-            context.Send(cont.release());
-        }
     };
 
-    handleGC(true, 20, 20); // group 0
-    handleGC(true, 10, 10); // group 1
-    handleGC(true, 0, 10'000); // group 2 DoNotKeep 30..10029
-    handleGC(true, 30, 9'970); // group 2 DoNotKeep 10030..19999 Keep 30.59
-    handleGC(false, 10'000, 0); // group 2  Keep 60..10059
-    handleGC(false, 9'940, 0); // group 2  Keep 10060..20000
-    handleGC(false, 0, 0); // group 3
-    handleGC(false, 0, 0); // group 4
-    handleGC(false, 0, 0); // group 5
+    handleGC(20, 20); // group 0
+    handleGC(10, 10); // group 1
+    handleGC(0, 10'000); // group 2 DoNotKeep 30..10029
+    handleGC(30, 9'970); // group 2 DoNotKeep 10030..19999 Keep 30.59
+    handleGC(10'000, 0); // group 2  Keep 60..10059
+    handleGC(9'940, 0); // group 2  Keep 10060..20000
+    handleGC(0, 0); // group 3
+    handleGC(0, 0); // group 4
+    handleGC(0, 0); // group 5
 
     TAutoPtr<IEventHandle> handle;
     auto eraseCollect = context.GrabEvent<TEvKeyValue::TEvCompleteGC>(handle);

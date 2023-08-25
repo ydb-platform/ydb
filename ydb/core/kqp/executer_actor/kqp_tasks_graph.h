@@ -159,9 +159,17 @@ public:
     ui64 NodeId = 0;  // only in case of scans over persistent snapshots
     bool ScanTask = false;
     TActorId ExecuterId;
+    ui32 Type = Unknown;
 
-    THashMap<TString, TString> DqTaskParams; // Params for sources/sinks
-    THashMap<TString, TString> DqSecureParams;
+    THashMap<TString, TString> TaskParams; // Params for sources/sinks
+    THashMap<TString, TString> SecureParams;
+
+    enum TTaskType : ui32 {
+        Unknown = 0,
+        Compute = 1,
+        Scan = 2,
+        DataShard = 3,
+    };
 
     struct TColumn {
         ui32 Id = 0;

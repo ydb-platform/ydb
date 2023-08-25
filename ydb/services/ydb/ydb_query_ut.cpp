@@ -1,67 +1,13 @@
 #include "ydb_common_ut.h"
 
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
+#include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
+
+#include <library/cpp/testing/unittest/tests_data.h>
 
 using namespace NYdb;
 using namespace NGrpc;
-
-namespace {
-
-TString CreateSession(const NGRpcProxy::TGRpcClientConfig& clientConfig) {
-    NGrpc::TGRpcClientLow clientLow;
-    auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Query::V1::QueryService>(clientConfig);
-
-    Ydb::Query::CreateSessionRequest request;
-    TString sessionId;
-
-    NGrpc::TResponseCallback<Ydb::Query::CreateSessionResponse> responseCb =
-        [&sessionId](NGrpc::TGrpcStatus&& grpcStatus, Ydb::Query::CreateSessionResponse&& response) -> void {
-            UNIT_ASSERT(!grpcStatus.InternalError);
-            UNIT_ASSERT(grpcStatus.GRpcStatusCode == 0);
-            UNIT_ASSERT_VALUES_EQUAL(response.status(), Ydb::StatusIds::SUCCESS);
-            UNIT_ASSERT(response.session_id() != "");
-            sessionId = response.session_id();
-    };
-
-    connection->DoRequest(request, std::move(responseCb), &Ydb::Query::V1::QueryService::Stub::AsyncCreateSession);
-
-    return sessionId;
-}
-
-using TProcessor = typename NGrpc::IStreamRequestReadProcessor<Ydb::Query::SessionState>::TPtr;
-void CheckAttach(const NGRpcProxy::TGRpcClientConfig& clientConfig, const TString& id,
-    const Ydb::StatusIds::StatusCode expected, bool& allDoneOk)
-{
-    NGrpc::TGRpcClientLow clientLow;
-    auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Query::V1::QueryService>(clientConfig);
-
-    Ydb::Query::AttachSessionRequest request;
-    request.set_session_id(id);
-
-    auto promise = NThreading::NewPromise<TProcessor>();
-    auto cb = [&allDoneOk, promise, expected](TGrpcStatus grpcStatus, TProcessor processor) mutable {
-        UNIT_ASSERT(grpcStatus.GRpcStatusCode == grpc::StatusCode::OK);
-        auto resp = std::make_shared<Ydb::Query::SessionState>();
-        processor->Read(resp.get(), [&allDoneOk, resp, promise, processor, expected](TGrpcStatus grpcStatus) mutable {
-            UNIT_ASSERT(grpcStatus.GRpcStatusCode == grpc::StatusCode::OK);
-            allDoneOk &= (resp->status() == expected);
-            if (!allDoneOk) {
-                Cerr << "Got attach response: " << resp->DebugString() << Endl;
-            }
-            promise.SetValue(processor);
-        });
-    };
-
-    connection->DoStreamRequest<Ydb::Query::AttachSessionRequest, Ydb::Query::SessionState>(
-        request,
-        cb,
-        &Ydb::Query::V1::QueryService::Stub::AsyncAttachSession);
-
-    auto processor = promise.GetFuture().GetValueSync();
-    processor->Cancel();
-}
-
-}
+using namespace NTestHelpers;
 
 Y_UNIT_TEST_SUITE(YdbQueryService) {
     Y_UNIT_TEST(TestCreateAndAttachSession) {
@@ -73,7 +19,7 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
         auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
         bool allDoneOk = true;
 
-        TString sessionId = CreateSession(clientConfig);
+        TString sessionId = CreateQuerySession(clientConfig);
 
         UNIT_ASSERT(sessionId);
 
@@ -98,4 +44,96 @@ Y_UNIT_TEST_SUITE(YdbQueryService) {
 
         UNIT_ASSERT(allDoneOk);
     }
+
+    Y_UNIT_TEST(TestAttachTwice) {
+        TKikimrWithGrpcAndRootSchema server;
+
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+        bool allDoneOk = true;
+
+        TString sessionId = CreateQuerySession(clientConfig);
+
+        UNIT_ASSERT(sessionId);
+
+        NGrpc::TGRpcClientLow clientLow;
+        auto p = CheckAttach(clientLow, clientConfig, sessionId, Ydb::StatusIds::SUCCESS, allDoneOk);
+
+        CheckAttach(clientConfig, sessionId, Ydb::StatusIds::SESSION_BUSY, allDoneOk);
+
+        p->Cancel();
+
+        UNIT_ASSERT(allDoneOk);
+    }
+
+    Y_UNIT_TEST(TestCreateDropAttachSession) {
+        TKikimrWithGrpcAndRootSchema server;
+
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+        bool allDoneOk = true;
+
+        TString sessionId = CreateQuerySession(clientConfig);
+
+        UNIT_ASSERT(sessionId);
+
+        {
+            CheckDelete(clientConfig, sessionId, Ydb::StatusIds::SUCCESS, allDoneOk);
+        }
+
+        UNIT_ASSERT(allDoneOk);
+
+        {
+            // We session has been destroyed by previous call
+            CheckAttach(clientConfig, sessionId, Ydb::StatusIds::BAD_SESSION, allDoneOk);
+        }
+
+        UNIT_ASSERT(allDoneOk);
+    }
+
+    Y_UNIT_TEST(TestCreateAttachAndDropAttachedSession) {
+        TKikimrWithGrpcAndRootSchema server;
+        server.GetRuntime()->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_TRACE);
+        server.GetRuntime()->SetLogPriority(NKikimrServices::KQP_SESSION, NActors::NLog::PRI_TRACE);
+
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(location);
+        bool allDoneOk = true;
+
+        TString sessionId = CreateQuerySession(clientConfig);
+
+        UNIT_ASSERT(sessionId);
+
+        NGrpc::TGRpcClientLow clientLow;
+        auto p = CheckAttach(clientLow, clientConfig, sessionId, Ydb::StatusIds::SUCCESS, allDoneOk);
+
+        UNIT_ASSERT(allDoneOk);
+
+        {
+            CheckDelete(clientConfig, sessionId, Ydb::StatusIds::SUCCESS, allDoneOk);
+        }
+
+        UNIT_ASSERT(allDoneOk);
+
+        {
+            EnsureSessionClosed(p, Ydb::StatusIds::SUCCESS, allDoneOk);
+        }
+
+        p->Cancel();
+
+        UNIT_ASSERT(allDoneOk);
+
+        {
+            CheckAttach(clientConfig, sessionId, Ydb::StatusIds::BAD_SESSION, allDoneOk);
+        }
+
+        UNIT_ASSERT(allDoneOk);
+    }
+
 }

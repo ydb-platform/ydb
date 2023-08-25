@@ -5,7 +5,7 @@
 
 #include <ydb/library/yql/dq/common/dq_common.h>
 
-#include <ydb/core/base/quoter.h>
+#include <ydb/core/quoter/public/quoter.h>
 
 namespace NYql {
 namespace NDq {

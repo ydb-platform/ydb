@@ -75,6 +75,8 @@ namespace NActors {
                         State = EState::BODY;
                         Iter = event.Buffer->GetBeginIter();
                         SerializationInfo = &event.Buffer->GetSerializationInfo();
+                        SectionIndex = 0;
+                        PartLenRemain = 0;
                     } else if (event.Event) {
                         State = EState::BODY;
                         IEventBase *base = event.Event.Get();
@@ -83,15 +85,16 @@ namespace NActors {
                         }
                         SerializationInfoContainer = base->CreateSerializationInfo();
                         SerializationInfo = &SerializationInfoContainer;
+                        SectionIndex = 0;
+                        PartLenRemain = 0;
                     } else { // event without buffer and IEventBase instance
                         State = EState::DESCRIPTOR;
                         SerializationInfoContainer = {};
                         SerializationInfo = &SerializationInfoContainer;
                     }
-                    EventInExternalDataChannel = Params.UseExternalDataChannel && !SerializationInfo->Sections.empty();
                     if (!event.EventSerializedSize) {
                         State = EState::DESCRIPTOR;
-                    } else if (EventInExternalDataChannel) {
+                    } else if (Params.UseExternalDataChannel && !SerializationInfo->Sections.empty()) {
                         State = EState::SECTIONS;
                         SectionIndex = 0;
                     }
@@ -130,11 +133,15 @@ namespace NActors {
                         char *p = sectionInfo;
 
                         const auto& section = SerializationInfo->Sections[SectionIndex];
-                        *p++ = static_cast<ui8>(EXdcCommand::DECLARE_SECTION);
+                        char& type = *p++;
+                        type = static_cast<ui8>(EXdcCommand::DECLARE_SECTION);
                         p += NInterconnect::NDetail::SerializeNumber(section.Headroom, p);
                         p += NInterconnect::NDetail::SerializeNumber(section.Size, p);
                         p += NInterconnect::NDetail::SerializeNumber(section.Tailroom, p);
                         p += NInterconnect::NDetail::SerializeNumber(section.Alignment, p);
+                        if (section.IsInline && Params.UseXdcShuffle) {
+                            type = static_cast<ui8>(EXdcCommand::DECLARE_SECTION_INLINE);
+                        }
                         Y_VERIFY(p <= std::end(sectionInfo));
 
                         const size_t declareLen = p - sectionInfo;
@@ -161,6 +168,8 @@ namespace NActors {
 
                     if (SectionIndex == SerializationInfo->Sections.size()) {
                         State = EState::BODY;
+                        SectionIndex = 0;
+                        PartLenRemain = 0;
                     }
 
                     break;
@@ -179,6 +188,8 @@ namespace NActors {
                 task.Append<External>(data, len);
             }
             *bytesSerialized += len;
+            Y_VERIFY_DEBUG(len <= PartLenRemain);
+            PartLenRemain -= len;
 
             event.EventActuallySerialized += len;
             if (event.EventActuallySerialized > MaxSerializedEventSize) {
@@ -189,15 +200,12 @@ namespace NActors {
         bool complete = false;
         if (event.Event) {
             while (!complete) {
-                TMutableContiguousSpan out = task.AcquireSpanForWriting<External>();
+                TMutableContiguousSpan out = task.AcquireSpanForWriting<External>().SubSpan(0, PartLenRemain);
                 if (!out.size()) {
                     break;
                 }
-                ui32 bytesFed = 0;
                 for (const auto& [buffer, size] : Chunker.FeedBuf(out.data(), out.size())) {
                     addChunk(buffer, size, false);
-                    bytesFed += size;
-                    Y_VERIFY(bytesFed <= out.size());
                 }
                 complete = Chunker.IsComplete();
                 if (complete) {
@@ -206,7 +214,7 @@ namespace NActors {
             }
         } else if (event.Buffer) {
             while (const size_t numb = Min<size_t>(External ? task.GetExternalFreeAmount() : task.GetInternalFreeAmount(),
-                    Iter.ContiguousSize())) {
+                    Iter.ContiguousSize(), PartLenRemain)) {
                 const char *obuf = Iter.ContiguousData();
                 addChunk(obuf, numb, true);
                 Iter += numb;
@@ -223,14 +231,43 @@ namespace NActors {
     }
 
     bool TEventOutputChannel::FeedPayload(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed) {
-        return EventInExternalDataChannel
-            ? FeedExternalPayload(task, event, weightConsumed)
-            : FeedInlinePayload(task, event, weightConsumed);
+        for (;;) {
+            // calculate inline or external part size (it may cover a few sections, not just single one)
+            while (!PartLenRemain) {
+                const auto& sections = SerializationInfo->Sections;
+                if (!Params.UseExternalDataChannel || sections.empty()) {
+                    // all data goes inline
+                    IsPartInline = true;
+                    PartLenRemain = Max<size_t>();
+                } else if (!Params.UseXdcShuffle) {
+                    // when UseXdcShuffle feature is not supported by the remote side, we transfer whole event over XDC
+                    IsPartInline = false;
+                    PartLenRemain = Max<size_t>();
+                } else {
+                    Y_VERIFY(SectionIndex < sections.size());
+                    IsPartInline = sections[SectionIndex].IsInline;
+                    while (SectionIndex < sections.size() && IsPartInline == sections[SectionIndex].IsInline) {
+                        PartLenRemain += sections[SectionIndex].Size;
+                        ++SectionIndex;
+                    }
+                }
+            }
+
+            // serialize bytes
+            const auto complete = IsPartInline
+                ? FeedInlinePayload(task, event, weightConsumed)
+                : FeedExternalPayload(task, event, weightConsumed);
+            if (!complete) { // no space to serialize
+                return false;
+            } else if (*complete) { // event serialized
+                return true;
+            }
+        }
     }
 
-    bool TEventOutputChannel::FeedInlinePayload(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed) {
+    std::optional<bool> TEventOutputChannel::FeedInlinePayload(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed) {
         if (task.GetInternalFreeAmount() <= sizeof(TChannelPart)) {
-            return false;
+            return std::nullopt;
         }
 
         auto partBookmark = task.Bookmark(sizeof(TChannelPart));
@@ -253,10 +290,10 @@ namespace NActors {
         return complete;
     }
 
-    bool TEventOutputChannel::FeedExternalPayload(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed) {
+    std::optional<bool> TEventOutputChannel::FeedExternalPayload(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed) {
         const size_t partSize = sizeof(TChannelPart) + sizeof(ui8) + sizeof(ui16) + (Params.Encryption ? 0 : sizeof(ui32));
         if (task.GetInternalFreeAmount() < partSize || task.GetExternalFreeAmount() == 0) {
-            return false;
+            return std::nullopt;
         }
 
         // clear external checksum for this chunk

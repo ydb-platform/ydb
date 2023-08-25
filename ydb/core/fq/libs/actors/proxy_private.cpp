@@ -31,9 +31,9 @@ public:
         TIntrusivePtr<ITimeProvider> timeProvider,
         TIntrusivePtr<IRandomProvider> randomProvider,
         ::NMonitoring::TDynamicCounterPtr counters,
-        const NConfig::TTokenAccessorConfig& tokenAccessorConfig)
+        const ::NFq::TSigner::TPtr& signer)
         : PrivateProxyConfig(privateProxyConfig)
-        , TokenAccessorConfig(tokenAccessorConfig)
+        , Signer(signer)
         , TimeProvider(timeProvider)
         , RandomProvider(randomProvider)
         , Counters(counters->GetSubgroup("subsystem", "private_api"))
@@ -96,7 +96,7 @@ private:
         }
 
         Register(
-            CreateGetTaskRequestActor(ev->Sender, TokenAccessorConfig, TimeProvider, ev->Release(), Counters),
+            CreateGetTaskRequestActor(ev->Sender, Signer, TimeProvider, ev->Release(), Counters),
             NActors::TMailboxType::HTSwap, SelfId().PoolID());
     }
 
@@ -188,7 +188,7 @@ private:
 
 private:
     const NConfig::TPrivateProxyConfig PrivateProxyConfig;
-    const NConfig::TTokenAccessorConfig TokenAccessorConfig;
+    const ::NFq::TSigner::TPtr Signer;
     TIntrusivePtr<ITimeProvider> TimeProvider;
     TIntrusivePtr<IRandomProvider> RandomProvider;
     ::NMonitoring::TDynamicCounterPtr Counters;
@@ -204,8 +204,8 @@ IActor* CreateYqlAnalyticsPrivateProxy(
     TIntrusivePtr<ITimeProvider> timeProvider,
     TIntrusivePtr<IRandomProvider> randomProvider,
     ::NMonitoring::TDynamicCounterPtr counters,
-    const NConfig::TTokenAccessorConfig& tokenAccessorConfig) {
-    return new TYqlAnalyticsPrivateProxy(privateProxyConfig, timeProvider, randomProvider, counters, tokenAccessorConfig);
+    const ::NFq::TSigner::TPtr& signer) {
+    return new TYqlAnalyticsPrivateProxy(privateProxyConfig, timeProvider, randomProvider, counters, signer);
 }
 
 } // namespace NFq

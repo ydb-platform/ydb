@@ -148,10 +148,11 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename IContext::TEvReadF
                 const auto& req = request.start_read();
 
                 const ui64 readOffset = req.read_offset();
-                const ui64 commitOffset = req.commit_offset();
                 const bool verifyReadOffset = req.verify_read_offset();
 
-                ctx.Send(ctx.SelfID, new TEvPQProxy::TEvStartRead(getAssignId(request.start_read()), readOffset, commitOffset, verifyReadOffset));
+                ctx.Send(ctx.SelfID, new TEvPQProxy::TEvStartRead(
+                        getAssignId(request.start_read()), readOffset, req.commit_offset(), verifyReadOffset
+                ));
                 return (void)ReadFromStreamOrDie(ctx);
             }
 
@@ -218,7 +219,10 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename IContext::TEvReadF
                 const ui64 readOffset = req.read_offset();
                 const ui64 commitOffset = req.commit_offset();
 
-                ctx.Send(ctx.SelfID, new TEvPQProxy::TEvStartRead(getAssignId(req), readOffset, commitOffset, req.has_read_offset()));
+                ctx.Send(ctx.SelfID, new TEvPQProxy::TEvStartRead(
+                        getAssignId(req), readOffset, req.has_commit_offset() ? commitOffset : TMaybe<ui64>{},
+                        req.has_read_offset()
+                ));
                 return (void)ReadFromStreamOrDie(ctx);
             }
 
@@ -446,7 +450,9 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvStartRead::T
 
     // proxy request to partition - allow initing
     // TODO: add here VerifyReadOffset too and check it againts Committed position
-    ctx.Send(it->second.Actor, new TEvPQProxy::TEvLockPartition(ev->Get()->ReadOffset, ev->Get()->CommitOffset, ev->Get()->VerifyReadOffset, true));
+    ctx.Send(it->second.Actor, new TEvPQProxy::TEvLockPartition(
+        ev->Get()->ReadOffset, ev->Get()->CommitOffset, ev->Get()->VerifyReadOffset, true
+    ));
 }
 
 template <bool UseMigrationProtocol>
@@ -1044,7 +1050,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " assign"
         << ": record# " << record);
 
-    ctx.Send(actorId, new TEvPQProxy::TEvLockPartition(0, 0, false, false));
+    ctx.Send(actorId, new TEvPQProxy::TEvLockPartition(0, {}, false, false));
 }
 
 template <bool UseMigrationProtocol>
@@ -1418,7 +1424,11 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(NGRpcService::TGRpcRequestP
             WriteToStreamOrDie(ctx, std::move(result));
         }
     } else {
-        Request->ReplyUnauthenticated("refreshed token is invalid");
+        if (ev->Get()->Retryable) {
+            Request->ReplyUnavaliable();
+        } else {
+            Request->ReplyUnauthenticated("refreshed token is invalid");
+        }
         Die(ctx);
     }
 }

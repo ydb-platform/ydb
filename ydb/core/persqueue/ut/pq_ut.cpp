@@ -1319,42 +1319,6 @@ Y_UNIT_TEST(TestLowWatermark) {
     });
 }
 
-
-
-Y_UNIT_TEST(TestWriteToFullPartition) {
-    TTestContext tc;
-    RunTestWithReboots(tc.TabletIds, [&]() {
-        return tc.InitialEventsFilter.Prepare();
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
-        TFinalizer finalizer(tc);
-        activeZone = false;
-        tc.Prepare(dispatchName, setup, activeZone);
-
-        tc.Runtime->SetScheduledLimit(100);
-
-        PQTabletPrepare({.maxCountInPartition=11}, {}, tc);
-
-        TVector<std::pair<ui64, TString>> data;
-        activeZone = PlainOrSoSlow(true, false);
-
-        TString s{32, 'c'};
-        ui32 pp = 8 + 4 + 2 + 9;
-        for (ui32 i = 0; i < 10; ++i) {
-            data.push_back({i + 1, s.substr(pp)});
-        }
-        CmdWrite(0, "sourceid0", data, tc, false, {}, true); //now 1 blob
-        PQTabletPrepare({.maxCountInPartition=10}, {}, tc);
-        PQGetPartInfo(0, 10, tc);
-        data.resize(1);
-        CmdWrite(0, "sourceid1", data, tc, true);
-        PQTabletPrepare({.maxCountInPartition=12}, {}, tc);
-        CmdWrite(0, "sourceid1", data, tc);
-        PQTabletPrepare({.maxCountInPartition=12, .maxSizeInPartition=100}, {}, tc);
-        CmdWrite(0, "sourceid1", data, tc, true);
-    });
-}
-
-
 Y_UNIT_TEST(TestTimeRetention) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
@@ -1772,7 +1736,7 @@ Y_UNIT_TEST(TestChangeConfig) {
         PQTabletPrepare({.maxCountInPartition=5, .maxSizeInPartition=1_MB,
                 .deleteTime=TDuration::Days(1).Seconds(), .partitions=10}, {{"bbb", true}, {"ccc", true}}, tc);
         data.pop_back(); //to be sure that after write partition will no be full
-        CmdWrite(0, "sourceid1", data, tc, true); //partition is full
+        CmdWrite(0, "sourceid1", data, tc);
         CmdWrite(1, "sourceid2", data, tc);
         CmdWrite(9, "sourceid3", data, tc); //now 1 blob
     });

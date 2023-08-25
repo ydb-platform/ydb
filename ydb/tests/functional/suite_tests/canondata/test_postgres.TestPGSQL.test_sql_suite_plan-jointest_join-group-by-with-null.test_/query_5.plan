@@ -29,7 +29,7 @@
                                             {
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": "row.q2"
+                                                "TopSortBy": "argument.t1.q2"
                                             },
                                             {
                                                 "Name": "Aggregate"
@@ -136,7 +136,7 @@
                                     }
                                 ],
                                 "SortColumns": [
-                                    "q2 (Asc)"
+                                    "t1.q2 (Asc)"
                                 ]
                             }
                         ]

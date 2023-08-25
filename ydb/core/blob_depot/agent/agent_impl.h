@@ -149,6 +149,34 @@ namespace NKikimr::NBlobDepot {
         void RegisterRequestInFlight(TRequestInFlight *requestInFlight);
     };
 
+    struct TReadOutcome {
+        struct TOk {
+            TRope Data;
+        };
+        struct TNodata {
+        };
+        struct TError {
+            NKikimrProto::EReplyStatus Status;
+            TString ErrorReason;
+        };
+        std::variant<TOk, TNodata, TError> Value;
+
+        TString ToString() const {
+            return std::visit(TOverloaded{
+                [](const TOk& value) {
+                    return TStringBuilder() << "{Ok Data.size# " << value.Data.size() << "}";
+                },
+                [](const TNodata& /*value*/) {
+                    return TStringBuilder() << "{Nodata}";
+                },
+                [](const TError& value) {
+                    return TStringBuilder() << "{Error Status# " << NKikimrProto::EReplyStatus_Name(value.Status)
+                        << " ErrorReason# " << value.ErrorReason.Quote() << "}";
+                }
+            }, Value);
+        }
+    };
+
     class TBlobDepotAgent
         : public TActorBootstrapped<TBlobDepotAgent>
         , public TRequestSender
@@ -342,7 +370,7 @@ namespace NKikimr::NBlobDepot {
             virtual void Initiate() = 0;
 
             virtual void OnUpdateBlock() {}
-            virtual void OnRead(ui64 /*tag*/, NKikimrProto::EReplyStatus /*status*/, TString /*dataOrErrorReason*/) {}
+            virtual void OnRead(ui64 /*tag*/, TReadOutcome&& /*outcome*/) {}
             virtual void OnIdAllocated(bool /*success*/) {}
             virtual void OnDestroy(bool /*success*/) {}
 

@@ -5,6 +5,8 @@
 #include <ydb/library/yql/dq/opt/dq_opt_phy.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 
+#include <util/generic/hash.h>
+
 namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
@@ -14,43 +16,45 @@ using namespace NYql::NNodes;
 namespace {
 
 TCoAtomList BuildKeyColumnsList(const TKikimrTableDescription& table, TPositionHandle pos, TExprContext& ctx) {
-    TVector<TExprBase> columnsToSelect;
-    columnsToSelect.reserve(table.Metadata->KeyColumnNames.size());
-    for (auto key : table.Metadata->KeyColumnNames) {
-        auto value = table.Metadata->Columns.at(key);
+    TSet<TString> columnsToSelect(table.Metadata->KeyColumnNames.begin(), table.Metadata->KeyColumnNames.end());
+    TVector<TExprBase> columnsList;
+    columnsList.reserve(columnsToSelect.size());
+    for (auto column : columnsToSelect) {
         auto atom = Build<TCoAtom>(ctx, pos)
-            .Value(value.Name)
+            .Value(column)
             .Done();
 
-        columnsToSelect.push_back(atom);
+        columnsList.emplace_back(std::move(atom));
     }
 
     return Build<TCoAtomList>(ctx, pos)
-        .Add(columnsToSelect)
+        .Add(columnsList)
         .Done();
 }
 
 TCoAtomList MergeColumns(const NNodes::TCoAtomList& col1, const TVector<TString>& col2, TExprContext& ctx) {
-    TVector<TCoAtom> columns;
-    THashSet<TString> uniqColumns;
-    columns.reserve(col1.Size() + col2.size());
-
+    TMap<TString, TCoAtom> columns;
     for (const auto& c : col1) {
-        YQL_ENSURE(uniqColumns.emplace(c.StringValue()).second);
-        columns.push_back(c);
+        YQL_ENSURE(columns.insert({c.StringValue(), c}).second);
     }
 
     for (const auto& c : col2) {
-        if (uniqColumns.emplace(c).second) {
+        if (!columns.contains(c)) {
             auto atom = Build<TCoAtom>(ctx, col1.Pos())
                 .Value(c)
                 .Done();
-            columns.push_back(atom);
+            columns.insert({c, std::move(atom)});
         }
     }
 
+    TVector<TCoAtom> columnsList;
+    columnsList.reserve(columns.size());
+    for (auto [_, column] : columns) {
+        columnsList.emplace_back(std::move(column));
+    }
+
     return Build<TCoAtomList>(ctx, col1.Pos())
-        .Add(columns)
+        .Add(columnsList)
         .Done();
 }
 
@@ -426,6 +430,126 @@ bool CanPushFlatMap(const TCoFlatMapBase& flatMap, const TKikimrTableDescription
 
     extraColumns.insert(extraColumns.end(), lambdaSubset.begin(), lambdaSubset.end());
     return true;
+}
+
+// Check if the TopSort key selectors are a single member or members only list
+bool IsMemberOnlyKeySelector(const TCoLambda& lambda) {
+    // If its a single selector:
+    if (lambda.Body().Maybe<TCoMember>()) {
+        // Check that the member is applied to lambda argument
+        auto member = lambda.Body().Cast<TCoMember>();
+        if (member.Struct().Raw() != lambda.Args().Arg(0).Raw()) {
+            return false;
+        }
+        return true;
+    } else if (lambda.Body().Maybe<TExprList>()) {
+        for (auto item : lambda.Body().Cast<TExprList>()) {
+            if (!item.Maybe<TCoMember>()) {
+                return false;
+            }
+            // Check that the member is applied to lambda argument
+            auto member = item.Cast<TCoMember>();
+            if (member.Struct().Raw() != lambda.Args().Arg(0).Raw()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    return false;
+}
+
+// Construct a new lambda with renamed attributes based on the mapping
+TCoLambda RenameKeySelector(const TCoLambda& lambda, TExprContext& ctx, const THashMap<TString,TString>& map) {
+    // If its single member lambda body
+    if (lambda.Body().Maybe<TCoMember>()) {
+        auto attrRef = lambda.Body().Cast<TCoMember>().Name().StringValue();
+        auto mapped = map.Value(attrRef,attrRef);
+
+        return Build<TCoLambda>(ctx, lambda.Pos())
+                .Args({"argument"})
+                .Body<TCoMember>()
+                    .Struct("argument")
+                    .Name().Build(mapped)
+                    .Build()
+                .Done();
+    }
+    // Else its a list of members lambda body
+    else {
+        TCoArgument arg = Build<TCoArgument>(ctx, lambda.Pos())
+            .Name("Arg")
+            .Done();
+
+        TVector<TExprBase> members;
+
+        for (auto item : lambda.Body().Cast<TExprList>()) {
+            auto attrRef = item.Cast<TCoMember>().Name().StringValue();
+            auto mapped = map.Value(attrRef,attrRef);
+
+            auto member = Build<TCoMember>(ctx, lambda.Pos())
+                .Struct(arg)
+                .Name().Build(mapped)
+                .Done();
+            members.push_back(member);
+        }
+                            
+        return Build<TCoLambda>(ctx, lambda.Pos())
+                .Args({arg})
+                .Body<TExprList>()
+                    .Add(members)
+                    .Build()
+                .Done();
+    }
+}
+
+
+// If we have a top-sort over rename, we can push it throught is, so that the 
+// RewriteTopSortOverIndexRead rule can fire next. If the flatmap renames some of the sort 
+// attributes, we need to use the original names in the top-sort. When pushing TopSort below
+// FlatMap, we change FlatMap to OrderedFlatMap to preserve the order of its input.
+TExprBase KqpRewriteTopSortOverRename(const TExprBase& node, TExprContext& ctx) {
+
+    // Check that we have a top-sort and a flat-map directly below it
+    if(!node.Maybe<TCoTopBase>()) {
+        return node;
+    }
+
+    const auto topBase = node.Maybe<TCoTopBase>().Cast();
+
+    if (!topBase.Input().Maybe<TCoFlatMap>()) {
+        return node;
+    }
+
+    auto flatMap = topBase.Input().Maybe<TCoFlatMap>().Cast();
+
+    // Check that the flat-map is a rename and compute the mapping
+    TExprNode::TPtr structNode;
+    THashMap<TString, TString> renameMap;
+    if (!IsRenameFlatMapWithMapping(flatMap, structNode, renameMap)) {
+        return node;
+    }
+
+    // Check that the TopSort selector list is member only
+    if (!IsMemberOnlyKeySelector(topBase.KeySelectorLambda())) {
+        return node;
+    }
+
+    // Rename the attributes in sort key selector of the sort
+    TCoLambda newKeySelector = RenameKeySelector(topBase.KeySelectorLambda(), ctx, renameMap);
+
+    // Swap top sort and rename operators
+    auto flatMapInput = Build<TCoTopBase>(ctx, node.Pos())
+        .CallableName(node.Ref().Content())
+        .Input(flatMap.Input())
+        .KeySelectorLambda(newKeySelector)
+        .SortDirections(topBase.SortDirections())
+        .Count(topBase.Count())
+        .Done();
+
+    return Build<TCoOrderedFlatMap>(ctx, node.Pos())
+        .Input(flatMapInput)
+        .Lambda(ctx.DeepCopyLambda(flatMap.Lambda().Ref()))
+        .Done();
 }
 
 // The index and main table have same number of rows, so we can push a copy of TCoTopSort or TCoTake

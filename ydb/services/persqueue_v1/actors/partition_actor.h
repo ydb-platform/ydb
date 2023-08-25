@@ -150,7 +150,7 @@ private:
 
     ui64 ReadOffset;
     ui64 ClientReadOffset;
-    ui64 ClientCommitOffset;
+    TMaybe<ui64> ClientCommitOffset;
     bool ClientVerifyReadOffset;
     ui64 CommittedOffset;
     ui64 WriteTimestampEstimateMs;

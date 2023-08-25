@@ -35,7 +35,7 @@
                                                     {
                                                         "Limit": "10",
                                                         "Name": "TopSort",
-                                                        "TopSortBy": "$11.c"
+                                                        "TopSortBy": "argument.Count0"
                                                     },
                                                     {
                                                         "Name": "Aggregate"
@@ -136,31 +136,14 @@
                                                                                                     "Id": 108
                                                                                                 }
                                                                                             ],
-                                                                                            "FunctionType": 2,
-                                                                                            "Id": 9,
-                                                                                            "KernelIdx": 0
-                                                                                        }
-                                                                                    }
-                                                                                },
-                                                                                {
-                                                                                    "Assign": {
-                                                                                        "Column": {
-                                                                                            "Id": 110
-                                                                                        },
-                                                                                        "Function": {
-                                                                                            "Arguments": [
-                                                                                                {
-                                                                                                    "Id": 109
-                                                                                                }
-                                                                                            ],
-                                                                                            "Id": 18
+                                                                                            "Id": 9
                                                                                         }
                                                                                     }
                                                                                 },
                                                                                 {
                                                                                     "Filter": {
                                                                                         "Predicate": {
-                                                                                            "Id": 110
+                                                                                            "Id": 109
                                                                                         }
                                                                                     }
                                                                                 },
@@ -177,7 +160,7 @@
                                                                                     }
                                                                                 }
                                                                             ],
-                                                                            "Version": 3
+                                                                            "Version": 2
                                                                         },
                                                                         "Table": "clickbench/plans/column/hits"
                                                                     }
@@ -193,7 +176,7 @@
                                             }
                                         ],
                                         "SortColumns": [
-                                            "c (Desc)"
+                                            "Count0 (Desc)"
                                         ]
                                     }
                                 ]

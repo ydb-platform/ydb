@@ -8,7 +8,7 @@ namespace NKikimr::NBlobDepot {
     {
         TReadArg ReadArg;
         const ui64 Size;
-        TString Buffer;
+        TFragmentedBuffer Buffer;
         bool Terminated = false;
         bool StopProcessingParts = false;
         ui32 NumPartsPending = 0;
@@ -25,20 +25,22 @@ namespace NKikimr::NBlobDepot {
 
         void EndWithSuccess(TQuery *query) {
             Y_VERIFY(!Terminated);
-            query->OnRead(ReadArg.Tag, NKikimrProto::OK, std::move(Buffer));
+            Y_VERIFY(Buffer.IsMonolith());
+            Y_VERIFY(Buffer.GetMonolith().size() == Size);
+            query->OnRead(ReadArg.Tag, TReadOutcome{TReadOutcome::TOk{Buffer.GetMonolith()}});
             Abort();
         }
 
         void EndWithError(TQuery *query, NKikimrProto::EReplyStatus status, TString errorReason) {
             Y_VERIFY(!Terminated);
             Y_VERIFY(status != NKikimrProto::NODATA && status != NKikimrProto::OK);
-            query->OnRead(ReadArg.Tag, status, errorReason);
+            query->OnRead(ReadArg.Tag, TReadOutcome{TReadOutcome::TError{status, std::move(errorReason)}});
             Abort();
         }
 
         void EndWithNoData(TQuery *query) {
             Y_VERIFY(!Terminated);
-            query->OnRead(ReadArg.Tag, NKikimrProto::NODATA, {});
+            query->OnRead(ReadArg.Tag, TReadOutcome{TReadOutcome::TNodata{}});
             Abort();
         }
 
@@ -188,20 +190,9 @@ namespace NKikimr::NBlobDepot {
                 return readContext.EndWithError(this, blob.Status, TStringBuilder() << "failed to read BlobId# " << blob.Id);
             }
 
-            auto& buffer = readContext.Buffer;
             const ui64 offset = partContext.Offsets[i];
-
             Y_VERIFY(offset < readContext.Size && blob.Buffer.size() <= readContext.Size - offset);
-
-            if (!buffer && !offset) {
-                buffer = std::move(blob.Buffer);
-                buffer.resize(readContext.Size);
-            } else {
-                if (!buffer) {
-                    buffer = TString::Uninitialized(readContext.Size);
-                }
-                memcpy(buffer.Detach() + offset, blob.Buffer.data(), blob.Buffer.size());
-            }
+            readContext.Buffer.Write(offset, std::move(blob.Buffer));
         }
 
         if (!--readContext.NumPartsPending) {

@@ -4,6 +4,7 @@ import logging
 from hamcrest import assert_that, raises, equal_to
 
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 
@@ -13,7 +14,7 @@ logger = logging.getLogger(__name__)
 class TestInsertOperations(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory()
+        cls.cluster = kikimr_cluster_factory(KikimrConfigGenerator(enable_immediate_effects=True))
         cls.cluster.start()
         cls.driver_config = ydb.DriverConfig(
             "%s:%s" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port), database='/Root')

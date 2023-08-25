@@ -7,6 +7,7 @@
 #include <ydb/core/protos/base.pb.h>
 #include <ydb/core/protos/msgbus_kv.pb.h>
 #include <ydb/core/protos/msgbus.pb.h>
+#include <ydb/core/util/fragmented_buffer.h>
 #include <ydb/core/keyvalue/protos/events.pb.h>
 
 namespace NKikimr {
@@ -34,7 +35,7 @@ struct TIntermediate {
 
         TVector<TReadItem> ReadItems;
         TString Key;
-        TString Value;
+        TFragmentedBuffer Value;
         ui32 Offset;
         ui32 Size;
         ui32 ValueSize;
@@ -50,6 +51,7 @@ struct TIntermediate {
                 NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel);
         NKikimrProto::EReplyStatus ItemsStatus() const;
         NKikimrProto::EReplyStatus CumulativeStatus() const;
+        TRope BuildRope();
     };
     struct TRangeRead {
         TDeque<TRead> Reads;
@@ -61,7 +63,7 @@ struct TIntermediate {
     struct TWrite {
         TVector<TLogoBlobID> LogoBlobIds;
         TString Key;
-        TRcBuf Data;
+        TRope Data;
         TEvBlobStorage::TEvPut::ETactic Tactic;
         NKikimrBlobStorage::EPutHandleClass HandleClass;
         NKikimrProto::EReplyStatus Status;
@@ -87,7 +89,7 @@ struct TIntermediate {
     };
     struct TGetStatus {
         NKikimrClient::TKeyValueRequest::EStorageChannel StorageChannel;
-        TLogoBlobID LogoBlobId;
+        ui32 GroupId;
         NKikimrProto::EReplyStatus Status;
         TStorageStatusFlags StatusFlags;
     };
@@ -148,9 +150,12 @@ struct TIntermediate {
 
     bool IsReplied;
 
+    bool UsePayloadInResponse = false;
+
     TRequestStat Stat;
 
     NKikimrClient::TResponse Response;
+    std::vector<TRope> Payload;
     NKikimrKeyValue::ExecuteTransactionResult ExecuteTransactionResponse;
     NKikimrKeyValue::GetStorageChannelStatusResult GetStorageChannelStatusResponse;
 

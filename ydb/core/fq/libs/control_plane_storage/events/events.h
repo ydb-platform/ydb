@@ -168,6 +168,8 @@ struct TEvControlPlaneStorage {
         EvCreateDatabaseResponse,
         EvDescribeDatabaseRequest,
         EvDescribeDatabaseResponse,
+        EvModifyDatabaseRequest,
+        EvModifyDatabaseResponse,
         EvEnd,
     };
 
@@ -631,7 +633,9 @@ struct TEvControlPlaneStorage {
 
         size_t GetByteSize() const {
             return sizeof(*this)
-                    + Scope.Size();
+                    + CloudId.Size()
+                    + Scope.Size()
+                    + Record.ByteSizeLong();
         }
 
         TString CloudId;
@@ -645,9 +649,7 @@ struct TEvControlPlaneStorage {
         explicit TEvCreateDatabaseResponse()
         {}
 
-        explicit TEvCreateDatabaseResponse(
-            const NYql::TIssues& issues
-            )
+        explicit TEvCreateDatabaseResponse(const NYql::TIssues& issues)
             : Issues(issues)
         {}
 
@@ -672,6 +674,8 @@ struct TEvControlPlaneStorage {
 
         size_t GetByteSize() const {
             return sizeof(*this)
+                    + Request.ByteSizeLong()
+                    + CloudId.Size()
                     + Scope.Size();
         }
 
@@ -683,8 +687,7 @@ struct TEvControlPlaneStorage {
     struct TEvDescribeDatabaseResponse : NActors::TEventLocal<TEvDescribeDatabaseResponse, EvDescribeDatabaseResponse> {
         static constexpr bool Auditable = false;
 
-        explicit TEvDescribeDatabaseResponse(
-            const FederatedQuery::Internal::ComputeDatabaseInternal& record)
+        explicit TEvDescribeDatabaseResponse(const FederatedQuery::Internal::ComputeDatabaseInternal& record)
             : Record(record)
         {}
 
@@ -702,6 +705,45 @@ struct TEvControlPlaneStorage {
         }
 
         FederatedQuery::Internal::ComputeDatabaseInternal Record;
+        NYql::TIssues Issues;
+        TDebugInfoPtr DebugInfo;
+    };
+
+    struct TEvModifyDatabaseRequest : NActors::TEventLocal<TEvModifyDatabaseRequest, EvModifyDatabaseRequest> {
+        TEvModifyDatabaseRequest() = default;
+
+        explicit TEvModifyDatabaseRequest(const TString& cloudId, const TString& scope)
+            : CloudId(cloudId)
+            , Scope(scope)
+        {}
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + CloudId.Size()
+                    + Scope.Size();
+        }
+
+        TString CloudId;
+        TString Scope;
+        TMaybe<bool> Synchronized;
+    };
+
+    struct TEvModifyDatabaseResponse : NActors::TEventLocal<TEvModifyDatabaseResponse, EvModifyDatabaseResponse> {
+        static constexpr bool Auditable = false;
+
+        explicit TEvModifyDatabaseResponse()
+        {}
+
+        explicit TEvModifyDatabaseResponse(const NYql::TIssues& issues)
+            : Issues(issues)
+        {}
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + GetIssuesByteSize(Issues)
+                    + GetDebugInfoByteSize(DebugInfo);
+        }
+
         NYql::TIssues Issues;
         TDebugInfoPtr DebugInfo;
     };

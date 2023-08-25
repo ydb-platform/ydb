@@ -49,6 +49,10 @@ message UpdateTokenRequest {
 message UpdateTokenResponse {
 }
 
+message MetadataItem {
+    string key = 1;
+    bytes value = 2;
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // StreamWrite
@@ -152,7 +156,7 @@ message StreamWriteMessage {
                 int64 partition_id = 6;
             }
             // Message metadata. Overall size is limited to 4096 symbols (all keys and values combined).
-            map<string, string> message_meta = 7;
+            repeated MetadataItem metadata_items = 7 [(Ydb.size).le = 1000];
         }
     }
 
@@ -360,7 +364,7 @@ message StreamReadMessage {
 
             // Filled if message_group_id was set on message write.
             string message_group_id = 7;
-            map<string, string> message_meta = 8;
+            repeated MetadataItem metadata_items = 8;
 
         }
 

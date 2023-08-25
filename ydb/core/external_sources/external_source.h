@@ -16,7 +16,7 @@ struct IExternalSource : public TThrRefBase {
         Packs TSchema, TGeneral into some string in arbitrary
         format: proto, json, text, and others. The output returns a
         string called content. Further, this string will be stored inside.
-        After that, it is passed to the GetParamters method.
+        After that, it is passed to the GetParameters method.
         Can throw an exception in case of an error.
     */
     virtual TString Pack(const NKikimrExternalSources::TSchema& schema,
@@ -35,7 +35,7 @@ struct IExternalSource : public TThrRefBase {
         this data will be displayed in the viewer.
         Can throw an exception in case of an error
     */
-    virtual TMap<TString, TString> GetParamters(const TString& content) const = 0;
+    virtual TMap<TString, TVector<TString>> GetParameters(const TString& content) const = 0;
 };
 
 }

@@ -201,13 +201,11 @@ public:
     }
 
     void Reply(NProtoBuf::Message* resp, ui32 status) override {
-        ResponseStatus = status;
-        WriteDataOk(resp);
+        WriteDataOk(resp, status);
     }
 
     void Reply(grpc::ByteBuffer* resp, ui32 status) override {
-        ResponseStatus = status;
-        WriteByteDataOk(resp);
+        WriteByteDataOk(resp, status);
     }
 
     void ReplyError(grpc::StatusCode code, const TString& msg, const TString& details) override {
@@ -276,7 +274,7 @@ private:
         Y_VERIFY(wasInProgress, "Finished grpc call that was not in progress");
     }
 
-    void WriteDataOk(NProtoBuf::Message* resp) {
+    void WriteDataOk(NProtoBuf::Message* resp, ui32 status) {
         auto makeResponseString = [&] {
             TString x;
             TOutProtoPrinter printer;
@@ -291,6 +289,7 @@ private:
                 makeResponseString().data(), this->Context.peer().c_str());
             StateFunc_ = &TThis::SetFinishDone;
             ResponseSize = sz;
+            ResponseStatus = status;
             Y_VERIFY(this->Context.c_call());
             OnBeforeCall();
             Finished_ = true;
@@ -302,11 +301,12 @@ private:
             // because of std::function cannot hold move-only captured object
             // we allocate shared object on heap to avoid message copy
             auto uResp = MakeIntrusive<TUniversalResponse<TOut>>(resp);
-            auto cb = [this, uResp = std::move(uResp), sz, &makeResponseString]() {
-                GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s data# %s peer# %s (pushed to grpc)",
-                    this, Name_, makeResponseString().data(), this->Context.peer().c_str());
+            auto cb = [this, uResp = std::move(uResp), sz, status]() {
+                GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s peer# %s (pushed to grpc)",
+                    this, Name_, this->Context.peer().c_str());
                 StateFunc_ = &TThis::NextReply;
                 ResponseSize += sz;
+                ResponseStatus = status;
                 OnBeforeCall();
                 StreamWriter_->Write(*uResp, GetGRpcTag());
             };
@@ -314,13 +314,14 @@ private:
         }
     }
 
-    void WriteByteDataOk(grpc::ByteBuffer* resp) {
+    void WriteByteDataOk(grpc::ByteBuffer* resp, ui32 status) {
         auto sz = resp->Length();
         if (Writer_) {
             GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s data# byteString peer# %s", this, Name_,
                 this->Context.peer().c_str());
             StateFunc_ = &TThis::SetFinishDone;
             ResponseSize = sz;
+            ResponseStatus = status;
             OnBeforeCall();
             Finished_ = true;
             Writer_->Finish(TUniversalResponseRef<TOut>(resp), grpc::Status::OK, GetGRpcTag());
@@ -331,11 +332,12 @@ private:
             // because of std::function cannot hold move-only captured object
             // we allocate shared object on heap to avoid buffer copy
             auto uResp = MakeIntrusive<TUniversalResponse<TOut>>(resp);
-            auto cb = [this, uResp = std::move(uResp), sz]() {
+            auto cb = [this, uResp = std::move(uResp), sz, status]() {
                 GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s data# byteString peer# %s (pushed to grpc)",
                     this, Name_, this->Context.peer().c_str());
                 StateFunc_ = &TThis::NextReply;
                 ResponseSize += sz;
+                ResponseStatus = status;
                 OnBeforeCall();
                 StreamWriter_->Write(*uResp, GetGRpcTag());
             };

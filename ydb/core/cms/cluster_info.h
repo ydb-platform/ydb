@@ -695,6 +695,14 @@ public:
         return StateStorageNodeToRingId[nodeId];
     }
 
+    void CheckNodeExistenceWithVerify(ui32 nodeId) const {
+      Y_VERIFY(HasNode(nodeId), "%s",
+               (TStringBuilder()
+                << "Node " << nodeId
+                << " does not exist in cluster, but exists in configuration.")
+                   .c_str());
+    }
+
     bool HasNode(ui32 nodeId) const {
         return Nodes.contains(nodeId);
     }
@@ -708,7 +716,7 @@ public:
     }
 
     const TNodeInfo &Node(ui32 nodeId) const {
-        Y_VERIFY(HasNode(nodeId));
+        CheckNodeExistenceWithVerify(nodeId);
         return *Nodes.find(nodeId)->second;
     }
 
@@ -726,7 +734,7 @@ public:
         auto pr = HostNameToNodeId.equal_range(hostName);
         for (auto it = pr.first; it != pr.second; ++it) {
             nodeId = it->second;
-            Y_VERIFY(HasNode(nodeId));
+            CheckNodeExistenceWithVerify(nodeId);
             nodes.push_back(Nodes.find(nodeId)->second.Get());
         }
 
@@ -739,7 +747,7 @@ public:
         auto pr = TenantToNodeId.equal_range(tenant);
         for (auto it = pr.first; it != pr.second; ++it) {
             const ui32 nodeId = it->second;
-            Y_VERIFY(HasNode(nodeId));
+            CheckNodeExistenceWithVerify(nodeId);
             nodes.push_back(Nodes.find(nodeId)->second.Get());
         }
 
@@ -928,7 +936,7 @@ public:
 
 private:
     TNodeInfo &NodeRef(ui32 nodeId) const {
-        Y_VERIFY(HasNode(nodeId));
+        CheckNodeExistenceWithVerify(nodeId);
         return *Nodes.find(nodeId)->second;
     }
 
@@ -947,7 +955,7 @@ private:
         for (auto it = range.first; it != range.second; ++it) {
             nodeId = it->second;
 
-            Y_VERIFY(HasNode(nodeId));
+            CheckNodeExistenceWithVerify(nodeId);
             auto &node = NodeRef(nodeId);
 
             if (filterByServices && !(node.Services & filterByServices)) {
@@ -989,7 +997,7 @@ private:
         auto pr = HostNameToNodeId.equal_range(hostName);
         for (auto it = pr.first; it != pr.second; ++it) {
             const ui32 nodeId = it->second;
-            Y_VERIFY(HasNode(nodeId));
+            CheckNodeExistenceWithVerify(nodeId);
             const auto &node = Node(nodeId);
             for (const auto &id : node.PDisks) {
                 Y_VERIFY(HasPDisk(id));

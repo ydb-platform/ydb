@@ -50,11 +50,6 @@ void THive::Handle(TEvHive::TEvAdoptTablet::TPtr& ev) {
     Execute(CreateAdoptTablet(rec, ev->Sender, ev->Cookie));
 }
 
-void THive::Handle(TEvents::TEvPoisonPill::TPtr&) {
-    BLOG_D("Handle TEvents::TEvPoisonPill");
-    Send(Tablet(), new TEvents::TEvPoisonPill);
-}
-
 void THive::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
     TEvTabletPipe::TEvClientConnected *msg = ev->Get();
     if (msg->ClientId == BSControllerPipeClient && msg->Status != NKikimrProto::OK) {
@@ -2567,7 +2562,6 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvLocal::TEvTabletStatus, Handle); // from bootqueue
         hFunc(TEvLocal::TEvRegisterNode, Handle); // from local
         hFunc(TEvBlobStorage::TEvControllerSelectGroupsResult, Handle);
-        hFunc(TEvents::TEvPoisonPill, Handle);
         hFunc(TEvTabletPipe::TEvClientConnected, Handle);
         hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
         hFunc(TEvTabletPipe::TEvServerConnected, Handle);
@@ -2639,6 +2633,10 @@ void THive::EnqueueIncomingEvent(STATEFN_SIG) {
 STFUNC(THive::StateInit) {
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvInterconnect::TEvNodesInfo, Handle);
+        // We subscribe to config updates before hive is fully loaded
+        hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
+        fFunc(NConsole::TEvConsole::TEvConfigNotificationRequest::EventType, EnqueueIncomingEvent);
+        fFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::EventType, EnqueueIncomingEvent);
     default:
         StateInitImpl(ev, SelfId());
     }
@@ -2657,7 +2655,6 @@ STFUNC(THive::StateWork) {
         fFunc(TEvLocal::TEvTabletStatus::EventType, EnqueueIncomingEvent); // from bootqueue
         fFunc(TEvLocal::TEvRegisterNode::EventType, EnqueueIncomingEvent); // from local
         fFunc(TEvBlobStorage::TEvControllerSelectGroupsResult::EventType, EnqueueIncomingEvent);
-        fFunc(TEvents::TEvPoisonPill::EventType, EnqueueIncomingEvent);
         fFunc(TEvTabletPipe::TEvClientConnected::EventType, EnqueueIncomingEvent);
         fFunc(TEvTabletPipe::TEvClientDestroyed::EventType, EnqueueIncomingEvent);
         fFunc(TEvTabletPipe::TEvServerConnected::EventType, EnqueueIncomingEvent);

@@ -4,12 +4,12 @@
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
-TPrivatePageCache::TPage::TPage(ui32 size, ui32 pageId, TInfo* info)
+TPrivatePageCache::TPage::TPage(size_t size, ui32 pageId, TInfo* info)
     : LoadState(LoadStateNo)
     , Sticky(false)
     , SharedPending(false)
-    , Size(size)
     , Id(pageId)
+    , Size(size)
     , Info(info)
 {}
 
@@ -462,7 +462,8 @@ void TPrivatePageCache::UpdateSharedBody(TInfo *info, ui32 pageId, TSharedPageRe
     if (!page)
         return;
 
-    Y_VERIFY_DEBUG(page->SharedPending, "Shared cache accepted a page that is not pending, possible bug");
+    // Note: shared cache may accept a peinding page if it is used by multiple private caches
+    // (for expample, used by tablet and its follower)
     if (Y_UNLIKELY(!page->SharedPending)) {
         return;
     }
@@ -486,7 +487,8 @@ void TPrivatePageCache::DropSharedBody(TInfo *info, ui32 pageId) {
     if (!page)
         return;
 
-    Y_VERIFY_DEBUG(!page->SharedPending, "Shared cache dropped page sharing request, possible bug");
+    // Note: shared cache may drop a peinding page if it is used by multiple private caches
+    // (for expample, used by tablet and its follower)
     if (Y_UNLIKELY(page->SharedPending)) {
         // Shared cache rejected our page so we should drop it too
         Stats.TotalSharedPending -= page->Size;

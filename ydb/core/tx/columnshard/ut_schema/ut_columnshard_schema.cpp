@@ -685,7 +685,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
                     deplayedExports += numExports;
                     numExports = 0;
                 } else if (numForgets) {
-                    counter.CaptureForgetResponse = reboots ? 2 : 1;
+                    counter.CaptureForgetResponse = 1;
                     deplayedForgets += numForgets;
                     numForgets = 0;
                 }
@@ -1491,7 +1491,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
         TestExport(false, {}, 2);
     }
 
-    Y_UNIT_TEST(RebootForgettWithLostAnswer) {
+    Y_UNIT_TEST(RebootForgetWithLostAnswer) {
         TestExport(true, {}, 2);
     }
 

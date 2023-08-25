@@ -154,6 +154,7 @@ grpc_config:
   - "keyvalue"
   - "monitoring"
   - "auth"
+  - "query_service"
 feature_flags:
   enable_persistent_query_stats: true
   enable_scheme_transactions_at_scheme_shard: true

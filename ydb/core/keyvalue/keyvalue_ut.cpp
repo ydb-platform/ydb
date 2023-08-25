@@ -1125,9 +1125,6 @@ Y_UNIT_TEST(TestWriteReadDeleteWithRestartsAndCatchCollectGarbageEventsWithSlowI
         savedInitialEvents.pop();
     }
 
-    TDispatchOptions options3;
-    options3.FinalEvents.push_back(TEvKeyValue::TEvEraseCollect::EventType);
-
     TestLog("Third dispatch ", collectStep);
     UNIT_ASSERT_VALUES_EQUAL(collectStep, 2);
 

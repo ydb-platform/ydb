@@ -105,8 +105,8 @@
                                     }
                                 ],
                                 "SortColumns": [
-                                    "a1 (Asc)",
-                                    "b2 (Asc)"
+                                    "qrt1.a (Asc)",
+                                    "qrt2.b (Asc)"
                                 ]
                             }
                         ]

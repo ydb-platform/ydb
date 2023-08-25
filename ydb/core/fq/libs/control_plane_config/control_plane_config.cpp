@@ -1,36 +1,24 @@
 #include "control_plane_config.h"
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
-#include <ydb/core/fq/libs/config/yq_issue.h>
-#include <ydb/core/fq/libs/common/cache.h>
-#include <ydb/core/fq/libs/common/entity_id.h>
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/control_plane_storage/util.h>
 #include <ydb/core/fq/libs/quota_manager/quota_manager.h>
 #include <ydb/core/fq/libs/shared_resources/db_exec.h>
-#include <ydb/core/fq/libs/test_connection/events/events.h>
-#include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/fq/libs/control_plane_storage/schema.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
-#include <ydb/core/fq/libs/quota_manager/quota_manager.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/actor.h>
 
-#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/library/db_pool/db_pool.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/security/util.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 
-#include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 #include <util/datetime/base.h>
 #include <util/digest/multi.h>
-#include <util/generic/yexception.h>
-#include <util/string/join.h>
 #include <util/system/hostname.h>
 
 namespace NFq {
@@ -205,7 +193,7 @@ private:
                         "WriteStateTime", true
                     );
 
-                    if (oldInfo) {                
+                    if (oldInfo) {
                         executer.Process(SelfId(),
                             [this, oldInfo=oldInfo](TStateTimeExecuter&) {
                                 this->ReflectTenantChanges(oldInfo);

@@ -449,19 +449,37 @@ public:
         return *this;
     }
 
-    TCreateConnectionBuilder& CreateClickHouse(const TString& databaseId, const TString& login, const TString& password, const TString& serviceAccount)
+    template <typename TConnection>
+    TCreateConnectionBuilder& CreateGeneric(
+        TConnection& conn,
+        const TString& databaseId,
+        const TString& login,
+        const TString& password,
+        const TString& serviceAccount)
     {
-        auto& ch = *Request.mutable_content()->mutable_setting()->mutable_clickhouse_cluster();
+        // auto& ch = *Request.mutable_content()->mutable_setting()->mutable_clickhouse_cluster();
         if (serviceAccount) {
-            ch.mutable_auth()->mutable_service_account()->set_id(serviceAccount);
+            conn.mutable_auth()->mutable_service_account()->set_id(serviceAccount);
         } else {
-            ch.mutable_auth()->mutable_current_iam();
+            conn.mutable_auth()->mutable_current_iam();
         }
 
-        ch.set_database_id(databaseId);
-        ch.set_login(login);
-        ch.set_password(password);
+        conn.set_database_id(databaseId);
+        conn.set_login(login);
+        conn.set_password(password);
         return *this;
+    }
+
+    TCreateConnectionBuilder& CreateClickHouse(const TString& databaseId, const TString& login, const TString& password, const TString& serviceAccount)
+    {
+        auto& conn = *Request.mutable_content()->mutable_setting()->mutable_clickhouse_cluster();
+        return CreateGeneric(conn, databaseId, login, password, serviceAccount);
+    }
+
+    TCreateConnectionBuilder& CreatePostgreSQL(const TString& databaseId, const TString& login, const TString& password, const TString& serviceAccount)
+    {
+        auto& conn = *Request.mutable_content()->mutable_setting()->mutable_postgresql_cluster();
+        return CreateGeneric(conn, databaseId, login, password, serviceAccount);
     }
 
     TCreateConnectionBuilder& CreateObjectStorage(const TString& bucket, const TString& serviceAccount)

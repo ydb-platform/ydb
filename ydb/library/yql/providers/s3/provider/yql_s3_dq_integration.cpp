@@ -340,6 +340,21 @@ public:
         }
     }
 
+    TMaybe<bool> CanWrite(const TExprNode& write, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        return TS3WriteObject::Match(&write);
+    }
+
+    TExprNode::TPtr WrapWrite(const TExprNode::TPtr& writeNode, TExprContext& ctx) override {
+        TExprBase writeExpr(writeNode);
+        const auto write = writeExpr.Cast<TS3WriteObject>();
+        return Build<TS3Insert>(ctx, write.Pos())
+            .DataSink(write.DataSink())
+            .Target(write.Target())
+            .Input(write.Input())
+            .Done().Ptr();
+    }
+
     void FillSinkSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sinkType) override {
         const TDqSink sink(&node);
         if (const auto maybeSettings = sink.Settings().Maybe<TS3SinkSettings>()) {

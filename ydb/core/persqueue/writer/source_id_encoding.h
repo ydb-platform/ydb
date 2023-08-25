@@ -3,6 +3,7 @@
 #include <util/generic/fwd.h>
 #include <util/generic/string.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
+#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -38,6 +39,8 @@ struct TEncodedSourceId {
 };
 
 void SetHashToTxParams(NClient::TParameters& parameters, const TEncodedSourceId& encodedSrcId);
+
+void SetHashToTParamsBuilder(NYdb::TParamsBuilder& builder, const TEncodedSourceId& encodedSrcId);
 
 TEncodedSourceId EncodeSrcId(const TString& topic, const TString& userSourceId, ESourceIdTableGeneration generation);
 

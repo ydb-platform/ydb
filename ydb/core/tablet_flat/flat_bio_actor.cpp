@@ -161,10 +161,7 @@ void TBlockIO::Handle(ui32 base, TArrayRef<TLoaded> items) noexcept
 
         auto& state = BlockStates.at(brick.Slot);
         Y_VERIFY(state.Data.size() - state.Offset >= piece.Buffer.size());
-        ::memcpy(
-            state.Data.mutable_data() + state.Offset,
-            piece.Buffer.data(),
-            piece.Buffer.size());
+        piece.Buffer.begin().ExtractPlainDataAndAdvance(state.Data.mutable_data() + state.Offset, piece.Buffer.size());
         state.Offset += piece.Buffer.size();
     }
 

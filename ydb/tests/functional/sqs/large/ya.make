@@ -17,7 +17,7 @@ IF (SANITIZER_TYPE)
 ELSE()
     REQUIREMENTS(
         cpu:4
-        ram:16
+        ram:32
     )
     TIMEOUT(600)
     SIZE(MEDIUM)

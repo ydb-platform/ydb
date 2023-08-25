@@ -17,6 +17,7 @@
 #include <library/cpp/protobuf/json/proto2json_printer.h>
 #include <library/cpp/uri/uri.h>
 
+#include <ydb/core/security/ticket_parser_impl.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/grpc_caching/cached_grpc_request_actor.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
@@ -971,8 +972,8 @@ namespace NKikimr::NHttpProxy {
         void HandleTicketParser(const TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext& ctx) {
 
             if (ev->Get()->Error) {
-                return ReplyWithError(ctx, NYdb::EStatus::UNAUTHORIZED, ev->Get()->Error.Message);
-            };
+                return ReplyWithError(ctx, ev->Get()->Error.Retryable ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED, ev->Get()->Error.Message);
+            }
             ctx.Send(Sender, new TEvServerlessProxy::TEvToken(ev->Get()->Token->GetUserSID(), "", ev->Get()->SerializedToken, {"", DatabaseId, DatabasePath, CloudId, FolderId}));
 
             LOG_SP_DEBUG_S(ctx, NKikimrServices::HTTP_PROXY, "Authorized successfully");
@@ -1080,11 +1081,14 @@ namespace NKikimr::NHttpProxy {
                     SendAuthenticationRequest(ctx);
                     return;
                 }
-                return ReplyWithError(ctx, NYdb::EStatus::UNAUTHORIZED, TStringBuilder() <<
-                    "requestid " << RequestId << "; " <<
-                    "can not authenticate service account user: " << ev->Get()->Status.Msg);
+                return ReplyWithError(ctx, ev->Get()->Status.InternalError || NKikimr::IsRetryableGrpcError(ev->Get()->Status)
+                                                                    ? NYdb::EStatus::UNAVAILABLE
+                                                                    : NYdb::EStatus::UNAUTHORIZED,
+                                         TStringBuilder() << "requestid " << RequestId
+                                         << "; can not authenticate service account user");
+
             } else if (!ev->Get()->Response.subject().has_service_account()) {
-                return ReplyWithError(ctx, NYdb::EStatus::UNAUTHORIZED,
+                return ReplyWithError(ctx, NYdb::EStatus::INTERNAL_ERROR,
                                       "(this error should not have been reached).");
             }
             RetryCounter.Void();
@@ -1120,8 +1124,10 @@ namespace NKikimr::NHttpProxy {
                     SendIamTokenRequest(ctx);
                     return;
                 }
-                return ReplyWithError(ctx, NYdb::EStatus::UNAUTHORIZED, TStringBuilder() <<
-                                      "IAM token issue error: " << ev->Get()->Status.Msg);
+                return ReplyWithError(ctx, ev->Get()->Status.InternalError || NKikimr::IsRetryableGrpcError(ev->Get()->Status)
+                                                                    ? NYdb::EStatus::UNAVAILABLE
+                                                                    : NYdb::EStatus::UNAUTHORIZED,
+                                            TStringBuilder() << "IAM token issue error: " << ev->Get()->Status.Msg);
             }
             RetryCounter.Void();
 

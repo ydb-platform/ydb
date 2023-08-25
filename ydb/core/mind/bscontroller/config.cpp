@@ -98,7 +98,7 @@ namespace NKikimr::NBsController {
                 }
                 pdisk->SetPDiskGuid(pdiskInfo.Guid);
                 pdisk->SetPDiskCategory(pdiskInfo.Kind.GetRaw());
-                pdisk->SetExpectedSerial(pdiskInfo.ExpectedSerial);
+                //pdisk->SetExpectedSerial(pdiskInfo.ExpectedSerial);
                 pdisk->SetManagementStage(Self->SerialManagementStage);
                 if (pdiskInfo.PDiskConfig && !pdisk->MutablePDiskConfig()->ParseFromString(pdiskInfo.PDiskConfig)) {
                     // TODO(alexvru): report this somehow
@@ -883,8 +883,8 @@ namespace NKikimr::NBsController {
             pb->SetDecommitStatus(pdisk.DecommitStatus);
             pb->MutablePDiskMetrics()->CopyFrom(pdisk.Metrics);
             pb->MutablePDiskMetrics()->ClearPDiskId();
-            pb->SetExpectedSerial(pdisk.ExpectedSerial);
-            pb->SetLastSeenSerial(pdisk.LastSeenSerial);
+            //pb->SetExpectedSerial(pdisk.ExpectedSerial);
+            //pb->SetLastSeenSerial(pdisk.LastSeenSerial);
         }
 
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TVSlotId *pb, TVSlotId id) {

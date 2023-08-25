@@ -16,6 +16,7 @@ target_link_libraries(compute-ydb-control_plane PUBLIC
   yutil
   cpp-actors-core
   cpp-actors-protos
+  compute-ydb-synchronization_service
   libs-control_plane_storage-proto
   libs-quota_manager-proto
   ydb-core-protos

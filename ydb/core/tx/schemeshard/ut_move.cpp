@@ -1166,4 +1166,29 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                             NLs::PathVersionEqual(5),
                             NLs::CheckColumns("TableMove", {"key", "value"}, {}, {"key"})});
     }
+
+    Y_UNIT_TEST(MoveOldTableWithIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().DisableRichTableDescriptionForTest = true;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint64" }
+              Columns { Name: "value" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "ByValue"
+              KeyColumnNames: ["value"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestMoveTable(runtime, ++txId, "/MyRoot/Table", "/MyRoot/TableMove");
+        env.TestWaitNotification(runtime, txId);
+    }
 }

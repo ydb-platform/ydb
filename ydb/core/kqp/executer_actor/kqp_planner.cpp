@@ -5,9 +5,11 @@
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/wilson.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 #include <util/generic/set.h>
+
+using namespace NActors;
 
 namespace NKikimr::NKqp {
 
@@ -59,7 +61,7 @@ TKqpPlanner::TKqpPlanner(TKqpTasksGraph& graph, ui64 txId, const TActorId& execu
     bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& executerSpan,
     TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot,
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
-    bool isDataQuery)
+    bool isDataQuery, ui64 mkqlMemoryLimit, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, bool doOptimization)
     : TxId(txId)
     , ExecuterId(executer)
     , ComputeTasks(std::move(computeTasks))
@@ -76,6 +78,9 @@ TKqpPlanner::TKqpPlanner(TKqpTasksGraph& graph, ui64 txId, const TActorId& execu
     , ExecuterRetriesConfig(executerRetriesConfig)
     , TasksGraph(graph)
     , IsDataQuery(isDataQuery)
+    , MkqlMemoryLimit(mkqlMemoryLimit)
+    , AsyncIoFactory(asyncIoFactory)
+    , DoOptimization(doOptimization)
 {
     if (!Database) {
         // a piece of magic for tests
@@ -281,27 +286,131 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
     }
 }
 
-std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
-    auto err = AssignTasksToNodes();
-    if (err) {
-        return err;
-    }
+const IKqpGateway::TKqpSnapshot& TKqpPlanner::GetSnapshot() const {
+    return TasksGraph.GetMeta().Snapshot;
+}
 
-    for(auto& [nodeId, tasks] : TasksPerNode) {
-        SortUnique(tasks);
-        auto& request = Requests.emplace_back(std::move(tasks), CalcSendMessageFlagsForNode(nodeId), nodeId);
-        request.SerializedRequest = SerializeRequest(request);
-        auto ev = CheckTaskSize(TxId, request.SerializedRequest->Record.GetTasks());
-        if (ev != nullptr) {
-            return std::make_unique<IEventHandle>(ExecuterId, ExecuterId, ev.release());
+void TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, bool shareMailbox) {
+
+    auto& task = TasksGraph.GetTask(taskId);
+    NYql::NDqProto::TDqTask* taskDesc = ArenaSerializeTaskToProto(TasksGraph, task);
+
+    NYql::NDq::TComputeRuntimeSettings settings;
+    if (Deadline) {
+        settings.Timeout = Deadline - TAppData::TimeProvider->Now();
+    }
+    //settings.ExtraMemoryAllocationPool = NRm::EKqpMemoryPool::DataQuery;
+    settings.ExtraMemoryAllocationPool = NRm::EKqpMemoryPool::Unspecified;
+    settings.FailOnUndelivery = true;
+    settings.StatsMode = GetDqStatsMode(StatsMode);
+    settings.UseSpilling = false;
+
+    NYql::NDq::TComputeMemoryLimits limits;
+    limits.ChannelBufferSize = 50_MB;
+    limits.MkqlLightProgramMemoryLimit = MkqlMemoryLimit > 0 ? std::min(500_MB, MkqlMemoryLimit) : 500_MB;
+    limits.MkqlHeavyProgramMemoryLimit = MkqlMemoryLimit > 0 ? std::min(2_GB, MkqlMemoryLimit) : 2_GB;
+
+    auto& taskOpts = taskDesc->GetProgram().GetSettings();
+    auto limit = taskOpts.GetHasMapJoin() /* || opts.GetHasSort()*/
+        ? limits.MkqlHeavyProgramMemoryLimit
+        : limits.MkqlLightProgramMemoryLimit;
+
+    limits.MemoryQuotaManager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(limit * 2, limit);
+
+    auto computeActor = NKikimr::NKqp::CreateKqpComputeActor(ExecuterId, TxId, taskDesc, AsyncIoFactory,
+        AppData()->FunctionRegistry, settings, limits, NWilson::TTraceId(), TasksGraph.GetMeta().GetArenaIntrusivePtr());
+
+    auto computeActorId = shareMailbox ? TlsActivationContext->AsActorContext().RegisterWithSameMailbox(computeActor) : TlsActivationContext->AsActorContext().Register(computeActor);
+    task.ComputeActorId = computeActorId;
+
+    LOG_D("Executing task: " << taskId << " on compute actor: " << task.ComputeActorId);
+    
+    auto result = PendingComputeActors.emplace(task.ComputeActorId, TProgressStat());
+    YQL_ENSURE(result.second);
+}
+
+ui32 TKqpPlanner::GetnScanTasks() {
+    return nScanTasks;
+}
+
+ui32 TKqpPlanner::GetnComputeTasks() {
+    return nComputeTasks;
+}
+
+std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
+    nScanTasks = 0;
+
+    for (auto& task : TasksGraph.GetTasks()) {
+        switch (task.Meta.Type) {
+            case TTaskMeta::TTaskType::Compute:
+                ComputeTasks.emplace_back(task.Id);
+                break;
+            case TTaskMeta::TTaskType::Scan:
+                TasksPerNode[task.Meta.NodeId].emplace_back(task.Id);
+                nScanTasks++;
+                break;
         }
     }
+
+    LOG_D("Total tasks: " << nScanTasks + nComputeTasks << ", readonly: true"  // TODO ???
+        << ", " << nScanTasks << " scan tasks on " << TasksPerNode.size() << " nodes"
+        << ", execType: " << (IsDataQuery ? "Data" : "Scan")
+        << ", snapshot: {" << GetSnapshot().TxId << ", " << GetSnapshot().Step << "}");
+
+    nComputeTasks = ComputeTasks.size();
+
+    if (IsDataQuery) {
+        bool shareMailbox = (ComputeTasks.size() <= 1);
+        for (ui64 taskId : ComputeTasks) {
+            ExecuteDataComputeTask(taskId, shareMailbox);
+        }
+        ComputeTasks.clear();
+    }
+    
+    if (nComputeTasks == 0 && TasksPerNode.size() == 1 && (AsyncIoFactory != nullptr) && DoOptimization) {
+        // query affects a single key or shard, so it might be more effective
+        // to execute this task locally so we can avoid useless overhead for remote task launching.
+        for(auto& [shardId, tasks]: TasksPerNode) {
+            for(ui64 taskId: tasks) {
+                ExecuteDataComputeTask(taskId, true);
+            }
+        }
+
+    } else {
+        for (ui64 taskId : ComputeTasks) {
+            PendingComputeTasks.insert(taskId);
+        }
+
+        for (auto& [shardId, tasks] : TasksPerNode) {
+            for (ui64 taskId : tasks) {
+                PendingComputeTasks.insert(taskId);
+            }
+        }
+
+        auto err = AssignTasksToNodes();
+        if (err) {
+            return err;
+        }
+
+        for(auto& [nodeId, tasks] : TasksPerNode) {
+            SortUnique(tasks);
+            auto& request = Requests.emplace_back(std::move(tasks), CalcSendMessageFlagsForNode(nodeId), nodeId);
+            request.SerializedRequest = SerializeRequest(request);
+            auto ev = CheckTaskSize(TxId, request.SerializedRequest->Record.GetTasks());
+            if (ev != nullptr) {
+                return std::make_unique<IEventHandle>(ExecuterId, ExecuterId, ev.release());
+            }
+        }
+
+    }
+
+
     return nullptr;
 }
 
 TString TKqpPlanner::GetEstimationsInfo() const {
     TStringStream ss;
-    ss << "ComputeTasks:" << ComputeTasks.size() << ";NodeTasks:";
+    ss << "ComputeTasks:" << nComputeTasks << ";NodeTasks:";
     if (auto it = TasksPerNode.find(ExecuterId.NodeId()); it != TasksPerNode.end()) {
         ss << it->second.size() << ";";
     } else {
@@ -311,10 +420,18 @@ TString TKqpPlanner::GetEstimationsInfo() const {
 }
 
 void TKqpPlanner::Unsubscribe() {
-    for(ui64 nodeId: TrackingNodes) {
+    for (ui64 nodeId: TrackingNodes) {
         TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(
             TActivationContext::InterconnectProxy(nodeId), ExecuterId, new TEvents::TEvUnsubscribe()));
     }
+}
+
+THashMap<TActorId, TProgressStat>& TKqpPlanner::GetPendingComputeActors() {
+    return PendingComputeActors;
+}
+
+THashSet<ui64>& TKqpPlanner::GetPendingComputeTasks() {
+    return PendingComputeTasks;
 }
 
 void TKqpPlanner::PrepareToProcess() {
@@ -361,11 +478,11 @@ std::unique_ptr<TKqpPlanner> CreateKqpPlanner(TKqpTasksGraph& tasksGraph, ui64 t
     const Ydb::Table::QueryStatsCollection::Mode& statsMode,
     bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& executerSpan,
     TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot, const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
-    bool isDataQuery)
+    bool isDataQuery, ui64 mkqlMemoryLimit, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, bool doOptimization)
 {
     return std::make_unique<TKqpPlanner>(tasksGraph, txId, executer, std::move(tasks), std::move(tasksPerNode), snapshot,
         database, userToken, deadline, statsMode, withSpilling, rlPath, executerSpan,
-        std::move(resourcesSnapshot), executerRetriesConfig, isDataQuery);
+        std::move(resourcesSnapshot), executerRetriesConfig, isDataQuery, mkqlMemoryLimit, asyncIoFactory, doOptimization);
 }
 
 } // namespace NKikimr::NKqp

@@ -116,8 +116,8 @@
                                     }
                                 ],
                                 "SortColumns": [
-                                    "b (Asc)",
-                                    "a (Asc)"
+                                    "t1.j (Asc)",
+                                    "t1.i (Asc)"
                                 ]
                             }
                         ]

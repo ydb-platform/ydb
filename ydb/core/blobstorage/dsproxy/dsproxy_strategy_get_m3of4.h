@@ -3,6 +3,8 @@
 #include "defs.h"
 #include "dsproxy_strategy_m3of4_base.h"
 
+#include <util/random/shuffle.h>
+
 namespace NKikimr {
 
     class TMirror3of4GetStrategy : public TMirror3of4StrategyBase {
@@ -95,6 +97,7 @@ namespace NKikimr {
                 }
                 // leave the slow group for the last query
                 auto pred = [](const auto *x, const auto *y) { return x->NumSlowDisks < y->NumSlowDisks; };
+                Shuffle(candidates.begin(), candidates.end());
                 std::stable_sort(candidates.begin(), candidates.end(), pred);
                 // pick the first candidate
                 Y_VERIFY(candidates);

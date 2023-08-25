@@ -443,8 +443,6 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
 
     Client->InitRootScheme(settings.DomainRoot);
 
-    NKikimr::NKqp::WaitForKqpProxyInit(GetDriver());
-
     if (settings.WithSampleTables) {
         CreateSampleTables();
     }
@@ -1027,25 +1025,6 @@ void CreateSampleTablesWithIndex(TSession& session, bool populateTables) {
     )", TTxControl::BeginTx().CommitTx()).GetValueSync();
 
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-}
-
-void WaitForKqpProxyInit(const NYdb::TDriver& driver) {
-    NYdb::NTable::TTableClient client(driver);
-
-    while (true) {
-        auto it = client.RetryOperationSync([=](TSession session) {
-            return session.ExecuteDataQuery(R"(
-                        SELECT 1;
-                    )",
-                    TTxControl::BeginTx().CommitTx()
-                ).GetValueSync();
-        });
-
-        if (it.IsSuccess()) {
-            break;
-        }
-        Sleep(TDuration::MilliSeconds(100));
-    }
 }
 
 void InitRoot(Tests::TServer::TPtr server, TActorId sender) {

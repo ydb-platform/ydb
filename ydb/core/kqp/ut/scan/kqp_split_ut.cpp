@@ -616,6 +616,25 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         s.AssertSuccess();
         UNIT_ASSERT_VALUES_EQUAL(Format(Canonize(s.CollectedKeys, Order)), ",103,302,402,502,703");
     }
+
+    Y_UNIT_TEST_SORT(IntersectionLosesRange, Order) {
+        TTestSetup s;
+        auto shards = s.Shards();
+
+        auto* shim = new TReadActorPipeCacheStub();
+        InterceptReadActorPipeCache(s.Runtime->Register(shim));
+        shim->SetupCapture(0, 1);
+        s.SendScanQuery("SELECT Key FROM `/Root/KeyValueLargePartition` where Key = 101 or (Key >= 202 and Key < 200+4) or (Key >= 701 and Key < 704)" + OrderBy(Order));
+        shim->ReadsReceived.WaitI();
+        Cerr << "starting split -----------------------------------------------------------" << Endl;
+        s.Split(shards.at(0), 190);
+        Cerr << "resume evread -----------------------------------------------------------" << Endl;
+        shim->SkipAll();
+        shim->SendCaptured(s.Runtime);
+
+        s.AssertSuccess();
+        UNIT_ASSERT_VALUES_EQUAL(Format(Canonize(s.CollectedKeys, Order)), ",101,202,203,701,702,703");
+    }
 }
 
 

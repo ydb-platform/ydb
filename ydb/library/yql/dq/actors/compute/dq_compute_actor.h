@@ -232,15 +232,6 @@ struct TComputeRuntimeSettings {
     TMaybe<NDqProto::TRlPath> RlPath;
 };
 
-struct IMemoryQuotaManager {
-    using TPtr = std::shared_ptr<IMemoryQuotaManager>;
-    using TWeakPtr = std::weak_ptr<IMemoryQuotaManager>;
-    virtual ~IMemoryQuotaManager() = default;
-    virtual bool AllocateQuota(ui64 memorySize) = 0;
-    virtual void FreeQuota(ui64 memorySize) = 0;
-    virtual ui64 GetCurrentQuota() const = 0;
-};
-
 struct TGuaranteeQuotaManager : public IMemoryQuotaManager {
 
     TGuaranteeQuotaManager(ui64 limit, ui64 guarantee, ui64 step = 1_MB, ui64 quota = 0)
@@ -290,10 +281,28 @@ struct TGuaranteeQuotaManager : public IMemoryQuotaManager {
     virtual void FreeExtraQuota(ui64) {
     }
 
-    ui64 Limit;
-    ui64 Guarantee;
-    ui64 Step;
-    ui64 Quota;
+    ui64 Limit;     // current consumption (Quota + leftover from allocation chunk)
+    ui64 Guarantee; // do not free memory below this value even if Quota == 0
+    ui64 Step;      // allocation chunk size
+    ui64 Quota;     // current value
+};
+
+struct TChainedQuotaManager : public TGuaranteeQuotaManager {
+
+    TChainedQuotaManager(IMemoryQuotaManager::TPtr extraQuotaManager, ui64 limit, ui64 guarantee, ui64 step = 1_MB, ui64 quota = 0)
+    : TGuaranteeQuotaManager(limit, guarantee, step, quota)
+    , ExtraQuotaManager(extraQuotaManager) {
+    }
+
+    bool AllocateExtraQuota(ui64 memorySize) override {
+        return ExtraQuotaManager->AllocateQuota(memorySize);
+    }
+
+    void FreeExtraQuota(ui64 memorySize) override {
+        ExtraQuotaManager->FreeQuota(memorySize);
+    }
+
+    IMemoryQuotaManager::TPtr ExtraQuotaManager;
 };
 
 struct TComputeMemoryLimits {

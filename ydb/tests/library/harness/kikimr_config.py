@@ -147,6 +147,7 @@ class KikimrConfigGenerator(object):
             default_users=None,  # dict[user]=password
             extra_feature_flags=None,  # list[str]
             extra_grpc_services=None,  # list[str]
+            enable_immediate_effects=False,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -225,17 +226,19 @@ class KikimrConfigGenerator(object):
         if overrided_actor_system_config:
             self.yaml_config["actor_system_config"] = overrided_actor_system_config
 
+        if "table_service_config" not in self.yaml_config:
+            self.yaml_config["table_service_config"] = {}
+
         if disable_iterator_reads:
-            if "table_service_config" not in self.yaml_config:
-                self.yaml_config["table_service_config"] = {}
             self.yaml_config["table_service_config"]["enable_kqp_scan_query_source_read"] = False
             self.yaml_config["table_service_config"]["enable_kqp_data_query_source_read"] = False
 
         if disable_iterator_lookups:
-            if "table_service_config" not in self.yaml_config:
-                self.yaml_config["table_service_config"] = {}
             self.yaml_config["table_service_config"]["enable_kqp_scan_query_stream_lookup"] = False
             self.yaml_config["table_service_config"]["enable_kqp_data_query_stream_lookup"] = False
+
+        if enable_immediate_effects:
+            self.yaml_config["table_service_config"]["enable_kqp_immediate_effects"] = True
 
         self.yaml_config["feature_flags"]["enable_public_api_external_blobs"] = enable_public_api_external_blobs
         self.yaml_config["feature_flags"]["enable_mvcc"] = "VALUE_FALSE" if disable_mvcc else "VALUE_TRUE"

@@ -1732,9 +1732,15 @@ message TExternalTableDescription {
 message NoneAuth {
 }
 
+message ServiceAccountAuth {
+    optional string Id = 1;
+    optional string SecretName = 2;
+}
+
 message TAuth {
     oneof identity {
         NoneAuth None = 3;
+        ServiceAccountAuth ServiceAccount = 4;
     }
 }
 

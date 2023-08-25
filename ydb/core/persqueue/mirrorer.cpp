@@ -623,9 +623,11 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
             ProcessError(ctx, TStringBuilder() << "stream has commit offset more then partition end offset,"
                 << "gap will be created [" << OffsetToRead << ";" << createStream->GetCommittedOffset() << ")"
            );
+
+           OffsetToRead = createStream->GetCommittedOffset();
         }
 
-        createStream->Confirm(OffsetToRead);
+        createStream->Confirm(OffsetToRead, createStream->GetCommittedOffset());
         RequestSourcePartitionStatus();
     } else if (auto* destroyStream = std::get_if<TPersQueueReadEvent::TStopPartitionSessionEvent>(&event.GetRef())) {
         destroyStream->Confirm();

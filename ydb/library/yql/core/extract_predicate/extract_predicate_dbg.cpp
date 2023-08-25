@@ -43,7 +43,7 @@ TExprNode::TPtr ExpandRangeComputeFor(const TExprNode::TPtr& node, TExprContext&
     }
 
 
-    auto buildResult = extractor->BuildComputeNode(indexKeys, ctx);
+    auto buildResult = extractor->BuildComputeNode(indexKeys, ctx, *typesCtx);
     if (!buildResult.ComputeNode) {
         YQL_CLOG(DEBUG, Core) << "BuildComputeNode: ranges can not be built for predicate";
         return result;

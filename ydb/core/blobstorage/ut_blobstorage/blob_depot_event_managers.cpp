@@ -169,7 +169,7 @@ void VerifyTEvGetResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> res
                 UNIT_ASSERT_VALUES_UNEQUAL(responses[0].Status, NKikimrProto::NODATA);
             }
             if (responses[0].Status == NKikimrProto::OK && !isIndexOnly) {
-                UNIT_ASSERT_VALUES_EQUAL(responses[0].Buffer, blob.Data);
+                UNIT_ASSERT_VALUES_EQUAL(responses[0].Buffer.ConvertToString(), blob.Data);
             }
         } else if (blob.Status == TBlobInfo::EStatus::UNKNOWN) {
             if (mustRestoreFirst && responses[0].Status == NKikimrProto::OK) {
@@ -255,7 +255,7 @@ void VerifyTEvGetResult(TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> res
             } else if (blobs[i].Status == TBlobInfo::EStatus::WRITTEN) {
                 UNIT_ASSERT_VALUES_UNEQUAL(responses[i].Status, NKikimrProto::NODATA);
                 if (responses[i].Status == NKikimrProto::OK && !isIndexOnly) {
-                    UNIT_ASSERT_VALUES_EQUAL(responses[i].Buffer, blobs[i].Data);
+                    UNIT_ASSERT_VALUES_EQUAL(responses[i].Buffer.ConvertToString(), blobs[i].Data);
                 }
             } else if (blobs[i].Status == TBlobInfo::EStatus::UNKNOWN) {
                 if (mustRestoreFirst && responses[i].Status == NKikimrProto::OK) {

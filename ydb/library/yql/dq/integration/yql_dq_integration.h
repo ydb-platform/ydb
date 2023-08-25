@@ -44,7 +44,13 @@ public:
     virtual bool CanRead(const TExprNode& read, TExprContext& ctx, bool skipIssues = true) = 0;
     virtual TMaybe<ui64> EstimateReadSize(ui64 dataSizePerJob, ui32 maxTasksPerStage, const TExprNode& node, TExprContext& ctx) = 0;
     virtual TExprNode::TPtr WrapRead(const TDqSettings& config, const TExprNode::TPtr& read, TExprContext& ctx) = 0;
-    virtual TMaybe<bool> CanWrite(const TDqSettings& config, const TExprNode& write, TExprContext& ctx) = 0;
+
+    // Nothing if callable is not for writing,
+    // false if callable is for writing and there are some errors (they are added to ctx),
+    // true if callable is for writing and no issues occured.
+    virtual TMaybe<bool> CanWrite(const TExprNode& write, TExprContext& ctx) = 0;
+
+    virtual TExprNode::TPtr WrapWrite(const TExprNode::TPtr& write, TExprContext& ctx) = 0;
     virtual void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) = 0;
     virtual bool CanFallback() = 0;
     virtual void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sourceType) = 0;

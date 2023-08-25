@@ -64,6 +64,9 @@ bool TSnapshot::GetSecretValue(const TSecretIdOrValue& sId, TString& result) con
         result = *sId.GetValue();
         return true;
     }
+    if (!sId.GetSecretId()) {
+        return false;;
+    }
     auto it = Secrets.find(*sId.GetSecretId());
     if (it == Secrets.end()) {
         return false;

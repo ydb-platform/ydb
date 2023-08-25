@@ -251,7 +251,7 @@ private:
             queryType,
             SelfId(),
             Request_,
-            "", // sessionId
+            req->session_id(),
             std::move(query),
             "", // queryId
             txControl,

@@ -17,6 +17,7 @@ public:
     TMaybe<TString> FindField(const TString& name) const;
     bool HasField(const TString& name) const;
     TStructuredToken& SetField(const TString& name, const TString& value);
+    TStructuredToken& ClearField(const TString& name);
     TString ToJson() const;
 
 private:

@@ -93,6 +93,8 @@ struct TEvKqp {
         TEvScriptRequest() = default;
 
         mutable NKikimrKqp::TEvQueryRequest Record;
+        TDuration ForgetAfter;
+        TDuration ResultsTtl;
     };
 
     struct TEvScriptResponse : public TEventLocal<TEvScriptResponse, TKqpEvents::EvScriptResponse> {

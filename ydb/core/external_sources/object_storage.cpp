@@ -50,17 +50,21 @@ struct TObjectStorageExternalSource : public IExternalSource {
         return TString{NYql::S3ProviderName};
     }
 
-    virtual TMap<TString, TString> GetParamters(const TString& content) const override {
+    virtual TMap<TString, TVector<TString>> GetParameters(const TString& content) const override {
         NKikimrExternalSources::TObjectStorage objectStorage;
         objectStorage.ParseFromStringOrThrow(content);
 
-        TMap<TString, TString> parameters{objectStorage.format_setting().begin(), objectStorage.format_setting().end()};
+        TMap<TString, TVector<TString>> parameters;
+        for (const auto& [key, value] : objectStorage.format_setting()) {
+            parameters[key] = {value};
+        }
+
         if (objectStorage.format()) {
-            parameters["format"] = objectStorage.format();
+            parameters["format"] = {objectStorage.format()};
         }
 
         if (objectStorage.compression()) {
-            parameters["compression"] = objectStorage.compression();
+            parameters["compression"] = {objectStorage.compression()};
         }
 
         NSc::TValue projection;
@@ -69,13 +73,14 @@ struct TObjectStorageExternalSource : public IExternalSource {
         }
 
         if (!projection.DictEmpty()) {
-            parameters["projection"] = projection.ToJson();
+            parameters["projection"] = {projection.ToJson()};
         }
 
-        NSc::TValue partitionedBy;
-        partitionedBy.AppendAll(objectStorage.partitioned_by());
-        if (!partitionedBy.ArrayEmpty()) {
-            parameters["partitioned_by"] = partitionedBy.ToJson();
+        if (!objectStorage.partitioned_by().empty()) {
+            parameters["partitioned_by"].reserve(objectStorage.partitioned_by().size());
+            for (const TString& column : objectStorage.partitioned_by()) {
+                parameters["partitioned_by"].emplace_back(column);
+            }
         }
 
         return parameters;
@@ -325,7 +330,7 @@ private:
                 .Primitive(NYdb::EPrimitiveType::Date)
                 .Build(),
             NYdb::TTypeBuilder{}
-                .Primitive(NYdb::EPrimitiveType::Date)
+                .Primitive(NYdb::EPrimitiveType::Datetime)
                 .Build()
         };
         return ValidateProjectionType(columnType, columnName, availableTypes);

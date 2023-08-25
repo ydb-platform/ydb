@@ -273,11 +273,17 @@ void BuildSequencerChannels(TKqpTasksGraph& graph, const TStageInfo& stageInfo, 
     for(const auto& column: sequencer.GetColumns()) {
         auto columnIt = table.Columns.find(column);
         YQL_ENSURE(columnIt != table.Columns.end(), "Unknown column: " << column);
+        const auto& columnInfo = columnIt->second;
 
         auto* columnProto = settings->AddColumns();
         columnProto->SetName(column);
-        columnProto->SetId(columnIt->second.Id);
-        columnProto->SetTypeId(columnIt->second.Type.GetTypeId());
+        columnProto->SetId(columnInfo.Id);
+        columnProto->SetTypeId(columnInfo.Type.GetTypeId());
+
+        auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(columnInfo.Type, columnInfo.TypeMod);
+        if (columnType.TypeInfo) {
+            *columnProto->MutableTypeInfo() = *columnType.TypeInfo;
+        }
 
         auto aic = autoIncrementColumns.find(column);
         if (aic != autoIncrementColumns.end()) {
@@ -939,6 +945,14 @@ void FillOutputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskOutpu
             break;
         }
 
+        case TTaskOutputType::Sink: {
+            auto* sink = outputDesc.MutableSink();
+            sink->SetType(output.SinkType);
+            YQL_ENSURE(output.SinkSettings);
+            sink->MutableSettings()->CopyFrom(*output.SinkSettings);
+            break;
+        }
+
         default: {
             YQL_ENSURE(false, "Unexpected task output type " << output.Type);
         }
@@ -1029,11 +1043,11 @@ void SerializeTaskToProto(const TKqpTasksGraph& tasksGraph, const TTask& task, N
         result->SetMetaId(task.GetMetaIdUnsafe());
     }
 
-    for (const auto& [paramName, paramValue] : task.Meta.DqTaskParams) {
+    for (const auto& [paramName, paramValue] : task.Meta.TaskParams) {
         (*result->MutableTaskParams())[paramName] = paramValue;
     }
 
-    for (const auto& [paramName, paramValue] : task.Meta.DqSecureParams) {
+    for (const auto& [paramName, paramValue] : task.Meta.SecureParams) {
         (*result->MutableSecureParams())[paramName] = paramValue;
     }
 

@@ -9,12 +9,6 @@
 add_subdirectory(services)
 add_subdirectory(ut)
 add_subdirectory(ut_board_subscriber)
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
 
 add_library(ydb-core-base)
 target_link_libraries(ydb-core-base PUBLIC
@@ -44,7 +38,6 @@ target_link_libraries(ydb-core-base PUBLIC
   api-protos-out
   library-yql-minikql
   cpp-deprecated-atomic
-  tools-enum_parser-enum_serialization_runtime
 )
 target_sources(ydb-core-base PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/base/actor_activity_names.cpp
@@ -62,7 +55,6 @@ target_sources(ydb-core-base PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/base/path.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/base/pathid.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/base/pool_stats_collector.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/base/quoter.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/base/row_version.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/base/services_assert.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/base/statestorage.cpp
@@ -82,9 +74,4 @@ target_sources(ydb-core-base PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/base/traceid.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/base/tx_processing.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/base/blobstorage_grouptype.cpp
-)
-generate_enum_serilization(ydb-core-base
-  ${CMAKE_SOURCE_DIR}/ydb/core/base/quoter.h
-  INCLUDE_HEADERS
-  ydb/core/base/quoter.h
 )

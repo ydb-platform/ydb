@@ -2205,6 +2205,11 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
     AddCallable({ "AsTagged","Untag" }, [](const TExprNode& node, TMkqlBuildContext& ctx) {
         auto input = MkqlBuildExpr(node.Head(), ctx);
+
+        if constexpr (NKikimr::NMiniKQL::RuntimeVersion < 34U) {
+            return input;
+        }
+
         auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
         return ctx.ProgramBuilder.Nop(input, returnType);
     });

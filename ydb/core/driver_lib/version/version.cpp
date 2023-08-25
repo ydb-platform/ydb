@@ -20,15 +20,20 @@ const TCurrent* TCompatibilityInfo::GetCurrent() {
     TGuard<TSpinLock> g(TCompatibilityInfo::LockCurrent);
 
     if (!CompatibilityInfo) {
-        // using TYdbVersion = TCompatibilityInfo::TProtoConstructor::TYdbVersion;
+        using TYdbVersion = TCompatibilityInfo::TProtoConstructor::TYdbVersion;
         // using TCompatibilityRule = TCompatibilityInfo::TProtoConstructor::TCompatibilityRule;
         using TCurrentCompatibilityInfo = TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo;
 
         auto current = TCurrentCompatibilityInfo{
-            .Build = "trunk"
+            .Build = "ydb",
+            .YdbVersion = TYdbVersion{
+                .Year = 23,
+                .Major = 3,
+            }
         }.ToPB();
 
-        // bool success = CompleteFromTag(current);
+        bool success = CompleteFromTag(current);
+        Y_UNUSED(success);
         // Y_VERIFY_DEBUG(success);
 
         CompatibilityInfo = TCurrent();
@@ -41,12 +46,13 @@ const TCurrent* TCompatibilityInfo::GetCurrent() {
 // obsolete version control
 TMaybe<NActors::TInterconnectProxyCommon::TVersionInfo> VERSION = NActors::TInterconnectProxyCommon::TVersionInfo{
     // version of this binary
-    "trunk",
+    "stable-23-3",
 
     // compatible versions; must include all compatible old ones, including this one; version verification occurs on both
     // peers and connection is accepted if at least one of peers accepts the version of the other peer
     {
-        "trunk"
+        "stable-23-2",
+        "stable-23-3"
     }
 };
 
@@ -70,7 +76,7 @@ const TStored* TCompatibilityInfo::GetUnknown() {
         UnknownYdbRelease = TStored();
         UnknownYdbRelease->CopyFrom(TStoredCompatibilityInfo{
             .Build = "ydb",
-            .YdbVersion = TYdbVersion{ .Year = 22, .Major = 5, .Minor = 7, .Hotfix = 0 }
+            .YdbVersion = TYdbVersion{ .Year = 23, .Major = 2, .Minor = 11, .Hotfix = 0 }
 
         }.ToPB());
     }

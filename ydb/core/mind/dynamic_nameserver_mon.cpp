@@ -173,6 +173,10 @@ void TDynamicNameserver::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext
                 << "      <td>" << config->MaxStaticNodeId << "</td>" << Endl
                 << "    </tr>" << Endl
                 << "    <tr>" << Endl
+                << "      <td class='right-align'>Min dynamic node ID:</td>" << Endl
+                << "      <td>" << config->MinDynamicNodeId << "</td>" << Endl
+                << "    </tr>" << Endl
+                << "    <tr>" << Endl
                 << "      <td class='right-align'>Max dynamic node ID:</td>" << Endl
                 << "      <td>" << config->MaxDynamicNodeId << "</td>" << Endl
                 << "    </tr>" << Endl

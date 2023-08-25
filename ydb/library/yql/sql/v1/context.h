@@ -1,6 +1,6 @@
 #pragma once
 
-#include "node.h"
+#include "source.h"
 #include "sql.h"
 
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>

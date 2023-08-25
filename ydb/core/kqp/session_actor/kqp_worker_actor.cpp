@@ -96,13 +96,15 @@ public:
 
     TKqpWorkerActor(const TActorId& owner, const TString& sessionId, const TKqpSettings::TConstPtr& kqpSettings,
         const TKqpWorkerSettings& workerSettings, NYql::IHTTPGateway::TPtr httpGateway,
-        TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters)
+        TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
+        NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory)
         : Owner(owner)
         , SessionId(sessionId)
         , Settings(workerSettings)
         , HttpGateway(std::move(httpGateway))
         , ModuleResolverState(moduleResolverState)
         , Counters(counters)
+        , CredentialsFactory(std::move(credentialsFactory))
         , Config(MakeIntrusive<TKikimrConfiguration>())
         , CreationTime(TInstant::Now())
         , QueryId(0)
@@ -138,7 +140,7 @@ public:
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
 
         KqpHost = CreateKqpHost(Gateway, Settings.Cluster, Settings.Database, Config, ModuleResolverState->ModuleResolver,
-            HttpGateway, AppData(ctx)->FunctionRegistry, !Settings.LongSession);
+            HttpGateway, AppData(ctx)->FunctionRegistry, !Settings.LongSession, false, CredentialsFactory);
 
         Become(&TKqpWorkerActor::ReadyState);
     }
@@ -466,8 +468,7 @@ private:
 
         switch (action) {
             case NKikimrKqp::QUERY_ACTION_EXECUTE: {
-                auto&& params = *QueryState->RequestEv->Record.MutableRequest()->MutableParameters();
-                if (!ExecuteQuery(QueryState->RequestEv->GetQuery(), std::move(params), queryType, QueryState->RequestEv->GetRequestActorId())) {
+                if (!ExecuteQuery(QueryState->RequestEv->GetQuery(), QueryState->RequestEv->GetYdbParameters(), queryType, QueryState->RequestEv->GetRequestActorId())) {
                     onBadRequest(QueryState->Error);
                     return;
                 }
@@ -565,7 +566,7 @@ private:
         Cleanup(ctx, true);
     }
 
-    bool ExecuteQuery(const TString& query, ::NKikimrMiniKQL::TParams&& parameters,
+    bool ExecuteQuery(const TString& query, const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>& parameters,
         NKikimrKqp::EQueryType type, const TActorId& requestActorId)
     {
         auto statsMode = GetStatsMode(QueryState->RequestEv.get(), EKikimrStatsMode::Basic);
@@ -595,7 +596,7 @@ private:
                 execSettings.Deadlines = QueryState->QueryDeadlines;
                 execSettings.RpcCtx = QueryState->RequestEv->GetRequestCtx();
                 execSettings.StatsMode = statsMode;
-                QueryState->AsyncQueryResult = KqpHost->ExecuteYqlScript(query, std::move(parameters), execSettings);
+                QueryState->AsyncQueryResult = KqpHost->ExecuteYqlScript(query, parameters, execSettings);
                 break;
             }
 
@@ -604,7 +605,7 @@ private:
                 execSettings.Deadlines = QueryState->QueryDeadlines;
                 execSettings.RpcCtx = QueryState->RequestEv->GetRequestCtx();
                 execSettings.StatsMode = statsMode;
-                QueryState->AsyncQueryResult = KqpHost->StreamExecuteYqlScript(query, std::move(parameters),
+                QueryState->AsyncQueryResult = KqpHost->StreamExecuteYqlScript(query, parameters,
                     requestActorId, execSettings);
                 break;
             }
@@ -1059,6 +1060,7 @@ private:
     NYql::IHTTPGateway::TPtr HttpGateway;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
     TIntrusivePtr<TKqpCounters> Counters;
+    NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
     TIntrusivePtr<TKqpRequestCounters> RequestCounters;
     TKikimrConfiguration::TPtr Config;
     TInstant CreationTime;
@@ -1075,9 +1077,10 @@ private:
 IActor* CreateKqpWorkerActor(const TActorId& owner, const TString& sessionId,
     const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
     NYql::IHTTPGateway::TPtr httpGateway,
-    TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters)
+    TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
+    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory)
 {
-    return new TKqpWorkerActor(owner, sessionId, kqpSettings, workerSettings, std::move(httpGateway), moduleResolverState, counters);
+    return new TKqpWorkerActor(owner, sessionId, kqpSettings, workerSettings, std::move(httpGateway), moduleResolverState, counters, std::move(credentialsFactory));
 }
 
 } // namespace NKqp

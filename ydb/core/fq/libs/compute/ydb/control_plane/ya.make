@@ -9,6 +9,7 @@ SRCS(
 PEERDIR(
     library/cpp/actors/core
     library/cpp/actors/protos
+    ydb/core/fq/libs/compute/ydb/synchronization_service
     ydb/core/fq/libs/control_plane_storage/proto
     ydb/core/fq/libs/quota_manager/proto
     ydb/core/protos

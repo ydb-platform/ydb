@@ -219,7 +219,9 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
     }
 
     Y_UNIT_TEST(NotNulls) {
-        TKikimrWithGrpcAndRootSchema server;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableNotNullDataColumns(true);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
         ui16 grpc = server.GetPort();
 
         TString location = TStringBuilder() << "localhost:" << grpc;

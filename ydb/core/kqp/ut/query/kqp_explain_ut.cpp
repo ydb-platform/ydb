@@ -496,6 +496,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST(FewEffects) {
         TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

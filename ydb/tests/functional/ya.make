@@ -9,6 +9,7 @@ RECURSE(
     dynumber
     encryption
     hive
+    kqp
     large_serializable
     limits
     open_source
@@ -25,4 +26,5 @@ RECURSE(
     ttl
     ydb_cli
     query_cache
+    script_execution
 )

@@ -790,10 +790,16 @@ public:
         THashSet<TString> notNullColumnsSet;
         auto notNullColumns = Y();
         auto columns = Y();
+        THashSet<TString> serialColumnsSet;
+        auto serialColumns = Y();
         for (auto& col : Params.Columns) {
             auto columnDesc = Y();
             columnDesc = L(columnDesc, BuildQuotedAtom(Pos, col.Name));
             auto type = col.Type;
+            if (col.Serial) {
+                if (serialColumnsSet.insert(col.Name).second)
+                    serialColumns = L(serialColumns, BuildQuotedAtom(Pos, col.Name));
+            }
             if (col.Nullable) {
                 type = Y("AsOptionalType", type);
             } else {
@@ -842,6 +848,10 @@ public:
 
         if (!notNullColumnsSet.empty()) {
             opts = L(opts, Q(Y(Q("notnull"), Q(notNullColumns))));
+        }
+
+        if (!serialColumnsSet.empty()) {
+            opts = L(opts, Q(Y(Q("serialColumns"), Q(serialColumns))));
         }
 
         if (!Params.PartitionByColumns.empty()) {

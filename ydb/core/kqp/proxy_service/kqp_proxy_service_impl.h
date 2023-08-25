@@ -12,6 +12,8 @@
 
 namespace NKikimr::NKqp {
 
+using TNodeId = ui32;
+
 struct TKqpProxyRequest {
     TActorId Sender;
     ui64 SenderCookie = 0;
@@ -83,6 +85,8 @@ struct TKqpSessionInfo {
     NActors::TMonotonic IdleTimeout;
     // position in the idle list.
     std::list<TKqpSessionInfo*>::iterator IdlePos;
+    TNodeId AttachedNodeId;
+    TActorId AttachedRpcId;
 
     TKqpSessionInfo(const TString& sessionId, const TActorId& workerId,
         const TString& database, TKqpDbCountersPtr dbCounters, std::vector<i32>&& pos,
@@ -95,6 +99,7 @@ struct TKqpSessionInfo {
         , ReadyPos(std::move(pos))
         , IdleTimeout(idleTimeout)
         , IdlePos(idlePos)
+        , AttachedNodeId(0)
     {
     }
 };
@@ -107,12 +112,21 @@ class TLocalSessionsRegistry {
     std::vector<std::vector<TString>> ReadySessions;
     TIntrusivePtr<IRandomProvider> RandomProvider;
     std::list<TKqpSessionInfo*> IdleSessions;
+    // map rpc node to local sessions
+    THashMap<TNodeId, THashSet<const TKqpSessionInfo*>> AttachedNodesIndex;
 
 public:
     TLocalSessionsRegistry(TIntrusivePtr<IRandomProvider> randomProvider)
         : ReadySessions(2)
         , RandomProvider(randomProvider)
     {}
+
+    bool AttachSession(const TKqpSessionInfo* sessionInfo, TNodeId nodeId, TActorId rpcActor) {
+        const_cast<TKqpSessionInfo*>(sessionInfo)->AttachedNodeId = nodeId;
+        const_cast<TKqpSessionInfo*>(sessionInfo)->AttachedRpcId = rpcActor;
+        auto& actors = AttachedNodesIndex[nodeId];
+        return actors.insert(sessionInfo).second;
+    }
 
     TKqpSessionInfo* Create(const TString& sessionId, const TActorId& workerId,
         const TString& database, TKqpDbCountersPtr dbCounters, bool supportsBalancing,
@@ -213,9 +227,11 @@ public:
         return ShutdownInFlightSessions.size();
     }
 
-    void Erase(const TString& sessionId) {
+    std::pair<TNodeId, TActorId> Erase(const TString& sessionId) {
         auto it = LocalSessions.find(sessionId);
+        auto result = std::make_pair<TNodeId, TActorId>(0, TActorId());
         if (it != LocalSessions.end()) {
+            result.second = it->second.AttachedRpcId;
             auto counter = SessionsCountPerDatabase.find(it->second.Database);
             if (counter != SessionsCountPerDatabase.end()) {
                 counter->second--;
@@ -228,8 +244,22 @@ public:
             RemoveSessionFromLists(&(it->second));
             ShutdownInFlightSessions.erase(sessionId);
             TargetIdIndex.erase(it->second.WorkerId);
+
+            if (const auto nodeId = it->second.AttachedNodeId) {
+                auto attIt = AttachedNodesIndex.find(nodeId);
+                if (attIt != AttachedNodesIndex.end()) {
+                    attIt->second.erase(&(it->second));
+                    if (attIt->second.empty()) {
+                        result.first = nodeId;
+                        AttachedNodesIndex.erase(attIt);
+                    }
+                }
+            }
+
             LocalSessions.erase(it);
         }
+
+        return result;
     }
 
     bool IsPendingShutdown(const TString& sessionId) const {
@@ -257,10 +287,30 @@ public:
         return LocalSessions.FindPtr(sessionId);
     }
 
-    void Erase(const TActorId& targetId) {
+    const THashSet<const TKqpSessionInfo*>& FindSessions(const TNodeId& nodeId) const {
+        auto it = AttachedNodesIndex.find(nodeId);
+        if (it == AttachedNodesIndex.end()) {
+            static THashSet<const TKqpSessionInfo*> empty;
+            return empty;
+        }
+        return it->second;
+    }
+
+    std::pair<TNodeId, TActorId> Erase(const TActorId& targetId) {
+        auto result = std::make_pair<TNodeId, TActorId>(0, TActorId());
+
         auto it = TargetIdIndex.find(targetId);
         if (it != TargetIdIndex.end()){
-            Erase(it->second);
+            result = Erase(it->second);
+        }
+
+        return result;
+    }
+
+    template<typename TCb>
+    void ForEachNode(TCb&& cb) {
+        for (const auto& n : AttachedNodesIndex) {
+            cb(n.first);
         }
     }
 

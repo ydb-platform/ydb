@@ -43,7 +43,7 @@ private:
         static bool TryParseRange(TStringBuf str, std::pair<ui32, ui32>& range);
 
         bool HttpBadRequest(const TReplyParams& params, const TString& error = {});
-        bool HttpNotFound(const TReplyParams& params);
+        bool HttpNotFound(const TReplyParams& params, const TString& errorCode = {});
         bool HttpNotImplemented(const TReplyParams& params);
         void MaybeContinue(const TReplyParams& params);
         bool HttpServeRead(const TReplyParams& params, EMethod method, const TStringBuf path);

@@ -104,6 +104,15 @@ void TTabletExecutedFlat::OnTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const
     ctx.Send(Tablet(), new TEvTablet::TEvTabletStopped());
 }
 
+void TTabletExecutedFlat::HandlePoison(const TActorContext &ctx) {
+    if (Executor0) {
+        Executor0->DetachTablet(ExecutorCtx(ctx));
+        Executor0 = nullptr;
+    }
+
+    Detach(ctx);
+}
+
 void TTabletExecutedFlat::HandleTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorContext &ctx) {
     if (Executor() && Executor()->GetStats().IsActive) {
         OnTabletStop(ev, ctx);
@@ -139,20 +148,20 @@ void TTabletExecutedFlat::HandleLocalReadColumns(TEvTablet::TEvLocalReadColumns:
     Execute(Factory->Make(ev), ctx);
 }
 
+void TTabletExecutedFlat::SignalTabletActive(const TActorIdentity &id) {
+    id.Send(Tablet(), new TEvTablet::TEvTabletActive());
+}
+
 void TTabletExecutedFlat::SignalTabletActive(const TActorContext &ctx) {
     ctx.Send(Tablet(), new TEvTablet::TEvTabletActive());
 }
 
-void TTabletExecutedFlat::DefaultSignalTabletActive(const TActorContext &ctx) {
-    SignalTabletActive(ctx);
-}
-
 void TTabletExecutedFlat::Enqueue(STFUNC_SIG) {
     Y_UNUSED(ev);
+    Y_VERIFY_DEBUG(false, "Unhandled StateInit event 0x%08" PRIx32, ev->GetTypeRewrite());
 }
 
 void TTabletExecutedFlat::ActivateExecutor(const TActorContext &ctx) {
-    DefaultSignalTabletActive(ctx);
     OnActivateExecutor(ctx);
 }
 
@@ -247,6 +256,7 @@ void TTabletExecutedFlat::HandleGetCounters(TEvTablet::TEvGetCounters::TPtr &ev)
 bool TTabletExecutedFlat::HandleDefaultEvents(TAutoPtr<IEventHandle>& ev, const TActorIdentity& id) {
     auto ctx(NActors::TActivationContext::ActorContextFor(id));
     switch (ev->GetTypeRewrite()) {
+        CFuncCtx(TEvents::TEvPoison::EventType, HandlePoison, ctx);
         HFuncCtx(TEvTablet::TEvBoot, Handle, ctx);
         HFuncCtx(TEvTablet::TEvRestored, Handle, ctx);
         HFuncCtx(TEvTablet::TEvFBoot, Handle, ctx);
@@ -273,15 +283,17 @@ bool TTabletExecutedFlat::HandleDefaultEvents(TAutoPtr<IEventHandle>& ev, const 
 void TTabletExecutedFlat::StateInitImpl(TAutoPtr<IEventHandle>& ev, const TActorIdentity& id) {
     auto ctx(NActors::TActivationContext::ActorContextFor(id));
     switch (ev->GetTypeRewrite()) {
+        CFuncCtx(TEvents::TEvPoison::EventType, HandlePoison, ctx);
         HFuncCtx(TEvTablet::TEvBoot, Handle, ctx);
+        HFuncCtx(TEvTablet::TEvRestored, Handle, ctx);
         HFuncCtx(TEvTablet::TEvFBoot, Handle, ctx);
         hFunc(TEvTablet::TEvFUpdate, Handle);
         hFunc(TEvTablet::TEvFAuxUpdate, Handle);
         hFunc(TEvTablet::TEvFollowerGcApplied, Handle);
-        HFuncCtx(TEvTablet::TEvRestored, Handle, ctx);
+        hFunc(TEvTablet::TEvNewFollowerAttached, Handle);
+        hFunc(TEvTablet::TEvFollowerSyncComplete, Handle);
         HFuncCtx(TEvTablet::TEvTabletStop, HandleTabletStop, ctx);
         HFuncCtx(TEvTablet::TEvTabletDead, HandleTabletDead, ctx);
-        hFunc(TEvTablet::TEvFollowerSyncComplete, Handle);
         hFunc(TEvTablet::TEvUpdateConfig, Handle);
         HFuncCtx(NMon::TEvRemoteHttpInfo, RenderHtmlPage, ctx);
         IgnoreFunc(TEvTablet::TEvReady);

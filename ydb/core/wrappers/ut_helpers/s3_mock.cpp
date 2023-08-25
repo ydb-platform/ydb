@@ -84,14 +84,14 @@ bool TS3Mock::TRequest::HttpBadRequest(const TReplyParams& params, const TString
     return true;
 }
 
-bool TS3Mock::TRequest::HttpNotFound(const TReplyParams& params) {
+bool TS3Mock::TRequest::HttpNotFound(const TReplyParams& params, const TString& errorCode) {
     params.Output << "HTTP/1.1 404 Not found\r\n\r\n";
-    params.Output << R"(
+    params.Output << Sprintf(R"(
         <?xml version="1.0" encoding="UTF-8"?>
         <Error>
-          <Code>NoSuchKey</Code>
+          <Code>%s</Code>
         </Error>
-    )";
+    )", errorCode.c_str());
     return true;
 }
 
@@ -175,7 +175,7 @@ bool TS3Mock::TRequest::HttpServeWrite(const TReplyParams& params, TStringBuf pa
 
         auto it = Parent->MultipartUploads.find(std::make_pair(path, queryParams.Get("uploadId")));
         if (it == Parent->MultipartUploads.end()) {
-            return HttpBadRequest(params, "Invalid uploadId");
+            return HttpNotFound(params, "NoSuchUpload");
         }
 
         size_t partNumber = 0;
@@ -267,7 +267,7 @@ bool TS3Mock::TRequest::HttpServeAction(const TReplyParams& params, EMethod meth
     } else if (queryParams.Has("uploadId")) {
         auto it = Parent->MultipartUploads.find(std::make_pair(path, queryParams.Get("uploadId")));
         if (it == Parent->MultipartUploads.end()) {
-            return HttpBadRequest(params, "Invalid uploadId");
+            return HttpNotFound(params, "NoSuchUpload");
         }
 
         if (method == EMethod::Post) {
@@ -369,7 +369,7 @@ bool TS3Mock::TRequest::DoReply(const TReplyParams& params) {
         if (Parent->Data.contains(pathStr)) {
             return HttpServeRead(params, method, pathStr);
         } else {
-            return HttpNotFound(params);
+            return HttpNotFound(params, "NoSuchKey");
         }
         break;
 

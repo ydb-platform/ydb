@@ -103,7 +103,7 @@ public:
             BlobsConstructor->RegisterBlobId(blobId);
         }
         if (status != NOlap::IBlobConstructor::EStatus::Finished) {
-            return SendResultAndDie(ctx, NKikimrProto::ERROR);
+            return SendResultAndDie(ctx, NKikimrProto::CORRUPTED);
         }
 
         if (BlobBatch.AllBlobWritesCompleted()) {

@@ -59,8 +59,8 @@
                                     }
                                 ],
                                 "SortColumns": [
-                                    "a (Asc)",
-                                    "e (Asc)"
+                                    "t1.i (Asc)",
+                                    "t2.k (Asc)"
                                 ]
                             }
                         ]

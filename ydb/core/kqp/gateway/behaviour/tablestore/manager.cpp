@@ -18,6 +18,11 @@ NThreading::TFuture<TTableStoreManager::TYqlConclusionStatus> TTableStoreManager
         auto promise = NThreading::NewPromise<TYqlConclusionStatus>();
         auto result = promise.GetFuture();
 
+        auto* actorSystem = context.GetExternalData().GetActorSystem();
+        if (!actorSystem) {
+            return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail("This place needs an actor system. Please contact internal support"));
+        }
+
         switch (context.GetActivityType()) {
             case EActivityType::Create:
             case EActivityType::Upsert:
@@ -48,8 +53,8 @@ NThreading::TFuture<TTableStoreManager::TYqlConclusionStatus> TTableStoreManager
                 auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
                 operation->SerializeScheme(schemeTx);
 
-                auto promiseScheme = NThreading::NewPromise<NKqp::TSchemeOpRequestHandler::TResult>(); 
-                TActivationContext::AsActorContext().Register(new NKqp::TSchemeOpRequestHandler(ev.Release(), promiseScheme, false));
+                auto promiseScheme = NThreading::NewPromise<NKqp::TSchemeOpRequestHandler::TResult>();
+                actorSystem->Register(new NKqp::TSchemeOpRequestHandler(ev.Release(), promiseScheme, false));
                 return promiseScheme.GetFuture().Apply([](const NThreading::TFuture<NKqp::TSchemeOpRequestHandler::TResult>& f) {
                     if (f.HasValue() && !f.HasException() && f.GetValue().Success()) {
                         return TYqlConclusionStatus::Success();

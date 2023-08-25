@@ -27,6 +27,10 @@ const ::google::protobuf::Map<TString, Ydb::TypedValue>& TProtoAccessor::GetProt
     return params.GetProtoMap();
 }
 
+::google::protobuf::Map<TString, Ydb::TypedValue>* TProtoAccessor::GetProtoMapPtr(TParams& params) {
+    return params.GetProtoMapPtr();
+}
+
 template Ydb::Export::ExportToS3Settings::Scheme TProtoAccessor::GetProto<Ydb::Export::ExportToS3Settings>(ES3Scheme value);
 template Ydb::Import::ImportFromS3Settings::Scheme TProtoAccessor::GetProto<Ydb::Import::ImportFromS3Settings>(ES3Scheme value);
 

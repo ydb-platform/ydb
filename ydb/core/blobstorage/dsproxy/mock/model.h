@@ -129,7 +129,8 @@ namespace NFake {
                     const ui32 size = Min<ui32>(maxSize, !query.Size ? Max<ui32>() : query.Size);
 
                     // calculate substring; use 0 instead of query.Shift because it may exceed the buffer
-                    response.Buffer = data.Buffer.ConvertToString().substr(size ? query.Shift : 0, size);
+                    const ui32 offset = size ? query.Shift : 0;
+                    response.Buffer = TRope(data.Buffer.Position(offset), data.Buffer.Position(offset + size));
                 } else {
                     // ensure this blob is not under GC
                     Y_VERIFY(!IsCollectedByBarrier(id), "Id# %s", id.ToString().data());

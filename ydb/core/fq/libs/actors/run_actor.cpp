@@ -1559,6 +1559,8 @@ private:
         apply("WatermarksGranularityMs", "1000");
         apply("WatermarksLateArrivalDelayMs", "5000");
         apply("WatermarksIdlePartitions", "true");
+        apply("EnableChannelStats", "true");
+        apply("ExportStats", "true");
 
         switch (Params.QueryType) {
         case FederatedQuery::QueryContent::STREAMING: {
@@ -2038,6 +2040,9 @@ private:
                     break;
                 case FederatedQuery::ConnectionSetting::kMonitoring:
                     html << "MONITORING";
+                    break;
+                case FederatedQuery::ConnectionSetting::kPostgresqlCluster:
+                    html << "POSTGRESQL";
                     break;
                 default:
                     html << "UNDEFINED";

@@ -1,3 +1,4 @@
+import "ydb/public/api/protos/ydb_topic.proto";
 package NKikimrPQClient;
 
 message TKeyValue {
@@ -38,5 +39,5 @@ message TDataChunk {
 
     optional bytes Data           = 127; // ~ 64K
 
-    map<string, string> MessageMeta = 128;
+    repeated Ydb.Topic.MetadataItem MessageMeta = 128;
 }

@@ -1,4 +1,6 @@
 RECURSE(
+    client/extensions
+    client/helpers
     client/ydb_types/credentials
     client/ydb_discovery
     client/ydb_types/status
@@ -49,7 +51,6 @@ RECURSE(
     client/impl/ydb_internal/plain_status
     client/impl/ydb_internal/thread_pool
     client/impl/ydb_endpoints/ut
-    client/extensions
     client/impl/ydb_internal/logger
     client/impl/ydb_internal/make_request
     client/resources

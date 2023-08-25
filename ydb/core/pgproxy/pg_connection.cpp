@@ -457,6 +457,19 @@ protected:
         }
     }
 
+    static void FillErrorResponse(TPGStreamOutput<TPGErrorResponse>& dataOut, const std::vector<std::pair<char, TString>>& dataIn) {
+        for (const auto& field : dataIn) {
+            dataOut << field.first << field.second << '\0';
+        }
+        dataOut << '\0';
+    }
+
+    void SendErrorResponse(const std::vector<std::pair<char, TString>>& errorFields) {
+        TPGStreamOutput<TPGErrorResponse> errorResponse;
+        FillErrorResponse(errorResponse, errorFields);
+        SendStream(errorResponse);
+    }
+
     bool FlushAndPoll() {
         if (FlushOutput()) {
             RequestPoller();
@@ -543,13 +556,7 @@ protected:
                     }
                 }
             } else {
-                // error response
-                TPGStreamOutput<TPGErrorResponse> errorResponse;
-                for (const auto& field : ev->Get()->ErrorFields) {
-                    errorResponse << field.first << field.second << '\0';
-                }
-                errorResponse << '\0';
-                SendStream(errorResponse);
+                SendErrorResponse(ev->Get()->ErrorFields);
             }
             if (ev->Get()->CommandCompleted) {
                 BecomeReadyForQuery();
@@ -579,13 +586,7 @@ protected:
                     SendMessage(TPGNoData());
                 }
             } else {
-                // error response
-                TPGStreamOutput<TPGErrorResponse> errorResponse;
-                for (const auto& field : ev->Get()->ErrorFields) {
-                    errorResponse << field.first << field.second << '\0';
-                }
-                errorResponse << '\0';
-                SendStream(errorResponse);
+                SendErrorResponse(ev->Get()->ErrorFields);
             }
             ++OutgoingSequenceNumber;
             BecomeReadyForQuery();
@@ -620,13 +621,7 @@ protected:
                     }
                 }
             } else {
-                // error response
-                TPGStreamOutput<TPGErrorResponse> errorResponse;
-                for (const auto& field : ev->Get()->ErrorFields) {
-                    errorResponse << field.first << field.second << '\0';
-                }
-                errorResponse << '\0';
-                SendStream(errorResponse);
+                SendErrorResponse(ev->Get()->ErrorFields);
             }
             if (ev->Get()->CommandCompleted) {
                 ++OutgoingSequenceNumber;
@@ -639,8 +634,12 @@ protected:
 
     void HandleConnected(TEvPGEvents::TEvParseResponse::TPtr& ev) {
         if (IsEventExpected(ev)) {
-            TPGStreamOutput<TPGParseComplete> parseComplete;
-            SendStream(parseComplete);
+            if (ev->Get()->ErrorFields.empty()) {
+                TPGStreamOutput<TPGParseComplete> parseComplete;
+                SendStream(parseComplete);
+            } else {
+                SendErrorResponse(ev->Get()->ErrorFields);
+            }
             ++OutgoingSequenceNumber;
             BecomeReadyForQuery();
         } else {

@@ -35,7 +35,7 @@
                                                     {
                                                         "Limit": "1001",
                                                         "Name": "TopSort",
-                                                        "TopSortBy": "$9.cnt"
+                                                        "TopSortBy": "argument.Count0"
                                                     },
                                                     {
                                                         "Name": "Aggregate"
@@ -118,7 +118,7 @@
                                                                                     }
                                                                                 }
                                                                             ],
-                                                                            "Version": 3
+                                                                            "Version": 2
                                                                         },
                                                                         "Table": "clickbench/plans/column/hits"
                                                                     }
@@ -134,7 +134,7 @@
                                             }
                                         ],
                                         "SortColumns": [
-                                            "cnt (Desc)"
+                                            "Count0 (Desc)"
                                         ]
                                     }
                                 ]

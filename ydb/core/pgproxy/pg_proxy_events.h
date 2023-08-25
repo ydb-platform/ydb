@@ -146,6 +146,7 @@ struct TEvPGEvents {
 
     struct TEvParseResponse : NActors::TEventLocal<TEvParseResponse, EvParseResponse> {
         std::unique_ptr<TPGParse> OriginalMessage;
+        std::vector<std::pair<char, TString>> ErrorFields;
 
         TEvParseResponse(std::unique_ptr<TPGParse> originalMessage)
             : OriginalMessage(std::move(originalMessage))

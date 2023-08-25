@@ -6,4 +6,5 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(functional)
 add_subdirectory(tools)

@@ -23,25 +23,12 @@ using TEvExecuteScriptRequest = TGrpcRequestNoOperationCall<Ydb::Query::ExecuteS
 bool FillQueryContent(const Ydb::Query::ExecuteScriptRequest& req, NKikimrKqp::TEvQueryRequest& kqpRequest,
     NYql::TIssues& issues)
 {
-    switch (req.script_case()) {
-        case Ydb::Query::ExecuteScriptRequest::kScriptContent:
-            if (!CheckQuery(req.script_content().text(), issues)) {
-                return false;
-            }
-
-            kqpRequest.MutableRequest()->SetQuery(req.script_content().text());
-            return true;
-
-        case Ydb::Query::ExecuteScriptRequest::kScriptId:
-            issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
-                "Execution by script id is not supported yet"));
-            return false;
-
-        default:
-            issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
-                "Unexpected query option"));
-            return false;
+    if (!CheckQuery(req.script_content().text(), issues)) {
+        return false;
     }
+
+    kqpRequest.MutableRequest()->SetQuery(req.script_content().text());
+    return true;
 }
 
 std::tuple<Ydb::StatusIds::StatusCode, NYql::TIssues> FillKqpRequest(
@@ -75,6 +62,9 @@ std::tuple<Ydb::StatusIds::StatusCode, NYql::TIssues> FillKqpRequest(
     kqpRequest.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
     kqpRequest.MutableRequest()->MutableTxControl()->set_commit_tx(true);
 
+    kqpRequest.MutableRequest()->SetCancelAfterMs(GetDuration(req.operation_params().cancel_after()).MilliSeconds());
+    kqpRequest.MutableRequest()->SetTimeoutMs(GetDuration(req.operation_params().operation_timeout()).MilliSeconds());
+
     NYql::TIssues issues;
     if (!FillQueryContent(req, kqpRequest, issues)) {
         return {Ydb::StatusIds::BAD_REQUEST, std::move(issues)};
@@ -96,10 +86,6 @@ public:
     void Bootstrap() {
         NYql::TIssues issues;
         const auto& request = *Request_->GetProtoRequest();
-        if (request.operation_params().has_forget_after() && request.operation_params().operation_mode() != Ydb::Operations::OperationParams::SYNC) {
-            issues.AddIssue("forget_after is not supported for this type of operation");
-            return Reply(Ydb::StatusIds::UNSUPPORTED, issues);
-        }
 
         if (request.operation_params().operation_mode() == Ydb::Operations::OperationParams::SYNC) {
             issues.AddIssue("ExecuteScript must be asyncronous operation");
@@ -147,6 +133,14 @@ private:
 
         if (traceId) {
             ev->Record.SetTraceId(traceId.GetRef());
+        }
+
+        if (req->operation_params().has_forget_after()) {
+            ev->ForgetAfter = GetDuration(req->operation_params().forget_after());
+        }
+
+        if (req->has_results_ttl()) {
+            ev->ResultsTtl = GetDuration(req->results_ttl());
         }
 
         std::tie(status, issues) = FillKqpRequest(*req, ev->Record);

@@ -8,16 +8,18 @@
 namespace NKikimr::NOlap::NIndexedReader {
 
 void TGranule::OnBatchReady(const TBatch& batchInfo, std::shared_ptr<arrow::RecordBatch> batch) {
-    GranuleDataSize.Take(batchInfo.GetRealBatchSizeVerified());
-    GranuleDataSize.Free(batchInfo.GetPredictedBatchSize());
-    RawDataSizeReal += batchInfo.GetRealBatchSizeVerified();
     if (Owner->GetSortingPolicy()->CanInterrupt() && ReadyFlag) {
         return;
     }
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "new_batch")("granule_id", GranuleId)
-        ("batch_address", batchInfo.GetBatchAddress().ToString())("count", WaitBatches.size());
     Y_VERIFY(!ReadyFlag);
     Y_VERIFY(WaitBatches.erase(batchInfo.GetBatchAddress().GetBatchGranuleIdx()));
+    if (InConstruction) {
+        GranuleDataSize.Take(batchInfo.GetRealBatchSizeVerified());
+        GranuleDataSize.Free(batchInfo.GetPredictedBatchSize());
+        RawDataSizeReal += batchInfo.GetRealBatchSizeVerified();
+    }
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "new_batch")("granule_id", GranuleId)
+        ("batch_address", batchInfo.GetBatchAddress().ToString())("count", WaitBatches.size())("in_construction", InConstruction);
     if (batch && batch->num_rows()) {
         RecordBatches.emplace_back(batch);
 

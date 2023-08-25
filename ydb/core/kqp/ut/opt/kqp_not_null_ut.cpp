@@ -295,6 +295,7 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
 
+
         {
             const auto query = Q_(R"(
                 CREATE TABLE `/Root/TestUpdateNotNullPk` (
@@ -339,7 +340,17 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
     }
 
     Y_UNIT_TEST(UpdateNotNullPkPg) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableNotNullDataColumns(true);
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
+        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
+        settings.SetAppConfig(appConfig);
+
+        TKikimrRunner kikimr(settings);
+
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
 
@@ -568,7 +579,8 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
 
     Y_UNIT_TEST(UpsertNotNullPg) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
+            .SetWithSampleTables(false)
+            .SetEnableNotNullDataColumns(true);
 
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetTableClient();
@@ -651,7 +663,8 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
 
     Y_UNIT_TEST(ReplaceNotNullPg) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
+            .SetWithSampleTables(false)
+            .SetEnableNotNullDataColumns(true);
 
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetTableClient();
@@ -746,7 +759,13 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
 
     Y_UNIT_TEST(UpdateNotNullPg) {
         auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
+            .SetWithSampleTables(false)
+            .SetEnableNotNullDataColumns(true);
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
+        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
+        settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetTableClient();
@@ -1261,6 +1280,11 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetEnableNotNullDataColumns(true);
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
+        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
+        settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetTableClient();

@@ -39,7 +39,7 @@ SRCS(
     mock/pdisk_mock.cpp
 )
 
-IF (BUILD_TYPE == "RELEASE")
+IF (BUILD_TYPE != "DEBUG")
     SRCS(
         blobstorage_pdisk_ut_yard.cpp
     )

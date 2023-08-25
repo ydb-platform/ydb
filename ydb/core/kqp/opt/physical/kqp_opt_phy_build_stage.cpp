@@ -495,6 +495,17 @@ NYql::NNodes::TExprBase KqpBuildSequencerStages(NYql::NNodes::TExprBase node, NY
             .AutoIncrementColumns(sequencer.AutoIncrementColumns())
             .InputItemType(sequencer.InputItemType())
             .Done();
+    } else if (sequencer.Input().Maybe<TDqCnUnionAll>()) {
+        auto output = sequencer.Input().Cast<TDqCnUnionAll>().Output();
+
+        cnSequencer = Build<TKqpCnSequencer>(ctx, sequencer.Pos())
+            .Output(output)
+            .Table(sequencer.Table())
+            .Columns(sequencer.Columns())
+            .AutoIncrementColumns(sequencer.AutoIncrementColumns())
+            .InputItemType(sequencer.InputItemType())
+            .Done();
+
     } else {
         return node;
     }

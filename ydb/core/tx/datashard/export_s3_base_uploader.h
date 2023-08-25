@@ -310,6 +310,7 @@ protected:
         }
 
         if (CanRetry(error)) {
+            UploadId.Clear(); // force getting info after restart
             Retry();
         } else {
             Error = error.GetMessage().c_str();
@@ -330,6 +331,7 @@ protected:
 
         const auto& error = result.GetError();
         if (CanRetry(error)) {
+            UploadId.Clear(); // force getting info after restart
             Retry();
         } else {
             Y_VERIFY(Error);

@@ -39,9 +39,27 @@ protected:
     virtual void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) = 0;
     virtual bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx);
 
+    /**
+     * Signal tablet as active and ready to process requests (from pipes).
+     */
+    void SignalTabletActive(const TActorIdentity &id);
     void SignalTabletActive(const TActorContext &ctx);
-    virtual void DefaultSignalTabletActive(const TActorContext &ctx); // must be overriden with empty body to postpone 'tablet active' notification
 
+    /**
+     * Must be overriden as an empty method. Previously default implementation
+     * was calling SignalTabletActive, but this proved to be error prone. For
+     * compatibility reasons an empty implementation is mandatory. This method
+     * is never called, and will be removed in the future.
+     */
+    virtual void DefaultSignalTabletActive(const TActorContext &ctx) = 0;
+
+    /**
+     * Called by StateInitImpl for unhandled non-system events. Used to delay
+     * processing of requests until tablet implementation is fully initialized.
+     * Default implementation will abort when compiled in debug mode.
+     * It is recommended to delay SignalTabletActive until tablet is ready to
+     * process incoming requests instead of using Enqueue.
+     */
     virtual void Enqueue(STFUNC_SIG);
 
     void Handle(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx);
@@ -53,6 +71,12 @@ protected:
     void Handle(TEvTablet::TEvFollowerGcApplied::TPtr&);
     void Handle(TEvTablet::TEvNewFollowerAttached::TPtr&);
     void Handle(TEvTablet::TEvUpdateConfig::TPtr&);
+
+    /**
+     * Common handler for TEvPoison, detaches from executor and calls Detach,
+     * which is expected to Die/PassAway in OnDetach.
+     */
+    void HandlePoison(const TActorContext &ctx);
 
     void HandleTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorContext &ctx);
     void HandleTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx);

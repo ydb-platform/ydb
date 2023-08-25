@@ -68,12 +68,12 @@ bool TTxExportFinish::Execute(TTransactionContext& txc, const TActorContext&) {
 
             // Delayed erase of evicted blob. Blob could be already deleted.
             if (present && !dropped) {
-                LOG_S_INFO(TxPrefix() << "Blob exported '" << blobId.ToStringNew() << "'" << TxSuffix());
+                LOG_S_INFO(TxPrefix() << "Blob exported '" << blobId << "'" << TxSuffix());
                 Self->BlobManager->DeleteBlob(blobId, blobManagerDb);
                 Self->IncCounter(COUNTER_BLOBS_ERASED);
                 Self->IncCounter(COUNTER_BYTES_ERASED, blobId.BlobSize());
             } else if (present && dropped) {
-                LOG_S_INFO(TxPrefix() << "Stale blob exported '" << blobId.ToStringNew() << "'" << TxSuffix());
+                LOG_S_INFO(TxPrefix() << "Stale blob exported '" << blobId << "'" << TxSuffix());
 
                 TEvictMetadata meta;
                 evict = Self->BlobManager->GetDropped(blobId, meta);
@@ -81,7 +81,7 @@ bool TTxExportFinish::Execute(TTransactionContext& txc, const TActorContext&) {
 
                 BlobsToForget[meta.GetTierName()].emplace(std::move(evict));
             } else {
-                LOG_S_ERROR(TxPrefix() << "Unknown blob exported '" << blobId.ToStringNew() << "'" << TxSuffix());
+                LOG_S_ERROR(TxPrefix() << "Unknown blob exported '" << blobId << "'" << TxSuffix());
             }
         }
     }

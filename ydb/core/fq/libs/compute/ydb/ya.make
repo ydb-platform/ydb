@@ -39,4 +39,5 @@ END()
 RECURSE(
     control_plane
     events
+    synchronization_service
 )

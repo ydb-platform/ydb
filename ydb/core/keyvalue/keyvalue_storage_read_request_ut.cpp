@@ -46,11 +46,16 @@ struct TBlobStorageMockState {
             response.Id = query.Id;
             response.Shift = query.Shift;
             response.RequestedSize = query.Size;
-            std::tie(response.Status, response.Buffer) = getBlob(query.Id);
+
+            TString r;
+            std::tie(response.Status, r) = getBlob(query.Id);
+
             if (response.Status == NKikimrProto::OK) {
-                TString buffer = TString::Uninitialized(query.Size);
-                memcpy(const_cast<char *>(buffer.data()), response.Buffer.data() + query.Shift, response.Buffer.size());
-                response.Buffer = buffer;
+                const size_t shift = Min<size_t>(query.Shift, r.size());
+                const size_t size = Min<size_t>(query.Size ? query.Size : Max<size_t>(), r.size() - shift);
+                TString buffer = TString::Uninitialized(size);
+                memcpy(buffer.Detach(), r.data() + shift, size);
+                response.Buffer = TRope(std::move(buffer));
             }
         }
         return getResult;

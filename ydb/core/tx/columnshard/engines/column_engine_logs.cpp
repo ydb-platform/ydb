@@ -1033,29 +1033,22 @@ bool TColumnEngineForLogs::UpsertPortion(const TPortionInfo& portionInfo, bool a
 
 bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool apply, bool updateStats) {
     Y_VERIFY(!portionInfo.Empty());
-    ui64 granule = portionInfo.Granule();
-    ui64 portion = portionInfo.Portion();
-
-    if (!apply) {
-        if (!Granules.contains(granule) || !Granules[granule]->GetPortions().contains(portion)) {
-            LOG_S_ERROR("Cannot erase unknown portion " << portionInfo << " at tablet " << TabletId);
-            return false;
-        }
-        return true;
-    }
-
-    auto& spg = Granules[granule];
+    const ui64 portion = portionInfo.Portion();
+    auto it = Granules.find(portionInfo.Granule());
+    Y_VERIFY(it != Granules.end());
+    auto& spg = it->second;
     Y_VERIFY(spg);
+    auto* p = spg->GetPortionPointer(portion);
 
-    if (updateStats) {
-        auto* p = spg->GetPortionPointer(portion);
-        if (p) {
+    if (!p) {
+        LOG_S_WARN("Portion erased already " << portionInfo << " at tablet " << TabletId);
+    } else if (apply) {
+        if (updateStats) {
             UpdatePortionStats(*p, EStatsUpdateType::ERASE);
         }
+        Y_VERIFY(spg->ErasePortion(portion));
     }
-    Y_VERIFY(spg->ErasePortion(portion));
-
-    return true; // It must return true if (apply == true)
+    return true;
 }
 
 bool TColumnEngineForLogs::CanInsert(const TChanges& changes, const TSnapshot& commitSnap) const {

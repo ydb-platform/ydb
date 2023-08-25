@@ -763,7 +763,15 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     RmInternalError = KqpGroup->GetCounter("RM/InternalError", true);
     RmSnapshotLatency = KqpGroup->GetHistogram(
         "RM/SnapshotLatency", NMonitoring::ExponentialHistogram(20, 2, 1));
+
+    NodeServiceStartEventDelivery = KqpGroup->GetHistogram(
+        "NodeService/StartEventDeliveryUs", NMonitoring::ExponentialHistogram(20, 2, 1));
+    NodeServiceProcessTime = KqpGroup->GetHistogram(
+        "jodeService/ProcessStartEventUs", NMonitoring::ExponentialHistogram(20, 2, 1));
+    NodeServiceProcessCancelTime = KqpGroup->GetHistogram(
+        "NodeService/ProcessCancelEventUs", NMonitoring::ExponentialHistogram(20, 2, 1));
     RmMaxSnapshotLatency = KqpGroup->GetCounter("RM/MaxSnapshotLatency", false);
+    RmNodeNumberInSnapshot = KqpGroup->GetCounter("RM/NodeNumberInSnapshot", false);
 
     /* Spilling */
     SpillingWriteBlobs = KqpGroup->GetCounter("Spilling/WriteBlobs", true);
@@ -787,6 +795,9 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     SentIteratorCancels = KqpGroup->GetCounter("IteratorReads/SentCancels", true);
     CreatedIterators = KqpGroup->GetCounter("IteratorReads/Created", true);
     ReadActorsCount = KqpGroup->GetCounter("IteratorReads/ReadActorCount", false);
+    ReadActorRemoteFetch = KqpGroup->GetCounter("IteratorReads/ReadActorRemoteFetch", true);
+    ReadActorRemoteFirstFetch = KqpGroup->GetCounter("IteratorReads/ReadActorRemoteFirstFetch", true);
+    ReadActorAbsentNodeId = KqpGroup->GetCounter("IteratorReads/AbsentNodeId", true);
     StreamLookupActorsCount = KqpGroup->GetCounter("IteratorReads/StreamLookupActorCount", false);
     ReadActorRetries = KqpGroup->GetCounter("IteratorReads/Retries", true);
     DataShardIteratorFails = KqpGroup->GetCounter("IteratorReads/DatashardFails", true);

@@ -748,14 +748,14 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
                     if (IsGetBlockDone) {
                         std::unique_ptr<TEvBlobStorage::TEvDiscoverResult> result(
                             new TEvBlobStorage::TEvDiscoverResult(
-                                response.Id, MinGeneration, response.Buffer, BlockedGen));
+                                response.Id, MinGeneration, response.Buffer.ConvertToString(), BlockedGen));
                         A_LOG_DEBUG_S("BSD16", "Handle TEvGetResult status# OK Die. TEvDiscoverResult# "
                             << result->Print(false));
                         SendResult(result);
                         return;
                     }
                     PendingResult.reset(new TEvBlobStorage::TEvDiscoverResult(response.Id, MinGeneration,
-                                response.Buffer, BlockedGen));
+                                response.Buffer.ConvertToString(), BlockedGen));
                     A_LOG_DEBUG_S("BSD17", "Handle TEvGetResult status# OK"
                         << " Setting pending result# " << PendingResult->ToString());
                     Y_VERIFY(TotalRecieved < TotalSent);

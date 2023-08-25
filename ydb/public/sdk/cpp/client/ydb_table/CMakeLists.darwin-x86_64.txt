@@ -22,6 +22,7 @@ target_link_libraries(cpp-client-ydb_table PUBLIC
   tools-enum_parser-enum_serialization_runtime
   api-protos
   impl-ydb_internal-make_request
+  impl-ydb_internal-kqp_session_common
   cpp-client-ydb_driver
   cpp-client-ydb_params
   cpp-client-ydb_proto

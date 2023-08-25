@@ -131,12 +131,13 @@ private:
 
     void SendProposeRequest(const TActorContext &ctx) {
         const auto req = GetProtoRequest();
+        const TString path = req->path();
 
         std::unique_ptr<TEvTxUserProxy::TEvNavigate> navigateRequest(new TEvTxUserProxy::TEvNavigate());
         SetAuthToken(navigateRequest, *Request_);
         SetDatabase(navigateRequest.get(), *Request_);
         NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath();
-        record->SetPath(req->path());
+        record->SetPath(path);
         if (req->include_shard_key_bounds()) {
             record->MutableOptions()->SetReturnBoundaries(true);
         }
@@ -145,7 +146,7 @@ private:
             record->MutableOptions()->SetReturnPartitionStats(true);
         }
 
-        if (AppData(ctx)->AllowPrivateTableDescribeForTest) {
+        if (AppData(ctx)->AllowPrivateTableDescribeForTest || path.EndsWith("/indexImplTable")) {
             record->MutableOptions()->SetShowPrivateTable(true);
         }
 

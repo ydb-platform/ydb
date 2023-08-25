@@ -2,6 +2,7 @@
 #include <ydb/library/yql/core/arrow_kernels/registry/registry.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
+#include <ydb/library/yql/minikql/mkql_runtime_version.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -117,6 +118,10 @@ Y_UNIT_TEST_SUITE(TKernelRegistryTest) {
     }
 
     Y_UNIT_TEST(TestJsonExists) {
+        if constexpr (RuntimeVersion < 39U) {
+            return;
+        }
+
         TestOne([](auto& b,auto& ctx) {
             auto blockOptJsonType = ctx.template MakeType<TBlockExprType>(
                 ctx.template MakeType<TOptionalExprType>(
@@ -178,31 +183,55 @@ Y_UNIT_TEST_SUITE(TKernelRegistryTest) {
     }
 
     Y_UNIT_TEST(TestJsonValueUtf8) {
+        if constexpr (RuntimeVersion < 39U) {
+            return;
+        }
+
         TesJsonValueImpl(EDataSlot::Json, NYql::EDataSlot::Utf8);
         TesJsonValueImpl(EDataSlot::JsonDocument, NYql::EDataSlot::Utf8);
     }
 
     Y_UNIT_TEST(TestJsonValueBool) {
+        if constexpr (RuntimeVersion < 39U) {
+            return;
+        }
+
         TesJsonValueImpl(EDataSlot::Json, NYql::EDataSlot::Bool);
         TesJsonValueImpl(EDataSlot::JsonDocument, NYql::EDataSlot::Bool);
     }
 
     Y_UNIT_TEST(TestJsonValueInt64) {
+        if constexpr (RuntimeVersion < 39U) {
+            return;
+        }
+
         TesJsonValueImpl(EDataSlot::Json, NYql::EDataSlot::Int64);
         TesJsonValueImpl(EDataSlot::JsonDocument, NYql::EDataSlot::Int64);
     }
 
     Y_UNIT_TEST(TestJsonValueUint64) {
+        if constexpr (RuntimeVersion < 39U) {
+            return;
+        }
+
         TesJsonValueImpl(EDataSlot::Json, NYql::EDataSlot::Uint64);
         TesJsonValueImpl(EDataSlot::JsonDocument, NYql::EDataSlot::Uint64);
     }
 
-    Y_UNIT_TEST(TestJsonValueFloat) {;
+    Y_UNIT_TEST(TestJsonValueFloat) {
+        if constexpr (RuntimeVersion < 39U) {
+            return;
+        }
+
         TesJsonValueImpl(EDataSlot::Json, NYql::EDataSlot::Float);
         TesJsonValueImpl(EDataSlot::JsonDocument, NYql::EDataSlot::Float);
     }
 
-    Y_UNIT_TEST(TestJsonValueDouble) {;
+    Y_UNIT_TEST(TestJsonValueDouble) {
+        if constexpr (RuntimeVersion < 39U) {
+            return;
+        }
+
         TesJsonValueImpl(EDataSlot::Json, NYql::EDataSlot::Double);
         TesJsonValueImpl(EDataSlot::JsonDocument, NYql::EDataSlot::Double);
     }

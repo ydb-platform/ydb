@@ -769,6 +769,7 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
         partitionConfig.SetLifetimeSeconds(op.GetRetentionPeriodSeconds());
         partitionConfig.SetWriteSpeedInBytesPerSecond(1_MB); // TODO: configurable write speed
         partitionConfig.SetBurstSize(1_MB); // TODO: configurable burst
+        partitionConfig.SetMaxCountInPartition(Max<i32>());
 
         for (const auto& tag : table->KeyColumnIds) {
             Y_VERIFY(table->Columns.contains(tag));

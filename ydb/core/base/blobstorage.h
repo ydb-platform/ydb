@@ -1194,7 +1194,7 @@ struct TEvBlobStorage {
             TLogoBlobID Id;
             ui32 Shift;
             ui32 RequestedSize;
-            TString Buffer;
+            TRope Buffer;
             TVector<TPartMapItem> PartMap;
             bool Keep = false;
             bool DoNotKeep = false;
@@ -1245,7 +1245,7 @@ struct TEvBlobStorage {
                     str << " RequestedSize# " << response.RequestedSize;
                 }
                 if (isFull) {
-                    str << " Buffer# " << response.Buffer.Quote();
+                    str << " Buffer# " << response.Buffer.ConvertToString().Quote();
                 }
                 str << "}";
                 if (ErrorReason.size()) {

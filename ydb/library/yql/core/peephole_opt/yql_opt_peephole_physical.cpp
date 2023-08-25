@@ -20,6 +20,8 @@
 #include <ydb/library/yql/core/services/yql_out_transformers.h>
 #include <ydb/library/yql/utils/yql_paths.h>
 
+#include "ydb/library/yql/minikql/mkql_runtime_version.h"
+
 #include <util/generic/xrange.h>
 
 #include <library/cpp/yson/writer.h>
@@ -4042,6 +4044,10 @@ TExprNode::TPtr OptimizeCombineCore(const TExprNode::TPtr& node, TExprContext& c
 
 template<bool Sort, bool HasCount>
 TExprNode::TPtr OptimizeTopOrSort(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if constexpr (NKikimr::NMiniKQL::RuntimeVersion < 35U) {
+        return node;
+    }
+
     if (const auto& input = node->Head(); input.IsCallable("NarrowMap") && input.Tail().Tail().IsCallable("AsStruct")) {
         TNodeMap<size_t> indexes(input.Tail().Tail().ChildrenSize());
         input.Tail().Tail().ForEachChild([&](const TExprNode& field) {

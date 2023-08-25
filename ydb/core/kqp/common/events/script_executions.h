@@ -55,6 +55,13 @@ struct TEvGetScriptExecutionOperationResponse : public NActors::TEventLocal<TEvG
     {
     }
 
+    TEvGetScriptExecutionOperationResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
+        : Ready(false)
+        , Status(status)
+        , Issues(std::move(issues))
+    {
+    }
+
     bool Ready;
     Ydb::StatusIds::StatusCode Status;
     NYql::TIssues Issues;
@@ -79,6 +86,12 @@ struct TEvListScriptExecutionOperationsResponse : public NActors::TEventLocal<TE
         , Issues(std::move(issues))
         , NextPageToken(nextPageToken)
         , Operations(std::move(operations))
+    {
+    }
+
+    TEvListScriptExecutionOperationsResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
+        : Status(status)
+        , Issues(std::move(issues))
     {
     }
 

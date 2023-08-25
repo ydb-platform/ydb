@@ -10,7 +10,7 @@ message TStreamingConfig {
         optional uint32 MaxQuotaSize = 4 [default = 5];
         optional uint32 MaxStreamingShards = 5 [default = 5];
         // Timeouts used to interrupt inactive streams.
-        optional uint64 InactiveClientTimeout = 6 [default = 60000000];
+        optional uint64 InactiveClientTimeout = 6 [default = 600000000];
         optional uint64 InactiveServerTimeout = 7 [default = 0];
     }
 

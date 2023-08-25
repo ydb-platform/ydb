@@ -27,35 +27,39 @@ bool IsDebugLogEnabled(const NActors::TActorSystem* actorSystem, NActors::NLog::
     return settings && settings->Satisfies(NActors::NLog::EPriority::PRI_DEBUG, component);
 }
 
-struct TDefaultRangeEvReadSettings {
-    NKikimrTxDataShard::TEvRead Data;
+struct TEvReadSettings : public TAtomicRefCount<TEvReadSettings> {
+    NKikimrTxDataShard::TEvRead Read;
+    NKikimrTxDataShard::TEvReadAck Ack;
 
-    TDefaultRangeEvReadSettings() {
-        Data.SetMaxRows(32767);
-        Data.SetMaxBytes(5_MB);
+    TEvReadSettings() {
+        Read.SetMaxRows(32767);
+        Read.SetMaxBytes(5_MB);
+
+        Ack.SetMaxRows(32767);
+        Ack.SetMaxBytes(5_MB);
+    }
+};
+
+struct TEvReadDefaultSettings {
+    THotSwap<TEvReadSettings> Settings;
+
+    TEvReadDefaultSettings() {
+        Settings.AtomicStore(MakeIntrusive<TEvReadSettings>());
     }
 
-} DefaultRangeEvReadSettings;
+} DefaultSettings;
 
 THolder<NKikimr::TEvDataShard::TEvRead> DefaultReadSettings() {
     auto result = MakeHolder<NKikimr::TEvDataShard::TEvRead>();
-    result->Record.MergeFrom(DefaultRangeEvReadSettings.Data);
+    auto ptr = DefaultSettings.Settings.AtomicLoad();
+    result->Record.MergeFrom(ptr->Read);
     return result;
 }
 
-struct TDefaultRangeEvReadAckSettings {
-    NKikimrTxDataShard::TEvReadAck Data;
-
-    TDefaultRangeEvReadAckSettings() {
-        Data.SetMaxRows(32767);
-        Data.SetMaxBytes(5_MB);
-    }
-
-} DefaultRangeEvReadAckSettings;
-
 THolder<NKikimr::TEvDataShard::TEvReadAck> DefaultAckSettings() {
     auto result = MakeHolder<NKikimr::TEvDataShard::TEvReadAck>();
-    result->Record.MergeFrom(DefaultRangeEvReadAckSettings.Data);
+    auto ptr = DefaultSettings.Settings.AtomicLoad();
+    result->Record.MergeFrom(ptr->Ack);
     return result;
 }
 
@@ -130,6 +134,10 @@ public:
         size_t ResolveAttempt = 0;
         size_t RetryAttempt = 0;
         size_t SuccessBatches = 0;
+
+        TMaybe<ui32> NodeId = {};
+        bool IsFirst = false;
+
 
         TShardState(ui64 tabletId)
             : TabletId(tabletId)
@@ -419,8 +427,8 @@ public:
         Counters->ReadActorsCount->Inc();
         Snapshot = IKqpGateway::TKqpSnapshot(Settings.GetSnapshot().GetStep(), Settings.GetSnapshot().GetTxId());
 
-        if (settings.HasMaxInFlightShards()) {
-            MaxInFlight = settings.GetMaxInFlightShards();
+        if (Settings.HasMaxInFlightShards()) {
+            MaxInFlight = Settings.GetMaxInFlightShards();
         }
     }
 
@@ -662,23 +670,23 @@ public:
 
             if (state->HasRanges()) {
                 for (ui64 j = rangeIndex; j < ranges.size(); ++j) {
-                    CA_LOG_D("Intersect state range #" << j << " " << DebugPrintRange(KeyColumnTypes, ranges[j].ToTableRange(), tr)
-                        << " with partition range " << DebugPrintRange(KeyColumnTypes, partitionRange, tr));
+                    auto comparison = CompareRanges(partitionRange, ranges[j].ToTableRange(), KeyColumnTypes);
+                    CA_LOG_D("Compare range #" << j << " " << DebugPrintRange(KeyColumnTypes, ranges[j].ToTableRange(), tr)
+                        << " with partition range " << DebugPrintRange(KeyColumnTypes, partitionRange, tr)
+                        << " : " << comparison);
 
-                    auto intersection = Intersect(KeyColumnTypes, partitionRange, ranges[j].ToTableRange());
-
-                    if (!intersection.IsEmptyRange(KeyColumnTypes)) {
+                    if (comparison > 0) {
+                        continue;
+                    } else if (comparison == 0) {
+                        auto intersection = Intersect(KeyColumnTypes, partitionRange, ranges[j].ToTableRange());
                         CA_LOG_D("Add range to new shardId: " << partition.ShardId
                             << ", range: " << DebugPrintRange(KeyColumnTypes, intersection, tr));
 
                         newShard->AddRange(TSerializedTableRange(intersection));
                     } else {
-                        CA_LOG_D("empty intersection");
-                        if (j > rangeIndex) {
-                            rangeIndex = j - 1;
-                        }
                         break;
                     }
+                    rangeIndex = j;
                 }
 
                 if (newShard->HasRanges()) {
@@ -875,6 +883,11 @@ public:
         Send(PipeCacheId, new TEvPipeCache::TEvForward(ev.Release(), state->TabletId, true),
             IEventHandle::FlagTrackDelivery);
 
+        if (!FirstShardStarted) {
+            state->IsFirst = true;
+        }
+        FirstShardStarted = true;
+
         if (auto delay = ShardTimeout()) {
             TlsActivationContext->Schedule(*delay, new IEventHandle(SelfId(), SelfId(), new TEvRetryShard(id, Reads[id].LastSeqNo)));
         }
@@ -903,6 +916,22 @@ public:
         if (!Reads[id] || Reads[id].Finished) {
             // dropped read
             return;
+        }
+
+        if (!record.HasNodeId()) {
+            Counters->ReadActorAbsentNodeId->Inc();
+        } else if (record.GetNodeId() != SelfId().NodeId()) {
+            auto* state = Reads[id].Shard;
+            if (!state->NodeId) {
+                state->NodeId = record.GetNodeId();
+                CA_LOG_D("Node mismatch for tablet " << state->TabletId << " " << *state->NodeId << " != SelfId: " << SelfId().NodeId());
+                if (state->IsFirst) {
+                    Counters->ReadActorRemoteFirstFetch->Inc();
+                }
+                Counters->ReadActorRemoteFetch->Inc();
+            }
+        } else {
+            CA_LOG_T("Node match for tablet " << Reads[id].Shard->TabletId);
         }
 
         Counters->DataShardIteratorMessages->Inc();
@@ -1402,6 +1431,8 @@ private:
     NActors::TActorId PipeCacheId;
 
     size_t TotalRetries = 0;
+
+    bool FirstShardStarted = false;
 };
 
 
@@ -1415,11 +1446,30 @@ void RegisterKqpReadActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<T
 }
 
 void InjectRangeEvReadSettings(const NKikimrTxDataShard::TEvRead& read) {
-    ::DefaultRangeEvReadSettings.Data.MergeFrom(read);
+    auto ptr = ::DefaultSettings.Settings.AtomicLoad();
+    TEvReadSettings settings = *ptr;
+    settings.Read.MergeFrom(read);
+    ::DefaultSettings.Settings.AtomicStore(MakeIntrusive<TEvReadSettings>(settings));
 }
 
 void InjectRangeEvReadAckSettings(const NKikimrTxDataShard::TEvReadAck& ack) {
-    ::DefaultRangeEvReadAckSettings.Data.MergeFrom(ack);
+    auto ptr = ::DefaultSettings.Settings.AtomicLoad();
+    TEvReadSettings settings = *ptr;
+    settings.Ack.MergeFrom(ack);
+    ::DefaultSettings.Settings.AtomicStore(MakeIntrusive<TEvReadSettings>(settings));
+}
+
+void SetDefaultIteratorQuotaSettings(ui32 rows, ui32 bytes) {
+    auto ptr = ::DefaultSettings.Settings.AtomicLoad();
+    TEvReadSettings settings = *ptr;
+
+    settings.Read.SetMaxRows(rows);
+    settings.Ack.SetMaxRows(rows);
+
+    settings.Read.SetMaxBytes(bytes);
+    settings.Ack.SetMaxBytes(bytes);
+
+    ::DefaultSettings.Settings.AtomicStore(MakeIntrusive<TEvReadSettings>(settings));
 }
 
 void InterceptReadActorPipeCache(NActors::TActorId id) {

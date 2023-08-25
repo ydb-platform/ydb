@@ -5,6 +5,7 @@
 #include "env.h"
 
 #include <ydb/core/mind/bscontroller/layout_helpers.h>
+#include <ydb/core/util/pb.h>
 
 Y_UNIT_TEST_SUITE(BsControllerTest) {
 
@@ -122,5 +123,86 @@ Y_UNIT_TEST_SUITE(BsControllerTest) {
 
     Y_UNIT_TEST(SelfHealMirror3dc) {
         TestSelfHeal(3, 4, 3, 4, 128, "mirror-3-dc", TBlobStorageGroupType::ErasureMirror3dc);
+    }
+
+    Y_UNIT_TEST(DecommitRejected) {
+        for (const bool useRejected : {false, true}) {
+            constexpr ui32 numNodes = 3 + 3 + 6 + 3;
+            const ui32 nodeToDataCenter[numNodes] = {1, 1, 1, 2, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 4};
+
+            auto locationGenerator = [&](ui32 nodeId) {
+                return TNodeLocation(ToString(nodeToDataCenter[nodeId - 1]), TString(), ToString(nodeId - 1), ToString(nodeId - 1));
+            };
+
+            TEnvironmentSetup env(numNodes, locationGenerator);
+
+            NKikimrBlobStorage::TConfigRequest request;
+
+            TVector<TEnvironmentSetup::TDrive> drives;
+            drives.push_back({.Path = "/dev/disk"});
+            env.DefineBox(1, drives, {{1, numNodes}}, &request);
+
+            env.DefineStoragePool(1, 1, 1, drives[0].Type, {}, &request, "mirror-3-dc");
+
+            auto response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+
+            request.Clear();
+            auto *cmd = request.AddCommand()->MutableEnableSelfHeal();
+            cmd->SetEnable(true);
+            response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+
+            env.Sim(TDuration::Minutes(1));
+
+            request.Clear();
+            env.QueryBaseConfig(&request);
+            response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+
+            request.Clear();
+            for (const auto& pdisk : response.GetStatus(0).GetBaseConfig().GetPDisk()) {
+                const ui32 nodeId = pdisk.GetNodeId();
+                if (nodeId >= 7 && nodeId <= 9) {
+                    auto *cmd = request.AddCommand()->MutableUpdateDriveStatus();
+                    cmd->MutableHostKey()->SetNodeId(nodeId);
+                    cmd->SetPDiskId(pdisk.GetPDiskId());
+                    cmd->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT);
+                }
+                if (useRejected && nodeId >= 10 && nodeId <= 12) {
+                    auto *cmd = request.AddCommand()->MutableUpdateDriveStatus();
+                    cmd->MutableHostKey()->SetNodeId(nodeId);
+                    cmd->SetPDiskId(pdisk.GetPDiskId());
+                    cmd->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus::DECOMMIT_REJECTED);
+                }
+            }
+            env.DefineStoragePool(1, 2, 1, drives[0].Type, {}, &request, "mirror-3-dc");
+            response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+
+            env.Sim(TDuration::Minutes(10));
+
+            request.Clear();
+            env.QueryBaseConfig(&request);
+            response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+
+            THashSet<ui32> group0nodes, group1nodes;
+
+            for (const auto& vdisk : response.GetStatus(0).GetBaseConfig().GetVSlot()) {
+                if (vdisk.GetGroupId() == 0x80000000) {
+                    group0nodes.insert(vdisk.GetVSlotId().GetNodeId());
+                } else {
+                    group1nodes.insert(vdisk.GetVSlotId().GetNodeId());
+                }
+            }
+
+            if (useRejected) {
+                UNIT_ASSERT_EQUAL(group0nodes, (THashSet<ui32>{{1, 2, 3, 4, 5, 6, 13, 14, 15}}));
+            } else {
+                UNIT_ASSERT_EQUAL(group0nodes, (THashSet<ui32>{{1, 2, 3, 4, 5, 6, 10, 11, 12}}));
+            }
+            UNIT_ASSERT_EQUAL(group1nodes, (THashSet<ui32>{{1, 2, 3, 10, 11, 12, 13, 14, 15}}));
+        }
     }
 }

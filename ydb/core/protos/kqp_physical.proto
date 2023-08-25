@@ -259,7 +259,7 @@ message TKqpPhyCnStreamLookup {
 message TKqpPhyCnSequencer {
     TKqpPhyTableId Table = 1;
     repeated string Columns = 2;
-    repeated string AutoIncrementColumns = 3;  
+    repeated string AutoIncrementColumns = 3;
     bytes InputType = 4;
     bytes OutputType = 5;
 }
@@ -307,6 +307,9 @@ message TKqpExternalSource {
     // Partitioning
     string TaskParamKey = 3;
     repeated string PartitionedTaskParams = 4;
+
+    string SourceName = 5;
+    string AuthInfo = 6;
 }
 
 message TKqpSource {
@@ -316,7 +319,23 @@ message TKqpSource {
         TKqpReadRangesSource ReadRangesSource = 3;
         TKqpExternalSource ExternalSource = 4;
     }
-};
+}
+
+message TKqpExternalSink {
+    string Type = 1;
+    google.protobuf.Any Settings = 2;
+
+    string SinkName = 3;
+    string AuthInfo = 4;
+}
+
+message TKqpSink {
+    uint32 OutputIndex = 1;
+
+    oneof Type {
+        TKqpExternalSink ExternalSink = 2;
+    }
+}
 
 message TKqpPhyStage {
     NYql.NDqProto.TProgram Program = 1;
@@ -329,6 +348,7 @@ message TKqpPhyStage {
     string StageGuid = 8;
     repeated TKqpSource Sources = 9;
     bool IsSinglePartition = 10;
+    repeated TKqpSink Sinks = 11;
 }
 
 message TKqpPhyResult {
@@ -336,7 +356,7 @@ message TKqpPhyResult {
     NKikimrMiniKQL.TType ItemType = 2;
     bool IsStream = 3;
     repeated string ColumnHints = 4;
-    uint32 QueryResultIndex = 5;
+    optional uint32 QueryResultIndex = 5;
 }
 
 message TKqpSchemeOperation {
@@ -363,6 +383,7 @@ message TKqpPhyTx {
     bool HasEffects = 6; // at least one stage has flag TKqpPhyStage::IsEffectStage set
     repeated TKqpPhyTable Tables = 7;
     TKqpSchemeOperation SchemeOperation = 8;
+    repeated string SecretNames = 9;
 }
 
 message TKqpTableInfo {

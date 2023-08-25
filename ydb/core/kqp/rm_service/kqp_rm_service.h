@@ -125,7 +125,8 @@ struct TEvKqpResourceInfoExchanger {
 };
 
 NActors::IActor* CreateKqpResourceInfoExchangerActor(TIntrusivePtr<TKqpCounters> counters,
-    std::shared_ptr<TResourceSnapshotState> resourceSnapshotState);
+    std::shared_ptr<TResourceSnapshotState> resourceSnapshotState,
+    const NKikimrConfig::TTableServiceConfig::TResourceManager::TInfoExchangerSettings& settings);
 
 } // namespace NRm
 

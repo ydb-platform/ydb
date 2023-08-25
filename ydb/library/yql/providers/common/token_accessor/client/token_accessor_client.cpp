@@ -46,8 +46,13 @@ private:
             RequestInflight = true;
             auto resultPromise = NThreading::NewPromise();
 
+            auto context = Client->CreateContext();
+            if (!context) {
+                throw yexception() << "Client is being shutted down";
+            }
             std::weak_ptr<const TImpl> weakSelf = shared_from_this();
-            auto cb = [weakSelf, resultPromise, sync](NGrpc::TGrpcStatus&& status, GetTokenResponse&& result) mutable {
+            // hold context until reply
+            auto cb = [weakSelf, resultPromise, sync, context](NGrpc::TGrpcStatus&& status, GetTokenResponse&& result) mutable {
                 if (auto self = weakSelf.lock()) {
                     self->ProcessResponse(std::move(status), std::move(result), sync);
                 }
@@ -66,7 +71,8 @@ private:
                     &TokenAccessorService::Stub::AsyncGetToken,
                     {
                         {}, {}, RequestTimeout
-                    }
+                    },
+                    context.get()
                 );
             }
             if (sync) {

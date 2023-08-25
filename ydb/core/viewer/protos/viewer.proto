@@ -321,6 +321,7 @@ message TClusterInfo {
     uint64 Hosts = 44;
     uint64 Tenants = 45;
     uint64 Tablets = 46;
+    string Domain = 47;
 }
 
 enum ETenantType {
@@ -391,6 +392,7 @@ message TStorageInfo {
     repeated TStoragePoolInfo StoragePools = 2;
     uint64 TotalGroups = 3;
     uint64 FoundGroups = 4;
+    repeated TStorageGroupInfo StorageGroups = 5;
 }
 
 message TNodeInfo {
@@ -474,6 +476,7 @@ message TComputeNodeInfo {
     optional uint64 MemoryLimit = 27;
     NKikimrTabletBase.TMetrics Metrics = 32;
     repeated TTabletStateInfo Tablets = 33;
+    optional string Tenant = 41; // for response without tenant groups
 }
 
 message TComputeTenantInfo {
@@ -486,6 +489,9 @@ message TComputeInfo {
     EFlag Overall = 1;
     repeated TComputeTenantInfo Tenants = 2;
     repeated string Errors = 3;
+    uint64 TotalNodes = 4;
+    uint64 FoundNodes = 5;
+    repeated TComputeNodeInfo Nodes = 6;
 }
 
 message TNodeLocation {
@@ -498,6 +504,10 @@ message TEvViewerRequest {
     oneof Request {
         NKikimrWhiteboard.TEvTabletStateRequest TabletRequest = 11;
         NKikimrWhiteboard.TEvSystemStateRequest SystemRequest = 12;
+        bytes Reserved13 = 13;
+        bytes Reserved14 = 14;
+        bytes Reserved15 = 15;
+        bytes Reserved16 = 16;
     }
 }
 
@@ -506,6 +516,10 @@ message TEvViewerResponse {
     oneof Response {
         NKikimrWhiteboard.TEvTabletStateResponse TabletResponse = 11;
         NKikimrWhiteboard.TEvSystemStateResponse SystemResponse = 12;
+        bytes Reserved13 = 13;
+        bytes Reserved14 = 14;
+        bytes Reserved15 = 15;
+        bytes Reserved16 = 16;
     }
 }
 

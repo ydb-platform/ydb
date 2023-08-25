@@ -183,13 +183,13 @@ Y_UNIT_TEST_SUITE(TFlatExecutorLeases) {
             Die(ctx);
         }
 
+        void DefaultSignalTabletActive(const TActorContext&) override {
+            // must be empty
+        }
+
         void OnActivateExecutor(const TActorContext&) override {
             Become(&TThis::StateWork);
             RunTxInitSchema();
-        }
-
-        void DefaultSignalTabletActive(const TActorContext&) override {
-            // nothing
         }
 
         void SwitchToWork(const TActorContext& ctx) {

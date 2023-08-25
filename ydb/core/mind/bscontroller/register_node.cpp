@@ -236,7 +236,9 @@ public:
             UpdateNodeDrivesRecord.AddDrivesData()->CopyFrom(data);
         }
 
-        Self->OnRegisterNode(request->Recipient, nodeId);
+        if (!Self->OnRegisterNode(request->Recipient, nodeId)) {
+            return true;
+        }
         Self->ProcessVDiskStatus(record.GetVDiskStatus());
 
         // create map of group ids to their generations as reported by the node warden
@@ -408,7 +410,7 @@ void TBlobStorageController::ReadPDisk(const TPDiskId& pdiskId, const TPDiskInfo
                 (PDiskId, pdiskId.PDiskId));
         }
     }
-    pDisk->SetExpectedSerial(pdisk.ExpectedSerial);
+    //pDisk->SetExpectedSerial(pdisk.ExpectedSerial);
     pDisk->SetManagementStage(SerialManagementStage);
     pDisk->SetSpaceColorBorder(PDiskSpaceColorBorder);
     pDisk->SetEntityStatus(entityStatus);
@@ -469,7 +471,7 @@ void TBlobStorageController::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& 
     }
 }
 
-void TBlobStorageController::OnRegisterNode(const TActorId& serverId, TNodeId nodeId) {
+bool TBlobStorageController::OnRegisterNode(const TActorId& serverId, TNodeId nodeId) {
     if (auto it = PipeServerToNode.find(serverId); it != PipeServerToNode.end()) {
         if (!it->second) {
             it->second = nodeId;
@@ -477,8 +479,9 @@ void TBlobStorageController::OnRegisterNode(const TActorId& serverId, TNodeId no
         } else {
             Y_VERIFY_DEBUG(*it->second == nodeId);
         }
+        return true;
     } else {
-        Y_VERIFY_DEBUG(false);
+        return false;
     }
 }
 

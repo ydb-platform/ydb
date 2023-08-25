@@ -46,12 +46,26 @@ NThreading::TFuture<void> TWriteSession::WaitEvent() {
 
 void TWriteSession::WriteEncoded(TContinuationToken&& token, TStringBuf data, ECodec codec, ui32 originalSize,
                                  TMaybe<ui64> seqNo, TMaybe<TInstant> createTimestamp) {
-    Impl->WriteInternal(std::move(token), data, codec, originalSize, seqNo, createTimestamp);
+    auto message = TWriteMessage::CompressedMessage(data, codec, originalSize);
+    if (seqNo.Defined())
+        message.SeqNo(*seqNo);
+    if (createTimestamp.Defined())
+        message.CreateTimestamp(*createTimestamp);
+    Impl->WriteInternal(std::move(token), std::move(message));
 }
 
 void TWriteSession::Write(TContinuationToken&& token, TStringBuf data, TMaybe<ui64> seqNo,
                           TMaybe<TInstant> createTimestamp) {
-    Impl->WriteInternal(std::move(token), data, {}, 0, seqNo, createTimestamp);
+    TWriteMessage message{data};
+    if (seqNo.Defined())
+        message.SeqNo(*seqNo);
+    if (createTimestamp.Defined())
+        message.CreateTimestamp(*createTimestamp);
+    Impl->WriteInternal(std::move(token), std::move(message));
+}
+
+void TWriteSession::Write(TContinuationToken&& token, TWriteMessage&& message) {
+    Impl->WriteInternal(std::move(token), std::move(message));
 }
 
 bool TWriteSession::Close(TDuration closeTimeout) {
@@ -97,6 +111,20 @@ bool TSimpleBlockingWriteSession::Write(
     auto continuationToken = WaitForToken(blockTimeout);
     if (continuationToken.Defined()) {
         Writer->Write(std::move(*continuationToken), std::move(data), seqNo, createTimestamp);
+        return true;
+    }
+    return false;
+}
+
+bool TSimpleBlockingWriteSession::Write(
+        TWriteMessage&& message, const TDuration& blockTimeout
+) {
+    if (!IsAlive())
+        return false;
+
+    auto continuationToken = WaitForToken(blockTimeout);
+    if (continuationToken.Defined()) {
+        Writer->Write(std::move(*continuationToken), std::move(message));
         return true;
     }
     return false;

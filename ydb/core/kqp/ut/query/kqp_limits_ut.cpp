@@ -553,7 +553,9 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     }
 
     Y_UNIT_TEST(ReplySizeExceeded) {
-        auto kikimr = DefaultKikimrRunner();
+        TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
+        TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);

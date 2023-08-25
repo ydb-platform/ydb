@@ -136,7 +136,6 @@ class TColumnShard
     class TTxProposeCancel;
 
     // proto
-    void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext& ctx);
@@ -183,6 +182,7 @@ class TColumnShard
 
     void Die(const TActorContext& ctx) override;
 
+    void CleanupActors(const TActorContext& ctx);
     void BecomeBroken(const TActorContext& ctx);
     void SwitchToWork(const TActorContext& ctx);
 
@@ -215,11 +215,7 @@ class TColumnShard
 protected:
     STFUNC(StateInit) {
         TRACE_EVENT(NKikimrServices::TX_COLUMNSHARD);
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvents::TEvPoisonPill, Handle);
-        default:
-            StateInitImpl(ev, SelfId());
-        }
+        StateInitImpl(ev, SelfId());
     }
 
     STFUNC(StateBroken) {
@@ -240,7 +236,6 @@ protected:
         TRACE_EVENT(NKikimrServices::TX_COLUMNSHARD);
         switch (ev->GetTypeRewrite()) {
             hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
-            HFunc(TEvents::TEvPoisonPill, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvServerConnected, Handle);
@@ -335,10 +330,17 @@ private:
         bool ActiveIndexing = false;
         TCurrentCompaction ActiveCompactionInfo;
         bool ActiveCleanup = false;
-        bool ActiveTtl = false;
+        THashSet<ui64> ActiveTtlPortions;
+
     public:
-        void StartCompaction(const NOlap::TPlanCompactionInfo& info) {
+        bool StartCompaction(const NOlap::TPlanCompactionInfo& info, const THashSet<ui64>& portions) {
+            for (ui64 p : portions) {
+                if (ActiveTtlPortions.contains(p)) {
+                    return false;
+                }
+            }
             Y_VERIFY(ActiveCompactionInfo.emplace(info.GetPathId(), info).second);
+            return true;
         }
         void FinishCompaction(const NOlap::TPlanCompactionInfo& info) {
             Y_VERIFY(ActiveCompactionInfo.erase(info.GetPathId()));
@@ -374,16 +376,16 @@ private:
             return ActiveCleanup;
         }
 
-        void StartTtl() {
-            Y_VERIFY(!ActiveTtl);
-            ActiveTtl = true;
+        void StartTtl(THashSet<ui64>&& ttlPortions) {
+            Y_VERIFY(ActiveTtlPortions.empty());
+            ActiveTtlPortions.swap(ttlPortions);
         }
         void FinishTtl() {
-            Y_VERIFY(ActiveTtl);
-            ActiveTtl = false;
+            Y_VERIFY(!ActiveTtlPortions.empty());
+            ActiveTtlPortions.clear();
         }
         bool IsTtlActive() const {
-            return ActiveTtl;
+            return !ActiveTtlPortions.empty();
         }
 
         bool HasSplitCompaction(const ui64 pathId) const {
@@ -505,7 +507,7 @@ private:
 
     void EnqueueProgressTx(const TActorContext& ctx);
     void EnqueueBackgroundActivities(bool periodic = false, TBackgroundActivity activity = TBackgroundActivity::All());
-    void CleanForgottenBlobs(const TActorContext& ctx);
+    void CleanForgottenBlobs(const TActorContext& ctx, const THashSet<TUnifiedBlobId>& allowList = {});
 
     void UpdateSchemaSeqNo(const TMessageSeqNo& seqNo, NTabletFlatExecutor::TTransactionContext& txc);
     void ProtectSchemaSeqNo(const NKikimrTxColumnShard::TSchemaSeqNo& seqNoProto, NTabletFlatExecutor::TTransactionContext& txc);

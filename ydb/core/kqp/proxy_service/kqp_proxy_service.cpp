@@ -31,6 +31,7 @@
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
+#include <library/cpp/actors/http/http.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <library/cpp/monlib/service/pages/templates.h>
@@ -104,6 +105,16 @@ TString EncodeSessionId(ui32 nodeId, const TString& id) {
     return NOperationId::ProtoToString(opId);
 }
 
+void ParseGrpcEndpoint(const TString& endpoint, TString& address, bool& useSsl) {
+    TStringBuf scheme;
+    TStringBuf host;
+    TStringBuf uri;
+    NHttp::CrackURL(endpoint, scheme, host, uri);
+
+    address = ToString(host);
+    useSsl = scheme == "grpcs";
+}
+
 class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
     struct TEvPrivate {
         enum EEv {
@@ -158,11 +169,13 @@ public:
 
     TKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
         const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+        const NKikimrProto::TTokenAccessorConfig& tokenAccessorConfig,
         TVector<NKikimrKqp::TKqpSetting>&& settings,
         std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
         std::shared_ptr<TKqpProxySharedResources>&& kqpProxySharedResources)
         : LogConfig(logConfig)
         , TableServiceConfig(tableServiceConfig)
+        , TokenAccessorConfig(tokenAccessorConfig)
         , KqpSettings(std::make_shared<const TKqpSettings>(std::move(settings)))
         , QueryReplayFactory(std::move(queryReplayFactory))
         , HttpGateway(NYql::IHTTPGateway::Make()) // TODO: pass config and counters
@@ -172,9 +185,22 @@ public:
     {}
 
     void Bootstrap() {
+        if (TokenAccessorConfig.GetEnabled()) {
+            TString caContent;
+            if (const auto& path = TokenAccessorConfig.GetSslCaCert()) {
+                caContent = TUnbufferedFileInput(path).ReadAll();
+            }
+
+            TString endpointAddress;
+            bool useSsl = false;
+            ParseGrpcEndpoint(TokenAccessorConfig.GetEndpoint(), endpointAddress, useSsl);
+
+            CredentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(endpointAddress, useSsl, caContent, TokenAccessorConfig.GetConnectionPoolSize());
+        }
+
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(KQP_PROVIDER));
         Counters = MakeIntrusive<TKqpCounters>(AppData()->Counters, &TlsActivationContext->AsActorContext());
-        AsyncIoFactory = CreateKqpAsyncIoFactory(Counters, HttpGateway);
+        AsyncIoFactory = CreateKqpAsyncIoFactory(Counters, HttpGateway, CredentialsFactory);
         ModuleResolverState = MakeIntrusive<TModuleResolverState>();
 
         LocalSessions = std::make_unique<TLocalSessionsRegistry>(AppData()->RandomProvider);
@@ -210,7 +236,7 @@ public:
 
         // Create compile service
         CompileService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpCompileService(TableServiceConfig,
-            KqpSettings, ModuleResolverState, Counters, std::move(QueryReplayFactory), HttpGateway));
+            KqpSettings, ModuleResolverState, Counters, std::move(QueryReplayFactory), CredentialsFactory, HttpGateway));
         TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(
             MakeKqpCompileServiceID(SelfId().NodeId()), CompileService);
 
@@ -233,8 +259,6 @@ public:
         AskSelfNodeInfo();
         SendWhiteboardRequest();
         ScheduleIdleSessionCheck(TDuration::Seconds(2));
-
-        CheckScriptExecutionsTablesExistence();
     }
 
     TDuration GetSessionIdleDuration() const {
@@ -339,14 +363,23 @@ public:
         KQP_PROXY_LOG_D("Received node white board pool stats: " << pool.usage());
         NodeResources.SetCpuUsage(pool.usage());
         NodeResources.SetThreads(pool.threads());
+
+        PublishResourceUsage();
     }
 
     void DoPublishResources() {
-        SendBoardPublishPoison();
-
         SendWhiteboardRequest();
+
         if (AppData()->TenantName.empty() || !SelfDataCenterId) {
             KQP_PROXY_LOG_E("Cannot start publishing usage, tenants: " << AppData()->TenantName << ", " <<  SelfDataCenterId.value_or("empty"));
+            return;
+        }
+
+        SendBoardPublishPoison();
+
+        if (TableServiceConfig.GetEnablePublishKqpProxyByRM()) {
+            LastPublishResourcesAt = TAppData::TimeProvider->Now();
+            Send(KqpRmServiceActor, std::make_unique<TEvKqp::TEvKqpProxyPublishRequest>());
             return;
         }
 
@@ -365,21 +398,13 @@ public:
     }
 
     void PublishResourceUsage() {
-        const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
-        auto now = TAppData::TimeProvider->Now();
-        TDuration batchingInterval = TDuration::MilliSeconds(sbs.GetBoardPublishIntervalMs());
-
-        if (TableServiceConfig.GetEnablePublishKqpProxyByRM()) {
-            if (!LastPublishResourcesAt.has_value() || now - *LastPublishResourcesAt < batchingInterval) {
-                LastPublishResourcesAt = TAppData::TimeProvider->Now();
-                Send(KqpRmServiceActor, std::make_unique<TEvKqp::TEvKqpProxyPublishRequest>());
-            }
-            return;
-        }
-
         if (ResourcesPublishScheduled) {
             return;
         }
+
+        const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
+        auto now = TAppData::TimeProvider->Now();
+        TDuration batchingInterval = TDuration::MilliSeconds(sbs.GetBoardPublishIntervalMs());
 
         if (LastPublishResourcesAt && now - *LastPublishResourcesAt < batchingInterval) {
             ResourcesPublishScheduled = true;
@@ -402,6 +427,11 @@ public:
         if (BoardPublishActor) {
             Send(BoardPublishActor, new TEvents::TEvPoison);
         }
+
+        LocalSessions->ForEachNode([this](TNodeId node) {
+            Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe);
+        });
+
         return TActor::PassAway();
     }
 
@@ -608,24 +638,14 @@ public:
         KQP_PROXY_LOG_D(TKqpRequestInfo(traceId, sessionId) << "TEvQueryRequest, set timer for: " << timerDuration << " timeout: " << timeout << " cancelAfter: " << cancelAfter);
         auto status = timerDuration == cancelAfter ? NYql::NDqProto::StatusIds::CANCELLED : NYql::NDqProto::StatusIds::TIMEOUT;
         StartQueryTimeout(requestId, timerDuration, status);
-        Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId);
         KQP_PROXY_LOG_D("Sent request to target, requestId: " << requestId
             << ", targetId: " << targetId << ", sessionId: " << sessionId);
+        Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId);
     }
 
     void Handle(TEvKqp::TEvScriptRequest::TPtr& ev) {
-        if (AppData()->FeatureFlags.GetEnableScriptExecutionOperations()) {
-            if (ScriptExecutionsCreationStatus == EScriptExecutionsCreationStatus::Pending) {
-                NYql::TIssues issues;
-                issues.AddIssue("Not ready");
-                Send(ev->Sender, new TEvKqp::TEvScriptResponse(Ydb::StatusIds::UNAVAILABLE, std::move(issues)));
-            } else {
-                Register(CreateScriptExecutionCreatorActor(std::move(ev)));
-            }
-        } else {
-            NYql::TIssues issues;
-            issues.AddIssue("ExecuteScript feature is not enabled");
-            Send(ev->Sender, new TEvKqp::TEvScriptResponse(Ydb::StatusIds::UNSUPPORTED, std::move(issues)));
+        if (CheckScriptExecutionsTablesReady<TEvKqp::TEvScriptResponse>(ev)) {
+            Register(CreateScriptExecutionCreatorActor(std::move(ev)));
         }
     }
 
@@ -664,20 +684,28 @@ public:
         const auto traceId = event.GetTraceId();
         TKqpRequestInfo requestInfo(traceId);
         const auto sessionId = request.GetSessionId();
+        // If set rpc layer will controll session lifetime
+        const TActorId ctrlActor = request.HasExtSessionCtrlActorId()
+            ? ActorIdFromProto(request.GetExtSessionCtrlActorId())
+            : TActorId();
         const TKqpSessionInfo* sessionInfo = LocalSessions->FindPtr(sessionId);
         auto dbCounters = sessionInfo ? sessionInfo->DbCounters : nullptr;
         Counters->ReportPingSession(dbCounters, request.ByteSize());
 
-        TActorId targetId;
         // Local session
         if (sessionInfo) {
-            KQP_PROXY_LOG_D("Received ping session request, has local session, trace_id: " << traceId);
+            const bool sameNode = ev->Sender.NodeId() == SelfId().NodeId();
+            KQP_PROXY_LOG_D("Received ping session request, has local session: " << sessionId
+                << ", rpc ctrl: " << ctrlActor
+                << ", sameNode: " << sameNode
+                << ", trace_id: " << traceId);
 
-            targetId = sessionInfo->WorkerId;
             const bool isIdle = LocalSessions->IsSessionIdle(sessionInfo);
             if (isIdle) {
                 LocalSessions->StopIdleCheck(sessionInfo);
-                LocalSessions->StartIdleCheck(sessionInfo, GetSessionIdleDuration());
+                if (!ctrlActor) {
+                    LocalSessions->StartIdleCheck(sessionInfo, GetSessionIdleDuration());
+                }
             }
 
             auto result = std::make_unique<TEvKqp::TEvPingSessionResponse>();
@@ -687,16 +715,38 @@ public:
                 ? Ydb::Table::KeepAliveResult::SESSION_STATUS_READY
                 : Ydb::Table::KeepAliveResult::SESSION_STATUS_BUSY;
             record.MutableResponse()->SetSessionStatus(sessionStatus);
-            Send(ev->Sender, result.release(), 0, ev->Cookie);
+            if (ctrlActor && isIdle) {
+                //TODO: fix
+                ui32 flags = IEventHandle::FlagTrackDelivery;
+                if (sameNode) {
+                    KQP_PROXY_LOG_T("Attach local session: " << sessionInfo->WorkerId
+                        << " to rpc: " << ctrlActor << " on same node");
+
+                    LocalSessions->AttachSession(sessionInfo, 0, ctrlActor);
+                } else {
+                    const TNodeId nodeId = ev->Sender.NodeId();
+                    KQP_PROXY_LOG_T("Subscribe local session: " << sessionInfo->WorkerId
+                        << " to remote: " << ev->Sender << " , nodeId: " << nodeId << ", with rpc: " << ctrlActor);
+
+                    LocalSessions->AttachSession(sessionInfo, nodeId, ctrlActor);
+
+                    flags |= IEventHandle::FlagSubscribeOnSession;
+                }
+                Send(ev->Sender, result.release(), flags, ev->Cookie);
+            } else {
+                Send(ev->Sender, result.release(), 0, ev->Cookie);
+            }
             return;
         }
 
         // Forward request to another proxy
         ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvPingSessionRequest);
 
-        KQP_PROXY_LOG_D("Received ping session request, request_id: " << requestId << ", trace_id: " << traceId);
+        KQP_PROXY_LOG_D("Received ping session request, request_id: " << requestId
+            << ", sender: " << ev->Sender
+            << ", trace_id: " << traceId);
 
-        targetId = TryGetSessionTargetActor(sessionId, requestInfo, requestId);
+        const TActorId targetId = TryGetSessionTargetActor(sessionId, requestInfo, requestId);
         if (!targetId) {
             return;
         }
@@ -788,11 +838,14 @@ public:
         if (!TableServiceConfig.GetEnablePublishKqpProxyByRM()) {
             LookupPeerProxyData();
         } else {
-            GetKqpResourceManager()->RequestClusterResourcesInfo(
-                [as = TlsActivationContext->ActorSystem(), self = SelfId()](TVector<NKikimrKqp::TKqpNodeResources>&& resources) {
-                    TAutoPtr<IEventHandle> eh = new IEventHandle(self, self, new TEvPrivate::TEvResourcesSnapshot(std::move(resources)));
-                    as->Send(eh);
-                });
+            if (SelfDataCenterId && !AppData()->TenantName.empty() && !IsLookupByRmScheduled) {
+                IsLookupByRmScheduled = true;
+                GetKqpResourceManager()->RequestClusterResourcesInfo(
+                    [as = TlsActivationContext->ActorSystem(), self = SelfId()](TVector<NKikimrKqp::TKqpNodeResources>&& resources) {
+                        TAutoPtr<IEventHandle> eh = new IEventHandle(self, self, new TEvPrivate::TEvResourcesSnapshot(std::move(resources)));
+                        as->Send(eh);
+                    });
+            }
         }
         if (!ShutdownRequested) {
             const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
@@ -834,32 +887,37 @@ public:
     }
 
     void Handle(TEvPrivate::TEvResourcesSnapshot::TPtr& ev) {
-        if (ev->Get()->Snapshot.empty()) {
+        IsLookupByRmScheduled = false;
+
+        TVector<NKikimrKqp::TKqpProxyNodeResources> proxyResources;
+        std::vector<ui64> localDatacenterProxies;
+        proxyResources.reserve(ev->Get()->Snapshot.size());
+
+        auto getDataCenterId = [](const auto& entry) {
+            return entry.HasDataCenterId() ? entry.GetDataCenterId() : DataCenterToString(entry.GetDataCenterNumId());
+        };
+
+        for(auto& nodeResources : ev->Get()->Snapshot) {
+            auto* proxyNodeResources = nodeResources.MutableKqpProxyNodeResources();
+
+            if (proxyNodeResources->HasNodeId()) {
+                proxyResources.push_back(std::move(*proxyNodeResources));
+                if (getDataCenterId(proxyResources.back()) == *SelfDataCenterId) {
+                    localDatacenterProxies.emplace_back(proxyResources.back().GetNodeId());
+                }
+            }
+        }
+
+        if (proxyResources.empty()) {
             PeerProxyNodeResources.clear();
-            KQP_PROXY_LOG_E("Can not find default state storage group for database " <<
+            KQP_PROXY_LOG_D("Received unexpected data from rm for database " <<
                 AppData()->TenantName);
             return;
         }
 
         Y_VERIFY(SelfDataCenterId);
-        PeerProxyNodeResources.resize(ev->Get()->Snapshot.size());
-        size_t idx = 0;
-        auto getDataCenterId = [](const auto& entry) {
-            return entry.HasDataCenterId() ? entry.GetDataCenterId() : DataCenterToString(entry.GetDataCenterNumId());
-        };
-
-        LocalDatacenterProxies.clear();
-        for(auto& nodeResource : ev->Get()->Snapshot) {
-            auto* proxyNodeResources = nodeResource.MutableKqpProxyNodeResources();
-            proxyNodeResources->SetNodeId(nodeResource.GetNodeId());
-
-            PeerProxyNodeResources[idx] = std::move(*proxyNodeResources);
-
-            if (getDataCenterId(PeerProxyNodeResources[idx]) == *SelfDataCenterId) {
-                LocalDatacenterProxies.emplace_back(PeerProxyNodeResources[idx].GetNodeId());
-            }
-            ++idx;
-        }
+        PeerProxyNodeResources = std::move(proxyResources);
+        LocalDatacenterProxies = std::move(localDatacenterProxies);
 
         PeerStats = CalcPeerStats(PeerProxyNodeResources, *SelfDataCenterId);
         TryKickSession();
@@ -1116,13 +1174,21 @@ public:
 
         const TKqpSessionInfo* info = LocalSessions->FindPtr(reqInfo->SessionId);
         if (msg->Round == 0 && info) {
-            TString message = TStringBuilder() << "request's " << (msg->Status == NYql::NDqProto::StatusIds::TIMEOUT ? "timeout" : "cancelAfter") << " exceeded";
+            TString message = TStringBuilder()
+                << "request's " << (msg->Status == NYql::NDqProto::StatusIds::TIMEOUT ? "timeout" : "cancelAfter")
+                << " exceeded";
+
             Send(info->WorkerId, new TEvKqp::TEvAbortExecution(msg->Status, message));
-            auto newEv = ev->Release().Release();
-            newEv->TickNextRound();
-            Schedule(newEv->Timeout, newEv);
+
+            // We must not reply before session actor in case of CANCEL AFTER settings
+            if (msg->Status != NYql::NDqProto::StatusIds::CANCELLED) {
+                auto newEv = ev->Release().Release();
+                newEv->TickNextRound();
+                Schedule(newEv->Timeout, newEv);
+            }
         } else {
-            TString message = TStringBuilder() << "Query did not complete within specified timeout, session id " << reqInfo->SessionId;
+            TString message = TStringBuilder()
+                << "Query did not complete within specified timeout, session id " << reqInfo->SessionId;
             ReplyProcessError(NYql::NDq::DqStatusToYdbStatus(msg->Status), message, requestId);
         }
     }
@@ -1172,6 +1238,8 @@ public:
             hFunc(NKqp::TEvGetScriptExecutionOperation, Handle);
             hFunc(NKqp::TEvListScriptExecutionOperations, Handle);
             hFunc(NKqp::TEvCancelScriptExecutionOperation, Handle);
+            hFunc(TEvInterconnect::TEvNodeConnected, Handle);
+            hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
         default:
             Y_FAIL("TKqpProxyService: unexpected event type: %" PRIx32 " event: %s",
                 ev->GetTypeRewrite(), ev->ToString().data());
@@ -1273,7 +1341,7 @@ private:
 
         auto config = CreateConfig(KqpSettings, workerSettings);
 
-        IActor* sessionActor = CreateKqpSessionActor(SelfId(), sessionId, KqpSettings, workerSettings, HttpGateway, AsyncIoFactory, ModuleResolverState, Counters);
+        IActor* sessionActor = CreateKqpSessionActor(SelfId(), sessionId, KqpSettings, workerSettings, HttpGateway, AsyncIoFactory, CredentialsFactory, ModuleResolverState, Counters);
         auto workerId = TlsActivationContext->ExecutorThread.RegisterActor(sessionActor, TMailboxType::HTSwap, AppData()->UserPoolId);
         TKqpSessionInfo* sessionInfo = LocalSessions->Create(
             sessionId, workerId, database, dbCounters, supportsBalancing, GetSessionIdleDuration());
@@ -1320,11 +1388,24 @@ private:
 
     void RemoveSession(const TString& sessionId, const TActorId& workerId) {
         if (!sessionId.empty()) {
-            LocalSessions->Erase(sessionId);
+            auto [nodeId, rpcActor] = LocalSessions->Erase(sessionId);
             KqpProxySharedResources->AtomicLocalSessionCount.store(LocalSessions->size());
             PublishResourceUsage();
             if (ShutdownRequested) {
                 ShutdownState->Update(LocalSessions->size());
+            }
+
+            // No more session with kqp proxy on this node
+            if (nodeId) {
+                Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe);
+            }
+
+            if (rpcActor) {
+                auto closeEv = MakeHolder<TEvKqp::TEvCloseSessionResponse>();
+                closeEv->Record.SetStatus(Ydb::StatusIds::SUCCESS);
+                closeEv->Record.MutableResponse()->SetSessionId(sessionId);
+                closeEv->Record.MutableResponse()->SetClosed(true);
+                Send(rpcActor, closeEv.Release());
             }
 
             return;
@@ -1357,38 +1438,95 @@ private:
         NYql::NDq::SetYqlLogLevels(yqlPriority);
     }
 
-    void CheckScriptExecutionsTablesExistence() {
-        if (AppData()->FeatureFlags.GetEnableScriptExecutionOperations()) {
-            Register(CreateScriptExecutionsTablesCreator(MakeHolder<TEvPrivate::TEvScriptExecutionsTablesCreationFinished>()));
-        } else {
-            ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::Finished;
+    template<typename TResponse, typename TEvent>
+    bool CheckScriptExecutionsTablesReady(TEvent& ev) {
+        if (!AppData()->FeatureFlags.GetEnableScriptExecutionOperations()) {
+            NYql::TIssues issues;
+            issues.AddIssue("ExecuteScript feature is not enabled");
+            Send(ev->Sender, new TResponse(Ydb::StatusIds::UNSUPPORTED, std::move(issues)));
+            return false;
+        }
+
+        switch (ScriptExecutionsCreationStatus) {
+            case EScriptExecutionsCreationStatus::NotStarted:
+                ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::Pending;
+                Register(CreateScriptExecutionsTablesCreator(MakeHolder<TEvPrivate::TEvScriptExecutionsTablesCreationFinished>()));
+                [[fallthrough]];
+            case EScriptExecutionsCreationStatus::Pending:
+                if (DelayedEventsQueue.size() < 10000) {
+                    DelayedEventsQueue.emplace_back(std::move(ev));
+                } else {
+                    NYql::TIssues issues;
+                    issues.AddIssue("Too many queued requests");
+                    Send(ev->Sender, new TResponse(Ydb::StatusIds::OVERLOADED, std::move(issues)));
+                }
+                return false;
+            case EScriptExecutionsCreationStatus::Finished:
+                return true;
         }
     }
 
     void Handle(TEvPrivate::TEvScriptExecutionsTablesCreationFinished::TPtr&) {
         ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::Finished;
+        while (!DelayedEventsQueue.empty()) {
+            Send(std::move(DelayedEventsQueue.front()));
+            DelayedEventsQueue.pop_front();
+        }
     }
 
     void Handle(NKqp::TEvForgetScriptExecutionOperation::TPtr& ev) {
-        Register(CreateForgetScriptExecutionOperationActor(std::move(ev)));
+        if (CheckScriptExecutionsTablesReady<TEvForgetScriptExecutionOperationResponse>(ev)) {
+            Register(CreateForgetScriptExecutionOperationActor(std::move(ev)));
+        }
     }
 
     void Handle(NKqp::TEvGetScriptExecutionOperation::TPtr& ev) {
-        Register(CreateGetScriptExecutionOperationActor(std::move(ev)));
+        if (CheckScriptExecutionsTablesReady<TEvGetScriptExecutionOperationResponse>(ev)) {
+            Register(CreateGetScriptExecutionOperationActor(std::move(ev)));
+        }
     }
 
     void Handle(NKqp::TEvListScriptExecutionOperations::TPtr& ev) {
-        Register(CreateListScriptExecutionOperationsActor(std::move(ev)));
+        if (CheckScriptExecutionsTablesReady<TEvListScriptExecutionOperationsResponse>(ev)) {
+            Register(CreateListScriptExecutionOperationsActor(std::move(ev)));
+        }
     }
 
     void Handle(NKqp::TEvCancelScriptExecutionOperation::TPtr& ev) {
-        Register(CreateCancelScriptExecutionOperationActor(std::move(ev)));
+        if (CheckScriptExecutionsTablesReady<TEvCancelScriptExecutionOperationResponse>(ev)) {
+            Register(CreateCancelScriptExecutionOperationActor(std::move(ev)));
+        }
+    }
+
+    void Handle(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
+        TNodeId nodeId = ev->Get()->NodeId;
+        auto sessions = LocalSessions->FindSessions(nodeId);
+        if (sessions) {
+            KQP_PROXY_LOG_T("Got TEvNodeConnected event from node: " << nodeId
+                << ", has " << sessions.size() << " sessions");
+        } else {
+            KQP_PROXY_LOG_E("Got TEvNodeConnected event from node without sessions: " << nodeId);
+        }
+    }
+
+    void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
+        TNodeId nodeId = ev->Get()->NodeId;
+        auto sessions = LocalSessions->FindSessions(nodeId);
+        KQP_PROXY_LOG_D("Node: " << nodeId << " disconnected, had " << sessions.size() << " sessions.");
+        const static auto IdleDurationAfterDisconnect = TDuration::Seconds(1);
+        // Just start standard idle check with small timeout
+        // It allows to use common code to close and delete expired session
+        for (const auto sessionInfo : sessions) {
+            LocalSessions->StartIdleCheck(sessionInfo, IdleDurationAfterDisconnect);
+        }
     }
 
 private:
     NKikimrConfig::TLogConfig LogConfig;
     NKikimrConfig::TTableServiceConfig TableServiceConfig;
+    NKikimrProto::TTokenAccessorConfig TokenAccessorConfig;
     TKqpSettings::TConstPtr KqpSettings;
+    NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
     std::shared_ptr<IQueryReplayBackendFactory> QueryReplayFactory;
     NYql::IHTTPGateway::TPtr HttpGateway;
 
@@ -1425,21 +1563,25 @@ private:
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
 
     enum class EScriptExecutionsCreationStatus {
+        NotStarted,
         Pending,
         Finished,
     };
-    EScriptExecutionsCreationStatus ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::Pending;
+    EScriptExecutionsCreationStatus ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::NotStarted;
+    std::deque<THolder<IEventHandle>> DelayedEventsQueue;
+    bool IsLookupByRmScheduled = false;
 };
 
 } // namespace
 
 IActor* CreateKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
     const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+    const NKikimrProto::TTokenAccessorConfig& tokenAccessorConfig,
     TVector<NKikimrKqp::TKqpSetting>&& settings,
     std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
     std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources)
 {
-    return new TKqpProxyService(logConfig, tableServiceConfig, std::move(settings),
+    return new TKqpProxyService(logConfig, tableServiceConfig, tokenAccessorConfig, std::move(settings),
         std::move(queryReplayFactory),std::move(kqpProxySharedResources));
 }
 

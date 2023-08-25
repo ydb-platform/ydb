@@ -14,7 +14,7 @@
 #include <ydb/core/audit/audit_log.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/ticket_parser.h>
-#include <ydb/core/base/quoter.h>
+#include <ydb/core/quoter/public/quoter.h>
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/core/ymq/base/action.h>
 #include <ydb/core/ymq/base/acl.h>

@@ -33,14 +33,13 @@ public:
           , TTabletExecutedFlat(info, tablet,  new NMiniKQL::TMiniKQLFactory)
     {}
 
+    void DefaultSignalTabletActive(const TActorContext&) override {
+        // must be empty
+    }
+
     void OnActivateExecutor(const TActorContext& ctx) override {
         Become(&TThis::StateWork);
-
-        while (!InitialEventsQueue.empty()) {
-            TAutoPtr<IEventHandle>& ev = InitialEventsQueue.front();
-            ctx.ExecutorThread.Send(ev.Release());
-            InitialEventsQueue.pop_front();
-        }
+        SignalTabletActive(ctx);
     }
 
     void OnDetach(const TActorContext& ctx) override {
@@ -52,25 +51,15 @@ public:
         Die(ctx);
     }
 
-    void Enqueue(STFUNC_SIG) override {
-        InitialEventsQueue.push_back(ev);
-    }
-
     STFUNC(StateInit) {
         StateInitImpl(ev, SelfId());
     }
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
             HFunc(TEvBlockStore::TEvUpdateVolumeConfig, Handle);
-            HFunc(TEvents::TEvPoisonPill, Handle);
-        }
-    }
-
-    STFUNC(StateBroken) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
+        default:
+            HandleDefaultEvents(ev, SelfId());
         }
     }
 
@@ -84,15 +73,6 @@ private:
         response->Record.SetStatus(NKikimrBlockStore::OK);
         ctx.Send(ev->Sender, response.Release());
     }
-
-    void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx) {
-        Y_UNUSED(ev);
-        Become(&TThis::StateBroken);
-        ctx.Send(Tablet(), new TEvents::TEvPoisonPill());
-    }
-
-private:
-    TDeque<TAutoPtr<IEventHandle>> InitialEventsQueue;
 };
 
 class TFakeFileStore : public TActor<TFakeFileStore>, public NTabletFlatExecutor::TTabletExecutedFlat {
@@ -102,14 +82,13 @@ public:
         , TTabletExecutedFlat(info, tablet,  new NMiniKQL::TMiniKQLFactory)
     {}
 
+    void DefaultSignalTabletActive(const TActorContext&) override {
+        // must be empty
+    }
+
     void OnActivateExecutor(const TActorContext& ctx) override {
         Become(&TThis::StateWork);
-
-        while (!InitialEventsQueue.empty()) {
-            TAutoPtr<IEventHandle>& ev = InitialEventsQueue.front();
-            ctx.ExecutorThread.Send(ev.Release());
-            InitialEventsQueue.pop_front();
-        }
+        SignalTabletActive(ctx);
     }
 
     void OnDetach(const TActorContext& ctx) override {
@@ -121,25 +100,15 @@ public:
         Die(ctx);
     }
 
-    void Enqueue(STFUNC_SIG) override {
-        InitialEventsQueue.push_back(ev);
-    }
-
     STFUNC(StateInit) {
         StateInitImpl(ev, SelfId());
     }
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
             HFunc(TEvFileStore::TEvUpdateConfig, Handle);
-            HFunc(TEvents::TEvPoisonPill, Handle);
-        }
-    }
-
-    STFUNC(StateBroken) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
+        default:
+            HandleDefaultEvents(ev, SelfId());
         }
     }
 
@@ -153,15 +122,6 @@ private:
         response->Record.SetStatus(NKikimrFileStore::OK);
         ctx.Send(ev->Sender, response.Release());
     }
-
-    void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx) {
-        Y_UNUSED(ev);
-        Become(&TThis::StateBroken);
-        ctx.Send(Tablet(), new TEvents::TEvPoisonPill());
-    }
-
-private:
-    TDeque<TAutoPtr<IEventHandle>> InitialEventsQueue;
 };
 
 class TFakeConfigDispatcher : public TActor<TFakeConfigDispatcher> {

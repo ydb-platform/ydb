@@ -14,7 +14,7 @@
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/base/wilson.h>
+#include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
@@ -24,6 +24,9 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/grpc_services/local_rate_limiter.h>
 
+#include <ydb/services/metadata/secret/fetcher.h>
+#include <ydb/services/metadata/secret/snapshot.h>
+
 #include <ydb/library/mkql_proto/mkql_proto.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
@@ -31,6 +34,7 @@
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
+#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
@@ -245,25 +249,27 @@ protected:
             case NYql::NDqProto::COMPUTE_STATE_EXECUTING: {
                 // initial TEvState event from Compute Actor
                 // there can be race with RM answer
-                if (PendingComputeTasks.erase(taskId)) {
-                    auto it = PendingComputeActors.emplace(computeActor, TProgressStat());
-                    YQL_ENSURE(it.second);
+                if (Planner) {
+                    if (Planner->GetPendingComputeTasks().erase(taskId)) {
+                        auto it = Planner->GetPendingComputeActors().emplace(computeActor, TProgressStat());
+                        YQL_ENSURE(it.second);
 
-                    if (state.HasStats()) {
-                        it.first->second.Set(state.GetStats());
-                    }
-
-                    auto& task = TasksGraph.GetTask(taskId);
-                    task.ComputeActorId = computeActor;
-
-                    THashMap<TActorId, THashSet<ui64>> updates;
-                    CollectTaskChannelsUpdates(task, updates);
-                    PropagateChannelsUpdates(updates);
-                } else {
-                    auto it = PendingComputeActors.find(computeActor);
-                    if (it != PendingComputeActors.end()) {
                         if (state.HasStats()) {
-                            it->second.Set(state.GetStats());
+                            it.first->second.Set(state.GetStats());
+                        }
+
+                        auto& task = TasksGraph.GetTask(taskId);
+                        task.ComputeActorId = computeActor;
+
+                        THashMap<TActorId, THashSet<ui64>> updates;
+                        CollectTaskChannelsUpdates(task, updates);
+                        PropagateChannelsUpdates(updates);
+                    } else {
+                        auto it = Planner->GetPendingComputeActors().find(computeActor);
+                        if (it != Planner->GetPendingComputeActors().end()) {
+                            if (state.HasStats()) {
+                                it->second.Set(state.GetStats());
+                            }
                         }
                     }
                 }
@@ -279,26 +285,28 @@ protected:
                 LastTaskId = taskId;
                 LastComputeActorId = computeActor.ToString();
 
-                auto it = PendingComputeActors.find(computeActor);
-                if (it == PendingComputeActors.end()) {
-                    LOG_W("Got execution state for compute actor: " << computeActor
-                        << ", task: " << taskId
-                        << ", state: " << NYql::NDqProto::EComputeState_Name((NYql::NDqProto::EComputeState) state.GetState())
-                        << ", too early (waiting reply from RM)");
+                if (Planner) {
+                    auto it = Planner->GetPendingComputeActors().find(computeActor);
+                    if (it == Planner->GetPendingComputeActors().end()) {
+                        LOG_W("Got execution state for compute actor: " << computeActor
+                            << ", task: " << taskId
+                            << ", state: " << NYql::NDqProto::EComputeState_Name((NYql::NDqProto::EComputeState) state.GetState())
+                            << ", too early (waiting reply from RM)");
 
-                    if (PendingComputeTasks.erase(taskId)) {
-                        LOG_E("Got execution state for compute actor: " << computeActor
-                            << ", for unknown task: " << state.GetTaskId()
-                            << ", state: " << NYql::NDqProto::EComputeState_Name((NYql::NDqProto::EComputeState) state.GetState()));
-                        return;
+                        if (Planner && Planner->GetPendingComputeTasks().erase(taskId)) {
+                            LOG_E("Got execution state for compute actor: " << computeActor
+                                << ", for unknown task: " << state.GetTaskId()
+                                << ", state: " << NYql::NDqProto::EComputeState_Name((NYql::NDqProto::EComputeState) state.GetState()));
+                            return;
+                        }
+                    } else {
+                        if (state.HasStats()) {
+                            it->second.Set(state.GetStats());
+                        }
+                        LastStats.emplace_back(std::move(it->second));
+                        Planner->GetPendingComputeActors().erase(it);
+                        YQL_ENSURE(Planner->GetPendingComputeTasks().find(taskId) == Planner->GetPendingComputeTasks().end());
                     }
-                } else {
-                    if (state.HasStats()) {
-                        it->second.Set(state.GetStats());
-                    }
-                    LastStats.emplace_back(std::move(it->second));
-                    PendingComputeActors.erase(it);
-                    YQL_ENSURE(PendingComputeTasks.find(taskId) == PendingComputeTasks.end());
                 }
             }
         }
@@ -369,9 +377,40 @@ protected:
         return res;
     }
 
+    NMetadata::NFetcher::ISnapshotsFetcher::TPtr GetSecretsSnapshotParser() {
+        return std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>();
+    }
+
+    void FetchSecrets() {
+        YQL_ENSURE(NMetadata::NProvider::TServiceOperator::IsEnabled(), "metadata service is not active");
+        this->Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvSubscribeExternal(GetSecretsSnapshotParser()));
+    }
+
+    void HandleRefreshSubscriberData(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
+        this->Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvUnsubscribeExternal(GetSecretsSnapshotParser()));
+        Secrets = ev->Get()->GetSnapshotPtrAs<NMetadata::NSecret::TSnapshot>();
+        OnSecretsFetched();
+    }
+
+    virtual void OnSecretsFetched() {}
+
+    TMap<TString, TString> ResolveSecretNames(const google::protobuf::RepeatedPtrField<TProtoStringType>& secretNames) {
+        TMap<TString, TString> secureParams;
+        for (const auto& secretName : secretNames) {
+            auto secretId = NMetadata::NSecret::TSecretId(UserToken->GetUserSID(), secretName);
+
+            TString secretValue;
+            YQL_ENSURE(Secrets->GetSecretValue(NMetadata::NSecret::TSecretIdOrValue::BuildAsId(secretId), secretValue), "secret with name '" << secretName << "' not found");
+
+            secureParams[secretName] = secretValue;
+        }
+
+        return secureParams;
+    }
+
 protected:
     bool CheckExecutionComplete() {
-        if (PendingComputeActors.empty() && PendingComputeTasks.empty()) {
+        if (Planner && Planner->GetPendingComputeActors().empty() && Planner->GetPendingComputeTasks().empty()) {
             static_cast<TDerived*>(this)->Finalize();
             UpdateResourcesUsage(true);
             return true;
@@ -382,11 +421,13 @@ protected:
         if (IsDebugLogEnabled()) {
             TStringBuilder sb;
             sb << "Waiting for: ";
-            for (auto ct : PendingComputeTasks) {
-                sb << "CT " << ct << ", ";
-            }
-            for (auto ca : PendingComputeActors) {
-                sb << "CA " << ca.first << ", ";
+            if (Planner) {
+                for (auto ct : Planner->GetPendingComputeTasks()) {
+                    sb << "CT " << ct << ", ";
+                }
+                for (auto ca : Planner->GetPendingComputeActors()) {
+                    sb << "CA " << ca.first << ", ";
+                }
             }
             LOG_D(sb);
         }
@@ -434,15 +475,17 @@ protected:
         auto nodeId = ev->Get()->NodeId;
         LOG_N("Disconnected node " << nodeId);
 
-        for (auto computeActor : PendingComputeActors) {
-            if (computeActor.first.NodeId() == nodeId) {
-                return ReplyUnavailable(TStringBuilder() << "Connection with node " << nodeId << " lost.");
+        if (Planner) {
+            for (auto computeActor : Planner->GetPendingComputeActors()) {
+                if (computeActor.first.NodeId() == nodeId) {
+                    return ReplyUnavailable(TStringBuilder() << "Connection with node " << nodeId << " lost.");
+                }
             }
-        }
 
-        for (auto& task : TasksGraph.GetTasks()) {
-            if (task.Meta.NodeId == nodeId && PendingComputeTasks.contains(task.Id)) {
-                return ReplyUnavailable(TStringBuilder() << "Connection with node " << nodeId << " lost.");
+            for (auto& task : TasksGraph.GetTasks()) {
+                if (task.Meta.NodeId == nodeId && Planner->GetPendingComputeTasks().contains(task.Id)) {
+                    return ReplyUnavailable(TStringBuilder() << "Connection with node " << nodeId << " lost.");
+                }
             }
         }
     }
@@ -502,13 +545,15 @@ protected:
 
             LOG_D("Executing task: " << taskId << " on compute actor: " << task.ComputeActorId);
 
-            if (PendingComputeTasks.erase(taskId) == 0) {
-                LOG_D("Executing task: " << taskId << ", compute actor: " << task.ComputeActorId << ", already finished");
-            } else {
-                auto result = PendingComputeActors.emplace(std::make_pair(task.ComputeActorId, TProgressStat()));
-                YQL_ENSURE(result.second);
+            if (Planner) {
+                if (Planner->GetPendingComputeTasks().erase(taskId) == 0) {
+                    LOG_D("Executing task: " << taskId << ", compute actor: " << task.ComputeActorId << ", already finished");
+                } else {
+                    auto result = Planner->GetPendingComputeActors().emplace(std::make_pair(task.ComputeActorId, TProgressStat()));
+                    YQL_ENSURE(result.second);
 
-                CollectTaskChannelsUpdates(task, channelsUpdates);
+                    CollectTaskChannelsUpdates(task, channelsUpdates);
+                }
             }
         }
 
@@ -602,9 +647,11 @@ protected:
         LastResourceUsageUpdate = now;
 
         TProgressStat::TEntry consumption;
-        for (const auto& p : PendingComputeActors) {
-            const auto& t = p.second.GetLastUsage();
-            consumption += t;
+        if (Planner) {
+            for (const auto& p : Planner->GetPendingComputeActors()) {
+                const auto& t = p.second.GetLastUsage();
+                consumption += t;
+            }
         }
 
         for (const auto& p : LastStats) {
@@ -618,8 +665,10 @@ protected:
         if (ru <= 100 && !force)
             return;
 
-        for (auto& p : PendingComputeActors) {
-            p.second.Update();
+        if (Planner) {
+            for (auto& p : Planner->GetPendingComputeActors()) {
+                p.second.Update();
+            }
         }
 
         for (auto& p : LastStats) {
@@ -643,7 +692,7 @@ protected:
 
 
 protected:
-    void BuildSysViewScanTasks(TStageInfo& stageInfo) {
+    void BuildSysViewScanTasks(TStageInfo& stageInfo, const TMap<TString, TString>& secureParams) {
         Y_VERIFY_DEBUG(stageInfo.Meta.IsSysView());
 
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
@@ -684,16 +733,40 @@ protected:
             task.Meta.Reads.ConstructInPlace();
             task.Meta.Reads->emplace_back(std::move(readInfo));
             task.Meta.ReadInfo.Reverse = op.GetReadRange().GetReverse();
+            task.Meta.Type = TTaskMeta::TTaskType::Compute;
+
+            BuildSinks(stage, task, secureParams);
 
             LOG_D("Stage " << stageInfo.Id << " create sysview scan task: " << task.Id);
         }
     }
 
-    void BuildReadTasksFromSource(TStageInfo& stageInfo) {
+    void BuildSinks(const NKqpProto::TKqpPhyStage& stage, TKqpTasksGraph::TTaskType& task, const TMap<TString, TString>& secureParams) {
+        if (stage.SinksSize() > 0) {
+            YQL_ENSURE(stage.SinksSize() == 1, "multiple sinks are not supported");
+            const auto& sink = stage.GetSinks(0);
+            YQL_ENSURE(sink.HasExternalSink(), "only external sinks are supported");
+            const auto& extSink = sink.GetExternalSink();
+            YQL_ENSURE(sink.GetOutputIndex() < task.Outputs.size());
+
+            auto sinkName = extSink.GetSinkName();
+            if (sinkName) {
+                auto structuredToken = NYql::CreateStructuredTokenParser(extSink.GetAuthInfo()).ToBuilder().ReplaceReferences(secureParams).ToJson();
+                task.Meta.SecureParams.emplace(sinkName, structuredToken);
+            }
+
+            auto& output = task.Outputs[sink.GetOutputIndex()];
+            output.Type = TTaskOutputType::Sink;
+            output.SinkType = extSink.GetType();
+            output.SinkSettings = extSink.GetSettings();
+        }
+    }
+
+    void BuildReadTasksFromSource(TStageInfo& stageInfo, const TMap<TString, TString>& secureParams) {
         const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         YQL_ENSURE(stage.GetSources(0).HasExternalSource());
-        YQL_ENSURE(stage.InputsSize() == 0 && stage.SourcesSize() == 1, "multiple sources or sources mixed with connections");
+        YQL_ENSURE(stage.SourcesSize() == 1, "multiple sources in one task are not supported");
 
         const auto& stageSource = stage.GetSources(0);
         const auto& externalSource = stageSource.GetExternalSource();
@@ -705,11 +778,21 @@ protected:
             input.SourceSettings = externalSource.GetSettings();
             input.SourceType = externalSource.GetType();
 
-            task.Meta.DqTaskParams.emplace(externalSource.GetTaskParamKey(), partitionParam);
+            task.Meta.TaskParams.emplace(externalSource.GetTaskParamKey(), partitionParam);
+
+            auto sourceName = externalSource.GetSourceName();
+            if (sourceName) {
+                auto structuredToken = NYql::CreateStructuredTokenParser(externalSource.GetAuthInfo()).ToBuilder().ReplaceReferences(secureParams).ToJson();
+                task.Meta.SecureParams.emplace(sourceName, structuredToken);
+            }
+
+            task.Meta.Type = TTaskMeta::TTaskType::Compute;
+
+            BuildSinks(stage, task, secureParams);
         }
     }
 
-    TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo) {
+    TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, const TMap<TString, TString>& secureParams) {
         THashMap<ui64, std::vector<ui64>> nodeTasks;
         THashMap<ui64, ui64> assignedShardsCount;
 
@@ -741,6 +824,7 @@ protected:
             YQL_ENSURE(!shardInfo.KeyWriteRanges);
 
             auto& task = TasksGraph.AddTask(stageInfo);
+            task.Meta.Type = TTaskMeta::TTaskType::Scan;
             task.Meta.ExecuterId = this->SelfId();
             if (auto ptr = ShardIdToNodeId.FindPtr(taskLocation)) {
                 task.Meta.NodeId = *ptr;
@@ -754,7 +838,7 @@ protected:
             input.ConnectionInfo = NYql::NDq::TSourceInput{};
 
             // allocating source settings
-            
+
             input.Meta.SourceSettings = TasksGraph.GetMeta().Allocate<NKikimrTxDataShard::TKqpReadRangesSourceSettings>();
             NKikimrTxDataShard::TKqpReadRangesSourceSettings* settings = input.Meta.SourceSettings;
             FillTableMeta(stageInfo, settings->MutableTable());
@@ -816,10 +900,18 @@ protected:
                 settings->SetLockTxId(*lockTxId);
                 settings->SetLockNodeId(self.NodeId());
             }
+
+            BuildSinks(stage, task, secureParams);
         };
 
-        if (source.GetSequentialInFlightShards()) {
+        THashMap<ui64, TShardInfo> partitions = PrunePartitions(GetTableKeys(), source, stageInfo, HolderFactory(), TypeEnv());
+        if (partitions.size() > 0 && source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards()) {
             auto [startShard, shardInfo] = MakeVirtualTablePartition(GetTableKeys(), source, stageInfo, HolderFactory(), TypeEnv());
+            if (Stats) {
+                for (auto& [shardId, _] : partitions) {
+                    Stats->AffectedShards.insert(shardId);
+                }
+            }
             if (shardInfo.KeyReadRanges) {
                 addPartiton(startShard, {}, shardInfo, source.GetSequentialInFlightShards());
                 return Nothing();
@@ -827,7 +919,6 @@ protected:
                 return 0;
             }
         } else {
-            THashMap<ui64, TShardInfo> partitions = PrunePartitions(GetTableKeys(), source, stageInfo, HolderFactory(), TypeEnv());
             for (auto& [shardId, shardInfo] : partitions) {
                 addPartiton(shardId, shardId, shardInfo, {});
             }
@@ -921,11 +1012,13 @@ protected:
     virtual void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status,
         google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* issues)
     {
-        for (auto computeActor : PendingComputeActors) {
-            LOG_D("terminate compute actor " << computeActor.first);
+        if (Planner) {
+            for (auto computeActor : Planner->GetPendingComputeActors()) {
+                LOG_D("terminate compute actor " << computeActor.first);
 
-            auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDq::YdbStatusToDqStatus(status), "Terminate execution");
-            this->Send(computeActor.first, ev.Release());
+                auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDq::YdbStatusToDqStatus(status), "Terminate execution");
+                this->Send(computeActor.first, ev.Release());
+            }
         }
 
         auto& response = *ResponseEv->Record.MutableResponse();
@@ -998,9 +1091,9 @@ protected:
         const auto& txResult = ResponseEv->TxResults[channel.DstInputIndex];
 
         IActor* proxy;
-        if (txResult.IsStream) {
+        if (txResult.IsStream && txResult.QueryResultIndex.Defined()) {
             proxy = CreateResultStreamChannelProxy(TxId, channel.Id, txResult.MkqlItemType,
-                txResult.ColumnOrder, txResult.QueryResultIndex, Target, Stats, this->SelfId());
+                txResult.ColumnOrder, *txResult.QueryResultIndex, Target, Stats, this->SelfId());
         } else {
             proxy = CreateResultDataChannelProxy(TxId, channel.Id, Stats, this->SelfId(),
                 channel.DstInputIndex, ResponseEv.get());
@@ -1095,7 +1188,6 @@ protected:
 
     TActorId KqpTableResolverId;
     TActorId KqpShardsResolverId;
-    THashMap<TActorId, TProgressStat> PendingComputeActors; // Running compute actors (pure and DS)
     THashMap<TActorId, NYql::NDqProto::TComputeActorExtraData> ExtraData;
 
     TVector<TProgressStat> LastStats;
@@ -1109,7 +1201,6 @@ protected:
     NWilson::TSpan ExecuterStateSpan;
     NWilson::TSpan ExecuterTableResolveSpan;
 
-    THashSet<ui64> PendingComputeTasks; // Not started yet, waiting resources
     TMap<ui64, ui64> ShardIdToNodeId;
     TMap<ui64, TVector<ui64>> ShardsOnNode;
 
@@ -1118,6 +1209,8 @@ protected:
 
     std::unique_ptr<TKqpPlanner> Planner;
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig ExecuterRetriesConfig;
+
+    std::shared_ptr<NMetadata::NSecret::TSnapshot> Secrets;
 
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);

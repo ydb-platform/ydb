@@ -29,6 +29,10 @@ public:
         return {const_cast<char *>(Buffer.data()), Buffer.size()};
     }
 
+    bool IsPrivate() const override {
+        return Buffer.IsPrivate();
+    }
+
     size_t GetOccupiedMemorySize() const override {
         return Buffer.size();
     }

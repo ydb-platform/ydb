@@ -420,7 +420,7 @@ void TDqComputeActorChannels::HandleWork(TEvInterconnect::TEvNodeDisconnected::T
     }
 }
 
-void TDqComputeActorChannels::HandleUndeliveredEvChannelData(ui64 channelId, TEvents::TEvUndelivered::EReason reason) {
+void TDqComputeActorChannels::HandleUndeliveredEvChannelData(ui64 channelId, NActors::TEvents::TEvUndelivered::EReason reason) {
     TOutputChannelState& outputChannel = OutCh(channelId);
 
     if (outputChannel.Finished && outputChannel.EarlyFinish && !SupportCheckpoints) {
@@ -449,7 +449,7 @@ void TDqComputeActorChannels::HandleUndeliveredEvChannelData(ui64 channelId, TEv
     ScheduleRetryForChannel<TOutputChannelState, TEvDqCompute::TEvRetryChannelData>(outputChannel, Now());
 }
 
-void TDqComputeActorChannels::HandleUndeliveredEvChannelDataAck(ui64 channelId, TEvents::TEvUndelivered::EReason reason) {
+void TDqComputeActorChannels::HandleUndeliveredEvChannelDataAck(ui64 channelId, NActors::TEvents::TEvUndelivered::EReason reason) {
     TInputChannelState& inputChannel = InCh(channelId);
     inputChannel.PollRequest.reset();
 

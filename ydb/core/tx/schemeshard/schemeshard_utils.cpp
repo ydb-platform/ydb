@@ -352,11 +352,14 @@ NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
         auto& columnName = column.GetName();
         if (implTableColumns.Columns.contains(columnName)) {
             auto item = result.AddColumns();
-            item->CopyFrom(column);
+            *item = column;
 
             // Indexes don't use column families
             item->ClearFamily();
             item->ClearFamilyName();
+
+            // Indexes can't have a default value
+            item->ClearDefaultValue();
 
             ui32 order = Max<ui32>();
             if (implKeyToImplColumn.contains(columnName)) {

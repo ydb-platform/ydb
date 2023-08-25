@@ -62,7 +62,8 @@ void TNodeBroker::OnActivateExecutor(const TActorContext &ctx)
     SingleDomainAlloc = SingleDomain && appData->FeatureFlags.GetEnableNodeBrokerSingleDomainMode();
 
     MaxStaticId = Min(appData->DynamicNameserviceConfig->MaxStaticNodeId, TActorId::MaxNodeId);
-    MaxDynamicId = Min(appData->DynamicNameserviceConfig->MaxDynamicNodeId, TActorId::MaxNodeId);
+    MinDynamicId = Max(MaxStaticId + 1, (ui64)Min(appData->DynamicNameserviceConfig->MinDynamicNodeId, TActorId::MaxNodeId));
+    MaxDynamicId = Max(MinDynamicId, (ui64)Min(appData->DynamicNameserviceConfig->MaxDynamicNodeId, TActorId::MaxNodeId));
 
     ClearState();
 
@@ -203,10 +204,10 @@ void TNodeBroker::RecomputeFreeIds()
     FreeIds.Clear();
 
     if (SingleDomainAlloc) {
-        FreeIds.Set(MaxStaticId + 1, MaxDynamicId + 1);
+        FreeIds.Set(MinDynamicId, MaxDynamicId + 1);
     } else {
-        auto firstId = RewriteNodeId(MaxStaticId + 1);
-        if (firstId <= MaxStaticId)
+        auto firstId = RewriteNodeId(MinDynamicId);
+        if (firstId < MinDynamicId)
             firstId += NodeIdStep();
 
         auto lastId = RewriteNodeId(MaxDynamicId);
@@ -751,13 +752,6 @@ void TNodeBroker::Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr
     }
 
     ProcessTx(0, CreateTxUpdateConfigSubscription(ev), ctx);
-}
-
-void TNodeBroker::Handle(TEvents::TEvPoisonPill::TPtr &ev,
-                         const TActorContext &ctx)
-{
-    Y_UNUSED(ev);
-    ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
 }
 
 void TNodeBroker::Handle(TEvNodeBroker::TEvListNodes::TPtr &ev,

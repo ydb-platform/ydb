@@ -25,6 +25,7 @@ extern NActors::IActor* CreatePgwireKqpProxy(
 );
 
 NActors::IActor* CreatePgwireKqpProxyQuery(const TActorId& owner, std::unordered_map<TString, TString> params, const TConnectionState& connection, NPG::TEvPGEvents::TEvQuery::TPtr&& evQuery);
+NActors::IActor* CreatePgwireKqpProxyParse(const TActorId& owner, std::unordered_map<TString, TString> params, const TConnectionState& connection, NPG::TEvPGEvents::TEvParse::TPtr&& evParse);
 NActors::IActor* CreatePgwireKqpProxyDescribe(const TActorId& owner, std::unordered_map<TString, TString> params, const TConnectionState& connection, NPG::TEvPGEvents::TEvDescribe::TPtr&& evDescribe, const TParsedStatement& statement);
 NActors::IActor* CreatePgwireKqpProxyExecute(const TActorId& owner, std::unordered_map<TString, TString> params, const TConnectionState& connection, NPG::TEvPGEvents::TEvExecute::TPtr&& evExecute, const TParsedStatement& statement);
 
@@ -59,12 +60,10 @@ public:
 
     void Handle(NPG::TEvPGEvents::TEvParse::TPtr& ev) {
         BLOG_D("TEvParse " << ev->Sender);
-
-        auto queryData = ev->Get()->Message->GetQueryData();
-        ParsedStatements[queryData.Name].QueryData = queryData;
-
-        auto parseComplete = ev->Get()->Reply();
-        Send(ev->Sender, parseComplete.release());
+        ++Inflight;
+        TActorId actorId = Register(CreatePgwireKqpProxyParse(SelfId(), ConnectionParams, Connection, std::move(ev)));
+        BLOG_D("Created pgwireKqpProxyParse: " << actorId);
+        return;
     }
 
     void Handle(NPG::TEvPGEvents::TEvBind::TPtr& ev) {
@@ -93,7 +92,7 @@ public:
         TString statementName = ev->Get()->Message->GetDescribeData().Name;
         if (statementName.empty()) {
             statementName = CurrentStatement;
-            BLOG_W("TEvExecute changed empty statement to " << CurrentStatement);
+            BLOG_W("TEvDescribe changed empty statement to " << CurrentStatement);
         }
         auto it = ParsedStatements.find(statementName);
         if (it == ParsedStatements.end()) {
@@ -104,10 +103,13 @@ public:
             return;
         }
 
-        ++Inflight;
-        TActorId actorId = Register(CreatePgwireKqpProxyDescribe(SelfId(), ConnectionParams, Connection, std::move(ev), it->second));
-        BLOG_D("Created pgwireKqpProxyDescribe: " << actorId);
-        return;
+        auto response = std::make_unique<NPG::TEvPGEvents::TEvDescribeResponse>();
+        for (const auto& ydbType : it->second.ParameterTypes) {
+            response->ParameterTypes.push_back(GetPgOidFromYdbType(ydbType));
+        }
+        response->DataFields = it->second.DataFields;
+
+        Send(ev->Sender, response.release());
     }
 
     void Handle(NPG::TEvPGEvents::TEvExecute::TPtr& ev) {
@@ -142,26 +144,32 @@ public:
     void Handle(TEvEvents::TEvProxyCompleted::TPtr& ev) {
         --Inflight;
         BLOG_D("Received TEvProxyCompleted");
-        if (ev->Get()->Connection.Transaction.Status) {
-            BLOG_D("Updating transaction state to " << ev->Get()->Connection.Transaction.Status);
-            Connection.Transaction.Status = ev->Get()->Connection.Transaction.Status;
-            switch (ev->Get()->Connection.Transaction.Status) {
-                case 'I':
-                case 'E':
-                    Connection.Transaction.Id.clear();
-                    BLOG_D("Transaction id cleared");
-                    break;
-                case 'T':
-                    if (ev->Get()->Connection.Transaction.Id) {
-                        Connection.Transaction.Id = ev->Get()->Connection.Transaction.Id;
-                        BLOG_D("Transaction id is " << Connection.Transaction.Id);
-                    }
-                    break;
-            }
+        if (ev->Get()->ParsedStatement) {
+            ParsedStatements[ev->Get()->ParsedStatement.value().QueryData.Name] = ev->Get()->ParsedStatement.value();
         }
-        if (ev->Get()->Connection.SessionId) {
-            BLOG_D("Session id is " << ev->Get()->Connection.SessionId);
-            Connection.SessionId = ev->Get()->Connection.SessionId;
+        if (ev->Get()->Connection) {
+            auto& connection(ev->Get()->Connection.value());
+            if (connection.Transaction.Status) {
+                BLOG_D("Updating transaction state to " << connection.Transaction.Status);
+                Connection.Transaction.Status = connection.Transaction.Status;
+                switch (connection.Transaction.Status) {
+                    case 'I':
+                    case 'E':
+                        Connection.Transaction.Id.clear();
+                        BLOG_D("Transaction id cleared");
+                        break;
+                    case 'T':
+                        if (connection.Transaction.Id) {
+                            Connection.Transaction.Id = connection.Transaction.Id;
+                            BLOG_D("Transaction id is " << Connection.Transaction.Id);
+                        }
+                        break;
+                }
+            }
+            if (connection.SessionId) {
+                BLOG_D("Session id is " << connection.SessionId);
+                Connection.SessionId = connection.SessionId;
+            }
         }
         while (!Events.empty() && Inflight == 0) {
             StateWork(Events.front());

@@ -5066,6 +5066,32 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 
+    Y_UNIT_TEST(CreateExternalDataSourceWithServiceAccount) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+                USE plato;
+                CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="my-bucket",
+                    AUTH_METHOD="SERVICE_ACCOUNT",
+                    SERVICE_ACCOUNT_ID="sa",
+                    SERVICE_ACCOUNT_SECRET_NAME="secret_name"
+                );
+            )");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_STRING_CONTAINS(line, R"#('('('"auth_method" '"SERVICE_ACCOUNT") '('"location" '"my-bucket") '('"service_account_id" '"sa") '('"service_account_secret_name" '"secret_name") '('"source_type" '"ObjectStorage"))#");
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
     Y_UNIT_TEST(CreateExternalDataSourceWithTablePrefix) {
         NYql::TAstParseResult res = SqlToYql(R"(
                 USE plato;
@@ -5113,7 +5139,6 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
                 );
             )" , "<main>:5:33: Error: INSTALLATION or LOCATION must be specified\n");
 
-
         ExpectFailWithError(R"(
                 USE plato;
                 CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
@@ -5131,6 +5156,44 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
                     OTHER="VALUE"
                 );
             )" , "<main>:7:21: Error: Unknown external data source setting: OTHER\n");
+
+        ExpectFailWithError(R"(
+                USE plato;
+                CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="my-bucket",
+                    AUTH_METHOD="NONE1"
+                );
+            )" , "<main>:6:33: Error: Unknown AUTH_METHOD = NONE1\n");
+
+        ExpectFailWithError(R"(
+                USE plato;
+                CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="my-bucket",
+                    AUTH_METHOD="SERVICE_ACCOUNT"
+                );
+            )" , "<main>:6:33: Error: SERVICE_ACCOUNT_ID requires key\n");
+
+        ExpectFailWithError(R"(
+                USE plato;
+                CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="my-bucket",
+                    AUTH_METHOD="SERVICE_ACCOUNT",
+                    SERVICE_ACCOUNT_ID="s1"
+                );
+            )" , "<main>:7:40: Error: SERVICE_ACCOUNT_SECRET_NAME requires key\n");
+
+        ExpectFailWithError(R"(
+                USE plato;
+                CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="my-bucket",
+                    AUTH_METHOD="SERVICE_ACCOUNT",
+                    SERVICE_ACCOUNT_SECRET_NAME="s1"
+                );
+            )" , "<main>:7:49: Error: SERVICE_ACCOUNT_ID requires key\n");
     }
 
     Y_UNIT_TEST(DropExternalDataSourceWithTablePrefix) {

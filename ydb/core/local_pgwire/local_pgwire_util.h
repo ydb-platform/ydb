@@ -44,6 +44,13 @@ struct TConnectionState {
     TTransactionState Transaction;
 };
 
+struct TParsedStatement {
+    NPG::TPGParse::TQueryData QueryData;
+    NPG::TPGBind::TBindData BindData;
+    std::vector<Ydb::Type> ParameterTypes;
+    std::vector<NPG::TEvPGEvents::TRowDescriptionField> DataFields;
+};
+
 struct TEvEvents {
     enum EEv {
         EvProxyCompleted = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
@@ -53,17 +60,19 @@ struct TEvEvents {
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "ES_PRIVATE event space is too small.");
 
     struct TEvProxyCompleted : NActors::TEventLocal<TEvProxyCompleted, EvProxyCompleted> {
-        TConnectionState Connection;
+        std::optional<TConnectionState> Connection;
+        std::optional<TParsedStatement> ParsedStatement;
 
-        TEvProxyCompleted(const TConnectionState& connection = {})
+        TEvProxyCompleted() = default;
+
+        TEvProxyCompleted(const TConnectionState& connection)
             : Connection(connection)
         {}
-    };
-};
 
-struct TParsedStatement {
-    NPG::TPGParse::TQueryData QueryData;
-    NPG::TPGBind::TBindData BindData;
+        TEvProxyCompleted(const TParsedStatement& parsedStatement)
+            : ParsedStatement(parsedStatement)
+        {}
+    };
 };
 
 inline TString ColumnPrimitiveValueToString(NYdb::TValueParser& valueParser) {
@@ -232,37 +241,6 @@ inline NYdb::NScripting::TExecuteYqlResult ConvertProtoResponseToSdkResult(Ydb::
     }
     NYdb::TPlainStatus alwaysSuccess;
     return {NYdb::TStatus(std::move(alwaysSuccess)), std::move(res), queryStats};
-}
-
-struct TConvertedQuery {
-    TString Query;
-    NYdb::TParams Params;
-};
-
-inline TConvertedQuery ConvertQuery(const TParsedStatement& statement) {
-    auto& bindData = statement.BindData;
-    const auto& queryData = statement.QueryData;
-    NYdb::TParamsBuilder paramsBuilder;
-    TStringBuilder injectedQuery;
-
-    for (size_t idxParam = 0; idxParam < queryData.ParametersTypes.size(); ++idxParam) {
-        int32_t paramType = queryData.ParametersTypes[idxParam];
-        TString paramValue;
-        if (idxParam < bindData.ParametersValue.size()) {
-            std::vector<uint8_t> paramVal = bindData.ParametersValue[idxParam];
-            paramValue = TString(reinterpret_cast<char*>(paramVal.data()), paramVal.size());
-        }
-        switch (paramType) {
-            case INT2OID:
-                paramsBuilder.AddParam(TStringBuilder() << ":_" << idxParam + 1).Int16(atoi(paramValue.data())).Build();
-                break;
-
-        }
-    }
-    return {
-        .Query = injectedQuery + queryData.Query,
-        .Params = paramsBuilder.Build(),
-    };
 }
 
 inline bool IsQueryEmptyChar(char c) {

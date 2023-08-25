@@ -22,6 +22,8 @@ RECURSE(
     schlab
     security
     testlib
+    time_series_vec
+    wilson_ids
     workload
     yaml_config
     workload

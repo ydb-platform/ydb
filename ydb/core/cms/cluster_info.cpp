@@ -401,7 +401,7 @@ void TClusterInfo::SetNodeState(ui32 nodeId, NKikimrCms::EState state, const NKi
         }
     }
 
-    node.UpdateNodeState(); 
+    node.UpdateNodeState();
 }
 
 void TClusterInfo::ClearNode(ui32 nodeId)
@@ -895,7 +895,7 @@ void TClusterInfo::ApplyStateStorageInfo(TIntrusiveConstPtr<TStateStorageInfo> i
             ringInfo->SetDisabled();
 
         for(auto replica : ring.Replicas) {
-            Y_VERIFY(HasNode(replica.NodeId()));
+            CheckNodeExistenceWithVerify(replica.NodeId());
             ringInfo->AddNode(Nodes[replica.NodeId()]);
             StateStorageReplicas.insert(replica.NodeId());
             StateStorageNodeToRingId[replica.NodeId()] = ringId;
@@ -918,9 +918,15 @@ void TClusterInfo::GenerateTenantNodesCheckers() {
 
 void TClusterInfo::GenerateSysTabletsNodesCheckers() {
     for (auto tablet : BootstrapConfig.GetTablet()) {
-        SysNodesCheckers[tablet.GetType()] = TSimpleSharedPtr<TSysTabletsNodesCounter>(new TSysTabletsNodesCounter(tablet.GetType())); 
+        SysNodesCheckers[tablet.GetType()] = TSimpleSharedPtr<TSysTabletsNodesCounter>(new TSysTabletsNodesCounter(tablet.GetType()));
 
         for (auto nodeId : tablet.GetNode()) {
+            if (!HasNode(nodeId)) {
+                BLOG_ERROR(TStringBuilder() << "Got node " << nodeId
+                                            << " with system tablet, which exists in configuration, "
+                                               "but does not exist in cluster.");
+                continue;
+            }
             NodeToTabletTypes[nodeId].push_back(tablet.GetType());
             NodeRef(nodeId).AddNodeGroup(SysNodesCheckers[tablet.GetType()]);
         }

@@ -665,6 +665,8 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
         newYamlProtoConfig = YamlProtoConfig;
     }
 
+    AppData()->YamlConfigEnabled = YamlConfigEnabled;
+
     std::swap(YamlProtoConfig, newYamlProtoConfig);
 
     THashSet<ui32> affectedKinds;

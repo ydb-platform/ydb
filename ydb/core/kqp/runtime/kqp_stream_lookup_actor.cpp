@@ -623,8 +623,7 @@ private:
     }
 
     ui64 GetNextReadId() {
-        static ui64 readId = 0;
-        return ++readId;
+        return ++ReadId;
     }
 
     TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator() {
@@ -672,6 +671,8 @@ private:
     ui64 ReadBytesCount = 0;
 
     TIntrusivePtr<TKqpCounters> Counters;
+
+    ui64 ReadId = 0;
 };
 
 } // namespace

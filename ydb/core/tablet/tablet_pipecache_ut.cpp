@@ -54,9 +54,13 @@ Y_UNIT_TEST_SUITE(TPipeCacheTest) {
             return Die(ctx);
         }
 
+        void DefaultSignalTabletActive(const TActorContext&) override {
+            // must be empty
+        }
+
         void OnActivateExecutor(const TActorContext& ctx) override {
-            Y_UNUSED(ctx);
             Become(&TThis::StateWork);
+            SignalTabletActive(ctx);
         }
     };
 

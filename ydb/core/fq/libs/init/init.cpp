@@ -96,11 +96,19 @@ void Init(
         );
     }
 
+    NFq::TSigner::TPtr signer;
+    if (protoConfig.GetTokenAccessor().GetHmacSecretFile()) {
+        signer = ::NFq::CreateSignerFromFile(protoConfig.GetTokenAccessor().GetHmacSecretFile());
+    }
+
     if (protoConfig.GetControlPlaneProxy().GetEnabled()) {
         auto controlPlaneProxy = NFq::CreateControlPlaneProxyActor(
             protoConfig.GetControlPlaneProxy(),
+            protoConfig.GetControlPlaneStorage(),
             protoConfig.GetCompute(),
             protoConfig.GetCommon(),
+            protoConfig.GetGateways().GetS3(),
+            signer,
             yqSharedResources,
             NKikimr::CreateYdbCredentialsProviderFactory,
             yqCounters->GetSubgroup("subsystem", "ControlPlaneProxy"),
@@ -109,7 +117,12 @@ void Init(
     }
 
     if (protoConfig.GetCompute().GetYdb().GetEnable() && protoConfig.GetCompute().GetYdb().GetControlPlane().GetEnable()) {
-        auto computeDatabaseService = NFq::CreateComputeDatabaseControlPlaneServiceActor(protoConfig.GetCompute(), NKikimr::CreateYdbCredentialsProviderFactory);
+        auto computeDatabaseService = NFq::CreateComputeDatabaseControlPlaneServiceActor(protoConfig.GetCompute(), 
+                                                                                         NKikimr::CreateYdbCredentialsProviderFactory, 
+                                                                                         protoConfig.GetCommon(), 
+                                                                                         signer, 
+                                                                                         yqSharedResources, 
+                                                                                         yqCounters->GetSubgroup("subsystem", "DatabaseControlPlane"));
         actorRegistrator(NFq::ComputeDatabaseControlPlaneServiceActorId(), computeDatabaseService.release());
     }
 
@@ -294,7 +307,7 @@ void Init(
                 protoConfig.GetControlPlaneStorage(),
                 protoConfig.GetGateways().GetS3(),
                 protoConfig.GetCommon(),
-                protoConfig.GetTokenAccessor(),
+                signer,
                 yqSharedResources,
                 credentialsFactory,
                 pqCmConnections,
@@ -332,7 +345,7 @@ void Init(
             TAppData::TimeProvider,
             TAppData::RandomProvider,
             serviceCounters.Counters,
-            protoConfig.GetTokenAccessor());
+            signer);
 
         actorRegistrator(MakeYqPrivateProxyId(), proxyPrivate);
     }

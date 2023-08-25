@@ -3,7 +3,7 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullsatisfactionrank.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hull.h>
 #include <ydb/core/util/queue_inplace.h>
-#include <ydb/core/base/wilson.h>
+#include <ydb/library/wilson_ids/wilson.h>
 #include <library/cpp/actors/wilson/wilson_span.h>
 
 namespace NKikimr {

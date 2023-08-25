@@ -387,16 +387,21 @@ private:
     bool Replied_ = false;
 };
 
-template<class TResponse>
-class IStreamRequestReadProcessor : public TThrRefBase {
+class IStreamRequestCtrl : public TThrRefBase {
 public:
-    using TPtr = TIntrusivePtr<IStreamRequestReadProcessor>;
-    using TReadCallback = std::function<void(TGrpcStatus&&)>;
+    using TPtr = TIntrusivePtr<IStreamRequestCtrl>;
 
     /**
      * Asynchronously cancel the request
      */
     virtual void Cancel() = 0;
+};
+
+template<class TResponse>
+class IStreamRequestReadProcessor : public IStreamRequestCtrl {
+public:
+    using TPtr = TIntrusivePtr<IStreamRequestReadProcessor>;
+    using TReadCallback = std::function<void(TGrpcStatus&&)>;
 
     /**
      * Scheduled initial server metadata read from the stream

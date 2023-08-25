@@ -8,6 +8,9 @@ using namespace NKikimr;
 using namespace NStorage;
 
 TVector<NPDisk::TDriveData> TNodeWarden::ListLocalDrives() {
+    return {};
+
+#if 0
     TVector<NPDisk::TDriveData> drives = ListDevicesWithPartlabel();
 
     try {
@@ -30,6 +33,7 @@ TVector<NPDisk::TDriveData> TNodeWarden::ListLocalDrives() {
     });
 
     return drives;
+#endif
 }
 
 void TNodeWarden::StartInvalidGroupProxy() {

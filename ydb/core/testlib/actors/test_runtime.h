@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/core/base/memobserver.h>
 
 #include <library/cpp/actors/testlib/test_runtime.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -31,6 +32,7 @@ namespace NActors {
             ~TNodeData();
             ui64 GetLoggerPoolId() const override;
             THolder<NActors::TMon> Mon;
+            TIntrusivePtr<NKikimr::TMemObserver> MemObserver = new NKikimr::TMemObserver;
         };
 
         struct TNodeFactory: public INodeFactory {
@@ -77,6 +79,12 @@ namespace NActors {
             }
 
             return f.ExtractValue();
+        }
+
+        TIntrusivePtr<NKikimr::TMemObserver> GetMemObserver(ui32 nodeIndex = 0) {
+            TGuard<TMutex> guard(Mutex);
+            auto node = GetNodeById(GetNodeId(nodeIndex));
+            return node->MemObserver;
         }
 
         void SendToPipe(ui64 tabletId, const TActorId& sender, IEventBase* payload, ui32 nodeIndex = 0,

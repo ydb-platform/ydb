@@ -114,7 +114,7 @@ public:
         const NConfig::TControlPlaneStorageConfig& controlPlaneStorageConfig,
         const NYql::TS3GatewayConfig& s3Config,
         const NConfig::TCommonConfig& commonConfig,
-        const NConfig::TTokenAccessorConfig& tokenAccessorConfig,
+        const ::NFq::TSigner::TPtr& signer,
         const NFq::TYqSharedResources::TPtr& sharedResources,
         const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
         const NPq::NConfigurationManager::IConnections::TPtr& cmConnections,
@@ -129,12 +129,9 @@ public:
         , CmConnections(cmConnections)
         , FunctionRegistry(functionRegistry)
         , Counters(counters)
+        , Signer(signer)
         , HttpGateway(httpGateway)
-    {
-        if (tokenAccessorConfig.GetHmacSecretFile()) {
-            Signer = ::NFq::CreateSignerFromFile(tokenAccessorConfig.GetHmacSecretFile());
-        }
-    }
+    {}
 
     static constexpr char ActorName[] = "YQ_TEST_CONNECTION";
 
@@ -235,7 +232,7 @@ NActors::IActor* CreateTestConnectionActor(
         const NConfig::TControlPlaneStorageConfig& controlPlaneStorageConfig,
         const NYql::TS3GatewayConfig& s3Config,
         const NConfig::TCommonConfig& commonConfig,
-        const NConfig::TTokenAccessorConfig& tokenAccessorConfig,
+        const ::NFq::TSigner::TPtr& signer,
         const NFq::TYqSharedResources::TPtr& sharedResources,
         const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
         const NPq::NConfigurationManager::IConnections::TPtr& cmConnections,
@@ -244,7 +241,7 @@ NActors::IActor* CreateTestConnectionActor(
         const ::NMonitoring::TDynamicCounterPtr& counters) {
     return new TTestConnectionActor(config, controlPlaneStorageConfig,
                                     s3Config, commonConfig,
-                                    tokenAccessorConfig, sharedResources,
+                                    signer, sharedResources,
                                     credentialsFactory, cmConnections,
                                     functionRegistry, httpGateway, counters);
 }

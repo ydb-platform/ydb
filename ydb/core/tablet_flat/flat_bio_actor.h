@@ -60,7 +60,7 @@ namespace NBlockIO {
     };
 
     template<typename ... TArgs>
-    inline void Once(NActors::IActorOps *ops, TActorId service,
+    inline void Start(NActors::IActorOps *ops, TActorId service,
                         ui64 cookie, TArgs&& ... args) noexcept
     {
         auto self = ops->Register(new TBlockIO(service, cookie));

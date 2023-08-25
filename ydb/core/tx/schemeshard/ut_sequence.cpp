@@ -302,4 +302,38 @@ Y_UNIT_TEST_SUITE(TSequence) {
         TestLs(runtime, "/MyRoot/Table", false, NLs::PathNotExist);
     }
 
+    Y_UNIT_TEST(CreateTableWithDefaultFromSequenceAndIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Table"
+                Columns { Name: "key"   Type: "Uint64" DefaultFromSequence: "myseq" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "ValueIndex"
+                KeyColumnNames: ["value"]
+            }
+            SequenceDescription {
+                Name: "myseq"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/Table/ValueIndex", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
+        TestLs(runtime, "/MyRoot/Table/myseq", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/Table", false, NLs::PathNotExist);
+    }
+
 } // Y_UNIT_TEST_SUITE(TSequence)

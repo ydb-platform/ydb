@@ -190,9 +190,14 @@ public:
         }
 
         for (const auto& stage: Tx.Stages()) {
-            if (stage.Cast<TDqStageBase>().Program().Body().Maybe<TKqpEffects>()) {
-                auto &planNode = AddPlanNode(phaseNode);
+            TDqStageBase stageBase = stage.Cast<TDqStageBase>();
+            if (stageBase.Program().Body().Maybe<TKqpEffects>()) {
+                auto& planNode = AddPlanNode(phaseNode);
                 planNode.TypeName = "Effect";
+                Visit(TExprBase(stage), planNode);
+            } else if (stageBase.Outputs()) { // Sink
+                auto& planNode = AddPlanNode(phaseNode);
+                planNode.TypeName = "Sink";
                 Visit(TExprBase(stage), planNode);
             }
         }
@@ -795,8 +800,10 @@ private:
             }
 
             if (explainPrompt.ExpectedMaxRanges) {
-                op.Properties["ReadRangesExpectedSize"] = explainPrompt.ExpectedMaxRanges;
+                op.Properties["ReadRangesExpectedSize"] = ToString(*explainPrompt.ExpectedMaxRanges);
             }
+
+            op.Properties["ReadRangesPointPrefixLen"] = ToString(explainPrompt.PointPrefixLen);
 
             auto& columns = op.Properties["ReadColumns"];
             for (const auto& col : sourceSettings.Columns()) {
@@ -882,7 +889,7 @@ private:
                         Visit(settings.Cast(), stagePlanNode);
                     } else {
                         TOperator op;
-                        op.Properties["Name"] = TString(source.Cast().DataSource().Cast<TCoDataSource>().Category().Value());
+                        op.Properties["Name"] = source.Cast().DataSource().Cast<TCoDataSource>().Category().StringValue();
                         AddOperator(stagePlanNode, "Source", op);
                     }
                 } else {
@@ -892,6 +899,16 @@ private:
                     FillConnectionPlanNode(inputCn, inputPlanNode);
 
                     Visit(inputCn.Output().Stage(), inputPlanNode);
+                }
+            }
+
+            if (auto outputs = expr.Cast<TDqStageBase>().Outputs()) {
+                for (auto output : outputs.Cast()) {
+                    if (output.Maybe<TDqSink>()) {
+                        TOperator op;
+                        op.Properties["Name"] = output.DataSink().Cast<TCoDataSink>().Category().StringValue();
+                        AddOperator(stagePlanNode, "Sink", op);
+                    }
                 }
             }
         } else {
@@ -1254,7 +1271,7 @@ private:
         }
 
         if (explainPrompt.ExpectedMaxRanges) {
-            op.Properties["ReadRangesExpectedSize"] = explainPrompt.ExpectedMaxRanges;
+            op.Properties["ReadRangesExpectedSize"] = *explainPrompt.ExpectedMaxRanges;
         }
 
         auto& columns = op.Properties["ReadColumns"];

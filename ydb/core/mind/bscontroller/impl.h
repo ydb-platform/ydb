@@ -451,6 +451,17 @@ public:
                 || DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT;
         }
 
+        bool IsSelfHealReasonDecommit() const {
+            return DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT &&
+                Status != NKikimrBlobStorage::EDriveStatus::FAULTY &&
+                Status != NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED;
+        }
+
+        bool UsableInTermsOfDecommission(bool isSelfHealReasonDecommit) const {
+            return DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE // acceptable in any case
+                || DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_REJECTED && !isSelfHealReasonDecommit;
+        }
+
         bool BadInTermsOfSelfHeal() const {
             return Status == NKikimrBlobStorage::EDriveStatus::FAULTY
                 || Status == NKikimrBlobStorage::EDriveStatus::INACTIVE;
@@ -470,6 +481,7 @@ public:
                     return false;
                 case NKikimrBlobStorage::EDecommitStatus::DECOMMIT_PENDING:
                 case NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT:
+                case NKikimrBlobStorage::EDecommitStatus::DECOMMIT_REJECTED:
                     return true;
                 case NKikimrBlobStorage::EDecommitStatus::DECOMMIT_UNSET:
                 case NKikimrBlobStorage::EDecommitStatus::EDecommitStatus_INT_MIN_SENTINEL_DO_NOT_USE_:
@@ -1760,7 +1772,6 @@ private:
     void Handle(TEvBlobStorage::TEvControllerProposeGroupKey::TPtr &ev);
     void ForwardToSystemViewsCollector(STATEFN_SIG);
     void Handle(TEvPrivate::TEvUpdateSystemViews::TPtr &ev);
-    void Handle(TEvents::TEvPoisonPill::TPtr& ev);
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Scrub handling
@@ -1984,7 +1995,6 @@ public:
             fFunc(NSysView::TEvSysView::EvGetStorageStatsRequest, ForwardToSystemViewsCollector);
             fFunc(TEvPrivate::EvUpdateSystemViews, EnqueueIncomingEvent);
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
-            hFunc(TEvents::TEvPoisonPill, Handle);
             hFunc(TEvTabletPipe::TEvServerConnected, Handle);
             hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
             fFunc(TEvPrivate::EvUpdateSelfHealCounters, EnqueueIncomingEvent);
@@ -2012,21 +2022,9 @@ public:
         }
     }
 
-    STFUNC(StateBroken) {
-        HandleDefaultEvents(ev, SelfId());
-    }
-
     void LoadFinished() {
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSC09, "LoadFinished");
         Become(&TThis::StateWork);
-
-        while (!InitQueue.empty()) {
-            TAutoPtr<IEventHandle> &ev = InitQueue.front();
-            STLOG(PRI_DEBUG, BS_CONTROLLER, BSC08, "Dequeue", (TabletID, TabletID()), (Type, ev->GetTypeRewrite()),
-                (Event, ev->ToString()));
-            TActivationContext::Send(ev.Release());
-            InitQueue.pop_front();
-        }
 
         ValidateInternalState();
         UpdatePDisksCounters();
@@ -2040,6 +2038,13 @@ public:
             if (info->VirtualGroupState) {
                 StartVirtualGroupSetupMachine(info.Get());
             }
+        }
+
+        for (; !InitQueue.empty(); InitQueue.pop_front()) {
+            TAutoPtr<IEventHandle> &ev = InitQueue.front();
+            STLOG(PRI_DEBUG, BS_CONTROLLER, BSC08, "Dequeue", (TabletID, TabletID()), (Type, ev->GetTypeRewrite()),
+                (Event, ev->ToString()));
+            StateWork(ev);
         }
     }
 
@@ -2227,7 +2232,7 @@ public:
 
     void Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev);
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev);
-    void OnRegisterNode(const TActorId& serverId, TNodeId nodeId);
+    bool OnRegisterNode(const TActorId& serverId, TNodeId nodeId);
     void OnWardenConnected(TNodeId nodeId);
     void OnWardenDisconnected(TNodeId nodeId);
     void EraseKnownDrivesOnDisconnected(TNodeInfo *nodeInfo);

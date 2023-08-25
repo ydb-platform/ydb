@@ -31,6 +31,7 @@ namespace NYdb {
 namespace NTable {
 
 using namespace NThreading;
+using namespace NSessionPool;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -2368,29 +2369,6 @@ TCommitTransactionResult::TCommitTransactionResult(TStatus&& status, const TMayb
 
 const TMaybe<TQueryStats>& TCommitTransactionResult::GetStats() const {
     return QueryStats_;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-std::function<void(TSession::TImpl*)> TSession::TImpl::GetSmartDeleter(std::shared_ptr<TTableClient::TImpl> client) {
-    return [client](TSession::TImpl* sessionImpl) {
-        switch (sessionImpl->GetState()) {
-            case TSession::TImpl::S_STANDALONE:
-            case TSession::TImpl::S_BROKEN:
-            case TSession::TImpl::S_CLOSING:
-                client->DeleteSession(sessionImpl);
-            break;
-            case TSession::TImpl::S_IDLE:
-            case TSession::TImpl::S_ACTIVE: {
-                if (!client->ReturnSession(sessionImpl)) {
-                    client->DeleteSession(sessionImpl);
-                }
-                break;
-            }
-            default:
-            break;
-        }
-    };
 }
 
 ////////////////////////////////////////////////////////////////////////////////

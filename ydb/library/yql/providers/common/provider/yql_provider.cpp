@@ -207,6 +207,7 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     TMaybeNode<TExprList> columns;
     TMaybeNode<TCoAtomList> primaryKey;
     TMaybeNode<TCoAtomList> notNullColumns;
+    TMaybeNode<TCoAtomList> serialColumns;
     TMaybeNode<TCoAtomList> partitionBy;
     TMaybeNode<TCoNameValueTupleList> orderBy;
     TMaybeNode<TCoLambda> filter;
@@ -299,6 +300,9 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
             } else if (name == "notnull") {
                 YQL_ENSURE(tuple.Value().Maybe<TCoAtomList>());
                 notNullColumns = tuple.Value().Cast<TCoAtomList>();
+            } else if (name == "serialColumns") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtomList>());
+                serialColumns = tuple.Value().Cast<TCoAtomList>();
             } else if (name == "pg_delete") {
                 YQL_ENSURE(tuple.Value().Maybe<TCallable>());
                 pgDelete = tuple.Value().Cast<TCallable>();
@@ -337,6 +341,7 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     ret.Columns = columns;
     ret.PrimaryKey = primaryKey;
     ret.NotNullColumns = notNullColumns;
+    ret.SerialColumns = serialColumns;
     ret.PartitionBy = partitionBy;
     ret.OrderBy = orderBy;
     ret.Filter = filter;

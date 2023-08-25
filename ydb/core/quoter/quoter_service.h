@@ -1,6 +1,6 @@
 #pragma once
 #include "defs.h"
-#include <ydb/core/base/quoter.h>
+#include <ydb/core/quoter/public/quoter.h>
 
 namespace NKikimr {
 

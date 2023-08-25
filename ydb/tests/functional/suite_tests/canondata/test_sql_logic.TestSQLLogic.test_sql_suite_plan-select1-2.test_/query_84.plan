@@ -54,8 +54,8 @@
                                     }
                                 ],
                                 "SortColumns": [
-                                    "col2 (Asc)",
-                                    "col1 (Asc)"
+                                    "c (Asc)",
+                                    "d (Asc)"
                                 ]
                             }
                         ]

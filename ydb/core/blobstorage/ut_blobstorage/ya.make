@@ -31,7 +31,7 @@ SRCS(
     sync.cpp
 )
 
-IF (BUILD_TYPE == "RELEASE")
+IF (BUILD_TYPE != "DEBUG")
     SRCS(
         big_cluster.cpp
         get.cpp

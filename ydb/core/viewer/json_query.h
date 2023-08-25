@@ -15,37 +15,93 @@
 //#include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include "json_pipe_req.h"
+#include "viewer_request.h"
 
 namespace NKikimr {
 namespace NViewer {
 
 using namespace NActors;
+using namespace NMonitoring;
 using ::google::protobuf::FieldDescriptor;
 
-class TJsonQuery : public TActorBootstrapped<TJsonQuery> {
+class TJsonQuery : public TViewerPipeClient<TJsonQuery> {
     using TThis = TJsonQuery;
-    using TBase = TActorBootstrapped<TJsonQuery>;
+    using TBase = TViewerPipeClient<TJsonQuery>;
     IViewer* Viewer;
     TJsonSettings JsonSettings;
     TActorId Initiator;
     NMon::TEvHttpInfo::TPtr Event;
     ui32 Timeout = 0;
     TVector<Ydb::ResultSet> ResultSets;
+    TString Query;
+    TString Database;
     TString Action;
     TString Stats;
     TString Schema = "classic";
     TString Syntax;
+    TString UserToken;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
+    void ParseCgiParameters(const TCgiParameters& params) {
+        JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), false);
+        JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
+        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 60000);
+        Query = params.Get("query");
+        Database = params.Get("database");
+        Stats = params.Get("stats");
+        Action = params.Get("action");
+        Schema = params.Get("schema");
+        if (Schema.empty()) {
+            Schema = "classic";
+        }
+        Syntax = params.Get("syntax");
+    }
+
+    void ParsePostContent(const TStringBuf& content) {
+        static NJson::TJsonReaderConfig JsonConfig;
+        NJson::TJsonValue requestData;
+        bool success = NJson::ReadJsonTree(content, &JsonConfig, &requestData);
+        if (success) {
+            Query = Query.empty() ? requestData["query"].GetStringSafe({}) : Query;
+            Database = Database.empty() ? requestData["database"].GetStringSafe({}) : Database;
+            Stats = Stats.empty() ? requestData["stats"].GetStringSafe({}) : Stats;
+            Action = Action.empty() ? requestData["action"].GetStringSafe({}) : Action;
+            Syntax = Syntax.empty() ? requestData["syntax"].GetStringSafe({}) : Syntax;
+        }
+    }
+
+    bool IsPostContent() {
+        if (Event->Get()->Request.GetMethod() == HTTP_METHOD_POST) {
+            const THttpHeaders& headers = Event->Get()->Request.GetHeaders();
+            auto itContentType = FindIf(headers, [](const auto& header) { return header.Name() == "Content-Type"; });
+            if (itContentType != headers.end()) {
+                TStringBuf contentTypeHeader = itContentType->Value();
+                TStringBuf contentType = contentTypeHeader.NextTok(';');
+                return contentType == "application/json";
+            }
+        }
+        return false;
+    }
+
     TJsonQuery(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : Viewer(viewer)
         , Initiator(ev->Sender)
         , Event(ev)
-    {}
+    {
+        const auto& params(Event->Get()->Request.GetParams());
+        InitConfig(params);
+        ParseCgiParameters(params);
+        if (IsPostContent()) {
+            TStringBuf content = Event->Get()->Request.GetPostContent();
+            ParsePostContent(content);
+        }
+        UserToken = Event->Get()->UserToken;
+    }
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
@@ -56,54 +112,14 @@ public:
             hFunc(NKqp::TEvKqpExecuter::TEvStreamProfile, HandleReply);
 
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
-
-            default: {
-                Cerr << "Unexpected event received in TJsonQuery::StateWork: " << ev->GetTypeRewrite() << Endl;
-            }
         }
     }
 
-    void Bootstrap() {
-        const auto& params(Event->Get()->Request.GetParams());
+    void SendKpqProxyRequest() {
         auto event = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
-        JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), false);
-        JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
-        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 60000);
-        TString query = params.Get("query");
-        TString database = params.Get("database");
-        Stats = params.Get("stats");
-        Action = params.Get("action");
-        Schema = params.Get("schema");
-        Syntax = params.Get("syntax");
-        if (Schema.empty()) {
-            Schema = "classic";
-        }
-        if (query.empty() && Event->Get()->Request.GetMethod() == HTTP_METHOD_POST) {
-            TStringBuf content = Event->Get()->Request.GetPostContent();
-            const THttpHeaders& headers = Event->Get()->Request.GetHeaders();
-            auto itContentType = FindIf(headers, [](const auto& header) { return header.Name() == "Content-Type"; });
-            if (itContentType != headers.end()) {
-                TStringBuf contentTypeHeader = itContentType->Value();
-                TStringBuf contentType = contentTypeHeader.NextTok(';');
-                if (contentType == "application/json") {
-                    static NJson::TJsonReaderConfig JsonConfig;
-                    NJson::TJsonValue requestData;
-                    bool success = NJson::ReadJsonTree(content, &JsonConfig, &requestData);
-                    if (success) {
-                        query = requestData["query"].GetStringSafe({});
-                        database = requestData["database"].GetStringSafe({});
-                        Stats = requestData["stats"].GetStringSafe({});
-                        Action = requestData["action"].GetStringSafe({});
-                    }
-                }
-            }
-        }
-        if (query.empty()) {
-            ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), {}, "Bad Request"));
-            return;
-        }
         NKikimrKqp::TQueryRequest& request = *event->Record.MutableRequest();
-        request.SetQuery(query);
+        request.SetQuery(Query);
+        request.SetUsePublicResponseDataFormat(true);
         if (Action.empty() || Action == "execute-script" || Action == "execute") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT);
@@ -140,20 +156,28 @@ public:
             request.SetStatsMode(NYql::NDqProto::DQ_STATS_MODE_PROFILE);
             request.SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE);
         }
-        if (database) {
-            request.SetDatabase(database);
+        if (Database) {
+            request.SetDatabase(Database);
         }
-        if (!Event->Get()->UserToken.empty()) {
-            event->Record.SetUserToken(Event->Get()->UserToken);
+        if (UserToken) {
+            event->Record.SetUserToken(UserToken);
         }
         if (Syntax == "yql_v1") {
             request.SetSyntax(Ydb::Query::Syntax::SYNTAX_YQL_V1);
-        } else if (Syntax = "pg") {
+        } else if (Syntax == "pg") {
             request.SetSyntax(Ydb::Query::Syntax::SYNTAX_PG);
         }
         ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
         Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
+    }
 
+    void Bootstrap() {
+        if (Query.empty()) {
+            ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), {}, "Bad Request"));
+            return;
+        }
+
+        SendKpqProxyRequest();
         Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
     }
 
@@ -244,10 +268,9 @@ private:
         }
     }
 
-    void HandleReply(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
+    void Handle(NKikimrKqp::TEvQueryResponse& record) {
         TStringBuilder out;
         NJson::TJsonValue jsonResponse;
-        NKikimrKqp::TEvQueryResponse& record = ev->Get()->Record.GetRef();
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             MakeOkReply(out, jsonResponse, record);
         } else {
@@ -261,6 +284,10 @@ private:
         out << NJson::WriteJson(jsonResponse, false);
 
         ReplyAndPassAway(out);
+    }
+
+    void HandleReply(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
+        Handle(ev->Get()->Record.GetRef());
     }
 
     void HandleReply(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev) {

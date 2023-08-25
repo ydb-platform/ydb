@@ -19,8 +19,12 @@ TExprNode::TPtr TDqIntegrationBase::WrapRead(const TDqSettings&, const TExprNode
     return read;
 }
 
-TMaybe<bool> TDqIntegrationBase::CanWrite(const TDqSettings&, const TExprNode&, TExprContext&) {
+TMaybe<bool> TDqIntegrationBase::CanWrite(const TExprNode&, TExprContext&) {
     return Nothing();
+}
+
+TExprNode::TPtr TDqIntegrationBase::WrapWrite(const TExprNode::TPtr& write, TExprContext&) {
+    return write;
 }
 
 void TDqIntegrationBase::RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase&)  {

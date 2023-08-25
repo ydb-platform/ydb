@@ -7,7 +7,7 @@
 #include <library/cpp/actors/wilson/wilson_trace.h>
 
 #include <ydb/core/base/cputime.h>
-#include <ydb/core/base/wilson.h>
+#include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
@@ -330,10 +330,6 @@ public:
 
     const ::Ydb::Table::TransactionControl& GetTxControl() const {
         return RequestEv->GetTxControl();
-    }
-
-    const ::NKikimrMiniKQL::TParams& GetParameters() const {
-        return RequestEv->GetParameters();
     }
 
     // validate the compiled query response and ensure that all table versions are not

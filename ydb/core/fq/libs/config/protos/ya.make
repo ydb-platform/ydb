@@ -1,6 +1,7 @@
 PROTO_LIBRARY()
 
 SRCS(
+    activation.proto
     audit.proto
     checkpoint_coordinator.proto
     common.proto

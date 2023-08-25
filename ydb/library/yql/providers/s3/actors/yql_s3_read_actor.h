@@ -25,6 +25,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateS3ReadA
     const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
     const TS3ReadActorFactoryConfig& cfg,
     ::NMonitoring::TDynamicCounterPtr counters,
-    ::NMonitoring::TDynamicCounterPtr taskCounters);
+    ::NMonitoring::TDynamicCounterPtr taskCounters,
+    IMemoryQuotaManager::TPtr memoryQuotaManager);
 
 } // namespace NYql::NDq

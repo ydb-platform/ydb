@@ -299,6 +299,7 @@ TTableMetadataResult EnrichExternalTable(const TTableMetadataResult& externalTab
     tableMeta->ExternalSource.DataSourceLocation = externalDataSource.Metadata->ExternalSource.DataSourceLocation;
     tableMeta->ExternalSource.DataSourceInstallation = externalDataSource.Metadata->ExternalSource.DataSourceInstallation;
     tableMeta->ExternalSource.DataSourceAuth = externalDataSource.Metadata->ExternalSource.DataSourceAuth;
+    tableMeta->ExternalSource.ServiceAccountIdSignature = externalDataSource.Metadata->ExternalSource.ServiceAccountIdSignature;
     return result;
 }
 
@@ -315,6 +316,33 @@ void UpdateMetadataIfSuccess(NYql::TKikimrTableMetadataPtr ptr, size_t idx, cons
         ptr->SecondaryGlobalIndexMetadata[idx] = value.Metadata;
     }
 
+}
+
+void UpdateExternalDataSourceSecretValue(TTableMetadataResult& externalDataSourceMetadata, const TDescribeObjectResponse& objectDescription) {
+    if (objectDescription.Status != Ydb::StatusIds::SUCCESS) {
+        externalDataSourceMetadata.AddIssues(objectDescription.Issues);
+        externalDataSourceMetadata.SetStatus(NYql::YqlStatusFromYdbStatus(objectDescription.Status));
+    } else {
+        externalDataSourceMetadata.Metadata->ExternalSource.ServiceAccountIdSignature = objectDescription.SecretValue;
+    }
+}
+
+NThreading::TFuture<TDescribeObjectResponse> LoadExternalDataSourceSecretValue(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TActorSystem* actorSystem) {
+    const auto& authDescription = entry.ExternalDataSourceInfo->Description.GetAuth();
+    switch (authDescription.identity_case()) {
+        case NKikimrSchemeOp::TAuth::kServiceAccount: {
+            const TString& secretId = authDescription.GetServiceAccount().GetSecretName();
+            auto promise = NewPromise<TDescribeObjectResponse>();
+            actorSystem->Register(new TDescribeObjectActor(userToken ? userToken->GetUserSID() : "", secretId, promise));
+            return promise.GetFuture();
+        }
+
+        case NKikimrSchemeOp::TAuth::kNone:
+            return MakeFuture(TDescribeObjectResponse(""));
+
+        case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET:
+            return MakeFuture(TDescribeObjectResponse(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("identity case is not specified") }));
+    }
 }
 
 } // anonymous namespace
@@ -580,7 +608,17 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
                 switch (entry.Kind) {
                     case EKind::KindExternalDataSource: {
-                        promise.SetValue(GetLoadTableMetadataResult(entry, cluster, table));
+                        auto externalDataSourceMetadata = GetLoadTableMetadataResult(entry, cluster, table);
+                        if (!externalDataSourceMetadata.Success()) {
+                            promise.SetValue(externalDataSourceMetadata);
+                            return;
+                        }
+                        LoadExternalDataSourceSecretValue(entry, userToken, ActorSystem)
+                            .Subscribe([promise, externalDataSourceMetadata](const TFuture<TDescribeObjectResponse>& result) mutable
+                        {
+                            UpdateExternalDataSourceSecretValue(externalDataSourceMetadata, result.GetValue());
+                            promise.SetValue(externalDataSourceMetadata);
+                        });
                     }
                     break;
                     case EKind::KindExternalTable: {

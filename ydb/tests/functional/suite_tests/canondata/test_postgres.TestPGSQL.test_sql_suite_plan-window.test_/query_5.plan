@@ -29,7 +29,7 @@
                                             {
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": "row.row_number"
+                                                "TopSortBy": "argument._yql_RowNumber0"
                                             },
                                             {
                                                 "Name": "Sort",
@@ -114,7 +114,7 @@
                                     }
                                 ],
                                 "SortColumns": [
-                                    "row_number (Desc)"
+                                    "_yql_RowNumber0 (Desc)"
                                 ]
                             }
                         ]

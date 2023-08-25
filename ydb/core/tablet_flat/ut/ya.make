@@ -47,6 +47,7 @@ SRCS(
     ut_forward.cpp
     ut_screen.cpp
     ut_bloom.cpp
+    ut_shared_sausagecache.cpp
     ut_slice.cpp
     ut_slice_loader.cpp
     ut_versions.cpp

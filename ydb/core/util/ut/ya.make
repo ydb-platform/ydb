@@ -45,7 +45,6 @@ SRCS(
     queue_oneone_inplace_ut.cpp
     simple_cache_ut.cpp
     stlog_ut.cpp
-    time_series_vec_ut.cpp
     token_bucket_ut.cpp
     ui64id_ut.cpp
     ulid_ut.cpp

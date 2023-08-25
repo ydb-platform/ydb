@@ -1,6 +1,7 @@
 #include "kqp_opt_impl.h"
 
 #include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -363,63 +364,102 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
     return true;
 }
 
-bool BuildEffects(TPositionHandle pos, const TVector<TKqlTableEffect>& effects,
-    TExprContext& ctx, const TKqpOptimizeContext& kqpCtx, TVector<TExprBase>& builtEffects)
+bool BuildEffects(TPositionHandle pos, const TVector<TExprBase>& effects,
+    TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
+    TVector<TExprBase>& builtEffects)
 {
     TVector<TCoArgument> inputArgs;
     TVector<TExprBase> inputs;
     TVector<TExprBase> newEffects;
+    TVector<TExprBase> newSinkEffects;
     newEffects.reserve(effects.size());
+    newSinkEffects.reserve(effects.size());
 
     for (const auto& effect : effects) {
-        TCoArgument inputArg = Build<TCoArgument>(ctx, pos)
-            .Name("inputArg")
-            .Done();
-
-        TMaybeNode<TExprBase> input;
         TMaybeNode<TExprBase> newEffect;
+        bool sinkEffect = false;
+        YQL_ENSURE(effect.Maybe<TKqlEffectBase>());
+        if (effect.Maybe<TKqlTableEffect>()) {
+            TMaybeNode<TExprBase> input;
+            TCoArgument inputArg = Build<TCoArgument>(ctx, pos)
+                .Name("inputArg")
+                .Done();
 
-        if (auto maybeUpsertRows = effect.Maybe<TKqlUpsertRows>()) {
-            if (!BuildUpsertRowsEffect(maybeUpsertRows.Cast(), ctx, kqpCtx, inputArg, input, newEffect)) {
+            if (auto maybeUpsertRows = effect.Maybe<TKqlUpsertRows>()) {
+                if (!BuildUpsertRowsEffect(maybeUpsertRows.Cast(), ctx, kqpCtx, inputArg, input, newEffect)) {
+                    return false;
+                }
+            }
+
+            if (auto maybeDeleteRows = effect.Maybe<TKqlDeleteRows>()) {
+                if (!BuildDeleteRowsEffect(maybeDeleteRows.Cast(), ctx, kqpCtx, inputArg, input, newEffect)) {
+                    return false;
+                }
+            }
+
+            if (input) {
+                inputArgs.push_back(inputArg);
+                inputs.push_back(input.Cast());
+            }
+        } else if (auto maybeExt = effect.Maybe<TKqlExternalEffect>()) {
+            sinkEffect = true;
+            TKqlExternalEffect externalEffect = maybeExt.Cast();
+            TExprBase input = externalEffect.Input();
+            auto maybeStage = input.Maybe<TDqStageBase>();
+            if (!maybeStage) {
                 return false;
             }
-        }
-
-        if (auto maybeDeleteRows = effect.Maybe<TKqlDeleteRows>()) {
-            if (!BuildDeleteRowsEffect(maybeDeleteRows.Cast(), ctx, kqpCtx, inputArg, input, newEffect)) {
+            auto stage = maybeStage.Cast();
+            const auto outputsList = stage.Outputs();
+            if (!outputsList) {
                 return false;
             }
+            TDqStageOutputsList outputs = outputsList.Cast();
+            YQL_ENSURE(outputs.Size() == 1, "Multiple sinks are not supported yet");
+            TDqOutputAnnotationBase output = outputs.Item(0);
+            if (!output.Maybe<TDqSink>()) {
+                return false;
+            }
+            newEffect = Build<TKqpSinkEffect>(ctx, effect.Pos())
+                .Stage(maybeStage.Cast().Ptr())
+                .SinkIndex().Build("0")
+                .Done();
         }
 
         YQL_ENSURE(newEffect);
-        newEffects.push_back(newEffect.Cast());
-
-        if (input) {
-            inputArgs.push_back(inputArg);
-            inputs.push_back(input.Cast());
+        if (sinkEffect) {
+            newSinkEffects.push_back(newEffect.Cast());
+        } else {
+            newEffects.push_back(newEffect.Cast());
         }
     }
 
-    auto stage = Build<TDqStage>(ctx, pos)
-        .Inputs()
-            .Add(inputs)
-            .Build()
-        .Program()
-            .Args(inputArgs)
-            .Body<TKqpEffects>()
-                .Add(newEffects)
+    if (!newEffects.empty()) {
+        auto stage = Build<TDqStage>(ctx, pos)
+            .Inputs()
+                .Add(inputs)
                 .Build()
-            .Build()
-        .Settings().Build()
-        .Done();
-
-    for (ui32 i = 0; i < newEffects.size(); ++i) {
-        auto effect = Build<TDqOutput>(ctx, pos)
-            .Stage(stage)
-            .Index().Build(ToString(0))
+            .Program()
+                .Args(inputArgs)
+                .Body<TKqpEffects>()
+                    .Add(newEffects)
+                    .Build()
+                .Build()
+            .Settings().Build()
             .Done();
 
-        builtEffects.push_back(effect);
+        for (ui32 i = 0; i < newEffects.size(); ++i) {
+            auto effect = Build<TDqOutput>(ctx, pos)
+                .Stage(stage)
+                .Index().Build(ToString(0))
+                .Done();
+
+            builtEffects.push_back(effect);
+        }
+    }
+
+    if (!newSinkEffects.empty()) {
+        builtEffects.insert(builtEffects.end(), newSinkEffects.begin(), newSinkEffects.end());
     }
 
     return true;
@@ -432,20 +472,20 @@ TMaybeNode<TKqlQuery> BuildEffects(const TKqlQuery& query, TExprContext& ctx,
     TVector<TExprBase> builtEffects;
 
     if constexpr (GroupEffectsByTable) {
-        TMap<TStringBuf, TVector<TKqlTableEffect>> tableEffectsMap;
+        TMap<TStringBuf, TVector<TExprBase>> tableEffectsMap;
         for (const auto& maybeEffect : query.Effects()) {
             if (const auto maybeList = maybeEffect.Maybe<TExprList>()) {
                 for (const auto effect : maybeList.Cast()) {
                     YQL_ENSURE(effect.Maybe<TKqlTableEffect>());
                     auto tableEffect = effect.Cast<TKqlTableEffect>();
 
-                    tableEffectsMap[tableEffect.Table().Path()].push_back(tableEffect);
+                    tableEffectsMap[tableEffect.Table().Path()].push_back(effect);
                 }
             } else {
                 YQL_ENSURE(maybeEffect.Maybe<TKqlTableEffect>());
                 auto tableEffect = maybeEffect.Cast<TKqlTableEffect>();
 
-                tableEffectsMap[tableEffect.Table().Path()].push_back(tableEffect);
+                tableEffectsMap[tableEffect.Table().Path()].push_back(maybeEffect);
             }
         }
 
@@ -460,18 +500,12 @@ TMaybeNode<TKqlQuery> BuildEffects(const TKqlQuery& query, TExprContext& ctx,
         for (const auto& maybeEffect : query.Effects()) {
             if (const auto maybeList = maybeEffect.Maybe<TExprList>()) {
                 for (const auto effect : maybeList.Cast()) {
-                    YQL_ENSURE(effect.Maybe<TKqlTableEffect>());
-                    auto tableEffect = effect.Cast<TKqlTableEffect>();
-
-                    if (!BuildEffects(query.Pos(), {tableEffect}, ctx, kqpCtx, builtEffects)) {
+                    if (!BuildEffects(query.Pos(), {effect}, ctx, kqpCtx, builtEffects)) {
                         return {};
                     }
                 }
             } else {
-                YQL_ENSURE(maybeEffect.Maybe<TKqlTableEffect>());
-                auto tableEffect = maybeEffect.Cast<TKqlTableEffect>();
-
-                if (!BuildEffects(query.Pos(), {tableEffect}, ctx, kqpCtx, builtEffects)) {
+                if (!BuildEffects(query.Pos(), {maybeEffect}, ctx, kqpCtx, builtEffects)) {
                     return {};
                 }
             }
@@ -502,7 +536,7 @@ TAutoPtr<IGraphTransformer> CreateKqpQueryEffectsTransformer(const TIntrusivePtr
         bool requireBuild = false;
         bool hasBuilt = false;
         for (const auto& effect : query.Effects()) {
-            if (!effect.Maybe<TDqOutput>()) {
+            if (!IsBuiltEffect(effect)) {
                 requireBuild = true;
             } else {
                 hasBuilt = true;

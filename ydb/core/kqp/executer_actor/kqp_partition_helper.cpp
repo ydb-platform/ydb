@@ -599,15 +599,6 @@ std::pair<ui64, TShardInfo> MakeVirtualTablePartition(const TKqpTableKeys& table
     const auto& keyColumnTypes = table->KeyColumnTypes;
     auto ranges = ExtractRanges(tableKeys, source, stageInfo, holderFactory, typeEnv, guard);
 
-    TShardInfo result;
-    for (auto& range: ranges) {
-        if (!result.KeyReadRanges) {
-            result.KeyReadRanges.ConstructInPlace();
-        }
-
-        result.KeyReadRanges->Add(std::move(range));
-    }
-
     ui64 shard = 0;
     if (!ranges.empty()) {
         auto& range = source.GetReverse() ? ranges.back() : ranges[0];
@@ -624,6 +615,14 @@ std::pair<ui64, TShardInfo> MakeVirtualTablePartition(const TKqpTableKeys& table
         }
     }
 
+    TShardInfo result;
+    for (auto& range: ranges) {
+        if (!result.KeyReadRanges) {
+            result.KeyReadRanges.ConstructInPlace();
+        }
+
+        result.KeyReadRanges->Add(std::move(range));
+    }
     return {shard, result};
 }
 

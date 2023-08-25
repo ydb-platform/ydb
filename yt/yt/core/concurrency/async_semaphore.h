@@ -72,10 +72,8 @@ public:
 
     //! Runs #handler when a given number of slots becomes available.
     //! These slots are immediately captured by TAsyncSemaphoreGuard instance passed to #handler.
-    // XXX(babenko): passing invoker is a temporary workaround until YT-3801 is fixed
     void AsyncAcquire(
         const TCallback<void(TAsyncSemaphoreGuard)>& handler,
-        IInvokerPtr invoker,
         i64 slots = 1);
 
     //! Returns |true| iff at least one slot is free.
@@ -107,12 +105,10 @@ private:
     struct TWaiter
     {
         TCallback<void(TAsyncSemaphoreGuard)> Handler;
-        IInvokerPtr Invoker;
         i64 Slots;
     };
 
     std::queue<TWaiter> Waiters_;
-
 };
 
 DEFINE_REFCOUNTED_TYPE(TAsyncSemaphore)

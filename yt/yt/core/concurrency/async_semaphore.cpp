@@ -25,7 +25,7 @@ void TAsyncSemaphore::SetTotal(i64 totalSlots)
     Release(0);
 }
 
-void TAsyncSemaphore::Release(i64 slots /* = 1 */)
+void TAsyncSemaphore::Release(i64 slots)
 {
     YT_VERIFY(slots >= 0);
 
@@ -68,7 +68,7 @@ void TAsyncSemaphore::Release(i64 slots /* = 1 */)
 
         for (const auto& waiter : waitersToRelease) {
             // NB: This may lead to a reentrant invocation of Release if the invoker discards the callback.
-            waiter.Invoker->Invoke(BIND(waiter.Handler, Passed(TAsyncSemaphoreGuard(this, waiter.Slots))));
+            waiter.Handler(TAsyncSemaphoreGuard(this, waiter.Slots));
         }
 
         if (readyEventToSet) {
@@ -99,7 +99,6 @@ bool TAsyncSemaphore::TryAcquire(i64 slots /*= 1*/)
 
 void TAsyncSemaphore::AsyncAcquire(
     const TCallback<void(TAsyncSemaphoreGuard)>& handler,
-    IInvokerPtr invoker,
     i64 slots)
 {
     YT_VERIFY(slots >= 0);
@@ -108,9 +107,9 @@ void TAsyncSemaphore::AsyncAcquire(
     if (FreeSlots_ >= slots) {
         FreeSlots_ -= slots;
         guard.Release();
-        invoker->Invoke(BIND(handler, Passed(TAsyncSemaphoreGuard(this, slots))));
+        handler(TAsyncSemaphoreGuard(this, slots));
     } else {
-        Waiters_.push(TWaiter{handler, std::move(invoker), slots});
+        Waiters_.push(TWaiter{handler, slots});
     }
 }
 

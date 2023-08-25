@@ -31,3 +31,5 @@ ydb-tests-functional-kqp-kqp_query_session/KqpQuerySession::NoLocalAttach
 ydb-library-yql-providers-yt-codec-codegen-ut/*
 ydb-library-yql-providers-yt-comp_nodes-ut/YtWriterTests::FlattenSkiff+LLVM
 ydb-library-yql-providers-yt-comp_nodes-ut/YtWriterTests::SimpleSkiff+LLVM
+ydb-core-blobstorage-ut_blobstorage/VDiskAssimilation::Test
+ydb-services-ydb-sdk_credprovider_ut/SdkCredProvider::PingFromProviderSyncDiscovery

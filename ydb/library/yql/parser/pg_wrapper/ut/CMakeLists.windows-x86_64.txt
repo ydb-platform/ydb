@@ -99,6 +99,22 @@ target_compile_options(ydb-library-yql-parser-pg_wrapper-ut PRIVATE
   -Dscram_ServerKey=yql_scram_ServerKey
   -Dscram_build_secret=yql_scram_build_secret
   -Dpg_is_ascii=yql_pg_is_ascii
+  -DmakeJsonLexContextCstringLen=yql_makeJsonLexContextCstringLen
+  -DIsValidJsonNumber=yql_IsValidJsonNumber
+  -Djson_lex=yql_json_lex
+  -Dpg_parse_json=yql_pg_parse_json
+  -Djson_count_array_elements=yql_json_count_array_elements
+  -DnullSemAction=yql_nullSemAction
+  -Dpg_cryptohash_free=yql_pg_cryptohash_free
+  -Dpg_cryptohash_final=yql_pg_cryptohash_final
+  -Dpg_cryptohash_update=yql_pg_cryptohash_update
+  -Dpg_cryptohash_init=yql_pg_cryptohash_init
+  -Dpg_cryptohash_create=yql_pg_cryptohash_create
+  -Dpg_hmac_free=yql_pg_hmac_free
+  -Dpg_hmac_final=yql_pg_hmac_final
+  -Dpg_hmac_update=yql_pg_hmac_update
+  -Dpg_hmac_init=yql_pg_hmac_init
+  -Dpg_hmac_create=yql_pg_hmac_create
   -DUSE_CURRENT_UDF_ABI_VERSION
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )

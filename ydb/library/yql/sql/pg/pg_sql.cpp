@@ -244,7 +244,9 @@ public:
         Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
             QA("OrderedColumns"))));
 
-        DqEnginePgmPos = Statements.size();
+        ui32 costBasedOptimizerPos = Statements.size();
+        Statements.push_back(configSource);
+        ui32 dqEnginePgmPos = Statements.size();
         Statements.push_back(configSource);
 
         for (int i = 0; i < ListLength(raw); ++i) {
@@ -267,12 +269,18 @@ public:
 
         Statements.push_back(L(A("return"), A("world")));
 
-
         if (DqEngineEnabled) {
-            Statements[DqEnginePgmPos] = L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
+            Statements[dqEnginePgmPos] = L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
                 QA("DqEngine"), QA(DqEngineForce ? "force" : "auto")));
         } else {
-            Statements.erase(Statements.begin() + DqEnginePgmPos);
+            Statements.erase(Statements.begin() + dqEnginePgmPos);
+        }
+
+        if (CostBasedOptimizer) {
+            Statements[costBasedOptimizerPos] = L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), configSource,
+                QA("CostBasedOptimizer"), QA(CostBasedOptimizer)));
+        } else {
+            Statements.erase(Statements.begin() + costBasedOptimizerPos);
         }
 
         return VL(Statements.data(), Statements.size());
@@ -1705,6 +1713,32 @@ public:
             if (NodeTag(arg) == T_A_Const && (NodeTag(CAST_NODE(A_Const, arg)->val) == T_String)) {
                 auto rawStr = StrVal(CAST_NODE(A_Const, arg)->val);
                 TablePathPrefix = rawStr;
+            } else {
+                AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
+                return nullptr;
+            }
+        } else if (name == "costbasedoptimizer") {
+            if (ListLength(value->args) != 1) {
+                AddError(TStringBuilder() << "VariableSetStmt, expected 1 arg, but got: " << ListLength(value->args));
+                return nullptr;
+            }
+
+            auto arg = ListNodeNth(value->args, 0);
+            if (NodeTag(arg) == T_A_Const && (NodeTag(CAST_NODE(A_Const, arg)->val) == T_String)) {
+                auto rawStr = StrVal(CAST_NODE(A_Const, arg)->val);
+                auto str = to_lower(TString(rawStr));
+                if (!(str == "disable" || str == "pg" || str == "native")) {
+                    AddError(TStringBuilder() << "VariableSetStmt, not supported CostBasedOptimizer option value: " << rawStr);
+                    return nullptr;
+                }
+
+                if (str == "pg") {
+                    CostBasedOptimizer = "PG";
+                } else if (str == "native") {
+                    CostBasedOptimizer = "Native";
+                } else {
+                    CostBasedOptimizer = str;
+                }
             } else {
                 AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
                 return nullptr;
@@ -3638,8 +3672,8 @@ private:
     NSQLTranslation::TTranslationSettings Settings;
     bool DqEngineEnabled = false;
     bool DqEngineForce = false;
+    TString CostBasedOptimizer;
     TVector<TAstNode*> Statements;
-    ui32 DqEnginePgmPos = 0;
     ui32 ReadIndex = 0;
     TViews Views;
     TVector<TViews> CTE;

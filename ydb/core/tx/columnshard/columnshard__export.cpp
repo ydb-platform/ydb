@@ -81,7 +81,7 @@ bool TTxExportFinish::Execute(TTransactionContext& txc, const TActorContext&) {
 
                 BlobsToForget[meta.GetTierName()].emplace(std::move(evict));
             } else {
-                LOG_S_ERROR(TxPrefix() << "Unknown blob exported '" << blobId << "'" << TxSuffix());
+                LOG_S_ERROR(TxPrefix() << "Blob not exported '" << blobId << "'" << TxSuffix());
             }
         }
     }

@@ -16,9 +16,9 @@ namespace NKikimr::NTestShard {
 
     void TLoadActor::ClearKeys() {
         for (auto& [key, info] : Keys) {
-            Y_VERIFY((info.ConfirmedState != ::NTestShard::TStateServer::CONFIRMED && info.ConfirmedKeyIndex == Max<size_t>()) ||
-                (info.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED && info.ConfirmedKeyIndex != Max<size_t>() &&
-                 ConfirmedKeys[info.ConfirmedKeyIndex] == key));
+            Y_VERIFY(info.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED
+                    ? info.ConfirmedKeyIndex < ConfirmedKeys.size() && ConfirmedKeys[info.ConfirmedKeyIndex] == key
+                    : info.ConfirmedKeyIndex == Max<size_t>());
             info.ConfirmedKeyIndex = Max<size_t>();
         }
         Keys.clear();

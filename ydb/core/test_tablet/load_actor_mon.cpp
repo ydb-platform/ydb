@@ -42,7 +42,7 @@ namespace NKikimr::NTestShard {
 
                 std::vector<TDuration> intervals;
                 constexpr size_t orders = 4;
-                constexpr size_t stepsPerOrder = 20;
+                constexpr size_t stepsPerOrder = 40;
                 intervals.reserve(orders * stepsPerOrder + 2);
                 for (ui32 i = 0; i < orders * stepsPerOrder + 1; ++i) {
                     const double seconds = 1e-5 * round(100 * pow(10, (double)i / stepsPerOrder));

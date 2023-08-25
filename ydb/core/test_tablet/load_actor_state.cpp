@@ -15,37 +15,22 @@ namespace NKikimr::NTestShard {
         Y_VERIFY(from != ::NTestShard::TStateServer::DELETED);
         Y_VERIFY(to != ::NTestShard::TStateServer::ABSENT);
 
-        // unconfirm the key
-        if (from == ::NTestShard::TStateServer::CONFIRMED) {
-            Y_VERIFY(key.second.ConfirmedKeyIndex != Max<size_t>() && key.second.ConfirmedKeyIndex < ConfirmedKeys.size());
-            auto& cell = ConfirmedKeys[key.second.ConfirmedKeyIndex];
-            Y_VERIFY(cell == key.first);
-            std::swap(cell, ConfirmedKeys.back());
-            ConfirmedKeys.pop_back();
-            if (key.second.ConfirmedKeyIndex != ConfirmedKeys.size()) {
-                const auto it = Keys.find(cell);
-                Y_VERIFY(it != Keys.end());
-                Y_VERIFY(it->second.ConfirmedKeyIndex == ConfirmedKeys.size());
-                it->second.ConfirmedKeyIndex = key.second.ConfirmedKeyIndex;
-            }
-            key.second.ConfirmedKeyIndex = Max<size_t>();
-        } else if (to == ::NTestShard::TStateServer::CONFIRMED) {
-            Y_VERIFY(key.second.ConfirmedKeyIndex == Max<size_t>());
-            key.second.ConfirmedKeyIndex = ConfirmedKeys.size();
-            ConfirmedKeys.push_back(key.first);
-        }
-
         if (!Settings.HasStorageServerHost()) {
             if (from == ::NTestShard::TStateServer::WRITE_PENDING && to == ::NTestShard::TStateServer::CONFIRMED) {
                 BytesOfData += key.second.Len;
+            }
+            if (from == ::NTestShard::TStateServer::CONFIRMED) {
+                MakeUnconfirmed(key);
+            } else if (to == ::NTestShard::TStateServer::CONFIRMED) {
+                MakeConfirmed(key);
             }
             if (to == ::NTestShard::TStateServer::DELETED) {
                 Keys.erase(key.first);
             } else {
                 key.second.ConfirmedState = key.second.PendingState = to;
-                Y_VERIFY((key.second.ConfirmedState != ::NTestShard::TStateServer::CONFIRMED && key.second.ConfirmedKeyIndex == Max<size_t>()) ||
-                    (key.second.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED && key.second.ConfirmedKeyIndex != Max<size_t>() &&
-                     ConfirmedKeys[key.second.ConfirmedKeyIndex] == key.first));
+                Y_VERIFY(key.second.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED
+                    ? key.second.ConfirmedKeyIndex < ConfirmedKeys.size() && ConfirmedKeys[key.second.ConfirmedKeyIndex] == key.first
+                    : key.second.ConfirmedKeyIndex == Max<size_t>());
             }
             if (ev) {
                 Send(TabletActorId, ev.release());
@@ -108,6 +93,11 @@ namespace NKikimr::NTestShard {
         }
 
         // switch to correct state
+        if (key.second.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED) {
+            MakeUnconfirmed(key);
+        } else if (key.second.PendingState == ::NTestShard::TStateServer::CONFIRMED) {
+            MakeConfirmed(key);
+        }
         key.second.ConfirmedState = key.second.PendingState;
         if (auto& r = key.second.Request) {
             if (const auto it = WritesInFlight.find(r->Record.GetCookie()); it != WritesInFlight.end()) {
@@ -119,13 +109,35 @@ namespace NKikimr::NTestShard {
             Y_VERIFY(key.second.ConfirmedKeyIndex == Max<size_t>());
             Keys.erase(key.first);
         } else {
-            Y_VERIFY((key.second.ConfirmedState != ::NTestShard::TStateServer::CONFIRMED && key.second.ConfirmedKeyIndex == Max<size_t>()) ||
-                (key.second.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED && key.second.ConfirmedKeyIndex != Max<size_t>() &&
-                 ConfirmedKeys[key.second.ConfirmedKeyIndex] == key.first));
+            Y_VERIFY(key.second.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED
+                ? key.second.ConfirmedKeyIndex < ConfirmedKeys.size() && ConfirmedKeys[key.second.ConfirmedKeyIndex] == key.first
+                : key.second.ConfirmedKeyIndex == Max<size_t>());
         }
 
         // perform some action if possible
         Action();
+    }
+
+    void TLoadActor::MakeConfirmed(TKey& key) {
+        Y_VERIFY(key.second.ConfirmedKeyIndex == Max<size_t>());
+        key.second.ConfirmedKeyIndex = ConfirmedKeys.size();
+        ConfirmedKeys.push_back(key.first);
+    }
+
+    void TLoadActor::MakeUnconfirmed(TKey& key) {
+        Y_VERIFY(key.second.ConfirmedKeyIndex < ConfirmedKeys.size());
+        Y_VERIFY(ConfirmedKeys[key.second.ConfirmedKeyIndex] == key.first);
+        if (key.second.ConfirmedKeyIndex + 1 != ConfirmedKeys.size()) {
+            auto& cell = ConfirmedKeys[key.second.ConfirmedKeyIndex];
+            std::swap(cell, ConfirmedKeys.back());
+            const auto it = Keys.find(cell);
+            Y_VERIFY(it != Keys.end());
+            auto& otherKey = it->second;
+            Y_VERIFY(otherKey.ConfirmedKeyIndex + 1 == ConfirmedKeys.size());
+            otherKey.ConfirmedKeyIndex = key.second.ConfirmedKeyIndex;
+        }
+        ConfirmedKeys.pop_back();
+        key.second.ConfirmedKeyIndex = Max<size_t>();
     }
 
 } // NKikimr::NTestShard

@@ -174,6 +174,9 @@ namespace NKikimr::NTestShard {
             ::NTestShard::TStateServer::EEntityState to, std::unique_ptr<TEvKeyValue::TEvRequest> ev = nullptr);
         void Handle(TEvStateServerWriteResult::TPtr ev);
 
+        void MakeConfirmed(TKey& key);
+        void MakeUnconfirmed(TKey& key);
+
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Tablet monitoring
 

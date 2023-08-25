@@ -106,6 +106,10 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
 
         NDataShard::gSkipReadIteratorResultFailPoint.Enable(-1);
+        Y_DEFER {
+            // just in case if test fails.
+            NDataShard::gSkipReadIteratorResultFailPoint.Disable();
+        };
 
         {
             auto it = kikimr.GetTableClient().StreamExecuteScanQuery(R"(
@@ -126,7 +130,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                 << counters.GetActiveSessionActors()->Val());
         }
 
-        NDataShard::gSkipRepliesFailPoint.Disable();
+        NDataShard::gSkipReadIteratorResultFailPoint.Disable();
         int count = 60;
         while (counters.GetActiveSessionActors()->Val() != 0 && count) {
             count--;

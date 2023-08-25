@@ -810,6 +810,24 @@ namespace {
 
                 Types.PgEmitAggApply = (name == "PgEmitAggApply");
             }
+            else if (name == "CostBasedOptimizer") {
+                if (args.size() != 1) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
+                    return false;
+                }
+                auto arg = TString{args[0]};
+
+                if (arg == "PG") {
+                    Types.CostBasedOptimizerType = arg;
+                } else if (arg == "DPccp") {
+                    Types.CostBasedOptimizerType = arg;
+                } else if (arg == "disable") {
+                    ;
+                } else {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected `disable|PG|DPccp', but got: " << args[0]));
+                    return false;
+                }
+            }
             else {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Unsupported command: " << name));
                 return false;

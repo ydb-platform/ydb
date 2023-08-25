@@ -19,6 +19,8 @@ SRCS(
     yql_dq_datasource.h
     yql_dq_recapture.cpp
     yql_dq_recapture.h
+    yql_dq_statistics.cpp
+    yql_dq_statistics.h
     yql_dq_statistics_json.cpp
     yql_dq_statistics_json.h
     yql_dq_validate.cpp

@@ -14,6 +14,7 @@ TAutoPtr<IGraphTransformer> CreateConfigureTransformer(const TTypeAnnotationCont
 TAutoPtr<IGraphTransformer> CreateIODiscoveryTransformer(const TTypeAnnotationContext& types);
 TAutoPtr<IGraphTransformer> CreateEpochsTransformer(const TTypeAnnotationContext& types);
 TAutoPtr<IGraphTransformer> CreateRecaptureDataProposalsInspector(const TTypeAnnotationContext& types, const TString& provider);
+TAutoPtr<IGraphTransformer> CreateStatisticsProposalsInspector(const TTypeAnnotationContext& types, const TString& provider);
 TAutoPtr<IGraphTransformer> CreateLogicalDataProposalsInspector(const TTypeAnnotationContext& types);
 TAutoPtr<IGraphTransformer> CreatePhysicalDataProposalsInspector(const TTypeAnnotationContext& types);
 TAutoPtr<IGraphTransformer> CreatePhysicalFinalizers(const TTypeAnnotationContext& types);

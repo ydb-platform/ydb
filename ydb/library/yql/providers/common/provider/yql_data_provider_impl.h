@@ -58,6 +58,7 @@ public:
     void PostRewriteIO() override;
     void Reset() override;
     IGraphTransformer& GetRecaptureOptProposalTransformer() override;
+    IGraphTransformer& GetStatisticsProposalTransformer() override;
     IGraphTransformer& GetLogicalOptProposalTransformer() override;
     IGraphTransformer& GetPhysicalOptProposalTransformer() override;
     IGraphTransformer& GetPhysicalFinalizingTransformer() override;

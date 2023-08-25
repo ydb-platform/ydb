@@ -126,6 +126,7 @@ public:
     //-- optimizations
     virtual TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) = 0;
     virtual IGraphTransformer& GetRecaptureOptProposalTransformer() = 0;
+    virtual IGraphTransformer& GetStatisticsProposalTransformer() = 0;
     virtual IGraphTransformer& GetLogicalOptProposalTransformer() = 0;
     virtual IGraphTransformer& GetPhysicalOptProposalTransformer() = 0;
     virtual IGraphTransformer& GetPhysicalFinalizingTransformer() = 0;

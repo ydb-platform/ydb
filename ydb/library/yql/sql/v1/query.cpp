@@ -2479,6 +2479,11 @@ public:
                         BuildQuotedAtom(Pos, "DqEngine"), BuildQuotedAtom(Pos, mode))));
                 }
 
+                if (ctx.CostBasedOptimizer) {
+                    Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
+                        BuildQuotedAtom(Pos, "CostBasedOptimizer"), BuildQuotedAtom(Pos, ctx.CostBasedOptimizer))));
+                }
+
                 if (ctx.JsonQueryReturnsJsonDocument.Defined()) {
                     TString pragmaName = "DisableJsonQueryReturnsJsonDocument";
                     if (*ctx.JsonQueryReturnsJsonDocument) {

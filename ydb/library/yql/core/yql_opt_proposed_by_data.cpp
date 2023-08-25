@@ -406,4 +406,14 @@ TAutoPtr<IGraphTransformer> CreateRecaptureDataProposalsInspector(const TTypeAnn
     );
 }
 
+TAutoPtr<IGraphTransformer> CreateStatisticsProposalsInspector(const TTypeAnnotationContext& types, const TString& provider) {
+    return CreateSpecificDataProposalsInspector<ESource::DataSource>(
+        types,
+        provider,
+        [](IDataProvider* provider) -> IGraphTransformer& {
+            return provider->GetStatisticsProposalTransformer();
+        }
+    );
+}
+
 } // namespace NYql

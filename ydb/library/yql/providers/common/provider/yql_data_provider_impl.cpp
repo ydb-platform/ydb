@@ -165,6 +165,7 @@ void TDataProviderBase::Reset() {
         }
     }
     GetRecaptureOptProposalTransformer().Rewind();
+    GetStatisticsProposalTransformer().Rewind();
     GetLogicalOptProposalTransformer().Rewind();
     GetPhysicalOptProposalTransformer().Rewind();
     GetPhysicalFinalizingTransformer().Rewind();
@@ -176,6 +177,10 @@ void TDataProviderBase::Reset() {
 }
 
 IGraphTransformer& TDataProviderBase::GetRecaptureOptProposalTransformer() {
+    return NullTransformer_;
+}
+
+IGraphTransformer& TDataProviderBase::GetStatisticsProposalTransformer() {
     return NullTransformer_;
 }
 

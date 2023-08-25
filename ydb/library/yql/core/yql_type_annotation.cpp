@@ -53,6 +53,7 @@ void TTypeAnnotationContext::Reset() {
     ExpectedTypes.clear();
     ExpectedConstraints.clear();
     ExpectedColumnOrders.clear();
+    StatisticsMap.clear();
 }
 
 TString FormatColumnOrder(const TMaybe<TColumnOrder>& columnOrder) {

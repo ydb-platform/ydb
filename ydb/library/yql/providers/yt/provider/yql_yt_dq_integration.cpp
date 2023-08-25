@@ -344,6 +344,29 @@ public:
         return false;
     }
 
+    TMaybe<TOptimizerStatistics> ReadStatistics(const TExprNode::TPtr& read, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        TOptimizerStatistics stat(0, 0);
+        if (auto maybeRead = TMaybeNode<TYtReadTable>(read)) {
+            auto input = maybeRead.Cast().Input();
+            for (auto section: input) {
+                for (const auto& path: section.Paths()) {
+                    auto pathInfo = MakeIntrusive<TYtPathInfo>(path);
+                    auto tableInfo = pathInfo->Table;
+                    YQL_ENSURE(tableInfo);
+
+                    if (tableInfo->Stat) {
+                        stat.Nrows += tableInfo->Stat->RecordsCount;
+                    }
+                    if (pathInfo->Columns && pathInfo->Columns->GetColumns()) {
+                        stat.Ncols += pathInfo->Columns->GetColumns()->size();
+                    }
+                }
+            }
+        }
+        return stat;
+    }
+
     TMaybe<ui64> EstimateReadSize(ui64 dataSizePerJob, ui32 maxTasksPerStage, const TVector<const TExprNode*>& nodes, TExprContext& ctx) override {
         TVector<bool> hasErasurePerNode;
         hasErasurePerNode.reserve(nodes.size());

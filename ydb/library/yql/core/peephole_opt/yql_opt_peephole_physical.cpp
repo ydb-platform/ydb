@@ -5666,6 +5666,57 @@ TExprNode::TPtr ExpandConstraintsOf(const TExprNode::TPtr& node, TExprContext& c
         .Build();
 }
 
+TExprNode::TPtr ExpandCostsOf(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
+
+    TString json;
+    TStringOutput out(json);
+    NJson::TJsonWriter jsonWriter(&out, true);
+
+    VisitExpr(node, [&](const TExprNode::TPtr& node) {
+        auto stat = typesCtx.GetStats(node.Get());
+
+        if (stat || node->ChildrenSize()) {
+            jsonWriter.OpenMap();
+            jsonWriter.WriteKey("Name");
+            jsonWriter.Write(node->Content());
+            if (stat) {
+                if (stat->Cost) {
+                    jsonWriter.WriteKey("Cost");
+                    jsonWriter.Write(*stat->Cost);
+                }
+                jsonWriter.WriteKey("Cols");
+                jsonWriter.Write(stat->Ncols);
+                jsonWriter.WriteKey("Rows");
+                jsonWriter.Write(stat->Nrows);
+            }
+            if (node->ChildrenSize()) {
+                jsonWriter.WriteKey("Children");
+                jsonWriter.OpenArray();
+            }
+        }
+        return true;
+    }, [&](const TExprNode::TPtr& node) {
+        auto stat = typesCtx.GetStats(node.Get());
+
+        if (stat || node->ChildrenSize()) {
+            if (node->ChildrenSize()) {
+                jsonWriter.CloseArray();
+            }
+            jsonWriter.CloseMap();
+        }
+        return true;
+    });
+
+    jsonWriter.Flush();
+
+    return ctx.Builder(node->Pos())
+        .Callable("Json")
+            .Atom(0, json, TNodeFlags::MultilineContent)
+        .Seal()
+        .Build();
+}
+
 TExprNode::TPtr OptimizeMapJoinCore(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (const auto& input = node->Head(); input.IsCallable("NarrowMap") && input.Tail().Tail().IsCallable("AsStruct")) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << input.Content();
@@ -7200,6 +7251,7 @@ struct TPeepHoleRules {
         {"AggregateMergeFinalize", &ExpandAggregatePeephole},
         {"AggregateMergeManyFinalize", &ExpandAggregatePeephole},
         {"AggregateFinalize", &ExpandAggregatePeephole},
+        {"CostsOf", &ExpandCostsOf},
         {"JsonQuery", &ExpandJsonQuery},
     };
 

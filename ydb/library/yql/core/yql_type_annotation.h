@@ -236,6 +236,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool UseBlocks = false;
     bool PgEmitAggApply = false;
     IArrowResolver::TPtr ArrowResolver;
+    TString CostBasedOptimizerType;
 
     // compatibility with v0 or raw s-expression code
     bool OrderedColumns = false;

@@ -7,6 +7,13 @@ ui64 TDqIntegrationBase::Partition(const TDqSettings&, size_t, const TExprNode&,
     return 0;
 }
 
+bool TDqIntegrationBase::CheckPragmas(const TExprNode& node, TExprContext& ctx, bool skipIssues) {
+    Y_UNUSED(skipIssues);
+    Y_UNUSED(node);
+    Y_UNUSED(ctx);
+    return true;
+}
+
 bool TDqIntegrationBase::CanRead(const TExprNode&, TExprContext&, bool) {
     return false;
 }
@@ -17,6 +24,12 @@ TMaybe<ui64> TDqIntegrationBase::EstimateReadSize(ui64, ui32, const TVector<cons
 
 TExprNode::TPtr TDqIntegrationBase::WrapRead(const TDqSettings&, const TExprNode::TPtr& read, TExprContext&) {
     return read;
+}
+
+TMaybe<TOptimizerStatistics> TDqIntegrationBase::ReadStatistics(const TExprNode::TPtr& readWrap, TExprContext& ctx) {
+    Y_UNUSED(readWrap);
+    Y_UNUSED(ctx);
+    return Nothing();
 }
 
 TMaybe<bool> TDqIntegrationBase::CanWrite(const TExprNode&, TExprContext&) {

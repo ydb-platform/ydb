@@ -3,6 +3,7 @@
 #include "yql_dq_datasource_type_ann.h"
 #include "yql_dq_state.h"
 #include "yql_dq_validate.h"
+#include "yql_dq_statistics.h"
 
 #include <ydb/library/yql/providers/common/config/yql_configuration_transformer.h>
 #include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
@@ -48,6 +49,7 @@ public:
         , ExecTransformer_([this, execTransformerFactory] () { return THolder<IGraphTransformer>(execTransformerFactory(State_)); })
         , TypeAnnotationTransformer_([] () { return CreateDqsDataSourceTypeAnnotationTransformer(); })
         , ConstraintsTransformer_([] () { return CreateDqDataSourceConstraintTransformer(); })
+        , StatisticsTransformer_([this]() { return CreateDqsStatisticsTransformer(State_); })
     { }
 
     TStringBuf GetName() const override {
@@ -66,6 +68,10 @@ public:
 
     IGraphTransformer& GetConfigurationTransformer() override {
         return *ConfigurationTransformer_;
+    }
+
+    IGraphTransformer& GetStatisticsProposalTransformer() override {
+        return *StatisticsTransformer_;
     }
 
     bool CanBuildResultImpl(const TExprNode& node, TNodeSet& visited) {
@@ -268,6 +274,7 @@ private:
     TLazyInitHolder<IGraphTransformer> ExecTransformer_;
     TLazyInitHolder<TVisitorTransformerBase> TypeAnnotationTransformer_;
     TLazyInitHolder<IGraphTransformer> ConstraintsTransformer_;
+    TLazyInitHolder<IGraphTransformer> StatisticsTransformer_;
 };
 
 }

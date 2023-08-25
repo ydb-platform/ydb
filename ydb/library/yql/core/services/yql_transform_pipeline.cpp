@@ -162,6 +162,11 @@ TTransformationPipeline& TTransformationPipeline::AddOptimization(bool checkWorl
         "RecaptureDataProposals",
         issueCode));
     Transformers_.push_back(TTransformStage(
+        CreateStatisticsProposalsInspector(*TypeAnnotationContext_, TString{DqProviderName}),
+        "StatisticsProposals",
+        issueCode
+    ));
+    Transformers_.push_back(TTransformStage(
         CreateLogicalDataProposalsInspector(*TypeAnnotationContext_),
         "LogicalDataProposals",
         issueCode));

@@ -74,7 +74,7 @@ protected:
         }
         request.SetKeepSession(true);
         // HACK
-        TString q(ToUpperASCII(query.substr(0, 10)));
+        TString q(ToUpperASCII(query.substr(0, 20)));
         if (q.StartsWith("BEGIN")) {
             Tag_ = "BEGIN";
             request.SetAction(NKikimrKqp::QUERY_ACTION_BEGIN_TX);
@@ -100,6 +100,8 @@ protected:
                 Tag_ = "SELECT";
             }
             if (q.StartsWith("CREATE") || q.StartsWith("ALTER") || q.StartsWith("DROP")) {
+                TStringBuf tag(q);
+                Tag_ = TStringBuilder() << tag.NextTok(' ') << " " << tag.NextTok(' ');
                 request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
                 request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DDL);
             } else {
@@ -307,6 +309,7 @@ public:
                 BLOG_D("Sent event to kqpProxy " << request.ShortDebugString());
                 Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
             } else { // for DDL and TCL
+                BLOG_D("Skipping parse of DDL/TCL");
                 auto response = EventParse_->Get()->Reply();
                 TParsedStatement statement;
                 statement.QueryData = std::move(QueryData_);

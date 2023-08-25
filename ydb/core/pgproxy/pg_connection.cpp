@@ -576,7 +576,7 @@ protected:
     void HandleConnected(TEvPGEvents::TEvDescribeResponse::TPtr& ev) {
         if (IsEventExpected(ev)) {
             if (ev->Get()->ErrorFields.empty()) {
-                { // parameterDescription
+                if (ev->Get()->ParameterTypes.size() > 0) { // parameterDescription
                     TPGStreamOutput<TPGParameterDescription> parameterDescription;
                     parameterDescription << uint16_t(ev->Get()->ParameterTypes.size()); // number of fields
                     for (auto type : ev->Get()->ParameterTypes) {
@@ -767,9 +767,9 @@ protected:
                     break;
                 } else if (-res == EINTR) {
                     continue;
-                } else if (!res) {
+                } else if (res == 0) {
                     // connection closed
-                    BLOG_ERROR("connection closed iSQ: " << IncomingSequenceNumber << " oSQ: " << OutgoingSequenceNumber << " sSQ: " << SyncSequenceNumber);
+                    BLOG_ERROR("connection was gracefully closed iSQ: " << IncomingSequenceNumber << " oSQ: " << OutgoingSequenceNumber << " sSQ: " << SyncSequenceNumber);
                     return PassAway();
                 } else {
                     BLOG_ERROR("connection closed - error in recv: " << strerror(-res));

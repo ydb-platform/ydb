@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -e
+CTX_DIR=$(mktemp -d)
+echo Working dir: $CTX_DIR
+cd "$CTX_DIR"
+
+export YDB_USE_IN_MEMORY_PDISKS=true
+export YDB_ERASURE=block_4-2
+
+# Start server
+$source_root/ydb/public/tools/ydb_recipe/start.sh $CTX_DIR
+
+# Run test
+set +e
+ARCADIA_BUILD_ROOT="$build_root" \
+YDB_ENDPOINT=$(cat $CTX_DIR/ydb_endpoint.txt) YDB_DATABASE=$(cat $CTX_DIR/ydb_database.txt) \
+$build_root/ydb/tests/functional/kqp/kqp_query_session/ydb-tests-functional-kqp-kqp_query_session $*
+code=$?
+if [ $code -gt 0 ];then
+  echo
+  echo "Test execution failed"
+  echo
+fi
+
+# Stop server (removes working dir!)
+$source_root/ydb/public/tools/ydb_recipe/stop.sh $CTX_DIR
+
+# Return result code from test run
+if [ $code -gt 0 ];then
+  exit $code
+fi
+

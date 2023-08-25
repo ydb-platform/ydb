@@ -17,7 +17,6 @@ PEERDIR(
     contrib/python/ipdb
     contrib/python/py
     contrib/python/pytest
-    contrib/python/requests
     library/python/pytest/plugins
     library/python/testing/yatest_common
     library/python/testing/yatest_lib

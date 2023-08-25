@@ -432,7 +432,8 @@ public:
         auto sessionCtx = SessionCtx;
         auto profilesFuture = Gateway->GetTableProfiles();
         auto tablePromise = NewPromise<TGenericResult>();
-        profilesFuture.Subscribe([gateway, sessionCtx, metadata, tablePromise, pathPair, isPrepare]
+        auto temporary = metadata->Temporary;
+        profilesFuture.Subscribe([gateway, sessionCtx, metadata, tablePromise, pathPair, isPrepare, temporary]
             (const TFuture<IKqpGateway::TKqpTableProfilesResult>& future) mutable {
                 auto profilesResult = future.GetValue();
                 if (!profilesResult.Success()) {
@@ -512,6 +513,14 @@ public:
                     result.SetSuccess();
                     tablePromise.SetValue(result);
                 } else {
+                    if (temporary) {
+                        auto code = Ydb::StatusIds::BAD_REQUEST;
+                        auto error = TStringBuilder() << "Not allowed to create temp table";
+                        IKqpGateway::TGenericResult errResult;
+                        errResult.AddIssue(NYql::TIssue(error));
+                        errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
+                        tablePromise.SetValue(errResult);
+                    }
                     gateway->ModifyScheme(std::move(schemeTx)).Subscribe([tablePromise, warnings]
                         (const TFuture<TGenericResult>& future) mutable {
                             auto result = future.GetValue();

@@ -121,6 +121,7 @@
   - os/signpost.h
   - os/trace.h
   - panel.h
+  - pthread/introspection.h
   - pthread/qos.h
   - pthread_spis.h
   - readline/history.h

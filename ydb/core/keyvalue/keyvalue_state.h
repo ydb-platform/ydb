@@ -503,17 +503,19 @@ public:
             THolder<TIntermediate> &intermediate)
     {
         auto &record = kvRequest->Record;
-        if (record.has_lock_generation() && record.lock_generation() != StoredState.GetUserGeneration()) {
+        if (record.has_lock_generation()) {
             intermediate->HasGeneration = true;
             intermediate->Generation = record.lock_generation();
-            TStringStream str;
-            str << "KeyValue# " << TabletId;
-            str << " Generation mismatch! Requested# " << record.lock_generation();
-            str << " Actual# " << StoredState.GetUserGeneration();
-            str << " Marker# KV05";
-            ReplyError<typename TGrpcRequestWithLockGeneration::TResponse>(ctx, str.Str(),
-                    NKikimrKeyValue::Statuses::RSTATUS_WRONG_LOCK_GENERATION, intermediate);
-            return true;
+            if (record.lock_generation() != StoredState.GetUserGeneration()) {
+                TStringStream str;
+                str << "KeyValue# " << TabletId;
+                str << " Generation mismatch! Requested# " << record.lock_generation();
+                str << " Actual# " << StoredState.GetUserGeneration();
+                str << " Marker# KV05";
+                ReplyError<typename TGrpcRequestWithLockGeneration::TResponse>(ctx, str.Str(),
+                        NKikimrKeyValue::Statuses::RSTATUS_WRONG_LOCK_GENERATION, intermediate);
+                return true;
+            }
         } else {
             intermediate->HasGeneration = false;
         }

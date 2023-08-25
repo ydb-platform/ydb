@@ -12107,6 +12107,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["MatchRecognizeMeasures"] = &MatchRecognizeMeasuresWrapper;
         Functions["MatchRecognizePattern"] = &MatchRecognizePatternWrapper;
         Functions["MatchRecognizeDefines"] = &MatchRecognizeDefinesWrapper;
+        Functions["MatchRecognizeCore"] = &MatchRecognizeCoreWrapper;
 
         Functions["FromPg"] = &FromPgWrapper;
         Functions["ToPg"] = &ToPgWrapper;

@@ -58,6 +58,7 @@ public:
         AddHandler(0, &TCoEquiJoin::Match, HNDL(RewriteEquiJoin));
         AddHandler(0, &TCoCalcOverWindowBase::Match, HNDL(ExpandWindowFunctions));
         AddHandler(0, &TCoCalcOverWindowGroup::Match, HNDL(ExpandWindowFunctions));
+        AddHandler(0, &TCoMatchRecognize::Match, HNDL(ExpandMatchRecognize));
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(FlatMapOverExtend));
         AddHandler(0, &TDqQuery::Match, HNDL(MergeQueriesWithSinks));
         AddHandler(0, &TCoSqlIn::Match, HNDL(SqlInDropCompact));
@@ -131,6 +132,13 @@ protected:
     TMaybeNode<TExprBase> ExpandWindowFunctions(TExprBase node, TExprContext& ctx) {
         if (node.Cast<TCoInputBase>().Input().Maybe<TDqConnection>()) {
             return DqExpandWindowFunctions(node, ctx, true);
+        }
+        return node;
+    }
+
+    TMaybeNode<TExprBase> ExpandMatchRecognize(TExprBase node, TExprContext& ctx) {
+        if (node.Cast<TCoInputBase>().Input().Maybe<TDqConnection>()) {
+            return DqExpandMatchRecognize(node, ctx);
         }
         return node;
     }

@@ -64,8 +64,8 @@ const std::unordered_set<TString> GetPrimaryVars(const TExprNode::TPtr& pattern,
                 result.insert(TString(factor->ChildRef(0)->Content()));
             } else {
                 YQL_ENSURE(nestingLevel < MaxMatchRecognizePatternNesting, "To big nesting level in the pattern");
-                    auto subExprVars = GetPrimaryVars(factor->ChildRef(0), ctx, ++nestingLevel);
-                    result.insert(subExprVars.begin(), subExprVars.end());
+                auto subExprVars = GetPrimaryVars(factor->ChildRef(0), ctx, ++nestingLevel);
+                result.insert(subExprVars.begin(), subExprVars.end());
             }
         }
     }
@@ -197,6 +197,37 @@ MatchRecognizeDefinesWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& outp
         }
     }
     input->SetTypeAnn(ctx.Expr.MakeType<TStructExprType>(items));
+    return IGraphTransformer::TStatus::Ok;
+}
+
+IGraphTransformer::TStatus
+MatchRecognizeCoreWrapper(const TExprNode::TPtr &input, TExprNode::TPtr &output, TContext &ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 4, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    const auto& source = input->ChildRef(0);
+    const auto& partitionKeySelector = input->ChildRef(1);
+    const auto& partitionColumns = input->ChildRef(2);
+    const auto& params = input->ChildRef(3);
+
+    YQL_ENSURE(source->GetTypeAnn()->Cast<TFlowExprType>() != NULL, "Internal logic error. Flow expected");
+    const auto& define = params->ChildRef(4);
+    YQL_ENSURE(GetSeqItemType(source->GetTypeAnn())->Equals(*define->ChildRef(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()),
+                            "Internal logic error. Expected the same input type as for DEFINE");
+
+    const auto& partitionKeySelectorType = partitionKeySelector->GetTypeAnn();
+    const auto& partitionKeySelectorItemTypes = partitionKeySelectorType->Cast<TTupleExprType>()->GetItems();
+
+    auto outputTableColumns = params->GetTypeAnn()->Cast<TStructExprType>()->GetItems();
+    for (size_t i = 0; i != partitionColumns->ChildrenSize(); ++i) {
+        outputTableColumns.push_back(ctx.Expr.MakeType<TItemExprType>(
+                partitionColumns->ChildRef(i)->Content(),
+                partitionKeySelectorItemTypes[i]
+        ));
+    }
+    const auto outputTableRowType = ctx.Expr.MakeType<TStructExprType>(outputTableColumns);
+    input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(outputTableRowType));
     return IGraphTransformer::TStatus::Ok;
 }
 

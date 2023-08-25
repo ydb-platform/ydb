@@ -94,6 +94,7 @@ target_sources(library-yql-core PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_holding_file_storage.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_join.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_library_compiler.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_opt_match_recognize.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_opt_proposed_by_data.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_opt_range.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_opt_rewrite_io.cpp

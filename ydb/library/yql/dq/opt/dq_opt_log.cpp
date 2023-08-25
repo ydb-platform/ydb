@@ -6,6 +6,7 @@
 #include <ydb/library/yql/core/yql_aggregate_expander.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_opt_window.h>
+#include <ydb/library/yql/core/yql_opt_match_recognize.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/core/yql_type_annotation.h>
 #include <ydb/library/yql/dq/integration/yql_dq_integration.h>
@@ -290,6 +291,12 @@ IGraphTransformer::TStatus DqWrapRead(const TExprNode::TPtr& input, TExprNode::T
         return node;
     }, ctx, settings);
     return status;
+}
+
+TExprBase DqExpandMatchRecognize(TExprBase node, TExprContext& ctx) {
+    if (node.Maybe<TCoMatchRecognize>())
+        return TExprBase(ExpandMatchRecognize(node.Ptr(), ctx));
+    return node;
 }
 
 }

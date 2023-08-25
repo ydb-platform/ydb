@@ -15,6 +15,7 @@
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_opt_window.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/core/yql_opt_match_recognize.h>
 #include <ydb/library/yql/core/yql_join.h>
 #include <ydb/library/yql/core/yql_type_helpers.h>
 #include <ydb/library/yql/utils/log/log.h>
@@ -77,6 +78,8 @@ public:
 
         AddHandler(2, &TCoEquiJoin::Match, HNDL(ConvertToCommonTypeForForcedMergeJoin));
         AddHandler(2, &TCoShuffleByKeys::Match, HNDL(ShuffleByKeys));
+
+        AddHandler(0, &TCoMatchRecognize::Match, HNDL(MatchRecognize));
 #undef HNDL
     }
 
@@ -2654,6 +2657,10 @@ protected:
                 .Build()
             .Build()
             .Done();
+    }
+
+    TMaybeNode<TExprBase> MatchRecognize(TExprBase node, TExprContext& ctx) {
+        return ExpandMatchRecognize(node.Ptr(), ctx);
     }
 private:
     TYtState::TPtr State_;

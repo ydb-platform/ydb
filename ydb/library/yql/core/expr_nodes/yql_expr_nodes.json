@@ -1472,6 +1472,17 @@
             ]
         },
         {
+            "Name": "TCoMatchRecognize",
+            "Base": "TCoInputBase",
+            "Match": {"Type": "Callable", "Name": "MatchRecognize"},
+            "Children": [
+                {"Index": 1, "Name": "partitionKeySelector", "Type": "TExprBase"},
+                {"Index": 2, "Name": "partitionColumns", "Type": "TExprBase"},
+                {"Index": 3, "Name": "sortTraits", "Type": "TExprBase"},
+                {"Index": 4, "Name": "params", "Type": "TExprBase"}
+            ]
+        },
+        {
             "Name": "TCoEquiJoinTuple",
             "Base": "TExprBase",
             "Match": {"Type": "Tuple"},

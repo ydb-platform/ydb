@@ -8,6 +8,7 @@
 #include <ydb/library/yql/core/yql_opt_range.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/core/yql_opt_window.h>
+#include <ydb/library/yql/core/yql_opt_match_recognize.h>
 #include <ydb/library/yql/core/yql_join.h>
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/common_opt/yql_co_transformer.h>
@@ -7240,7 +7241,8 @@ struct TPeepHoleRules {
         {"CheckedMod", &ExpandCheckedMod},
         {"CheckedMinus", &ExpandCheckedMinus},
         {"JsonValue", &ExpandJsonValue},
-        {"JsonExists", &ExpandJsonExists}
+        {"JsonExists", &ExpandJsonExists},
+        {"MatchRecognize", &ExpandMatchRecognize}
     };
 
     static constexpr std::initializer_list<TExtPeepHoleOptimizerMap::value_type> CommonStageExtRulesInit = {

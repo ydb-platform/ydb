@@ -16,5 +16,6 @@ NO_RUNTIME()
 EXPORTS_SCRIPT(libiconv.exports)
 
 DYNAMIC_LIBRARY_FROM(contrib/libs/libiconv/static)
+LICENSE_RESTRICTION_EXCEPTIONS(contrib/libs/libiconv/static)
 
 END()

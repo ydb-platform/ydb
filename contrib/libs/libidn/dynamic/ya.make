@@ -17,6 +17,7 @@ LICENSE(
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 DYNAMIC_LIBRARY_FROM(contrib/libs/libidn/static)
+LICENSE_RESTRICTION_EXCEPTIONS(contrib/libs/libidn/static)
 
 NO_RUNTIME()
 

@@ -11,6 +11,7 @@ LICENSE(
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 DYNAMIC_LIBRARY_FROM(contrib/libs/libaio/static)
+LICENSE_RESTRICTION_EXCEPTIONS(contrib/libs/libaio/static)
 
 NO_RUNTIME()
 

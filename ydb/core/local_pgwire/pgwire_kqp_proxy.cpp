@@ -79,10 +79,11 @@ protected:
             Tag_ = "BEGIN";
             request.SetAction(NKikimrKqp::QUERY_ACTION_BEGIN_TX);
             request.MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
-        } else if (q.StartsWith("COMMIT")) {
+        } else if (q.StartsWith("COMMIT") || q.StartsWith("END")) {
             Tag_ = "COMMIT";
             request.SetAction(NKikimrKqp::QUERY_ACTION_COMMIT_TX);
             request.MutableTxControl()->set_tx_id(Connection_.Transaction.Id);
+            request.MutableTxControl()->set_commit_tx(true);
         } else if (q.StartsWith("ROLLBACK")) {
             Tag_ = "ROLLBACK";
             if (Connection_.Transaction.Status == 'T') {

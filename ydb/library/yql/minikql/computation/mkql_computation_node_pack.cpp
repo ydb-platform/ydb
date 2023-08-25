@@ -1008,7 +1008,6 @@ void TValuePackerTransport<Fast>::InitBlocks() {
     ConvertedScalars_.resize(width - 1);
     for (ui32 i = 0; i < width - 1; ++i) {
         const TBlockType* itemType = static_cast<const TBlockType*>(multiType->GetElementType(i));
-        const bool isScalar = itemType->GetShape() == TBlockType::EShape::Scalar;
         BlockSerializers_.emplace_back(MakeBlockSerializer(TTypeInfoHelper(), itemType->GetItemType()));
         BlockDeserializers_.emplace_back(MakeBlockDeserializer(TTypeInfoHelper(), itemType->GetItemType()));
         if (itemType->GetShape() == TBlockType::EShape::Scalar) {
@@ -1163,7 +1162,6 @@ TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddWideItemBlocks(cons
     // save metadata itself
     ui32 savedMetadata = 0;
     for (size_t i = 0; i < width - 1; ++i) {
-        const bool isScalar = BlockReaders_[i] != nullptr;
         BlockSerializers_[i]->StoreMetadata(*arrays[i], [&](ui64 meta) {
             PackData<false>(meta, *metadataBuffer);
             ++savedMetadata;
@@ -1176,7 +1174,6 @@ TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddWideItemBlocks(cons
         NYql::MakeReadOnlyRope(metadataBuffer, metadataBuffer->data(), metadataBuffer->size()));
     // save buffers
     for (size_t i = 0; i < width - 1; ++i) {
-        const bool isScalar = BlockReaders_[i] != nullptr;
         BlockSerializers_[i]->StoreArray(*arrays[i], BlockBuffer_);
     }
     ++ItemCount_;

@@ -36,7 +36,6 @@ public:
         auto secondReader = NYql::NUdf::MakeBlockReader(TTypeInfoHelper(), SecondItemType_);
         if (first.is_scalar()) {
             auto firstValue = firstReader->GetScalarItem(*first.scalar());
-            const auto& secondArray = *second.array();
             if (firstValue) {
                 auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), SecondItemType_, *ctx->memory_pool(), length, nullptr);
                 builder->Add(NeedUnwrapFirst_ ? firstValue.GetOptionalValue() : firstValue, length);
@@ -48,7 +47,7 @@ public:
             const auto& firstArray = *first.array();
             if (firstArray.GetNullCount() == 0) {
                 *res = NeedUnwrapFirst_ ? Unwrap(firstArray, FirstItemType_) : first;
-            } else if (firstArray.GetNullCount() == length) {
+            } else if ((size_t)firstArray.GetNullCount() == length) {
                 auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), SecondItemType_, *ctx->memory_pool(), length, nullptr);
                 auto secondValue = secondReader->GetScalarItem(*second.scalar());
                 builder->Add(secondValue, length);
@@ -72,7 +71,7 @@ public:
             const auto& secondArray = *second.array();
             if (firstArray.GetNullCount() == 0) {
                 *res = NeedUnwrapFirst_ ? Unwrap(firstArray, FirstItemType_) : first;
-            } else if (firstArray.GetNullCount() == length) {
+            } else if ((size_t)firstArray.GetNullCount() == length) {
                 *res = second;
             } else {
                 auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), SecondItemType_, *ctx->memory_pool(), length, nullptr);

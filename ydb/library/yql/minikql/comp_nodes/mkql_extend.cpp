@@ -20,7 +20,7 @@ public:
     {}
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        auto& s = GetState(state, ctx, output);
+        auto& s = GetState(state, ctx);
 
         size_t yieldCount = 0;
         while (s.LiveInputs) {
@@ -59,7 +59,7 @@ private:
         size_t LiveInputs;
         size_t InputIndex = 0;
 
-        TState(TMemoryUsageInfo* memInfo, const TComputationWideFlowNodePtrVector& inputs, NUdf::TUnboxedValue*const* output)
+        TState(TMemoryUsageInfo* memInfo, const TComputationWideFlowNodePtrVector& inputs)
             : TComputationValue(memInfo)
             , Inputs(inputs)
             , LiveInputs(Inputs.size())
@@ -74,9 +74,9 @@ private:
     };
 
 
-    TState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+    TState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (!state.HasValue()) {
-            state = ctx.HolderFactory.Create<TState>(Flows_, output);
+            state = ctx.HolderFactory.Create<TState>(Flows_);
         }
         return *static_cast<TState*>(state.AsBoxed().Get());
     }

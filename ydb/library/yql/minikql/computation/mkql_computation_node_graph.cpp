@@ -900,6 +900,9 @@ public:
 
         timerFull.Release();
         timerFull.Report(stats);
+#else
+        Y_UNUSED(optLLVM);
+        Y_UNUSED(stats);
 #endif
 
         IsPatternCompiled.store(true);

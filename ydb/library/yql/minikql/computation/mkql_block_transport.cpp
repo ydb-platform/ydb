@@ -45,7 +45,7 @@ std::shared_ptr<arrow::Buffer> MakeZeroBitmap(size_t bitCount) {
 }
 
 bool NeedStoreBitmap(const arrow::ArrayData& data) {
-    size_t nullCount = data.GetNullCount();
+    auto nullCount = data.GetNullCount();
     return nullCount != 0 && nullCount != data.length;
 }
 
@@ -73,7 +73,7 @@ void StoreNulls(const arrow::ArrayData& data, TRope& dst) {
     }
     const ui64 desiredOffset = data.offset % 8;
     size_t nullBytes = (((size_t)data.length + desiredOffset + 7) & ~7ull) >> 3;
-    YQL_ENSURE(desiredOffset <= data.offset);
+    YQL_ENSURE(desiredOffset <= (size_t)data.offset);
     YQL_ENSURE((data.offset - desiredOffset) % 8 == 0);
     const char* nulls = data.GetValues<char>(0, 0) + (data.offset - desiredOffset) / 8;
     dst.Insert(dst.End(), NYql::MakeReadOnlyRope(data.buffers[0], nulls, nullBytes));

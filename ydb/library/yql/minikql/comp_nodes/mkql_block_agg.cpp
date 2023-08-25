@@ -280,6 +280,11 @@ public:
         memcpy(U.A, other.U.A, SSO_Length + 1);
     }
 
+    TSSOKey& operator=(const TSSOKey& other) {
+        memcpy(U.A, other.U.A, SSO_Length + 1);
+        return *this;
+    }
+
     static bool CanBeInplace(TStringBuf data) {
         return data.Size() + 1 <= sizeof(TSSOKey);
     }

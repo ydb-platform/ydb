@@ -1017,7 +1017,6 @@ IComputationNode* WrapSelfJoin(TCallable& callable, const TComputationNodeFactor
 
     const auto leftFlowNode = callable.GetInput(0);
     const auto leftFlowComponents = GetWideComponents(AS_TYPE(TFlowType, leftFlowNode));
-    const auto rightFlowComponents{leftFlowComponents};
     const auto joinKindNode = callable.GetInput(1);
     const auto leftKeyColumnsNode = AS_VALUE(TTupleLiteral, callable.GetInput(2));
     const auto rightKeyColumnsNode = AS_VALUE(TTupleLiteral, callable.GetInput(3));

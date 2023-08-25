@@ -819,12 +819,12 @@ namespace {
 
                 if (arg == "PG") {
                     Types.CostBasedOptimizerType = arg;
-                } else if (arg == "DPccp") {
+                } else if (arg == "Native") {
                     Types.CostBasedOptimizerType = arg;
                 } else if (arg == "disable") {
                     ;
                 } else {
-                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected `disable|PG|DPccp', but got: " << args[0]));
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected `disable|PG|Native', but got: " << args[0]));
                     return false;
                 }
             }

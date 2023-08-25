@@ -1977,9 +1977,9 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "costbasedoptimizer") {
             Ctx.IncrementMonCounter("sql_pragma", "CostBasedOptimizer");
             if (values.size() != 1 || !values[0].GetLiteral()
-                || ! (*values[0].GetLiteral() == "disable" || *values[0].GetLiteral() == "PG" || *values[0].GetLiteral() == "DPccp"))
+                || ! (*values[0].GetLiteral() == "disable" || *values[0].GetLiteral() == "PG" || *values[0].GetLiteral() == "Native"))
             {
-                Error() << "Expected `disable|PG|DPccp' argument for: " << pragma;
+                Error() << "Expected `disable|PG|Native' argument for: " << pragma;
                 Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
                 return {};
             }

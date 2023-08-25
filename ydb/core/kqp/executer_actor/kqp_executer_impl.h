@@ -76,40 +76,39 @@ inline bool IsDebugLogEnabled() {
 TActorId ReportToRl(ui64 ru, const TString& database, const TString& userToken,
     const NKikimrKqp::TRlPath& path);
 
-template <class TDerived, EExecType ExecType>
-class TKqpExecuterBase : public TActorBootstrapped<TDerived> {
-protected:
-    struct TEvPrivate {
-        enum EEv {
-            EvRetry = EventSpaceBegin(TEvents::ES_PRIVATE),
-            EvResourcesSnapshot,
-            EvReattachToShard,
-        };
-
-        struct TEvRetry : public TEventLocal<TEvRetry, EEv::EvRetry> {
-            ui32 RequestId;
-            TActorId Target;
-
-            TEvRetry(ui64 requestId, const TActorId& target)
-                : RequestId(requestId)
-                , Target(target) {}
-        };
-
-        struct TEvResourcesSnapshot : public TEventLocal<TEvResourcesSnapshot, EEv::EvResourcesSnapshot> {
-            TVector<NKikimrKqp::TKqpNodeResources> Snapshot;
-
-            TEvResourcesSnapshot(TVector<NKikimrKqp::TKqpNodeResources>&& snapshot)
-                : Snapshot(std::move(snapshot)) {}
-        };
-
-        struct TEvReattachToShard : public TEventLocal<TEvReattachToShard, EvReattachToShard> {
-            const ui64 TabletId;
-
-            explicit TEvReattachToShard(ui64 tabletId)
-                : TabletId(tabletId) {}
-        };
+struct TEvPrivate {
+    enum EEv {
+        EvRetry = EventSpaceBegin(TEvents::ES_PRIVATE),
+        EvResourcesSnapshot,
+        EvReattachToShard,
     };
 
+    struct TEvRetry : public TEventLocal<TEvRetry, EEv::EvRetry> {
+        ui32 RequestId;
+        TActorId Target;
+
+        TEvRetry(ui64 requestId, const TActorId& target)
+            : RequestId(requestId)
+            , Target(target) {}
+    };
+
+    struct TEvResourcesSnapshot : public TEventLocal<TEvResourcesSnapshot, EEv::EvResourcesSnapshot> {
+        TVector<NKikimrKqp::TKqpNodeResources> Snapshot;
+
+        TEvResourcesSnapshot(TVector<NKikimrKqp::TKqpNodeResources>&& snapshot)
+            : Snapshot(std::move(snapshot)) {}
+    };
+
+    struct TEvReattachToShard : public TEventLocal<TEvReattachToShard, EvReattachToShard> {
+        const ui64 TabletId;
+
+        explicit TEvReattachToShard(ui64 tabletId)
+            : TabletId(tabletId) {}
+    };
+};
+
+template <class TDerived, EExecType ExecType>
+class TKqpExecuterBase : public TActorBootstrapped<TDerived> {
 public:
     TKqpExecuterBase(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
@@ -408,6 +407,14 @@ protected:
         }
 
         return secureParams;
+    }
+
+    void GetResourcesSnapshot() {
+        GetKqpResourceManager()->RequestClusterResourcesInfo(
+            [as = TlsActivationContext->ActorSystem(), self = SelfId()](TVector<NKikimrKqp::TKqpNodeResources>&& resources) {
+                TAutoPtr<IEventHandle> eh = new IEventHandle(self, self, new TEvPrivate::TEvResourcesSnapshot(std::move(resources)));
+                as->Send(eh);
+            });
     }
 
 protected:
@@ -764,7 +771,7 @@ protected:
         }
     }
 
-    void BuildReadTasksFromSource(TStageInfo& stageInfo, const TMap<TString, TString>& secureParams) {
+    void BuildReadTasksFromSource(TStageInfo& stageInfo, const TMap<TString, TString>& secureParams, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot) {
         const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         YQL_ENSURE(stage.GetSources(0).HasExternalSource());
@@ -772,7 +779,26 @@ protected:
 
         const auto& stageSource = stage.GetSources(0);
         const auto& externalSource = stageSource.GetExternalSource();
-        for (const TString& partitionParam : externalSource.GetPartitionedTaskParams()) {
+
+        ui32 taskCount = externalSource.GetPartitionedTaskParams().size();
+
+        if (!resourceSnapshot.empty()) {
+            ui32 maxTaskcount = resourceSnapshot.size() * 2;
+            if (taskCount > maxTaskcount) {
+                taskCount = maxTaskcount;
+            }
+        }
+
+        auto sourceName = externalSource.GetSourceName();
+        TString structuredToken;
+        if (sourceName) {
+            structuredToken = NYql::CreateStructuredTokenParser(externalSource.GetAuthInfo()).ToBuilder().ReplaceReferences(secureParams).ToJson();   
+        }
+
+        TVector<ui64> tasksIds;
+
+        // generate all tasks
+        for (ui32 i = 0; i < taskCount; i++) {
             auto& task = TasksGraph.AddTask(stageInfo);
 
             auto& input = task.Inputs[stageSource.GetInputIndex()];
@@ -780,17 +806,32 @@ protected:
             input.SourceSettings = externalSource.GetSettings();
             input.SourceType = externalSource.GetType();
 
-            task.Meta.ReadRanges.push_back(partitionParam);
-
-            auto sourceName = externalSource.GetSourceName();
-            if (sourceName) {
-                auto structuredToken = NYql::CreateStructuredTokenParser(externalSource.GetAuthInfo()).ToBuilder().ReplaceReferences(secureParams).ToJson();
+            if (structuredToken) {
                 task.Meta.SecureParams.emplace(sourceName, structuredToken);
             }
 
-            task.Meta.Type = TTaskMeta::TTaskType::Compute;
+            if (resourceSnapshot.empty()) {
+                task.Meta.Type = TTaskMeta::TTaskType::Compute;
+            } else {
+                task.Meta.NodeId = resourceSnapshot[i % resourceSnapshot.size()].GetNodeId();
+                task.Meta.Type = TTaskMeta::TTaskType::Scan;
+            }
 
-            BuildSinks(stage, task, secureParams);
+            tasksIds.push_back(task.Id);
+        }
+
+        // distribute read ranges between them
+        ui32 currentTaskIndex = 0;
+        for (const TString& partitionParam : externalSource.GetPartitionedTaskParams()) {
+            TasksGraph.GetTask(tasksIds[currentTaskIndex]).Meta.ReadRanges.push_back(partitionParam);
+            if (++currentTaskIndex >= tasksIds.size()) {
+                currentTaskIndex = 0;
+            }
+        }
+
+        // finish building
+        for (auto taskId : tasksIds) {
+            BuildSinks(stage, TasksGraph.GetTask(taskId), secureParams);
         }
     }
 
@@ -950,7 +991,7 @@ protected:
 protected:
     void UnexpectedEvent(const TString& state, ui32 eventType) {
         LOG_C("TKqpExecuter, unexpected event: " << eventType << ", at state:" << state << ", selfID: " << this->SelfId());
-        InternalError(TStringBuilder() << "Unexpected event at TKqpScanExecuter, state: " << state
+        InternalError(TStringBuilder() << "Unexpected event at TKqpExecuter, state: " << state
             << ", event: " << eventType);
     }
 

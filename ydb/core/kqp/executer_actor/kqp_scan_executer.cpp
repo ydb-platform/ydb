@@ -475,14 +475,6 @@ private:
         }
     }
 
-    void GetResourcesSnapshot() {
-        GetKqpResourceManager()->RequestClusterResourcesInfo(
-            [as = TlsActivationContext->ActorSystem(), self = SelfId()](TVector<NKikimrKqp::TKqpNodeResources>&& resources) {
-                TAutoPtr<IEventHandle> eh = new IEventHandle(self, self, new TEvPrivate::TEvResourcesSnapshot(std::move(resources)));
-                as->Send(eh);
-            });
-    }
-
     void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
         if (!TBase::HandleResolve(ev)) return;
         TSet<ui64> shardIds;

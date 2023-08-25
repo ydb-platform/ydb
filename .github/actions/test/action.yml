@@ -307,9 +307,9 @@ runs:
       .github/scripts/tests/generate-summary.py \
         --summary-out-path $ARTIFACTS_DIR/summary/ \
         --summary-url-prefix $S3_URL_PREFIX/summary/ \
-        "Unittest" unittest.html $TESTREPDIR/unittests \
-        "CTest shard" ctest.html $TESTREPDIR/suites \
-        "Functional" functional.html $PYTESTREPDIR
+        "Unittests" unittest.html $TESTREPDIR/unittests \
+        "Unittest binary runs" ctest.html $TESTREPDIR/suites \
+        "Functional tests" functional.html $PYTESTREPDIR
 
   - name: sync test results to s3
     if: always()

@@ -817,16 +817,12 @@ namespace {
                 }
                 auto arg = TString{args[0]};
 
-                if (arg == "PG") {
-                    Types.CostBasedOptimizerType = arg;
-                } else if (arg == "Native") {
-                    Types.CostBasedOptimizerType = arg;
-                } else if (arg == "disable") {
-                    ;
-                } else {
-                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected `disable|PG|Native', but got: " << args[0]));
+                if (!(arg == "pg" || arg == "native" || arg == "disable")) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected `disable|pg|native', but got: " << args[0]));
                     return false;
                 }
+
+                Types.CostBasedOptimizerType = arg;
             }
             else {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Unsupported command: " << name));

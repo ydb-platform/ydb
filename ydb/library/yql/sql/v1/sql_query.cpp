@@ -1976,14 +1976,16 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
             Ctx.IncrementMonCounter("sql_pragma", "DisableCompactGroupBy");
         } else if (normalizedPragma == "costbasedoptimizer") {
             Ctx.IncrementMonCounter("sql_pragma", "CostBasedOptimizer");
+            if (values.size() == 1 && values[0].GetLiteral()) {
+                Ctx.CostBasedOptimizer = to_lower(*values[0].GetLiteral());
+            }
             if (values.size() != 1 || !values[0].GetLiteral()
-                || ! (*values[0].GetLiteral() == "disable" || *values[0].GetLiteral() == "PG" || *values[0].GetLiteral() == "Native"))
+                || ! (Ctx.CostBasedOptimizer == "disable" || Ctx.CostBasedOptimizer == "pg" || Ctx.CostBasedOptimizer == "native"))
             {
-                Error() << "Expected `disable|PG|Native' argument for: " << pragma;
+                Error() << "Expected `disable|pg|native' argument for: " << pragma;
                 Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
                 return {};
             }
-            Ctx.CostBasedOptimizer = *values[0].GetLiteral();
         } else {
             Error() << "Unknown pragma: " << pragma;
             Ctx.IncrementMonCounter("sql_errors", "UnknownPragma");

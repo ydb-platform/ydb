@@ -1732,13 +1732,7 @@ public:
                     return nullptr;
                 }
 
-                if (str == "pg") {
-                    CostBasedOptimizer = "PG";
-                } else if (str == "native") {
-                    CostBasedOptimizer = "Native";
-                } else {
-                    CostBasedOptimizer = str;
-                }
+                CostBasedOptimizer = str;
             } else {
                 AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
                 return nullptr;

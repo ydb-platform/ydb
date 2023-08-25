@@ -7,6 +7,8 @@
 
 #include <yt/yt/client/api/client.h>
 
+#include <yt/yt/client/cache/public.h>
+
 // @brief   HedgingClient is a wrapper for several YT-clients with ability
 //          to retry asynchronously the same request with different underlying-clients.
 //          HedgingClient implements IClient interface and supports methods that do not change state of data on YT.
@@ -28,6 +30,8 @@
 namespace NYT::NClient::NHedging::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+using NCache::IClientsCachePtr;
 
 // from config.proto
 class THedgingClientConfig;

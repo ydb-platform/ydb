@@ -5,12 +5,9 @@ INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 EXPLICIT_DATA()
 
 SRCS(
-    cache_ut.cpp
     counters_ut.cpp
     hedging_ut.cpp
-    options_ut.cpp
     penalty_provider_ut.cpp
-    rpc_ut.cpp
 
     GLOBAL hook.cpp
 )

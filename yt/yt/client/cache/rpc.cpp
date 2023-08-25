@@ -1,7 +1,7 @@
 #include "rpc.h"
 #include "options.h"
 
-#include <yt/yt_proto/yt/client/hedging/proto/config.pb.h>
+#include <yt/yt_proto/yt/client/cache/proto/config.pb.h>
 
 #include <yt/yt/client/api/client.h>
 
@@ -12,7 +12,7 @@
 
 #include <util/system/env.h>
 
-namespace NYT::NClient::NHedging::NRpc {
+namespace NYT::NClient::NCache {
 
 NCompression::ECodec GetResponseCodecFromProto(const ECompressionCodec& protoCodec)
 {
@@ -153,4 +153,4 @@ NApi::IClientPtr CreateClient(TStringBuf clusterUrl, const NApi::TClientOptions&
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NClient::NHedging::NRpc
+} // namespace NYT::NClient::NCache

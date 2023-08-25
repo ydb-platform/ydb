@@ -1,0 +1,15 @@
+SET_RESOURCE_URI_FROM_JSON(SANDBOX_RESOURCE_URI ${ARCADIA_ROOT}/build/prebuilt/contrib/tools/protoc/plugins/cpp_styleguide/resources.json)
+
+IF (SANDBOX_RESOURCE_URI != "")
+    ENABLE(PREBUILT)
+
+    PREBUILT_PROGRAM()
+
+    DECLARE_EXTERNAL_RESOURCE(CPP_STYLEGUIDE ${SANDBOX_RESOURCE_URI})
+
+    PRIMARY_OUTPUT(${CPP_STYLEGUIDE_RESOURCE_GLOBAL}/cpp_styleguide${MODULE_SUFFIX})
+
+    INCLUDE(ya.make.induced_deps)
+
+    END()
+ENDIF()

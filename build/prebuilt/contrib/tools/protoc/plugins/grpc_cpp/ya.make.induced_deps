@@ -1,0 +1,35 @@
+INDUCED_DEPS(cpp
+    ${ARCADIA_ROOT}/contrib/libs/grpc/include/grpcpp/support/async_stream.h
+    ${ARCADIA_ROOT}/contrib/libs/grpc/include/grpcpp/support/async_unary_call.h
+    ${ARCADIA_ROOT}/contrib/libs/grpc/include/grpcpp/impl/channel_interface.h
+    ${ARCADIA_ROOT}/contrib/libs/grpc/include/grpcpp/impl/client_unary_call.h
+    ${ARCADIA_ROOT}/contrib/libs/grpc/include/grpcpp/support/client_callback.h
+    ${ARCADIA_ROOT}/contrib/libs/grpc/include/grpcpp/support/message_allocator.h
+    ${ARCADIA_ROOT}/contrib/libs/grpc/include/grpcpp/support/method_handler.h
+    ${ARCADIA_ROOT}/contrib/libs/grpc/include/grpcpp/impl/rpc_service_method.h
+    ${ARCADIA_ROOT}/contrib/libs/grpc/include/grpcpp/support/server_callback.h
+    ${ARCADIA_ROOT}/contrib/libs/grpc/include/grpcpp/impl/server_callback_handlers.h
+    ${ARCADIA_ROOT}/contrib/libs/grpc/include/grpcpp/server_context.h
+    ${ARCADIA_ROOT}/contrib/libs/grpc/include/grpcpp/impl/service_type.h
+    ${ARCADIA_ROOT}/contrib/libs/grpc/include/grpcpp/support/sync_stream.h
+)
+    
+INDUCED_DEPS(h+cpp
+    ${ARCADIA_ROOT}/contrib/libs/grpc/include/grpcpp/generic/async_generic_service.h
+    ${ARCADIA_ROOT}/contrib/libs/grpc/include/grpcpp/support/async_stream.h
+    ${ARCADIA_ROOT}/contrib/libs/grpc/include/grpcpp/support/async_unary_call.h
+    ${ARCADIA_ROOT}/contrib/libs/grpc/include/grpcpp/support/client_callback.h
+    ${ARCADIA_ROOT}/contrib/libs/grpc/include/grpcpp/client_context.h
+    ${ARCADIA_ROOT}/contrib/libs/grpc/include/grpcpp/completion_queue.h
+    ${ARCADIA_ROOT}/contrib/libs/grpc/include/grpcpp/support/message_allocator.h
+    ${ARCADIA_ROOT}/contrib/libs/grpc/include/grpcpp/support/method_handler.h
+    ${ARCADIA_ROOT}/contrib/libs/grpc/include/grpcpp/impl/proto_utils.h
+    ${ARCADIA_ROOT}/contrib/libs/grpc/include/grpcpp/impl/rpc_method.h
+    ${ARCADIA_ROOT}/contrib/libs/grpc/include/grpcpp/support/server_callback.h
+    ${ARCADIA_ROOT}/contrib/libs/grpc/include/grpcpp/impl/server_callback_handlers.h
+    ${ARCADIA_ROOT}/contrib/libs/grpc/include/grpcpp/server_context.h
+    ${ARCADIA_ROOT}/contrib/libs/grpc/include/grpcpp/impl/service_type.h
+    ${ARCADIA_ROOT}/contrib/libs/grpc/include/grpcpp/support/status.h
+    ${ARCADIA_ROOT}/contrib/libs/grpc/include/grpcpp/support/stub_options.h
+    ${ARCADIA_ROOT}/contrib/libs/grpc/include/grpcpp/support/sync_stream.h
+)

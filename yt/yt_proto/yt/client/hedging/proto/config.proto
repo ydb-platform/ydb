@@ -1,6 +1,6 @@
 package NYT.NClient.NHedging.NRpc;
 
-import public "yt/yt_proto/yt/client/cache/proto/config.proto";
+import public "yt_proto/yt/client/cache/proto/config.proto";
 import "yt_proto/yt/core/yson/proto/protobuf_interop.proto";
 
 option (NYT.NYson.NProto.derive_underscore_case_names) = true;

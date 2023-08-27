@@ -46,7 +46,7 @@ public:
                 Find(includeScopes, scope) != includeScopes.end();
             auto isActivatedCase2 =
                 activation.GetPercentage() == 100 &&
-                Find(excludeScopes, scope) != excludeScopes.end();
+                Find(excludeScopes, scope) == excludeScopes.end();
             if (isActivatedCase1 || isActivatedCase2) {
                 return mapping.GetCompute();
             }

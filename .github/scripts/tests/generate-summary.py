@@ -79,17 +79,18 @@ def render_testlist_html(rows, fn):
             has_any_log.add(t.status)
 
     for status in status_test.keys():
-        status_test[status].sort(key=attrgetter('full_name'))
+        status_test[status].sort(key=attrgetter("full_name"))
 
     status_order = [TestStatus.FAIL, TestStatus.SKIP, TestStatus.MUTE, TestStatus.PASS]
 
     # remove status group without tests
     status_order = [s for s in status_order if s in status_test]
 
-    content = env.get_template("summary.html").render(status_order=status_order, tests=status_test,
-                                                      has_any_log=has_any_log)
+    content = env.get_template("summary.html").render(
+        status_order=status_order, tests=status_test, has_any_log=has_any_log
+    )
 
-    with open(fn, 'w') as fp:
+    with open(fn, "w") as fp:
         fp.write(content)
 
 
@@ -108,7 +109,11 @@ def write_summary(lines: List[str]):
         fp.close()
 
 
-def gen_summary(summary_url_prefix, summary_out_folder, paths, ):
+def gen_summary(
+    summary_url_prefix,
+    summary_out_folder,
+    paths,
+):
     summary = [
         "|      | TESTS | PASSED | ERRORS | FAILED | SKIPPED | MUTED[^1] |",
         "| :--- | ---:  | -----: | -----: | -----: | ------: | ----: |",
@@ -142,7 +147,7 @@ def gen_summary(summary_url_prefix, summary_out_folder, paths, ):
             test_result = TestResult(classname=classname, name=name, status=status, log_url=log_url)
             test_results.append(test_result)
 
-        report_url = f'{summary_url_prefix}{html_fn}'
+        report_url = f"{summary_url_prefix}{html_fn}"
 
         render_testlist_html(test_results, os.path.join(summary_out_folder, html_fn))
 
@@ -150,18 +155,18 @@ def gen_summary(summary_url_prefix, summary_out_folder, paths, ):
             " | ".join(
                 [
                     title,
-                    render_pm(tests, f'{report_url}', 0),
-                    render_pm(passed, f'{report_url}#PASS', 0),
-                    render_pm(errors, f'{report_url}#ERROR', 0),
-                    render_pm(failed, f'{report_url}#FAIL', 0),
-                    render_pm(skipped, f'{report_url}#SKIP', 0),
-                    render_pm(muted, f'{report_url}#MUTE', 0),
+                    render_pm(tests, f"{report_url}", 0),
+                    render_pm(passed, f"{report_url}#PASS", 0),
+                    render_pm(errors, f"{report_url}#ERROR", 0),
+                    render_pm(failed, f"{report_url}#FAIL", 0),
+                    render_pm(skipped, f"{report_url}#SKIP", 0),
+                    render_pm(muted, f"{report_url}#MUTE", 0),
                 ]
             )
         )
 
-    github_srv = os.environ.get('GITHUB_SERVER_URL', 'https://github.com')
-    repo = os.environ.get('GITHUB_REPOSITORY', 'ydb-platform/ydb')
+    github_srv = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
+    repo = os.environ.get("GITHUB_REPOSITORY", "ydb-platform/ydb")
 
     summary.append("\n")
     summary.append(f"[^1]: All mute rules are defined [here]({github_srv}/{repo}/tree/main/.github/config).")

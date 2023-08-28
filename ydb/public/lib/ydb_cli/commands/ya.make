@@ -12,6 +12,7 @@ SRCS(
     topic_write_scenario.cpp
     topic_readwrite_scenario.cpp
     tpch.cpp
+    tpcc_workload.cpp
     ydb_sdk_core_access.cpp
     ydb_command.cpp
     ydb_profile.cpp

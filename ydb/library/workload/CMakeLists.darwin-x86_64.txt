@@ -6,11 +6,18 @@
 # original buildsystem will not be accepted.
 
 
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
 add_library(ydb-library-workload)
 target_link_libraries(ydb-library-workload PUBLIC
   contrib-libs-cxxsupp
   yutil
+  tools-enum_parser-enum_serialization_runtime
   api-protos
   cpp-client-ydb_table
 )
@@ -18,4 +25,21 @@ target_sources(ydb-library-workload PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/workload/stock_workload.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/workload/kv_workload.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/workload/workload_factory.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/workload/tpcc/tpcc_workload.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/workload/tpcc/load_data/customer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/workload/tpcc/load_data/district.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/workload/tpcc/load_data/history.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/workload/tpcc/load_data/item.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/workload/tpcc/load_data/new_order.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/workload/tpcc/load_data/oorder.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/workload/tpcc/load_data/order_line.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/workload/tpcc/load_data/query_generator.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/workload/tpcc/load_data/stock.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/workload/tpcc/load_data/warehouse.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/workload/tpcc/load_data/load_thread_pool.cpp
+)
+generate_enum_serilization(ydb-library-workload
+  ${CMAKE_SOURCE_DIR}/ydb/library/workload/tpcc/tpcc_config.h
+  INCLUDE_HEADERS
+  ydb/library/workload/tpcc/tpcc_config.h
 )

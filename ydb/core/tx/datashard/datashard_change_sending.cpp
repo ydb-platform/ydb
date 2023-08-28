@@ -1,9 +1,9 @@
 #include "datashard_impl.h"
 
+#include <util/generic/algorithm.h>
 #include <util/generic/size_literals.h>
 
-namespace NKikimr {
-namespace NDataShard {
+namespace NKikimr::NDataShard {
 
 using namespace NTabletFlatExecutor;
 
@@ -230,16 +230,19 @@ public:
             ctx.Send(to, new TEvChangeExchange::TEvForgetRecords(std::move(records)));
         }
 
-        size_t left = 0;
-        for (const auto& [_, records] : Self->ChangeRecordsRequested) {
-            left += records.size();
-        }
+        size_t left = Accumulate(Self->ChangeRecordsRequested, (size_t)0, [](size_t sum, const auto& kv) {
+            return sum + kv.second.size();
+        });
 
         LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TTxRequestChangeRecords Complete"
             << ": sent# " << sent
             << ", forgotten# " << forgotten
             << ", left# " << left
             << ", at tablet# " << Self->TabletID());
+
+        Self->SetCounter(COUNTER_CHANGE_RECORDS_REQUESTED, left);
+        Self->IncCounter(COUNTER_CHANGE_RECORDS_SENT, sent);
+        Self->IncCounter(COUNTER_CHANGE_RECORDS_FORGOTTEN, forgotten);
 
         if (left) {
             Self->Execute(new TTxRequestChangeRecords(Self), ctx);
@@ -385,6 +388,9 @@ private:
 /// Request
 void TDataShard::Handle(TEvChangeExchange::TEvRequestRecords::TPtr& ev, const TActorContext& ctx) {
     ChangeRecordsRequested[ev->Sender].insert(ev->Get()->Records.begin(), ev->Get()->Records.end());
+    SetCounter(COUNTER_CHANGE_QUEUE_SIZE, Accumulate(ChangeRecordsRequested, (size_t)0, [](size_t sum, const auto& kv) {
+        return sum + kv.second.size();
+    }));
     ScheduleRequestChangeRecords(ctx);
 }
 
@@ -421,5 +427,4 @@ void TDataShard::Handle(TEvChangeExchange::TEvSplitAck::TPtr&, const TActorConte
     Execute(new TTxChangeExchangeSplitAck(this), ctx);
 }
 
-} // NDataShard
-} // NKikimr
+}

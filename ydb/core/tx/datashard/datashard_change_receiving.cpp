@@ -101,6 +101,12 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         for (auto& [sender, status] : Statuses) {
+            if (status->Record.GetStatus() == NKikimrChangeExchange::TEvStatus::STATUS_OK) {
+                Self->IncCounter(COUNTER_CHANGE_EXCHANGE_SUCCESSFUL_HANDSHAKES);
+            } else {
+                Self->IncCounter(COUNTER_CHANGE_EXCHANGE_REJECTED_HANDSHAKES);
+            }
+
             ctx.Send(sender, status.Release());
         }
     }
@@ -385,6 +391,13 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         Y_VERIFY(Status);
+
+        if (Status->Record.GetStatus() == NKikimrChangeExchange::TEvStatus::STATUS_OK) {
+            Self->IncCounter(COUNTER_CHANGE_EXCHANGE_SUCCESSFUL_APPLY);
+        } else {
+            Self->IncCounter(COUNTER_CHANGE_EXCHANGE_REJECTED_APPLY);
+        }
+
         ctx.Send(Ev->Sender, Status.Release());
     }
 

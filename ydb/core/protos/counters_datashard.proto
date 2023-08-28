@@ -24,6 +24,7 @@ enum ESimpleCounters {
     COUNTER_READ_ITERATORS_WAITING = 14                            [(CounterOpts) = {Name: "ReadIteratorsWaiting"}];
     COUNTER_READ_ITERATORS_COUNT = 15                              [(CounterOpts) = {Name: "ReadIteratorsCount"}];
     COUNTER_READ_ITERATORS_EXHAUSTED_COUNT = 16                    [(CounterOpts) = {Name: "ReadIteratorsExhaustedCount"}];
+    COUNTER_CHANGE_RECORDS_REQUESTED = 17                          [(CounterOpts) = {Name: "ChangeRecordsRequested"}];
 }
 
 enum ECumulativeCounters {
@@ -123,6 +124,12 @@ enum ECumulativeCounters {
     COUNTER_READ_ITERATOR_ROWS_READ = 93                  [(CounterOpts) = {Name: "ReadIteratorRowsRead"}];
     COUNTER_READ_ITERATOR_BYTES_READ = 94                 [(CounterOpts) = {Name: "ReadIteratorBytesRead"}];
     COUNTER_READ_ITERATOR_CANCEL = 95                     [(CounterOpts) = {Name: "ReadIteratorCancel"}];
+    COUNTER_CHANGE_EXCHANGE_SUCCESSFUL_HANDSHAKES = 96    [(CounterOpts) = {Name: "ChangeExchangeSuccessfulHandshakes"}];
+    COUNTER_CHANGE_EXCHANGE_REJECTED_HANDSHAKES = 97      [(CounterOpts) = {Name: "ChangeExchangeRejectedHandshakes"}];
+    COUNTER_CHANGE_EXCHANGE_SUCCESSFUL_APPLY = 98         [(CounterOpts) = {Name: "ChangeExchangeSuccessfulApply"}];
+    COUNTER_CHANGE_EXCHANGE_REJECTED_APPLY = 99           [(CounterOpts) = {Name: "ChangeExchangeRejectedApply"}];
+    COUNTER_CHANGE_RECORDS_SENT = 100                     [(CounterOpts) = {Name: "ChangeRecordsSent"}];
+    COUNTER_CHANGE_RECORDS_FORGOTTEN = 101                [(CounterOpts) = {Name: "ChangeRecordsForgotten"}];
 }
 
 enum EPercentileCounters {

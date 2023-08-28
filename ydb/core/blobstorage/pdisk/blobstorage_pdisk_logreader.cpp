@@ -539,6 +539,21 @@ void TLogReader::Exec(ui64 offsetRead, TVector<ui64> &badOffsets, TActorSystem *
     }// while (true)
 }
 
+void TLogReader::NotifyError(ui64 offsetRead, TString& errorReason) {
+    TGuard<TMutex> guard(ExecMutex);
+    if (IsReplied.load()) {
+        return;
+    }
+
+    Result->ErrorReason = errorReason;
+
+    LOG_ERROR(*ActorSystem, NKikimrServices::BS_PDISK,
+        "PDiskId# %" PRIu32 " Error reading log with offset %" PRIu64,
+        (ui32)PDisk->PDiskId, offsetRead);
+        
+    ReplyError();
+}
+
 TString TLogReader::SelfInfo() {
     TStringStream ss;
     ss << "PDiskId# " << PDisk->PDiskId

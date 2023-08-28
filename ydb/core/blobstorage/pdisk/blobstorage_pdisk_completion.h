@@ -23,7 +23,7 @@ protected:
     TVector<ui64> BadOffsets;
 
 public:
-    void SetResult(const EIoResult  result) {
+    void SetResult(const EIoResult result) {
         Result = result;
         if (FlushAction) {
             FlushAction->SetResult(result);

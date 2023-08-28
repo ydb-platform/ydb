@@ -26,6 +26,8 @@ public:
 
     void Release(TActorSystem *actorSystem) override {
         Y_UNUSED(actorSystem);
+        // Notifies log reader of the log reading error.
+        Reader->NotifyError(Offset, ErrorReason);
         delete this;
     }
 };
@@ -119,6 +121,7 @@ public:
     virtual ~TLogReader();
 
     void Exec(ui64 offsetRead, TVector<ui64> &badOffsets, TActorSystem *actorSystem) override;
+    void NotifyError(ui64 offsetRead, TString& errorReason) override;
 
 private:
     TString SelfInfo();

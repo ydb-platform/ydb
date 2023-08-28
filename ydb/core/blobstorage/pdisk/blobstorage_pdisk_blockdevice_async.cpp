@@ -83,12 +83,15 @@ class TRealBlockDevice : public IBlockDevice {
                             if (!stateError && action->CanHandleResult()) {
                                 action->Exec(Device.ActorSystem);
                             } else {
+                                TString errorReason = action->ErrorReason;
+
+                                action->Release(Device.ActorSystem);
+
                                 if (!stateError) {
                                     stateError = true;
                                     Device.BecomeErrorState(TStringBuilder()
-                                            << " CompletionAction error, operation info# " << action->ErrorReason);
+                                            << " CompletionAction error, operation info# " << errorReason);
                                 }
-                                action->Release(Device.ActorSystem);
                             }
                         }
                     }
@@ -1071,7 +1074,7 @@ protected:
     }
 
     void BecomeErrorState(const TString& info) {
-        // Block only B flag so device will not working but when Stop() will be called AFlag will be toggled
+        // Block only B flag so device will not be working but when Stop() will be called AFlag will be toggled
         QuitCounter.BlockB();
         TString fullInfo = TStringBuilder() << IoContext->GetPDiskInfo() << info;
         if (ActorSystem) {
@@ -1329,6 +1332,24 @@ public:
     void ReleaseRead(TCachedReadCompletion *completion, TActorSystem *actorSystem) {
         TGuard<TMutex> guard(CacheMutex);
         Y_UNUSED(actorSystem);
+
+        if (!completion->CanHandleResult()) {
+            // If error, notify all underlying reads of that error.
+            // Notice that reads' CompletionActions are not released here.
+            // This should happen on device stop.
+            ui64 offset = completion->GetOffset();
+            auto range = ReadsForOffset.equal_range(offset);
+
+            for (auto it = range.first; it != range.second; ++it) {
+                TRead &read = it->second;
+                
+                Y_VERIFY(read.CompletionAction);
+
+                read.CompletionAction->SetResult(completion->Result);
+                read.CompletionAction->SetErrorReason(completion->ErrorReason);
+            }
+        }
+
         auto it = CurrentReads.find(completion->GetOffset());
         Y_VERIFY(it != CurrentReads.end());
         delete it->second;

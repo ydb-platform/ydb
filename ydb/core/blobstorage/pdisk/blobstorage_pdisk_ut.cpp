@@ -361,6 +361,52 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT(errors > 0);
     }
 
+    Y_UNIT_TEST(TestFakeErrorPDiskLogRead) {
+        TActorTestContext testCtx({ false });
+
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+
+        for (int i = 0; i < 100; i++) {
+            vdisk.SendEvLogSync(1024);
+        }
+
+        testCtx.RestartPDiskSync();
+
+        vdisk.Init();
+
+        // Make sure there will be read error.
+        testCtx.TestCtx.SectorMap->ImitateReadIoErrorProbability = 1;
+
+        auto res = vdisk.ReadLog(true);
+
+        // Zero log records should be read.
+        UNIT_ASSERT_EQUAL(0, res);
+
+        auto device = testCtx.GetPDisk()->BlockDevice.Get();
+
+        // After unsuccessful log read, pdisk should be shut down.
+        UNIT_ASSERT(!device->IsGood());
+    }
+
+    Y_UNIT_TEST(TestFakeErrorPDiskSysLogRead) {
+        TActorTestContext testCtx({ false });
+
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+
+        // Make sure there will be syslog read error.
+        testCtx.TestCtx.SectorMap->ImitateReadIoErrorProbability = 1;
+
+        testCtx.TestResponse<NPDisk::TEvYardControlResult>(
+                new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStop, nullptr),
+                NKikimrProto::OK);
+
+        testCtx.TestResponse<NPDisk::TEvYardControlResult>(
+                new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStart, (void*)(&testCtx.MainKey)),
+                NKikimrProto::CORRUPTED);
+    }
+
     Y_UNIT_TEST(TestFakeErrorPDiskManyChunkRead) {
         TActorTestContext testCtx({ false });
         testCtx.TestCtx.SectorMap->ImitateReadIoErrorProbability = 1e-4;

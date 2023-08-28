@@ -182,8 +182,8 @@ TString TS3ExternalStorageConfig::DoGetStorageId() const {
     return TString(Config.endpointOverride.data(), Config.endpointOverride.size());
 }
 
-IExternalStorageOperator::TPtr TS3ExternalStorageConfig::DoConstructStorageOperator() const {
-    return std::make_shared<TS3ExternalStorage>(Config, Credentials, Bucket, StorageClass);
+IExternalStorageOperator::TPtr TS3ExternalStorageConfig::DoConstructStorageOperator(bool verbose) const {
+    return std::make_shared<TS3ExternalStorage>(Config, Credentials, Bucket, StorageClass, verbose);
 }
 
 TS3ExternalStorageConfig::TS3ExternalStorageConfig(const Ydb::Import::ImportFromS3Settings& settings): Config(ConfigFromSettings(settings))

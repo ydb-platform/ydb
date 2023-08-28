@@ -35,6 +35,7 @@ private:
     const Aws::Auth::AWSCredentials Credentials;
     const TString Bucket;
     const Aws::S3::Model::StorageClass StorageClass = Aws::S3::Model::StorageClass::STANDARD;
+    bool Verbose = true;
 
     template <typename TRequest, typename TOutcome>
     using THandler = std::function<void(const Aws::S3::S3Client*, const TRequest&, const TOutcome&, const std::shared_ptr<const Aws::Client::AsyncCallerContext>&)>;
@@ -48,34 +49,49 @@ private:
         ev->Get()->MutableRequest().WithBucket(Bucket);
 
         auto ctx = std::make_shared<TCtx>(TlsActivationContext->ActorSystem(), ev->Sender, ev->Get()->GetRequestContext(), StorageClass);
-        auto callback = [](
+        bool verbose = Verbose;
+        auto callback = [verbose](
             const Aws::S3::S3Client*,
             const typename TEvRequest::TRequest& request,
             const typename TEvResponse::TOutcome& outcome,
             const std::shared_ptr<const Aws::Client::AsyncCallerContext>& context) {
                 const auto* ctx = static_cast<const TCtx*>(context.get());
 
-                LOG_INFO_S(*ctx->GetActorSystem(), NKikimrServices::S3_WRAPPER, "Response"
-                    << ": uuid# " << ctx->GetUUID()
-                    << ", response# " << outcome);
+                if (verbose) {
+                    LOG_NOTICE_S(*ctx->GetActorSystem(), NKikimrServices::S3_WRAPPER, "Response"
+                        << ": uuid# " << ctx->GetUUID()
+                        << ", response# " << outcome);
+                } else {
+                    LOG_INFO_S(*ctx->GetActorSystem(), NKikimrServices::S3_WRAPPER, "Response"
+                        << ": uuid# " << ctx->GetUUID()
+                        << ", response# " << outcome);
+                }
                 ctx->Reply(request, outcome);
         };
 
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER, "Request"
-            << ": uuid# " << ctx->GetUUID()
-            << ", request# " << ev->Get()->GetRequest());
+        if (Verbose) {
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER, "Request"
+                << ": uuid# " << ctx->GetUUID()
+                << ", request# " << ev->Get()->GetRequest());
+        } else {
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::S3_WRAPPER, "Request"
+                << ": uuid# " << ctx->GetUUID()
+                << ", request# " << ev->Get()->GetRequest());
+        }
         func(Client.Get(), ctx->PrepareRequest(ev), callback, ctx);
     }
 
 public:
     TS3ExternalStorage(const Aws::Client::ClientConfiguration& config,
         const Aws::Auth::AWSCredentials& credentials,
-        const TString& bucket, const Aws::S3::Model::StorageClass storageClass)
+        const TString& bucket, const Aws::S3::Model::StorageClass storageClass,
+        bool verbose = true)
         : Client(new Aws::S3::S3Client(credentials, config))
         , Config(config)
         , Credentials(credentials)
         , Bucket(bucket)
         , StorageClass(storageClass)
+        , Verbose(verbose)
     {
     }
 

@@ -129,7 +129,8 @@ public:
             Send(ExternalStorageActorId, new TEvents::TEvPoisonPill);
             ExternalStorageActorId = {};
         }
-        ExternalStorageActorId = this->RegisterWithSameMailbox(NWrappers::CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
+        ExternalStorageActorId = this->RegisterWithSameMailbox(
+            NWrappers::CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator(false)));
     }
 
     void Handle(TEvPrivate::TEvExport::TPtr& ev) {

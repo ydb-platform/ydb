@@ -62,7 +62,7 @@ private:
     class TStoragesCollection;
 
 protected:
-    virtual IExternalStorageOperator::TPtr DoConstructStorageOperator() const = 0;
+    virtual IExternalStorageOperator::TPtr DoConstructStorageOperator(bool verbose) const = 0;
     virtual TString DoGetStorageId() const = 0;
 
     TString GetStorageId() const {
@@ -71,7 +71,7 @@ protected:
 public:
     using TPtr = std::shared_ptr<IExternalStorageConfig>;
     virtual ~IExternalStorageConfig() = default;
-    IExternalStorageOperator::TPtr ConstructStorageOperator() const;
+    IExternalStorageOperator::TPtr ConstructStorageOperator(bool verbose = true) const;
     static IExternalStorageConfig::TPtr Construct(const NKikimrSchemeOp::TS3Settings& settings);
 };
 } // NExternalStorage

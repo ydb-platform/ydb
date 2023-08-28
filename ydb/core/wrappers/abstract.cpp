@@ -6,8 +6,8 @@
 
 namespace NKikimr::NWrappers::NExternalStorage {
 
-IExternalStorageOperator::TPtr IExternalStorageConfig::ConstructStorageOperator() const {
-    return DoConstructStorageOperator();
+IExternalStorageOperator::TPtr IExternalStorageConfig::ConstructStorageOperator(bool verbose) const {
+    return DoConstructStorageOperator(verbose);
 }
 
 IExternalStorageConfig::TPtr IExternalStorageConfig::Construct(const NKikimrSchemeOp::TS3Settings& settings) {

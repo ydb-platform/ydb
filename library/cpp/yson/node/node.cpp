@@ -5,6 +5,9 @@
 #include <library/cpp/yson/writer.h>
 
 #include <util/generic/overloaded.h>
+#include <util/string/escape.h>
+
+#include <iostream>
 
 namespace NYT {
 
@@ -907,6 +910,17 @@ bool GetBool(const TNode& node)
     } else {
         ythrow TNode::TTypeError()
             << "GetBool(): not a boolean or string type";
+    }
+}
+
+void PrintTo(const TNode& node, std::ostream* out)
+{
+    if (node.IsUndefined()) {
+        (*out) << "NYT::TNode::Undefined";
+    } else {
+        (*out) << "NYT::TNode("
+        << NodeToCanonicalYsonString(node)
+        << ")";
     }
 }
 

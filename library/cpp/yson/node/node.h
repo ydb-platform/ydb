@@ -290,6 +290,9 @@ bool operator!=(const TNode& lhs, const TNode& rhs);
 
 bool GetBool(const TNode& node);
 
+/// Debug printer for gtest
+void PrintTo(const TNode& node, std::ostream* out);
+
 inline bool TNode::IsArithmetic() const {
     return IsInt64() || IsUint64() || IsDouble() || IsBool();
 }

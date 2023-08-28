@@ -471,8 +471,8 @@ private:
     IProxyDiscoveryCachePtr ProxyDiscoveryCache_;
 
     class TCommandContext;
-    typedef TIntrusivePtr<TCommandContext> TCommandContextPtr;
-    typedef TCallback<void(ICommandContextPtr)> TExecuteCallback;
+    using TCommandContextPtr = TIntrusivePtr<TCommandContext>;
+    using TExecuteCallback = TCallback<void(ICommandContextPtr)>;
 
     const IStickyTransactionPoolPtr StickyTransactionPool_;
 

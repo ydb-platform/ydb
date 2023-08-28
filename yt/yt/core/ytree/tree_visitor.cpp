@@ -131,7 +131,7 @@ private:
         Consumer->OnBeginMap();
         auto children = node->GetChildren();
         if (Stable_) {
-            typedef std::pair<TString, INodePtr> TPair;
+            using TPair = std::pair<TString, INodePtr>;
             std::sort(
                 children.begin(),
                 children.end(),

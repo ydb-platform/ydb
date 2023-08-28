@@ -50,7 +50,7 @@ class TLexer
     : public TLexerBase<TBlockStream, EnableLinePositionInfo>
 {
 private:
-    typedef TLexerBase<TBlockStream, EnableLinePositionInfo> TBase;
+    using TBase = TLexerBase<TBlockStream, EnableLinePositionInfo>;
 
     static EReadStartCase GetStartState(char ch)
     {

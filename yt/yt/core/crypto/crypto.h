@@ -13,8 +13,8 @@ namespace NYT::NCrypto {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-typedef std::array<char, 16> TMD5Hash;
-typedef std::array<char, 92> TMD5State;
+using TMD5Hash = std::array<char, 16>;
+using TMD5State = std::array<char, 92>;
 
 TMD5Hash MD5FromString(TStringBuf data);
 
@@ -47,7 +47,7 @@ TString GetMD5HexDigestLowerCase(TStringBuf data);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-typedef std::array<char, 20> TSha1Hash;
+using TSha1Hash = std::array<char, 20>;
 
 TSha1Hash Sha1FromString(TStringBuf data);
 

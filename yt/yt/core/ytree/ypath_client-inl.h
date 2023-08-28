@@ -12,7 +12,7 @@ template <class TTypedRequest>
 TFuture<TIntrusivePtr<typename TTypedRequest::TTypedResponse>>
 ExecuteVerb(const IYPathServicePtr& service, const TIntrusivePtr<TTypedRequest>& request)
 {
-    typedef typename TTypedRequest::TTypedResponse TTypedResponse;
+    using TTypedResponse = typename TTypedRequest::TTypedResponse;
 
     auto requestMessage = request->Serialize();
     return ExecuteVerb(service, requestMessage)

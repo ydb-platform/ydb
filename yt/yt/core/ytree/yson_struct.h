@@ -299,7 +299,7 @@ struct TSerializerTraits<
     C,
     typename std::enable_if_t<std::is_convertible_v<T&, NYTree::TYsonStructBase&>>>
 {
-    typedef TBinaryYsonStructSerializer TSerializer;
+    using TSerializer = TBinaryYsonStructSerializer;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

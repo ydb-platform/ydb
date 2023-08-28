@@ -96,7 +96,7 @@ class TTypedYPathRequest
     , public TRequestMessage
 {
 public:
-    typedef TTypedYPathResponse<TRequestMessage, TResponseMessage> TTypedResponse;
+    using TTypedResponse = TTypedYPathResponse<TRequestMessage, TResponseMessage>;
 
     explicit TTypedYPathRequest(const NRpc::NProto::TRequestHeader& header)
         : TYPathRequest(header)
@@ -168,11 +168,11 @@ protected:
     static_assert(true)
 
 #define DEFINE_YPATH_PROXY_METHOD_IMPL(ns, method, isMutating) \
-    typedef ::NYT::NYTree::TTypedYPathRequest<ns::TReq##method, ns::TRsp##method> TReq##method; \
-    typedef ::NYT::NYTree::TTypedYPathResponse<ns::TReq##method, ns::TRsp##method> TRsp##method; \
-    typedef ::NYT::TIntrusivePtr<TReq##method> TReq##method##Ptr; \
-    typedef ::NYT::TIntrusivePtr<TRsp##method> TRsp##method##Ptr; \
-    typedef ::NYT::TErrorOr<TRsp##method##Ptr> TErrorOrRsp##method##Ptr; \
+    using TReq##method = ::NYT::NYTree::TTypedYPathRequest<ns::TReq##method, ns::TRsp##method>; \
+    using TRsp##method = ::NYT::NYTree::TTypedYPathResponse<ns::TReq##method, ns::TRsp##method>; \
+    using TReq##method##Ptr = ::NYT::TIntrusivePtr<TReq##method>; \
+    using TRsp##method##Ptr = ::NYT::TIntrusivePtr<TRsp##method>; \
+    using TErrorOrRsp##method##Ptr = ::NYT::TErrorOr<TRsp##method##Ptr>; \
     \
     static TReq##method##Ptr method(const NYT::NYPath::TYPath& path = NYT::NYPath::TYPath()) \
     { \

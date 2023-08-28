@@ -30,7 +30,7 @@ struct TProfilerTag final
     { }
 };
 
-typedef TIntrusivePtr<TProfilerTag> TProfilerTagPtr;
+using TProfilerTagPtr = TIntrusivePtr<TProfilerTag>;
 
 constexpr int MaxActiveTags = 4;
 

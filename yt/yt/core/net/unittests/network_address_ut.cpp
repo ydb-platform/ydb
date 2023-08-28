@@ -170,7 +170,7 @@ std::array<ui16, 8> AddressToWords(const TIP6Address& addr) {
 
 TEST(TIP6AddressTest, FromString)
 {
-    typedef std::pair<TString, std::array<ui16, 8>> TTestCase;
+    using TTestCase = std::pair<TString, std::array<ui16, 8>>;
 
     for (const auto& testCase : {
         TTestCase{"0:0:0:0:0:0:0:0", {0, 0, 0, 0, 0, 0, 0, 0}},

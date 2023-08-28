@@ -65,7 +65,7 @@ namespace NYT {
 template <class C>
 struct TSerializerTraits<NYTree::IAttributeDictionaryPtr, C, void>
 {
-    typedef NYTree::TAttributeDictionarySerializer TSerializer;
+    using TSerializer = NYTree::TAttributeDictionarySerializer;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

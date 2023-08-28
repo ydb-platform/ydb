@@ -278,7 +278,7 @@ void WriteBody(THttpOutput* out, TStringBuf body)
 
 TEST(THttpOutputTest, Full)
 {
-    typedef std::tuple<EMessageType, TString, std::function<void(THttpOutput*)>> TTestCase;
+    using TTestCase = std::tuple<EMessageType, TString, std::function<void(THttpOutput*)>>;
     std::vector<TTestCase> table = {
         TTestCase{
             EMessageType::Request,
@@ -468,7 +468,7 @@ void ExpectBodyEnd(THttpInput* in)
 
 TEST(THttpInputTest, Simple)
 {
-    typedef std::tuple<EMessageType, TString, std::function<void(THttpInput*)>> TTestCase;
+    using TTestCase = std::tuple<EMessageType, TString, std::function<void(THttpInput*)>>;
     std::vector<TTestCase> table = {
         TTestCase{
             EMessageType::Response,

@@ -176,10 +176,10 @@ private:
     // at the right registers.
     //
     // Kudos to folly::Function authors.
-    typedef R(*TTypedInvokeFunction)(TCallArg<TArgs>..., NYT::NDetail::TBindStateBase*);
+    using TTypedInvokeFunction = R(*)(TCallArg<TArgs>..., NYT::NDetail::TBindStateBase*);
 
 public:
-    typedef R(TSignature)(TArgs...);
+    using TSignature = R(TArgs...);
 
     TCallback()
         : TCallbackBase(TIntrusivePtr<NYT::NDetail::TBindStateBase>())
@@ -243,7 +243,7 @@ private:
     template <class R2, class... TArgs2>
     TCallback<R2(TArgs2...)> CastImpl() const
     {
-        typedef TCallableBindState<R(TArgs...), R2(TArgs2...)> TBindState;
+        using TBindState = TCallableBindState<R(TArgs...), R2(TArgs2...)>;
 
         return TCallback<R2(TArgs2...)>(
             New<TBindState>(

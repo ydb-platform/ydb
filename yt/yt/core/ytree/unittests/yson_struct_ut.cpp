@@ -59,7 +59,7 @@ struct TTestSubconfig
     }
 };
 
-typedef TIntrusivePtr<TTestSubconfig> TTestSubconfigPtr;
+using TTestSubconfigPtr = TIntrusivePtr<TTestSubconfig>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -97,7 +97,7 @@ public:
     }
 };
 
-typedef TIntrusivePtr<TTestConfig> TTestConfigPtr;
+using TTestConfigPtr = TIntrusivePtr<TTestConfig>;
 
 ////////////////////////////////////////////////////////////////////////////////
 

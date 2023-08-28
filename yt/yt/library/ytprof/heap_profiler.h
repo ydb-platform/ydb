@@ -21,7 +21,7 @@ int AbslStackUnwinder(void** frames, int*,
                       const void*,
                       int*);
 
-typedef uintptr_t TMemoryTag;
+using TMemoryTag = uintptr_t;
 
 TMemoryTag GetMemoryTag();
 

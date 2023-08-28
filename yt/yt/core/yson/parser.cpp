@@ -14,7 +14,7 @@ using namespace NConcurrency;
 class TYsonParser::TImpl
 {
 private:
-    typedef TCoroutine<int(const char* begin, const char* end, bool finish)> TParserCoroutine;
+    using TParserCoroutine = TCoroutine<int(const char* begin, const char* end, bool finish)>;
 
     TParserCoroutine ParserCoroutine_;
     TParserYsonStreamImpl<IYsonConsumer, TBlockReader<TParserCoroutine>> Parser_;

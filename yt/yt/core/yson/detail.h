@@ -536,7 +536,7 @@ class TLexerBase
     : public TCodedStream<TCharStream<TBlockStream, TPositionInfo<EnableLinePositionInfo>>>
 {
 private:
-    typedef TCodedStream<TCharStream<TBlockStream, TPositionInfo<EnableLinePositionInfo>>> TBaseStream;
+    using TBaseStream = TCodedStream<TCharStream<TBlockStream, TPositionInfo<EnableLinePositionInfo>>>;
 
     const i64 MemoryLimit_;
 

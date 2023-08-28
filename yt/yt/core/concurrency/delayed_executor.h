@@ -12,7 +12,7 @@ namespace NYT::NConcurrency {
 class TDelayedExecutor
 {
 public:
-    typedef TCallback<void(bool)> TDelayedCallback;
+    using TDelayedCallback = TCallback<void(bool)>;
 
     //! Constructs a future that gets set when a given #delay elapses.
     /*!

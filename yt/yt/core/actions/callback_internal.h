@@ -96,7 +96,7 @@ protected:
      * We create a TUntypedInvokeFunction type that can store our
      * function pointer, and then cast it back to the original type on usage.
      */
-    typedef void(*TUntypedInvokeFunction)();
+    using TUntypedInvokeFunction = void(*)();
 
     TIntrusivePtr<TBindStateBase> BindState;
     TUntypedInvokeFunction UntypedInvoke;

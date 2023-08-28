@@ -29,16 +29,16 @@ public:
 
 private:
     class TImpl;
-    typedef TIntrusivePtr<TImpl> TImplPtr;
+    using TImplPtr = TIntrusivePtr<TImpl>;
 
     struct TData;
-    typedef TIntrusivePtr<TData> TDataPtr;
+    using TDataPtr = TIntrusivePtr<TData>;
 
     class TReader;
-    typedef TIntrusivePtr<TReader> TReaderPtr;
+    using TReaderPtr = TIntrusivePtr<TReader>;
 
     class TWriter;
-    typedef TIntrusivePtr<TWriter> TWriterPtr;
+    using TWriterPtr = TIntrusivePtr<TWriter>;
 
 
     TIntrusivePtr<TImpl> Impl_;

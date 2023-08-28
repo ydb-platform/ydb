@@ -1111,7 +1111,7 @@ struct TSorterSelector<THashSet<T...>, C, TSortedTag>
 template <class C, class T, size_t N, class Q>
 struct TSorterSelector<TCompactSet<T, N, Q>, C, TSortedTag>
 {
-    typedef TNoopSorter<TCompactSet<T, N, Q>, C> TSorter;
+    using TSorter = TNoopSorter<TCompactSet<T, N, Q>, C>;
 };
 
 template <class C, class... T>
@@ -1879,7 +1879,7 @@ struct TSerializerTraits<THashSet<T, H, E, A>, C, void>
 template <class T, size_t N, class Q, class C>
 struct TSerializerTraits<TCompactSet<T, N, Q>, C, void>
 {
-    typedef TSetSerializer<> TSerializer;
+    using TSerializer = TSetSerializer<>;
 };
 
 template <class T, class C>

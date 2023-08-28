@@ -39,7 +39,7 @@ TYPED_TEST_P(TYTreeFluentStringScalarTest, Ok)
         .Value(passedScalar);
 }
 
-typedef Types<const char*, TString> TYTreeFluentStringScalarTestTypes;
+using TYTreeFluentStringScalarTestTypes = Types<const char*, TString>;
 
 REGISTER_TYPED_TEST_SUITE_P(TYTreeFluentStringScalarTest, Ok);
 INSTANTIATE_TYPED_TEST_SUITE_P(
@@ -73,8 +73,7 @@ TYPED_TEST_P(TYTreeFluentIntScalarTest, Ok)
         .Value(passedScalar);
 }
 
-typedef Types<i8, i16, i32, i64>
-    TYTreeFluentIntScalarTestTypes;
+using TYTreeFluentIntScalarTestTypes = Types<i8, i16, i32, i64>;
 REGISTER_TYPED_TEST_SUITE_P(TYTreeFluentIntScalarTest, Ok);
 INSTANTIATE_TYPED_TEST_SUITE_P(TypeParametrized, TYTreeFluentIntScalarTest,
     TYTreeFluentIntScalarTestTypes
@@ -105,8 +104,7 @@ TYPED_TEST_P(TYTreeFluentUintScalarTest, Ok)
         .Value(passedScalar);
 }
 
-typedef Types<ui8, ui16, ui32, ui64>
-    TYTreeFluentUintScalarTestTypes;
+using TYTreeFluentUintScalarTestTypes = Types<ui8, ui16, ui32, ui64>;
 REGISTER_TYPED_TEST_SUITE_P(TYTreeFluentUintScalarTest, Ok);
 INSTANTIATE_TYPED_TEST_SUITE_P(TypeParametrized, TYTreeFluentUintScalarTest,
     TYTreeFluentUintScalarTestTypes
@@ -137,8 +135,7 @@ TYPED_TEST_P(TYTreeFluentFloatScalarTest, Ok)
         .Value(passedScalar);
 }
 
-typedef Types<float, double>
-    TYTreeFluentFloatScalarTestTypes;
+using TYTreeFluentFloatScalarTestTypes = Types<float, double>;
 REGISTER_TYPED_TEST_SUITE_P(TYTreeFluentFloatScalarTest, Ok);
 INSTANTIATE_TYPED_TEST_SUITE_P(TypeParametrized, TYTreeFluentFloatScalarTest,
     TYTreeFluentFloatScalarTestTypes

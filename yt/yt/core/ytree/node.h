@@ -81,7 +81,7 @@ template <class T>
 struct IScalarNode
     : public virtual INode
 {
-    typedef T TValue;
+    using TValue = T;
 
     //! Gets the value.
     virtual typename NMpl::TCallTraits<TValue>::TType GetValue() const = 0;

@@ -15,7 +15,7 @@ namespace NYT::NProfiling {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-typedef std::vector<std::pair<std::vector<int>, TInstant>> TReadWindow;
+using TReadWindow = std::vector<std::pair<std::vector<int>, TInstant>>;
 
 struct TReadOptions
 {

@@ -21,8 +21,8 @@ class TYsonSerializableLite
     : private TNonCopyable
 {
 public:
-    typedef std::function<void()> TPostprocessor;
-    typedef std::function<void()> TPreprocessor;
+    using TPostprocessor = std::function<void()>;
+    using TPreprocessor = std::function<void()>;
 
     struct IParameter
         : public TRefCounted
@@ -59,15 +59,15 @@ public:
         virtual void SetKeepUnrecognizedRecursively() = 0;
     };
 
-    typedef TIntrusivePtr<IParameter> IParameterPtr;
+    using IParameterPtr = TIntrusivePtr<IParameter>;
 
     template <class T>
     class TParameter
         : public IParameter
     {
     public:
-        typedef std::function<void(const T&)> TPostprocessor;
-        typedef typename TOptionalTraits<T>::TValue TValueType;
+        using TPostprocessor = std::function<void(const T&)>;
+        using TValueType = typename TOptionalTraits<T>::TValue;
 
         TParameter(TString key, T& parameter);
 
@@ -256,7 +256,7 @@ struct TSerializerTraits<
     C,
     typename std::enable_if_t<std::is_convertible_v<T&, NYTree::TYsonSerializableLite&>>>
 {
-    typedef TBinaryYsonSerializer TSerializer;
+    using TSerializer = TBinaryYsonSerializer;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

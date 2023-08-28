@@ -25,7 +25,7 @@ template <class TResult, class... TArgs>
 class TCallbackList<TResult(TArgs...)>
 {
 public:
-    typedef NYT::TCallback<TResult(TArgs...)> TCallback;
+    using TCallback = NYT::TCallback<TResult(TArgs...)>;
 
     //! Adds a new handler to the list.
     /*!

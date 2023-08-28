@@ -15,7 +15,7 @@
 namespace NYT::NFormats {
 namespace {
 
-typedef TVector<TString> VectorStrok;
+using VectorStrok = TVector<TString>;
 
 ////////////////////////////////////////////////////////////////////////////////
 

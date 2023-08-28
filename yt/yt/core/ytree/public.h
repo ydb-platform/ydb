@@ -25,9 +25,9 @@ class TYsonSerializable;
 struct IYsonStructMeta;
 
 DECLARE_REFCOUNTED_STRUCT(INode)
-typedef TIntrusivePtr<const INode> IConstNodePtr;
+using IConstNodePtr = TIntrusivePtr<const INode>;
 DECLARE_REFCOUNTED_STRUCT(ICompositeNode)
-typedef TIntrusivePtr<ICompositeNode> ICompositeNodePtr;
+using ICompositeNodePtr = TIntrusivePtr<ICompositeNode>;
 DECLARE_REFCOUNTED_STRUCT(IStringNode)
 DECLARE_REFCOUNTED_STRUCT(IInt64Node)
 DECLARE_REFCOUNTED_STRUCT(IUint64Node)

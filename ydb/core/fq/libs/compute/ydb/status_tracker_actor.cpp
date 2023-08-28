@@ -4,6 +4,7 @@
 #include <ydb/core/fq/libs/compute/common/metrics.h>
 #include <ydb/core/fq/libs/compute/common/retry_actor.h>
 #include <ydb/core/fq/libs/compute/common/run_actor_params.h>
+#include <ydb/core/fq/libs/compute/common/utils.h>
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/library/services/services.pb.h>
@@ -164,6 +165,11 @@ public:
         pingTaskRequest.set_status(::FederatedQuery::QueryMeta::COMPLETING);
         pingTaskRequest.set_ast(QueryStats.query_ast());
         pingTaskRequest.set_plan(QueryStats.query_plan());
+        try {
+            pingTaskRequest.set_statistics(GetV1StatFromV2Plan(QueryStats.query_plan()));
+        } catch(const NJson::TJsonException& ex) {
+            LOG_E("Error statistics conversion: " << ex.what());
+        }
         Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest));
     }
 

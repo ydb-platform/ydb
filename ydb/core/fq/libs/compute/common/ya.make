@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     pinger.cpp
     run_actor_params.cpp
+    utils.cpp
 )
 
 PEERDIR(

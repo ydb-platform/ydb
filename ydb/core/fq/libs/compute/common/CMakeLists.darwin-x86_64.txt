@@ -24,4 +24,5 @@ target_link_libraries(libs-compute-common PUBLIC
 target_sources(libs-compute-common PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/compute/common/pinger.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/compute/common/run_actor_params.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/compute/common/utils.cpp
 )

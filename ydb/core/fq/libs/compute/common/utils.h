@@ -24,4 +24,6 @@ inline std::shared_ptr<NYdb::NTable::TTableClient> CreateNewTableClient(const TS
                                                         tableSettings);
 }
 
+TString GetV1StatFromV2Plan(const TString& plan);
+
 } // namespace NFq

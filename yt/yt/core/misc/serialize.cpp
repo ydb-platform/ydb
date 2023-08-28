@@ -177,5 +177,16 @@ TEntityStreamSaveContext::TEntityStreamSaveContext(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TEntityStreamLoadContext::TEntityStreamLoadContext(
+    IZeroCopyInput* input,
+    const TEntityStreamLoadContext* parentContext)
+    : TStreamLoadContext(input)
+    , ParentContext_(parentContext)
+{
+    SetVersion(ParentContext_->GetVersion());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT
 

@@ -263,6 +263,10 @@ class TEntityStreamLoadContext
 public:
     using TStreamLoadContext::TStreamLoadContext;
 
+    TEntityStreamLoadContext(
+        IZeroCopyInput* input,
+        const TEntityStreamLoadContext* parentContext);
+
     template <class T>
     TEntitySerializationKey RegisterRawEntity(T* entity);
     template <class T>
@@ -274,6 +278,8 @@ public:
     TIntrusivePtr<T> GetRefCountedEntity(TEntitySerializationKey key) const;
 
 private:
+    const TEntityStreamLoadContext* const ParentContext_ = nullptr;
+
     std::vector<void*> RawPtrs_;
     std::vector<TIntrusivePtr<TRefCounted>> RefCountedPtrs_;
 };

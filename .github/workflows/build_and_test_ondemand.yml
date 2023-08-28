@@ -112,7 +112,7 @@ jobs:
     - name: Run tests
       uses: ./.github/actions/test
       with:
-        log_suffix: ${{ inputs.sanitizer != '' && format('{0}-{1}', 'x86_64', inputs.sanitizer) || inputs.runner_label }}
+        log_suffix: ${{ inputs.sanitizer != '' && format('{0}-{1}', 'x86_64', inputs.sanitizer) || 'x86_64' }}
         test_label_regexp: ${{ inputs.test_label_regexp }}
         aws_key_id: ${{secrets.AWS_KEY_ID}}
         aws_key_value: ${{secrets.AWS_KEY_VALUE}}

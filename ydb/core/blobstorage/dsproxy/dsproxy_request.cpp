@@ -263,22 +263,29 @@ namespace NKikimr {
         TMaybe<TGroupStat::EKind> kind = PutHandleClassToGroupStatKind(handleClass);
 
         if (Info) {
-            TAppData *app = NKikimr::AppData(TActivationContext::AsActorContext());
-            bool enableRequestMod3x3ForMinLatency = app->FeatureFlags.GetEnable3x3RequestsForMirror3DCMinLatencyPut();
-            // TODO(alexvru): MinLatency support
-            if (batchedPuts.Queue.size() == 1) {
-                const TActorId reqID = Register(
-                    CreateBlobStorageGroupPutRequest(Info, Sessions->GroupQueues, batchedPuts.Queue.front()->Sender,
-                        Mon, batchedPuts.Queue.front()->Get(), batchedPuts.Queue.front()->Cookie,
-                        std::move(batchedPuts.Queue.front()->TraceId), Mon->TimeStats.IsEnabled(), PerDiskStats, kind,
-                        TActivationContext::Now(), StoragePoolCounters, enableRequestMod3x3ForMinLatency));
-                ActiveRequests.insert(reqID);
+            if (CurrentStateFunc() == &TThis::StateWork) {
+                TAppData *app = NKikimr::AppData(TActivationContext::AsActorContext());
+                bool enableRequestMod3x3ForMinLatency = app->FeatureFlags.GetEnable3x3RequestsForMirror3DCMinLatencyPut();
+                // TODO(alexvru): MinLatency support
+                if (batchedPuts.Queue.size() == 1) {
+                    const TActorId reqID = Register(
+                        CreateBlobStorageGroupPutRequest(Info, Sessions->GroupQueues, batchedPuts.Queue.front()->Sender,
+                            Mon, batchedPuts.Queue.front()->Get(), batchedPuts.Queue.front()->Cookie,
+                            std::move(batchedPuts.Queue.front()->TraceId), Mon->TimeStats.IsEnabled(), PerDiskStats, kind,
+                            TActivationContext::Now(), StoragePoolCounters, enableRequestMod3x3ForMinLatency));
+                    ActiveRequests.insert(reqID);
+                } else {
+                    const TActorId reqID = Register(
+                        CreateBlobStorageGroupPutRequest(Info, Sessions->GroupQueues,
+                            Mon, batchedPuts.Queue, Mon->TimeStats.IsEnabled(), PerDiskStats, kind, TActivationContext::Now(),
+                            StoragePoolCounters, handleClass, tactic, enableRequestMod3x3ForMinLatency));
+                    ActiveRequests.insert(reqID);
+                }
             } else {
-                const TActorId reqID = Register(
-                    CreateBlobStorageGroupPutRequest(Info, Sessions->GroupQueues,
-                        Mon, batchedPuts.Queue, Mon->TimeStats.IsEnabled(), PerDiskStats, kind, TActivationContext::Now(),
-                        StoragePoolCounters, handleClass, tactic, enableRequestMod3x3ForMinLatency));
-                ActiveRequests.insert(reqID);
+                for (auto it = batchedPuts.Queue.begin(); it != batchedPuts.Queue.end(); ++it) {
+                    TAutoPtr<IEventHandle> ev = it->Release();
+                    Receive(ev);
+                }
             }
         } else {
             for (auto it = batchedPuts.Queue.begin(); it != batchedPuts.Queue.end(); ++it) {

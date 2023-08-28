@@ -28,6 +28,7 @@ import "ydb/core/protos/key.proto";
 import "ydb/core/protos/alloc.proto";
 import "ydb/core/protos/node_limits.proto";
 import "ydb/core/fq/libs/config/protos/fq_config.proto";
+import "ydb/library/yql/providers/common/proto/gateways_config.proto";
 
 package NKikimrConfig;
 option java_package = "ru.yandex.kikimr.proto";
@@ -1380,6 +1381,18 @@ message TTableServiceConfig {
     optional EChannelTransportVersion ChannelTransportVersion = 46 [default = CTV_OOB_PICKLE_1_0];
 };
 
+message TQueryServiceConfig {
+    optional uint64 ScriptOperationTimeoutDefaultSeconds = 1;
+    optional uint64 ScriptForgetAfterDefaultSeconds = 2; // 0 = infinity
+    optional uint64 ScriptResultsTtlDefaultSeconds = 3; // 0 = infinity
+    optional uint64 ScriptResultSizeLimit = 4; // 0 = infinity
+    optional uint64 ScriptResultRowsLimit = 5; // 0 = infinity
+
+    optional NYql.TS3GatewayConfig S3 = 6;
+    optional NYql.THttpGatewayConfig HttpGateway = 7;
+    optional NYql.TGenericConnectorConfig Connector = 8;
+}
+
 // Config describes immediate controls and allows
 // to manage their values (not variety and limits)
 // via CMS. All fields should be either [u]int64 or
@@ -2000,6 +2013,7 @@ message TAppConfig {
     optional TAwsCompatibilityConfig AwsCompatibilityConfig = 70;
     optional TKafkaProxyConfig KafkaProxyConfig = 71;
     optional TConveyorConfig CompConveyorConfig = 72;
+    optional TQueryServiceConfig QueryServiceConfig = 73;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

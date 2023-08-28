@@ -5,6 +5,17 @@ This article provides examples of how to use the {{ ydb-short-name }} SDK to wor
 
 Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and [add a consumer](../ydb-cli/topic-consumer-add.md).
 
+## Topic usage examples
+
+{% list tabs %}
+
+- Java
+
+  [Examples on GitHub](https://github.com/ydb-platform/ydb-java-examples/tree/master/ydb-cookbook/src/main/java/tech/ydb/examples/topic)
+
+
+{% endlist %}
+
 ## Initializing a connection {#init}
 
 {% list tabs %}
@@ -27,13 +38,44 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
   TDriver driver(driverConfig);
   ```
 
-  This example uses authentication token from the `YDB_TOKEN` environment variable. For details see [Connecting to a database](../../concepts/connect.md) и [Authentication](../../concepts/auth.md) pages.
+  This example uses authentication token from the `YDB_TOKEN` environment variable. For details see [Connecting to a database](../../concepts/connect.md) and [Authentication](../../concepts/auth.md) pages.
 
   App code snippet for creating a client:
 
   ```cpp
   TTopicClient topicClient(driver);
   ```
+
+- Java
+
+  To interact with YDB Topics, create an instance of the YDB transport and topic client.
+
+  The YDB transport lets the app and YDB interact at the transport layer. The transport must exist during the YDB access lifecycle and be initialized before creating a client.
+
+  App code snippet for transport initialization:
+  ```java
+  try (GrpcTransport transport = GrpcTransport.forConnectionString(connString)
+          .withAuthProvider(CloudAuthHelper.getAuthProviderFromEnviron())
+          .build()) {
+      // Use YDB transport
+  }
+  ```
+  In this example `CloudAuthHelper.getAuthProviderFromEnviron()` helper method is used which retrieves auth token from environment variables.
+  For example, `YDB_ACCESS_TOKEN_CREDENTIALS`.
+  For details see [Connecting to a database](../../concepts/connect.md) and [Authentication](../../concepts/auth.md) pages.
+
+  Topic client ([source code](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/TopicClient.java#L34)) uses YDB transport and handles all topics topic operations, manages read and write sessions.
+
+  App code snippet for creating a client:
+  ```java
+  try (TopicClient topicClient = TopicClient.newClient(transport)
+                .setCompressionExecutor(compressionExecutor)
+                .build()) {
+    // Use topic client
+  }
+  ```
+  Both provided examples use ([try-with-resources](https://docs.oracle.com/javase/tutorial/essential/exceptions/tryResourceClose.html)) block.
+  It allows to automatically close  client and transport on leaving this block, considering both classes extends `AutoCloseable`.
 
 {% endlist %}
 
@@ -43,9 +85,9 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
 
 {% list tabs %}
 
-- C++
+The topic path is mandatory. Other parameters are optional.
 
-  The topic path is mandatory. Other parameters are optional.
+- C++
 
   For a full list of supported parameters, see the [source code](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L394).
 
@@ -61,8 +103,6 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
       .GetValueSync();
   ```
 - Go
-
-  The topic path is mandatory. Other parameters are optional.
 
    For a full list of supported parameters, see the [SDK documentation](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions#CreateOption).
 
@@ -88,6 +128,24 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
        min_active_partitions=3,                                    # optional
    )
    ```
+
+- Java
+
+  For a full list of supported parameters, see the [source code](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/settings/CreateTopicSettings.java#L97).
+
+  ```java
+  topicClient.createTopic(topicPath, CreateTopicSettings.newBuilder()
+                  // Optional
+                  .setSupportedCodecs(SupportedCodecs.newBuilder()
+                          .addCodec(Codec.RAW)
+                          .addCodec(Codec.GZIP)
+                          .build())
+                  // Optional
+                  .setPartitioningSettings(PartitioningSettings.newBuilder()
+                          .setMinActivePartitions(3)
+                          .build())
+                  .build());
+  ```
 
 {% endlist %}
 
@@ -134,6 +192,22 @@ When you update a topic, you must specify the topic path and the parameters to b
 
    This feature is under development.
 
+- Java
+
+  For a full list of supported parameters, see the [source code](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/settings/AlterTopicSettings.java#L23).
+
+  ```java
+  topicClient.alterTopic(topicPath, AlterTopicSettings.newBuilder()
+                  .addAddConsumer(Consumer.newBuilder()
+                          .setName("new-consumer")
+                          .setSupportedCodecs(SupportedCodecs.newBuilder()
+                                  .addCodec(Codec.RAW)
+                                  .addCodec(Codec.GZIP)
+                                  .build())
+                          .build())
+                  .build());
+  ```
+
 {% endlist %}
 
 ### Getting topic information {#describe-topic}
@@ -176,6 +250,18 @@ When you update a topic, you must specify the topic path and the parameters to b
    print(info)
    ```
 
+- Java
+
+  Use `describeTopic` method to get information about topic.
+
+  For a full list of description fields, see the [source code](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/description/TopicDescription.java#L19).
+
+  ```java
+  Result<TopicDescription> topicDescriptionResult = topicClient.describeTopic(topicPath)
+          .join();
+  TopicDescription description = topicDescriptionResult.getValue();
+  ```
+
 {% endlist %}
 
 ### Deleting a topic {#drop-topic}
@@ -201,6 +287,12 @@ To delete a topic, just specify the path to it.
    ```python
    driver.topic_client.drop_topic(topic_path)
    ```
+
+- Java
+
+  ```java
+  topicClient.dropTopic(topicPath);
+  ```
 
 {% endlist %}
 
@@ -248,9 +340,68 @@ Only connections with matching [producer and message group](../../concepts/topic
    writer = driver.topic_client.writer(topic_path)
    ```
 
+- Java (sync)
+
+  Writer settings initialization:
+  ```java
+  String producerAndGroupID = "group-id";
+  WriterSettings settings = WriterSettings.newBuilder()
+        .setTopicPath(topicPath)
+        .setProducerId(producerAndGroupID)
+        .setMessageGroupId(producerAndGroupID)
+        .build();
+  ```
+
+  Sync writer creation:
+  ```java
+  SyncWriter writer = topicClient.createSyncWriter(settings);
+  ```
+
+  Writer should be initialized after it is created. There are two methods to do that:
+    - `init()`: non-blocking, launches initialization in background and doesn't wait for it to finish.
+      ```java
+      writer.init();
+      ```
+    - `initAndWait()`: blocking, launches initialization and waits for it to finish.
+      If an error occurs during this process, exception will be thrown.
+      ```java
+      try {
+          writer.initAndWait();
+          logger.info("Init finished succsessfully");
+      } catch (Exception exception) {
+          logger.error("Exception while initializing writer: ", exception);
+          return;
+      }
+      ```
+
+- Java (async)
+
+  Writer settings initialization:
+  ```java
+  String producerAndGroupID = "group-id";
+  WriterSettings settings = WriterSettings.newBuilder()
+        .setTopicPath(topicPath)
+        .setProducerId(producerAndGroupID)
+        .setMessageGroupId(producerAndGroupID)
+        .build();
+  ```
+
+  Async writer creation and initialization:
+  ```java
+  AsyncWriter writer = topicClient.createAsyncWriter(settings);
+
+  // Init in background
+  writer.init()
+          .thenRun(() -> logger.info("Init finished successfully"))
+          .exceptionally(ex -> {
+              logger.error("Init failed with ex: ", ex);
+              return null;
+          });
+  ```
+
 {% endlist %}
 
-### Asynchronous message writes {#async-write}
+### Writing messages {#writing-messages}
 
 {% list tabs %}
 
@@ -339,6 +490,53 @@ Only connections with matching [producer and message group](../../concepts/topic
 
    ```
 
+- Java (sync)
+
+  Method `send` blocks until a message is put into writers sending queue.
+  Putting a message into this queue means that the writer will do its best to deliver it.
+  For example, if a writing session will be accidentally closed, the writer will reconnect and try to resend this message on a new session.
+  But putting a message into message queue has no guarantees that this message will be written.
+  For example, there could be errors that will lead to writer shutdown before messages from the queue are sent.
+  If you have to be sure for each message that it is written, use async writer and check status returned by `send` method.
+
+  ```java
+  writer.send(Message.of("11".getBytes()));
+
+  long timeoutSeconds = 5; // How long should we wait for a message to be put into sending buffer
+  try {
+      writer.send(
+              Message.newBuilder()
+                      .setData("22".getBytes())
+                      .setCreateTimestamp(Instant.now().minusSeconds(5))
+                      .build(),
+              timeoutSeconds,
+              TimeUnit.SECONDS
+      );
+  } catch (TimeoutException exception) {
+      logger.error("Send queue is full. Couldn't put message into sending queue within {} seconds", timeoutSeconds);
+  } catch (InterruptedException | ExecutionException exception) {
+      logger.error("Couldn't put the message into sending queue due to exception: ", exception);
+  }
+  ```
+
+- Java (async)
+
+  Method `send` puts a message into writer's sending queue.
+  Method returns `CompletableFuture<WriteAck>` which allows checking if the message was really written.
+  In case if the queue is full, `QueueOverflowException` exception will be thrown.
+  It is a way to signal a user that writing speed should be slowed down.
+  In this case a message write should be skipped or retried with exponential backoff.
+  Client buffer size can be also increased (`setMaxSendBufferMemorySize`) to be able to store more messages in memory before this exception is thrown.
+
+  ```java
+  try {
+      // Non-blocking. Throws QueueOverflowException if send queue is full
+      writer.send(Message.of("33".getBytes()));
+  } catch (QueueOverflowException exception) {
+      // Send queue is full. Need to retry with backoff or skip
+  }
+  ```
+
 {% endlist %}
 
 ### Message writes with storage confirmation on the server
@@ -422,6 +620,48 @@ Only connections with matching [producer and message group](../../concepts/topic
 
    ```
 
+- Java (sync)
+
+  Blocking method `flush()` waits until all the messages previously written to the internal buffer are acknowledged:
+
+  ```java
+  for (byte[] message : messages) {
+      writer.send(Message.of(message));
+  }
+  writer.flush();
+  ```
+
+- Java (async)
+
+  `send` method returns `CompletableFuture<WriteAck>`.
+  Its successful completion means that the fact that this message is written is confirmed by server.
+  `WriteAck` struct contains seqNo, offset and write status:
+
+  ```java
+  writer.send(Message.of(message))
+          .whenComplete((result, ex) -> {
+              if (ex != null) {
+                  logger.error("Exception on writing message message: ", ex);
+              } else {
+                  switch (result.getState()) {
+                      case WRITTEN:
+                          WriteAck.Details details = result.getDetails();
+                          StringBuilder str = new StringBuilder("Message was written successfully");
+                          if (details != null) {
+                              str.append(", offset: ").append(details.getOffset());
+                          }
+                          logger.debug(str.toString());
+                          break;
+                      case ALREADY_WRITTEN:
+                          logger.warn("Message was already written");
+                          break;
+                      default:
+                          break;
+                  }
+              }
+          });
+  ```
+
 {% endlist %}
 
 ### Selecting a codec for message compression {#codec}
@@ -473,11 +713,27 @@ For more details on using data compression for topics, see [here](../../concepts
    )
    ```
 
+- Java
+
+  ```java
+  String producerAndGroupID = "group-id";
+  WriterSettings settings = WriterSettings.newBuilder()
+          .setTopicPath(topicPath)
+          .setProducerId(producerAndGroupID)
+          .setMessageGroupId(producerAndGroupID)
+          .setCodec(Codec.ZSTD)
+          .build();
+  ```
+
 {% endlist %}
 
 ## Reading messages {#reading}
 
 ### Connecting to a topic for message reads {#start-reader}
+
+To be able to read messages from topic, a Consumer on this topic should exist.
+A Consumer can be created on [creating](#create-topic) or [altering](#alter-topic) a topic.
+Topic can have several Consumers and for each of them server stores its own reading progress.
 
 {% list tabs %}
 
@@ -515,6 +771,96 @@ For more details on using data compression for topics, see [here](../../concepts
    ```python
    reader = driver.topic_client.reader(topic="topic-path", consumer="consumer_name")
    ```
+
+- Java (sync)
+
+  Reader settings initialization:
+  ```java
+  ReaderSettings settings = ReaderSettings.newBuilder()
+          .setConsumerName(consumerName)
+          .addTopic(TopicReadSettings.newBuilder()
+                  .setPath(topicPath)
+                  .setReadFrom(Instant.now().minus(Duration.ofHours(24))) // Optional
+                  .setMaxLag(Duration.ofMinutes(30)) // Optional
+                  .build())
+          .build();
+  ```
+
+  Sync reader creation:
+  ```java
+  SyncReader reader = topicClient.createSyncReader(settings);
+  ```
+
+  After a reader is created, it has to be initialized. Sync reader has two methods for this:
+    - `init()`: non-blocking, launches initialization in background and does not wait for it to finish.
+      ```java
+      reader.init();
+      ```
+    - `initAndWait()`: blocking, launches initialization and waits for it to finish.
+      If an error occurs during this process, exception will be thrown.
+      ```java
+      try {
+          reader.initAndWait();
+          logger.info("Init finished succsessfully");
+      } catch (Exception exception) {
+          logger.error("Exception while initializing reader: ", exception);
+          return;
+      }
+      ```
+
+- Java (async)
+
+  Reader settings initialization:
+  ```java
+  ReaderSettings settings = ReaderSettings.newBuilder()
+          .setConsumerName(consumerName)
+          .addTopic(TopicReadSettings.newBuilder()
+                  .setPath(topicPath)
+                  .setReadFrom(Instant.now().minus(Duration.ofHours(24))) // Optional
+                  .setMaxLag(Duration.ofMinutes(30)) // Optional
+                  .build())
+          .build();
+  ```
+
+  For async reader, `ReadEventHandlersSettings` also have to be provided with an implementation of `ReadEventHandler`.
+  It describes how events should be handled during reading.
+  ```java
+  ReadEventHandlersSettings handlerSettings = ReadEventHandlersSettings.newBuilder()
+          .setEventHandler(new Handler())
+          .build();
+  ```
+  Optionally, an executor for message handling can be also provided in `ReadEventHandlersSettings`.
+  To implement a Handler, default abstract class `AbstractReadEventHandler` can be used.
+  It is enough to override `onMessages` method that describes message handling. Implementation example:
+  ```java
+  private class Handler extends AbstractReadEventHandler {
+      @Override
+      public void onMessages(DataReceivedEvent event) {
+          for (Message message : event.getMessages()) {
+              StringBuilder str = new StringBuilder();
+              logger.info("Message received. SeqNo={}, offset={}", message.getSeqNo(), message.getOffset());
+
+              process(message);
+
+              message.commit().thenRun(() -> {
+                  logger.info("Message committed");
+              });
+          }
+      }
+  }
+  ```
+
+  Async reader creation and initialization:
+  ```java
+  AsyncReader reader = topicClient.createAsyncReader(readerSettings, handlerSettings);
+  // Init in background
+  reader.init()
+          .thenRun(() -> logger.info("Init finished successfully"))
+          .exceptionally(ex -> {
+              logger.error("Init failed with ex: ", ex);
+              return null;
+          });
+  ```
 
 {% endlist %}
 
@@ -559,6 +905,22 @@ To establish a connection to the `my-topic` and `my-specific-topic` topics using
 
    This feature is under development.
 
+- Java
+
+  ```java
+  ReaderSettings settings = ReaderSettings.newBuilder()
+          .setConsumerName(consumerName)
+          .addTopic(TopicReadSettings.newBuilder()
+                  .setPath("my-topic")
+                  .build())
+          .addTopic(TopicReadSettings.newBuilder()
+                  .setPath("my-specific-topic")
+                  .setReadFrom(Instant.now().minus(Duration.ofHours(24))) // Optional
+                  .setMaxLag(Duration.ofMinutes(30)) // Optional
+                  .build())
+          .build();
+  ```
+
 {% endlist %}
 
 ### Reading messages {#reading-messages}
@@ -580,6 +942,14 @@ Information about which messages have already been processed can be [saved on th
   If handler is not set for a particular event, it will be delivered to SDK client via `GetEvent` / `GetEvents` methods. `WaitEvent` method allows user to await for a next event in non-blocking way with `TFuture<void>()` interface.
 
 - Go
+
+  The SDK receives data from the server in batches and buffers it. Depending on the task, the client code can read messages from the buffer one by one or in batches.
+
+- Python
+
+  The SDK receives data from the server in batches and buffers it. Depending on the task, the client code can read messages from the buffer one by one or in batches.
+
+- Java
 
   The SDK receives data from the server in batches and buffers it. Depending on the task, the client code can read messages from the buffer one by one or in batches.
 
@@ -617,6 +987,21 @@ Reading messages one-by-one is not supported in the C++ SDK. Class `TDataReceive
        message = reader.receive_message()
        process(message)
    ```
+
+- Java (sync)
+
+  To read messages one-by-one without commit just do not call `commit` method on messages:
+
+  ```java
+  while(true) {
+      Message message = reader.receive();
+      process(message);
+  }
+  ```
+
+- Java (async)
+
+  Reading messages one-by-one is not supported in async Reader.
 
 {% endlist %}
 
@@ -666,6 +1051,25 @@ Reading messages one-by-one is not supported in the C++ SDK. Class `TDataReceive
      process(batch)
    ```
 
+- Java (sync)
+
+  Reading messages in batches is not supported in sync Reader.
+
+- Java (async)
+
+  To read messages without commit just do not call `commit` method:
+
+  ```java
+  private class Handler extends AbstractReadEventHandler {
+      @Override
+      public void onMessages(DataReceivedEvent event) {
+          for (Message message : event.getMessages()) {
+              process(message);
+          }
+      }
+  }
+  ```
+
 {% endlist %}
 
 ### Reading with a commit {#commit}
@@ -705,6 +1109,26 @@ Reading messages one-by-one is not supported in the C++ SDK. Class `TDataReceive
        process(message)
        reader.commit(message)
    ```
+
+- Java
+
+  To commit a message just call `commit` method on it.
+  This method returns `CompletableFuture<Void>` which successful completion means that the server confirmed commit.
+  In case of an error on commit do not retry it. Most likely, an error is caused be session shutdown.
+  The reader (maybe another one) will create a new session for this partition and the message will be read again.
+
+  ```java
+  message.commit()
+         .whenComplete((result, ex) -> {
+             if (ex != null) {
+                 // Read session was probably closed, there is nothing we can do here.
+                 // Do not retry this commit on the same message.
+                 logger.error("exception while committing message: ", ex);
+             } else {
+                 logger.info("message committed successfully");
+             }
+         });
+  ```
 
 {% endlist %}
 
@@ -754,6 +1178,33 @@ Reading messages one-by-one is not supported in the C++ SDK. Class `TDataReceive
      process(batch)
      reader.commit(batch)
    ```
+
+- Java (sync)
+
+  Not relevant due to sync reader only reading messages one by one.
+
+- Java (async)
+
+  In `onMessage` handler whole message batch in `DataReceivedEvent` can be committed:
+
+  ```java
+  @Override
+  public void onMessages(DataReceivedEvent event) {
+      for (Message message : event.getMessages()) {
+          process(message);
+      }
+      event.commit()
+             .whenComplete((result, ex) -> {
+                 if (ex != null) {
+                     // Read session was probably closed, there is nothing we can do here.
+                     // Do not retry this commit on the same event.
+                     logger.error("exception while committing message batch: ", ex);
+                 } else {
+                     logger.info("message batch committed successfully");
+                 }
+             });
+  }
+  ```
 
 {% endlist %}
 
@@ -815,6 +1266,12 @@ When reading starts, the client code must transmit the starting consumer offset 
 
    This feature is under development.
 
+- Java
+
+  Setting the starting offset for reading is not supported in the current state of Java SDK.
+
+  The `setReadFrom` setting is used for reading only messages with write timestamps no less than the given one.
+
 {% endlist %}
 
 ### Processing a server read interrupt {#stop}
@@ -871,6 +1328,29 @@ In case of a _hard interruption_, the client receives a notification that it is 
      process(batch)
      reader.commit(batch)
    ```
+
+- Java (sync)
+
+  Not relevant due to not being possible to change the way of handling such events.
+  Client will automatically respond to server that it is ready to stop.
+
+- Java (async)
+
+  `onStopPartitionSession(StopPartitionSessionEvent event)` handler should be overridden to handle this event:
+
+  ```java
+  @Override
+  public void onStopPartitionSession(StopPartitionSessionEvent event) {
+      logger.info("Partition session {} stopped. Committed offset: {}", event.getPartitionSessionId(),
+              event.getCommittedOffset());
+      // This event means that no more messages will be received by server
+      // Received messages still can be read from ReaderBuffer
+      // Messages still can be committed, until confirm() method is called
+
+      // Confirm that session can be closed
+      event.confirm();
+  }
+  ```
 
 {% endlist %}
 
@@ -930,5 +1410,18 @@ In case of a _hard interruption_, the client receives a notification that it is 
    if process_batch(batch):
        reader.commit(batch)
    ```
+
+- Java (sync)
+
+  Not relevant due to not being possible to change the way of handling such events.
+
+- Java (async)
+
+  ```java
+  @Override
+  public void onPartitionSessionClosed(PartitionSessionClosedEvent event) {
+      logger.info("Partition session {} is closed.", event.getPartitionSession().getPartitionId());
+  }
+  ```
 
 {% endlist %}

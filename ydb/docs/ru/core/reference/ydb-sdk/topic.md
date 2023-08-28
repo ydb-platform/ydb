@@ -5,6 +5,17 @@
 
 Перед выполнением примеров [создайте топик](../ydb-cli/topic-create.md) и [добавьте читателя](../ydb-cli/topic-consumer-add.md).
 
+## Примеры работы с топиками
+
+{% list tabs %}
+
+- Java
+
+  [Примеры на GitHub](https://github.com/ydb-platform/ydb-java-examples/tree/master/ydb-cookbook/src/main/java/tech/ydb/examples/topic)
+
+
+{% endlist %}
+
 ## Инициализация соединения с топиками
 
 {% list tabs %}
@@ -34,6 +45,36 @@
   TTopicClient topicClient(driver);
   ```
 
+- Java
+
+  Для работы с топиками создаются экземпляры транспорта YDB и клиента.
+
+  Транспорт YDB отвечает за взаимодействие приложения и YDB на транспортном уровне. Он должен существовать на всем протяжении жизненного цикла работы с топиками и должен быть инициализирован перед созданием клиента.
+
+  Фрагмент кода приложения для инициализации транспорта YDB:
+  ```java
+  try (GrpcTransport transport = GrpcTransport.forConnectionString(connString)
+          .withAuthProvider(CloudAuthHelper.getAuthProviderFromEnviron())
+          .build()) {
+      // Use YDB transport
+  }
+  ```
+  В этом примере используется вспомогательный метод `CloudAuthHelper.getAuthProviderFromEnviron()`, получающий токен из переменных окружения.
+  Например, `YDB_ACCESS_TOKEN_CREDENTIALS`.
+  Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../concepts/auth.md).
+
+  Клиент сервиса топиков ([исходный код](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/TopicClient.java#L34)) работает поверх транспорта YDB и отвечает как за управляющие операции с топиками, так и за создание писателей и читателей.
+
+  Фрагмент кода приложения для создания клиента:
+  ```java
+  try (TopicClient topicClient = TopicClient.newClient(transport)
+                .setCompressionExecutor(compressionExecutor)
+                .build()) {
+    // Use topic client
+  }
+  ```
+  В обоих примерах кода выше используется блок ([try-with-resources](https://docs.oracle.com/javase/tutorial/essential/exceptions/tryResourceClose.html)).
+  Это позволяет автоматически закрывать клиент и транспорт при выходе из этого блока, т.к. оба являются наследниками `AutoCloseable`.
 
 {% endlist %}
 
@@ -41,13 +82,13 @@
 
 ### Создание топика {#create-topic}
 
+Единственный обязательный параметр для создания топика - это его путь, остальные параметры опциональны.
+
 {% list tabs %}
 
 - C++
 
-  Единственный обязательный параметр для создания топика - это его путь. Остальные настройки опциональны и представлены структурой `TCreateTopicSettings`.
-
-  Полный список настроек смотри [в заголовочном файле](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L394).
+  Полный список настроек можно посмотреть [в заголовочном файле](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L394).
 
   Пример создания топика c тремя партициями и поддержкой кодека ZSTD:
 
@@ -62,8 +103,6 @@
   ```
 
 - Go
-
-  Единственный обязательный параметр для создания топика - это его путь, остальные параметры опциональны.
 
   Полный список поддерживаемых параметров можно посмотреть в [документации SDK](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions#CreateOption).
 
@@ -90,6 +129,26 @@
   )
   ```
 
+- Java
+
+  Полный список настроек можно посмотреть [в коде SDK](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/settings/CreateTopicSettings.java#L97).
+
+  Пример создания топика со списком поддерживаемых кодеков и минимальным количеством партиций
+
+  ```java
+  topicClient.createTopic(topicPath, CreateTopicSettings.newBuilder()
+                  // Optional
+                  .setSupportedCodecs(SupportedCodecs.newBuilder()
+                          .addCodec(Codec.RAW)
+                          .addCodec(Codec.GZIP)
+                          .build())
+                  // Optional
+                  .setPartitioningSettings(PartitioningSettings.newBuilder()
+                          .setMinActivePartitions(3)
+                          .build())
+                  .build());
+  ```
+
 {% endlist %}
 
 ### Изменение топика {#alter-topic}
@@ -100,7 +159,7 @@
 
   При изменении топика в параметрах метода `AlterTopic` нужно указать путь топика и параметры, которые будут изменяться. Изменяемые параметры представлены структурой `TAlterTopicSettings`.
 
-  Полный список настроек смотри [в заголовочном файле](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L458).
+  Полный список настроек можно посмотреть [в заголовочном файле](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L458).
 
   Пример добавления [важного читателя](../../concepts/topic#important-consumer) к топику и установки [времени хранения сообщений](../../concepts/topic#retention-time) для топика в два дня:
 
@@ -137,6 +196,24 @@
 
   Функциональность находится в разработке.
 
+- Java
+
+  При изменении топика в параметрах метода `alterTopic` нужно указать путь топика и параметры, которые будут изменяться.
+
+  Полный список настроек можно посмотреть [в коде SDK](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/settings/AlterTopicSettings.java#L23).
+
+
+  ```java
+  topicClient.alterTopic(topicPath, AlterTopicSettings.newBuilder()
+                  .addAddConsumer(Consumer.newBuilder()
+                          .setName("new-consumer")
+                          .setSupportedCodecs(SupportedCodecs.newBuilder()
+                                  .addCodec(Codec.RAW)
+                                  .addCodec(Codec.GZIP)
+                                  .build())
+                          .build())
+                  .build());
+
 {% endlist %}
 
 ### Получение информации о топике {#describe-topic}
@@ -168,7 +245,7 @@
   ```go
     descResult, err := db.Topic().Describe(ctx, "topic-path")
   if err != nil {
-    log.Fatalf("failed drop topic: %v", err)
+    log.Fatalf("failed describe topic: %v", err)
     return
   }
   fmt.Printf("describe: %#v\n", descResult)
@@ -179,6 +256,19 @@
   ```python
   info = driver.topic_client.describe_topic(topic_path)
   print(info)
+  ```
+
+- Java
+
+  Для получения информации о топике используется метод `describeTopic`.
+
+  Полный список полей описания можно посмотреть [в коде SDK](https://github.com/ydb-platform/ydb-java-sdk/blob/master/topic/src/main/java/tech/ydb/topic/description/TopicDescription.java#L19).
+
+
+  ```java
+  Result<TopicDescription> topicDescriptionResult = topicClient.describeTopic(topicPath)
+          .join();
+  TopicDescription description = topicDescriptionResult.getValue();
   ```
 
 {% endlist %}
@@ -205,6 +295,12 @@
 
   ```python
   driver.topic_client.drop_topic(topic_path)
+  ```
+
+- Java
+
+  ```java
+  topicClient.dropTopic(topicPath);
   ```
 
 {% endlist %}
@@ -253,9 +349,67 @@
   writer = driver.topic_client.writer(topic_path)
   ```
 
+- Java (sync)
+
+  Инициализация настроек писателя:
+  ```java
+  String producerAndGroupID = "group-id";
+  WriterSettings settings = WriterSettings.newBuilder()
+        .setTopicPath(topicPath)
+        .setProducerId(producerAndGroupID)
+        .setMessageGroupId(producerAndGroupID)
+        .build();
+  ```
+
+  Создание синхронного писателя:
+  ```java
+  SyncWriter writer = topicClient.createSyncWriter(settings);
+  ```
+
+  После создания писателя его необходимо инициализировать. Для этого есть два метода:
+    - `init()`: неблокирующий, запускает процесс инициализации в фоне и не ждёт его завершения.
+      ```java
+      writer.init();
+      ```
+    - `initAndWait()`: блокирующий, запускает процесс инициализации и ждёт его завершения. Если в процессе инициализации возникла ошибка, будет брошено исключение.
+      ```java
+      try {
+          writer.initAndWait();
+          logger.info("Init finished succsessfully");
+      } catch (Exception exception) {
+          logger.error("Exception while initializing writer: ", exception);
+          return;
+      }
+      ```
+
+- Java (async)
+
+  Инициализация настроек писателя:
+  ```java
+  String producerAndGroupID = "group-id";
+  WriterSettings settings = WriterSettings.newBuilder()
+        .setTopicPath(topicPath)
+        .setProducerId(producerAndGroupID)
+        .setMessageGroupId(producerAndGroupID)
+        .build();
+  ```
+
+  Создание и инициализация асинхронного писателя:
+  ```java
+  AsyncWriter writer = topicClient.createAsyncWriter(settings);
+
+  // Init in background
+  writer.init()
+          .thenRun(() -> logger.info("Init finished successfully"))
+          .exceptionally(ex -> {
+              logger.error("Init failed with ex: ", ex);
+              return null;
+          });
+  ```
+
 {% endlist %}
 
-### Асинхронная запись сообщений {#async-write}
+### Запись сообщений {#writing-messages}
 
 {% list tabs %}
 
@@ -344,6 +498,51 @@
 
   ```
 
+- Java (sync)
+
+  Метод `send` блокирует управление, пока сообщение не будет помещено в очередь отправки.
+  Попадание сообщения в эту очередь означает, что писатель сделает всё возможное для доставки сообщения.
+  Например, если сессия записи по какой-то причине оборвётся, писатель переустановит соединение и попробует отправить это сообщение на новой сессии.
+  Но попадание сообщения в очередь отправки не гарантирует того, что сообщение в итоге будет записано.
+  Например, могут возникать ошибки, приводящие к завершению работы писателя до того, как сообщения из очереди будут отправлены.
+  Если нужно подтверждение успешной записи для каждого сообщения, используйте асинхронного писателя и проверяйте статус, возвращаемый методом `send`.
+  ```java
+  writer.send(Message.of("11".getBytes()));
+
+  long timeoutSeconds = 5; // How long should we wait for a message to be put into sending buffer
+  try {
+      writer.send(
+              Message.newBuilder()
+                      .setData("22".getBytes())
+                      .setCreateTimestamp(Instant.now().minusSeconds(5))
+                      .build(),
+              timeoutSeconds,
+              TimeUnit.SECONDS
+      );
+  } catch (TimeoutException exception) {
+      logger.error("Send queue is full. Couldn't put message into sending queue within {} seconds", timeoutSeconds);
+  } catch (InterruptedException | ExecutionException exception) {
+      logger.error("Couldn't put the message into sending queue due to exception: ", exception);
+  }
+  ```
+
+- Java (async)
+
+  Метод `send` в асинхронном клиенте неблокирующий. Помещает сообщение в очередь отправки.
+  Метод возвращает `CompletableFuture<WriteAck>`, позволяющую проверить, действительно ли сообщение было записано.
+  В случае, если очередь переполнена, будет брошено исключение QueueOverflowException.
+  Это способ сигнализировать пользователю о том, что поток записи следует притормозить.
+  В таком случае стоит или пропускать сообщения, или выполнять повторные попытки записи через exponential backoff.
+  Также можно увеличить размер клиентского буфера (`setMaxSendBufferMemorySize`), чтобы обрабатывать больший объем сообщений перед тем, как он заполнится.
+  ```java
+  try {
+      // Non-blocking. Throws QueueOverflowException if send queue is full
+      writer.send(Message.of("33".getBytes()));
+  } catch (QueueOverflowException exception) {
+      // Send queue is full. Need to retry with backoff or skip
+  }
+  ```
+
 {% endlist %}
 
 ### Запись сообщений с подтверждением о сохранении на сервере
@@ -427,6 +626,36 @@
 
   ```
 
+- Java (async)
+
+  Метод `send` возвращает `CompletableFuture<WriteAck>`. Её успешное завершение означает подтверждение записи сервером.
+  В структуре `WriteAck` содержится информация о seqNo, offset и статусе записи:
+
+  ```java
+  writer.send(Message.of(message))
+          .whenComplete((result, ex) -> {
+              if (ex != null) {
+                  logger.error("Exception on writing message message: ", ex);
+              } else {
+                  switch (result.getState()) {
+                      case WRITTEN:
+                          WriteAck.Details details = result.getDetails();
+                          StringBuilder str = new StringBuilder("Message was written successfully");
+                          if (details != null) {
+                              str.append(", offset: ").append(details.getOffset());
+                          }
+                          logger.debug(str.toString());
+                          break;
+                      case ALREADY_WRITTEN:
+                          logger.warn("Message was already written");
+                          break;
+                      default:
+                          break;
+                  }
+              }
+          });
+  ```
+
 {% endlist %}
 
 ### Выбор кодека для сжатия сообщений {#codec}
@@ -477,11 +706,27 @@
   )
   ```
 
+- Java
+
+  ```java
+  String producerAndGroupID = "group-id";
+  WriterSettings settings = WriterSettings.newBuilder()
+          .setTopicPath(topicPath)
+          .setProducerId(producerAndGroupID)
+          .setMessageGroupId(producerAndGroupID)
+          .setCodec(Codec.ZSTD)
+          .build();
+  ```
+
 {% endlist %}
 
 ## Чтение сообщений {#reading}
 
 ### Подключение к топику для чтения сообщений {#start-reader}
+
+Для чтения сообщений из топика необходимо наличие заранее созданного Consumer, связанного с этим топиком.
+Создать Consumer можно при [создании](#create-topic) или [изменении](#alter-topic) топика.
+У топика может быть несколько Consumer'ов и для каждого из них сервер хранит свой прогресс чтения.
 
 {% list tabs %}
 
@@ -520,9 +765,101 @@
   reader = driver.topic_client.reader(topic="topic-path", consumer="consumer_name")
   ```
 
+- Java (sync)
+
+  Инициализация настроек читателя
+  ```java
+  ReaderSettings settings = ReaderSettings.newBuilder()
+          .setConsumerName(consumerName)
+          .addTopic(TopicReadSettings.newBuilder()
+                  .setPath(topicPath)
+                  .setReadFrom(Instant.now().minus(Duration.ofHours(24))) // Optional
+                  .setMaxLag(Duration.ofMinutes(30)) // Optional
+                  .build())
+          .build();
+  ```
+
+  Создание синхронного читателя
+  ```java
+  SyncReader reader = topicClient.createSyncReader(settings);
+  ```
+
+  После создания синхронного читателя необходимо инициализировать. Для этого следует воспользоваться одним их двух методов:
+    - `init()`: неблокирующий, запускает процесс инициализации в фоне и не ждёт его завершения.
+      ```java
+      reader.init();
+      ```
+    - `initAndWait()`: блокирующий, запускает процесс инициализации и ждёт его завершения. Если в процессе инициализации возникла ошибка, будет брошено исключение.
+      ```java
+      try {
+          reader.initAndWait();
+          logger.info("Init finished succsessfully");
+      } catch (Exception exception) {
+          logger.error("Exception while initializing reader: ", exception);
+          return;
+      }
+      ```
+
+- Java (async)
+
+  Инициализация настроек читателя
+  ```java
+  ReaderSettings settings = ReaderSettings.newBuilder()
+          .setConsumerName(consumerName)
+          .addTopic(TopicReadSettings.newBuilder()
+                  .setPath(topicPath)
+                  .setReadFrom(Instant.now().minus(Duration.ofHours(24))) // Optional
+                  .setMaxLag(Duration.ofMinutes(30)) // Optional
+                  .build())
+          .build();
+  ```
+
+  Для асинхронного читателя, помимо общих настроек чтения `ReaderSettings`, понадобятся настройки обработчика событий `ReadEventHandlersSettings`, в которых необходимо передать экземпляр наследника `ReadEventHandler`.
+  Он будет описывать, как должна происходить обработка различных событий, происходящих во время чтения.
+
+  ```java
+  ReadEventHandlersSettings handlerSettings = ReadEventHandlersSettings.newBuilder()
+          .setEventHandler(new Handler())
+          .build();
+  ```
+
+  Опционально, в `ReadEventHandlersSettings` можно указать executor'а, на котором будет происходить обработка сообщений.
+  Для реализации объекта-наследника ReadEventHandler можно воспользоваться дефолтным абстрактным классом `AbstractReadEventHandler`.
+  Достаточно переопределить метод onMessages, отвечающий за обработку самих сообщений. Пример реализации:
+
+  ```java
+  private class Handler extends AbstractReadEventHandler {
+      @Override
+      public void onMessages(DataReceivedEvent event) {
+          for (Message message : event.getMessages()) {
+              StringBuilder str = new StringBuilder();
+              logger.info("Message received. SeqNo={}, offset={}", message.getSeqNo(), message.getOffset());
+
+              process(message);
+
+              message.commit().thenRun(() -> {
+                  logger.info("Message committed");
+              });
+          }
+      }
+  }
+  ```
+
+  Создание и инициализация асинхронного читателя:
+  ```java
+  AsyncReader reader = topicClient.createAsyncReader(readerSettings, handlerSettings);
+  // Init in background
+  reader.init()
+          .thenRun(() -> logger.info("Init finished successfully"))
+          .exceptionally(ex -> {
+              logger.error("Init failed with ex: ", ex);
+              return null;
+          });
+  ```
+
 {% endlist %}
 
-Вы также можете использовать расширенный вариант создания подключения, чтобы указать несколько топиков и задать параметры чтения. Следующий код создаст подключение к топикам `my-topic` и `my-specific-topic` через читателя `my-consumer`, а также задаст время, с которого начинать читать сообщения:
+Вы также можете использовать расширенный вариант создания подключения, чтобы указать несколько топиков и задать параметры чтения. Следующий код создаст подключение к топикам `my-topic` и `my-specific-topic` через читателя `my-consumer`:
 
 {% list tabs %}
 
@@ -558,9 +895,27 @@
   }
   ```
 
+  Также в примере выше задаётся время, с которого следует начинать читать сообщения.
+
 - Python
 
   Функциональность находится в разработке.
+
+- Java
+
+  ```java
+  ReaderSettings settings = ReaderSettings.newBuilder()
+          .setConsumerName(consumerName)
+          .addTopic(TopicReadSettings.newBuilder()
+                  .setPath("my-topic")
+                  .build())
+          .addTopic(TopicReadSettings.newBuilder()
+                  .setPath("my-specific-topic")
+                  .setReadFrom(Instant.now().minus(Duration.ofHours(24))) // Optional
+                  .setMaxLag(Duration.ofMinutes(30)) // Optional
+                  .build())
+          .build();
+  ```
 
 {% endlist %}
 
@@ -583,6 +938,14 @@
   Если обработчик для некоторого события не установлен, его необходимо получить и обработать в методах `GetEvent` / `GetEvents`. Для неблокирующего ожидания очередного события есть метод `WaitEvent` с сигнатурой `TFuture<void>()`.
 
 - Go
+
+  SDK получает данные с сервера партиями и буферизирует их. В зависимости от задач клиентский код может читать сообщения из буфера по одному или пакетами.
+
+- Python
+
+  SDK получает данные с сервера партиями и буферизирует их. В зависимости от задач клиентский код может читать сообщения из буфера по одному или пакетами.
+
+- Java
 
   SDK получает данные с сервера партиями и буферизирует их. В зависимости от задач клиентский код может читать сообщения из буфера по одному или пакетами.
 
@@ -620,6 +983,21 @@
       message = reader.receive_message()
       process(message)
   ```
+
+- Java (sync)
+
+  Чтобы читать сообщения без подтверждения обработки, по одному, используйте следующий код:
+
+  ```java
+  while(true) {
+      Message message = reader.receive();
+      process(message);
+  }
+  ```
+
+- Java (async)
+
+  В асинхронном клиенте нет возможности читать сообщения по одному.
 
 {% endlist %}
 
@@ -670,6 +1048,25 @@
     process(batch)
   ```
 
+- Java (sync)
+
+  В синхронном клиенте нет возможности прочитать сразу пакет сообщений.
+
+- Java (async)
+
+  Чтобы прочитать пакет сообщений без подтверждения обработки, используйте следующий код:
+
+  ```java
+  private class Handler extends AbstractReadEventHandler {
+      @Override
+      public void onMessages(DataReceivedEvent event) {
+          for (Message message : event.getMessages()) {
+              process(message);
+          }
+      }
+  }
+  ```
+
 {% endlist %}
 
 ### Чтение с подтверждением обработки сообщений {#commit}
@@ -708,6 +1105,28 @@
       message = reader.receive_message()
       process(message)
       reader.commit(message)
+  ```
+
+- Java
+
+  Для подтверждения обработки сообщения достаточно вызвать у сообщения метод `commit`.
+  Актуально как для синхронного, так и для асинхронного читателя.
+  В асинхронном читателе, при обработке пакета сообщений, можно вызвать `commit` или у всего пакета сразу, или у каждого сообщения отдельно.
+  Этот метод возвращает `CompletableFuture<Void>`, успешное выполнение которой означает подтверждение обработки сервером.
+  В случае ошибки коммита не следует пытаться его ретраить. Скорее всего, ошибка вызвана закрытием сессии.
+  Читатель (необязательно этот же) сам создаст новую сессию для этой партиции и сообщение будет прочитано снова.
+
+  ```java
+  message.commit()
+         .whenComplete((result, ex) -> {
+             if (ex != null) {
+                 // Read session was probably closed, there is nothing we can do here.
+                 // Do not retry this commit on the same event.
+                 logger.error("exception while committing message: ", ex);
+             } else {
+                 logger.info("message committed successfully");
+             }
+         });
   ```
 
 {% endlist %}
@@ -757,6 +1176,32 @@
     batch = reader.receive_batch()
     process(batch)
     reader.commit(batch)
+  ```
+
+- Java (sync)
+
+  Неактуально, т.к. в синхронном читателе нет возможности читать сообщения пакетами.
+
+- Java (async)
+
+  В обработчике `onMessage` можно закоммитить весь пакет сообщений, вызвав `commit` на событии.
+  ```java
+  @Override
+  public void onMessages(DataReceivedEvent event) {
+      for (Message message : event.getMessages()) {
+          process(message);
+      }
+      event.commit()
+             .whenComplete((result, ex) -> {
+                 if (ex != null) {
+                     // Read session was probably closed, there is nothing we can do here.
+                     // Do not retry this commit on the same message.
+                     logger.error("exception while committing message batch: ", ex);
+                 } else {
+                     logger.info("message batch committed successfully");
+                 }
+             });
+  }
   ```
 
 {% endlist %}
@@ -819,6 +1264,12 @@
 
   Функциональность находится в разработке.
 
+- Java
+
+  Чтение с заданной позиции в текущей версии SDK отсутствует.
+
+  Поддерживается настройка читателя `setReadFrom` для чтения событий с отметками времени записи не меньше данной.
+
 {% endlist %}
 
 ### Обработка серверного прерывания чтения {#stop}
@@ -874,6 +1325,30 @@
     batch = reader.receive_batch()
     process(batch)
     reader.commit(batch)
+  ```
+
+- Java (sync)
+
+  Неактуально, т.к. в синхронном читателе нет возможности настраивать обработку подобных событий.
+  Клиент сразу ответит серверу подтверждением остановки.
+
+- Java (async)
+
+  Для возможности реагировать на такое событие следует переопределить метод `onStopPartitionSession(StopPartitionSessionEvent event)` в объекте-наследнике `ReadEventHandler` (см [Подключение к топику для чтения сообщений](#start-reader)).
+  `event.confirm()` обязательно должен быть вызван, т.к. сервер ожидает этого ответа для продолжения остановки.
+
+  ```java
+  @Override
+  public void onStopPartitionSession(StopPartitionSessionEvent event) {
+      logger.info("Partition session {} stopped. Committed offset: {}", event.getPartitionSessionId(),
+              event.getCommittedOffset());
+      // This event means that no more messages will be received by server
+      // Received messages still can be read from ReaderBuffer
+      // Messages still can be committed, until confirm() method is called
+
+      // Confirm that session can be closed
+      event.confirm();
+  }
   ```
 
 {% endlist %}
@@ -933,6 +1408,19 @@
   batch = reader.receive_batch()
   if process_batch(batch):
       reader.commit(batch)
+  ```
+
+- Java (sync)
+
+  Неактуально, т.к. в синхронном читателе нет возможности настраивать обработку подобных событий.
+
+- Java (async)
+
+  ```java
+  @Override
+  public void onPartitionSessionClosed(PartitionSessionClosedEvent event) {
+      logger.info("Partition session {} is closed.", event.getPartitionSession().getPartitionId());
+  }
   ```
 
 {% endlist %}

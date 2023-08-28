@@ -1974,6 +1974,50 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             UNIT_ASSERT(result.GetIssues().ToString().Contains("Cannot find table 'db.[/Root/test]'"));
         }
     }
+
+    Y_UNIT_TEST(JoinWithQueryService) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        auto client = kikimr.GetTableClient();
+        auto db = kikimr.GetQueryClient();
+        auto settings = NYdb::NQuery::TExecuteQuerySettings()
+            .Syntax(NYdb::NQuery::ESyntax::Pg);
+        {
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            const auto query = Q_(R"(
+                --!syntax_pg
+                CREATE TABLE t1(
+                id1 int4 PRIMARY KEY,
+                val1 text
+                ))");
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            const auto query = Q_(R"(
+                --!syntax_pg
+                CREATE TABLE t2(
+                id2 int4 PRIMARY KEY,
+                val2 text
+                ))");
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                INSERT INTO t1(id1, val1) VALUES (1, 'val1');
+                INSERT INTO t2(id2, val2) VALUES (1, 'val2');
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT * FROM t1 JOIN t2 ON t1.id1 = t2.id2;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([["1";"val1";"1";"val2"]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
 }
 
 } // namespace NKqp

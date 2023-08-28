@@ -160,3 +160,11 @@ target_allocator(ydb-library-yql-minikql-codegen-ut
   libs-tcmalloc-no_percpu_cache
 )
 vcs_info(ydb-library-yql-minikql-codegen-ut)
+llvm_compile_cxx(ydb-library-yql-minikql-codegen-ut
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/codegen/ut/128_bit.ll
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/minikql/codegen/ut/128_bit.ll.bc
+  ${CLANGPLUSPLUS}
+  -Wno-unknown-warning-option
+  -emit-llvm
+)
+

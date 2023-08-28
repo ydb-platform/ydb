@@ -129,9 +129,9 @@ private:
             result->StatResponses.push_back(rsp);
         }
 
-        InFlight.erase(requestId);
-
         Send(request.ReplyToActorId, result.Release(), 0, request.EvCookie);
+
+        InFlight.erase(requestId);
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
@@ -157,11 +157,11 @@ private:
             rsp.Req = req;
         }
 
+        Send(request.ReplyToActorId, std::move(result), 0, request.EvCookie);
+
         if (removeRequest) {
             InFlight.erase(requestId);
         }
-
-        Send(request.ReplyToActorId, std::move(result), 0, request.EvCookie);
     }
 
     void PassAway() override {

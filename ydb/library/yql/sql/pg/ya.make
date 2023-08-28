@@ -9,6 +9,7 @@ PEERDIR(
     ydb/library/yql/core
     ydb/library/yql/parser/pg_catalog
     ydb/library/yql/sql/settings
+    ydb/public/api/protos
 )
 
 ADDINCL(

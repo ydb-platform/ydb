@@ -1,5 +1,6 @@
 #include "util/charset/utf8.h"
 #include "utils.h"
+#include "ydb/public/api/protos/ydb_value.pb.h"
 #include <ydb/library/yql/sql/settings/partitioning.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/config.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/parser.h>
@@ -11,6 +12,8 @@
 #include <ydb/library/yql/core/issue/yql_issue.h>
 #include <ydb/library/yql/core/yql_callable_names.h>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
+#include <ydb/library/yql/utils/log/log_level.h>
+#include <ydb/library/yql/utils/log/log.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/generic/scope.h>
@@ -33,9 +36,18 @@ extern "C" {
 #undef Max
 #undef TypeName
 #undef SortBy
+
+#undef TRACE
+#undef INFO
+#undef WARNING
+#undef ERROR
+#undef FATAL
+#undef NOTICE
 }
 
 constexpr auto PREPARED_PARAM_PREFIX =  "$p";
+constexpr auto AUTO_PARAM_PREFIX =  "a";
+constexpr auto DEFAULT_PARAM_TYPE = "text";
 
 namespace NSQLTranslationPG {
 
@@ -196,6 +208,34 @@ public:
         TVector<TString> ColNames;
         TAstNode* Source = nullptr;
     };
+    
+    struct TPgConst {
+        TString value;
+        enum class Type {
+            int4,
+            int8,
+            numeric,
+            text,
+            unknown
+        };
+
+        static TString ToString(const TPgConst::Type& type) {
+            switch (type) {
+                case TPgConst::Type::int4:
+                    return "int4";
+                case TPgConst::Type::int8:
+                    return "int8";
+                case TPgConst::Type::numeric:
+                    return "numeric";
+                case TPgConst::Type::text:
+                    return "text";
+                case TPgConst::Type::unknown:
+                    return "unknown";
+                }
+        }
+
+        Type type;
+    };
 
     using TViews = THashMap<TString, TView>;
 
@@ -225,14 +265,20 @@ public:
         }
 
         for (size_t i = 0; i < Settings.PgParameterTypeOids.size(); ++i) {
-            auto paramName = PREPARED_PARAM_PREFIX + ToString(i + 1);
-            ParamNameToTypeOid[paramName] = Settings.PgParameterTypeOids[i];
+            const auto paramName = PREPARED_PARAM_PREFIX + ToString(i + 1);
+            const auto typeOid = Settings.PgParameterTypeOids[i];
+            const auto& typeName =
+                typeOid != UNKNOWNOID ? NPg::LookupType(typeOid).Name : "text";
+            ParamNameToPgTypeName[paramName] = typeName;
         }
     }
 
     void OnResult(const List* raw) {
         AstParseResult.Pool = std::make_unique<TMemoryPool>(4096);
         AstParseResult.Root = ParseResult(raw);
+        if (!AutoParamValues.empty()) {
+            AstParseResult.PgAutoParamValues = std::move(AutoParamValues);
+        }
     }
 
     void OnError(const TIssue& issue) {
@@ -341,6 +387,204 @@ public:
             NodeNotImplemented(value, node);
             return false;
         }
+    }
+
+    [[nodiscard]]
+    static Ydb::TypedValue MakeYdbListTupleParamValue(TVector<Ydb::Value>&& autoParamLiterals, TVector<TPgConst::Type>&& columnTypes) {
+        Ydb::TypedValue listOfTuples;
+
+        auto* tupleType = listOfTuples.mutable_type()->mutable_list_type()->mutable_item()->mutable_tuple_type();
+        for (auto&& colTypeStr : columnTypes) {
+            auto* pgColType = tupleType->add_elements()->mutable_pg_type();
+            pgColType->set_oid(NPg::LookupType(TPgConst::ToString(colTypeStr)).TypeId);
+        }
+
+        auto* tuples = listOfTuples.mutable_value()->mutable_items();
+        size_t idx = 0;
+        size_t cols = columnTypes.size();
+        for (size_t idx = 0; idx < autoParamLiterals.size(); idx += cols){
+            auto* tuple = tuples->Add();
+            auto next_row_items_from = autoParamLiterals.begin() + idx;
+            auto next_row_items_to = next_row_items_from + cols;
+            *tuple->mutable_items() = {
+                std::make_move_iterator(next_row_items_from),
+                std::make_move_iterator(next_row_items_to)
+            };
+        }
+        
+        return listOfTuples;
+    }
+
+    [[nodiscard]]
+    bool ExtractPgConstsForAutoParam(List* rawValuesLists, TVector<TPgConst>& pgConsts) {
+        YQL_LOG_CTX_SCOPE(TStringBuf("PgSql Autoparametrize"), __FUNCTION__);
+        Y_VERIFY(rawValuesLists);
+        size_t rows = ListLength(rawValuesLists);
+
+        if (rows == 0 || !Settings.AutoParametrizeEnabled) {
+            return false;
+        }
+
+        size_t cols = ListLength(CAST_NODE(List, ListNodeNth(rawValuesLists, 0)));
+        pgConsts.reserve(rows * cols);
+
+        for (int rowIdx = 0; rowIdx < ListLength(rawValuesLists); ++rowIdx) {
+            const auto rawRow = CAST_NODE(List, ListNodeNth(rawValuesLists, rowIdx));
+
+            for (int colIdx = 0; colIdx < ListLength(rawRow); ++colIdx) {
+                const auto rawCell = ListNodeNth(rawRow, colIdx);
+                if (NodeTag(rawCell) != T_A_Const) {
+                    YQL_CLOG(INFO, Default) << "Auto parametrization of " << NodeTag(rawCell) << " is not supported";
+                    return false;
+                }
+                auto pgConst = GetValueNType(CAST_NODE(A_Const, rawCell));
+                if (!pgConst) {
+                    return false;
+                }
+                pgConsts.push_back(std::move(pgConst.GetRef()));
+            }
+        }
+        return true;
+    }
+    
+    TMaybe<TVector<TPgConst::Type>> InferColumnTypesForValuesStmt(const TVector<TPgConst>& values, size_t cols) {
+        Y_VERIFY((values.size() % cols == 0), "wrong amount of columns for auto param values vector");
+        TVector<TMaybe<TPgConst::Type>> maybeColumnTypes(cols);
+
+        for (size_t i = 0; i < values.size(); ++i) {
+            const auto& value = values[i];
+            size_t col = i % cols;
+            auto& columnType = maybeColumnTypes[col];
+            
+            if (!columnType || columnType.GetRef() == TPgConst::Type::unknown) {
+                columnType = value.type;
+            }
+
+            if (columnType.GetRef() != value.type && value.type != TPgConst::Type::unknown) {
+                YQL_CLOG(INFO, Default) 
+                    << "Failed to auto parametrize: different types: " 
+                    << TPgConst::ToString(columnType.GetRef()) << " and " << TPgConst::ToString(value.type)
+                    << " in col " << col;
+                return {};
+            }
+        }
+
+        TVector<TPgConst::Type> columnTypes;
+        for (auto& maybeColumnType: maybeColumnTypes) {
+            if (maybeColumnType.Empty()) {
+                YQL_CLOG(INFO, Default) << "Failed to auto parametrize: can't infer PgType for column";
+                return {};
+            }
+            columnTypes.emplace_back(maybeColumnType.GetRef());
+        }
+        return columnTypes;
+    }
+    
+    TAstNode* MakeValuesStmtAutoParam(TVector<TPgConst>&& values, TVector<TPgConst::Type>&& columnTypes) {
+        TVector<Ydb::Value> ydbValues;
+        for (auto&& pgConst : values) {
+            Ydb::Value literal;
+
+            // Assuming context of VALUES(...), 
+            // otherwise we have to PgCast (Null) to unknown!
+            if (pgConst.type == TPgConst::Type::unknown) {
+                literal.set_null_flag_value(NProtoBuf::NULL_VALUE);
+            } else {
+                literal.set_text_value(std::move(pgConst.value));
+            }
+            ydbValues.push_back(literal);
+        }
+
+        TVector<TAstNode*> autoParamTupleType;
+        autoParamTupleType.reserve(columnTypes.size());
+        autoParamTupleType.push_back(A("TupleType"));
+
+        const auto paramName = TString(AUTO_PARAM_PREFIX) + ToString(AutoParamValues.size());
+        AutoParamValues[paramName] = MakeYdbListTupleParamValue(std::move(ydbValues), std::move(columnTypes));
+        
+        Statements.push_back(L(A("declare"), A(paramName), L(A("ListType"), VL(autoParamTupleType))));
+
+        YQL_CLOG(INFO, Default) << "Successfully autoparametrized VALUES at" << Positions.back();
+
+        return A(paramName);
+    }
+
+    [[nodiscard]]
+    TAstNode* ParseValuesList(List* valuesLists) {
+        TVector<TAstNode*> valNames;
+        uint64 colIdx = 0;
+
+        TExprSettings settings;
+        settings.AllowColumns = false;
+        settings.Scope = "VALUES";
+
+        for (int valueIndex = 0; valueIndex < ListLength(valuesLists); ++valueIndex) {
+            auto node = ListNodeNth(valuesLists, valueIndex);
+            if (NodeTag(node) != T_List) {
+                NodeNotImplemented(node);
+                return nullptr;
+            }
+
+            auto lst = CAST_NODE(List, node);
+            if (valueIndex == 0) {
+                for (int item = 0; item < ListLength(lst); ++item) {
+                    valNames.push_back(QA("column" + ToString(colIdx++)));
+                }
+            } else {
+                if (ListLength(lst) != (int)valNames.size()) {
+                    AddError("VALUES lists must all be the same length");
+                    return nullptr;
+                }
+            }
+        }
+
+        const auto buildValuesTupleList = [this] (TVector<TVector<TAstNode*>>& values) {
+            TVector<TAstNode*> valueRows;
+            valueRows.reserve(values.size() + 1);
+            valueRows.push_back(A("AsList"));
+
+            for (auto& row: values) {
+                valueRows.push_back(QVL(row.data(), row.size()));
+            }
+            return VL(valueRows);
+        };
+
+        TVector<TPgConst> pgConsts;
+        bool allValsAreLiteral = ExtractPgConstsForAutoParam(valuesLists, pgConsts);
+        if (allValsAreLiteral) {
+            auto maybeColumnTypes = InferColumnTypesForValuesStmt(pgConsts, valNames.size());
+            if (maybeColumnTypes) {
+                auto valuesNode = MakeValuesStmtAutoParam(std::move(pgConsts), std::move(maybeColumnTypes.GetRef()));
+                return QL(QA("values"), QVL(valNames.data(), valNames.size()), valuesNode);
+            }
+        }
+        
+        TVector<TAstNode*> valueRows;
+        valueRows.reserve(ListLength(valuesLists));
+        valueRows.push_back(A("AsList"));
+        for (int valueIndex = 0; valueIndex < ListLength(valuesLists); ++valueIndex) {
+            auto node = ListNodeNth(valuesLists, valueIndex);
+            if (NodeTag(node) != T_List) {
+                NodeNotImplemented(node);
+                return nullptr;
+            }
+
+            auto lst = CAST_NODE(List, node);
+            TVector<TAstNode*> row;
+
+            for (int item = 0; item < ListLength(lst); ++item) {
+                auto cell = ParseExpr(ListNodeNth(lst, item), settings);
+                if (!cell) {
+                    return nullptr;
+                }
+
+                row.push_back(cell);
+            }
+
+            valueRows.push_back(QVL(row.data(), row.size()));
+        }
+
+        return QL(QA("values"), QVL(valNames.data(), valNames.size()), VL(valueRows));
     }
 
     using TTraverseSelectStack = TStack<std::pair<const SelectStmt*, bool>>;
@@ -708,47 +952,6 @@ public:
                 res.push_back(CreatePgResultItem(r, x, i));
             }
 
-            TVector<TAstNode*> val;
-            TVector<TAstNode*> valNames;
-            val.push_back(A("AsList"));
-
-            for (int valueIndex = 0; valueIndex < ListLength(x->valuesLists); ++valueIndex) {
-                TExprSettings settings;
-                settings.AllowColumns = false;
-                settings.Scope = "VALUES";
-
-                auto node = ListNodeNth(x->valuesLists, valueIndex);
-                if (NodeTag(node) != T_List) {
-                    NodeNotImplemented(x, node);
-                    return nullptr;
-                }
-
-                auto lst = CAST_NODE(List, node);
-                TVector<TAstNode*> row;
-                if (valueIndex == 0) {
-                    for (int item = 0; item < ListLength(lst); ++item) {
-                        valNames.push_back(QA("column" + ToString(i++)));
-                    }
-                } else {
-                    if (ListLength(lst) != (int)valNames.size()) {
-                        AddError("SelectStmt: VALUES lists must all be the same length");
-                        return nullptr;
-                    }
-                }
-
-                for (int item = 0; item < ListLength(lst); ++item) {
-                    auto cell = ParseExpr(ListNodeNth(lst, item), settings);
-                    if (!cell) {
-                        return nullptr;
-                    }
-
-                    row.push_back(cell);
-                }
-
-                val.push_back(QVL(row.data(), row.size()));
-            }
-
-
             TVector<TAstNode*> setItemOptions;
             if (emitPgStar) {
                 setItemOptions.push_back(QL(QA("emit_pg_star")));
@@ -759,7 +962,7 @@ public:
             if (ListLength(x->targetList) > 0) {
                 setItemOptions.push_back(QL(QA("result"), QVL(res.data(), res.size())));
             } else {
-                setItemOptions.push_back(QL(QA("values"), QVL(valNames.data(), valNames.size()), VL(val.data(), val.size())));
+                setItemOptions.push_back(ParseValuesList(x->valuesLists));
             }
 
             if (!fromList.empty()) {
@@ -2294,8 +2497,8 @@ public:
 
     TAstNode* ParseParamRefExpr(const ParamRef* value) {
         const auto varName = PREPARED_PARAM_PREFIX + ToString(value->number);
-        if (!ParamNameToTypeOid.contains(varName)) {
-            ParamNameToTypeOid[varName] = UNKNOWNOID;
+        if (!ParamNameToPgTypeName.contains(varName)) {
+            ParamNameToPgTypeName[varName] = DEFAULT_PARAM_TYPE;
         }
         return A(varName);
     }
@@ -2382,29 +2585,64 @@ public:
             return nullptr;
         }
     }
+    
+    TMaybe<TPgConst> GetValueNType(const A_Const* value) {
+        TPgConst pgConst;
+        const auto& val = value->val;
+        switch (NodeTag(val)) {
+            case T_Integer: {
+                pgConst.value = ToString(IntVal(val));
+                pgConst.type = TPgConst::Type::int4;
+                return pgConst;
+            }
+            case T_Float: {
+                auto s = StrFloatVal(val);
+                i64 v;
+                const bool isInt8 = TryFromString<i64>(s, v);
+                pgConst.value = ToString(s);
+                pgConst.type = isInt8 ? TPgConst::Type::int8 : TPgConst::Type::numeric;
+                return pgConst;
+            }
+            case T_String: {
+                pgConst.value = ToString(StrVal(val));
+                pgConst.type = TPgConst::Type::text;
+                return pgConst;
+            }
+            case T_Null: {
+                pgConst.type = TPgConst::Type::unknown;
+                return pgConst;
+            }
+            default: {
+                ValueNotImplemented(value, val);
+                return {};
+            }
+        }
+    }
 
     TAstNode* ParseAConst(const A_Const* value) {
         AT_LOCATION(value);
         const auto& val = value->val;
-        switch (NodeTag(val)) {
-        case T_Integer: {
-            return L(A("PgConst"), QA(ToString(IntVal(val))), L(A("PgType"), QA("int4")));
-        }
-        case T_Float: {
-            auto s = StrFloatVal(val);
-            i64 v;
-            const bool isInt8 = TryFromString<i64>(s, v);
-            return L(A("PgConst"), QA(ToString(s)), L(A("PgType"), isInt8 ? QA("int8") : QA("numeric")));
-        }
-        case T_String: {
-            return L(A("PgConst"), QAX(ToString(StrVal(val))), L(A("PgType"), QA("text")));
-        }
-        case T_Null: {
-            return L(A("PgCast"), L(A("Null")), L(A("PgType"), QA("unknown")));
-        }
-        default:
-            ValueNotImplemented(value, val);
+        auto valueNType = GetValueNType(value);
+        if (!valueNType) {
             return nullptr;
+        }
+        switch (NodeTag(val)) {
+            case T_Integer: {
+                return L(A("PgConst"), QA(valueNType->value), L(A("PgType"), QA(TPgConst::ToString(valueNType->type))));
+            }
+            case T_Float: {
+                return L(A("PgConst"), QA(valueNType->value), L(A("PgType"), QA(TPgConst::ToString(valueNType->type))));
+            }
+            case T_String: {
+                return L(A("PgConst"), QAX(valueNType->value), L(A("PgType"), QA(TPgConst::ToString(valueNType->type))));
+            }
+            case T_Null: {
+                return L(A("PgCast"), L(A("Null")), L(A("PgType"), QA("unknown")));
+            }
+            default: {
+                ValueNotImplemented(value, val);
+                return nullptr;
+            }
         }
     }
 
@@ -3465,9 +3703,7 @@ public:
     }
 
     void AddVariableDeclarations() {
-      for (const auto &[varName, typeOid] : ParamNameToTypeOid) {
-        const auto &typeName =
-            typeOid != UNKNOWNOID ? NPg::LookupType(typeOid).Name : "text";
+      for (const auto& [varName, typeName] : ParamNameToPgTypeName) {
         const auto pgType = L(A("PgType"), QA(typeName));
         Statements.push_back(L(A("declare"), A(varName), pgType));
       }
@@ -3511,6 +3747,10 @@ public:
         return TAstNode::NewList(pos.Row ? pos : Positions.back(), nodes, size, *AstParseResult.Pool);
     }
 
+    TAstNode* VL(TArrayRef<TAstNode*> nodes, TPosition pos = {}) {
+        return TAstNode::NewList(pos.Row ? pos : Positions.back(), nodes.data(), nodes.size(), *AstParseResult.Pool);
+    }
+
     TAstNode* QVL(TAstNode** nodes, ui32 size, TPosition pos = {}) {
         return Q(VL(nodes, size, pos), pos);
     }
@@ -3518,8 +3758,12 @@ public:
     TAstNode* QVL(TAstNode* node, TPosition pos = {}) {
         return QVL(&node, 1, pos);
     }
+    
+    TAstNode* QVL(TArrayRef<TAstNode*> nodes, TPosition pos = {}) {
+        return Q(VL(nodes, pos), pos);
+    }
 
-    TAstNode* A(const TString& str, TPosition pos = {}, ui32 flags = 0) {
+    TAstNode* A(const TStringBuf str, TPosition pos = {}, ui32 flags = 0) {
         return TAstNode::NewAtom(pos.Row ? pos : Positions.back(), str, *AstParseResult.Pool, flags);
     }
 
@@ -3531,7 +3775,7 @@ public:
         return L(A("quote", pos), node, pos);
     }
 
-    TAstNode* QA(const TString& str, TPosition pos = {}, ui32 flags = 0) {
+    TAstNode* QA(const TStringBuf str, TPosition pos = {}, ui32 flags = 0) {
         return Q(A(str, pos, flags), pos);
     }
 
@@ -3678,7 +3922,8 @@ private:
     TString Provider;
     static const THashMap<TStringBuf, TString> ProviderToInsertModeMap;
 
-    THashMap<TString, Oid> ParamNameToTypeOid;
+    THashMap<TString, TString> ParamNameToPgTypeName;
+    THashMap<TString, Ydb::TypedValue> AutoParamValues;
 };
 
 const THashMap<TStringBuf, TString> TConverter::ProviderToInsertModeMap = {

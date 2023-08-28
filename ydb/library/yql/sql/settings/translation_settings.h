@@ -106,6 +106,7 @@ namespace NSQLTranslation {
         TString FileAliasPrefix;
 
         TVector<ui32> PgParameterTypeOids;
+        bool AutoParametrizeEnabled = false;
     };
 
     bool ParseTranslationSettings(const TString& query, NSQLTranslation::TTranslationSettings& settings, NYql::TIssues& issues);

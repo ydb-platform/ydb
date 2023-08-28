@@ -28,6 +28,7 @@ target_link_libraries(ydb-library-yql-sql-pg-ut PUBLIC
 )
 target_sources(ydb-library-yql-sql-pg-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/pg/pg_sql_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/pg/pg_sql_autoparam_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/pg/optimizer_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/pg/optimizer_impl_ut.cpp
 )

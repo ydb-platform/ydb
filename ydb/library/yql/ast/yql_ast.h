@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ydb/public/api/protos/ydb_value.pb.h"
 #include "yql_errors.h"
 
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
@@ -129,7 +130,7 @@ struct TAstNode {
         }
     }
     
-    inline TArrayRef<TAstNode*> GetChildren() {
+    inline TArrayRef<TAstNode* const> GetChildren() const {
         Y_VERIFY(IsList());
         return {ListCount <= SmallListCount ? Data.S.Children : Data.L.Children, ListCount};
     }
@@ -244,6 +245,7 @@ struct TAstParseResult {
     std::unique_ptr<TMemoryPool> Pool;
     TAstNode* Root = nullptr;
     TIssues Issues;
+    TMaybe<THashMap<TString, Ydb::TypedValue>> PgAutoParamValues = Nothing();
 
     inline bool IsOk() const {
         return !!Root;

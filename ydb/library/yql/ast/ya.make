@@ -38,6 +38,7 @@ PEERDIR(
     ydb/library/yql/core/issue
     ydb/library/yql/core/url_lister/interface
     ydb/library/yql/parser/pg_catalog
+    ydb/public/api/protos
 )
 
 END()

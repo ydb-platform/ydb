@@ -28,6 +28,7 @@ target_link_libraries(yql-sql-pg PUBLIC
   library-yql-core
   yql-parser-pg_catalog
   yql-sql-settings
+  api-protos
 )
 target_sources(yql-sql-pg PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/sql/pg/pg_sql.cpp

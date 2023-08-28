@@ -28,6 +28,7 @@ target_link_libraries(library-yql-ast PUBLIC
   yql-core-issue
   core-url_lister-interface
   yql-parser-pg_catalog
+  api-protos
 )
 target_sources(library-yql-ast PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/ast/yql_ast.cpp

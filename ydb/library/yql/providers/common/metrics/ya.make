@@ -13,3 +13,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE(
+    protos
+)

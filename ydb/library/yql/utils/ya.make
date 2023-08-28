@@ -57,6 +57,7 @@ RECURSE(
     failure_injector
     fetch
     log
+    test_http_server
     threading
 )
 

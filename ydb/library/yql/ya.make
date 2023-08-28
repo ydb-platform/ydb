@@ -1,21 +1,6 @@
 RECURSE(
     ast
     core
-    core/arrow_kernels/request
-    core/arrow_kernels/registry
-    core/common_opt
-    core/credentials
-    core/expr_nodes
-    core/expr_nodes_gen
-    core/extract_predicate
-    core/facade
-    core/file_storage
-    core/issue
-    core/peephole_opt
-    core/services
-    core/sql_types
-    core/type_ann
-    core/user_data
     dq
     minikql
     parser

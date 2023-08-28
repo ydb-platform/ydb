@@ -1,5 +1,5 @@
 IF (NOT WINDOWS)
-    UNITTEST_FOR(yql/library/dom)
+    UNITTEST_FOR(ydb/library/yql/minikql/dom)
 
     SRCS(
         yson_ut.cpp
@@ -14,6 +14,7 @@ IF (NOT WINDOWS)
     PEERDIR(
         ydb/library/yql/minikql/computation/llvm
         ydb/library/yql/public/udf/service/exception_policy
+        ydb/library/yql/sql/pg_dummy
     )
 
     YQL_LAST_ABI_VERSION()

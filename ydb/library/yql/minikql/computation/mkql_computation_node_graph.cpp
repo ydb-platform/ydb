@@ -144,6 +144,8 @@ public:
     {
 #ifndef NDEBUG
         AllocState.ActiveMemInfo.emplace(MemInfo.Get(), MemInfo);
+#else
+        Y_UNUSED(AllocState);
 #endif
     }
 

@@ -53,6 +53,10 @@ GENERATE_ENUM_SERIALIZATION(ast_nodes.h)
 
 END()
 
+RECURSE(
+    benchmark
+)
+
 RECURSE_FOR_TESTS(
     ut
 )

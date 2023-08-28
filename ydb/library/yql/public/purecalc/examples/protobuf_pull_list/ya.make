@@ -11,9 +11,7 @@ PEERDIR(
     ydb/library/yql/public/purecalc/helpers/stream
 )
 
-
-   YQL_LAST_ABI_VERSION()
-
+YQL_LAST_ABI_VERSION()
 
 END()
 

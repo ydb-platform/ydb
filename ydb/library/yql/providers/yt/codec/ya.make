@@ -40,6 +40,10 @@ YQL_LAST_ABI_VERSION()
 
 END()
 
+RECURSE(
+    codegen
+)
+
 RECURSE_FOR_TESTS(
     ut
 )

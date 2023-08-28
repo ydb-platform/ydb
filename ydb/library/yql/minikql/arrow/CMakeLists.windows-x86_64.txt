@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(yql-minikql-arrow)
 target_compile_options(yql-minikql-arrow PRIVATE

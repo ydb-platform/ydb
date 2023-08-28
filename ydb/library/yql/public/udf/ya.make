@@ -53,6 +53,13 @@ PROVIDES(YqlUdfSdk)
 
 END()
 
+RECURSE(
+    arrow
+    service
+    support
+    tz
+)
+
 RECURSE_FOR_TESTS(
     ut
 )

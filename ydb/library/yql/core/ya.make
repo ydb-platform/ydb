@@ -92,4 +92,25 @@ YQL_LAST_ABI_VERSION()
 
 END()
 
+RECURSE(
+    arrow_kernels
+    cbo
+    common_opt
+    credentials
+    expr_nodes
+    expr_nodes_gen
+    extract_predicate
+    facade
+    file_storage
+    issue
+    peephole_opt
+    services
+    spilling
+    sql_types
+    type_ann
+    url_lister
+    url_preprocessing
+    user_data
+)
+
 RECURSE_FOR_TESTS(ut)

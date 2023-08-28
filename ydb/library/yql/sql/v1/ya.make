@@ -56,6 +56,13 @@ GENERATE_ENUM_SERIALIZATION(sql_call_param.h)
 
 END()
 
+RECURSE(
+    format
+    lexer
+    perf
+    proto_parser
+)
+
 RECURSE_FOR_TESTS(
     ut
 )

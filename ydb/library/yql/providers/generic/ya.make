@@ -2,8 +2,8 @@ RECURSE(
     actors
     connector
     expr_nodes
-    provider
     proto
+    provider
 )
 
 RECURSE_FOR_TESTS(

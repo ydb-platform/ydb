@@ -10,3 +10,10 @@ PEERDIR(
 )
 
 END()
+
+RECURSE(
+    expr
+    mkql
+    parser
+    skiff
+)

@@ -1,8 +1,9 @@
 RECURSE(
     activation
-    arrow_resolve
     arrow
+    arrow_resolve
     codec
+    comp_nodes
     config
     db_id_async_resolver
     dq
@@ -10,14 +11,10 @@ RECURSE(
     http_gateway
     metrics
     mkql
-    comp_nodes
     proto
+    proto/python
     provider
     schema
-    schema/expr
-    schema/mkql
-    schema/parser
-    schema/skiff
     structured_token
     token_accessor
     transform

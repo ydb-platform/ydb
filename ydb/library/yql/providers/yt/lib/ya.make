@@ -1,4 +1,5 @@
 RECURSE(
+    config_clusters
     expr_traits
     graph_reorder
     hash
@@ -14,6 +15,6 @@ RECURSE(
     skiff
     url_mapper
     yson_helpers
-    yt_url_lister
     yt_download
+    yt_url_lister
 )

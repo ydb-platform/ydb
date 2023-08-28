@@ -21,6 +21,10 @@ GENERATE_ENUM_SERIALIZATION(yql_warning.h)
 
 END()
 
+RECURSE(
+    protos
+)
+
 RECURSE_FOR_TESTS(
     ut
 )

@@ -13,7 +13,13 @@ YQL_LAST_ABI_VERSION()
 
 END()
 
+RECURSE(
+    common
+    examples
+    helpers
+    io_specs
+)
+
 RECURSE_FOR_TESTS(
-    io_specs/ut
     ut
 )

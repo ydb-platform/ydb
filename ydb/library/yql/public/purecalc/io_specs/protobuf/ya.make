@@ -10,9 +10,7 @@ SRCS(
     proto_variant.cpp
 )
 
-
-   YQL_LAST_ABI_VERSION()
-
+YQL_LAST_ABI_VERSION()
 
 END()
 

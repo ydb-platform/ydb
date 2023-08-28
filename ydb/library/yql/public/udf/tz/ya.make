@@ -12,6 +12,10 @@ PROVIDES(YqlUdfTz)
 
 END()
 
+RECURSE(
+    gen
+)
+
 RECURSE_FOR_TESTS(
     ut
 )

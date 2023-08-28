@@ -83,6 +83,19 @@ YQL_LAST_ABI_VERSION()
 
 END()
 
+RECURSE(
+    arrow
+    benchmark
+    codegen
+    comp_nodes
+    computation
+    datetime
+    dom
+    invoke_builtins
+    jsonpath
+    perf
+)
+
 RECURSE_FOR_TESTS(
     ut
 )

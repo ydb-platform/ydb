@@ -33,6 +33,10 @@ GENERATE_ENUM_SERIALIZATION(node.h)
 
 END()
 
+RECURSE(
+    lexer
+)
+
 RECURSE_FOR_TESTS(
     ut
 )

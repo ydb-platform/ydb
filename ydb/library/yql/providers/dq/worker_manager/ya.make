@@ -22,3 +22,7 @@ SRCS(
 )
 
 END()
+
+RECURSE(
+    interface
+)

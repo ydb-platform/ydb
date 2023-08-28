@@ -4,14 +4,6 @@ RECURSE(
     fastcheck
     issue
     purecalc
-    purecalc/examples
-    purecalc/helpers
-    purecalc/io_specs
     types
     udf
-    udf/arrow
-    udf/service/exception_policy
-    udf/service/stub
-    udf/service/terminate_policy
-    udf/tz/gen
 )

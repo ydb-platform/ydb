@@ -1,11 +1,7 @@
 RECURSE(
     codec
-    codec/codegen/ut
-    codec/ut
     common
     comp_nodes
-    comp_nodes/ut
-    comp_nodes/dq
     expr_nodes
     gateway
     job
@@ -13,5 +9,4 @@ RECURSE(
     mkql_dq
     opt
     provider
-    provider/ut
 )

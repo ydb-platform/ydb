@@ -15,3 +15,7 @@ CFLAGS(
 )
 
 END()
+
+RECURSE(
+    interface
+)

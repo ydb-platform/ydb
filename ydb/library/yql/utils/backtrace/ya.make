@@ -29,6 +29,10 @@ PEERDIR(
 
 END()
 
+RECURSE(
+    fake_llvm_symbolizer
+)
+
 RECURSE_FOR_TESTS(
     ut
 )

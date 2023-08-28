@@ -10,6 +10,7 @@ add_subdirectory(format)
 add_subdirectory(lexer)
 add_subdirectory(perf)
 add_subdirectory(proto_parser)
+add_subdirectory(ut)
 get_built_tool_path(
   TOOL_enum_parser_bin
   TOOL_enum_parser_dependency

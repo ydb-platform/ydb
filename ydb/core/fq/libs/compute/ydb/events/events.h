@@ -191,17 +191,20 @@ struct TEvYdbCompute {
         TEvCreateDatabaseRequest(const TString& cloudId,
                                  const TString& scope,
                                  const TString& basePath,
-                                 const TString& path)
+                                 const TString& path,
+                                 const NFq::NConfig::TYdbStorageConfig& executionConnection)
             : CloudId(cloudId)
             , Scope(scope)
             , BasePath(basePath)
             , Path(path)
+            , ExecutionConnection(executionConnection)
         {}
 
         TString CloudId;
         TString Scope;
         TString BasePath;
         TString Path;
+        NFq::NConfig::TYdbStorageConfig ExecutionConnection;
     };
 
     struct TEvCreateDatabaseResponse : public NActors::TEventLocal<TEvCreateDatabaseResponse, EvCreateDatabaseResponse> {

@@ -33,11 +33,12 @@ using namespace NFq;
 
 class TCreateDatabaseRequestActor : public NActors::TActorBootstrapped<TCreateDatabaseRequestActor> {
 public:
-    TCreateDatabaseRequestActor(const TActorId& databaseClientActorId, const TActorId& synchronizationServiceActorId, const NFq::NConfig::TComputeConfig& config, TEvYdbCompute::TEvCreateDatabaseRequest::TPtr& request)
+    TCreateDatabaseRequestActor(const TActorId& databaseClientActorId, const TActorId& synchronizationServiceActorId, const NFq::NConfig::TComputeConfig& config, const NFq::NConfig::TYdbStorageConfig& executionConnection, TEvYdbCompute::TEvCreateDatabaseRequest::TPtr& request)
         : DatabaseClientActorId(databaseClientActorId)
         , SynchronizationServiceActorId(synchronizationServiceActorId)
         , Config(config)
         , Request(request)
+        , ExecutionConnection(executionConnection)
     {}
 
     static constexpr char ActorName[] = "FQ_CREATE_DATABASE_REQUEST_ACTOR";
@@ -72,7 +73,7 @@ public:
         const auto& result = ev->Get()->Record;
 
         if (issues && issues.back().IssueCode == TIssuesIds::ACCESS_DENIED) {
-            Send(DatabaseClientActorId, new TEvYdbCompute::TEvCreateDatabaseRequest{Request->Get()->CloudId, Request->Get()->Scope, Request->Get()->BasePath, Request->Get()->Path});
+            Send(DatabaseClientActorId, new TEvYdbCompute::TEvCreateDatabaseRequest{Request->Get()->CloudId, Request->Get()->Scope, Request->Get()->BasePath, Request->Get()->Path, ExecutionConnection});
             return;
         }
 
@@ -128,6 +129,7 @@ private:
     NFq::NConfig::TComputeConfig Config;
     TEvYdbCompute::TEvCreateDatabaseRequest::TPtr Request;
     FederatedQuery::Internal::ComputeDatabaseInternal Result;
+    NFq::NConfig::TYdbStorageConfig ExecutionConnection;
 };
 
 class TComputeDatabaseControlPlaneServiceActor : public NActors::TActorBootstrapped<TComputeDatabaseControlPlaneServiceActor> {
@@ -177,7 +179,7 @@ public:
 
     static NCloud::TGrpcClientSettings CreateGrpcClientSettings(const NConfig::TComputeDatabaseConfig& config) {
         NCloud::TGrpcClientSettings settings;
-        const auto& connection = config.GetConnection();
+        const auto& connection = config.GetControlPlaneConnection();
         settings.Endpoint = connection.GetEndpoint();
         settings.EnableSsl = connection.GetUseSsl();
         if (connection.GetCertificateFile()) {
@@ -189,26 +191,26 @@ public:
     void CreateCmsClientActors(const NConfig::TYdbComputeControlPlane::TCms& cmsConfig) {
         const auto& mapping = cmsConfig.GetDatabaseMapping();
         for (const auto& config: mapping.GetCommon()) {
-            CommonDatabaseClients.push_back({Register(CreateCmsGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.connection()))->CreateProvider()).release()), config});
+            CommonDatabaseClients.push_back({Register(CreateCmsGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release()), config});
         }
 
         Y_VERIFY(CommonDatabaseClients);
 
         for (const auto& [scope, config]: mapping.GetScopeToComputeDatabase()) {
-            ScopeToDatabaseClient[scope] = {Register(CreateCmsGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.connection()))->CreateProvider()).release()), config};
+            ScopeToDatabaseClient[scope] = {Register(CreateCmsGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release()), config};
         }
     }
 
     void CreateControlPlaneClientActors(const NConfig::TYdbComputeControlPlane::TYdbcp& controlPlaneConfig) {
         const auto& mapping = controlPlaneConfig.GetDatabaseMapping();
         for (const auto& config: mapping.GetCommon()) {
-            CommonDatabaseClients.push_back({Register(CreateYdbcpGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.connection()))->CreateProvider()).release()), config});
+            CommonDatabaseClients.push_back({Register(CreateYdbcpGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release()), config});
         }
 
         Y_VERIFY(CommonDatabaseClients);
 
         for (const auto& [scope, config]: mapping.GetScopeToComputeDatabase()) {
-            ScopeToDatabaseClient[scope] = {Register(CreateYdbcpGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.connection()))->CreateProvider()).release()), config};
+            ScopeToDatabaseClient[scope] = {Register(CreateYdbcpGrpcClientActor(CreateGrpcClientSettings(config), CredentialsProviderFactory(GetYdbCredentialSettings(config.GetControlPlaneConnection()))->CreateProvider()).release()), config};
         }
     }
 
@@ -218,7 +220,7 @@ public:
 
     void Handle(TEvYdbCompute::TEvCreateDatabaseRequest::TPtr& ev) {
         if (Config.GetYdb().GetControlPlane().HasSingle()) {
-            Register(new TCreateDatabaseRequestActor(TActorId{}, SynchronizationServiceActorId, Config, ev));
+            Register(new TCreateDatabaseRequestActor(TActorId{}, SynchronizationServiceActorId, Config, Config.GetYdb().GetControlPlane().GetSingle().GetConnection(), ev));
             return;
         }
 
@@ -226,18 +228,19 @@ public:
         auto it = ScopeToDatabaseClient.find(scope);
         if (it != ScopeToDatabaseClient.end()) {
             FillRequest(ev, it->second.Config);
-            Register(new TCreateDatabaseRequestActor(it->second.ActorId, SynchronizationServiceActorId, Config, ev));
+            Register(new TCreateDatabaseRequestActor(it->second.ActorId, SynchronizationServiceActorId, Config, it->second.Config.GetExecutionConnection(), ev));
             return;
         }
         const auto& clientConfig = CommonDatabaseClients[MultiHash(scope) % CommonDatabaseClients.size()];
         FillRequest(ev, clientConfig.Config);
-        Register(new TCreateDatabaseRequestActor(clientConfig.ActorId, SynchronizationServiceActorId, Config, ev));
+        Register(new TCreateDatabaseRequestActor(clientConfig.ActorId, SynchronizationServiceActorId, Config, clientConfig.Config.GetExecutionConnection(), ev));
     }
 
     void FillRequest(TEvYdbCompute::TEvCreateDatabaseRequest::TPtr& ev, const NConfig::TComputeDatabaseConfig& config) {
         NYdb::NFq::TScope scope(ev.Get()->Get()->Scope);
-        ev.Get()->Get()->BasePath = config.GetConnection().GetDatabase();
-        ev.Get()->Get()->Path = config.GetTenant() ? config.GetTenant() + "/" + scope.ParseFolder() : scope.ParseFolder();
+        ev.Get()->Get()->BasePath = config.GetControlPlaneConnection().GetDatabase();
+        const TString databaseName = Config.GetYdb().GetControlPlane().GetDatabasePrefix() + scope.ParseFolder();
+        ev.Get()->Get()->Path = config.GetTenant() ? config.GetTenant() + "/" + databaseName: databaseName;
     }
 
 private:

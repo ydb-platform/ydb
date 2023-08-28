@@ -349,7 +349,7 @@ private:
             *resources.mutable_topic_consumers() = task.created_topic_consumers();
         }
 
-        NFq::NConfig::TYdbStorageConfig computeConnection = ComputeConfig.GetConnection(task.scope());
+        NFq::NConfig::TYdbStorageConfig computeConnection = ComputeConfig.GetExecutionConnection(task.scope());
         computeConnection.set_endpoint(task.compute_connection().endpoint());
         computeConnection.set_database(task.compute_connection().database());
         computeConnection.set_usessl(task.compute_connection().usessl());

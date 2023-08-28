@@ -95,9 +95,9 @@ public:
         }
 
         forwardResponse->Result.set_id(request.Get()->Get()->Path);
-        forwardResponse->Result.mutable_connection()->set_endpoint(Settings.Endpoint);
+        forwardResponse->Result.mutable_connection()->set_endpoint(request->Get()->ExecutionConnection.GetEndpoint());
         forwardResponse->Result.mutable_connection()->set_database(request.Get()->Get()->Path);
-        forwardResponse->Result.mutable_connection()->set_usessl(Settings.EnableSsl);
+        forwardResponse->Result.mutable_connection()->set_usessl(request->Get()->ExecutionConnection.GetUseSsl());
 
         Send(request->Sender, forwardResponse.release(), 0, request->Cookie);
     }

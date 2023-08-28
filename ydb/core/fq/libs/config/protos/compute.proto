@@ -18,7 +18,8 @@ message TInPlaceCompute {
 }
 
 message TComputeDatabaseConfig {
-    TYdbStorageConfig Connection = 1;
+    TYdbStorageConfig ControlPlaneConnection = 1;
+    TYdbStorageConfig ExecutionConnection = 3;
     string Tenant = 2;
 }
 
@@ -46,6 +47,7 @@ message TYdbComputeControlPlane {
         TCms Cms = 3;
         TYdbcp Ydbcp = 4;
     }
+    string DatabasePrefix = 5;
 }
 
 message TYdbCompute {

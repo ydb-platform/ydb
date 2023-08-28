@@ -94,15 +94,15 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
             {
                 auto* meta = msg->add_metadata_items();
                 meta->set_key("meta-key");
-       	        meta->set_value("meta-value");
+                meta->set_value("meta-value");
             };
             {
                 auto* meta = msg->add_metadata_items();
                 meta->set_key("meta-key2");
-       	        meta->set_value("meta-value2");
+                meta->set_value("meta-value2");
             };
 
-	    if (!writeSession->Write(req)) {
+            if (!writeSession->Write(req)) {
                 UNIT_FAIL("Grpc write fail");
             }
             UNIT_ASSERT(writeSession->Read(&resp));
@@ -177,6 +177,7 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         }
         {
             TVector<TString> base64sourceIds = {"base64:ZHNmc2Rm", "MTIzNDU=", "cXdlcnR5", "base64:bG9nYnJva2Vy", "base64:aa"};
+
             ui32 partition = 0;
             for (auto& sourceId : base64sourceIds) {
                 auto writer = CreateSimpleWriter(*driver, srcTopic, sourceId, partition + 1);
@@ -233,6 +234,7 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
                     UNIT_ASSERT_EQUAL(dstMessages[i].GetData(), srcMessages[i].GetData());
                     UNIT_ASSERT_EQUAL(dstMessages[i].GetCodec(), srcMessages[i].GetCodec());
                     UNIT_ASSERT_EQUAL(dstMessages[i].GetOffset(0), srcMessages[i].GetOffset(0));
+                    Cerr << "SRC " << srcMessages[i].GetMessageGroupId(0) << " DST " << dstMessages[i].GetMessageGroupId(0) << "\n";
                     UNIT_ASSERT_EQUAL(dstMessages[i].GetMessageGroupId(0), srcMessages[i].GetMessageGroupId(0));
                     UNIT_ASSERT_EQUAL(dstMessages[i].GetSeqNo(0), srcMessages[i].GetSeqNo(0));
                     UNIT_ASSERT_EQUAL(dstMessages[i].GetCreateTime(0), srcMessages[i].GetCreateTime(0));

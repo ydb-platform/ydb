@@ -9,6 +9,7 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <library/cpp/time_provider/time_provider.h>
+#include <library/cpp/string_utils/base64/base64.h>
 
 #include <google/protobuf/util/message_differencer.h>
 
@@ -115,7 +116,14 @@ bool TMirrorer::AddToWriteRequest(
 
     auto write = request.AddCmdWrite();
     write->SetData(GetSerializedData(message));
-    write->SetSourceId(NSourceIdEncoding::EncodeSimple(message.GetProducerId()));
+    TString producerId = message.GetProducerId();
+    for (const auto& item : message.GetMeta()->Fields) {
+        if (item.first == "_encoded_producer_id") {
+            producerId = Base64Decode(item.second);
+            break;
+        }
+    }
+    write->SetSourceId(NSourceIdEncoding::EncodeSimple(producerId));
     write->SetSeqNo(message.GetSeqNo());
     write->SetCreateTimeMS(message.GetCreateTime().MilliSeconds());
     if (Config.GetSyncWriteTime()) {

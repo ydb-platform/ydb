@@ -1,6 +1,7 @@
 #include "dq_transport.h"
 
 #include <ydb/library/mkql_proto/mkql_proto.h>
+#include <ydb/library/yql/minikql/computation/mkql_block_reader.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>
@@ -361,6 +362,23 @@ ui64 EstimateSizeImpl(const NUdf::TUnboxedValuePod& value, const NKikimr::NMiniK
             return EstimateSizeImpl(value, taggedType->GetBaseType(), fixed, settings);
         }
 
+        case TType::EKind::Block: {
+            auto blockType = static_cast<const TBlockType*>(type);
+            if (fixed) {
+                *fixed = false;
+            }
+
+            auto reader = MakeBlockReader(TTypeInfoHelper(), blockType->GetItemType());
+            ui64 size;
+            if (blockType->GetShape() == TBlockType::EShape::Many) {
+                size = reader->GetDataWeight(*TArrowBlock::From(value).GetDatum().array());
+            } else {
+                auto blockItem = reader->GetScalarItem(*TArrowBlock::From(value).GetDatum().scalar());
+                size = reader->GetDataWeight(blockItem);
+            }
+            return size;
+        }
+
         case TType::EKind::Type:
         case TType::EKind::Stream:
         case TType::EKind::Callable:
@@ -368,7 +386,6 @@ ui64 EstimateSizeImpl(const NUdf::TUnboxedValuePod& value, const NKikimr::NMiniK
         case TType::EKind::Resource:
         case TType::EKind::Flow:
         case TType::EKind::ReservedKind:
-        case TType::EKind::Block:
         case TType::EKind::Multi: {
             if (settings.DiscardUnsupportedTypes) {
                 return 0;

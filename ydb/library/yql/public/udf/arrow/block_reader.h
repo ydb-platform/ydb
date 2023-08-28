@@ -18,6 +18,10 @@ public:
     virtual TBlockItem GetItem(const arrow::ArrayData& data, size_t index) = 0;
     virtual TBlockItem GetScalarItem(const arrow::Scalar& scalar) = 0;
 
+    virtual ui64 GetDataWeight(const arrow::ArrayData& data) const = 0;
+    virtual ui64 GetDataWeight(TBlockItem item) const = 0;
+    virtual ui64 GetDefaultValueWeight() const = 0;
+
     virtual void SaveItem(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const = 0;
     virtual void SaveScalarItem(const arrow::Scalar& scalar, TOutputBuffer& out) const = 0;
 };
@@ -49,6 +53,25 @@ public:
         }
 
         return TBlockItem(*static_cast<const T*>(arrow::internal::checked_cast<const arrow::internal::PrimitiveScalarBase&>(scalar).data()));
+    }
+
+    ui64 GetDataWeight(const arrow::ArrayData& data) const final {
+        if constexpr (Nullable) {
+            return (1 + sizeof(T)) * data.length;
+        }
+        return sizeof(T) * data.length;
+    }
+
+    ui64 GetDataWeight(TBlockItem item) const final {
+        Y_UNUSED(item);
+        return GetDefaultValueWeight();
+    }
+
+    ui64 GetDefaultValueWeight() const final {
+        if constexpr (Nullable) {
+            return 1 + sizeof(T);
+        }
+        return sizeof(T);
     }
 
     void SaveItem(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const final {
@@ -104,6 +127,29 @@ public:
         auto buffer = arrow::internal::checked_cast<const arrow::BaseBinaryScalar&>(scalar).value;
         std::string_view str(reinterpret_cast<const char*>(buffer->data()), buffer->size());
         return TBlockItem(str);
+    }
+
+    ui64 GetDataWeight(const arrow::ArrayData& data) const final {
+        ui64 size = 0;
+        if constexpr (Nullable) {
+            size += data.length;
+        }
+        size += data.buffers[2] ? data.buffers[2]->size() : 0;
+        return size;
+    }
+
+    ui64 GetDataWeight(TBlockItem item) const final {
+        if constexpr (Nullable) {
+            return 1 + (item ? item.AsStringRef().Size() : 0);
+        }
+        return item.AsStringRef().Size();
+    }
+
+    ui64 GetDefaultValueWeight() const final {
+        if constexpr (Nullable) {
+            return 1;
+        }
+        return 0;
     }
 
     void SaveItem(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const final {
@@ -174,6 +220,50 @@ public:
         return TBlockItem(Items.data());
     }
 
+    ui64 GetDataWeight(const arrow::ArrayData& data) const final {
+        ui64 size = 0;
+        if constexpr (Nullable) {
+            size += data.length;
+        }
+
+        for (ui32 i = 0; i < Children.size(); ++i) {
+            size += Children[i]->GetDataWeight(*data.child_data[i]);
+        }
+
+        return size;
+    }
+
+    ui64 GetDataWeight(TBlockItem item) const final {
+        const TBlockItem* items = nullptr;
+        ui64 size = 0;
+        if constexpr (Nullable) {
+            if (!item) {
+                return GetDefaultValueWeight();
+            }
+            size = 1;
+            items = item.GetOptionalValue().GetElements();
+        } else {
+            items = item.GetElements();
+        }
+
+        for (ui32 i = 0; i < Children.size(); ++i) {
+            size += Children[i]->GetDataWeight(items[i]);
+        }
+
+        return size;
+    }
+
+    ui64 GetDefaultValueWeight() const final {
+        ui64 size = 0;
+        if constexpr (Nullable) {
+            size = 1;
+        }
+        for (ui32 i = 0; i < Children.size(); ++i) {
+            size += Children[i]->GetDefaultValueWeight();
+        }
+        return size;
+    }
+
     void SaveItem(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const final {
         if constexpr (Nullable) {
             if (IsNull(data, index)) {
@@ -228,6 +318,21 @@ public:
 
         const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(scalar);
         return Inner->GetScalarItem(*structScalar.value[0]).MakeOptional();
+    }
+
+    ui64 GetDataWeight(const arrow::ArrayData& data) const final {
+        return data.length + Inner->GetDataWeight(*data.child_data[0]);
+    }
+
+    ui64 GetDataWeight(TBlockItem item) const final {
+        if (!item) {
+            return GetDefaultValueWeight();
+        }
+        return 1 + Inner->GetDataWeight(item.GetOptionalValue());
+    }
+
+    ui64 GetDefaultValueWeight() const final {
+        return 1 + Inner->GetDefaultValueWeight();
     }
 
     void SaveItem(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const final {

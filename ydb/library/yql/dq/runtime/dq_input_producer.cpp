@@ -580,10 +580,9 @@ private:
 
         YQL_ENSURE(blockLen > 0);
         result[chunk.size()] = Factory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(blockLen)));
-        // TODO: support stats for blocks
-        //if (Stats_) {
-        //    Stats_.Add(result, width);
-        //}
+        if (Stats_) {
+            Stats_.Add(result, width);
+        }
         return NUdf::EFetchStatus::Ok;
     }
 
@@ -711,22 +710,29 @@ void TDqMeteringStats::TInputStatsMeter::Add(const NKikimr::NUdf::TUnboxedValue&
 }
 
 void TDqMeteringStats::TInputStatsMeter::Add(const NKikimr::NUdf::TUnboxedValue* row, ui32 width) {
-    Stats->RowsConsumed += 1;
     if (InputType) {
         YQL_ENSURE(InputType->IsMulti());
         auto multiType = static_cast<const TMultiType*>(InputType);
         YQL_ENSURE(width == multiType->GetElementsCount());
+        const bool isBlock = AnyOf(multiType->GetElements(), [](auto itemType) {  return itemType->IsBlock(); });
+        if (isBlock) {
+            Stats->RowsConsumed += TArrowBlock::From(row[width - 1]).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+        } else {
+            Stats->RowsConsumed += 1;
+        }
         
         NYql::NDq::TDqDataSerializer::TEstimateSizeSettings settings;
         settings.DiscardUnsupportedTypes = true;
         settings.WithHeaders = false;
 
         ui64 size = 0;
-        for (ui32 i = 0; i < multiType->GetElementsCount(); ++i) {
+        for (ui32 i = 0; (isBlock ? (i + 1) : i) < multiType->GetElementsCount(); ++i) {
             size += TDqDataSerializer::EstimateSize(row[i], multiType->GetElementType(i), nullptr, settings);
         }
 
         Stats->BytesConsumed += Max<ui64>(size, 8 /* billing size for count(*) */);
+    } else {
+        Stats->RowsConsumed += 1;
     }
 }
 

@@ -34,6 +34,7 @@ TYPath CreateTestDirectory(const IClientBasePtr& client);
 TString GenerateRandomData(size_t size, ui64 seed = 42);
 
 TVector<TNode> ReadTable(const IClientBasePtr& client, const TString& tablePath);
+void WriteTable(const IClientBasePtr& client, const TString& tablePath, const std::vector<TNode>& rowList);
 
 ////////////////////////////////////////////////////////////////////////////////
 

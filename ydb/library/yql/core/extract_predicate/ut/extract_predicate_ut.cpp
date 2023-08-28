@@ -886,6 +886,91 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
         UNIT_ASSERT_EQUAL(lambda, canonicalLambda);
         //Cerr << DumpNode(*buildResult.ComputeNode, exprCtx);
     }
+
+    Y_UNIT_TEST(BoolPredicate) {
+        TString prog =
+            "use plato;\n"
+            "declare $param as List<Int32>;\n"
+            "$src = [<|x:true, y:1|>, <|x:false, y:2|>];\n"
+            "insert into Output with truncate\n"
+            "select * from as_table($src) where not x;";
+
+        TExprContext exprCtx;
+        TTypeAnnotationContextPtr typesCtx;
+        TExprNode::TPtr exprRoot = ParseAndOptimize(prog, exprCtx, typesCtx);
+        TExprNode::TPtr filterLambda = LocateFilterLambda(exprRoot);
+
+        THashSet<TString> usedColumns;
+        using NDetail::TPredicateRangeExtractor;
+
+        TPredicateExtractorSettings settings;
+        auto extractor = MakePredicateRangeExtractor(settings);
+
+        UNIT_ASSERT(extractor->Prepare(filterLambda, *filterLambda->Head().Head().GetTypeAnn(), usedColumns, exprCtx, *typesCtx));
+
+        auto buildResult = extractor->BuildComputeNode({ "x" }, exprCtx, *typesCtx);
+
+        UNIT_ASSERT(buildResult.ComputeNode);
+
+        auto canonicalRanges =
+            "(\n"
+            "(return (RangeFinalize (RangeMultiply (Uint64 '10000) (RangeUnion (RangeFor '=== (Bool 'false) (DataType 'Bool))))))\n"
+            ")\n";
+        auto ranges = DumpNode(*buildResult.ComputeNode, exprCtx);
+        UNIT_ASSERT_EQUAL(ranges, canonicalRanges);
+
+        auto canonicalLambda =
+            "(\n"
+            "(return (lambda '($1) (OptionalIf (Bool 'true) $1)))\n"
+            ")\n";
+        auto lambda = DumpNode(*buildResult.PrunedLambda, exprCtx);
+        UNIT_ASSERT_EQUAL(lambda, canonicalLambda);
+    }
+
+    Y_UNIT_TEST(BoolPredicateLiteralRange) {
+        TString prog =
+            "use plato;\n"
+            "declare $param as List<Int32>;\n"
+            "$src = [<|x:true, y:1|>, <|x:false, y:2|>];\n"
+            "insert into Output with truncate\n"
+            "select * from as_table($src) where not x and y = 1;";
+
+        TExprContext exprCtx;
+        TTypeAnnotationContextPtr typesCtx;
+        TExprNode::TPtr exprRoot = ParseAndOptimize(prog, exprCtx, typesCtx);
+        TExprNode::TPtr filterLambda = LocateFilterLambda(exprRoot);
+
+        THashSet<TString> usedColumns;
+        using NDetail::TPredicateRangeExtractor;
+
+        TPredicateExtractorSettings settings;
+        settings.BuildLiteralRange = true;
+        auto extractor = MakePredicateRangeExtractor(settings);
+
+        UNIT_ASSERT(extractor->Prepare(filterLambda, *filterLambda->Head().Head().GetTypeAnn(), usedColumns, exprCtx, *typesCtx));
+
+        auto buildResult = extractor->BuildComputeNode({ "x", "y"}, exprCtx, *typesCtx);
+
+        UNIT_ASSERT(buildResult.ComputeNode);
+        UNIT_ASSERT(buildResult.LiteralRange);
+
+        auto canonicalRanges =
+            "(\n"
+            "(let $1 (RangeFor '== (Bool 'false) (DataType 'Bool)))\n"
+            "(let $2 (RangeFor '=== (Int32 '1) (DataType 'Int32)))\n"
+            "(return (RangeFinalize (RangeMultiply (Uint64 '10000) (RangeUnion (RangeIntersect (RangeMultiply (Uint64 '10000) $1 $2))))))\n"
+            ")\n";
+        auto ranges = DumpNode(*buildResult.ComputeNode, exprCtx);
+        UNIT_ASSERT_EQUAL(ranges, canonicalRanges);
+
+        auto canonicalLambda =
+            "(\n"
+            "(return (lambda '($1) (OptionalIf (Bool 'true) $1)))\n"
+            ")\n";
+        auto lambda = DumpNode(*buildResult.PrunedLambda, exprCtx);
+
+        UNIT_ASSERT_EQUAL(lambda, canonicalLambda);
+    }
 }
 
 } // namespace NYql

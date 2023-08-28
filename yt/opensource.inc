@@ -15,7 +15,6 @@ IF (OPENSOURCE)
         DENY REQUIRE_DISCLOSURE FORBIDDEN PROTESTWARE
     )
     LICENSE_RESTRICTION_EXCEPTIONS(
-        contrib/libs/linux-headers      # DTCC-553
         contrib/libs/fmt                # DTCC-1317
     )
 ENDIF()

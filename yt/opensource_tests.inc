@@ -16,7 +16,6 @@ IF (OPENSOURCE)
     )
 
     LICENSE_RESTRICTION_EXCEPTIONS(
-        contrib/libs/linux-headers       # DTCC-553
         contrib/libs/fmt                 # DTCC-1317
         # Java tests
         contrib/java/junit/junit/4.13

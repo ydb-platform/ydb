@@ -13,6 +13,9 @@
 #include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
 #include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
 
+#include <ydb/library/ydb_issue/proto/issue_id.pb.h>
+#include <ydb/library/yql/public/issue/yql_issue.h>
+
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
@@ -1006,8 +1009,15 @@ public:
                         future = Gateway->DropTable(table.Metadata->Cluster, table.Metadata->Name);
                         if (missingOk) {
                             future = future.Apply([](const NThreading::TFuture<IKikimrGateway::TGenericResult>& res) {
-                                Y_UNUSED(res);
-                                return CreateDummySuccess();
+                                auto operationResult = res.GetValue();
+                                bool pathNotExist = false;
+                                for (const auto& issue : operationResult.Issues()) {
+                                    WalkThroughIssues(issue, false, [&pathNotExist](const NYql::TIssue& issue, int level) {
+                                        Y_UNUSED(level);
+                                        pathNotExist |= (issue.GetCode() == NKikimrIssues::TIssuesIds::PATH_NOT_EXIST);
+                                    });
+                                }
+                                return pathNotExist ? CreateDummySuccess() : res;
                             });
                         }
                         break;

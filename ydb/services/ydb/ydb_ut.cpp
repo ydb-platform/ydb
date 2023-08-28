@@ -864,7 +864,7 @@ Y_UNIT_TEST_SUITE(GrpcConnectionStringParserTest) {
 }
 
 Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
-    Y_UNIT_TEST(RemoveNotExistedDirecroty) {
+    Y_UNIT_TEST(RemoveNotExistedDirectory) {
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
 
@@ -889,7 +889,7 @@ Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
             NYql::TIssues issues;
             NYql::IssuesFromMessage(deferred.issues(), issues);
             TString tmp = issues.ToString();
-            TString expected = "<main>: Error: Path does not exist\n";
+            TString expected = "<main>: Error: Path does not exist, code: 200200\n";
             UNIT_ASSERT_NO_DIFF(tmp, expected);
         }
     }

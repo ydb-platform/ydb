@@ -442,7 +442,11 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             << " SEND to# " << Source.ToString() << " Source " << result->ToString());
 
         if (result->Record.GetSchemeShardReason()) {
-            auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, result->Record.GetSchemeShardReason());
+            auto issueStatus = NKikimrIssues::TIssuesIds::DEFAULT_ERROR;
+            if (result->Record.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusPathDoesNotExist) {
+                issueStatus = NKikimrIssues::TIssuesIds::PATH_NOT_EXIST;
+            }
+            auto issue = MakeIssue(std::move(issueStatus), result->Record.GetSchemeShardReason());
             NYql::IssueToMessage(issue, result->Record.AddIssues());
         }
         ctx.Send(Source, result);

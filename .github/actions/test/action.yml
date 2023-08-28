@@ -92,6 +92,8 @@ runs:
     run: |
       RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
       BRANCH_TAG="$GITHUB_REF_NAME"
+      TESTMO_SOURCE="${{ inputs.log_suffix }}"
+      TESTMO_SOURCE="${TESTMO_SOURCE/_/-}"
 
       case $GITHUB_EVENT_NAME in
         workflow_dispatch)
@@ -116,7 +118,7 @@ runs:
       testmo automation:resources:add-link --name build --url $RUN_URL --resources testmo.json
       testmo automation:resources:add-field --name git-sha --type string --value ${GITHUB_SHA:0:7} --resources testmo.json
       testmo automation:run:create --instance "$TESTMO_URL" --project-id ${{inputs.testman_project_id}} --name "$TESTMO_RUN_NAME" \
-        --source "${{inputs.log_suffix}}" --resources testmo.json \
+        --source "$TESTMO_SOURCE" --resources testmo.json \
         --tags "$BRANCH_TAG" --tags "$EXTRA_TAG"  | \
         echo "runid=$(cat)" >> $GITHUB_OUTPUT
 

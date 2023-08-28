@@ -613,7 +613,7 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
             const ui32 step = TEvBlobStorage::TEvCollectGarbage::PerGenerationCounterStepSize(keep.Get(), nullptr);
             auto ev = MakeHolder<TEvBlobStorage::TEvCollectGarbage>(info->TabletID, executorGeneration,
                     PerGenerationCounter, channel, true /*collect*/, barrierGeneration, barrierStep, keep.Release(),
-                    nullptr /*doNotKeep*/, TInstant::Max(), false /*isMultiCollectAllowed*/, false /*hard*/);
+                    nullptr /*doNotKeep*/, TInstant::Max(), true /*isMultiCollectAllowed*/, false /*hard*/);
             PerGenerationCounter += step;
 
             const TActorId nodeWarden = MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId());

@@ -5,7 +5,7 @@ import os, sys
 from enum import Enum
 from itertools import groupby
 from operator import attrgetter
-from typing import List
+from typing import List, Optional
 from jinja2 import Environment, FileSystemLoader
 from junit_utils import get_property_value, iter_xml_files
 
@@ -26,6 +26,7 @@ class TestResult:
     classname: str
     name: str
     status: TestStatus
+    log_url: Optional[str]
 
     @property
     def status_display(self):
@@ -69,11 +70,24 @@ def render_testlist_html(rows, fn):
 
     env = Environment(loader=FileSystemLoader(TEMPLATES_PATH))
 
-    rows.sort(key=attrgetter('full_name'))
-    rows.sort(key=attrgetter('status'), reverse=True)
+    status_test = {}
+    has_any_log = set()
 
-    rows = groupby(rows, key=attrgetter('status'))
-    content = env.get_template("summary.html").render(test_results=rows)
+    for t in rows:
+        status_test.setdefault(t.status, []).append(t)
+        if t.log_url:
+            has_any_log.add(t.status)
+
+    for status in status_test.keys():
+        status_test[status].sort(key=attrgetter('full_name'))
+
+    status_order = [TestStatus.FAIL, TestStatus.SKIP, TestStatus.MUTE, TestStatus.PASS]
+
+    # remove status group without tests
+    status_order = [s for s in status_order if s in status_test]
+
+    content = env.get_template("summary.html").render(status_order=status_order, tests=status_test,
+                                                      has_any_log=has_any_log)
 
     with open(fn, 'w') as fp:
         fp.write(content)
@@ -123,7 +137,9 @@ def gen_summary(summary_url_prefix, summary_out_folder, paths, ):
                 passed += 1
                 status = TestStatus.PASS
 
-            test_result = TestResult(classname=classname, name=name, status=status)
+            log_url = get_property_value(case, "url:Log")
+
+            test_result = TestResult(classname=classname, name=name, status=status, log_url=log_url)
             test_results.append(test_result)
 
         report_url = f'{summary_url_prefix}{html_fn}'

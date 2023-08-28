@@ -55,6 +55,7 @@ public:
         AddHandler(0, &TCoUnorderedBase::Match, HNDL(SkipUnordered));
         AddHandler(0, &TCoAggregateBase::Match, HNDL(RewriteAggregate));
         AddHandler(0, &TCoTake::Match, HNDL(RewriteTakeSortToTopSort));
+        AddHandler(0, &TCoEquiJoin::Match, HNDL(OptimizeEquiJoinWithCosts));
         AddHandler(0, &TCoEquiJoin::Match, HNDL(RewriteEquiJoin));
         AddHandler(0, &TCoCalcOverWindowBase::Match, HNDL(ExpandWindowFunctions));
         AddHandler(0, &TCoCalcOverWindowGroup::Match, HNDL(ExpandWindowFunctions));
@@ -110,6 +111,14 @@ protected:
             return DqRewriteTakeSortToTopSort(node, ctx, *getParents());
         }
         return node;
+    }
+
+    TMaybeNode<TExprBase> OptimizeEquiJoinWithCosts(TExprBase node, TExprContext& ctx) {
+        if (TypesCtx.CostBasedOptimizerType == "native") {
+            return DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, true);
+        } else {
+            return node;
+        }
     }
 
     TMaybeNode<TExprBase> RewriteEquiJoin(TExprBase node, TExprContext& ctx) {

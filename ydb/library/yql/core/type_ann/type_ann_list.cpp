@@ -4307,6 +4307,11 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
+        if (IsSameAnnotation(*resItemType, *structType)) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
         input->SetTypeAnn(MakeSequenceType(input->Head().GetTypeAnn()->GetKind(), *resItemType, ctx.Expr));
         return IGraphTransformer::TStatus::Ok;
     }

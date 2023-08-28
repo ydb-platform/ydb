@@ -53,7 +53,7 @@ namespace NTest {
 
             TRawTypeValue Raw() const
             {
-                return { Cell.Data(), Cell.Size(), Type };
+                return { Cell.Data(), Cell.Size(), NScheme::TTypeInfo(Type) };
             }
 
             NTable::TTag Tag = Max<TTag>();

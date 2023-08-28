@@ -308,7 +308,7 @@ void TDatabase::Update(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUp
             if (auto got = annex->Place(table, op.Tag, raw)) {
                 ModifiedRefs[index] = got.Ref;
                 const auto payload = NUtil::NBin::ToRef(ModifiedRefs[index]);
-                op.Value = TRawTypeValue(payload, op.Value.Type());
+                op.Value = TRawTypeValue(payload, NScheme::TTypeInfo(op.Value.Type()));
                 op.Op = ELargeObj::Extern;
             }
         }

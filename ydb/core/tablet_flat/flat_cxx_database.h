@@ -24,64 +24,64 @@ public:
     {}
 
     TTypeValue(const ui64& value, NScheme::TTypeId type = NScheme::NTypeIds::Uint64)
-        : TRawTypeValue(&value, sizeof(value), type)
+        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
     {}
 
     TTypeValue(const i64& value, NScheme::TTypeId type = NScheme::NTypeIds::Int64)
-        : TRawTypeValue(&value, sizeof(value), type)
+        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
     {}
 
     TTypeValue(const ui32& value, NScheme::TTypeId type = NScheme::NTypeIds::Uint32)
-        : TRawTypeValue(&value, sizeof(value), type)
+        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
     {}
 
     TTypeValue(const i32& value, NScheme::TTypeId type = NScheme::NTypeIds::Int32)
-        : TRawTypeValue(&value, sizeof(value), type)
+        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
     {}
 
     TTypeValue(const ui16& value, NScheme::TTypeId type = NScheme::NTypeIds::Date)
-        : TRawTypeValue(&value, sizeof(value), type)
+        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
     {}
 
     TTypeValue(const ui8& value, NScheme::TTypeId type = NScheme::NTypeIds::Byte)
-        : TRawTypeValue(&value, sizeof(value), type)
+        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
     {}
 
     TTypeValue(const bool& value, NScheme::TTypeId type = NScheme::NTypeIds::Bool)
-        : TRawTypeValue(&value, sizeof(value), type)
+        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
     {}
 
     TTypeValue(const double& value, NScheme::TTypeId type = NScheme::NTypeIds::Double)
-        : TRawTypeValue(&value, sizeof(value), type)
+        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
     {}
 
     template <typename ElementType>
     TTypeValue(const TVector<ElementType> &value, NScheme::TTypeId type = NScheme::NTypeIds::String)
-        : TRawTypeValue(value.empty() ? (const ElementType*)0xDEADBEEFDEADBEEF : value.data(), value.size() * sizeof(ElementType), type)
+        : TRawTypeValue(value.empty() ? (const ElementType*)0xDEADBEEFDEADBEEF : value.data(), value.size() * sizeof(ElementType), NScheme::TTypeInfo(type))
     {}
 
     TTypeValue(const TActorId& value, NScheme::TTypeId type = NScheme::NTypeIds::ActorId)
-        : TRawTypeValue(&value, sizeof(value), type)
+        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
     {}
 
     TTypeValue(const std::pair<ui64, ui64>& value, NScheme::TTypeId type = NScheme::NTypeIds::PairUi64Ui64)
-        : TRawTypeValue(&value, sizeof(value), type)
+        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
     {}
 
     TTypeValue(const std::pair<ui64, i64>& value, NScheme::TTypeId type = NScheme::NTypeIds::Decimal)
-        : TRawTypeValue(&value, sizeof(value), type)
+        : TRawTypeValue(&value, sizeof(value), NScheme::TTypeInfo(type))
     {}
 
     TTypeValue(const TString& value, NScheme::TTypeId type = NScheme::NTypeIds::Utf8)
-        : TRawTypeValue(value.data(), value.size(), type)
+        : TRawTypeValue(value.data(), value.size(), NScheme::TTypeInfo(type))
     {}
 
     TTypeValue(const TBuffer& value, NScheme::TTypeId type = NScheme::NTypeIds::String)
-        : TRawTypeValue(value.Empty() ? (const char*)0xDEADBEEFDEADBEEF : value.Data(), value.Size(), type)
+        : TRawTypeValue(value.Empty() ? (const char*)0xDEADBEEFDEADBEEF : value.Data(), value.Size(), NScheme::TTypeInfo(type))
     {}
 
     TTypeValue(const TStringBuf& value, NScheme::TTypeId type = NScheme::NTypeIds::String)
-        : TRawTypeValue(value.empty() ? (const char*)0xDEADBEEFDEADBEEF : value.data(), value.size(), type)
+        : TRawTypeValue(value.empty() ? (const char*)0xDEADBEEFDEADBEEF : value.data(), value.size(), NScheme::TTypeInfo(type))
     {}
 
     explicit TTypeValue(const TRawTypeValue& rawTypeValue)
@@ -235,7 +235,7 @@ template <NScheme::TTypeId ValType>
 class TConvertTypeValue : public TRawTypeValue {
 public:
     TConvertTypeValue(const TRawTypeValue& value)
-        : TRawTypeValue(value.Data(), value.Size(), value.IsEmpty() ? 0 : ValType)
+        : TRawTypeValue(value.Data(), value.Size(), value.IsEmpty() ? NScheme::TTypeInfo(0) : NScheme::TTypeInfo(ValType))
     {}
 
     template <typename ValueType> static typename NSchemeTypeMapper<ValType>::Type ConvertFrom(ValueType value) {
@@ -248,7 +248,7 @@ template <>
 class TConvertTypeValue<NScheme::NTypeIds::String> : public TRawTypeValue {
 public:
     TConvertTypeValue(const TRawTypeValue& value)
-        : TRawTypeValue(value.Data(), value.Size(), value.IsEmpty() ? 0 : NScheme::NTypeIds::String)
+        : TRawTypeValue(value.Data(), value.Size(), value.IsEmpty() ? NScheme::TTypeInfo(0) : NScheme::TTypeInfo(NScheme::NTypeIds::String))
     {}
 
     static typename NSchemeTypeMapper<NScheme::NTypeIds::String>::Type ConvertFrom(const TString& value) {
@@ -505,7 +505,7 @@ struct TConvertValue<TColumnType, TRawTypeValue, TStringBuf> {
     TRawTypeValue Value;
 
     TConvertValue(TStringBuf value)
-        : Value(value.data(), value.size(), TColumnType::ColumnType)
+        : Value(value.data(), value.size(), NScheme::TTypeInfo(TColumnType::ColumnType))
     {
         static_assert(TColumnType::ColumnType == NScheme::NTypeIds::String
                       || TColumnType::ColumnType == NScheme::NTypeIds::Utf8,

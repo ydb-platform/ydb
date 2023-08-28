@@ -86,7 +86,7 @@ public:
                                 vals.emplace_back();
                                 TBuffer& buf = vals.back();
                                 buf.Assign(reinterpret_cast<const char*>(&v), sizeof(v));
-                                key.emplace_back(buf.Data(), buf.Size(), type);
+                                key.emplace_back(buf.Data(), buf.Size(), NScheme::TTypeInfo(type));
                                 break;
                             }
                             case NScheme::NTypeIds::Uint64:
@@ -95,7 +95,7 @@ public:
                                 vals.emplace_back();
                                 TBuffer& buf = vals.back();
                                 buf.Assign(reinterpret_cast<const char*>(&v), sizeof(v));
-                                key.emplace_back(buf.Data(), buf.Size(), type);
+                                key.emplace_back(buf.Data(), buf.Size(), NScheme::TTypeInfo(type));
                                 break;
                             }
                             case NScheme::NTypeIds::String:
@@ -104,7 +104,7 @@ public:
                                 vals.emplace_back();
                                 TBuffer& buf = vals.back();
                                 buf.Assign(val.data(), val.size());
-                                key.emplace_back(buf.Data(), buf.Size(), type);
+                                key.emplace_back(buf.Data(), buf.Size(), NScheme::TTypeInfo(type));
                                 break;
                             }
                             default:

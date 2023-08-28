@@ -66,7 +66,7 @@ namespace NTest {
             for (auto &value: *tagged) {
                 auto * const info = ColFor(value);
 
-                TRawTypeValue raw(value.Cell.AsRef(), value.Type);
+                TRawTypeValue raw(value.Cell.AsRef(), NScheme::TTypeInfo(value.Type));
 
                 if (info->IsKey()) {
                     Y_VERIFY(value.Op == ECellOp::Set || value.Op == ECellOp::Null);

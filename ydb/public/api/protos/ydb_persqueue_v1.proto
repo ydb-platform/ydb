@@ -63,7 +63,7 @@ message StreamingWriteClientMessage {
         // Path of topic to write to.
         string topic = 1;
         // message group identifier of client data stream a.k.a. sourceId.
-        string message_group_id = 2;
+        string message_group_id = 2 [(Ydb.length).le = 2048];
         // Some user metadata attached to this write session.
         map<string, string> session_meta = 3;
         // Partition group to write to.
@@ -553,7 +553,7 @@ message StreamingReadServerMessage {
         // Representation of sequence of client messages from one write session.
         message Batch {
             // Source identifier provided by client for this batch of client messages.
-            bytes message_group_id = 2;
+            bytes message_group_id = 2 [(Ydb.length).le = 2048];
             // Client metadata attached to write session, the same for all messages in batch.
             MetaValue session_meta = 3;
             // Persist timestamp on server for batch.
@@ -882,7 +882,7 @@ message MigrationStreamingReadServerMessage {
         // Representation of sequence of client messages from one write session.
         message Batch {
             // Source identifier provided by client for this batch of client messages.
-            bytes source_id = 2;
+            bytes source_id = 2 [(Ydb.length).le = 2048];
             // Client metadata attached to write session, the same for all messages in batch.
             repeated KeyValue extra_fields = 3;
             // Persist timestamp on server for batch.

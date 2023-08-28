@@ -104,7 +104,7 @@ message StreamWriteMessage {
         string path = 1;
         // Producer identifier of client data stream.
         // Used for message deduplication by sequence numbers.
-        string producer_id = 2;
+        string producer_id = 2 [(Ydb.length).le = 2048];
         // User metadata attached to this write session.
         // Reader will get this session meta data with each message read.
         map<string, string> write_session_meta = 3;
@@ -112,7 +112,7 @@ message StreamWriteMessage {
         // If neither is set, no guarantees on ordering or partitions to write to.
         oneof partitioning {
             // All messages with given pair (producer_id, message_group_id) go to single partition in order of writes.
-            string message_group_id = 4;
+            string message_group_id = 4 [(Ydb.length).le = 2048];
             // Explicit partition id to write to.
             int64 partition_id = 5;
             // Explicit partition location to write to.
@@ -163,7 +163,7 @@ message StreamWriteMessage {
             // Per-message override for respective write session settings.
             oneof partitioning {
                 // All messages with given pair (producer_id, message_group_id) go to single partition in order of writes.
-                string message_group_id = 5;
+                string message_group_id = 5 [(Ydb.length).le = 2048];
                 // Explicit partition id to write to.
                 int64 partition_id = 6;
                 // Explicit partition location to write to.
@@ -377,7 +377,7 @@ message StreamReadMessage {
             int64 uncompressed_size = 6;
 
             // Filled if message_group_id was set on message write.
-            string message_group_id = 7;
+            string message_group_id = 7 [(Ydb.length).le = 2048];
             repeated MetadataItem metadata_items = 8;
 
         }
@@ -388,7 +388,7 @@ message StreamReadMessage {
             repeated MessageData message_data = 1;
 
             // Producer identifier provided by client for this batch of client messages.
-            string producer_id = 2;
+            string producer_id = 2 [(Ydb.length).le = 2048];
             // Client metadata attached to write session, the same for all messages in batch.
             map<string, string> write_session_meta = 3;
 

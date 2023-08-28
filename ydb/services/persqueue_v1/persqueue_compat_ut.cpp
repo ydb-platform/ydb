@@ -240,6 +240,65 @@ Y_UNIT_TEST_SUITE(TPQCompatTest) {
 
     }
 
+    Y_UNIT_TEST(LongProducerAndLongMessageGroupId) {
+        TPQv1CompatTestBase testServer;
+        std::shared_ptr<grpc::Channel> Channel_;
+        Channel_ = grpc::CreateChannel(
+                         "localhost:" + ToString(testServer.Server->GrpcPort),
+                         grpc::InsecureChannelCredentials()
+                    );
+        auto TopicStubP_ = Ydb::Topic::V1::TopicService::NewStub(Channel_);
+
+        struct Data {
+            TString ProducerId;
+            bool error;
+        };
+
+        std::vector<Data> data = {
+            {"producer-1", false},
+            { TString(2_KB, '-'), false},
+            { TString(2_KB + 1, '-'), true},
+        };
+
+        for(const auto& [producerId, error] : data) {
+            Cerr << ">>>>> Case producerId.length()=" << producerId.length() << Endl;
+
+            grpc::ClientContext wcontext;
+            wcontext.AddMetadata("x-ydb-database", "/Root/LbCommunal/account");
+
+            auto writeStream = TopicStubP_->StreamWrite(&wcontext);
+            UNIT_ASSERT(writeStream);
+
+            Ydb::Topic::StreamWriteMessage::FromClient req;
+            Ydb::Topic::StreamWriteMessage::FromServer resp;
+
+            req.mutable_init_request()->set_path("topic2");
+            if (!producerId.Empty()) {
+                req.mutable_init_request()->set_producer_id(producerId);
+                req.mutable_init_request()->set_message_group_id(producerId);
+            }
+
+            UNIT_ASSERT(writeStream->Write(req));
+            UNIT_ASSERT(writeStream->Read(&resp));
+            Cerr << ">>>>> Response = " << resp.server_message_case() << Endl;
+            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamWriteMessage::FromServer::kInitResponse);
+            req.Clear();
+
+            Cerr << ">>>>> Write message" << Endl;
+            auto* write = req.mutable_write_request();
+            write->set_codec(Ydb::Topic::CODEC_RAW);
+
+            auto* msg = write->add_messages();
+            msg->set_seq_no(1);
+            msg->set_data("x");
+            UNIT_ASSERT(writeStream->Write(req));
+            UNIT_ASSERT(writeStream->Read(&resp));
+            Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
+            UNIT_ASSERT(resp.server_message_case() ==  (error ? Ydb::Topic::StreamWriteMessage::FromServer::SERVER_MESSAGE_NOT_SET : Ydb::Topic::StreamWriteMessage::FromServer::kWriteResponse));
+            resp.Clear();
+        }
+    }
+
     Y_UNIT_TEST(ReadWriteSessions) {
         TPQv1CompatTestBase testServer;
         std::shared_ptr<grpc::Channel> Channel_;

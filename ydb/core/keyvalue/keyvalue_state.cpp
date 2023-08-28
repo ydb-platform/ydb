@@ -61,6 +61,12 @@ constexpr ui64 ReadResultSizeEstimationNewApi = 1 + 5 // Key id, length
 
 constexpr ui64 ErrorMessageSizeEstimation = 128;
 
+constexpr size_t MaxKeySize = 4000;
+
+bool IsKeyLengthValid(const TString& key) {
+    return key.length() <= MaxKeySize;
+}
+
 // Guideline:
 // Check SetError calls: there must be no changes made to the DB before SetError call (!)
 
@@ -1416,13 +1422,21 @@ void TKeyValueState::CmdCmds(THolder<TIntermediate> &intermediate, ISimpleDb &db
 }
 
 TKeyValueState::TCheckResult TKeyValueState::CheckCmd(const TIntermediate::TCopyRange &cmd, TKeySet& keys,
-        ui32 /*index*/) const
+        ui32 index) const
 {
     TVector<TString> nkeys;
     auto range = GetRange(cmd.Range, keys);
     for (auto it = range.first; it != range.second; ++it) {
         if (it->StartsWith(cmd.PrefixToRemove)) {
-            nkeys.push_back(cmd.PrefixToAdd + it->substr(cmd.PrefixToRemove.size()));
+            auto newKey = cmd.PrefixToAdd + it->substr(cmd.PrefixToRemove.size());
+            if (!IsKeyLengthValid(newKey)) {
+                TStringStream str;
+                str << "KeyValue# " << TabletId
+                    << " NewKey# " << EscapeC(newKey) << " in CmdCopyRange(" << index << ") has length " << newKey.length() << " but max is " << MaxKeySize
+                    << " Marker# KV24";
+                return {NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, str.Str()};
+            }
+            nkeys.push_back(newKey);
         }
     }
     keys.insert(nkeys.begin(), nkeys.end());
@@ -1438,8 +1452,16 @@ TKeyValueState::TCheckResult TKeyValueState::CheckCmd(const TIntermediate::TRena
         str << "KeyValue# " << TabletId
             << " OldKey# " << EscapeC(cmd.OldKey) << " does not exist in CmdRename(" << index << ")"
             << " Marker# KV18";
-        return {false, str.Str()};
+        return {NKikimrKeyValue::Statuses::RSTATUS_NOT_FOUND, str.Str()};
     }
+    if (!IsKeyLengthValid(cmd.NewKey)) {
+        TStringStream str;
+        str << "KeyValue# " << TabletId
+            << " NewKey# " << EscapeC(cmd.NewKey) << " in CmdRename(" << index << ") has length " << cmd.NewKey.length() << " but max is " << MaxKeySize
+            << " Marker# KV23";
+        return {NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, str.Str()};
+    }
+
     keys.erase(it);
     keys.insert(cmd.NewKey);
     return {};
@@ -1455,11 +1477,19 @@ TKeyValueState::TCheckResult TKeyValueState::CheckCmd(const TIntermediate::TConc
             str << "KeyValue# " << TabletId
                 << " InputKey# " << EscapeC(key) << " does not exist in CmdConcat(" << index << ")"
                 << " Marker# KV19";
-            return {false, str.Str()};
+            return {NKikimrKeyValue::Statuses::RSTATUS_NOT_FOUND, str.Str()};
         }
         if (!cmd.KeepInputs) {
             keys.erase(it);
         }
+    }
+
+    if (!IsKeyLengthValid(cmd.OutputKey)) {
+        TStringStream str;
+        str << "KeyValue# " << TabletId
+            << " OutputKey length in CmdConcat(" << index << ") is " << cmd.OutputKey.length() << " but max is " << MaxKeySize
+            << " Marker# KV25";
+        return {NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, str.Str()};
     }
 
     keys.insert(cmd.OutputKey);
@@ -1475,71 +1505,36 @@ TKeyValueState::TCheckResult TKeyValueState::CheckCmd(const TIntermediate::TDele
 }
 
 TKeyValueState::TCheckResult TKeyValueState::CheckCmd(const TIntermediate::TWrite &cmd, TKeySet& keys,
-        ui32 /*index*/) const
+        ui32 index) const
 {
+    if (!IsKeyLengthValid(cmd.Key)) {
+        TStringStream str;
+        str << "KeyValue# " << TabletId
+            << " Key length in CmdWrite(" << index << ") is " << cmd.Key.length() << " but max is " << MaxKeySize
+            << " Marker# KV26";
+        return {NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, str.Str()};
+    }
     keys.insert(cmd.Key);
     return {};
 }
 
-bool TKeyValueState::CheckCmdCopyRanges(THolder<TIntermediate>& intermediate, const TActorContext& /*ctx*/,
-        TKeySet& keys, const TTabletStorageInfo* /*info*/)
-{
-    for (const auto& cmd : intermediate->CopyRanges) {
-        CheckCmd(cmd, keys, 0);
-    }
-    return true;
+TKeyValueState::TCheckResult TKeyValueState::CheckCmd(const TIntermediate::TGetStatus &/*cmd*/, TKeySet& /*keys*/, ui32 /*index*/) const {
+    return {};
 }
 
-bool TKeyValueState::CheckCmdRenames(THolder<TIntermediate>& intermediate, const TActorContext& ctx, TKeySet& keys,
-        const TTabletStorageInfo *info)
-{
-    ui32 index = 0;
-    for (const auto& cmd : intermediate->Renames) {
-        const auto &[ok, msg] = CheckCmd(cmd, keys, index++);
-        if (!ok) {
-            ReplyError(ctx, msg, NMsgBusProxy::MSTATUS_ERROR, NKikimrKeyValue::Statuses::RSTATUS_NOT_FOUND, intermediate, info);
-            return false;
-        }
-    }
-    return true;
-}
+template<class Cmd>
+bool TKeyValueState::CheckCmds(THolder<TIntermediate>& intermediate, const TDeque<Cmd>& cmds, const TActorContext& ctx,
+        TKeySet& keys, const TTabletStorageInfo* info) {
 
-bool TKeyValueState::CheckCmdConcats(THolder<TIntermediate>& intermediate, const TActorContext& ctx, TKeySet& keys,
-        const TTabletStorageInfo *info)
-{
     ui32 index = 0;
-    for (const auto& cmd : intermediate->Concats) {
-        const auto &[ok, msg] = CheckCmd(cmd, keys, index++);
-        if (!ok) {
-            ReplyError(ctx, msg, NMsgBusProxy::MSTATUS_ERROR, NKikimrKeyValue::Statuses::RSTATUS_NOT_FOUND, intermediate, info);
+    for (const auto& cmd : cmds) {
+        const auto &[status, msg] = CheckCmd(cmd, keys, index++);
+        if (NKikimrKeyValue::Statuses::RSTATUS_OK != status) {
+            ReplyError(ctx, msg, NMsgBusProxy::MSTATUS_ERROR, status, intermediate, info);
             return false;
         }
     }
 
-    return true;
-}
-
-bool TKeyValueState::CheckCmdDeletes(THolder<TIntermediate>& intermediate, const TActorContext& /*ctx*/, TKeySet& keys,
-        const TTabletStorageInfo* /*info*/)
-{
-    for (const auto& cmd : intermediate->Deletes) {
-        CheckCmd(cmd, keys, 0);
-    }
-    return true;
-}
-
-bool TKeyValueState::CheckCmdWrites(THolder<TIntermediate>& intermediate, const TActorContext& /*ctx*/, TKeySet& keys,
-        const TTabletStorageInfo* /*info*/)
-{
-    for (const auto& cmd : intermediate->Writes) {
-        CheckCmd(cmd, keys, 0);
-    }
-    return true;
-}
-
-bool TKeyValueState::CheckCmdGetStatus(THolder<TIntermediate>& /*intermediate*/, const TActorContext& /*ctx*/,
-        TKeySet& /*keys*/, const TTabletStorageInfo* /*info*/)
-{
     return true;
 }
 
@@ -1564,9 +1559,9 @@ bool TKeyValueState::CheckCmds(THolder<TIntermediate>& intermediate, const TActo
     };
 
     for (const auto& cmd : intermediate->Commands) {
-        const auto &[ok, msg] = std::visit(visitor, cmd);
-        if (!ok) {
-            ReplyError(ctx, msg, NMsgBusProxy::MSTATUS_ERROR, NKikimrKeyValue::Statuses::RSTATUS_NOT_FOUND, intermediate, info);
+        const auto &[status, msg] = std::visit(visitor, cmd);
+        if (NKikimrKeyValue::Statuses::RSTATUS_OK != status) {
+            ReplyError(ctx, msg, NMsgBusProxy::MSTATUS_ERROR, status, intermediate, info);
             return false;
         }
     }
@@ -1590,13 +1585,13 @@ void TKeyValueState::ProcessCmds(THolder<TIntermediate> &intermediate, ISimpleDb
         success = false;
     }
 
-    success = success && CheckCmdCopyRanges(intermediate, ctx, keys, info);
-    success = success && CheckCmdRenames(intermediate, ctx, keys, info);
-    success = success && CheckCmdConcats(intermediate, ctx, keys, info);
-    success = success && CheckCmdDeletes(intermediate, ctx, keys, info);
-    success = success && CheckCmdWrites(intermediate, ctx, keys, info);
+    success = success && CheckCmds(intermediate, intermediate->CopyRanges, ctx, keys, info);
+    success = success && CheckCmds(intermediate, intermediate->Renames, ctx, keys, info);
+    success = success && CheckCmds(intermediate, intermediate->Concats, ctx, keys, info);
+    success = success && CheckCmds(intermediate, intermediate->Deletes, ctx, keys, info);
+    success = success && CheckCmds(intermediate, intermediate->Writes, ctx, keys, info);
     success = success && CheckCmds(intermediate, ctx, keys, info);
-    success = success && CheckCmdGetStatus(intermediate, ctx, keys, info);
+    success = success && CheckCmds(intermediate, intermediate->GetStatuses, ctx, keys, info);
     if (!success) {
         DropRefCountsOnErrorInTx(std::exchange(intermediate->RefCountsIncr, {}), db, ctx, intermediate->RequestUid);
     } else {

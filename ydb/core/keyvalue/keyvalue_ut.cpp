@@ -738,7 +738,7 @@ struct TKeyRenamePair {
     TString NewKey;
 };
 
-
+template <NKikimrKeyValue::Statuses::ReplyStatus ExpectedStatus = NKikimrKeyValue::Statuses::RSTATUS_OK>
 void ExecuteRename(TTestContext &tc, const TDeque<TKeyRenamePair> &pairs, ui64 lockedGeneration)
 {
     TDesiredPair<TEvKeyValue::TEvExecuteTransaction> dp;
@@ -755,11 +755,12 @@ void ExecuteRename(TTestContext &tc, const TDeque<TKeyRenamePair> &pairs, ui64 l
     dp.Request.set_lock_generation(lockedGeneration);
 
     ExecuteEvent(dp, tc);
-    UNIT_ASSERT_C(dp.Response.status() == NKikimrKeyValue::Statuses::RSTATUS_OK,
+    UNIT_ASSERT_C(dp.Response.status() == ExpectedStatus,
             "got# " << NKikimrKeyValue::Statuses_ReplyStatus_Name(dp.Response.status())
             << " msg# " << dp.Response.msg());
 }
 
+template <bool IsSuccess = true>
 void ExecuteConcat(TTestContext &tc, const TString &newKey, const TDeque<TString> &inputKeys, ui64 lockedGeneration,
         bool keepKeys)
 {
@@ -778,9 +779,15 @@ void ExecuteConcat(TTestContext &tc, const TString &newKey, const TDeque<TString
     dp.Request.set_lock_generation(lockedGeneration);
 
     ExecuteEvent(dp, tc);
-    UNIT_ASSERT_C(dp.Response.status() == NKikimrKeyValue::Statuses::RSTATUS_OK,
-            "got# " << NKikimrKeyValue::Statuses_ReplyStatus_Name(dp.Response.status())
-            << " msg# " << dp.Response.msg());
+    if constexpr (IsSuccess) {
+        UNIT_ASSERT_C(dp.Response.status() == NKikimrKeyValue::Statuses::RSTATUS_OK,
+                "got# " << NKikimrKeyValue::Statuses_ReplyStatus_Name(dp.Response.status())
+                << " msg# " << dp.Response.msg());
+    } else {
+        UNIT_ASSERT_C(dp.Response.status() == NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR,
+                "got# " << NKikimrKeyValue::Statuses_ReplyStatus_Name(dp.Response.status())
+                << " msg# " << dp.Response.msg());
+    }
 }
 
 
@@ -2436,6 +2443,74 @@ Y_UNIT_TEST(TestLargeWriteAndDelete) {
         ExecuteWrite(tc, keys, 1, 2, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
         ExecuteDeleteRange(tc, "", EBorderKind::Without, "", EBorderKind::Without, 1);
    });
+}
+
+Y_UNIT_TEST(TestWriteLongKey) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        ExecuteObtainLock(tc, 1);
+
+        TDeque<TKeyValuePair> keys;
+        keys.push_back({TString{10_KB, '_'}, ""});
+
+        ExecuteWrite<NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR>(tc, keys, 1, 2, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
+    });
+}
+
+Y_UNIT_TEST(TestRenameToLongKey) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        ExecuteObtainLock(tc, 1);
+
+        TDeque<TKeyValuePair> keys;
+        keys.push_back({"oldKey", ""});
+
+        ExecuteWrite(tc, keys, 1, 2, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
+        ExecuteRename<NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR>(tc, { {"oldKey", TString{10_KB, '_'}} }, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
+    });
+}
+
+Y_UNIT_TEST(TestCopyRangeToLongKey) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        ExecuteObtainLock(tc, 1);
+
+        TDeque<TKeyValuePair> keys;
+        keys.push_back({"oldKey", ""});
+
+        ExecuteWrite(tc, keys, 1, 2, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
+        ExecuteCopyRange<false>(tc, "", EBorderKind::Without, "", EBorderKind::Without, 1, TString{10_KB, '_'}, "");
+    });
+}
+
+Y_UNIT_TEST(TestConcatToLongKey) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        ExecuteObtainLock(tc, 1);
+
+        TDeque<TKeyValuePair> keys;
+        keys.push_back({"oldKey1", "1"});
+        keys.push_back({"oldKey2", "2"});
+
+        ExecuteWrite(tc, keys, 1, 2, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
+        ExecuteConcat<false>(tc, TString{10_KB, '_'}, {"oldKey1", "oldKey2"}, 1, 1);
+    });
 }
 
 } // TKeyValueTest

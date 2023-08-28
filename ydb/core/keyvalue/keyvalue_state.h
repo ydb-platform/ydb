@@ -402,7 +402,7 @@ public:
     bool IncrementGeneration(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx);
 
     struct TCheckResult {
-        bool Result = true;
+        NKikimrKeyValue::Statuses::ReplyStatus Status = NKikimrKeyValue::Statuses::RSTATUS_OK;
         TString ErrorMsg;
     };
 
@@ -411,19 +411,11 @@ public:
     TCheckResult CheckCmd(const TIntermediate::TWrite &cmd, TKeySet& keys, ui32 index) const;
     TCheckResult CheckCmd(const TIntermediate::TCopyRange &cmd, TKeySet& keys, ui32 index) const;
     TCheckResult CheckCmd(const TIntermediate::TConcat &cmd, TKeySet& keys, ui32 index) const;
+    TCheckResult CheckCmd(const TIntermediate::TGetStatus &cmd, TKeySet& keys, ui32 index) const;
 
-    bool CheckCmdRenames(THolder<TIntermediate>& intermediate, const TActorContext& ctx, TKeySet& keys,
-            const TTabletStorageInfo *info);
-    bool CheckCmdDeletes(THolder<TIntermediate>& intermediate, const TActorContext& ctx, TKeySet& keys,
-            const TTabletStorageInfo *info);
-    bool CheckCmdWrites(THolder<TIntermediate>& intermediate, const TActorContext& ctx, TKeySet& keys,
-            const TTabletStorageInfo *info);
-    bool CheckCmdCopyRanges(THolder<TIntermediate>& intermediate, const TActorContext& ctx, TKeySet& keys,
-            const TTabletStorageInfo *info);
-    bool CheckCmdConcats(THolder<TIntermediate>& intermediate, const TActorContext& ctx, TKeySet& keys,
-            const TTabletStorageInfo *info);
-    bool CheckCmdGetStatus(THolder<TIntermediate>& /*intermediate*/, const TActorContext& /*ctx*/,
-        TKeySet& /*keys*/, const TTabletStorageInfo* /*info*/);
+    template<class Cmd>
+    bool CheckCmds(THolder<TIntermediate>& intermediate, const TDeque<Cmd>& cmds, const TActorContext& ctx,
+        TKeySet& keys, const TTabletStorageInfo* info);        
     bool CheckCmds(THolder<TIntermediate>& intermediate, const TActorContext& /*ctx*/, TKeySet& keys,
             const TTabletStorageInfo* /*info*/);
 

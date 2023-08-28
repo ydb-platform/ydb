@@ -1200,6 +1200,14 @@ void TestWritePQImpl(bool fast) {
 
         //read from gap
         CmdRead(0, 500, Max<i32>(), Max<i32>(), 6, false, tc, {1000,1001,2000,2001,3000,3002});
+
+        // Write long sourceId
+        // The write should not be executed because the SourceId exceeds the maximum allowed size
+        CmdWrite(0, TString(10_KB, '_'), data1, tc, true, {}, false, "", -1, 10000);
+
+        // Write long sourceId
+        // The write must be completed successfully because the SourceId has the maximum allowed size
+        CmdWrite(0, TString(2_KB, '_'), data1, tc, false, {}, false, "", -1, 10000);
     });
 }
 

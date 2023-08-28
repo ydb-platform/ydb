@@ -5,10 +5,10 @@ ARG DEBIAN_FRONTEND=noninteractive
 ENV TZ=Etc/UTC
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git wget gnupg lsb-release curl xz-utils tzdata \
-    cmake python3-dev python3-pip ninja-build antlr3 m4 libidn11-dev libaio1 libaio-dev make \
-    clang-12 lld-12 llvm-12 clang-14 lld-14 llvm-14 file \
-    && pip3 install conan==1.59 grpcio-tools pyinstaller==5.13.2 six pyyaml packaging PyHamcrest cryptography \
+    && apt-get install -y sudo wget gnupg lsb-release curl xz-utils tzdata \
+    cmake python3-pip ninja-build antlr3 m4 libidn11-dev libaio1 libaio-dev make \
+    clang-12 lld-12 llvm-12 clang-14 lld-14 llvm-14 \
+    && pip3 install conan==1.59 grpcio-tools \
     && (V=4.8.1; curl -L https://github.com/ccache/ccache/releases/download/v${V}/ccache-${V}-linux-x86_64.tar.xz | \
          tar -xJ -C /usr/local/bin/ --strip-components=1 --no-same-owner ccache-${V}-linux-x86_64/ccache)
 

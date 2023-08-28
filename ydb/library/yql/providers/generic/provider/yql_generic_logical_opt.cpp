@@ -23,17 +23,10 @@ namespace NYql {
                 , State_(state)
             {
 #define HNDL(name) "LogicalOptimizer-" #name, Hndl(&TGenericLogicalOptProposalTransformer::name)
-                AddHandler(0, &TCoLeft::Match, HNDL(TrimReadWorld));
                 AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembers));
                 AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqWrap));
                 AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqSourceWrap));
 #undef HNDL
-            }
-
-            TMaybeNode<TExprBase> TrimReadWorld(TExprBase node, TExprContext& ctx) const {
-                if (const auto maybeRead = node.Cast<TCoLeft>().Input().Maybe<TGenReadTable>())
-                    return TExprBase(ctx.NewWorld(node.Pos()));
-                return node;
             }
 
             TMaybeNode<TExprBase> ExtractMembers(TExprBase node, TExprContext& ctx) const {

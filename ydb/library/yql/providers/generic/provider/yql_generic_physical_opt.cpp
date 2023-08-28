@@ -23,8 +23,15 @@ namespace NYql {
                 , State_(state)
             {
 #define HNDL(name) "PhysicalOptimizer-" #name, Hndl(&TGenericPhysicalOptProposalTransformer::name)
+                AddHandler(0, &TCoLeft::Match, HNDL(TrimReadWorld));
                 AddHandler(0, &TCoNarrowMap::Match, HNDL(ReadZeroColumns));
 #undef HNDL
+            }
+
+            TMaybeNode<TExprBase> TrimReadWorld(TExprBase node, TExprContext& ctx) const {
+                if (const auto maybeRead = node.Cast<TCoLeft>().Input().Maybe<TGenReadTable>())
+                    return TExprBase(ctx.NewWorld(node.Pos()));
+                return node;
             }
 
             TMaybeNode<TExprBase> ReadZeroColumns(TExprBase node, TExprContext& ctx) const {

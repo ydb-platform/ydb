@@ -52,7 +52,7 @@ IF (GCC OR CLANG)
     # object files actually are not ELFs but an LLVM bytecode and we get
     # "member at xxxxx is not an ELF object" errors from the linker.
     # Just generate native code from the beginning.
-    DISABLE(USE_LTO)
+    NO_LTO()
 ENDIF()
 
 SRCS(

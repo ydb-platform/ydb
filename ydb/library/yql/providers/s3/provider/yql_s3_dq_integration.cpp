@@ -130,6 +130,36 @@ public:
         return Nothing();
     }
 
+    TMaybe<TOptimizerStatistics> ReadStatistics(const TExprNode::TPtr& sourceWrap, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        double size = 0;
+        double cols = 0;
+        double rows = 0;
+        if (const auto& maybeArrowSettings = TMaybeNode<TS3ArrowSettings>(sourceWrap->Child(0))) {
+            const auto& arrowSettings = maybeArrowSettings.Cast();
+            for (size_t i = 0; i < arrowSettings.Paths().Size(); ++i) {
+                auto batch = arrowSettings.Paths().Item(i);
+                TStringBuf packed = batch.Data().Literal().Value();
+                bool isTextEncoded = FromString<bool>(batch.IsText().Literal().Value());
+                TPathList paths;
+                UnpackPathsList(packed, isTextEncoded, paths);
+
+                for (const auto& path : paths) {
+                    size += path.Size;
+                }
+            }
+
+            if (arrowSettings.RowType().Maybe<TCoStructType>()) {
+                cols = arrowSettings.RowType().Ptr()->ChildrenSize();
+            }
+
+            rows = size / 1024; // magic estimate
+            return TOptimizerStatistics(rows, cols);
+        } else {
+            return Nothing();
+        }
+    }
+
     TExprNode::TPtr WrapRead(const TDqSettings&, const TExprNode::TPtr& read, TExprContext& ctx) override {
         if (const auto& maybeS3ReadObject = TMaybeNode<TS3ReadObject>(read)) {
             const auto& s3ReadObject = maybeS3ReadObject.Cast();

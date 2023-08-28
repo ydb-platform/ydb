@@ -29,21 +29,24 @@ public:
         auto ret = OptimizeExpr(input, output, [*this](const TExprNode::TPtr& input, TExprContext& ctx) {
             Y_UNUSED(ctx);
             auto output = input;
+            bool hasDqSource = false;
 
             if (TCoFlatMap::Match(input.Get())){
                 NDq::InferStatisticsForFlatMap(input, State->TypeCtx);
             } else if(TCoSkipNullMembers::Match(input.Get())){
                 NDq::InferStatisticsForSkipNullMembers(input, State->TypeCtx);
-            } else if (TDqReadWrapBase::Match(input.Get())) {
-                auto read = input->Child(TDqReadWrapBase::idx_Input);
+            } else if (TDqReadWrapBase::Match(input.Get()) || (hasDqSource = TDqSourceWrapBase::Match(input.Get()))) {
+                auto node = hasDqSource
+                    ? input
+                    : input->Child(TDqReadWrapBase::idx_Input);
                 auto dataSourceChildIndex = 1;
-                YQL_ENSURE(read->ChildrenSize() > 1);
-                YQL_ENSURE(read->Child(dataSourceChildIndex)->IsCallable("DataSource"));
-                auto dataSourceName = read->Child(dataSourceChildIndex)->Child(0)->Content();
+                YQL_ENSURE(node->ChildrenSize() > 1);
+                YQL_ENSURE(node->Child(dataSourceChildIndex)->IsCallable("DataSource"));
+                auto dataSourceName = node->Child(dataSourceChildIndex)->Child(0)->Content();
                 auto datasource = State->TypeCtx->DataSourceMap.FindPtr(dataSourceName);
                 YQL_ENSURE(datasource);
                 if (auto dqIntegration = (*datasource)->GetDqIntegration()) {
-                    auto stat = dqIntegration->ReadStatistics(read, ctx);
+                    auto stat = dqIntegration->ReadStatistics(node, ctx);
                     if (stat) {
                         State->TypeCtx->SetStats(input.Get(), std::move(std::make_shared<TOptimizerStatistics>(*stat)));
                     }

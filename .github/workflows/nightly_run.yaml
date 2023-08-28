@@ -1,5 +1,5 @@
 name: Nightly-run
-on: 
+on:
   schedule:
     - cron: "0 1 * * *"
   workflow_dispatch:
@@ -7,10 +7,10 @@ on:
       test_label_regexp:
         required: false
         type: string
-  
+
 jobs:
   build_ondemand:
-    name: Build/test X64
+    name: Build/test x86_64
     strategy:
       matrix: ${{ fromJSON(vars.NIGHTLY_ONDEMAND_MATRIX) }}
       fail-fast: false

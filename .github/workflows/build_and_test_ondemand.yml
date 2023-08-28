@@ -23,7 +23,7 @@ on:
         type: boolean
         default: true
   workflow_dispatch:
-    inputs: 
+    inputs:
       sanitizer:
         required: false
         type: string
@@ -89,7 +89,7 @@ jobs:
 
   main:
     name: Build and test
-    needs: 
+    needs:
     - provide-runner
     - prepare-vm
     runs-on: [ self-hosted, "${{ needs.provide-runner.outputs.label }}" ]
@@ -105,14 +105,14 @@ jobs:
     - name: Build
       id: build
       uses: ./.github/actions/build
-      with: 
+      with:
         sanitizer: ${{ inputs.sanitizer }}
         ccache_remote_path: ${{ vars.REMOTE_CACHE_URL && format('http://{0}{1}', secrets.REMOTE_CACHE_AUTH, vars.REMOTE_CACHE_URL) || ''}}
         extra_compile_flags: ${{ inputs.extra_compile_flags }}
     - name: Run tests
       uses: ./.github/actions/test
       with:
-        log_suffix: ${{format('{0}{1}', 'X64', inputs.sanitizer)}}
+        log_suffix: ${{ inputs.sanitizer != '' && format('{0}-{1}', 'x86_64', inputs.sanitizer) || inputs.runner_label }}
         test_label_regexp: ${{ inputs.test_label_regexp }}
         aws_key_id: ${{secrets.AWS_KEY_ID}}
         aws_key_value: ${{secrets.AWS_KEY_VALUE}}
@@ -139,4 +139,4 @@ jobs:
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           label: ${{ needs.provide-runner.outputs.label }}
           instance-id: ${{ needs.provide-runner.outputs.instance-id }}
-          
+

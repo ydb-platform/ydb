@@ -190,19 +190,17 @@ class TestImpex(BaseTestTableService):
     @classmethod
     def setup_class(cls):
         BaseTestTableService.setup_class()
-
         cls.session = cls.driver.table_client.session().create()
-        cls.table_path = cls.root_dir + "/impex_table"
-        create_table(cls.session, cls.table_path, "row")
 
-    def clear_table(self):
-        self.session.drop_table(self.table_path)
+    def init_test(self, tmp_path, table_type, name):
+        self.tmp_path = tmp_path
+        self.table_type = table_type
+        self.table_path = self.root_dir + "/" + name
         create_table(self.session, self.table_path, self.table_type)
 
-    @staticmethod
-    def write_array_to_files(arr, ftype):
+    def write_array_to_files(self, arr, ftype):
         for i in range(len(arr)):
-            with open("tempinput{}.{}".format(i, ftype), "w") as f:
+            with (self.tmp_path / "tempinput{}.{}".format(i, ftype)).open("w") as f:
                 f.writelines(arr[i])
 
     @staticmethod
@@ -229,118 +227,114 @@ class TestImpex(BaseTestTableService):
             return '{' + '"key": {}, "id": {}, "value":"{}"'.format(key, id, value) + '}\n'
         raise RuntimeError("Not supported format used")
 
-    @staticmethod
-    def gen_dataset(rows, files, ftype):
+    def gen_dataset(self, rows, files, ftype):
         id_set = [10, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200]
         value_set = ["", "aaaaaaaaaa", "bbbbbbbbbb", "ccccccccc", "ddddddd", "eeeeeeeee", "fffffffff"]
         for i in range(files):
-            with open("tempinput{}.{}".format(i, ftype), "w") as f:
+            with (self.tmp_path / "tempinput{}.{}".format(i, ftype)).open("w") as f:
                 f.write(TestImpex.get_header(ftype))
                 for key in range(i * rows, (i + 1) * rows):
                     f.write(TestImpex.get_row_in_format(ftype, key, id_set[key % len(id_set)], value_set[key % len(value_set)]))
 
     def run_import(self, ftype, data, additional_args=[]):
-        self.clear_table()
-        with open("tempinput.{}".format(ftype), "w") as f:
+        path = self.tmp_path / "tempinput.{}".format(ftype)
+        with path.open("w") as f:
             f.writelines(data)
-        self.execute_ydb_cli_command(["import", "file", ftype, "-p", self.table_path, "-i", "tempinput.{}".format(ftype)] + self.get_header_flag(ftype) + additional_args)
+        self.execute_ydb_cli_command(["import", "file", ftype, "-p", self.table_path, "-i", str(path)] + self.get_header_flag(ftype) + additional_args)
 
     def run_import_from_stdin(self, ftype, data, additional_args=[]):
-        self.clear_table()
-        with open("tempinput.{}".format(ftype), "w") as f:
+        with (self.tmp_path / "tempinput.{}".format(ftype)).open("w") as f:
             f.writelines(data)
-        with open("tempinput.{}".format(ftype), "r") as f:
+        with (self.tmp_path / "tempinput.{}".format(ftype)).open("r") as f:
             self.execute_ydb_cli_command(["import", "file", ftype, "-p", self.table_path] + self.get_header_flag(ftype) + additional_args, stdin=f)
 
     def run_import_multiple_files(self, ftype, files_count, additional_args=[]):
-        self.clear_table()
         args = ["import", "file", ftype, "-p", self.table_path] + self.get_header_flag(ftype) + additional_args
         for i in range(files_count):
-            args.append("tempinput{}.{}".format(i, ftype))
+            args.append(str(self.tmp_path / "tempinput{}.{}".format(i, ftype)))
         self.execute_ydb_cli_command(args)
 
     def run_import_multiple_files_and_stdin(self, ftype, files_count, additional_args=[]):
-        self.clear_table()
         args = ["import", "file", ftype, "-p", self.table_path] + self.get_header_flag(ftype) + additional_args
         for i in range(1, files_count):
-            args.append("tempinput{}.{}".format(i, ftype))
-        with open("tempinput0.{}".format(ftype), "r") as f:
+            args.append(str(self.tmp_path / "tempinput{}.{}".format(i, ftype)))
+        with (self.tmp_path / "tempinput0.{}".format(ftype)).open("r") as f:
             self.execute_ydb_cli_command(args, stdin=f)
 
     def run_import_parquet(self, data):
-        self.clear_table()
-        with open("tempinput.parquet", "w"):
-            pq.write_table(data, "tempinput.parquet", version="2.4")
-        self.execute_ydb_cli_command(["import", "file", "parquet", "-p", self.table_path, "-i", "tempinput.parquet"])
+        path = self.tmp_path / "tempinput.parquet"
+        with path.open("w"):
+            pq.write_table(data, str(path), version="2.4")
+        self.execute_ydb_cli_command(["import", "file", "parquet", "-p", self.table_path, "-i", str(path)])
 
     def run_export(self, format):
         if format == "json":
             format = "json-unicode"
         query = "SELECT `key`, `id`, `value` FROM `{}` ORDER BY `key`".format(self.table_path)
-        output_file_name = "result.output"
+        output_file_name = str(self.tmp_path / "result.output")
         self.execute_ydb_cli_command(["table", "query", "execute", "-q", query, "-t", "scan", "--format", format], stdout=output_file_name)
         return yatest_common.canonical_file(output_file_name, local=True, universal_lines=True)
 
     def validate_gen_data(self):
         query = "SELECT count(*) FROM `{}`".format(self.table_path)
-        output_file_name = "result.output"
+        output_file_name = str(self.tmp_path / "result.output")
         self.execute_ydb_cli_command(["table", "query", "execute", "-q", query, "-t", "scan"], stdout=output_file_name)
         return yatest_common.canonical_file(output_file_name, local=True, universal_lines=True)
 
     @pytest.mark.parametrize("ftype,additional_args", ALL_PARAMS)
-    def test_simple(self, table_type, ftype, additional_args):
-        self.table_type = table_type
+    def test_simple(self, tmp_path, request, table_type, ftype, additional_args):
+        self.init_test(tmp_path, table_type, request.node.name)
         self.run_import(ftype, DATA[ftype], additional_args)
         return self.run_export(ftype)
 
     @pytest.mark.parametrize("ftype,additional_args", ONLY_CSV_TSV_PARAMS)
-    def test_delimeter_at_end_of_lines(self, table_type, ftype, additional_args):
-        self.table_type = table_type
+    def test_delimeter_at_end_of_lines(self, tmp_path, request, table_type, ftype, additional_args):
+        self.init_test(tmp_path, table_type, request.node.name)
         self.run_import(ftype, DATA_END_LINES[ftype], additional_args)
         return self.run_export(ftype)
 
     @pytest.mark.parametrize("ftype,additional_args", ALL_PARAMS)
-    def test_excess_columns(self, table_type, ftype, additional_args):
-        self.table_type = table_type
+    def test_excess_columns(self, tmp_path, request, table_type, ftype, additional_args):
+        self.init_test(tmp_path, table_type, request.node.name)
         self.run_import(ftype, DATA_EXCESS[ftype], additional_args)
         return self.run_export(ftype)
 
     @pytest.mark.parametrize("ftype,additional_args", ALL_PARAMS)
-    def test_stdin(self, table_type, ftype, additional_args):
-        self.table_type = table_type
+    def test_stdin(self, tmp_path, request, table_type, ftype, additional_args):
+        self.init_test(tmp_path, table_type, request.node.name)
         self.run_import_from_stdin(ftype, DATA[ftype], additional_args)
         return self.run_export(ftype)
 
     @pytest.mark.parametrize("ftype,additional_args", ALL_PARAMS)
-    def test_multiple_files(self, table_type, ftype, additional_args):
-        self.table_type = table_type
+    def test_multiple_files(self, tmp_path, request, table_type, ftype, additional_args):
+        self.init_test(tmp_path, table_type, request.node.name)
         self.write_array_to_files(DATA_ARRAY[ftype], ftype)
         self.run_import_multiple_files(ftype, len(DATA_ARRAY[ftype]), additional_args)
         return self.run_export(ftype)
 
     @pytest.mark.parametrize("ftype,additional_args", ALL_PARAMS)
-    def test_multiple_files_and_stdin(self, table_type, ftype, additional_args):
-        self.table_type = table_type
+    def test_multiple_files_and_stdin(self, tmp_path, request, table_type, ftype, additional_args):
+        self.init_test(tmp_path, table_type, request.node.name)
         self.write_array_to_files(DATA_ARRAY[ftype], ftype)
         self.run_import_multiple_files(ftype, len(DATA_ARRAY[ftype]), additional_args)
         return self.run_export(ftype)
 
     @pytest.mark.parametrize("ftype,additional_args", ONLY_CSV_TSV_PARAMS)
-    def test_multiple_files_and_columns_opt(self, table_type, ftype, additional_args):
-        self.table_type = table_type
+    def test_multiple_files_and_columns_opt(self, tmp_path, request, table_type, ftype, additional_args):
+        self.init_test(tmp_path, table_type, request.node.name)
         self.write_array_to_files(DATA_ARRAY_BAD_HEADER[ftype], ftype)
         self.run_import_multiple_files(ftype, len(DATA_ARRAY_BAD_HEADER[ftype]), ["--columns", self.get_header(ftype)] + additional_args)
         return self.run_export(ftype)
 
     @pytest.mark.parametrize("ftype,additional_args", ALL_PARAMS)
-    def test_big_dataset(self, table_type, ftype, additional_args):
-        self.table_type = table_type
+    def test_big_dataset(self, tmp_path, request, table_type, ftype, additional_args):
+        self.init_test(tmp_path, table_type, request.node.name)
         self.gen_dataset(DATASET_SIZE, FILES_COUNT, ftype)
         self.run_import_multiple_files(ftype, FILES_COUNT, additional_args)
         return self.validate_gen_data()
 
     @pytest.mark.skip("test is failing right now")
-    def test_format_parquet(self, table_type):
-        self.table_type = table_type
+    def test_format_parquet(self, tmp_path, request, table_type):
+        self.init_test(tmp_path, table_type, request.node.name)
         self.run_import_parquet(DATA_PARQUET)
         return self.run_export("csv")

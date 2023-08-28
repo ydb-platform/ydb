@@ -13,5 +13,3 @@ ydb/tests/functional/suite_tests/test_stream_query.py::TestStreamQuery::test_sql
 ydb/tests/functional/tenants/test_dynamic_tenants.py::*
 ydb/tests/functional/tenants/test_storage_config.py::TestStorageConfig::*
 ydb/tests/functional/tenants/test_tenants.py::*
-ydb/tests/functional/ydb_cli/test_ydb_impex.py::TestImpex::*
-ydb/tests/functional/ydb_cli/test_ydb_scripting.py::TestExecuteScriptWithParamsFromStdin::test_batching_full_tsv[stream]

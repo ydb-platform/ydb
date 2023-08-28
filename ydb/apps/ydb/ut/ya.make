@@ -1,10 +1,5 @@
 UNITTEST()
 
-IF (SANDBOXING)
-    SIZE(LARGE)
-    TAG(ya:fat)
-ENDIF()
-
 DEPENDS(
     ydb/apps/ydb
 )

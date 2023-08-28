@@ -52,6 +52,7 @@ END()
 RECURSE(
     actor_log
     actors
+    actor_system
     backtrace
     bindings
     failure_injector

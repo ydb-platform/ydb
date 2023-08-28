@@ -7,6 +7,7 @@
 
 
 add_subdirectory(actor_log)
+add_subdirectory(actor_system)
 add_subdirectory(actors)
 add_subdirectory(backtrace)
 add_subdirectory(bindings)

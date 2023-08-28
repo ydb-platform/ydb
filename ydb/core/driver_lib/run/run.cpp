@@ -1217,6 +1217,8 @@ void TKikimrRunner::InitializeActorSystem(
     if (Monitoring) {
         setup->LocalServices.emplace_back(NCrossRef::MakeCrossRefActorId(), TActorSetupCmd(NCrossRef::CreateCrossRefActor(),
             TMailboxType::HTSwap, AppData->SystemPoolId));
+        setup->LocalServices.emplace_back(MakeMonVDiskStreamId(), TActorSetupCmd(CreateMonVDiskStreamActor(),
+            TMailboxType::HTSwap, AppData->SystemPoolId));
     }
 
     ApplyLogSettings(runConfig);
@@ -1266,7 +1268,14 @@ void TKikimrRunner::InitializeActorSystem(
 
         Monitoring->Register(CreateMonGetBlobPage("get_blob", ActorSystem.Get()));
         Monitoring->Register(CreateMonBlobRangePage("blob_range", ActorSystem.Get()));
-        Monitoring->Register(CreateMonVDiskStreamPage("vdisk_stream", ActorSystem.Get()));
+
+        Monitoring->RegisterActorPage(
+                nullptr,
+                "vdisk_stream",
+                TString(),
+                false,
+                ActorSystem.Get(),
+                MakeMonVDiskStreamId());
 
         Monitoring->RegisterActorPage(
                 ActorsMonPage->RegisterIndexPage("interconnect", "Interconnect"),

@@ -300,7 +300,7 @@ namespace NKikimr {
                 comp << Processor.ReadIntoString(BlockSize);
                 comp.Finish();
             }
-            ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(s.Str()));
+            ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(s.Str()), 0, ev->Cookie);
             Deadline = ctx.Now() + LifetimeAfterQuery;
         }
 

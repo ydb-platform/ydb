@@ -6,6 +6,10 @@
 
 namespace NKikimr {
 
-    NMonitoring::IMonPage *CreateMonVDiskStreamPage(const TString& path, TActorSystem *actorSystem);
+    static TActorId MakeMonVDiskStreamId() {
+        return TActorId(0, TStringBuf("vdisk_stream", 12));
+    }
+
+    IActor *CreateMonVDiskStreamActor();
 
 } // NKikimr

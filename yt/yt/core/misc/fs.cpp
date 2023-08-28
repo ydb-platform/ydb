@@ -1061,22 +1061,29 @@ void ReadWriteCopySync(
     std::vector<ui8> buffer(chunkSize);
 
     while (true) {
-        auto readSize = read(srcFd, buffer.data(), chunkSize);
+        auto readByteCount = read(srcFd, buffer.data(), chunkSize);
 
-        if (readSize == -1) {
+        if (readByteCount == -1) {
             THROW_ERROR_EXCEPTION("Error while doing read")
                 << TError::FromSystem();
         }
 
-        if (readSize == 0) {
+        if (readByteCount == 0) {
             return;
         }
 
-        auto size = write(dstFd, buffer.data(), readSize);
+        for (int writtenByteCount = 0; writtenByteCount < readByteCount;) {
+            auto byteCount = write(
+                dstFd,
+                buffer.data() + writtenByteCount,
+                readByteCount - writtenByteCount);
 
-        if (size == -1) {
-            THROW_ERROR_EXCEPTION("Error while doing write")
-                << TError::FromSystem();
+            if (byteCount == -1) {
+                THROW_ERROR_EXCEPTION("Error while doing write")
+                    << TError::FromSystem();
+            }
+
+            writtenByteCount += byteCount;
         }
     }
 #else

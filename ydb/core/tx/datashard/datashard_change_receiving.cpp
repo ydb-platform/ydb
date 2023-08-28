@@ -1,7 +1,6 @@
 #include "datashard_impl.h"
 
-namespace NKikimr {
-namespace NDataShard {
+namespace NKikimr::NDataShard {
 
 using namespace NTabletFlatExecutor;
 
@@ -28,10 +27,7 @@ public:
                 break;
             }
 
-            auto it = Self->InChangeSenders.find(req.GetOrigin());
-            if (it == Self->InChangeSenders.end()) {
-                ok = ok && db.Table<Schema::ChangeSenders>().Key(req.GetOrigin()).Precharge();
-            }
+            ok = ok && db.Table<Schema::ChangeSenders>().Key(req.GetOrigin()).Precharge();
         }
 
         return ok;
@@ -69,29 +65,25 @@ public:
             return true;
         }
 
-        auto it = Self->InChangeSenders.find(req.GetOrigin());
-        if (it == Self->InChangeSenders.end()) {
-            auto rowset = db.Table<Schema::ChangeSenders>().Key(req.GetOrigin()).Select();
-            if (!rowset.IsReady()) {
-                return false;
-            }
-
-            if (rowset.IsValid()) {
-                const auto generation = rowset.GetValue<Schema::ChangeSenders::Generation>();
-                const auto lastRecordOrder = rowset.GetValueOrDefault<Schema::ChangeSenders::LastRecordOrder>(0);
-                it = Self->InChangeSenders.emplace(req.GetOrigin(), TInChangeSender(generation, lastRecordOrder)).first;
-            } else {
-                it = Self->InChangeSenders.emplace(req.GetOrigin(), TInChangeSender(req.GetGeneration())).first;
-            }
+        auto rowset = db.Table<Schema::ChangeSenders>().Key(req.GetOrigin()).Select();
+        if (!rowset.IsReady()) {
+            return false;
         }
 
-        if (it->second.Generation > req.GetGeneration()) {
+        TInChangeSender info(req.GetGeneration());
+        if (rowset.IsValid()) {
+            info.Generation = rowset.GetValue<Schema::ChangeSenders::Generation>();
+            info.LastRecordOrder = rowset.GetValueOrDefault<Schema::ChangeSenders::LastRecordOrder>(0);
+        }
+
+        auto it = Self->InChangeSenders.emplace(req.GetOrigin(), info).first;
+        if (it->second.Generation > req.GetGeneration()) { // use in-memory Generation
             resp.SetStatus(NKikimrChangeExchange::TEvStatus::STATUS_REJECT);
             resp.SetReason(NKikimrChangeExchange::TEvStatus::REASON_STALE_ORIGIN);
         } else {
-            it->second.Generation = req.GetGeneration();
+            it->second.Generation = req.GetGeneration(); // update in-memory Generation
             resp.SetStatus(NKikimrChangeExchange::TEvStatus::STATUS_OK);
-            resp.SetLastRecordOrder(it->second.LastRecordOrder);
+            resp.SetLastRecordOrder(info.LastRecordOrder); // use persistent LastRecordOrder
         }
 
         return true;
@@ -444,5 +436,4 @@ void TDataShard::Handle(TEvChangeExchange::TEvApplyRecords::TPtr& ev, const TAct
     Execute(new TTxApplyChangeRecords(this, ev), ctx);
 }
 
-} // NDataShard
-} // NKikimr
+}

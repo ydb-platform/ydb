@@ -6,10 +6,7 @@ IF (NOT WINDOWS)
         json_ut.cpp
     )
 
-    IF (SANITIZER_TYPE)
-        SIZE(MEDIUM)
-        TIMEOUT(600)
-    ENDIF()
+    SIZE(MEDIUM)
 
     PEERDIR(
         ydb/library/yql/minikql/computation/llvm

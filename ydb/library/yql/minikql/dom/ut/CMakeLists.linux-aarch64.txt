@@ -62,7 +62,7 @@ set_yunittest_property(
   ydb-library-yql-minikql-dom-ut
   PROPERTY
   LABELS
-  SMALL
+  MEDIUM
 )
 set_yunittest_property(
   TEST

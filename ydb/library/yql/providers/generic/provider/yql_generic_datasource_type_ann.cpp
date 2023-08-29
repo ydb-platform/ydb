@@ -90,7 +90,7 @@ namespace NYql {
 
         TStatus HandleReadTable(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
             Y_UNUSED(output);
-            if (!EnsureArgsCount(*input, 5, ctx)) {
+            if (!EnsureArgsCount(*input, 4, ctx)) {
                 return TStatus::Error;
             }
 
@@ -103,10 +103,6 @@ namespace NYql {
             }
 
             if (!EnsureAtom(*input->Child(TGenReadTable::idx_Table), ctx)) {
-                return TStatus::Error;
-            }
-
-            if (!EnsureAtom(*input->Child(TGenReadTable::idx_Timezone), ctx)) {
                 return TStatus::Error;
             }
 

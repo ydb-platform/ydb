@@ -24,40 +24,38 @@ namespace NYql {
 
         using TGetTableResult = std::pair<std::optional<const TTableMeta*>, std::optional<TIssue>>;
 
-        void AddTable(const TStringBuf& clusterName, const TStringBuf& tableName, TTableMeta&& tableMeta) {
-            Tables_.emplace(TTableAddress(clusterName, tableName), tableMeta);
+        TGenericState() = delete;
+
+        TGenericState(
+            TTypeAnnotationContext* types,
+            const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+            const std::shared_ptr<NYql::IDatabaseAsyncResolver>& databaseResolver,
+            const NConnector::IClient::TPtr& genericClient,
+            const TGatewaysConfig* gatewaysConfig = nullptr)
+            : Types(types)
+            , Configuration(MakeIntrusive<TGenericConfiguration>())
+            , FunctionRegistry(functionRegistry)
+            , DatabaseResolver(databaseResolver)
+            , GenericClient(genericClient)
+        {
+            if (gatewaysConfig) {
+                Configuration->Init(gatewaysConfig->GetGeneric(), databaseResolver, DatabaseAuth, types->Credentials);
+            }
         }
 
-        TGetTableResult GetTable(const TStringBuf& clusterName, const TStringBuf& tableName) const {
-            auto result = Tables_.FindPtr(TTableAddress(clusterName, tableName));
-            if (result) {
-                return std::make_pair(result, std::nullopt);
-            }
+        void AddTable(const TStringBuf& clusterName, const TStringBuf& tableName, TTableMeta&& tableMeta);
+        TGetTableResult GetTable(const TStringBuf& clusterName, const TStringBuf& tableName) const;
+        TGetTableResult GetTable(const TStringBuf& clusterName, const TStringBuf& tableName, const TPosition& position) const;
 
-            return std::make_pair(
-                std::nullopt,
-                TIssue(TStringBuilder() << "no metadata for table " << clusterName << "." << tableName));
-        };
-
-        TGetTableResult GetTable(const TStringBuf& clusterName, const TStringBuf& tableName, const TPosition& position) const {
-            auto pair = GetTable(clusterName, tableName);
-            if (pair.second.has_value()) {
-                pair.second->Position = position;
-            }
-
-            return pair;
-        }
-
-        // FIXME: not used anymore, delete it some day
-        std::unordered_map<std::string_view, std::string_view> Timezones;
-
-        TTypeAnnotationContext* Types = nullptr;
+        TTypeAnnotationContext* Types;
         TGenericConfiguration::TPtr Configuration = MakeIntrusive<TGenericConfiguration>();
-        const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
+        const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
 
         // key - (database id, database type), value - credentials to access MDB API
         NYql::IDatabaseAsyncResolver::TDatabaseAuthMap DatabaseAuth;
         std::shared_ptr<NYql::IDatabaseAsyncResolver> DatabaseResolver;
+
+        NConnector::IClient::TPtr GenericClient;
 
     private:
         THashMap<TTableAddress, TTableMeta> Tables_;

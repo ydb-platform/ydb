@@ -21,19 +21,17 @@ namespace NYql {
             Y_UNUSED(progressWriter);
             Y_UNUSED(operationOptions);
 
-            auto state = MakeIntrusive<TGenericState>();
-
-            state->Types = typeCtx.Get();
-            state->FunctionRegistry = functionRegistry;
-            state->DatabaseResolver = dbResolver;
-            if (gatewaysConfig) {
-                state->Configuration->Init(gatewaysConfig->GetGeneric(), state->DatabaseResolver, state->DatabaseAuth, typeCtx->Credentials);
-            }
+            auto state = MakeIntrusive<TGenericState>(
+                typeCtx.Get(),
+                functionRegistry,
+                dbResolver,
+                genericClient,
+                gatewaysConfig);
 
             TDataProviderInfo info;
 
             info.Names.insert({TString{GenericProviderName}});
-            info.Source = CreateGenericDataSource(state, genericClient);
+            info.Source = CreateGenericDataSource(state);
             info.Sink = CreateGenericDataSink(state);
 
             return info;

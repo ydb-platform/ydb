@@ -7,12 +7,12 @@
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 
 namespace NYql {
-    TDataProviderInitializer
-    GetGenericDataProviderInitializer(NConnector::IClient::TPtr genericClient,
-                                      std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver = nullptr);
+    TDataProviderInitializer GetGenericDataProviderInitializer(
+        NConnector::IClient::TPtr genericClient,                           // required
+        std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver = nullptr // can be missing in on-prem installations
+    );
 
-    TIntrusivePtr<IDataProvider> CreateGenericDataSource(TGenericState::TPtr state,
-                                                         NConnector::IClient::TPtr genericClient);
+    TIntrusivePtr<IDataProvider> CreateGenericDataSource(TGenericState::TPtr state);
 
     TIntrusivePtr<IDataProvider> CreateGenericDataSink(TGenericState::TPtr state);
 

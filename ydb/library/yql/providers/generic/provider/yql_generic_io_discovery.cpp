@@ -6,6 +6,7 @@
 #include <ydb/library/yql/core/yql_graph_transformer.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
+#include <ydb/library/yql/utils/log/log.h>
 
 namespace NYql {
 

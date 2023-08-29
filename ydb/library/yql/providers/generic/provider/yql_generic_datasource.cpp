@@ -2,12 +2,13 @@
 #include "yql_generic_provider_impl.h"
 
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 
 namespace NYql {
 
@@ -17,10 +18,10 @@ namespace NYql {
 
         class TGenericDataSource: public TDataProviderBase {
         public:
-            TGenericDataSource(TGenericState::TPtr state, NConnector::IClient::TPtr client)
+            TGenericDataSource(TGenericState::TPtr state)
                 : State_(state)
                 , IODiscoveryTransformer_(CreateGenericIODiscoveryTransformer(State_))
-                , LoadMetaDataTransformer_(CreateGenericLoadTableMetadataTransformer(State_, std::move(client)))
+                , LoadMetaDataTransformer_(CreateGenericLoadTableMetadataTransformer(State_))
                 , TypeAnnotationTransformer_(CreateGenericDataSourceTypeAnnotationTransformer(State_))
                 , DqIntegration_(CreateGenericDqIntegration(State_))
             {
@@ -138,8 +139,8 @@ namespace NYql {
 
     }
 
-    TIntrusivePtr<IDataProvider> CreateGenericDataSource(TGenericState::TPtr state, NConnector::IClient::TPtr client) {
-        return new TGenericDataSource(std::move(state), std::move(client));
+    TIntrusivePtr<IDataProvider> CreateGenericDataSource(TGenericState::TPtr state) {
+        return new TGenericDataSource(std::move(state));
     }
 
 } // namespace NYql

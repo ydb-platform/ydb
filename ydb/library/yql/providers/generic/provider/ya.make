@@ -16,7 +16,9 @@ SRCS(
     yql_generic_provider.h
     yql_generic_provider_impl.h
     yql_generic_settings.h
+    yql_generic_settings.cpp
     yql_generic_state.h
+    yql_generic_state.cpp
 )
 
 YQL_LAST_ABI_VERSION()

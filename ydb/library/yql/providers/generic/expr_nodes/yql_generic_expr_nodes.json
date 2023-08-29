@@ -32,8 +32,7 @@
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSource", "Type": "TGenDataSource"},
                 {"Index": 2, "Name": "Table", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "Columns", "Type": "TExprBase"},
-                {"Index": 4, "Name": "Timezone", "Type": "TCoAtom"}
+                {"Index": 3, "Name": "Columns", "Type": "TExprBase"}
             ]
         },
         {

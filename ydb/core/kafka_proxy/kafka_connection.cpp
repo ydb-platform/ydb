@@ -290,6 +290,7 @@ protected:
         Context->UserToken = event->UserToken;
         Context->Database = event->Database;
         Context->AuthenticationStep = authStep;
+        Context->RlContext = {event->Coordinator, event->ResourcePath, event->Database, event->UserToken->GetSerializedToken()};
 
         KAFKA_LOG_D("Authentificated successful. SID=" << Context->UserToken->GetUserSID());
     }

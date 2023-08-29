@@ -177,6 +177,8 @@ private:
         ETopicStatus Status = OK;
         TInstant ExpirationTime;
 
+        NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode;
+
         // partitioId -> tabletId
         std::unordered_map<ui32, ui64> partitions;
     };

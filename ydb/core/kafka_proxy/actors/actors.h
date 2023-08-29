@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/persqueue/pq_rl_helpers.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/aclib/aclib.h>
 
@@ -32,6 +33,8 @@ struct TContext {
     TString Database;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TString ClientDC;
+
+    NKikimr::NPQ::TRlContext RlContext;
 
     bool Authenticated() { return AuthenticationStep == SUCCESS; }
 };

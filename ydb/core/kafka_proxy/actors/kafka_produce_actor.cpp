@@ -19,6 +19,13 @@ NActors::IActor* CreateKafkaProduceActor(const TContext::TPtr context) {
     return new TKafkaProduceActor(context);
 }
 
+TString NormalizePath(const TString& database, const TString& topic) {
+    if (topic.Size() > database.Size() && topic.at(database.Size()) == '/' && topic.StartsWith(database)) {
+        return topic;
+    }
+    return CanonizePath(database + "/" + topic);
+}
+
 TString TKafkaProduceActor::LogPrefix() {
     TStringBuilder sb;
     sb << "TKafkaProduceActor " << SelfId() << " State: ";
@@ -115,11 +122,13 @@ void TKafkaProduceActor::HandleInit(TEvTxProxySchemeCache::TEvNavigateKeySetResu
     auto* navigate = ev.Get()->Get()->Request.Get();
     for (auto& info : navigate->ResultSet) {
         if (NSchemeCache::TSchemeCacheNavigate::EStatus::Ok == info.Status) {
-            auto topicPath = "/" + NKikimr::JoinPath(info.Path);
+            auto topicPath = CanonizePath(NKikimr::JoinPath(info.Path));
             KAFKA_LOG_D("Received topic '" << topicPath << "' description");
             TopicsForInitialization.erase(topicPath);
 
             auto& topic = Topics[topicPath];
+
+            topic.MeteringMode = info.PQGroupInfo->Description.GetPQTabletConfig().GetMeteringMode();
 
             if (info.SecurityObject->CheckAccess(NACLib::EAccessRights::UpdateRow, *Context->UserToken)) {
                 topic.Status = OK;
@@ -222,7 +231,7 @@ size_t TKafkaProduceActor::EnqueueInitialization() {
     for(const auto& e : Requests) {
         auto* r = e->Get()->Request;
         for(const auto& topicData : r->TopicData) {
-            const auto& topicPath = *topicData.Name;
+            const auto& topicPath = NormalizePath(Context->Database, *topicData.Name);
             if (!Topics.contains(topicPath)) {
                 requireInitialization = true;
                 TopicsForInitialization.insert(topicPath);
@@ -315,7 +324,7 @@ void TKafkaProduceActor::ProcessRequest(TPendingRequest& pendingRequest, const T
 
     size_t position = 0;
     for(const auto& topicData : r->TopicData) {
-        const TString& topicPath = *topicData.Name;
+        const TString& topicPath = NormalizePath(Context->Database, *topicData.Name);
         for(const auto& partitionData : topicData.PartitionData) {
             const auto partitionId = partitionData.Index;
 
@@ -470,11 +479,13 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
                 partitionResponse.Index = partitionData.Index;
 
                 if (EKafkaErrors::NONE_ERROR != result.ErrorCode) {
+                    KAFKA_LOG_T("Partition result with error: ErrorCode=" << static_cast<int>(result.ErrorCode) << ", ErrorMessage=" << result.ErrorMessage);
                     partitionResponse.ErrorCode = result.ErrorCode;
                     partitionResponse.ErrorMessage = result.ErrorMessage;
                 } else {
                     auto* msg = result.Value->Get();
                     if (msg->IsSuccess()) {
+                        KAFKA_LOG_T("Partition result success.");
                         partitionResponse.ErrorCode = EKafkaErrors::NONE_ERROR;
                         auto& writeResults = msg->Record.GetPartitionResponse().GetCmdWriteResult();
 
@@ -484,6 +495,7 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
                             partitionResponse.BaseOffset = lastResult.GetSeqNo();
                         }
                     } else {
+                        KAFKA_LOG_T("Partition result with error: ErrorCode=" << static_cast<int>(Convert(msg->GetError().Code)) << ", ErrorMessage=" << msg->GetError().Reason);
                         partitionResponse.ErrorCode = Convert(msg->GetError().Code);
                         partitionResponse.ErrorMessage = msg->GetError().Reason;
                     }
@@ -560,7 +572,10 @@ std::pair<TKafkaProduceActor::ETopicStatus, TActorId> TKafkaProduceActor::Partit
     }
 
     auto tabletId = pit->second;
-    auto* writerActor = CreatePartitionWriter(SelfId(), tabletId, partitionId, {}, SourceId, TPartitionWriterOpts().WithDeduplication(false));
+    TPartitionWriterOpts opts;
+    opts.WithDeduplication(false)
+        .WithCheckRequestUnits(topicInfo.MeteringMode, Context->RlContext);
+    auto* writerActor = CreatePartitionWriter(SelfId(), topicPath, tabletId, partitionId, {/*expectedGeneration*/}, SourceId, opts);
 
     auto& writerInfo = partitionWriters[partitionId];
     writerInfo.ActorId = ctx.RegisterWithSameMailbox(writerActor);

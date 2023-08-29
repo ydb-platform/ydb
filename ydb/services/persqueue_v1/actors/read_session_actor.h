@@ -7,7 +7,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/persqueue/events/global.h>
-#include <ydb/services/lib/actors/pq_rl_helpers.h>
+#include <ydb/core/persqueue/pq_rl_helpers.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
@@ -121,7 +121,7 @@ struct TFormedReadResponse: public TSimpleRefCount<TFormedReadResponse<TServerMe
 template <bool UseMigrationProtocol> // Migration protocol is "pqv1"
 class TReadSessionActor
     : public TActorBootstrapped<TReadSessionActor<UseMigrationProtocol>>
-    , private TRlHelpers
+    , private NPQ::TRlHelpers
 {
     using TClientMessage = typename std::conditional_t<UseMigrationProtocol,
         PersQueue::V1::MigrationStreamingReadClientMessage,

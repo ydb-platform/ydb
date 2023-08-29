@@ -5,11 +5,11 @@
 
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/pq_rl_helpers.h>
 #include <ydb/core/persqueue/write_meta.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 
-#include <ydb/services/lib/actors/pq_rl_helpers.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 #include <ydb/services/lib/sharding/sharding.h>
 
@@ -213,7 +213,7 @@ namespace NKikimr::NDataStreams::V1 {
     template<class TDerived, class TProto>
     class TPutRecordsActorBase
         : public NGRpcProxy::V1::TPQGrpcSchemaBase<TPutRecordsActorBase<TDerived, TProto>, TProto>
-        , private NGRpcProxy::V1::TRlHelpers
+        , private NPQ::TRlHelpers
     {
         using TBase = NGRpcProxy::V1::TPQGrpcSchemaBase<TPutRecordsActorBase<TDerived, TProto>, TProto>;
 
@@ -261,7 +261,7 @@ namespace NKikimr::NDataStreams::V1 {
     template<class TDerived, class TProto>
     TPutRecordsActorBase<TDerived, TProto>::TPutRecordsActorBase(NGRpcService::IRequestOpCtx* request)
             : TBase(request, dynamic_cast<const typename TProto::TRequest*>(request->GetRequest())->stream_name())
-            , TRlHelpers(request, 4_KB, TDuration::Seconds(1))
+            , TRlHelpers({}, request, 4_KB, false, TDuration::Seconds(1))
             , Ip(request->GetPeerName())
     {
         Y_ENSURE(request);

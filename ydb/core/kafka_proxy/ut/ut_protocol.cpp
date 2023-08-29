@@ -125,7 +125,7 @@ public:
             nullptr,
             0)
         );
-        KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::KAFKA_PROXY, NActors::NLog::PRI_DEBUG);
+        KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::KAFKA_PROXY, NActors::NLog::PRI_TRACE);
 
         ui16 grpc = KikimrServer->GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
@@ -169,7 +169,7 @@ using TInsecureTestServer = TTestServer<TKikimrWithGrpcAndRootSchema, false>;
 using TSecureTestServer = TTestServer<TKikimrWithGrpcAndRootSchemaSecure, true>;
 
 void Write(TSocketOutput& so, TApiMessage* request, TKafkaVersion version) {
-    TWritableBuf sb(nullptr, request->Size(version));
+    TWritableBuf sb(nullptr, request->Size(version) + 1000);
     TKafkaWritable writable(sb);
     request->Write(writable, version);
     so.Write(sb.Data(), sb.Size());
@@ -221,7 +221,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
     Y_UNIT_TEST(ProduceScenario) {
         TInsecureTestServer testServer;
 
-        TString topicName = "topic-0-test";
+        TString topicName = "/Root/topic-0-test";
 
         {
             NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
@@ -235,13 +235,15 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TSocketOutput so(s);
         TSocketInput si(s);
 
+        size_t correlationId = 0;
+
         {
             Cerr << ">>>>> ApiVersionsRequest\n";
 
             TRequestHeaderData header;
             header.RequestApiKey = NKafka::EApiKey::API_VERSIONS;
             header.RequestApiVersion = 2;
-            header.CorrelationId = 0;
+            header.CorrelationId = correlationId++;
             header.ClientId = "test";
 
             TApiVersionsRequestData request;
@@ -263,7 +265,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             TRequestHeaderData header;
             header.RequestApiKey = NKafka::EApiKey::SASL_HANDSHAKE;
             header.RequestApiVersion = 1;
-            header.CorrelationId = 1;
+            header.CorrelationId = correlationId++;
             header.ClientId = "test";
 
             TSaslHandshakeRequestData request;
@@ -280,13 +282,13 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
 
         {
-            Cerr << ">>>>> SaslAuthenticateRequestData";
+            Cerr << ">>>>> SaslAuthenticateRequestData\n";
             char authBytes[] = "ignored\0ouruser@/Root\0ourUserPassword";
 
             TRequestHeaderData header;
             header.RequestApiKey = NKafka::EApiKey::SASL_AUTHENTICATE;
             header.RequestApiVersion = 2;
-            header.CorrelationId = 2;
+            header.CorrelationId = correlationId++;
             header.ClientId = "test";
 
             TSaslAuthenticateRequestData request;
@@ -295,10 +297,61 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             Write(so, &header, &request);
 
             auto response = Read(si, &header);
-            Y_UNUSED(response);
             auto* msg = dynamic_cast<TSaslAuthenticateResponseData*>(response.get());
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+
+        {
+            Cerr << ">>>>> TInitProducerIdRequestData\n";
+
+            TRequestHeaderData header;
+            header.RequestApiKey = NKafka::EApiKey::INIT_PRODUCER_ID;
+            header.RequestApiVersion = 4;
+            header.CorrelationId = correlationId++;
+            header.ClientId = "test";
+
+            TInitProducerIdRequestData request;
+            request.TransactionTimeoutMs = 5000;
+
+            Write(so, &header, &request);
+
+            auto response = Read(si, &header);
+            auto* msg = dynamic_cast<TInitProducerIdResponseData*>(response.get());
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+
+        {
+            Cerr << ">>>>> TProduceRequestData\n";
+
+            TRequestHeaderData header;
+            header.RequestApiKey = NKafka::EApiKey::PRODUCE;
+            header.RequestApiVersion = 9;
+            header.CorrelationId = correlationId++;
+            header.ClientId = "test-client-random-string";
+
+            TProduceRequestData request;
+            request.TopicData.resize(1);
+            request.TopicData[0].Name = topicName;
+            request.TopicData[0].PartitionData.resize(1);
+            request.TopicData[0].PartitionData[0].Index = 0; // Partition id
+            request.TopicData[0].PartitionData[0].Records.emplace();
+            request.TopicData[0].PartitionData[0].Records->BaseOffset = 3;
+            request.TopicData[0].PartitionData[0].Records->BaseSequence = 5;
+            request.TopicData[0].PartitionData[0].Records->Magic = 2; // Current supported
+            request.TopicData[0].PartitionData[0].Records->Records.resize(1);
+            request.TopicData[0].PartitionData[0].Records->Records[0].Key = "record-key";
+            request.TopicData[0].PartitionData[0].Records->Records[0].Value = "record-value";
+
+            Write(so, &header, &request);
+
+            auto response = Read(si, &header);
+            auto* msg = dynamic_cast<TProduceResponseData*>(response.get());
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Name, topicName);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].PartitionResponses[0].Index, 0);
+           // UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].PartitionResponses[0].ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
         }
     }
 }

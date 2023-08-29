@@ -2,7 +2,6 @@ LIBRARY()
 
 SRCS(
     pq_schema_actor.cpp
-    pq_rl_helpers.cpp
 )
 
 PEERDIR(

@@ -49,17 +49,35 @@ struct TEvKafka {
     };
 
     struct TEvAuthResult : public TEventLocal<TEvAuthResult, EvAuthResult> {
-        TEvAuthResult(EAuthSteps authStep, std::shared_ptr<TEvKafka::TEvResponse> clientResponse, TIntrusiveConstPtr<NACLib::TUserToken> token, TString database, TString error = "")
-        : AuthStep(authStep),
-          UserToken(token),
-          Database(database),
-          Error(error),
-          ClientResponse(std::move(clientResponse))
-        {}
+        TEvAuthResult(EAuthSteps authStep, std::shared_ptr<TEvKafka::TEvResponse> clientResponse, TString error = "")
+            : AuthStep(authStep)
+            , Error(error)
+            , ClientResponse(clientResponse) {
+        }
+
+        TEvAuthResult(EAuthSteps authStep, std::shared_ptr<TEvKafka::TEvResponse> clientResponse, TIntrusiveConstPtr<NACLib::TUserToken> token, TString database,
+                      TString folderId, TString serviceAccountId, TString databaseId, TString coordinator, TString resourcePath, TString error = "")
+            : AuthStep(authStep)
+            , UserToken(token)
+            , Database(database)
+            , FolderId(folderId)
+            , ServiceAccountId(serviceAccountId)
+            , DatabaseId(databaseId)
+            , Coordinator(coordinator)
+            , ResourcePath(resourcePath)
+            , Error(error)
+            , ClientResponse(std::move(clientResponse)) {
+        }
 
         EAuthSteps AuthStep;
         TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
         TString Database;
+        TString FolderId;
+        TString ServiceAccountId;
+        TString DatabaseId;
+        TString Coordinator;
+        TString ResourcePath;
+
         TString Error;
         TString SaslMechanism;
         std::shared_ptr<TEvKafka::TEvResponse> ClientResponse;

@@ -32,7 +32,7 @@ TReadSessionActor<UseMigrationProtocol>::TReadSessionActor(
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
         const TMaybe<TString> clientDC,
         const NPersQueue::TTopicsListController& topicsHandler)
-    : TRlHelpers(request, READ_BLOCK_SIZE, TDuration::Minutes(1))
+    : TRlHelpers({}, request, READ_BLOCK_SIZE, false)
     , Request(request)
     , ClientDC(clientDC.GetOrElse("other"))
     , StartTimestamp(TInstant::Now())
@@ -1909,6 +1909,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvents::TEvWakeup::TPtr& e
             break;
 
         case EWakeupTag::RlNoResource:
+        case EWakeupTag::RlInitNoResource:
             if (PendingQuota) {
                 Y_VERIFY(MaybeRequestQuota(PendingQuota->RequiredQuota, EWakeupTag::RlAllowed, ctx));
             } else {

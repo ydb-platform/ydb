@@ -2,8 +2,10 @@
 
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
+#include <ydb/core/grpc_services/local_rate_limiter.h>
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
+#include <ydb/core/persqueue/pq_rl_helpers.h>
 
 #include <variant>
 
@@ -81,7 +83,8 @@ struct TEvPartitionWriter {
             // Partition located on other node.
             PartitionNotLocal,
             // Partitition restarted.
-            PartitionDisconnected
+            PartitionDisconnected,
+            Overload
         };
 
         struct TSuccess {
@@ -124,11 +127,17 @@ struct TPartitionWriterOpts {
     bool AutoRegister = false;
     bool UseDeduplication = true;
 
+    std::optional<NKikimrPQ::TPQTabletConfig::EMeteringMode> MeteringMode;
+    TRlContext RlCtx;
+
+    bool CheckRequestUnits() const { return RlCtx; }
+
     TPartitionWriterOpts& WithCheckState(bool value) { CheckState = value; return *this; }
     TPartitionWriterOpts& WithAutoRegister(bool value) { AutoRegister = value; return *this; }
     TPartitionWriterOpts& WithDeduplication(bool value) { UseDeduplication = value; return *this; }
+    TPartitionWriterOpts& WithCheckRequestUnits(const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode , const TRlContext& rlCtx) { MeteringMode = meteringMode; RlCtx = rlCtx; return *this; }
 };
 
-IActor* CreatePartitionWriter(const TActorId& client, ui64 tabletId, ui32 partitionId, TMaybe<ui32> expectedGeneration, const TString& sourceId,
+IActor* CreatePartitionWriter(const TActorId& client, const std::optional<TString>& topicPath, ui64 tabletId, ui32 partitionId, const std::optional<ui32> expectedGeneration, const TString& sourceId,
                               const TPartitionWriterOpts& opts = {});
 }

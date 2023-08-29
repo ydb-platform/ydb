@@ -10,6 +10,11 @@ namespace NKikimr {
 
 IActor* CreateSchemeBoardSubscriber(
     const TActorId& owner,
+    const TString& path
+);
+
+IActor* CreateSchemeBoardSubscriber(
+    const TActorId& owner,
     const TString& path,
     const ui64 stateStorageGroup,
     const ui64 domainOwnerId

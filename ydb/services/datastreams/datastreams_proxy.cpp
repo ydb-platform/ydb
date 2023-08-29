@@ -9,10 +9,10 @@
 #include <ydb/core/grpc_services/rpc_deferrable.h>
 #include <ydb/core/grpc_services/rpc_scheme_base.h>
 #include <ydb/core/persqueue/partition.h>
+#include <ydb/core/persqueue/pq_rl_helpers.h>
 #include <ydb/core/persqueue/write_meta.h>
 
 #include <ydb/public/api/protos/ydb_topic.pb.h>
-#include <ydb/services/lib/actors/pq_rl_helpers.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 #include <ydb/services/lib/sharding/sharding.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
@@ -1312,7 +1312,7 @@ namespace NKikimr::NDataStreams::V1 {
     //-----------------------------------------------------------------------------------
 
     class TGetRecordsActor : public TPQGrpcSchemaBase<TGetRecordsActor, TEvDataStreamsGetRecordsRequest>
-                           , private TRlHelpers
+                           , private NPQ::TRlHelpers
                            , public TCdcStreamCompatible
     {
         using TBase = TPQGrpcSchemaBase<TGetRecordsActor, TEvDataStreamsGetRecordsRequest>;
@@ -1352,7 +1352,7 @@ namespace NKikimr::NDataStreams::V1 {
         : TBase(request, TShardIterator(GetRequest<TProtoRequest>(request)->shard_iterator()).IsValid()
                 ? TShardIterator(GetRequest<TProtoRequest>(request)->shard_iterator()).GetStreamName()
                 : "undefined")
-        , TRlHelpers(request, 8_KB, TDuration::Seconds(1))
+        , TRlHelpers({}, request, 8_KB, false, TDuration::Seconds(1))
         , ShardIterator{GetRequest<TProtoRequest>(request)->shard_iterator()}
         , StreamName{ShardIterator.IsValid() ? ShardIterator.GetStreamName() : "undefined"}
         , TabletId{0}

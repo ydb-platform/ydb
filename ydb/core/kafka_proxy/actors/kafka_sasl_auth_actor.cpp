@@ -1,7 +1,9 @@
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
+#include <ydb/core/tx/scheme_board/subscriber.h>
 #include <library/cpp/actors/core/actor.h>
 
 #include "kafka_sasl_auth_actor.h"
@@ -33,13 +35,21 @@ void TKafkaSaslAuthActor::Bootstrap(const NActors::TActorContext& ctx) {
     StartPlainAuth(ctx);
 }
 
+void TKafkaSaslAuthActor::PassAway() {
+    if (SubscriberId) {
+        Send(SubscriberId, new TEvents::TEvPoison());
+    }
+    TActorBootstrapped::PassAway();
+}
+
 void TKafkaSaslAuthActor::StartPlainAuth(const NActors::TActorContext& ctx) {
     TAuthData authData;
     if (!TryParseAuthDataTo(authData, ctx)) {
         return;
     }
-    Database = authData.Database;
+    Database = CanonizePath(authData.Database);
     SendLoginRequest(authData, ctx);
+    SendDescribeRequest(ctx);
 }
 
 void TKafkaSaslAuthActor::Handle(NKikimr::TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const NActors::TActorContext& ctx) {
@@ -48,17 +58,11 @@ void TKafkaSaslAuthActor::Handle(NKikimr::TEvTicketParser::TEvAuthorizeTicketRes
         return;
     }
 
-    auto responseToClient = std::make_shared<TSaslAuthenticateResponseData>();
-    responseToClient->ErrorCode = EKafkaErrors::NONE_ERROR;
-    responseToClient->ErrorMessage = "";
-    responseToClient->AuthBytes = TKafkaRawBytes(ERROR_AUTH_BYTES, sizeof(ERROR_AUTH_BYTES));
+    Authentificated = true;
 
-    auto evResponse = std::make_shared<TEvKafka::TEvResponse>(CorrelationId, responseToClient);
+    Token = ev->Get()->Token;
 
-    auto authResult = new TEvKafka::TEvAuthResult(EAuthSteps::SUCCESS, evResponse, ev->Get()->Token, Database);
-    Send(Context->ConnectionId, authResult);  
-    
-    Die(ctx);
+    ReplyIfReady(ctx);
 }
 
 void TKafkaSaslAuthActor::Handle(TEvPrivate::TEvTokenReady::TPtr& ev, const NActors::TActorContext& /*ctx*/) {
@@ -67,6 +71,31 @@ void TKafkaSaslAuthActor::Handle(TEvPrivate::TEvTokenReady::TPtr& ev, const NAct
         .Ticket = ev->Get()->LoginResult.token(),
         .PeerName = TStringBuilder() << Address,
     }));
+}
+
+void TKafkaSaslAuthActor::ReplyIfReady(const NActors::TActorContext& ctx) {
+    if (!Authentificated || !Described) {
+        return;
+    }
+
+    KAFKA_LOG_D("Authentificated success. Database='" << Database << "', "
+                                      << "FolderId='" << FolderId << "', "
+                                      << "ServiceAccountId='" << ServiceAccountId << "', "
+                                      << "DatabaseId='" << DatabaseId << "', "
+                                      << "Coordinator='" << Coordinator << "', "
+                                      << "ResourcePath='" << ResourcePath << "'");
+
+    auto responseToClient = std::make_shared<TSaslAuthenticateResponseData>();
+    responseToClient->ErrorCode = EKafkaErrors::NONE_ERROR;
+    responseToClient->ErrorMessage = "";
+    responseToClient->AuthBytes = TKafkaRawBytes(ERROR_AUTH_BYTES, sizeof(ERROR_AUTH_BYTES));
+
+    auto evResponse = std::make_shared<TEvKafka::TEvResponse>(CorrelationId, responseToClient);
+
+    auto authResult = new TEvKafka::TEvAuthResult(EAuthSteps::SUCCESS, evResponse, Token, Database, FolderId, ServiceAccountId, DatabaseId, Coordinator, ResourcePath);
+    Send(Context->ConnectionId, authResult);  
+
+    Die(ctx);
 }
 
 void TKafkaSaslAuthActor::Handle(TEvPrivate::TEvAuthFailed::TPtr& ev, const NActors::TActorContext& ctx) {
@@ -111,7 +140,7 @@ void TKafkaSaslAuthActor::SendAuthFailedAndDie(EKafkaErrors errorCode, const TSt
     responseToClient->AuthBytes = TKafkaRawBytes(ERROR_AUTH_BYTES, sizeof(ERROR_AUTH_BYTES));
 
     auto evResponse = std::make_shared<TEvKafka::TEvResponse>(CorrelationId, responseToClient);
-    auto authResult = new TEvKafka::TEvAuthResult(EAuthSteps::FAILED, evResponse, nullptr, "", errorMessage);
+    auto authResult = new TEvKafka::TEvAuthResult(EAuthSteps::FAILED, evResponse, errorMessage);
     Send(Context->ConnectionId, authResult);
    
     Die(ctx);
@@ -125,7 +154,6 @@ void TKafkaSaslAuthActor::SendLoginRequest(TKafkaSaslAuthActor::TAuthData authDa
 
     using TRpcEv = NKikimr::NGRpcService::TGRpcRequestWrapperNoAuth<NKikimr::NGRpcService::TRpcServices::EvLogin, Ydb::Auth::LoginRequest, Ydb::Auth::LoginResponse>;
     auto rpcFuture = NKikimr::NRpcService::DoLocalRpc<TRpcEv>(std::move(request), authData.Database, {}, actorSystem);
-
     rpcFuture.Subscribe([authData, actorSystem, selfId = SelfId()](const NThreading::TFuture<Ydb::Auth::LoginResponse>& future) {
         auto& response = future.GetValueSync();
 
@@ -145,5 +173,49 @@ void TKafkaSaslAuthActor::SendLoginRequest(TKafkaSaslAuthActor::TAuthData authDa
         }
     });
 }
+
+void TKafkaSaslAuthActor::SendDescribeRequest(const NActors::TActorContext& /*ctx*/) {
+    if (Database.Empty()) {
+        Described = true;
+        return;
+    }
+
+    KAFKA_LOG_D("Describe database '" << Database << "'");
+    SubscriberId = Register(CreateSchemeBoardSubscriber(SelfId(), Database));
+}
+
+void TKafkaSaslAuthActor::Handle(TSchemeBoardEvents::TEvNotifyUpdate::TPtr& ev, const TActorContext& ctx) {
+    Described = true;
+
+    auto* result = ev->Get();
+    auto status = result->DescribeSchemeResult.GetStatus();
+    if (status != NKikimrScheme::EStatus::StatusSuccess) {
+        KAFKA_LOG_ERROR("Describe database '" << Database << "' error: " << status);
+        ReplyIfReady(ctx);
+        return;
+    }
+
+    for(const auto& attr : result->DescribeSchemeResult.GetPathDescription().GetUserAttributes()) {
+        const auto& key = attr.GetKey();
+        const auto& value = attr.GetValue();
+
+        KAFKA_LOG_D("Database attribute key=" << key << ", value=" << value);
+
+        if (key == "folder_id") {
+            FolderId = value;
+        } else if (key == "service_account_id") {
+            ServiceAccountId = value;
+        } else if (key == "database_id") {
+            DatabaseId = value;
+        } else if (key == "serverless_rt_coordination_node_path") {
+            Coordinator = value;
+        } else if (key == "serverless_rt_base_resource_ru") {
+            ResourcePath = value;
+        }
+    }
+
+    ReplyIfReady(ctx);
+}
+
 
 } // NKafka

@@ -480,12 +480,7 @@ void TGRpcRequestProxyImpl::ForgetDatabase(const TString& database) {
 void TGRpcRequestProxyImpl::SubscribeToDatabase(const TString& database) {
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Subscribe to " << database);
 
-    Y_VERIFY(!AppData()->DomainsInfo->Domains.empty());
-    auto& domain = AppData()->DomainsInfo->Domains.begin()->second;
-    ui64 domainOwnerId = domain->SchemeRoot;
-    ui32 schemeBoardGroup = domain->DefaultSchemeBoardGroup;
-    THolder<IActor> subscriber{CreateSchemeBoardSubscriber(SelfId(), database, schemeBoardGroup, domainOwnerId)};
-    TActorId subscriberId = Register(subscriber.Release());
+    TActorId subscriberId = Register(CreateSchemeBoardSubscriber(SelfId(), database));
     auto itSubscriber = Subscribers.emplace(database, subscriberId);
     if (!itSubscriber.second) {
         Send(itSubscriber.first->second, new TEvents::TEvPoisonPill());

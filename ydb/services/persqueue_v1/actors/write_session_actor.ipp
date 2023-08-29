@@ -177,7 +177,7 @@ TWriteSessionActor<UseMigrationProtocol>::TWriteSessionActor(
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const TMaybe<TString> clientDC,
         const NPersQueue::TTopicsListController& topicsController
 )
-    : TRlHelpers(request, WRITE_BLOCK_SIZE, TDuration::Minutes(1))
+    : TRlHelpers({}, request, WRITE_BLOCK_SIZE, false)
     , Request(request)
     , State(ES_CREATED)
     , SchemeCache(schemeCache)
@@ -1034,7 +1034,7 @@ void TWriteSessionActor<UseMigrationProtocol>::ProceedPartition(const ui32 parti
     }
 
     Writer = ctx.RegisterWithSameMailbox(NPQ::CreatePartitionWriter(
-            ctx.SelfID, PartitionTabletId, Partition, ExpectedGeneration,
+            ctx.SelfID, {}, PartitionTabletId, Partition, ExpectedGeneration,
             SourceId, TPartitionWriterOpts().WithDeduplication(UseDeduplication)
     ));
     State = ES_WAIT_WRITER_INIT;
@@ -1771,6 +1771,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvents::TEvWakeup::TPtr& 
             break;
 
         case EWakeupTag::RlNoResource:
+        case EWakeupTag::RlInitNoResource:
             if (PendingQuotaRequest) {
                 Y_VERIFY(MaybeRequestQuota(PendingQuotaRequest->RequiredQuota, EWakeupTag::RlAllowed, ctx));
             } else {

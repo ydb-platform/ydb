@@ -64,3 +64,13 @@ runs:
       ninja
       ccache -s
       df -h
+  - name: report Build failed
+    if: ${{ failure() }}
+    shell: bash
+    run: |
+      echo "# Build failed" >> $GITHUB_STEP_SUMMARY
+  - name: report Build cancelled
+    if: ${{ cancelled() }}
+    shell: bash
+    run: |
+      echo "# Build cancelled" >> $GITHUB_STEP_SUMMARY

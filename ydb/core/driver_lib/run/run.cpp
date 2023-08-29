@@ -1219,6 +1219,8 @@ void TKikimrRunner::InitializeActorSystem(
             TMailboxType::HTSwap, AppData->SystemPoolId));
         setup->LocalServices.emplace_back(MakeMonVDiskStreamId(), TActorSetupCmd(CreateMonVDiskStreamActor(),
             TMailboxType::HTSwap, AppData->SystemPoolId));
+        setup->LocalServices.emplace_back(MakeMonGetBlobId(), TActorSetupCmd(CreateMonGetBlobActor(),
+            TMailboxType::HTSwap, AppData->SystemPoolId));
     }
 
     ApplyLogSettings(runConfig);
@@ -1266,7 +1268,14 @@ void TKikimrRunner::InitializeActorSystem(
                 MakeBlobStorageFailureInjectionID(runConfig.NodeId));
         }
 
-        Monitoring->Register(CreateMonGetBlobPage("get_blob", ActorSystem.Get()));
+        Monitoring->RegisterActorPage(
+                nullptr,
+                "get_blob",
+                TString(),
+                false,
+                ActorSystem.Get(),
+                MakeMonGetBlobId());
+
         Monitoring->Register(CreateMonBlobRangePage("blob_range", ActorSystem.Get()));
 
         Monitoring->RegisterActorPage(

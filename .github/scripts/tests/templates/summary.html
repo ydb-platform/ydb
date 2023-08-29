@@ -28,23 +28,41 @@
         span.test_mute {
             color: blue;
         }
+        table > tbody > tr > td:nth-child(2),
+        table > tbody > tr > td:nth-child(3) {
+            text-align: center;
+        }
     </style>
 </head>
 <body>
-{% for status, rows in test_results %}
-<h1 id="{{ status.name}}">{{ status.name }}</h1>
-<table style="width:90%;" border="1">
+{% for status in status_order %}
+<h1 id="{{ status.name}}">{{ status.name }} ({{ tests[status] | length }})</h1>
+<table style="width:100%;" border="1">
     <thead>
     <tr>
         <th>test name</th>
         <th>status</th>
+    {% if status in has_any_log %}
+        <th>LOG</th>
+    {% endif %}
     </tr>
     </thead>
     <tbody>
-    {% for t in rows %}
+    {% for t in tests[status] %}
     <tr>
         <td>{{ t.full_name }}</td>
-        <td><span class="test_status test_{{ t.status_display }}">{{ t.status_display }}</span></td>
+        <td>
+            <span class="test_status test_{{ t.status_display }}">{{ t.status_display }}</span>
+        </td>
+        {% if status in has_any_log %}
+        <td>
+            {% if t.log_url %}
+                <a href="{{ t.log_url }}">LOG</a>
+            {% else %}
+                &nbsp;
+            {% endif %}
+        </td>
+        {% endif %}
     </tr>
     {% endfor %}
     </tbody>

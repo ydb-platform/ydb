@@ -973,7 +973,7 @@ void TKikimrRunner::InitializeAllocator(const TKikimrRunConfig& runConfig) {
 void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 {
     const auto& cfg = runConfig.AppConfig;
-    
+
     bool useAutoConfig = !cfg.HasActorSystemConfig() || (cfg.GetActorSystemConfig().HasUseAutoConfig() && cfg.GetActorSystemConfig().GetUseAutoConfig());
     NAutoConfigInitializer::TASPools pools = NAutoConfigInitializer::GetASPools(cfg.GetActorSystemConfig(), useAutoConfig);
     TMap<TString, ui32> servicePools = NAutoConfigInitializer::GetServicePools(cfg.GetActorSystemConfig(), useAutoConfig);
@@ -1479,7 +1479,9 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     sil->AddServiceInitializer(new TMemProfMonitorInitializer(runConfig, MemObserver));
 
 #if defined(ENABLE_MEMORY_TRACKING)
-    sil->AddServiceInitializer(new TMemoryTrackerInitializer(runConfig));
+    if (serviceMask.EnableMemoryTracker) {
+        sil->AddServiceInitializer(new TMemoryTrackerInitializer(runConfig));
+    }
 #endif
 
     if (serviceMask.EnableKqp) {

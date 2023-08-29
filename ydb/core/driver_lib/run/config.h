@@ -75,6 +75,9 @@ union TBasicKikimrServicesMask {
         bool EnableLocalPgWire:1;
         bool EnableKafkaProxy:1;
         bool EnableIcNodeCacheService:1;
+        bool EnableMemoryTracker:1;
+
+        // next 64 flags
     };
 
     ui64 Raw;
@@ -100,6 +103,13 @@ union TBasicKikimrServicesMask {
         EnableViewerService = true;
         EnableMeteringWriter = true;
         EnableProfiler = true;
+    }
+
+    void SetTinyMode() {
+        EnableSelfPing = false;
+        EnableMemoryTracker = false;
+
+        // TODO: set EnableStatsCollector to false as well
     }
 
     TBasicKikimrServicesMask() {

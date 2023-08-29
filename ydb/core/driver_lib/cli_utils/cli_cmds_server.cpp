@@ -63,6 +63,7 @@ protected:
     bool FixedNodeID;
     bool IgnoreCmsConfigs;
     bool HierarchicalCfg;
+    bool TinyMode;
     TString NodeAddress;
     TString NodeHost;
     TString NodeResolveHost;
@@ -244,6 +245,9 @@ protected:
         config.Opts->AddLongOption("http-proxy-file", "Http proxy config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("public-http-file", "Public HTTP config file").OptionalArgument("PATH");
 
+        config.Opts->AddLongOption("tiny-mode", "Start in a tiny mode")
+        .NoArgument().SetFlag(&TinyMode);
+
         config.Opts->AddHelpOption('h');
 
         // add messagebus proxy options
@@ -394,6 +398,10 @@ protected:
             RunConfig.ServicesMask.EnableYQ();
         } else {
             ythrow yexception() << "wrong '--node-kind' value '" << NodeKind << "', only '" << NODE_KIND_YDB << "' or '" << NODE_KIND_YQ << "' is allowed";
+        }
+
+        if (TinyMode) {
+            RunConfig.ServicesMask.SetTinyMode();
         }
 
         RunConfig.Labels["node_id"] = ToString(NodeId);

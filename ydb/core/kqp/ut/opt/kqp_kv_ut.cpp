@@ -269,6 +269,14 @@ Y_UNIT_TEST_SUITE(KqpKv) {
                 [14u;4u;"abcde"]
             ])", res);
         }
+        {
+            NYdb::TValueBuilder keys;
+            keys.BeginList();
+            keys.EndList();
+
+            auto selectResult = db.ReadRows("/Root/TestTable", keys.Build()).GetValueSync();
+            UNIT_ASSERT_EQUAL(selectResult.GetStatus(), EStatus::BAD_REQUEST);
+        }
     }
 
     Y_UNIT_TEST(ReadRows_SpecificReturnValue) {

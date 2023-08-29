@@ -400,6 +400,10 @@ public:
         if (!CheckAccess(resolveNamesResult.Get(), errorMessage)) {
             return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, errorMessage);
         }
+        const auto& keys = GetProto()->Getkeys().Getvalue().Getitems();
+        if (keys.empty()) {
+            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, "no keys are found in request's proto");
+        }
 
         if (!BuildSchema(resolveNamesResult.Get(), errorMessage)) {
             return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, errorMessage);

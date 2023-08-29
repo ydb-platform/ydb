@@ -1839,7 +1839,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
-        {   
+        {
             auto result = db.ExecuteQuery(R"(
                 SELECT * FROM test;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
@@ -1891,15 +1891,15 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 KeyColumnNames: ["key"],
                 SplitBoundary { KeyPrefix { Tuple { Optional { Text: "100" } } } }
             )");
-            auto db = kikimr.GetTableClient();  
+            auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
             auto describeResult = session.DescribeTable(
                 "/Root/PgTwoShard",
                 TDescribeTableSettings().WithTableStatistics(true).WithKeyShardBoundary(true)
             ).GetValueSync();
-            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());   
+            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTableDescription().GetPartitionsCount(), 2);
-        }  
+        }
         {
             auto result = db.ExecuteQuery(R"(
                 INSERT INTO PgTwoShard (key, value) VALUES (10, 10), (110, 110);
@@ -1912,7 +1912,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
-        {   
+        {
             auto result = db.ExecuteQuery(R"(
                 SELECT * FROM PgTwoShard ORDER BY key;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
@@ -1922,7 +1922,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             )", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
-    
+
     Y_UNIT_TEST(DropTableIfExists) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
         {
@@ -1962,7 +1962,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 DROP TABLE IF EXISTS test;
             )").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }        
+        }
         {
             auto db = kikimr.GetQueryClient();
             auto settings = NYdb::NQuery::TExecuteQuerySettings()
@@ -2016,6 +2016,43 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([["1";"val1";"1";"val2"]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(EquiJoin) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        auto db = kikimr.GetQueryClient();
+        auto settings = NYdb::NQuery::TExecuteQuerySettings().Syntax(NYdb::NQuery::ESyntax::Pg);
+        {
+            auto client = kikimr.GetTableClient();
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            const auto query = Q_(R"_(
+                --!syntax_pg
+                    CREATE TABLE left_table(id int4, val text, primary key(id));
+
+                    CREATE TABLE right_table(id int4, val2 text, primary key(id));
+                )_");
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = db.ExecuteQuery(R"(
+                INSERT INTO left_table (id, val) VALUES (1, 'a'), (2, 'b'), (3, 'c');
+                INSERT INTO right_table (id, val2) VALUES (1, 'd'), (2, 'e'), (3, 'f');
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT left_table.*, right_table.val2 FROM left_table, right_table WHERE left_table.id=right_table.id
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            UNIT_ASSERT_C(!result.GetResultSets().empty(), "results are empty");
+            CompareYson(R"(
+                [["1";"a";"d"];["2";"b";"e"];["3";"c";"f"]]
+            )", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 }

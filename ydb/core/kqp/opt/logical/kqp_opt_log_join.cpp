@@ -17,19 +17,13 @@ using namespace NYql::NNodes;
 namespace {
 
 bool GetEquiJoinKeyTypes(TExprBase leftInput, const TString& leftColumnName, const TKikimrTableDescription& rightTable,
-    const TString& rightColumnName, const TDataExprType*& leftData, const TDataExprType*& rightData)
+    const TString& rightColumnName, const TTypeAnnotationNode*& leftData, const TTypeAnnotationNode*& rightData)
 {
     auto rightType = rightTable.GetColumnType(rightColumnName);
     YQL_ENSURE(rightType);
     if (rightType->GetKind() == ETypeAnnotationKind::Optional) {
         rightType = rightType->Cast<TOptionalExprType>()->GetItemType();
     }
-
-    if (rightType->GetKind() != ETypeAnnotationKind::Data) {
-        Y_ENSURE(rightType->GetKind() == ETypeAnnotationKind::Pg);
-        return false;
-    }
-    rightData = rightType->Cast<TDataExprType>();
 
     auto leftInputType = leftInput.Ref().GetTypeAnn();
     YQL_ENSURE(leftInputType);
@@ -45,10 +39,15 @@ bool GetEquiJoinKeyTypes(TExprBase leftInput, const TString& leftColumnName, con
         leftType = leftType->Cast<TOptionalExprType>()->GetItemType();
     }
 
-    if (leftType->GetKind() != ETypeAnnotationKind::Data) {
-        return false;
+    if (rightType->GetKind() != ETypeAnnotationKind::Data || leftType->GetKind() != ETypeAnnotationKind::Data) {
+        Y_ENSURE(rightType->GetKind() == ETypeAnnotationKind::Pg);
+        Y_ENSURE(leftType->GetKind() == ETypeAnnotationKind::Pg);
+        rightData = rightType->Cast<TPgExprType>();
+        leftData = leftType->Cast<TPgExprType>();
+        return true;
     }
 
+    rightData = rightType->Cast<TDataExprType>();
     leftData = leftType->Cast<TDataExprType>();
     return true;
 }
@@ -502,26 +501,40 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
                 .Name().Build(*leftColumn)
                 .Done().Ptr();
 
-            const TDataExprType* leftDataType;
-            const TDataExprType* rightDataType;
-            if (!GetEquiJoinKeyTypes(join.LeftInput(), *leftColumn, rightTableDesc, rightColumnName, leftDataType, rightDataType)) {
+            const TTypeAnnotationNode* leftType;
+            const TTypeAnnotationNode* rightType;
+            if (!GetEquiJoinKeyTypes(join.LeftInput(), *leftColumn, rightTableDesc, rightColumnName, leftType, rightType)) {
                 return {};
             }
 
-            if (leftDataType != rightDataType) {
-                bool canCast = IsDataTypeNumeric(leftDataType->GetSlot()) && IsDataTypeNumeric(rightDataType->GetSlot());
-                if (!canCast) {
-                    canCast = leftDataType->GetName() == "Utf8" && rightDataType->GetName() == "String";
-                }
-                if (canCast) {
-                    DBG("------ cast " << leftDataType->GetName() << " to " << rightDataType->GetName());
-                    member = Build<TCoConvert>(ctx, join.Pos())
-                        .Input(member)
-                        .Type().Build(rightDataType->GetName())
-                        .Done().Ptr();
-                } else {
-                    DBG("------ can not cast " << leftDataType->GetName() << " to " << rightDataType->GetName());
+            if (leftType->GetKind() == ETypeAnnotationKind::Pg) {
+                Y_ENSURE(rightType->GetKind() == ETypeAnnotationKind::Pg);
+                auto* leftPgType = static_cast<const TPgExprType*>(leftType);
+                auto* rightPgType = static_cast<const TPgExprType*>(rightType);
+                if (leftPgType != rightPgType) {
+                    // TODO: Emit PgCast
                     return {};
+                }
+            } else {
+                Y_ENSURE(leftType->GetKind() == ETypeAnnotationKind::Data);
+                Y_ENSURE(rightType->GetKind() == ETypeAnnotationKind::Data);
+                auto* leftDataType = static_cast<const TDataExprType*>(leftType);
+                auto* rightDataType = static_cast<const TDataExprType*>(rightType);
+                if (leftDataType != rightDataType) {
+                    bool canCast = IsDataTypeNumeric(leftDataType->GetSlot()) && IsDataTypeNumeric(rightDataType->GetSlot());
+                    if (!canCast) {
+                        canCast = leftDataType->GetName() == "Utf8" && rightDataType->GetName() == "String";
+                    }
+                    if (canCast) {
+                        DBG("------ cast " << leftDataType->GetName() << " to " << rightDataType->GetName());
+                        member = Build<TCoConvert>(ctx, join.Pos())
+                            .Input(member)
+                            .Type().Build(rightDataType->GetName())
+                            .Done().Ptr();
+                    } else {
+                        DBG("------ can not cast " << leftDataType->GetName() << " to " << rightDataType->GetName());
+                        return {};
+                    }
                 }
             }
         }

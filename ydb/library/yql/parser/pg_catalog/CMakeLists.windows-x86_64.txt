@@ -79,76 +79,76 @@ target_link_libraries(yql-parser-pg_catalog.global PUBLIC
   library-cpp-resource
 )
 target_sources(yql-parser-pg_catalog.global PRIVATE
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/99bdd9e510834dd355c2457fcccc53d5.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/f1a4bc0ed0162412cffb7ad89af053b9.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/1ecd65c896f36a3990d870644a6da9c8.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/46b25697572e7e60703079b71cd18295.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/15e039bc35a86f84476091e328dd74ea.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/cfe805d97f50bda16fa4bad21fa16589.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/ca7bb755fe32f897eb03cf6004d1ad2a.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/f2374a475345069a2bfd38b387dfa11a.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/462597d51509ecdc14b417ce082dc53b.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/eadca93c2963e941669f9c2a2aa57764.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/3d26e9517473285170cd0a3d23c7d2d0.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/4a6c1378a260ff6d488f8786dfd07167.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/f90d56932d7a7f6894e22bfd30e081cc.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/83fc7cd35e09e29e248d3759a2f756a6.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/aef100a0eb600c727753b7527c8156c1.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/69148841cb58a458173a42fc4a2d34a5.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/ec0b500b671e1ef6896201d71c27c3a9.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/35d2aa467812d7360a78c1fae061c821.cpp
 )
 resources(yql-parser-pg_catalog.global
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/99bdd9e510834dd355c2457fcccc53d5.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/eadca93c2963e941669f9c2a2aa57764.cpp
   INPUTS
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/include/catalog/pg_operator.dat
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_operator.dat
   KEYS
   pg_operator.dat
 )
 resources(yql-parser-pg_catalog.global
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/f1a4bc0ed0162412cffb7ad89af053b9.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/3d26e9517473285170cd0a3d23c7d2d0.cpp
   INPUTS
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/include/catalog/pg_proc.dat
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_proc.dat
   KEYS
   pg_proc.dat
 )
 resources(yql-parser-pg_catalog.global
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/1ecd65c896f36a3990d870644a6da9c8.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/4a6c1378a260ff6d488f8786dfd07167.cpp
   INPUTS
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/include/catalog/pg_type.dat
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_type.dat
   KEYS
   pg_type.dat
 )
 resources(yql-parser-pg_catalog.global
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/46b25697572e7e60703079b71cd18295.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/f90d56932d7a7f6894e22bfd30e081cc.cpp
   INPUTS
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/include/catalog/pg_cast.dat
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_cast.dat
   KEYS
   pg_cast.dat
 )
 resources(yql-parser-pg_catalog.global
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/15e039bc35a86f84476091e328dd74ea.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/83fc7cd35e09e29e248d3759a2f756a6.cpp
   INPUTS
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/include/catalog/pg_aggregate.dat
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_aggregate.dat
   KEYS
   pg_aggregate.dat
 )
 resources(yql-parser-pg_catalog.global
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/cfe805d97f50bda16fa4bad21fa16589.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/aef100a0eb600c727753b7527c8156c1.cpp
   INPUTS
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/include/catalog/pg_opfamily.dat
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_opfamily.dat
   KEYS
   pg_opfamily.dat
 )
 resources(yql-parser-pg_catalog.global
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/ca7bb755fe32f897eb03cf6004d1ad2a.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/69148841cb58a458173a42fc4a2d34a5.cpp
   INPUTS
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/include/catalog/pg_opclass.dat
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_opclass.dat
   KEYS
   pg_opclass.dat
 )
 resources(yql-parser-pg_catalog.global
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/f2374a475345069a2bfd38b387dfa11a.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/ec0b500b671e1ef6896201d71c27c3a9.cpp
   INPUTS
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/include/catalog/pg_amproc.dat
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_amproc.dat
   KEYS
   pg_amproc.dat
 )
 resources(yql-parser-pg_catalog.global
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/462597d51509ecdc14b417ce082dc53b.cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/pg_catalog/35d2aa467812d7360a78c1fae061c821.cpp
   INPUTS
-  ${CMAKE_SOURCE_DIR}/contrib/libs/postgresql/src/include/catalog/pg_amop.dat
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_amop.dat
   KEYS
   pg_amop.dat
 )

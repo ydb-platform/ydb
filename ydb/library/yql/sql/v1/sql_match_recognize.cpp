@@ -162,7 +162,7 @@ TNamedLambda TSqlMatchRecognizeClause::ParseOneMeasure(const TRule_row_pattern_m
     const auto& name = Id(node.GetRule_an_id3(), *this);
     //TODO https://st.yandex-team.ru/YQL-16186
     //Each measure must be a lambda, that accepts 2 args:
-    // - List<InputTableColumns + _yql_Classifier, _yql_MatchNumber, _yqlMatchRowNumber>
+    // - List<InputTableColumns + _yql_Classifier, _yql_MatchNumber>
     // - Struct that maps row pattern variables to ranges in the queue
     return {expr, name};
 }
@@ -254,7 +254,7 @@ TRowPatternTerm TSqlMatchRecognizeClause::ParsePatternTerm(const TRule_row_patte
                 Y_ENSURE("^" == std::get<0>(primary));
                 break;
             case TRule_row_pattern_primary::kAltRowPatternPrimary4: {
-                if (++PatternNestingLevel <= MaxMatchRecognizePatternNesting) {
+                if (++PatternNestingLevel <= NYql::NMatchRecognize::MaxPatternNesting) {
                     primary = ParsePattern(primaryVar.GetAlt_row_pattern_primary4().GetBlock2().GetRule_row_pattern1());
                 } else {
                     Ctx.Error(TokenPosition(primaryVar.GetAlt_row_pattern_primary4().GetToken1()))

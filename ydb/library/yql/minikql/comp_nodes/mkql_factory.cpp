@@ -63,6 +63,7 @@
 #include "mkql_map.h"
 #include "mkql_mapnext.h"
 #include "mkql_map_join.h"
+#include "mkql_match_recognize.h"
 #include "mkql_multimap.h"
 #include "mkql_next_value.h"
 #include "mkql_nop.h"
@@ -342,6 +343,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"RoundDown", &WrapRound},
         {"NextValue", &WrapNextValue},
         {"Nop", &WrapNop},
+        {"MatchRecognizeCore", &WrapMatchRecognizeCore},
     };
 };
 

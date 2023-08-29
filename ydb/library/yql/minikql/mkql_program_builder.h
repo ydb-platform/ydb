@@ -4,6 +4,7 @@
 #include "mkql_node.h"
 #include "mkql_node_builder.h"
 #include <ydb/library/yql/public/udf/udf_value.h>
+#include <ydb/library/yql/core/sql_types/match_recognize.h>
 
 #include <functional>
 
@@ -694,6 +695,13 @@ public:
     TRuntimeNode PgArray(const TArrayRef<const TRuntimeNode>& args, TType* returnType);
 
     TRuntimeNode ScalarApply(const TArrayRef<const TRuntimeNode>& args, const TArrayLambda& handler);
+
+    TRuntimeNode MatchRecognizeCore(
+        TRuntimeNode inputStream,
+        const TUnaryLambda& getPartitionKeySelectorNode,
+        const TArrayRef<TStringBuf>& partitionColumns,
+        const TArrayRef<std::pair<TStringBuf, TBinaryLambda>>& getMeasures
+    );
 
 protected:
     TRuntimeNode Invoke(const std::string_view& funcName, TType* resultType, const TArrayRef<const TRuntimeNode>& args);

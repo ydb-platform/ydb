@@ -42,6 +42,7 @@ target_link_libraries(library-yql-minikql PUBLIC
   yql-public-udf
   public-udf-tz
   library-yql-utils
+  yql-core-sql_types
   ydb-library-uuid
   public-lib-scheme_types
 )

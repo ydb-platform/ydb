@@ -73,6 +73,7 @@ SRCS(
     mkql_map.cpp
     mkql_mapnext.cpp
     mkql_map_join.cpp
+    mkql_match_recognize.cpp
     mkql_multihopping.cpp
     mkql_multimap.cpp
     mkql_next_value.cpp

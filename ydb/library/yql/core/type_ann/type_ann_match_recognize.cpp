@@ -63,7 +63,7 @@ const std::unordered_set<TString> GetPrimaryVars(const TExprNode::TPtr& pattern,
             if (factor->ChildRef(0)->IsAtom()) {
                 result.insert(TString(factor->ChildRef(0)->Content()));
             } else {
-                YQL_ENSURE(nestingLevel < MaxMatchRecognizePatternNesting, "To big nesting level in the pattern");
+                YQL_ENSURE(nestingLevel < NYql::NMatchRecognize::MaxPatternNesting, "To big nesting level in the pattern");
                 auto subExprVars = GetPrimaryVars(factor->ChildRef(0), ctx, ++nestingLevel);
                 result.insert(subExprVars.begin(), subExprVars.end());
             }
@@ -107,9 +107,15 @@ MatchRecognizeMeasuresWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& out
         return IGraphTransformer::TStatus::Error;
     }
 
-    auto lambdaInputRowColumns = inputRowType->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>()->GetItems();
-    lambdaInputRowColumns.push_back(ctx.Expr.MakeType<TItemExprType>("_yql_Classifier", ctx.Expr.MakeType<TDataExprType>(EDataSlot::Utf8)));
-    lambdaInputRowColumns.push_back(ctx.Expr.MakeType<TItemExprType>("_yql_MatchNumber", ctx.Expr.MakeType<TDataExprType>(EDataSlot::Int64)));
+    auto lambdaInputRowColumns = inputRowType->GetTypeAnn()
+            ->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>()->GetItems();
+    using NYql::NMatchRecognize::MeasureInputDataSpecialColumns;
+    lambdaInputRowColumns.push_back(ctx.Expr.MakeType<TItemExprType>(
+            MeasureInputDataSpecialColumnName(MeasureInputDataSpecialColumns::Classifier),
+            ctx.Expr.MakeType<TDataExprType>(EDataSlot::Utf8)));
+    lambdaInputRowColumns.push_back(ctx.Expr.MakeType<TItemExprType>(
+            MeasureInputDataSpecialColumnName(MeasureInputDataSpecialColumns::MatchNumber),
+            ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64)));
     auto lambdaInputRowType = ctx.Expr.MakeType<TStructExprType>(lambdaInputRowColumns);
     const auto& matchedRowsRanges = GetMatchedRowsRangesType(pattern, ctx);
     YQL_ENSURE(matchedRowsRanges);

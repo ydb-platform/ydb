@@ -6,13 +6,25 @@
 # original buildsystem will not be accepted.
 
 
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
 add_library(yql-core-sql_types)
 target_link_libraries(yql-core-sql_types PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  tools-enum_parser-enum_serialization_runtime
 )
 target_sources(yql-core-sql_types PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/sql_types/simple_types.cpp
+)
+generate_enum_serilization(yql-core-sql_types
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/sql_types/match_recognize.h
+  INCLUDE_HEADERS
+  ydb/library/yql/core/sql_types/match_recognize.h
 )

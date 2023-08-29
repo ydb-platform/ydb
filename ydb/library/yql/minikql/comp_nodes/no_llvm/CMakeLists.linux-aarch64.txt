@@ -103,6 +103,7 @@ target_sources(minikql-comp_nodes-no_llvm PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_map.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_mapnext.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_map_join.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_match_recognize.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_multihopping.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_multimap.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_next_value.cpp

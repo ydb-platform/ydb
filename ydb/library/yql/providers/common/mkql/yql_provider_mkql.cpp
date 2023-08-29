@@ -852,6 +852,47 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.Nth(tupleObj, index);
     });
 
+    AddCallable("MatchRecognizeCore", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto& inputStream = node.Child(0);
+        const auto& partitionKeySelector = node.Child(1);
+        const auto& partitionColumns = node.Child(2);
+        const auto& params = node.Child(3);
+
+        //explore params
+        const auto& measures = params->ChildRef(0);
+
+        //explore measures
+        const auto measureNames = measures->ChildRef(2);
+        constexpr size_t FirstMeasureLambdaIndex = 3;
+
+        TVector<TStringBuf> partitionColumnNames;
+        for (const auto& n: partitionColumns->Children()) {
+            partitionColumnNames.push_back(n->Content());
+        }
+
+        TProgramBuilder::TUnaryLambda getPartitionKeySelector = [partitionKeySelector, &ctx](TRuntimeNode inputRowArg){
+            return MkqlBuildLambda(*partitionKeySelector, ctx, {inputRowArg});
+        };
+
+        TVector<std::pair<TStringBuf, TProgramBuilder::TBinaryLambda>> getMeasures(measureNames->ChildrenSize());
+        for (size_t i = 0; i != measureNames->ChildrenSize(); ++i) {
+            getMeasures[i] = std::pair{
+                    measureNames->ChildRef(i)->Content(),
+                    [i, measures, &ctx](TRuntimeNode data, TRuntimeNode matchedVars) {
+                        return MkqlBuildLambda(*measures->ChildRef(FirstMeasureLambdaIndex + i), ctx,
+                                               {data, matchedVars});
+                    }
+            };
+        }
+
+        return ctx.ProgramBuilder.MatchRecognizeCore(
+                MkqlBuildExpr(*inputStream, ctx),
+                getPartitionKeySelector,
+                partitionColumnNames,
+                getMeasures
+                );
+    });
+
     AddCallable("Guess", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto variantObj = MkqlBuildExpr(node.Head(), ctx);
         auto type = node.Head().GetTypeAnn();

@@ -32,3 +32,6 @@ ydb-library-yql-providers-yt-comp_nodes-ut/YtWriterTests::FlattenSkiff+LLVM
 ydb-library-yql-providers-yt-comp_nodes-ut/YtWriterTests::SimpleSkiff+LLVM
 ydb-core-blobstorage-ut_blobstorage/VDiskAssimilation::Test
 ydb-services-ydb-sdk_credprovider_ut/SdkCredProvider::PingFromProviderSyncDiscovery
+ydb-library-yql-minikql-codegen-ut/*
+ydb-library-yql-minikql-computation-ut/ComputationPatternCache::Smoke
+ydb-tests-functional-kqp-kqp_indexes/ConsistentIndexRead::InteractiveTx

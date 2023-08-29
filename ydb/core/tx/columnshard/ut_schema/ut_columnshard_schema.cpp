@@ -809,8 +809,20 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
 
 class TEvictionChanges {
 public:
-    void AddTierAlters(const TTestSchema::TTableSpecials& spec, const std::vector<TDuration>&& borders,
-                        std::vector<TTestSchema::TTableSpecials>& alters) const {
+    static std::vector<TTestSchema::TTableSpecials> OneTierAlters(const TTestSchema::TTableSpecials& spec,
+                                                                const std::vector<ui64>& ts) {
+        TInstant now = TAppData::TimeProvider->Now();
+        TDuration allowBoth = TDuration::Seconds(now.Seconds() - ts[0] + 600);
+        TDuration allowOne = TDuration::Seconds(now.Seconds() - ts[1] + 600);
+        TDuration allowNone = TDuration::Seconds(now.Seconds() - ts[1] - 600);
+
+        std::vector<TTestSchema::TTableSpecials> alters = { TTestSchema::TTableSpecials() };
+        AddTierAlters(spec, {allowBoth, allowOne, allowNone}, alters);
+        return alters;
+    }
+
+    static void AddTierAlters(const TTestSchema::TTableSpecials& spec, const std::vector<TDuration>&& borders,
+                        std::vector<TTestSchema::TTableSpecials>& alters) {
         UNIT_ASSERT_EQUAL(borders.size(), 3);
         UNIT_ASSERT(spec.Tiers.size());
 
@@ -828,8 +840,8 @@ public:
         }
     }
 
-    void AddTtlAlters(const TTestSchema::TTableSpecials& spec, const std::vector<TDuration>&& borders,
-                      std::vector<TTestSchema::TTableSpecials>& alters) const {
+    static void AddTtlAlters(const TTestSchema::TTableSpecials& spec, const std::vector<TDuration>&& borders,
+                      std::vector<TTestSchema::TTableSpecials>& alters) {
         UNIT_ASSERT_EQUAL(borders.size(), 3);
         UNIT_ASSERT(spec.Tiers.size());
 
@@ -863,8 +875,8 @@ public:
     }
 
 private:
-    TTestSchema::TTableSpecials MakeAlter(const TTestSchema::TTableSpecials& spec,
-                                          const std::vector<TDuration>& tierBorders) const {
+    static TTestSchema::TTableSpecials MakeAlter(const TTestSchema::TTableSpecials& spec,
+                                          const std::vector<TDuration>& tierBorders) {
         UNIT_ASSERT_EQUAL(spec.Tiers.size(), tierBorders.size());
 
         TTestSchema::TTableSpecials alter(spec); // same TTL, Codec, etc.
@@ -944,30 +956,11 @@ std::vector<std::pair<ui32, ui64>> TestTiersAndTtl(const TTestSchema::TTableSpec
     return rowsBytes;
 }
 
-std::vector<std::pair<ui32, ui64>> TestOneTierExport(const TTestSchema::TTableSpecials& spec, bool reboots,
-                                                    std::optional<ui32> misconfig, std::optional<ui32> loss) {
-    const std::vector<ui64> ts = { 1600000000, 1620000000 };
-
+std::vector<std::pair<ui32, ui64>> TestOneTierExport(const TTestSchema::TTableSpecials& spec,
+                                                    const std::vector<TTestSchema::TTableSpecials>& alters,
+                                                    const std::vector<ui64>& ts, bool reboots, std::optional<ui32> loss) {
     ui32 overlapSize = 0;
     std::vector<TString> blobs = MakeData(ts, PORTION_ROWS, overlapSize, spec.TtlColumn);
-
-    TInstant now = TAppData::TimeProvider->Now();
-    TDuration allowBoth = TDuration::Seconds(now.Seconds() - ts[0] + 600);
-    TDuration allowOne = TDuration::Seconds(now.Seconds() - ts[1] + 600);
-    TDuration allowNone = TDuration::Seconds(now.Seconds() - ts[1] - 600);
-
-    std::vector<TTestSchema::TTableSpecials> alters = { TTestSchema::TTableSpecials() };
-
-    TEvictionChanges changes;
-    changes.AddTierAlters(spec, {allowBoth, allowOne, allowNone}, alters);
-    UNIT_ASSERT_VALUES_EQUAL(alters.size(), 4);
-
-    if (misconfig) {
-        // Add error in config => eviction + not finished export
-        UNIT_ASSERT_VALUES_EQUAL(alters[*misconfig].Tiers.size(), 1);
-        UNIT_ASSERT(alters[*misconfig].Tiers[0].S3);
-        alters[*misconfig].Tiers[0].S3->SetEndpoint("nowhere"); // clear special "fake" endpoint
-    }
 
     auto rowsBytes = TestTiers(reboots, blobs, alters, {1}, {2, 3}, loss);
     for (auto&& i : rowsBytes) {
@@ -975,9 +968,6 @@ std::vector<std::pair<ui32, ui64>> TestOneTierExport(const TTestSchema::TTableSp
     }
 
     UNIT_ASSERT_EQUAL(rowsBytes.size(), alters.size());
-    if (!misconfig) {
-        changes.Assert(spec, rowsBytes, 1);
-    }
     return rowsBytes;
 }
 
@@ -1033,7 +1023,13 @@ void TestHotAndColdTiers(bool reboot, const EInitialEviction initial) {
     TestTiersAndTtl(spec, reboot, initial);
 }
 
-void TestExport(bool reboot, std::optional<ui32> misconfig = {}, std::optional<ui32> loss = {}) {
+struct TExportTestOpts {
+    std::optional<ui32> Misconfig;
+    std::optional<ui32> Loss;
+    std::optional<ui32> NoTier;
+};
+
+void TestExport(bool reboot, TExportTestOpts&& opts = TExportTestOpts{}) {
     TPortManager portManager;
     const ui16 port = portManager.GetPort();
 
@@ -1045,7 +1041,30 @@ void TestExport(bool reboot, std::optional<ui32> misconfig = {}, std::optional<u
     spec.Tiers.emplace_back(TTestSchema::TStorageTier("cold").SetTtlColumn("timestamp"));
     spec.Tiers.back().S3 = TTestSchema::TStorageTier::FakeS3();
 
-    TestOneTierExport(spec, reboot, misconfig, loss);
+    const std::vector<ui64> ts = { 1600000000, 1620000000 };
+    TEvictionChanges changes;
+    std::vector<TTestSchema::TTableSpecials> alters = changes.OneTierAlters(spec, ts);
+    UNIT_ASSERT_VALUES_EQUAL(alters.size(), 4);
+
+    if (opts.Misconfig) {
+        ui32 alterNo = *opts.Misconfig;
+        // Add error in config => eviction + not finished export
+        UNIT_ASSERT_VALUES_EQUAL(alters[alterNo].Tiers.size(), 1);
+        UNIT_ASSERT(alters[alterNo].Tiers[0].S3);
+        alters[alterNo].Tiers[0].S3->SetEndpoint("nowhere"); // clear special "fake" endpoint
+    }
+    if (opts.NoTier) {
+        ui32 alterNo = *opts.NoTier;
+        // Add error in config => eviction + not finished export
+        UNIT_ASSERT_VALUES_EQUAL(alters[alterNo].Tiers.size(), 1);
+        UNIT_ASSERT(alters[alterNo].Tiers[0].S3);
+        alters[alterNo].Tiers[0].S3 = {};
+    }
+
+    auto rowsBytes = TestOneTierExport(spec, alters, ts, reboot, opts.Loss);
+    if (!opts.Misconfig) {
+        changes.Assert(spec, rowsBytes, 1);
+    }
 }
 
 void TestDrop(bool reboots) {
@@ -1468,41 +1487,42 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
     }
 
     Y_UNIT_TEST(ExportAfterFail) {
-        TestExport(false, 1);
+        TestExport(false, TExportTestOpts{.Misconfig = 1});
     }
 
     Y_UNIT_TEST(RebootExportAfterFail) {
-        TestExport(true, 1);
+        TestExport(true, TExportTestOpts{.Misconfig = 1});
     }
 
     Y_UNIT_TEST(ForgetAfterFail) {
-        TestExport(false, 2);
+        TestExport(false, TExportTestOpts{.Misconfig = 2});
     }
 
     Y_UNIT_TEST(RebootForgetAfterFail) {
-        TestExport(true, 2);
+        TestExport(true, TExportTestOpts{.Misconfig = 2});
     }
 
     Y_UNIT_TEST(ExportWithLostAnswer) {
-        TestExport(false, {}, 1);
+        TestExport(false, TExportTestOpts{.Loss = 1});
     }
 
     Y_UNIT_TEST(RebootExportWithLostAnswer) {
-        TestExport(true, {}, 1);
+        TestExport(true, TExportTestOpts{.Loss = 1});
     }
 
     Y_UNIT_TEST(ForgetWithLostAnswer) {
-        TestExport(false, {}, 2);
+        TestExport(false, TExportTestOpts{.Loss = 2});
     }
 
     Y_UNIT_TEST(RebootForgetWithLostAnswer) {
-        TestExport(true, {}, 2);
+        TestExport(true, TExportTestOpts{.Loss = 2});
     }
-
+#if 0
+    Y_UNIT_TEST(RebootReadNoTier) {
+        TestExport(true, TExportTestOpts{.NoTier = 3});
+    }
+#endif
     // TODO: LastTierBorderIsTtl = false
-
-    // TODO: DisableTierAfterExport
-    // TODO: ReenableTierAfterExport
     // TODO: AlterTierBorderAfterExport
 
     Y_UNIT_TEST(ColdCompactionSmoke) {

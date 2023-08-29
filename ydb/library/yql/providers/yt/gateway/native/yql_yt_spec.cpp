@@ -191,8 +191,10 @@ void FillSpec(NYT::TNode& spec,
         spec["annotations"] = *val;
     }
 
-    if (auto val = settings->MaxJobCount.Get(cluster)) {
-        spec["max_job_count"] = static_cast<i64>(*val);
+    if (!opProps.HasFlags(EYtOpProp::IntermediateData)) {
+        if (auto val = settings->MaxJobCount.Get(cluster)) {
+            spec["max_job_count"] = static_cast<i64>(*val);
+        }
     }
 
     if (auto val = settings->UserSlots.Get(cluster)) {
@@ -457,9 +459,10 @@ void FillSpec(NYT::TNode& spec,
             spec["reducer"]["network_project"] = *val;
         }
     }
-
-    if (auto val = settings->_ForceJobSizeAdjuster.Get(cluster)) {
-        spec["force_job_size_adjuster"] = *val;
+    if (!opProps.HasFlags(EYtOpProp::IntermediateData)) {
+        if (auto val = settings->_ForceJobSizeAdjuster.Get(cluster)) {
+            spec["force_job_size_adjuster"] = *val;
+        }
     }
 }
 

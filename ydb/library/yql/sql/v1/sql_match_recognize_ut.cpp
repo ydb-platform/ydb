@@ -290,9 +290,34 @@ FROM Input MATCH_RECOGNIZE(
             UNIT_ASSERT(not r.IsOk());
         }
     }
-    Y_UNIT_TEST(row_pattern_initial_or_seek) {
-        //TODO https://st.yandex-team.ru/YQL-16186
+    Y_UNIT_TEST(row_pattern_initial) {
+        const auto stmt = R"(
+USE plato;
+SELECT *
+FROM Input MATCH_RECOGNIZE(
+    INITIAL
+    PATTERN (A+  B* C?)
+    DEFINE A as A
+    )
+)";
+        auto r = MatchRecognizeSqlToYql(stmt);
+        UNIT_ASSERT(not r.IsOk());
     }
+
+    Y_UNIT_TEST(row_pattern_seek) {
+        const auto stmt = R"(
+USE plato;
+SELECT *
+FROM Input MATCH_RECOGNIZE(
+    SEEK
+    PATTERN (A+  B* C?)
+    DEFINE A as A
+    )
+)";
+        auto r = MatchRecognizeSqlToYql(stmt);
+        UNIT_ASSERT(not r.IsOk());
+    }
+
     Y_UNIT_TEST(PatternSimple) {
         const auto stmt = R"(
 USE plato;

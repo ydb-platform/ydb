@@ -72,7 +72,6 @@
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
 #include <ydb/core/util/pb.h>
 
-#include <kikimr/yndx/cm_client/client.h>
 #include <yt/cpp/mapreduce/interface/init.h>
 
 #include <library/cpp/yson/public.h>

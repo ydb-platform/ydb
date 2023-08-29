@@ -524,12 +524,14 @@ TDqPhyStage RebuildStageInputsAsWide(const TDqPhyStage& stage, bool useChannelBl
 TDqPhyStage RebuildStageOutputAsWide(const TDqPhyStage& stage, const TStructExprType& outputItemType, bool useChannelBlocks,
     TExprContext& ctx, TTypeAnnotationContext& typesCtx)
 {
+    TCoLambda program(ctx.DeepCopyLambda(stage.Program().Ref()));
+
     // convert stream to wide stream
-    auto resultStream = ctx.Builder(stage.Program().Body().Pos())
+    auto resultStream = ctx.Builder(program.Body().Pos())
         .Callable("FromFlow")
             .Callable(0, "ExpandMap")
                 .Callable(0, "ToFlow")
-                    .Add(0, stage.Program().Body().Ptr())
+                    .Add(0, program.Body().Ptr())
                 .Seal()
                 .Lambda(1)
                     .Param("item")
@@ -564,7 +566,7 @@ TDqPhyStage RebuildStageOutputAsWide(const TDqPhyStage& stage, const TStructExpr
     return Build<TDqPhyStage>(ctx, stage.Pos())
         .InitFrom(stage)
         .Program()
-            .Args(stage.Program().Args())
+            .Args(program.Args())
             .Body(resultStream)
         .Build()
         .Settings(TDqStageSettings::New(stage).SetWideChannels(outputItemType).BuildNode(ctx, stage.Pos()))

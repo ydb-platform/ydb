@@ -6,8 +6,18 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(astdiff)
-add_subdirectory(dqrun)
-add_subdirectory(mrjob)
-add_subdirectory(sql2yql)
-add_subdirectory(yqlrun)
+add_subdirectory(actors)
+add_subdirectory(api)
+add_subdirectory(common)
+add_subdirectory(config)
+add_subdirectory(counters)
+add_subdirectory(expr_nodes)
+add_subdirectory(interface)
+add_subdirectory(mkql)
+add_subdirectory(opt)
+add_subdirectory(planner)
+add_subdirectory(provider)
+add_subdirectory(runtime)
+add_subdirectory(task_runner)
+add_subdirectory(task_runner_actor)
+add_subdirectory(worker_manager)

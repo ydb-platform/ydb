@@ -6,8 +6,9 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(astdiff)
-add_subdirectory(dqrun)
-add_subdirectory(mrjob)
-add_subdirectory(sql2yql)
-add_subdirectory(yqlrun)
+
+add_library(yql-tools-dqrun INTERFACE)
+target_link_libraries(yql-tools-dqrun INTERFACE
+  contrib-libs-cxxsupp
+  yutil
+)

@@ -6,8 +6,14 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(astdiff)
-add_subdirectory(dqrun)
-add_subdirectory(mrjob)
-add_subdirectory(sql2yql)
-add_subdirectory(yqlrun)
+add_subdirectory(codec)
+add_subdirectory(common)
+add_subdirectory(comp_nodes)
+add_subdirectory(dq_task_preprocessor)
+add_subdirectory(expr_nodes)
+add_subdirectory(gateway)
+add_subdirectory(job)
+add_subdirectory(lib)
+add_subdirectory(mkql_dq)
+add_subdirectory(opt)
+add_subdirectory(provider)

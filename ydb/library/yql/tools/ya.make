@@ -1,6 +1,7 @@
 RECURSE(
     astdiff
+    dqrun
     mrjob
-    yqlrun
     sql2yql
+    yqlrun
 )

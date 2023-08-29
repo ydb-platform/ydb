@@ -395,9 +395,16 @@ TExprBase KqpRewriteLookupTable(const TExprBase& node, TExprContext& ctx, const 
             auto it = keyColumnsStruct.find(name);
             YQL_ENSURE(it != keyColumnsStruct.end());
             keyValues.push_back(it->second);
+        }
 
-            if (skipNullMembers) {
-                settings.AddSkipNullKey(name);
+        if (skipNullMembers) {
+            auto skipNullColumns = skipNullMembers.Cast().Members();
+
+            if (skipNullColumns) {
+                for (const auto &column : skipNullColumns.Cast()) {
+                    settings.AddSkipNullKey(TString(column.Value()));
+                }
+
             }
         }
 

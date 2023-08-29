@@ -4,6 +4,13 @@ SRCS(
     yt_codec_cg_ut.cpp
 )
 
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
+    SIZE(MEDIUM)
+ELSE()
+    SIZE(SMALL)
+ENDIF()
+
+
 PEERDIR(
     ydb/library/yql/minikql/computation/llvm
     ydb/library/yql/public/udf/service/exception_policy

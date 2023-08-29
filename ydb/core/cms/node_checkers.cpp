@@ -1,8 +1,6 @@
 #include "node_checkers.h"
 
-#include <ydb/core/protos/cms.pb.h>
-
-#include <util/string/cast.h>
+#include <library/cpp/actors/core/log.h>
 
 namespace NKikimr::NCms {
 
@@ -81,29 +79,31 @@ void TNodesCounterBase::UnlockNode(ui32 nodeId) {
     }
 }
 
-bool TNodesLimitsCounterBase::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode) const {
+bool TNodesLimitsCounterBase::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, TString& reason) const {
     Y_VERIFY(NodeToState.contains(nodeId));
     auto nodeState = NodeToState.at(nodeId);
 
     bool isForceRestart = mode == NKikimrCms::MODE_FORCE_RESTART;
 
     NCH_LOG_D("Checking Node: "
-            << nodeId << ", with state: " << ToString(nodeState) 
+            << nodeId << ", with state: " << nodeState 
             << ", with limit: " << DisabledNodesLimit
             << ", with ratio limit: " << DisabledNodesRatioLimit
             << ", locked nodes: " << LockedNodesCount
             << ", down nodes: " << DownNodesCount);
 
-    // Allow to maintain down/unavailable node
-    if (nodeState == NODE_STATE_DOWN) {
-        return true;
-    }
-
-    if (nodeState == NODE_STATE_RESTART ||
-        nodeState == NODE_STATE_LOCKED ||
-        nodeState == NODE_STATE_UNSPECIFIED) {
-
-        return false;
+    switch (nodeState) {
+        case NODE_STATE_UP:
+            break;
+        case NODE_STATE_UNSPECIFIED:
+        case NODE_STATE_LOCKED:
+        case NODE_STATE_RESTART:
+            reason = TStringBuilder() << ReasonPrefix(nodeId)
+                << ": node state: '" << nodeState << "'";
+            return false;
+        case NODE_STATE_DOWN:
+            // Allow to maintain down/unavailable node
+            return true;
     }
 
     // Always allow at least one node
@@ -115,56 +115,85 @@ bool TNodesLimitsCounterBase::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabili
         return true;
     }
 
-    if (DisabledNodesLimit > 0 &&
-        (LockedNodesCount + DownNodesCount + 1 > DisabledNodesLimit)) {
+    const auto disabledNodes = LockedNodesCount + DownNodesCount + 1;
+
+    if (DisabledNodesLimit > 0 && disabledNodes > DisabledNodesLimit) {
+        reason = TStringBuilder() << ReasonPrefix(nodeId)
+            << ": too many unavailable nodes."
+            << " Locked: " << LockedNodesCount
+            << ", down: " << DownNodesCount
+            << ", limit: " << DisabledNodesLimit;
         return false;
     }
 
-    if (DisabledNodesRatioLimit > 0 &&
-        ((LockedNodesCount + DownNodesCount + 1) * 100 >
-         (NodeToState.size() * DisabledNodesRatioLimit))) {
+    if (DisabledNodesRatioLimit > 0 && (disabledNodes * 100 > NodeToState.size() * DisabledNodesRatioLimit)) {
+        reason = TStringBuilder() << ReasonPrefix(nodeId)
+            << ": too many unavailable nodes."
+            << " Locked: " << LockedNodesCount
+            << ", down: " << DownNodesCount
+            << ", total: " << NodeToState.size()
+            << ", limit: " << DisabledNodesRatioLimit << "%";
         return false;
     }
 
     return true;
 }
 
-bool TSysTabletsNodesCounter::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode) const  {
+bool TSysTabletsNodesCounter::TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, TString& reason) const {
     Y_VERIFY(NodeToState.contains(nodeId));
     auto nodeState = NodeToState.at(nodeId);
 
     NCH_LOG_D("Checking limits for sys tablet: " << NKikimrConfig::TBootstrap_ETabletType_Name(TabletType)
             << ", on node: " << nodeId
-            << ", with state: " << ToString(nodeState) 
+            << ", with state: " << nodeState 
             << ", locked nodes: " << LockedNodesCount
             << ", down nodes: " << DownNodesCount);
 
-    if (nodeState == NODE_STATE_RESTART ||
-        nodeState == NODE_STATE_LOCKED ||
-        nodeState == NODE_STATE_UNSPECIFIED) {
-
-        return false;
+    switch (nodeState) {
+        case NODE_STATE_UNSPECIFIED:
+        case NODE_STATE_LOCKED:
+        case NODE_STATE_RESTART:
+            reason = TStringBuilder() << "Cannot lock node '" << nodeId << "'"
+                << ": node state: '" << nodeState << "'";
+            return false;
+        default:
+            break;
     }
 
-    ui32 tabletNodes = NodeToState.size();
+    const auto tabletNodes = NodeToState.size();
+    if (tabletNodes < 1) {
+        return true;
+    }
+
+    const auto disabledNodes = LockedNodesCount + DownNodesCount + 1;
+    ui32 limit = 0;
+
     switch (mode) {
+        case NKikimrCms::MODE_FORCE_RESTART:
+            return true;
         case NKikimrCms::MODE_MAX_AVAILABILITY:
-            if (tabletNodes > 1 && (DownNodesCount + LockedNodesCount + 1) * 2 > tabletNodes){
-                return false;
+            limit = NodeToState.size() / 2;
+            if (disabledNodes * 2 <= tabletNodes) {
+                return true;
             }
             break;
         case NKikimrCms::MODE_KEEP_AVAILABLE:
-            if (tabletNodes > 1 && (DownNodesCount + LockedNodesCount + 1) > tabletNodes - 1) {
-                return false;
+            limit = NodeToState.size() - 1;
+            if (disabledNodes < tabletNodes) {
+                return true;
             }
-            break;
-        case NKikimrCms::MODE_FORCE_RESTART:
             break;
         default:
             Y_FAIL("Unknown availability mode");
     }
 
-    return true;
+    reason = TStringBuilder() << "Cannot lock node '" << nodeId << "'"
+        << ": tablet '" << NKikimrConfig::TBootstrap_ETabletType_Name(TabletType) << "'"
+        << " has too many unavailable nodes."
+        << " Locked: " << LockedNodesCount
+        << ", down: " << DownNodesCount
+        << ", limit: " << limit;
+    return false;
 }
 
 } // namespace NKikimr::NCms

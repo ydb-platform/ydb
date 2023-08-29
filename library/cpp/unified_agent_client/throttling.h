@@ -5,6 +5,8 @@
 #include <util/datetime/base.h>
 
 namespace NUnifiedAgent {
+    // Comment from a non-author:
+    // It is based on something similar to https://en.wikipedia.org/wiki/Token_bucket
     class TThrottler {
     public:
         explicit TThrottler(double rate, TDuration updatePeriod = TDuration::MilliSeconds(100));

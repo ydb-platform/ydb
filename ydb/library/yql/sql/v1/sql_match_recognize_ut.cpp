@@ -127,7 +127,49 @@ FROM Input MATCH_RECOGNIZE(
         //TODO https://st.yandex-team.ru/YQL-16186
     }
     Y_UNIT_TEST(RowsPerMatch) {
-        //TODO https://st.yandex-team.ru/YQL-16186
+        {
+            const auto stmt = R"(
+USE plato;
+SELECT *
+FROM Input MATCH_RECOGNIZE(
+    ONE ROW PER MATCH
+    PATTERN (A)
+    DEFINE A as A
+)
+)";
+            auto r = MatchRecognizeSqlToYql(stmt);
+            UNIT_ASSERT(r.IsOk());
+            auto rowsPerMatch = FindMatchRecognizeParam(r.Root, "rowsPerMatch");
+            UNIT_ASSERT_VALUES_EQUAL("RowsPerMatch_OneRow", rowsPerMatch->GetChild(1)->GetContent());
+        }
+        {
+            const auto stmt = R"(
+USE plato;
+SELECT *
+FROM Input MATCH_RECOGNIZE(
+    ALL ROWS PER MATCH
+    PATTERN (A)
+    DEFINE A as A
+)
+)";
+            auto r = MatchRecognizeSqlToYql(stmt);
+            UNIT_ASSERT(not r.IsOk()); ///https://st.yandex-team.ru/YQL-16213
+        }
+        { //default
+            const auto stmt = R"(
+USE plato;
+SELECT *
+FROM Input MATCH_RECOGNIZE(
+    PATTERN (A)
+    DEFINE A as A
+)
+)";
+            auto r = MatchRecognizeSqlToYql(stmt);
+            UNIT_ASSERT(r.IsOk());
+            auto rowsPerMatch = FindMatchRecognizeParam(r.Root, "rowsPerMatch");
+            UNIT_ASSERT_VALUES_EQUAL("RowsPerMatch_OneRow", rowsPerMatch->GetChild(1)->GetContent());
+        }
+
     }
     Y_UNIT_TEST(SkipAfterMatch) {
         {

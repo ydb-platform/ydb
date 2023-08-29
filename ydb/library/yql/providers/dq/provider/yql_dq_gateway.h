@@ -76,6 +76,8 @@ public:
     virtual TString GetVanillaJobMd5() {
         return "";
     }
+
+    virtual void Stop() { }
 };
 
 TIntrusivePtr<IDqGateway> CreateDqGateway(const TString& host, int port);

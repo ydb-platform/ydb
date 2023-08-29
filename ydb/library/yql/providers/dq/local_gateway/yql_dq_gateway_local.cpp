@@ -149,6 +149,10 @@ public:
         return result;
     }
 
+    void Stop() {
+        Gateway->Stop();
+    }
+
 private:
     void TryExecuteNext() {
         TGuard<TMutex> lock(Mutex);
@@ -193,6 +197,10 @@ public:
         : Impl(std::make_shared<TDqGatewayLocalImpl>(std::move(localService), gateway))
     {}
 
+    ~TDqGatewayLocal() {
+        Impl->Stop();
+    }
+
     NThreading::TFuture<void> OpenSession(const TString& sessionId, const TString& username) override {
         return Impl->OpenSession(sessionId, username);
     }
@@ -210,6 +218,10 @@ public:
     {
         return Impl->ExecutePlan(sessionId, std::move(plan), columns, secureParams, graphParams,
             settings, progressWriter, modulesMapping, discard);
+    }
+
+    void Stop() override {
+        Impl->Stop();
     }
 
 private:

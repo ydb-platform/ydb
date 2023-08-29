@@ -62,6 +62,10 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_types/credentials/login
 )
 
+CFLAGS(
+    -DREPLXX_STATIC
+)
+
 RESOURCE(
     click_bench_queries.sql click_bench_queries.sql
     click_bench_schema.sql click_bench_schema.sql

@@ -201,23 +201,52 @@ MatchRecognizeDefinesWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& outp
 }
 
 IGraphTransformer::TStatus
-MatchRecognizeCoreWrapper(const TExprNode::TPtr &input, TExprNode::TPtr &output, TContext &ctx) {
+MatchRecognizeCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     Y_UNUSED(output);
     if (!EnsureArgsCount(*input, 4, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
     const auto& source = input->ChildRef(0);
-    const auto& partitionKeySelector = input->ChildRef(1);
+    auto& partitionKeySelector = input->ChildRef(1);
     const auto& partitionColumns = input->ChildRef(2);
     const auto& params = input->ChildRef(3);
+    if (not params->IsCallable("MatchRecognizeParams")) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(params->Pos()), "Expected MatchRecognizeParams"));
+        return IGraphTransformer::TStatus::Error;
+    }
 
-    YQL_ENSURE(source->GetTypeAnn()->Cast<TFlowExprType>() != NULL, "Internal logic error. Flow expected");
+    if (!EnsureFlowType(*source, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    const auto& inputRowType = GetSeqItemType(source->GetTypeAnn());
     const auto& define = params->ChildRef(4);
-    YQL_ENSURE(GetSeqItemType(source->GetTypeAnn())->Equals(*define->ChildRef(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()),
-                            "Internal logic error. Expected the same input type as for DEFINE");
+    if (not inputRowType->Equals(*define->ChildRef(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType())) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Expected the same input row type as for DEFINE"));
+        return IGraphTransformer::TStatus::Error;
+    }
 
-    const auto& partitionKeySelectorType = partitionKeySelector->GetTypeAnn();
+    auto status = ConvertToLambda(partitionKeySelector, ctx.Expr, 1, 1);
+    if (status.Level != IGraphTransformer::TStatus::Ok) {
+        return status;
+    }
+    if (!UpdateLambdaAllArgumentsTypes(partitionKeySelector, { inputRowType }, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    auto partitionKeySelectorType = partitionKeySelector->GetTypeAnn();
+    if (!partitionKeySelectorType) {
+        return IGraphTransformer::TStatus::Repeat;
+    }
+    if (not EnsureTupleType(partitionKeySelector->Pos(), *partitionKeySelectorType, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
     const auto& partitionKeySelectorItemTypes = partitionKeySelectorType->Cast<TTupleExprType>()->GetItems();
+    if (not EnsureTupleOfAtoms(*partitionColumns, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    if (partitionColumns->ChildrenSize() != partitionKeySelectorItemTypes.size()) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Partition columns does not match the size of partition lambda"));
+        return IGraphTransformer::TStatus::Error;
+    }
 
     auto outputTableColumns = params->GetTypeAnn()->Cast<TStructExprType>()->GetItems();
     for (size_t i = 0; i != partitionColumns->ChildrenSize(); ++i) {
@@ -228,6 +257,7 @@ MatchRecognizeCoreWrapper(const TExprNode::TPtr &input, TExprNode::TPtr &output,
     }
     const auto outputTableRowType = ctx.Expr.MakeType<TStructExprType>(outputTableColumns);
     input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(outputTableRowType));
+
     return IGraphTransformer::TStatus::Ok;
 }
 

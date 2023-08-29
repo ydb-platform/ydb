@@ -651,6 +651,8 @@ TSelectRowsCommand::TSelectRowsCommand()
         .Optional();
     RegisterParameter("placeholder_values", PlaceholderValues)
         .Optional();
+    RegisterParameter("use_canonical_null_relations", Options.UseCanonicalNullRelations)
+        .Optional();
 }
 
 bool TSelectRowsCommand::HasResponseParameters() const

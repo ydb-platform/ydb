@@ -151,6 +151,8 @@ struct TSelectRowsOptionsBase
     // COMPAT(lukyan)
     //! Use fixed and rewritten range inference.
     bool NewRangeInference = false;
+    //! Enables canonical sql behaviour for relational operators, i.e. null </=/> value -> null.
+    bool UseCanonicalNullRelations = false;
 };
 
 struct TSelectRowsOptions

@@ -587,6 +587,7 @@ message TReqSelectRows
     optional EReplicaConsistency replica_consistency = 17;
     optional bytes placeholder_values = 18; // YSON
     optional bool new_range_inference = 19;
+    optional bool use_canonical_null_relations = 20;
 
     optional TSuppressableAccessTrackingOptions suppressable_access_tracking_options = 104;
 }

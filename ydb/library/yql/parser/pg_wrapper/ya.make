@@ -90,7 +90,8 @@ IF (OS_LINUX OR OS_DARWIN)
     )
 ELSEIF (OS_WINDOWS)
     ADDINCL(
-        contrib/libs/postgresql/src/include/port
+        contrib/libs/postgresql/src/include
+        contrib/libs/postgresql/src/include/port/win32
         contrib/libs/postgresql/src/include/port/win32
         contrib/libs/postgresql/src/include/port/win32_msvc
     )
@@ -114,10 +115,9 @@ ELSEIF (OS_WINDOWS)
         ../../../../../contrib/libs/postgresql/src/port/pwrite.c
         ../../../../../contrib/libs/postgresql/src/port/pwritev.c
         ../../../../../contrib/libs/postgresql/src/port/system.c
-        ../../../../../contrib/libs/postgresql/src/port/win32common.c
         ../../../../../contrib/libs/postgresql/src/port/win32env.c
         ../../../../../contrib/libs/postgresql/src/port/win32error.c
-        ../../../../../contrib/libs/postgresql/src/port/win32fseek.c
+        ../../../../../contrib/libs/postgresql/src/port/win32ntdll.c
         ../../../../../contrib/libs/postgresql/src/port/win32security.c
         ../../../../../contrib/libs/postgresql/src/port/win32setlocale.c
         ../../../../../contrib/libs/postgresql/src/port/win32stat.c

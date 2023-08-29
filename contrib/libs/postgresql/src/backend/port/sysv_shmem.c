@@ -9,7 +9,7 @@
  * exist, though, because mmap'd shmem provides no way to find out how
  * many processes are attached, which we need for interlocking purposes.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2022, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -289,7 +289,7 @@ static void
 IpcMemoryDetach(int status, Datum shmaddr)
 {
 	/* Detach System V shared memory block. */
-	if (shmdt(DatumGetPointer(shmaddr)) < 0)
+	if (shmdt((void *) DatumGetPointer(shmaddr)) < 0)
 		elog(LOG, "shmdt(%p) failed: %m", DatumGetPointer(shmaddr));
 }
 
@@ -323,7 +323,7 @@ PGSharedMemoryIsInUse(unsigned long id1, unsigned long id2)
 	IpcMemoryState state;
 
 	state = PGSharedMemoryAttach((IpcMemoryId) id2, NULL, &memAddress);
-	if (memAddress && shmdt(memAddress) < 0)
+	if (memAddress && shmdt((void *) memAddress) < 0)
 		elog(LOG, "shmdt(%p) failed: %m", memAddress);
 	switch (state)
 	{
@@ -456,8 +456,6 @@ PGSharedMemoryAttach(IpcMemoryId shmId,
 	return shmStat.shm_nattch == 0 ? SHMSTATE_UNATTACHED : SHMSTATE_ATTACHED;
 }
 
-#ifdef MAP_HUGETLB
-
 /*
  * Identify the huge page size to use, and compute the related mmap flags.
  *
@@ -475,13 +473,19 @@ PGSharedMemoryAttach(IpcMemoryId shmId,
  * hugepage sizes, we might want to think about more invasive strategies,
  * such as increasing shared_buffers to absorb the extra space.
  *
- * Returns the (real, assumed or config provided) page size into *hugepagesize,
- * and the hugepage-related mmap flags to use into *mmap_flags.
+ * Returns the (real, assumed or config provided) page size into
+ * *hugepagesize, and the hugepage-related mmap flags to use into
+ * *mmap_flags if requested by the caller.  If huge pages are not supported,
+ * *hugepagesize and *mmap_flags are set to 0.
  */
-static void
+void
 GetHugePageSize(Size *hugepagesize, int *mmap_flags)
 {
+#ifdef MAP_HUGETLB
+
 	Size		default_hugepagesize = 0;
+	Size		hugepagesize_local = 0;
+	int			mmap_flags_local = 0;
 
 	/*
 	 * System-dependent code to find out the default huge page size.
@@ -519,12 +523,12 @@ GetHugePageSize(Size *hugepagesize, int *mmap_flags)
 	if (huge_page_size != 0)
 	{
 		/* If huge page size is requested explicitly, use that. */
-		*hugepagesize = (Size) huge_page_size * 1024;
+		hugepagesize_local = (Size) huge_page_size * 1024;
 	}
 	else if (default_hugepagesize != 0)
 	{
 		/* Otherwise use the system default, if we have it. */
-		*hugepagesize = default_hugepagesize;
+		hugepagesize_local = default_hugepagesize;
 	}
 	else
 	{
@@ -536,26 +540,39 @@ GetHugePageSize(Size *hugepagesize, int *mmap_flags)
 		 * writing, there are no reports of any non-Linux systems being picky
 		 * about that.
 		 */
-		*hugepagesize = 2 * 1024 * 1024;
+		hugepagesize_local = 2 * 1024 * 1024;
 	}
 
-	*mmap_flags = MAP_HUGETLB;
+	mmap_flags_local = MAP_HUGETLB;
 
 	/*
 	 * On recent enough Linux, also include the explicit page size, if
 	 * necessary.
 	 */
 #if defined(MAP_HUGE_MASK) && defined(MAP_HUGE_SHIFT)
-	if (*hugepagesize != default_hugepagesize)
+	if (hugepagesize_local != default_hugepagesize)
 	{
-		int			shift = pg_ceil_log2_64(*hugepagesize);
+		int			shift = pg_ceil_log2_64(hugepagesize_local);
 
-		*mmap_flags |= (shift & MAP_HUGE_MASK) << MAP_HUGE_SHIFT;
+		mmap_flags_local |= (shift & MAP_HUGE_MASK) << MAP_HUGE_SHIFT;
 	}
 #endif
-}
+
+	/* assign the results found */
+	if (mmap_flags)
+		*mmap_flags = mmap_flags_local;
+	if (hugepagesize)
+		*hugepagesize = hugepagesize_local;
+
+#else
+
+	if (hugepagesize)
+		*hugepagesize = 0;
+	if (mmap_flags)
+		*mmap_flags = 0;
 
 #endif							/* MAP_HUGETLB */
+}
 
 /*
  * Creates an anonymous mmap()ed shared memory segment.
@@ -790,7 +807,7 @@ PGSharedMemoryCreate(Size size,
 				break;
 		}
 
-		if (oldhdr && shmdt(oldhdr) < 0)
+		if (oldhdr && shmdt((void *) oldhdr) < 0)
 			elog(LOG, "shmdt(%p) failed: %m", oldhdr);
 	}
 

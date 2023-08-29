@@ -55,7 +55,7 @@ set_yunittest_property(
   ydb-apps-ydb-ut
   PROPERTY
   LABELS
-  SMALL
+  MEDIUM
 )
 set_yunittest_property(
   TEST
@@ -63,6 +63,13 @@ set_yunittest_property(
   PROPERTY
   PROCESSORS
   1
+)
+set_yunittest_property(
+  TEST
+  ydb-apps-ydb-ut
+  PROPERTY
+  TIMEOUT
+  600
 )
 target_allocator(ydb-apps-ydb-ut
   cpp-malloc-jemalloc

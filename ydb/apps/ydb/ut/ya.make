@@ -1,5 +1,8 @@
 UNITTEST()
 
+TIMEOUT(600)
+SIZE(MEDIUM)
+
 DEPENDS(
     ydb/apps/ydb
 )

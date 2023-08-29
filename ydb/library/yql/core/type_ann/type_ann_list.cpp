@@ -4683,10 +4683,16 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        if (isMany && ctx.Types.UseBlocks && !inputStructType->FindItem("_yql_group_stream_index")) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                TStringBuilder() << "Missing service column: _yql_group_stream_index"));
-            return IGraphTransformer::TStatus::Error;
+        if (isMany && ctx.Types.UseBlocks) {
+            auto streamIndex = inputStructType->FindItem("_yql_group_stream_index");
+            if (streamIndex) {
+                const TTypeAnnotationNode* streamIndexType = inputStructType->GetItems()[*streamIndex]->GetItemType();
+                if (streamIndexType->GetKind() != ETypeAnnotationKind::Data || streamIndexType->Cast<TDataExprType>()->GetSlot() != EDataSlot::Uint32) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                        TStringBuilder() << "Invalid type for service column _yql_group_stream_index: expecting Uint32, got: " << *streamIndexType));
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
         }
 
         auto status = NormalizeTupleOfAtoms(input, 1, output, ctx.Expr);
@@ -4717,7 +4723,6 @@ namespace {
         }
 
         bool isHopping = false;
-        bool hasManyStreams = false;
         const auto settings = input->Child(3);
         if (!EnsureTuple(*settings, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -4847,19 +4852,11 @@ namespace {
                 if (!ValidateAggManyStreams(*value, input->Child(2)->ChildrenSize(), ctx.Expr)) {
                     return IGraphTransformer::TStatus::Error;
                 }
-
-                hasManyStreams = true;
             } else {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(setting->Head().Pos()),
                     TStringBuilder() << "Unexpected setting: " << settingName));
                 return IGraphTransformer::TStatus::Error;
             }
-        }
-
-        if (isMany && !hasManyStreams && ctx.Types.UseBlocks) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(settings->Head().Pos()),
-                "Missing setting: many_streams"));
-            return IGraphTransformer::TStatus::Error;
         }
 
         for (auto& child : input->Child(1)->Children()) {

@@ -550,7 +550,9 @@ TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& strea
 
     if (many) {
         auto rowIndex = RowType->FindItem("_yql_group_stream_index");
-        YQL_ENSURE(rowIndex, "Unknown column: _yql_group_stream_index");
+        if (!rowIndex) {
+            return nullptr;
+        }
         if (streamIdxColumn) {
             *streamIdxColumn = extractorRoots.size();
         }

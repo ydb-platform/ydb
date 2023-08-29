@@ -805,7 +805,7 @@ private:
 };
 
 static bool FillPredicatesFromRange(NOlap::TReadDescription& read, const ::NKikimrTx::TKeyRange& keyRange,
-                                    const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbPk, ui64 tabletId, const NOlap::TIndexInfo* indexInfo) {
+                                    const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbPk, ui64 tabletId, const NOlap::TIndexInfo* indexInfo, TString& error) {
     TSerializedTableRange range(keyRange);
     auto fromPredicate = std::make_shared<NOlap::TPredicate>();
     auto toPredicate = std::make_shared<NOlap::TPredicate>();
@@ -817,7 +817,10 @@ static bool FillPredicatesFromRange(NOlap::TReadDescription& read, const ::NKiki
         << " less predicate over columns: " << toPredicate->ToString()
         << " at tablet " << tabletId);
 
-    return read.PKRangesFilter.Add(fromPredicate, toPredicate, indexInfo);
+    if (!read.PKRangesFilter.Add(fromPredicate, toPredicate, indexInfo)) {
+        error = "Error building filter";
+    }
+    return true;
 }
 
 std::shared_ptr<NOlap::TReadStatsMetadata>
@@ -878,7 +881,7 @@ std::shared_ptr<NOlap::TReadMetadataBase> TTxScan::CreateReadMetadata(NOlap::TRe
     }
 
     if (!metadata) {
-        return {};
+        return nullptr;
     }
 
     if (itemsLimit) {
@@ -957,7 +960,7 @@ bool TTxScan::Execute(TTransactionContext& txc, const TActorContext& ctx) {
         indexInfo->GetPrimaryKey();
 
     for (auto& range: record.GetRanges()) {
-        if (!FillPredicatesFromRange(read, range, ydbKey, Self->TabletID(), isIndexStats ? nullptr : indexInfo)) {
+        if (!FillPredicatesFromRange(read, range, ydbKey, Self->TabletID(), isIndexStats ? nullptr : indexInfo, ErrorDescription)) {
             ReadMetadataRanges.clear();
             return true;
         }
@@ -1025,12 +1028,11 @@ void TTxScan::Complete(const TActorContext& ctx) {
                 << detailedInfo.Str()
                 << " at tablet " << Self->TabletID());
 
-        Y_VERIFY(ErrorDescription);
         auto ev = MakeHolder<TEvKqpCompute::TEvScanError>(scanGen);
 
         ev->Record.SetStatus(Ydb::StatusIds::BAD_REQUEST);
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder()
-            << "Table " << table << " (shard " << Self->TabletID() << ") scan failed, reason: " << ErrorDescription);
+            << "Table " << table << " (shard " << Self->TabletID() << ") scan failed, reason: " << ErrorDescription ? ErrorDescription : "unknown error");
         NYql::IssueToMessage(issue, ev->Record.MutableIssues()->Add());
 
         ctx.Send(scanComputeActor, ev.Release());

@@ -8,6 +8,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/protobuf
     library/cpp/logger
     library/cpp/logger/global
     library/cpp/deprecated/atomic

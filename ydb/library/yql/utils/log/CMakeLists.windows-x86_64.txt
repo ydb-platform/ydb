@@ -13,6 +13,7 @@ add_library(yql-utils-log)
 target_link_libraries(yql-utils-log PUBLIC
   contrib-libs-cxxsupp
   yutil
+  contrib-libs-protobuf
   library-cpp-logger
   cpp-logger-global
   cpp-deprecated-atomic

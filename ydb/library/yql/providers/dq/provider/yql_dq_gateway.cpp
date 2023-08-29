@@ -554,8 +554,8 @@ TIntrusivePtr<IDqGateway> CreateDqGateway(const TString& host, int port) {
 
 TIntrusivePtr<IDqGateway> CreateDqGateway(const NProto::TDqConfig& config) {
     return new TDqGateway("localhost", config.GetPort(),
-        config.GetYtBackends()[0].GetVanillaJob(),
-        config.GetYtBackends()[0].GetVanillaJobMd5(),
+        config.GetYtBackends()[0].GetVanillaJobLite(),
+        config.GetYtBackends()[0].GetVanillaJobLiteMd5(),
         TDuration::MilliSeconds(config.GetOpenSessionTimeoutMs()),
         TDuration::MilliSeconds(config.GetRequestTimeoutMs()));
 }

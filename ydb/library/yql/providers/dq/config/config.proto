@@ -56,6 +56,11 @@ message TDqConfig {
         optional string Value = 2;
     }
 
+    message TFile {
+        optional string Name = 1;
+        optional string LocalPath = 2;
+    }
+
     message TPortoSettings {
         repeated TAttr Setting = 1;
     }
@@ -64,8 +69,10 @@ message TDqConfig {
         optional string ClusterName = 1 [default = "hume"];
         optional string User = 2;      // default -- current user name
         optional string TokenFile = 3; // default -- $HOME/.yt/token
-        optional string VanillaJob = 4;
-        optional string VanillaJobMd5 = 27; // autofilled
+        optional string VanillaJobLite = 4;
+        optional string VanillaJobLiteMd5 = 27; // autofilled (for Lite version only)
+        optional string VanillaJobCommand = 35;
+        repeated TFile VanillaJobFile = 36;
         optional uint32 MaxJobs = 5;
         optional string Prefix = 16;
         optional string UploadPrefix = 6; // deprecated option
@@ -74,7 +81,7 @@ message TDqConfig {
         optional string Token = 8; // for internal use only
         optional int64 MemoryLimit = 9;
         optional int64 CpuLimit = 29;
-        optional string VanillaJobLogFile = 10; // for tests only
+        repeated TAttr VaultEnv = 34;
         optional uint32 JobsPerOperation = 11;
         optional uint32 UploadReplicationFactor = 12;
         repeated string Owner = 13;

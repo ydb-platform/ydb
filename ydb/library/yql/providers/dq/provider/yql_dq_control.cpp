@@ -166,8 +166,8 @@ IDqControlFactoryPtr CreateDqControlFactory(const NProto::TDqConfig& config, con
         config.GetPort(),
         2,
         udfs,
-        config.GetYtBackends()[0].GetVanillaJob(),
-        config.GetYtBackends()[0].GetVanillaJobMd5(),
+        config.GetYtBackends()[0].GetVanillaJobLite(),
+        config.GetYtBackends()[0].GetVanillaJobLiteMd5(),
         indexedUdfFilter,
         config.GetControl().GetEnableStrip(),
         fileStorage

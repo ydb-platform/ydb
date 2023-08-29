@@ -981,8 +981,8 @@ TExprNode::TPtr OptimizeFlatContainerIf(const TExprNode::TPtr& node, TExprContex
     if (1U == nodeToCheck.ChildrenSize() && nodeToCheck.IsCallable(IsList ? "AsList" : "Just")) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " with " << nodeToCheck.Content();
         auto res = ctx.NewCallable(node->Pos(), IsList ? "ListIf" : "OptionalIf", {node->HeadPtr(), nodeToCheck.HeadPtr()});
-        if (IsList) {
-            res = KeepSortedConstraint(res, node->GetConstraint<TSortedConstraintNode>(), ctx);
+        if constexpr (IsList) {
+            res = KeepConstraints(std::move(res), *node, ctx);
         }
         return res;
     }

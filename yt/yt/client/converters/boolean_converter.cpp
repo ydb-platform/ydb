@@ -35,17 +35,17 @@ public:
         , ColumnSchema_(columnSchema)
     { }
 
-    TConvertedColumn Convert(TRange<NTableClient::TUnversionedRow> rows) override
+    TConvertedColumn Convert(const std::vector<TUnversionedRowValues>& rowsValues) override
     {
         Reset();
-        AddValues(rows);
+        AddValues(rowsValues);
 
         auto column = std::make_shared<TBatchColumn>();
         auto nullBitmapRef = NullBitmap_.Flush<TConverterTag>();
         auto valuesRef = Values_.Flush<TConverterTag>();
 
-        FillColumnarBooleanValues(column.get(), 0, rows.size(), valuesRef);
-        FillColumnarNullBitmap(column.get(), 0, rows.size(), nullBitmapRef);
+        FillColumnarBooleanValues(column.get(), 0, rowsValues.size(), valuesRef);
+        FillColumnarNullBitmap(column.get(), 0, rowsValues.size(), nullBitmapRef);
 
         column->Type = ColumnSchema_.LogicalType();
         column->Id = ColumnIndex_;
@@ -74,12 +74,12 @@ private:
         NullBitmap_ = TBitmapOutput();
     }
 
-    void AddValues(TRange<NTableClient::TUnversionedRow> rows)
+    void AddValues(const std::vector<TUnversionedRowValues>& rowsValues)
     {
-        for (auto row : rows) {
-            const auto& value = row[ColumnIndex_];
-            bool isNull = value.Type == NTableClient::EValueType::Null;
-            bool data = isNull ? false : value.Data.Boolean;
+        for (auto rowValues : rowsValues) {
+            auto value = rowValues[ColumnIndex_];
+            bool isNull = value == nullptr || value->Type == NTableClient::EValueType::Null;
+            bool data = isNull ? false : value->Data.Boolean;
             NullBitmap_.Append(isNull);
             Values_.Append(data);
         }

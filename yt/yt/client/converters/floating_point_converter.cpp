@@ -60,9 +60,9 @@ public:
         static_assert(std::is_floating_point_v<TValue>);
     }
 
-    TConvertedColumn Convert(TRange<NTableClient::TUnversionedRow> rows) {
+    TConvertedColumn Convert(const std::vector<TUnversionedRowValues>& rowsValues) {
         Reset();
-        AddValues(rows);
+        AddValues(rowsValues);
         auto nullBitmapRef = NullBitmap_.Flush<TConverterTag>();
         auto valuesRef = TSharedRef::MakeCopy<TConverterTag>(TRef(Values_.data(), sizeof(TValue) * Values_.size()));
 
@@ -71,13 +71,13 @@ public:
         FillColumnarFloatingPointValues<TValue>(
             column.get(),
             0,
-            rows.size(),
+            rowsValues.size(),
             valuesRef);
 
         FillColumnarNullBitmap(
             column.get(),
             0,
-            rows.size(),
+            rowsValues.size(),
             nullBitmapRef);
 
         column->Type = ColumnSchema_.LogicalType();
@@ -107,12 +107,14 @@ private:
         NullBitmap_ = TBitmapOutput();
     }
 
-    void AddValues(TRange<NTableClient::TUnversionedRow> rows)
+    void AddValues(const std::vector<TUnversionedRowValues>& rowsValues)
     {
-        for (auto row : rows) {
-            const auto& value = row[ColumnIndex_];
-            NullBitmap_.Append(value.Type == EValueType::Null);
-            Values_.push_back(value.Data.Double);
+        for (auto rowValues : rowsValues) {
+            auto value = rowValues[ColumnIndex_];
+            bool isNull = value == nullptr || value->Type == NTableClient::EValueType::Null;
+            TValue data = isNull ? 0 : value->Data.Double;
+            NullBitmap_.Append(isNull);
+            Values_.push_back(data);
         }
     }
 };

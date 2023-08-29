@@ -52,10 +52,10 @@ public:
         , ColumnSchema_(columnSchema)
     {}
 
-    TConvertedColumn Convert(TRange<NTableClient::TUnversionedRow> rows) override
+    TConvertedColumn Convert(const std::vector<TUnversionedRowValues>& rowsValues) override
     {
         Reset();
-        AddValues(rows);
+        AddValues(rowsValues);
         return GetColumns();
     }
 
@@ -278,11 +278,12 @@ private:
         }
     }
 
-    void AddValues(TRange<NTableClient::TUnversionedRow> rows)
+    void AddValues(const std::vector<TUnversionedRowValues>& rowsValues)
     {
-        for (auto row : rows) {
-            const auto& unversionedValue = row[ColumnIndex_];
-            auto value = CaptureValue(unversionedValue);
+        for (auto rowValues : rowsValues) {
+            auto unversionedValue = rowValues[ColumnIndex_];
+            YT_VERIFY(unversionedValue != nullptr);
+            auto value = CaptureValue(*unversionedValue);
             Values_.push_back(value);
             ++RowCount_;
         }

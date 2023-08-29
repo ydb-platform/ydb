@@ -73,10 +73,10 @@ public:
           ColumnSchema_(columnSchema)
     {}
 
-    TConvertedColumn Convert(TRange<NTableClient::TUnversionedRow> rows) override
+    TConvertedColumn Convert(const std::vector<TUnversionedRowValues>& rowsValues) override
     {
         Reset();
-        AddValues(rows);
+        AddValues(rowsValues);
         for (i64 index = 0; index < std::ssize(Values_); ++index) {
             if (!NullBitmap_[index]) {
                 Values_[index] -= MinValue_;
@@ -140,14 +140,15 @@ private:
         NullBitmap_ = TBitmapOutput();
     }
 
-    void AddValues(TRange<NTableClient::TUnversionedRow> rows)
+    void AddValues(const std::vector<TUnversionedRowValues>& rowsValues)
     {
-        for (auto row : rows) {
-            const auto& value = row[ColumnIndex_];
-            bool isNull = value.Type == NTableClient::EValueType::Null;
+        for (auto rowValues : rowsValues) {
+            auto value = rowValues[ColumnIndex_];
+            bool isNull = value == nullptr || value->Type == NTableClient::EValueType::Null;
             ui64 data = 0;
             if (!isNull) {
-                data = EncodeValue(GetValue<TValue>(value));
+                YT_VERIFY(value != nullptr);
+                data = EncodeValue(GetValue<TValue>(*value));
             }
             Values_.push_back(data);
             NullBitmap_.Append(isNull);

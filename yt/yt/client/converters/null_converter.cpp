@@ -12,15 +12,17 @@ class TNullColumnWriterConverter
     : public IColumnConverter
 {
 public:
-    explicit TNullColumnWriterConverter()
+    explicit TNullColumnWriterConverter(int columnIndex)
+        : ColumnIndex_(columnIndex)
     {}
 
-    TConvertedColumn Convert(TRange<NTableClient::TUnversionedRow> rows) override
+    TConvertedColumn Convert(const std::vector<TUnversionedRowValues>& rowsValues) override
     {
-        auto rowCount = rows.size();
+        auto rowCount = rowsValues.size();
 
         auto column = std::make_shared<TBatchColumn>();
 
+        column->Id = ColumnIndex_;
         column->Type = SimpleLogicalType(ESimpleLogicalValueType::Null);
         column->ValueCount = rowCount;
 
@@ -34,13 +36,16 @@ public:
         return {{owner}, owner.Column.get()};
     }
 
+private:
+    const int ColumnIndex_;
+
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IColumnConverterPtr CreateNullConverter()
+IColumnConverterPtr CreateNullConverter(int columnIndex)
 {
-    return std::make_unique<TNullColumnWriterConverter>();
+    return std::make_unique<TNullColumnWriterConverter>(columnIndex);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

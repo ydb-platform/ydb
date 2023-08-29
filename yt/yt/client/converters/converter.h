@@ -10,6 +10,7 @@ namespace NYT::NConverters {
 
 using TBatchColumn = NTableClient::IUnversionedColumnarRowBatch::TColumn;
 using TBatchColumnPtr = std::shared_ptr<TBatchColumn>;
+using TUnversionedRowValues = std::vector<const NTableClient::TUnversionedValue*>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -35,7 +36,7 @@ struct IColumnConverter
     : public TNonCopyable
 {
     virtual ~IColumnConverter() = default;
-    virtual TConvertedColumn Convert(TRange<NTableClient::TUnversionedRow> rows) = 0;
+    virtual TConvertedColumn Convert(const std::vector<TUnversionedRowValues>& rowsValues) = 0;
 };
 
 using IColumnConverterPtr = std::unique_ptr<IColumnConverter>;

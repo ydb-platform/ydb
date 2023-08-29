@@ -46,7 +46,7 @@ IColumnConverterPtr CreateColumnConvert(
         return CreateCompositeConverter(columnIndex, columnSchema);
 
     case EValueType::Null:
-        return CreateNullConverter();
+        return CreateNullConverter(columnIndex);
 
     case EValueType::Min:
     case EValueType::TheBottom:
@@ -60,13 +60,25 @@ IColumnConverterPtr CreateColumnConvert(
 
 
 TConvertedColumnRange ConvertRowsToColumns(
-    TRange<NTableClient::TUnversionedRow> rows,
-    const std::vector<NTableClient::TColumnSchema> &columnSchema)
+    TRange<TUnversionedRow> rows,
+    const std::vector<TColumnSchema> &columnSchema)
 {
     TConvertedColumnRange convertedColumnsRange;
+    std::vector<TUnversionedRowValues> rowsValues;
+    rowsValues.reserve(rows.size());
+
+    for (const auto& row : rows) {
+        NConverters::TUnversionedRowValues rowValues;
+        rowValues.resize(columnSchema.size(), nullptr);
+        for (const auto* item = row.Begin(); item != row.End(); ++item) {
+            rowValues[item->Id] = item;
+        }
+        rowsValues.push_back(std::move(rowValues));
+    }
+
     for (int columnId = 0; columnId < std::ssize(columnSchema); columnId++) {
         auto converter = CreateColumnConvert(columnSchema[columnId], columnId);
-        auto columns = converter->Convert(rows);
+        auto columns = converter->Convert(rowsValues);
         convertedColumnsRange.push_back(columns);
     }
     return convertedColumnsRange;

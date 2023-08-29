@@ -824,6 +824,13 @@ namespace {
 
                 Types.CostBasedOptimizerType = arg;
             }
+            else if (name == "EnableMatchRecognize" || name == "DisableMatchRecognize") {
+                if (args.size() != 0) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+                    return false;
+                }
+                Types.MatchRecognize = name == "EnableMatchRecognize";
+            }
             else {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Unsupported command: " << name));
                 return false;

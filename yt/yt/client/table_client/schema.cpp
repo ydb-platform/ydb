@@ -64,6 +64,18 @@ ELockType GetStrongestLock(ELockType lhs, ELockType rhs)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool operator == (const TLockMask& lhs, const TLockMask& rhs)
+{
+    int lockCount = std::max(lhs.GetSize(), rhs.GetSize());
+    for (int index = 0; index < lockCount; ++index) {
+        if (lhs.Get(index) != rhs.Get(index)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 TLockMask MaxMask(TLockMask lhs, TLockMask rhs)
 {
     int size = std::max<int>(lhs.GetSize(), rhs.GetSize());

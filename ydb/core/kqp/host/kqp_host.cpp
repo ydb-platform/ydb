@@ -1497,8 +1497,16 @@ private:
         state->FunctionRegistry = FuncRegistry;
         state->CredentialsFactory = CredentialsFactory;
 
+        //
+        // TODO: Use TS3GatewayConfig from Kikimr Config when added
+        //
         NYql::TS3GatewayConfig cfg;
         cfg.SetMaxReadSizePerQuery(100_GB);
+        {
+            auto& setting = *cfg.AddDefaultSettings();
+            setting.SetName("UseBlocksSource");
+            setting.SetValue("true");
+        }
         state->Configuration->Init(cfg, TypesCtx);
 
         auto dataSource = NYql::CreateS3DataSource(state, HttpGateway);

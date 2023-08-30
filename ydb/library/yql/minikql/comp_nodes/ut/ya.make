@@ -40,6 +40,7 @@ SRCS(
     mkql_join_dict_ut.cpp
     mkql_grace_join_ut.cpp
     mkql_map_join_ut.cpp
+    mkql_match_recognize_matched_vars_ut.cpp
     mkql_safe_circular_buffer_ut.cpp
     mkql_sort_ut.cpp
     mkql_switch_ut.cpp

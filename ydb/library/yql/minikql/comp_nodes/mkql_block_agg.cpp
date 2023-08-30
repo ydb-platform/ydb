@@ -876,7 +876,12 @@ public:
                     // encode key
                     out[insertBatchLen].Rewind();
                     for (ui32 i = 0; i < keysDatum.size(); ++i) {
-                        s.Readers_[i]->SaveItem(*keysDatum[i].array(), row, out[insertBatchLen]);
+                        if (keysDatum[i].is_scalar()) {
+                            // TODO: more efficient code when grouping by scalar
+                            s.Readers_[i]->SaveScalarItem(*keysDatum[i].scalar(), out[insertBatchLen]);
+                        } else {
+                            s.Readers_[i]->SaveItem(*keysDatum[i].array(), row, out[insertBatchLen]);
+                        }
                     }
 
                     insertBatchRows[insertBatchLen] = row;
@@ -1555,7 +1560,6 @@ void PrepareKeys(const std::vector<TKeyParams>& keys, TMaybe<ui32>& totalKeysSiz
     NYql::NUdf::TBlockItemSerializeProps props;
     for (auto& param : keys) {
         auto type = AS_TYPE(TBlockType, param.Type);
-        MKQL_ENSURE(type->GetShape() != TBlockType::EShape::Scalar, "Expecting block as key");
         UpdateBlockItemSerializeProps(TTypeInfoHelper(), type->GetItemType(), props);
     }
 

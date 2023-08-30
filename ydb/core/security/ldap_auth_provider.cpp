@@ -2,7 +2,6 @@
 #include <library/cpp/actors/core/log.h>
 #include <ydb/core/base/ticket_parser.h>
 #include "ticket_parser_log.h"
-#include <util/generic/string.h>
 #include "ldap_auth_provider.h"
 
 // This temporary solution
@@ -39,6 +38,13 @@ class TLdapAuthProvider : public NActors::TActorBootstrapped<TLdapAuthProvider> 
         char* Attribute = nullptr;
     };
 
+    struct TAuthenticateUserRequest : TBasicRequest {
+        LDAP** Ld = nullptr;
+        LDAPMessage* Entry = nullptr;
+        TString Login;
+        TString Password;
+    };
+
     struct TBasicResponse {
         TEvLdapAuthProvider::EStatus Status = TEvLdapAuthProvider::EStatus::SUCCESS;
         TEvLdapAuthProvider::TError Error;
@@ -49,6 +55,8 @@ class TLdapAuthProvider : public NActors::TActorBootstrapped<TLdapAuthProvider> 
     struct TSearchUserResponse : TBasicResponse {
         LDAPMessage* SearchMessage = nullptr;
     };
+
+    struct TAuthenticateUserResponse : TBasicResponse {};
 
 public:
     TLdapAuthProvider(const NKikimrProto::TLdapAuthentication& settings)
@@ -62,11 +70,49 @@ public:
     void StateWork(TAutoPtr<NActors::IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvLdapAuthProvider::TEvEnrichGroupsRequest, Handle);
+            hFunc(TEvLdapAuthProvider::TEvAuthenticateRequest, Handle);
             CFunc(TEvents::TSystem::PoisonPill, Die);
         }
     }
 
 private:
+    void Handle(TEvLdapAuthProvider::TEvAuthenticateRequest::TPtr& ev) {
+        TEvLdapAuthProvider::TEvAuthenticateRequest* request = ev->Get();
+        LDAP* ld = nullptr;
+        auto initializeResponse = InitializeLDAPConnection(&ld);
+        if (initializeResponse.Error) {
+            Send(ev->Sender, new TEvLdapAuthProvider::TEvAuthenticateResponse(initializeResponse.Status, initializeResponse.Error));
+            return;
+        }
+
+        int result = NKikimrLdap::Bind(ld, Settings.GetBindDn(), Settings.GetBindPassword());
+        if (!NKikimrLdap::IsSuccess(result)) {
+            TEvLdapAuthProvider::TError error {
+                .Message = "Could not perform initial LDAP bind for dn " + Settings.GetBindDn() + " on server " + Settings.GetHost() + "\n"
+                            + NKikimrLdap::ErrorToString(result)
+            };
+            // The Unbind operation is not the antithesis of the Bind operation as the name implies.
+            // Close the LDAP connection, free the resources contained in the LDAP structure
+            NKikimrLdap::Unbind(ld);
+            Send(ev->Sender, new TEvLdapAuthProvider::TEvAuthenticateResponse(NKikimrLdap::ErrorToStatus(result), error));
+            return;
+        }
+
+        TSearchUserResponse searchUserResponse = SearchUserRecord({.Ld = ld,
+                                                                .User = request->Login,
+                                                                .RequestedAttributes = NKikimrLdap::noAttributes});
+        if (searchUserResponse.Status != TEvLdapAuthProvider::EStatus::SUCCESS) {
+            NKikimrLdap::Unbind(ld);
+            Send(ev->Sender, new TEvLdapAuthProvider::TEvAuthenticateResponse(searchUserResponse.Status, searchUserResponse.Error));
+            return;
+        }
+        auto entry = NKikimrLdap::FirstEntry(ld, searchUserResponse.SearchMessage);
+        TAuthenticateUserResponse authResponse = AuthenticateUser({.Ld = &ld, .Entry = entry, .Login = request->Login, .Password = request->Password});
+        NKikimrLdap::MsgFree(entry);
+        NKikimrLdap::Unbind(ld);
+        Send(ev->Sender, new TEvLdapAuthProvider::TEvAuthenticateResponse(authResponse.Status, authResponse.Error));
+    }
+
     void Handle(TEvLdapAuthProvider::TEvEnrichGroupsRequest::TPtr& ev) {
         TEvLdapAuthProvider::TEvEnrichGroupsRequest* request = ev->Get();
         LDAP* ld = nullptr;
@@ -83,6 +129,8 @@ private:
                             + NKikimrLdap::ErrorToString(result),
                 .Retryable = NKikimrLdap::IsRetryableError(result)
             };
+            // The Unbind operation is not the antithesis of the Bind operation as the name implies.
+            // Close the LDAP connection, free the resources contained in the LDAP structure
             NKikimrLdap::Unbind(ld);
             Send(ev->Sender, new TEvLdapAuthProvider::TEvEnrichGroupsResponse(request->Key, NKikimrLdap::ErrorToStatus(result), error));
             return;
@@ -123,10 +171,9 @@ private:
 
         *ld = NKikimrLdap::Init(host, port);
         if (*ld == nullptr) {
-
-        return {{TEvLdapAuthProvider::EStatus::UNAVAILABLE,
-                {.Message = "Could not initialize LDAP connection for host: " + host + ", port: " + ToString(port) + ". " + NKikimrLdap::LdapError(*ld),
-                .Retryable = false}}};
+            return {{TEvLdapAuthProvider::EStatus::UNAVAILABLE,
+                    {.Message = "Could not initialize LDAP connection for host: " + host + ", port: " + ToString(port) + ". " + NKikimrLdap::LdapError(*ld),
+                    .Retryable = false}}};
         }
 
         int result = NKikimrLdap::SetProtocolVersion(*ld);
@@ -137,6 +184,25 @@ private:
                     .Retryable = NKikimrLdap::IsRetryableError(result)}}};
         }
         return {};
+    }
+
+    TAuthenticateUserResponse AuthenticateUser(const TAuthenticateUserRequest& request) {
+        char* dn = NKikimrLdap::GetDn(*request.Ld, request.Entry);
+        if (dn == nullptr) {
+            return {{TEvLdapAuthProvider::EStatus::UNAUTHORIZED,
+                    {.Message = "Could not get dn for the first entry matching " + GetFilter(request.Login) + " on server " + Settings.GetHost() + "\n"
+                            + NKikimrLdap::LdapError(*request.Ld),
+                    .Retryable = false}}};
+        }
+        TEvLdapAuthProvider::TError error;
+        int result = NKikimrLdap::Bind(*request.Ld, dn, request.Password);
+        if (!NKikimrLdap::IsSuccess(result)) {
+            error.Message = "LDAP login failed for user " + TString(dn) + " on server " + Settings.GetHost() + "\n"
+                            + NKikimrLdap::ErrorToString((result));
+            error.Retryable = NKikimrLdap::IsRetryableError(result);
+        }
+        NKikimrLdap::MemFree(dn);
+        return {{NKikimrLdap::ErrorToStatus(result), error}};
     }
 
     TSearchUserResponse SearchUserRecord(const TSearchUserRequest& request) {

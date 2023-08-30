@@ -9,9 +9,11 @@ struct TEvLdapAuthProvider {
     enum EEv {
         // requests
         EvEnrichGroupsRequest = EventSpaceBegin(TKikimrEvents::ES_LDAP_AUTH_PROVIDER),
+        EvAuthenticateRequest,
 
         // replies
         EvEnrichGroupsResponse = EventSpaceBegin(TKikimrEvents::ES_LDAP_AUTH_PROVIDER) + 512,
+        EvAuthenticateResponse,
 
         EvEnd
     };
@@ -32,6 +34,16 @@ struct TEvLdapAuthProvider {
         TEvEnrichGroupsRequest(const TString& key, const TString& user)
             : Key(key)
             , User(user)
+        {}
+    };
+
+    struct TEvAuthenticateRequest : TEventLocal<TEvAuthenticateRequest, EvAuthenticateRequest> {
+        TString Login;
+        TString Password;
+
+        TEvAuthenticateRequest(const TString& login, const TString& password)
+            : Login(login)
+            , Password(password)
         {}
     };
 
@@ -64,7 +76,18 @@ struct TEvLdapAuthProvider {
             , Key(key)
         {}
     };
+
+    struct TEvAuthenticateResponse : TEvResponse<TEvAuthenticateResponse, EvAuthenticateResponse> {
+        TEvAuthenticateResponse(const EStatus& status, const TError& error)
+            : TEvResponse<TEvAuthenticateResponse, EvAuthenticateResponse>(status, error)
+        {}
+    };
 };
+
+inline NActors::TActorId MakeLdapAuthProviderID() {
+    static const char name[12] = "ldapauthpdr";
+    return NActors::TActorId(0, TStringBuf(name, 12));
+}
 
 IActor* CreateLdapAuthProvider(const NKikimrProto::TLdapAuthentication& settings);
 

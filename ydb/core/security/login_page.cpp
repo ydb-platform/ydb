@@ -1,4 +1,5 @@
 #include "login_page.h"
+#include "login_shared_func.h"
 
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_reader.h>
@@ -7,6 +8,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/security/ldap_auth_provider.h>
 
 #include <ydb/library/login/login.h>
 #include <ydb/library/security/util.h>
@@ -44,6 +46,7 @@ public:
             hFunc(TEvTabletPipe::TEvClientConnected, HandleConnect);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNavigate);
             hFunc(TEvSchemeShard::TEvLoginResult, HandleResult);
+            hFunc(TEvLdapAuthProvider::TEvAuthenticateResponse, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
@@ -96,27 +99,25 @@ public:
             Database = "/" + domain.Name;
         }
 
+        TString login;
+        TString password;
         NJson::TJsonValue* jsonUser;
         if (postData.GetValuePointer("user", &jsonUser)) {
-            User = jsonUser->GetStringRobust();
+            login = jsonUser->GetStringRobust();
         } else {
             return ReplyErrorAndPassAway("400 Bad Request", "User must be specified");
         }
 
         NJson::TJsonValue* jsonPassword;
         if (postData.GetValuePointer("password", &jsonPassword)) {
-            Password = jsonPassword->GetStringRobust();
+            password = jsonPassword->GetStringRobust();
         } else {
             return ReplyErrorAndPassAway("400 Bad Request", "Password must be specified");
         }
 
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-        request->DatabaseName = Database;
-        auto& entry = request->ResultSet.emplace_back();
-        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
-        entry.Path = ::NKikimr::SplitPath(Database);
-        entry.RedirectRequired = false;
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
+        AuthCredentials = PrepareCredentials(login, password, AppData()->AuthConfig);
+        auto sendParameters = GetSendParameters(AuthCredentials, Database);
+        Send(sendParameters.Recipient, sendParameters.Event.Release());
 
         Become(&TThis::StateWork, Timeout, new TEvents::TEvWakeup());
     }
@@ -136,8 +137,7 @@ public:
                 IActor* pipe = NTabletPipe::CreateClient(SelfId(), schemeShardTabletId, GetPipeClientConfig());
                 TActorId pipeClient = RegisterWithSameMailbox(pipe);
                 THolder<TEvSchemeShard::TEvLogin> request = MakeHolder<TEvSchemeShard::TEvLogin>();
-                request.Get()->Record.SetUser(User);
-                request.Get()->Record.SetPassword(Password);
+                request.Get()->Record = CreateLoginRequest(AuthCredentials, AppData()->AuthConfig);
                 NTabletPipe::SendData(SelfId(), pipeClient, request.Release());
                 return;
             } else {
@@ -146,6 +146,15 @@ public:
             }
         } else {
             ReplyErrorAndPassAway("503 Service Unavailable", "Scheme error");
+        }
+    }
+
+    void Handle(TEvLdapAuthProvider::TEvAuthenticateResponse::TPtr& ev) {
+        TEvLdapAuthProvider::TEvAuthenticateResponse* response = ev->Get();
+        if (response->Status == TEvLdapAuthProvider::EStatus::SUCCESS) {
+            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(CreateNavigateKeySetRequest(Database).Release()));
+        } else {
+            ReplyErrorAndPassAway("403 Forbidden", response->Error.Message);
         }
     }
 
@@ -223,8 +232,9 @@ protected:
     NThreading::TPromise<THttpResponsePtr> Result;
     TDuration Timeout = TDuration::Seconds(60);
     TString Database;
-    TString User;
-    TString Password;
+
+private:
+    TAuthCredentials AuthCredentials;
 };
 
 class TLoginMonPage: public IMonPage {

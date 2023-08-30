@@ -148,7 +148,6 @@ class TTicketParserImpl : public TActorBootstrapped<TDerived> {
     TPriorityQueue<TTokenRefreshRecord> RefreshQueue;
     std::unordered_map<TString, NLogin::TLoginProvider> LoginProviders;
     bool UseLoginProvider = false;
-    TActorId LdapAuthProvider;
 
     TInstant GetExpireTime(TInstant now) const {
         return now + ExpireTime;
@@ -345,8 +344,8 @@ class TTicketParserImpl : public TActorBootstrapped<TDerived> {
 
     template <typename TTokenRecord>
     void SendRequestToLdap(const TString& key, TTokenRecord& record, const TString& user) {
-        if (LdapAuthProvider) {
-            Send(LdapAuthProvider, new TEvLdapAuthProvider::TEvEnrichGroupsRequest(key, user));
+        if (Config.HasLdapAuthentication()) {
+            Send(MakeLdapAuthProviderID(), new TEvLdapAuthProvider::TEvEnrichGroupsRequest(key, user));
         } else {
             SetError(key, record, {.Message = "LdapAuthProvider is not initialized", .Retryable = false});
         }
@@ -1415,9 +1414,6 @@ protected:
 
         if (Config.GetUseLoginProvider()) {
             UseLoginProvider = true;
-            if (Config.HasLdapAuthentication()) {
-                LdapAuthProvider = Register(CreateLdapAuthProvider(Config.GetLdapAuthentication()), TMailboxType::Simple, AppData()->IOPoolId);
-            }
         }
     }
 
@@ -1439,9 +1435,6 @@ protected:
         }
         if (ServiceAccountService) {
             Send(ServiceAccountService, new TEvents::TEvPoisonPill);
-        }
-        if (LdapAuthProvider) {
-            Send(LdapAuthProvider, new TEvents::TEvPoisonPill);
         }
         TBase::PassAway();
     }

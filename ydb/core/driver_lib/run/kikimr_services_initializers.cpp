@@ -110,6 +110,7 @@
 #include <ydb/core/scheme/scheme_type_registry.h>
 
 #include <ydb/core/security/ticket_parser.h>
+#include <ydb/core/security/ldap_auth_provider.h>
 
 #include <ydb/core/sys_view/processor/processor.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
@@ -1589,6 +1590,13 @@ TSecurityServicesInitializer::TSecurityServicesInitializer(const TKikimrRunConfi
 
 void TSecurityServicesInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
                                                       const NKikimr::TAppData* appData) {
+    const auto& authConfig = appData->AuthConfig;
+    if (!IsServiceInitialized(setup, MakeLdapAuthProviderID()) && authConfig.HasLdapAuthentication()) {
+        IActor* ldapAuthProvider = CreateLdapAuthProvider(authConfig.GetLdapAuthentication());
+        if (ldapAuthProvider) {
+            setup->LocalServices.push_back(std::make_pair<TActorId, TActorSetupCmd>(MakeLdapAuthProviderID(), TActorSetupCmd(ldapAuthProvider, TMailboxType::HTSwap, appData->UserPoolId)));
+        }
+    }
     if (!IsServiceInitialized(setup, MakeTicketParserID())) {
         IActor* ticketParser = nullptr;
         if (Factories && Factories->CreateTicketParser) {

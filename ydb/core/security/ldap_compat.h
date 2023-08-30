@@ -1,7 +1,13 @@
 #pragma once
 #include <util/generic/string.h>
 
+#ifndef LDAP_NO_ATTRS
+#define LDAP_NO_ATTRS "1.1"
+#endif
+
 namespace NKikimrLdap {
+
+extern char* noAttributes[];
 
 enum class EScope : int {
     BASE,
@@ -21,7 +27,6 @@ int Search(LDAP* ld,
            LDAPMessage** res);
 TString LdapError(LDAP* ld);
 TString ErrorToString(int err);
-
 LDAPMessage* FirstEntry(LDAP* ld, LDAPMessage* chain);
 char* FirstAttribute(LDAP* ld, LDAPMessage* entry, BerElement** berout);
 void MemFree(char* p);
@@ -29,13 +34,11 @@ void BerFree(BerElement* ber, int freebuf);
 void MsgFree(LDAPMessage* lm);
 int CountEntries(LDAP *ld, LDAPMessage *chain);
 std::vector<TString> GetAllValuesOfAttribute(LDAP* ld, LDAPMessage* entry, char* target);
-
 int SetProtocolVersion(LDAP* ld);
 ui32 GetPort();
 int GetScope(const EScope& scope);
 bool IsSuccess(int result);
-
-
 NKikimr::TEvLdapAuthProvider::EStatus ErrorToStatus(int err);
 bool IsRetryableError(int error);
+char* GetDn(LDAP* ld, LDAPMessage* entry);
 }

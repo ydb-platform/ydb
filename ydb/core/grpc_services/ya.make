@@ -112,6 +112,7 @@ PEERDIR(
     ydb/core/tx/long_tx_service/public
     ydb/core/tx/ev_write
     ydb/core/ydb_convert
+    ydb/core/security
     ydb/library/aclib
     ydb/library/binary_json
     ydb/library/dynumber

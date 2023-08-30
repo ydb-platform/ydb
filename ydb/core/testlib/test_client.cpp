@@ -43,6 +43,7 @@
 #include <ydb/core/cms/console/immediate_controls_configurator.h>
 #include <ydb/core/formats/clickhouse_block.h>
 #include <ydb/core/security/ticket_parser.h>
+#include <ydb/core/security/ldap_auth_provider.h>
 #include <ydb/core/base/user_registry.h>
 #include <ydb/core/health_check/health_check.h>
 #include <ydb/core/kafka_proxy/kafka_listener.h>
@@ -785,6 +786,11 @@ namespace Tests {
     void TServer::SetupProxies(ui32 nodeIdx) {
         Runtime->SetTxAllocatorTabletIds({ChangeStateStorage(TxAllocator, Settings->Domain)});
         {
+            if (Settings->AuthConfig.HasLdapAuthentication()) {
+                IActor* ldapAuthProvider = NKikimr::CreateLdapAuthProvider(Settings->AuthConfig.GetLdapAuthentication());
+                TActorId ldapAuthProviderId = Runtime->Register(ldapAuthProvider, nodeIdx);
+                Runtime->RegisterService(MakeLdapAuthProviderID(), ldapAuthProviderId, nodeIdx);
+            }
             IActor* ticketParser = Settings->CreateTicketParser(Settings->AuthConfig);
             TActorId ticketParserId = Runtime->Register(ticketParser, nodeIdx);
             Runtime->RegisterService(MakeTicketParserID(), ticketParserId, nodeIdx);

@@ -29,6 +29,7 @@ SRCS(
     ydb_monitoring_ut.cpp
     cert_gen.cpp
     ydb_query_ut.cpp
+    ydb_ldap_login_ut.cpp
 )
 
 PEERDIR(
@@ -43,10 +44,12 @@ PEERDIR(
     ydb/core/testlib
     ydb/library/yql/minikql/dom
     ydb/library/yql/minikql/jsonpath
+    ydb/library/testlib/service_mocks/ldap_mock
     ydb/public/lib/experimental
     ydb/public/lib/json_value
     ydb/public/lib/yson_value
     ydb/public/lib/ut_helpers
+    ydb/public/lib/ydb_cli/commands
     ydb/public/sdk/cpp/client/draft
     ydb/public/sdk/cpp/client/ydb_coordination
     ydb/public/sdk/cpp/client/ydb_export

@@ -11,6 +11,14 @@
 
 namespace NKikimrLdap {
 
+namespace {
+
+char ldapNoAttribute[] = LDAP_NO_ATTRS;
+
+}
+
+char* noAttributes[] = {ldapNoAttribute, nullptr};
+
 int Bind(LDAP* ld, const TString& dn, const TString& password) {
     char* bindDn = const_cast<char*>(dn.c_str());
     char* bindPassword = const_cast<char*>(password.c_str());
@@ -128,6 +136,10 @@ bool IsRetryableError(int error) {
             return true;
     }
     return false;
+}
+
+char* GetDn(LDAP* ld, LDAPMessage* entry) {
+    return ldap_get_dn(ld, entry);
 }
 
 }

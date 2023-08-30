@@ -141,6 +141,7 @@ message TEvUpdateConfigResult {
 message TEvLogin {
     optional string User = 1;
     optional string Password = 2;
+    optional string ExternalAuth = 3;
 }
 
 message TEvLoginResult {

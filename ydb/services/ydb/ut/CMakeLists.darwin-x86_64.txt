@@ -31,10 +31,12 @@ target_link_libraries(ydb-services-ydb-ut PUBLIC
   ydb-core-testlib
   yql-minikql-dom
   yql-minikql-jsonpath
+  testlib-service_mocks-ldap_mock
   public-lib-experimental
   public-lib-json_value
   public-lib-yson_value
   public-lib-ut_helpers
+  clicommands
   cpp-client-draft
   cpp-client-ydb_coordination
   cpp-client-ydb_export
@@ -67,6 +69,7 @@ target_sources(ydb-services-ydb-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_monitoring_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/cert_gen.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_query_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/ydb/ydb_ldap_login_ut.cpp
 )
 set_property(
   TARGET

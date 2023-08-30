@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     login_page.cpp
     login_page.h
+    login_shared_func.cpp
     secure_request.h
     ticket_parser_impl.h
     ticket_parser.cpp

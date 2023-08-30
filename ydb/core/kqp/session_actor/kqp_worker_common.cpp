@@ -67,7 +67,7 @@ bool IsSameProtoTypeImpl(const NKikimrMiniKQL::TVariantType& actual, const NKiki
 } // namespace
 
 TKikimrQueryLimits GetQueryLimits(const TKqpWorkerSettings& settings) {
-    const auto& queryLimitsProto = settings.Service.GetQueryLimits();
+    const auto& queryLimitsProto = settings.TableService.GetQueryLimits();
     const auto& phaseLimitsProto = queryLimitsProto.GetPhaseLimits();
 
     TKikimrQueryLimits queryLimits;

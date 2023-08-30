@@ -17,15 +17,19 @@ struct TKqpWorkerSettings {
     TString Database;
     bool LongSession = false;
 
-    NKikimrConfig::TTableServiceConfig Service;
+    NKikimrConfig::TTableServiceConfig TableService;
+    NKikimrConfig::TQueryServiceConfig QueryService;
 
     TKqpDbCountersPtr DbCounters;
 
     TKqpWorkerSettings(const TString& cluster, const TString& database,
-        const NKikimrConfig::TTableServiceConfig& serviceConfig, TKqpDbCountersPtr dbCounters)
+                       const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+                       const  NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
+                       TKqpDbCountersPtr dbCounters)
         : Cluster(cluster)
         , Database(database)
-        , Service(serviceConfig)
+        , TableService(tableServiceConfig)
+        , QueryService(queryServiceConfig)
         , DbCounters(dbCounters) {}
 };
 

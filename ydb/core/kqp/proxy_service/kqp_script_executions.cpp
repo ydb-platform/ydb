@@ -44,8 +44,6 @@ namespace {
 constexpr TDuration LEASE_DURATION = TDuration::Seconds(30);
 constexpr TDuration DEADLINE_OFFSET = TDuration::Minutes(20);
 constexpr TDuration BRO_RUN_INTERVAL = TDuration::Minutes(60);
-constexpr TDuration DEFAULT_OPERATION_TTL = TDuration::Days(1);
-constexpr TDuration DEFAULT_RESULTS_TTL = TDuration::Days(1);
 
 TString SerializeIssues(const NYql::TIssues& issues) {
     NYql::TIssue root;
@@ -229,14 +227,16 @@ Ydb::Query::ExecMode GetExecModeFromAction(NKikimrKqp::EQueryAction action) {
 
 class TCreateScriptOperationQuery : public TQueryBase {
 public:
-    TCreateScriptOperationQuery(const TString& executionId, const NActors::TActorId& runScriptActorId, const NKikimrKqp::TEvQueryRequest& req, TDuration operationTtl, TDuration resultsTtl, TDuration leaseDuration = TDuration::Zero())
+    TCreateScriptOperationQuery(const TString& executionId, const NActors::TActorId& runScriptActorId, const NKikimrKqp::TEvQueryRequest& req, TDuration operationTtl, TDuration resultsTtl, TDuration leaseDuration = TDuration::Zero(), TDuration maxRunTime = SCRIPT_TIMEOUT_LIMIT)
         : ExecutionId(executionId)
         , RunScriptActorId(runScriptActorId)
         , Request(req)
         , OperationTtl(operationTtl)
         , ResultsTtl(resultsTtl)
         , LeaseDuration(leaseDuration ? leaseDuration : LEASE_DURATION)
+        , MaxRunTime(Max(maxRunTime, TDuration::Days(1)))
     {
+        Y_ENSURE(MaxRunTime);
     }
 
     void OnRunQuery() override {
@@ -251,10 +251,11 @@ public:
             DECLARE $syntax AS Int32;
             DECLARE $meta AS JsonDocument;
             DECLARE $lease_duration AS Interval;
+            DECLARE $max_run_time AS Interval;
 
             UPSERT INTO `.metadata/script_executions`
-                (database, execution_id, run_script_actor_id, execution_status, execution_mode, start_ts, query_text, syntax, meta)
-            VALUES ($database, $execution_id, $run_script_actor_id, $execution_status, $execution_mode, CurrentUtcTimestamp(), $query_text, $syntax, $meta);
+                (database, execution_id, run_script_actor_id, execution_status, execution_mode, start_ts, query_text, syntax, meta, expire_at)
+            VALUES ($database, $execution_id, $run_script_actor_id, $execution_status, $execution_mode, CurrentUtcTimestamp(), $query_text, $syntax, $meta, CurrentUtcTimestamp() + $max_run_time);
 
             UPSERT INTO `.metadata/script_execution_leases`
                 (database, execution_id, lease_deadline, lease_generation)
@@ -293,6 +294,9 @@ public:
                 .Build()
             .AddParam("$lease_duration")
                 .Interval(static_cast<i64>(LeaseDuration.MicroSeconds()))
+                .Build()
+            .AddParam("$max_run_time")
+                .Interval(static_cast<i64>(MaxRunTime.MicroSeconds()))
                 .Build();
 
         RunDataQuery(sql, &params);
@@ -318,12 +322,15 @@ private:
     const TDuration OperationTtl;
     const TDuration ResultsTtl;
     const TDuration LeaseDuration;
+    const TDuration MaxRunTime;
 };
 
 struct TCreateScriptExecutionActor : public TActorBootstrapped<TCreateScriptExecutionActor> {
-    TCreateScriptExecutionActor(TEvKqp::TEvScriptRequest::TPtr&& ev, TDuration leaseDuration = TDuration::Zero())
+    TCreateScriptExecutionActor(TEvKqp::TEvScriptRequest::TPtr&& ev, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TDuration maxRunTime = SCRIPT_TIMEOUT_LIMIT, TDuration leaseDuration = TDuration::Zero())
         : Event(std::move(ev))
+        , QueryServiceConfig(queryServiceConfig)
         , LeaseDuration(leaseDuration ? leaseDuration : LEASE_DURATION)
+        , MaxRunTime(maxRunTime)
     {
     }
 
@@ -331,12 +338,16 @@ struct TCreateScriptExecutionActor : public TActorBootstrapped<TCreateScriptExec
         Become(&TCreateScriptExecutionActor::StateFunc);
 
         ExecutionId = CreateGuidAsString();
-        auto operationTtl = Event->Get()->ForgetAfter ? Event->Get()->ForgetAfter : DEFAULT_OPERATION_TTL;
-        auto resultsTtl = Event->Get()->ResultsTtl ? Event->Get()->ResultsTtl : DEFAULT_RESULTS_TTL;
-        resultsTtl = Min(operationTtl, resultsTtl);
+
+        auto operationTtl = Event->Get()->ForgetAfter ? Event->Get()->ForgetAfter : TDuration::Seconds(QueryServiceConfig.GetScriptForgetAfterDefaultSeconds());
+        auto resultsTtl = Event->Get()->ResultsTtl ? Event->Get()->ResultsTtl : TDuration::Seconds(QueryServiceConfig.GetScriptResultsTtlDefaultSeconds());
+        if (operationTtl) {
+            resultsTtl = Min(operationTtl, resultsTtl);
+        }
+
         // Start request
-        RunScriptActorId = Register(CreateRunScriptActor(ExecutionId, Event->Get()->Record, Event->Get()->Record.GetRequest().GetDatabase(), 1, LeaseDuration));
-        Register(new TCreateScriptOperationQuery(ExecutionId, RunScriptActorId, Event->Get()->Record, operationTtl, resultsTtl, LeaseDuration));
+        RunScriptActorId = Register(CreateRunScriptActor(ExecutionId, Event->Get()->Record, Event->Get()->Record.GetRequest().GetDatabase(), 1, LeaseDuration, QueryServiceConfig));
+        Register(new TCreateScriptOperationQuery(ExecutionId, RunScriptActorId, Event->Get()->Record, operationTtl, resultsTtl, LeaseDuration, MaxRunTime));
     }
 
     void Handle(TEvPrivate::TEvCreateScriptOperationResponse::TPtr& ev) {
@@ -355,9 +366,11 @@ struct TCreateScriptExecutionActor : public TActorBootstrapped<TCreateScriptExec
 
 private:
     TEvKqp::TEvScriptRequest::TPtr Event;
+    const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     TString ExecutionId;
     NActors::TActorId RunScriptActorId;
-    TDuration LeaseDuration;
+    const TDuration LeaseDuration;
+    const TDuration MaxRunTime;
 };
 
 class TScriptLeaseUpdater : public TQueryBase {
@@ -566,7 +579,7 @@ public:
                 end_ts = CurrentUtcTimestamp(),
                 stats = $stats,
                 ast = $ast,
-                expire_at = CurrentUtcTimestamp() + $operation_ttl
+                expire_at = IF($operation_ttl > CAST(0 AS Interval), CurrentUtcTimestamp() + $operation_ttl, NULL)
             WHERE database = $database AND execution_id = $execution_id;
 
             DELETE FROM `.metadata/script_execution_leases`
@@ -574,7 +587,7 @@ public:
 
             UPDATE `.metadata/result_sets`
             SET
-                expire_at = CurrentUtcTimestamp() + $results_ttl
+                expire_at = IF($results_ttl > CAST(0 AS Interval), CurrentUtcTimestamp() + $results_ttl, NULL)
             where database = $database AND execution_id = $execution_id;
         )";
 
@@ -1948,12 +1961,12 @@ public:
             }
 
             const auto ttl = GetTtlFromSerializedMeta(*serializedMeta);
-                if (!ttl) {
-                    Finish(Ydb::StatusIds::INTERNAL_ERROR, "Metainformation is corrupted");
-                    return;
-                }
-                const auto [_, resultsTtl] = *ttl;
-            if ((*endTs + resultsTtl) < TInstant::Now()){
+            if (!ttl) {
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Metainformation is corrupted");
+                return;
+            }
+            const auto [_, resultsTtl] = *ttl;
+            if (resultsTtl && (*endTs + resultsTtl) < TInstant::Now()){
                 Finish(Ydb::StatusIds::NOT_FOUND, "Results are expired");
                 return;
             }
@@ -2068,8 +2081,8 @@ private:
 
 } // anonymous namespace
 
-NActors::IActor* CreateScriptExecutionCreatorActor(TEvKqp::TEvScriptRequest::TPtr&& ev) {
-    return new TCreateScriptExecutionActor(std::move(ev));
+NActors::IActor* CreateScriptExecutionCreatorActor(TEvKqp::TEvScriptRequest::TPtr&& ev, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TDuration maxRunTime) {
+    return new TCreateScriptExecutionActor(std::move(ev), queryServiceConfig, maxRunTime);
 }
 
 NActors::IActor* CreateScriptExecutionsTablesCreator(THolder<NActors::IEventBase> resultEvent) {

@@ -2104,7 +2104,7 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
             new NYql::NLog::TTlsLogBackend(new TNullLogBackend())));
 
         auto proxy = NKqp::CreateKqpProxyService(Config.GetLogConfig(), Config.GetTableServiceConfig(), Config.GetAuthConfig().GetTokenAccessorConfig(),
-            std::move(settings), Factories->QueryReplayBackendFactory, std::move(kqpProxySharedResources));
+            Config.GetQueryServiceConfig(), std::move(settings), Factories->QueryReplayBackendFactory, std::move(kqpProxySharedResources));
         setup->LocalServices.push_back(std::make_pair(
             NKqp::MakeKqpProxyID(NodeId),
             TActorSetupCmd(proxy, TMailboxType::HTSwap, appData->UserPoolId)));

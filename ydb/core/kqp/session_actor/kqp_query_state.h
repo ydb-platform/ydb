@@ -31,7 +31,8 @@ class TKqpQueryState : public TNonCopyable {
 public:
     TKqpQueryState(TEvKqp::TEvQueryRequest::TPtr& ev, ui64 queryId, const TString& database,
         const TString& cluster, TKqpDbCountersPtr dbCounters, bool longSession,
-        const NKikimrConfig::TTableServiceConfig& config, NWilson::TTraceId&& traceId)
+        const NKikimrConfig::TTableServiceConfig& tableServiceConfig, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
+        NWilson::TTraceId&& traceId)
         : QueryId(queryId)
         , Database(database)
         , Cluster(cluster)
@@ -55,7 +56,7 @@ public:
             }
         }
 
-        SetQueryDeadlines(config);
+        SetQueryDeadlines(tableServiceConfig, queryServiceConfig);
         auto action = GetAction();
         KqpSessionSpan = NWilson::TSpan(
             TWilsonKqp::KqpSession, std::move(traceId),
@@ -151,7 +152,7 @@ public:
         TempTablesState = std::make_shared<const TKqpTempTablesState>(tempTablesState);
     }
 
-    void SetQueryDeadlines(const NKikimrConfig::TTableServiceConfig& service) {
+    void SetQueryDeadlines(const NKikimrConfig::TTableServiceConfig& tableService, const NKikimrConfig::TQueryServiceConfig& queryService) {
         auto now = TAppData::TimeProvider->Now();
         auto cancelAfter = RequestEv->GetCancelAfter();
         auto timeout = RequestEv->GetOperationTimeout();
@@ -159,7 +160,7 @@ public:
             QueryDeadlines.CancelAt = now + cancelAfter;
         }
 
-        auto timeoutMs = GetQueryTimeout(GetType(), timeout.MilliSeconds(), service);
+        auto timeoutMs = GetQueryTimeout(GetType(), timeout.MilliSeconds(), tableService, queryService);
         QueryDeadlines.TimeoutAt = now + timeoutMs;
     }
 

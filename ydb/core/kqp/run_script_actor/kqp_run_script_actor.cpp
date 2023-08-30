@@ -30,8 +30,6 @@ namespace NKikimr::NKqp {
 
 namespace {
 
-constexpr ui64 RESULT_SIZE_LIMIT = 10_MB;
-constexpr int RESULT_ROWS_LIMIT = 1000;
 constexpr ui32 LEASE_UPDATE_FREQUENCY = 2;
 
 class TRunScriptActor : public NActors::TActorBootstrapped<TRunScriptActor> {
@@ -50,12 +48,13 @@ class TRunScriptActor : public NActors::TActorBootstrapped<TRunScriptActor> {
     };
 
 public:
-    TRunScriptActor(const TString& executionId, const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration, TDuration leaseDuration)
+    TRunScriptActor(const TString& executionId, const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration, TDuration leaseDuration, NKikimrConfig::TQueryServiceConfig&& queryServiceConfig)
         : ExecutionId(executionId)
         , Request(request)
         , Database(database)
         , LeaseGeneration(leaseGeneration)
         , LeaseDuration(leaseDuration)
+        , QueryServiceConfig(queryServiceConfig)
     {}
 
     static constexpr char ActorName[] = "KQP_RUN_SCRIPT_ACTOR";
@@ -220,7 +219,9 @@ private:
         }
         auto resp = MakeHolder<TEvKqpExecuter::TEvStreamDataAck>();
         resp->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
-        resp->Record.SetFreeSpace(RESULT_SIZE_LIMIT);
+        resp->Record.SetFreeSpace(QueryServiceConfig.GetScriptResultSizeLimit()
+                                 ? QueryServiceConfig.GetScriptResultSizeLimit()
+                                 : std::numeric_limits<ui64>::max());
 
         LOG_D("Send stream data ack"
             << ", seqNo: " << ev->Get()->Record.GetSeqNo()
@@ -252,13 +253,13 @@ private:
             std::vector<TString> serializedRows;
 
             for (const auto& row : ev->Get()->Record.GetResultSet().rows()) {
-                if (rowCount > RESULT_ROWS_LIMIT) {
+                if (QueryServiceConfig.GetScriptResultRowsLimit() && rowCount > QueryServiceConfig.GetScriptResultRowsLimit()) {
                     Truncated[resultSetIndex] = true;
                     break;
                 }
 
                 auto serializedSize = row.ByteSizeLong();
-                if (byteCount + serializedSize > RESULT_SIZE_LIMIT) {
+                if (QueryServiceConfig.GetScriptResultSizeLimit() && byteCount + serializedSize > QueryServiceConfig.GetScriptResultSizeLimit()) {
                     Truncated[resultSetIndex] = true;
                     break;
                 }
@@ -476,6 +477,7 @@ private:
     const TString Database;
     const ui64 LeaseGeneration;
     const TDuration LeaseDuration;
+    const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     TString SessionId;
     bool LeaseUpdateQueryRunning = false;
     bool FinalStatusIsSaved = false;
@@ -504,8 +506,8 @@ private:
 
 } // namespace
 
-NActors::IActor* CreateRunScriptActor(const TString& executionId, const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration, TDuration leaseDuration) {
-    return new TRunScriptActor(executionId, request, database, leaseGeneration, leaseDuration);
+NActors::IActor* CreateRunScriptActor(const TString& executionId, const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration, TDuration leaseDuration, NKikimrConfig::TQueryServiceConfig queryServiceConfig) {
+    return new TRunScriptActor(executionId, request, database, leaseGeneration, leaseDuration, std::move(queryServiceConfig));
 }
 
 } // namespace NKikimr::NKqp

@@ -26,6 +26,7 @@ target_link_libraries(ydb-core-protos PUBLIC
   core-issue-protos
   dq-actors-protos
   yql-dq-proto
+  providers-common-proto
   public-issue-protos
   yql-public-types
   ydb-library-services

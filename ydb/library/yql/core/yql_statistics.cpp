@@ -2,9 +2,9 @@
 
 using namespace NYql;
 
-std::ostream& operator<<(std::ostream& os, const TOptimizerStatistics& s) {
+std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) {
     os << "Nrows: " << s.Nrows << ", Ncols: " << s.Ncols;
-    os << "Cost: ";
+    os << ", Cost: ";
     if (s.Cost.has_value()){
         os << s.Cost.value();
     } else {

@@ -2,6 +2,8 @@
 #include "actors/kqp_ic_gateway_actors.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/statistics/events.h>
+#include <ydb/core/statistics/stat_service.h>
 
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
@@ -688,7 +690,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
     const auto schemeCacheId = MakeSchemeCacheID();
 
-    return SendActorRequest<TRequest, TResponse, TResult>(
+    auto future = SendActorRequest<TRequest, TResponse, TResult>(
         ActorSystem,
         schemeCacheId,
         ev.Release(),
@@ -778,6 +780,57 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                 promise.SetValue(ResultFromException<TResult>(e));
             }
         });
+
+    // Create an apply for the future that will fetch table statistics and save it in the metadata
+    // This method will only run if cost based optimization is enabled
+
+    if (!Config || !Config->HasOptEnableCostBasedOptimization()){
+        return future;
+    }
+
+    TActorSystem* actorSystem = ActorSystem;
+
+    return future.Apply([actorSystem,table](const TFuture<TTableMetadataResult>& f) {        
+        auto result = f.GetValue();
+        if (!result.Success()) {
+            return MakeFuture(result);
+        }
+
+        if (!result.Metadata->DoesExist){
+            return MakeFuture(result);
+        }
+
+        if (result.Metadata->Kind != NYql::EKikimrTableKind::Datashard &&
+            result.Metadata->Kind != NYql::EKikimrTableKind::Olap) {
+            return MakeFuture(result);
+        }
+
+        NKikimr::NStat::TRequest t;
+        t.StatType = NKikimr::NStat::EStatType::SIMPLE;
+        t.PathId = NKikimr::TPathId(result.Metadata->PathId.OwnerId(), result.Metadata->PathId.TableId());
+
+        auto event = MakeHolder<NStat::TEvStatistics::TEvGetStatistics>();
+        event->StatRequests.push_back(t);
+
+        auto statServiceId = NStat::MakeStatServiceID();
+
+        
+        return SendActorRequest<NStat::TEvStatistics::TEvGetStatistics, NStat::TEvStatistics::TEvGetStatisticsResult, TResult>(
+            actorSystem,
+            statServiceId,
+            event.Release(),
+            [result](TPromise<TResult> promise, NStat::TEvStatistics::TEvGetStatisticsResult&& response){
+                if (!response.StatResponses.size()){
+                    return;
+                }
+                auto resp = response.StatResponses[0];
+                auto s = std::get<NKikimr::NStat::TStatSimple>(resp.Statistics);
+                result.Metadata->RecordsCount = s.RowCount;
+                result.Metadata->DataSize = s.BytesSize;
+                promise.SetValue(result);
+        });
+
+    });
 }
 
 }  // namespace NKikimr::NKqp

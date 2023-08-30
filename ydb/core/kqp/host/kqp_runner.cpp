@@ -91,7 +91,7 @@ public:
             .Add(CreateKqpCheckQueryTransformer(), "CheckKqlQuery")
             .AddPostTypeAnnotation(/* forSubgraph */ true)
             .AddCommonOptimization()
-            .Add(CreateKqpStatisticsTransformer(*typesCtx, Config), "Statistics")
+            .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config), "Statistics")
             .Add(CreateKqpLogOptTransformer(OptimizeCtx, *typesCtx, Config), "LogicalOptimize")
             .Add(CreateLogicalDataProposalsInspector(*typesCtx), "ProvidersLogicalOptimize")
             .Add(CreateKqpPhyOptTransformer(OptimizeCtx, *typesCtx), "KqpPhysicalOptimize")

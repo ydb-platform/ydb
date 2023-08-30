@@ -133,7 +133,8 @@ public:
         LOG_D("Worker bootstrapped");
         Counters->ReportWorkerCreated(Settings.DbCounters);
 
-        std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(TlsActivationContext->ActorSystem(), false);
+        std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(
+            TlsActivationContext->ActorSystem(), Config, false);
         Gateway = CreateKikimrIcGateway(Settings.Cluster, Settings.Database, std::move(loader),
             ctx.ExecutorThread.ActorSystem, ctx.SelfID.NodeId(), RequestCounters);
 

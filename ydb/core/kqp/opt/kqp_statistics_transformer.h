@@ -1,5 +1,7 @@
 #pragma once
 
+#include "kqp_opt.h"
+
 #include <ydb/library/yql/core/yql_statistics.h>
 
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -14,6 +16,7 @@ namespace NKqp {
 
 using namespace NYql;
 using namespace NYql::NNodes;
+using namespace NOpt;
 
 /***
  * Statistics transformer is a transformer that propagates statistics and costs from
@@ -23,12 +26,16 @@ using namespace NYql::NNodes;
 */
 class TKqpStatisticsTransformer : public TSyncTransformerBase {
 
-    TTypeAnnotationContext* typeCtx;
+    TTypeAnnotationContext* TypeCtx;
     const TKikimrConfiguration::TPtr& Config;
+    const TKqpOptimizeContext& KqpCtx;
 
     public:
-        TKqpStatisticsTransformer(TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config) : 
-            typeCtx(&typeCtx), Config(config) {}
+        TKqpStatisticsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, 
+            const TKikimrConfiguration::TPtr& config) : 
+            TypeCtx(&typeCtx), 
+            Config(config),
+            KqpCtx(*kqpCtx) {}
 
         // Main method of the transformer
         IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
@@ -39,7 +46,7 @@ class TKqpStatisticsTransformer : public TSyncTransformerBase {
     }
 };
 
-TAutoPtr<IGraphTransformer> CreateKqpStatisticsTransformer(TTypeAnnotationContext& typeCtx, 
-    const TKikimrConfiguration::TPtr& config);
+TAutoPtr<IGraphTransformer> CreateKqpStatisticsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, 
+    TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config);
 }
 }

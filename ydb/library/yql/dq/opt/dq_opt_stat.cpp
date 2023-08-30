@@ -57,4 +57,61 @@ void InferStatisticsForSkipNullMembers(const TExprNode::TPtr& input, TTypeAnnota
     typeCtx->SetCost( input.Get(), typeCtx->GetCost( skipNullMembersInput.Raw() ) );
 }
 
+/**
+ * Infer statistics and costs for ExtractlMembers
+ * We just return the input statistics.
+*/
+void InferStatisticsForExtractMembers(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+
+    auto inputNode = TExprBase(input);
+    auto extractMembers = inputNode.Cast<TCoExtractMembers>();
+    auto extractMembersInput = extractMembers.Input();
+
+    auto inputStats = typeCtx->GetStats(extractMembersInput.Raw() );
+    if (!inputStats) {
+        return;
+    }
+
+    typeCtx->SetStats( input.Get(), inputStats );
+    typeCtx->SetCost( input.Get(), typeCtx->GetCost( extractMembersInput.Raw() ) );
+}
+
+/**
+ * Infer statistics and costs for AggregateCombine
+ * We just return the input statistics.
+*/
+void InferStatisticsForAggregateCombine(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+
+    auto inputNode = TExprBase(input);
+    auto agg = inputNode.Cast<TCoAggregateCombine>();
+    auto aggInput = agg.Input();
+
+    auto inputStats = typeCtx->GetStats(aggInput.Raw());
+    if (!inputStats) {
+        return;
+    }
+
+    typeCtx->SetStats( input.Get(), inputStats );
+    typeCtx->SetCost( input.Get(), typeCtx->GetCost( aggInput.Raw() ) );
+}
+
+/**
+ * Infer statistics and costs for AggregateMergeFinalize
+ * Just return input stats
+*/
+void InferStatisticsForAggregateMergeFinalize(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+
+    auto inputNode = TExprBase(input);
+    auto agg = inputNode.Cast<TCoAggregateMergeFinalize>();
+    auto aggInput = agg.Input();
+
+    auto inputStats = typeCtx->GetStats(aggInput.Raw() );
+    if (!inputStats) {
+        return;
+    }
+
+    typeCtx->SetStats( input.Get(), inputStats );
+    typeCtx->SetCost( input.Get(), typeCtx->GetCost( aggInput.Raw() ) );
+}
+
 } // namespace NYql::NDq {

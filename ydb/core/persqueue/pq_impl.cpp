@@ -1725,6 +1725,14 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
         return;
     }
 
+    if (req.HasWriteId()) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                    "Tablet " << TabletID() <<
+                    " Write in transaction." <<
+                    " Partition: " << req.GetPartition() <<
+                    ", WriteId: " << req.GetWriteId());
+    }
+
     for (ui32 i = 0; i < req.CmdWriteSize(); ++i) {
         const auto& cmd = req.GetCmdWrite(i);
 
@@ -1880,6 +1888,14 @@ void TPersQueue::HandleReserveBytesRequest(const ui64 responseCookie, const TAct
     if (!req.HasOwnerCookie()) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "OwnerCookie must be set for ReserveBytes request");
         return;
+    }
+
+    if (req.HasWriteId()) {
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                    "Tablet " << TabletID() <<
+                    " Reserve bytes in transaction." <<
+                    " Partition: " << req.GetPartition() <<
+                    ", WriteId: " << req.GetWriteId());
     }
 
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_RESERVE_BYTES);
@@ -2417,7 +2433,7 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
                     "Tablet " << TabletID() <<
                     " tx=" << event.GetTxId() <<
-                    ", lock_tx_id=" << txBody.GetLockTxId() <<
+                    ", write_id=" << txBody.GetWriteId() <<
                     ", path=" << operation.GetPath() <<
                     ", partition=" << operation.GetPartitionId() <<
                     ", consumer=" << operation.GetConsumer() <<
@@ -2426,7 +2442,7 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
                     ", is_write=" << isWriteOperation);
     }
 
-    if (TabletState != NKikimrPQ::ENormal) {
+    if ((TabletState != NKikimrPQ::ENormal) || txBody.HasWriteId()) {
         SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
                                     event.GetTxId(),
                                     ctx);

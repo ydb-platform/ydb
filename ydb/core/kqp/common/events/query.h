@@ -55,7 +55,7 @@ public:
         return RequestCtx ? false : Record.HasYdbStatus();
     }
 
-    const ::NKikimrKqp::TTopicOperations& GetTopicOperations() const {
+    const ::NKikimrKqp::TTopicOperationsRequest& GetTopicOperations() const {
         return Record.GetRequest().GetTopicOperations();
     }
 

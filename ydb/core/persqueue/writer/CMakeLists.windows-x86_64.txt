@@ -16,6 +16,8 @@ target_link_libraries(core-persqueue-writer PUBLIC
   cpp-string_utils-base64
   ydb-core-base
   core-persqueue-events
+  grpc_services-cancelation-protos
+  kqp-common-simple
   ydb-core-protos
   public-lib-base
   lib-deprecated-kicli

@@ -71,10 +71,14 @@ enum EQueryReplyFlags {
     QUERY_REPLY_FLAG_AST = 4;
 };
 
-message TTopicOperations {
+message TTopicOperationsRequest {
     optional string Consumer = 1;
     repeated Ydb.Topic.UpdateOffsetsInTransactionRequest.TopicOffsets Topics = 2;
 }
+
+message TTopicOperationsResponse {
+    optional int64 WriteId = 1;
+};
 
 message TQueryRequest {
     optional bytes SessionId = 1;
@@ -98,7 +102,7 @@ message TQueryRequest {
     reserved 19; // (deprecated) StatsMode
     optional NYql.NDqProto.EDqStatsMode StatsMode = 20; // deprecated
     optional Ydb.Table.QueryStatsCollection.Mode CollectStats = 21;
-    optional TTopicOperations TopicOperations = 22;
+    optional TTopicOperationsRequest TopicOperations = 22;
     optional bool UsePublicResponseDataFormat = 23;
     map<string, Ydb.TypedValue> YdbParameters = 24;
     optional bool IsInternalCall = 25;
@@ -256,6 +260,7 @@ message TQueryResponse {
     optional Ydb.Table.TransactionMeta TxMeta = 11;
     optional NKqpProto.TKqpStatsQuery QueryStats = 12;
     repeated Ydb.ResultSet YdbResults = 13;
+    optional TTopicOperationsResponse TopicOperations = 14;
 }
 
 message TEvQueryResponse {

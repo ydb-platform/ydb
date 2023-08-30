@@ -12,6 +12,8 @@ PEERDIR(
     library/cpp/string_utils/base64
     ydb/core/base
     ydb/core/persqueue/events
+    ydb/core/grpc_services/cancelation/protos
+    ydb/core/kqp/common/simple
     ydb/core/protos
     ydb/public/lib/base
     ydb/public/lib/deprecated/kicli

@@ -230,7 +230,7 @@ public:
         return RequestEv->GetQuery();
     }
 
-    const ::NKikimrKqp::TTopicOperations& GetTopicOperations() const {
+    const ::NKikimrKqp::TTopicOperationsRequest& GetTopicOperations() const {
         return RequestEv->GetTopicOperations();
     }
 

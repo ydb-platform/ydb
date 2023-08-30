@@ -40,6 +40,8 @@ public:
 
     void Write(TContinuationToken&& continuationToken, TWriteMessage&& message) override;
 
+    void WriteEncoded(TContinuationToken&& continuationToken, TWriteMessage&& message) override;
+
     NThreading::TFuture<void> WaitEvent() override;
 
     // Empty maybe - block till all work is done. Otherwise block at most at closeTimeout duration.

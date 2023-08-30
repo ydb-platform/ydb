@@ -300,4 +300,5 @@ bool TKqpQueryState::HasErrors(const NSchemeCache::TSchemeCacheNavigate& respons
 
     return true;
 }
+
 }

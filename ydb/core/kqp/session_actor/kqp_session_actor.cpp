@@ -986,8 +986,8 @@ public:
                 request.PerShardKeysSizeLimitBytes = Config->_CommitPerShardKeysSizeLimitBytes.Get().GetRef();
             }
 
-            if (txCtx.Locks.HasLocks() || txCtx.TopicOperations.HasReadOperations()) {
-                if (!txCtx.GetSnapshot().IsValid() || txCtx.TxHasEffects() || txCtx.TopicOperations.HasReadOperations()) {
+            if (txCtx.Locks.HasLocks() || txCtx.TopicOperations.HasOperations()) {
+                if (!txCtx.GetSnapshot().IsValid() || txCtx.TxHasEffects() || txCtx.TopicOperations.HasOperations()) {
                     LOG_D("TExecPhysicalRequest, tx has commit locks");
                     request.LocksOp = ELocksOp::Commit;
                 } else {
@@ -1402,6 +1402,8 @@ public:
 
         bool replyQueryId = false;
         bool replyQueryParameters = false;
+        bool replyTopicOperations = false;
+
         switch (QueryState->GetAction()) {
             case NKikimrKqp::QUERY_ACTION_PREPARE:
                 replyQueryId = true;
@@ -1415,6 +1417,10 @@ public:
             case NKikimrKqp::QUERY_ACTION_PARSE:
             case NKikimrKqp::QUERY_ACTION_VALIDATE:
                 replyQueryParameters = true;
+                break;
+
+            case NKikimrKqp::QUERY_ACTION_TOPIC:
+                replyTopicOperations = true;
                 break;
 
             default:
@@ -1433,6 +1439,12 @@ public:
                 queryId = QueryState->CompileResult->Uid;
             }
             response->SetPreparedQuery(queryId);
+        }
+
+        if (replyTopicOperations) {
+            if (HasTopicWriteId()) {
+                response->MutableTopicOperations()->SetWriteId(GetTopicWriteId());
+            }
         }
 
         // Result for scan query is sent directly to target actor.
@@ -1996,6 +2008,7 @@ public:
                 hFunc(TEvKqp::TEvQueryRequest, HandleTopicOps);
 
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleTopicOps);
+                hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, HandleTopicOps);
 
                 hFunc(TEvKqp::TEvCloseSessionRequest, HandleTopicOps);
                 hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
@@ -2074,13 +2087,38 @@ private:
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << message;
         }
 
-        ReplySuccess();
+        if (HasTopicWriteOperations() && !HasTopicWriteId()) {
+            Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId);
+        } else {
+            ReplySuccess();
+        }
     }
 
     void HandleTopicOps(TEvKqp::TEvCloseSessionRequest::TPtr&) {
         YQL_ENSURE(QueryState);
         ReplyQueryError(Ydb::StatusIds::BAD_SESSION, "Request cancelled due to explicit session close request");
         Counters->ReportSessionActorClosedRequest(Settings.DbCounters);
+    }
+
+    void HandleTopicOps(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
+        SetTopicWriteId(NLongTxService::TLockHandle(ev->Get()->TxId, TActivationContext::ActorSystem()));
+        ReplySuccess();
+    }
+
+    bool HasTopicWriteOperations() const {
+        return QueryState->TxCtx->TopicOperations.HasWriteOperations();
+    }
+
+    bool HasTopicWriteId() const {
+        return QueryState->TxCtx->TopicOperations.HasWriteId();
+    }
+
+    ui64 GetTopicWriteId() const {
+        return QueryState->TxCtx->TopicOperations.GetWriteId();
+    }
+
+    void SetTopicWriteId(NLongTxService::TLockHandle handle) {
+        QueryState->TxCtx->TopicOperations.SetWriteId(std::move(handle));
     }
 
 private:

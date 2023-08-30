@@ -54,6 +54,11 @@ void TWriteSession::WriteEncoded(TContinuationToken&& token, TStringBuf data, EC
     Impl->WriteInternal(std::move(token), std::move(message));
 }
 
+void TWriteSession::WriteEncoded(TContinuationToken&& token, TWriteMessage&& message)
+{
+    Impl->WriteInternal(std::move(token), std::move(message));
+}
+
 void TWriteSession::Write(TContinuationToken&& token, TStringBuf data, TMaybe<ui64> seqNo,
                           TMaybe<TInstant> createTimestamp) {
     TWriteMessage message{data};

@@ -1,7 +1,9 @@
 #pragma once
 
 #include "events.h"
+#include "partition_writer.h"
 #include "persqueue_utils.h"
+#include "write_request_info.h"
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
@@ -52,32 +54,8 @@ class TWriteSessionActor
     using TEvDescribeTopicsResponse = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse;
     using TEvDescribeTopicsRequest = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsRequest;
 
-    struct TWriteRequestInfo: public TSimpleRefCount<TWriteRequestInfo> {
-        using TPtr = TIntrusivePtr<TWriteRequestInfo>;
-
-        explicit TWriteRequestInfo(ui64 cookie)
-            : PartitionWriteRequest(new NPQ::TEvPartitionWriter::TEvWriteRequest(cookie))
-            , Cookie(cookie)
-            , ByteSize(0)
-            , RequiredQuota(0)
-        {
-        }
-
-        // Source requests from user (grpc session object)
-        std::deque<THolder<TEvWrite>> UserWriteRequests;
-
-        // Partition write request
-        THolder<NPQ::TEvPartitionWriter::TEvWriteRequest> PartitionWriteRequest;
-
-        // Formed write request's cookie
-        ui64 Cookie;
-
-        // Formed write request's size
-        ui64 ByteSize;
-
-        // Quota in term of RUs
-        ui64 RequiredQuota;
-    };
+    using TWriteRequestInfo = TWriteRequestInfoImpl<TEvWrite>;
+    using TPartitionWriter = TPartitionWriterImpl<TEvWrite>;
 
 // Codec ID size in bytes
 static constexpr ui32 CODEC_ID_SIZE = 1;
@@ -181,7 +159,7 @@ private:
     void MakeAndSentInitResponse(const TMaybe<ui64>& maxSeqNo, const TActorContext& ctx);
 
     void Handle(NPQ::TEvPartitionWriter::TEvWriteAccepted::TPtr& ev, const TActorContext& ctx);
-    void ProcessWriteResponse(const NKikimrClient::TPersQueuePartitionResponse& response, const TActorContext& ctx);
+    void ProcessWriteResponse(const NKikimrClient::TPersQueuePartitionResponse& response, TPartitionWriter& writer, const TActorContext& ctx);
     void Handle(NPQ::TEvPartitionWriter::TEvWriteResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(NPQ::TEvPartitionWriter::TEvDisconnected::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const NActors::TActorContext& ctx);
@@ -196,12 +174,17 @@ private:
     void CheckFinish(const NActors::TActorContext& ctx);
 
     void PrepareRequest(THolder<TEvWrite>&& ev, const TActorContext& ctx);
-    void SendRequest(typename TWriteRequestInfo::TPtr&& request, const TActorContext& ctx);
+    void SendRequest(TPartitionWriter& writer, typename TWriteRequestInfo::TPtr&& request, const TActorContext& ctx);
 
     void SetupCounters();
     void SetupCounters(const TString& cloudId, const TString& dbId, const TString& dbPath, const bool isServerless, const TString& folderId);
 
 private:
+    TPartitionWriter* FindPartitionWriter(const TString& sessionId, const TString& txId);
+    void InitPartitionWriter(const TString& sessionId, const TString& txId,
+                             const TActorContext& ctx);
+    bool AnyRequests() const;
+
     std::unique_ptr<TEvStreamWriteRequest> Request;
 
     enum EState {
@@ -218,7 +201,6 @@ private:
 
     EState State;
     TActorId SchemeCache;
-    TActorId Writer;
 
     TString PeerName;
     ui64 Cookie;
@@ -242,15 +224,9 @@ private:
     THolder<TAclWrapper> ACL;
 
     // Future batch request to partition actor
-    typename TWriteRequestInfo::TPtr PendingRequest;
+    std::deque<typename TWriteRequestInfo::TPtr> PendingRequests;
     // Request that is waiting for quota
     typename TWriteRequestInfo::TPtr PendingQuotaRequest;
-    // Quoted, but not sent requests
-    std::deque<typename TWriteRequestInfo::TPtr> QuotedRequests;
-    // Requests that is sent to partition actor, but not accepted
-    std::deque<typename TWriteRequestInfo::TPtr> SentRequests;
-    // Accepted requests
-    std::deque<typename TWriteRequestInfo::TPtr> AcceptedRequests;
 
 
     bool WritesDone;
@@ -321,6 +297,7 @@ private:
 
     TDeque<ui64> SeqNoInflight;
 
+    THashMap<std::pair<TString, TString>, TPartitionWriter> Writers;
 };
 
 }

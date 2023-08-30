@@ -201,6 +201,21 @@ bool TTopicOperations::HasWriteOperations() const
     return HasWriteOperations_;
 }
 
+bool TTopicOperations::HasWriteId() const
+{
+    return WriteId_.GetLockId();
+}
+
+ui64 TTopicOperations::GetWriteId() const
+{
+    return WriteId_.GetLockId();
+}
+
+void TTopicOperations::SetWriteId(NLongTxService::TLockHandle handle)
+{
+    WriteId_ = std::move(handle);
+}
+
 bool TTopicOperations::TabletHasReadOperations(ui64 tabletId) const
 {
     for (auto& [_, value] : Operations_) {

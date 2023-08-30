@@ -12,12 +12,23 @@ Y_UNIT_TEST_SUITE(TxUsage) {
 
 NKikimr::Tests::TServerSettings MakeServerSettings()
 {
+    auto loggerInitializer = [](TTestActorRuntime& runtime) {
+        runtime.SetLogPriority(NKikimrServices::PQ_READ_PROXY, NActors::NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NActors::NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::PQ_MIRRORER, NActors::NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::PQ_METACACHE, NActors::NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, NActors::NLog::PRI_DEBUG);
+    };
+
     auto settings = PQSettings(0);
     settings.SetDomainName("Root");
     settings.SetEnableTopicServiceTx(true);
     settings.PQConfig.SetTopicsAreFirstClassCitizen(true);
     settings.PQConfig.SetRoot("/Root");
     settings.PQConfig.SetDatabase("/Root");
+    settings.SetLoggerInitializer(loggerInitializer);
+
     return settings;
 }
 
@@ -114,18 +125,20 @@ protected:
 
     void WriteMessage(const TString& data);
 
-private:
+protected:
+    const TDriver& GetDriver();
+
     TString GetTopicPath() const;
+    TString GetMessageGroupId() const;
+
+private:
     TString GetTopicName() const;
     TString GetConsumerName() const;
-    TString GetMessageGroupId() const;
 
     template<class E>
     E ReadEvent(TTopicReadSessionPtr reader, NTable::TTransaction& tx);
     template<class E>
     E ReadEvent(TTopicReadSessionPtr reader);
-
-    const TDriver& GetDriver();
 
     std::shared_ptr<TEnvironment> Env;
     TMaybe<TDriver> Driver;
@@ -315,6 +328,34 @@ Y_UNIT_TEST_F(TwoSessionOneConsumer, TFixture)
 
     CommitTx(tx2, EStatus::SUCCESS);
     CommitTx(tx1, EStatus::ABORTED);
+}
+
+Y_UNIT_TEST_F(WriteToTopic, TFixture)
+{
+    NTopic::TWriteSessionSettings options;
+    options.Path(GetTopicPath());
+    options.MessageGroupId(GetMessageGroupId());
+
+    auto session = CreateSession();
+    auto tx = BeginTx(session);
+
+    auto writeMessages = [&](const TVector<TString>& messages) {
+        NTopic::TTopicClient client(GetDriver());
+        auto session = client.CreateSimpleBlockingWriteSession(options);
+
+        for (auto& message : messages) {
+            NTopic::TWriteMessage params(message);
+            params.Tx(tx);
+            UNIT_ASSERT(session->Write(std::move(params)));
+        }
+
+        UNIT_ASSERT(session->Close());
+    };
+
+    writeMessages({"a", "bb", "ccc", "dddd"});
+    writeMessages({"eeeee", "ffffff", "ggggggg"});
+
+    CommitTx(tx, EStatus::ABORTED);
 }
 
 }

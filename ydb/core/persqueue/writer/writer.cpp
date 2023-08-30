@@ -5,7 +5,10 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/pq_rl_helpers.h>
 #include <ydb/public/lib/base/msgbus_status.h>
@@ -31,10 +34,14 @@ namespace NKikimr::NPQ {
 static const ui64 WRITE_BLOCK_SIZE = 4_KB;    
 
 TString TEvPartitionWriter::TEvInitResult::TSuccess::ToString() const {
-    return TStringBuilder() << "Success {"
+    auto out = TStringBuilder() << "Success {"
         << " OwnerCookie: " << OwnerCookie
-        << " SourceIdInfo: " << SourceIdInfo.ShortDebugString()
-    << " }";
+        << " SourceIdInfo: " << SourceIdInfo.ShortDebugString();
+    if (WriteId != INVALID_WRITE_ID) {
+        out << " WriteId: " << WriteId;
+    }
+    out << " }";
+    return out;
 }
 
 TString TEvPartitionWriter::TEvInitResult::TError::ToString() const {
@@ -47,6 +54,8 @@ TString TEvPartitionWriter::TEvInitResult::TError::ToString() const {
 TString TEvPartitionWriter::TEvInitResult::ToString() const {
     auto out = TStringBuilder() << ToStringHeader() << " {";
 
+    out << " SessionId: " << SessionId;
+    out << " TxId: " << TxId;
     if (IsSuccess()) {
         out << " " << GetResult().ToString();
     } else {
@@ -59,6 +68,8 @@ TString TEvPartitionWriter::TEvInitResult::ToString() const {
 
 TString TEvPartitionWriter::TEvWriteAccepted::ToString() const {
     return TStringBuilder() << ToStringHeader() << " {"
+        << " SessionId: " << SessionId
+        << " TxId: " << TxId
         << " Cookie: " << Cookie
     << " }";
 }
@@ -67,6 +78,8 @@ TString TEvPartitionWriter::TEvWriteResponse::DumpError() const {
     Y_VERIFY(!IsSuccess());
 
     return TStringBuilder() << "Error {"
+        << " SessionId: " << SessionId
+        << " TxId: " << TxId
         << " Reason: " << GetError().Reason
         << " Response: " << Record.ShortDebugString()
     << " }";
@@ -75,6 +88,8 @@ TString TEvPartitionWriter::TEvWriteResponse::DumpError() const {
 TString TEvPartitionWriter::TEvWriteResponse::ToString() const {
     auto out = TStringBuilder() << ToStringHeader() << " {";
 
+    out << " SessionId: " << SessionId;
+    out << " TxId: " << TxId;
     if (IsSuccess()) {
         out << " Success { Response: " << Record.ShortDebugString() << " }";
     } else {
@@ -163,7 +178,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
     template <typename... Args>
     void SendInitResult(Args&&... args) {
-        Send(Client, new TEvPartitionWriter::TEvInitResult(std::forward<Args>(args)...));
+        Send(Client, new TEvPartitionWriter::TEvInitResult(Opts.SessionId, Opts.TxId, std::forward<Args>(args)...));
     }
 
     void InitResult(const TString& reason, NKikimrClient::TResponse&& response) {
@@ -171,13 +186,13 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         BecomeZombie(TEvPartitionWriter::TEvWriteResponse::EErrors::InternalError, "Init error");
     }
 
-    void InitResult(const TString& ownerCookie, const TEvPartitionWriter::TEvInitResult::TSourceIdInfo& sourceIdInfo) {
-        SendInitResult(ownerCookie, sourceIdInfo);
+    void InitResult(const TString& ownerCookie, const TEvPartitionWriter::TEvInitResult::TSourceIdInfo& sourceIdInfo, ui64 writeId) {
+        SendInitResult(ownerCookie, sourceIdInfo, writeId);
     }
 
     template <typename... Args>
     void SendWriteResult(Args&&... args) {
-        Send(Client, new TEvPartitionWriter::TEvWriteResponse(std::forward<Args>(args)...));
+        Send(Client, new TEvPartitionWriter::TEvWriteResponse(Opts.SessionId, Opts.TxId, std::forward<Args>(args)...));
     }
 
     void WriteResult(TEvPartitionWriter::TEvWriteResponse::EErrors errorCode, const TString& reason, NKikimrClient::TResponse&& response) {
@@ -191,12 +206,83 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void WriteAccepted(ui64 cookie) {
-        Send(Client, new TEvPartitionWriter::TEvWriteAccepted(cookie));
+        Send(Client, new TEvPartitionWriter::TEvWriteAccepted(Opts.SessionId, Opts.TxId, cookie));
     }
 
     void Disconnected(TEvPartitionWriter::TEvWriteResponse::EErrors errorCode) {
         Send(Client, new TEvPartitionWriter::TEvDisconnected());
         BecomeZombie(errorCode, "Disconnected");
+    }
+
+    /// GetWriteId
+
+    void GetWriteId(const TActorContext& ctx) {
+        auto ev = MakeWriteIdRequest();
+        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
+        Become(&TThis::StateGetWriteId);
+    }
+
+    STATEFN(StateGetWriteId) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(NKqp::TEvKqp::TEvQueryResponse, HandleWriteId);
+            hFunc(TEvPartitionWriter::TEvWriteRequest, HoldPending);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    void HandleWriteId(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
+        Y_UNUSED(ctx);
+
+        auto& record = ev->Get()->Record.GetRef();
+        WriteId = record.GetResponse().GetTopicOperations().GetWriteId();
+
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY,
+                    "SessionId: " << Opts.SessionId <<
+                    " TxId: " << Opts.TxId <<
+                    " WriteId: " << WriteId);
+
+        GetOwnership();
+    }
+
+    THolder<NKqp::TEvKqp::TEvQueryRequest> MakeWriteIdRequest() {
+        auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+
+        if (Opts.Token) {
+            ev->Record.SetUserToken(Opts.Token);
+        }
+        //ev->Record.SetRequestActorId(???);
+
+        ev->Record.MutableRequest()->SetDatabase(CanonizePath(Opts.Database));
+        ev->Record.MutableRequest()->SetSessionId(Opts.SessionId);
+        ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_UNDEFINED);
+        ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_TOPIC);
+
+        if (Opts.TraceId) {
+            ev->Record.SetTraceId(Opts.TraceId);
+        }
+
+        if (Opts.RequestType) {
+            ev->Record.SetRequestType(Opts.RequestType);
+        }
+
+        //ev->Record.MutableRequest()->SetCancelAfterMs(???);
+        //ev->Record.MutableRequest()->SetTimeoutMs(???);
+
+        ev->Record.MutableRequest()->MutableTxControl()->set_tx_id(Opts.TxId);
+
+        auto* topics = ev->Record.MutableRequest()->MutableTopicOperations()->AddTopics();
+        topics->set_path(Opts.TopicPath);
+        auto* partitions = topics->add_partitions();
+        partitions->set_partition_id(PartitionId);
+
+        return ev;
+    }
+
+    void SetWriteId(NKikimrClient::TPersQueuePartitionRequest& request) {
+        if (WriteId != INVALID_WRITE_ID) {
+            request.SetWriteId(WriteId);
+        }
     }
 
     /// GetOwnership
@@ -298,7 +384,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
             }
         }
 
-        InitResult(OwnerCookie, sourceIdInfo);
+        InitResult(OwnerCookie, sourceIdInfo, WriteId);
         Become(&TThis::StateWork);
 
         if (Pending) {
@@ -398,6 +484,8 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
             auto& request = *ev->Record.MutablePartitionRequest();
             request.SetMessageNo(MessageNo++);
+
+            SetWriteId(request);
 
             auto& cmd = *request.MutableCmdReserveBytes();
             cmd.SetSize(it->second.ByteSize());
@@ -510,6 +598,8 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
         auto& request = *ev->Record.MutablePartitionRequest();
         request.SetMessageNo(MessageNo++);
+
+        SetWriteId(request);
 
         if (!Opts.UseDeduplication) {
             request.SetPartition(PartitionId);
@@ -666,7 +756,7 @@ public:
         }
     }
 
-    void Bootstrap() {
+    void Bootstrap(const TActorContext& ctx) {
         NTabletPipe::TClientConfig config;
         config.RetryPolicy = {
             .RetryLimitCount = 6,
@@ -677,7 +767,12 @@ public:
         };
 
         PipeClient = RegisterWithSameMailbox(NTabletPipe::CreateClient(SelfId(), TabletId, config));
-        GetOwnership();
+
+        if (Opts.Database && Opts.SessionId && Opts.TxId) {
+            GetWriteId(ctx);
+        } else {
+            GetOwnership();
+        }
     }
 
     STATEFN(StateBase) {
@@ -697,6 +792,7 @@ public:
     }
 
 private:
+
     const TActorId Client;
     const ui64 TabletId;
     const ui32 PartitionId;
@@ -731,6 +827,7 @@ private:
 
     TEvPartitionWriter::TEvWriteResponse::EErrors ErrorCode = TEvPartitionWriter::TEvWriteResponse::EErrors::InternalError;
 
+    ui64 WriteId = INVALID_WRITE_ID;
 }; // TPartitionWriter
 
 IActor* CreatePartitionWriter(const TActorId& client, const std::optional<TString>& topicPath, ui64 tabletId, ui32 partitionId, 

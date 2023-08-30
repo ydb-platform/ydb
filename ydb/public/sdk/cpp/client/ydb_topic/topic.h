@@ -1573,6 +1573,13 @@ public:
     //! Message metadata. Limited to 4096 characters overall (all keys and values combined).
     FLUENT_SETTING(TMessageMeta, MessageMeta);
 
+    //! Transaction id
+    FLUENT_SETTING_OPTIONAL(std::reference_wrapper<NTable::TTransaction>, Tx);
+
+    const NTable::TTransaction* GetTxPtr() const
+    {
+        return Tx_ ? &Tx_->get() : nullptr;
+    }
 };
 
 //! Simple write session. Does not need event handlers. Does not provide Events, ContinuationTokens, write Acks.
@@ -1631,6 +1638,10 @@ public:
     //! Write single message. Old method with only basic message options.
     virtual void Write(TContinuationToken&& continuationToken, TStringBuf data, TMaybe<ui64> seqNo = Nothing(),
                        TMaybe<TInstant> createTimestamp = Nothing()) = 0;
+
+    //! Write single message that is already coded by codec.
+    //! continuationToken - a token earlier provided to client with ReadyToAccept event.
+    virtual void WriteEncoded(TContinuationToken&& continuationToken, TWriteMessage&& params) = 0;
 
     //! Write single message that is already compressed by codec. Old method with only basic message options.
     virtual void WriteEncoded(TContinuationToken&& continuationToken, TStringBuf data, ECodec codec, ui32 originalSize,

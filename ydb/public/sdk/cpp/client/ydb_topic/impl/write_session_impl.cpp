@@ -376,7 +376,8 @@ void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
     with_lock(Lock) {
         CurrentBatch.Add(
                 GetNextSeqNoImpl(message.SeqNo_), createdAtValue, message.Data, message.Codec, message.OriginalSize,
-                message.MessageMeta_
+                message.MessageMeta_,
+                message.GetTxPtr()
         );
 
         FlushWriteIfRequiredImpl();
@@ -392,6 +393,10 @@ void TWriteSessionImpl::Write(TContinuationToken&& token, TWriteMessage&& messag
     WriteInternal(std::move(token), std::move(message));
 }
 
+void TWriteSessionImpl::WriteEncoded(TContinuationToken&& token, TWriteMessage&& message)
+{
+    WriteInternal(std::move(token), std::move(message));
+}
 
 TWriteSessionImpl::THandleResult TWriteSessionImpl::OnErrorImpl(NYdb::TPlainStatus&& status) {
     Y_VERIFY(Lock.IsLocked());
@@ -1078,9 +1083,11 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
             (*Counters->MessagesInflight)++;
             if (!currMessage.MessageMeta.empty()) {
                 OriginalMessagesToSend.emplace(sequenceNumber, createTs, datum.size(),
-                                               std::move(currMessage.MessageMeta));
+                                               std::move(currMessage.MessageMeta),
+                                               currMessage.Tx);
             } else {
-                OriginalMessagesToSend.emplace(sequenceNumber, createTs, datum.size());
+                OriginalMessagesToSend.emplace(sequenceNumber, createTs, datum.size(),
+                                               currMessage.Tx);
             }
         }
         block.Data = std::move(CurrentBatch.Data);
@@ -1161,6 +1168,10 @@ void TWriteSessionImpl::SendImpl() {
 
                 auto* msgData = writeRequest->add_messages();
 
+                if (message.Tx) {
+                    writeRequest->mutable_tx()->set_id(message.Tx->GetId());
+                    writeRequest->mutable_tx()->set_session(message.Tx->GetSession().GetId());
+                }
 
                 msgData->set_seq_no(message.SeqNo + SeqNoShift);
                 *msgData->mutable_created_at() = ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(message.CreatedAt.MilliSeconds());

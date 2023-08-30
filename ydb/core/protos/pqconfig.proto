@@ -861,7 +861,7 @@ message TDataTransaction {
     repeated uint64 SendingShards = 3;
     repeated uint64 ReceivingShards = 4;
     optional bool Immediate = 5;
-    optional fixed64 LockTxId = 6;
+    optional fixed64 WriteId = 6;
 }
 
 message TConfigTransaction {

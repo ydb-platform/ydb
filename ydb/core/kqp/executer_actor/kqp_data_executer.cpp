@@ -2261,10 +2261,9 @@ private:
     }
 
     void ExecuteTopicTabletTransactions(TTopicTabletTxs& topicTxs) {
-        auto lockTxId = Request.AcquireLocksTxId;
-        if (lockTxId.Defined() && *lockTxId == 0) {
-            lockTxId = TxId;
-            LockHandle = TLockHandle(TxId, TActivationContext::ActorSystem());
+        TMaybe<ui64> writeId;
+        if (Request.TopicOperations.HasWriteId()) {
+            writeId = Request.TopicOperations.GetWriteId();
         }
 
         for (auto& tx : topicTxs) {
@@ -2273,8 +2272,8 @@ private:
 
             auto ev = std::make_unique<TEvPersQueue::TEvProposeTransaction>();
 
-            if (lockTxId) {
-                transaction.SetLockTxId(*lockTxId);
+            if (writeId.Defined()) {
+                transaction.SetWriteId(*writeId);
             }
             transaction.SetImmediate(ImmediateTx);
 
@@ -2286,7 +2285,7 @@ private:
             LOG_D("ExecuteTopicTabletTransaction traceId.verbosity: " << std::to_string(traceId.GetVerbosity()));
 
             LOG_D("Executing KQP transaction on topic tablet: " << tabletId
-                  << ", lockTxId: " << lockTxId);
+                  << ", writeId: " << writeId);
 
             Send(MakePipePeNodeCacheID(false),
                  new TEvPipeCache::TEvForward(ev.release(), tabletId, true),

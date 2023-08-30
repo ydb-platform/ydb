@@ -174,14 +174,18 @@ private:
         TMaybe<ECodec> Codec;
         ui32 OriginalSize; // only for coded messages
         TVector<std::pair<TString, TString>> MessageMeta;
+        const NTable::TTransaction* Tx;
+
         TMessage(ui64 seqNo, const TInstant& createdAt, TStringBuf data, TMaybe<ECodec> codec = {},
-                 ui32 originalSize = 0, const TVector<std::pair<TString, TString>>& messageMeta = {})
+                 ui32 originalSize = 0, const TVector<std::pair<TString, TString>>& messageMeta = {},
+                 const NTable::TTransaction* tx = nullptr)
             : SeqNo(seqNo)
             , CreatedAt(createdAt)
             , DataRef(data)
             , Codec(codec)
             , OriginalSize(originalSize)
             , MessageMeta(messageMeta)
+            , Tx(tx)
         {}
     };
 
@@ -192,12 +196,14 @@ private:
         TInstant StartedAt = TInstant::Zero();
         bool Acquired = false;
         bool FlushRequested = false;
+
         void Add(ui64 seqNo, const TInstant& createdAt, TStringBuf data, TMaybe<ECodec> codec, ui32 originalSize,
-                 const TVector<std::pair<TString, TString>>& messageMeta) {
+                 const TVector<std::pair<TString, TString>>& messageMeta,
+                 const NTable::TTransaction* tx) {
             if (StartedAt == TInstant::Zero())
                 StartedAt = TInstant::Now();
             CurrentSize += codec ? originalSize : data.size();
-            Messages.emplace_back(seqNo, createdAt, data, codec, originalSize, messageMeta);
+            Messages.emplace_back(seqNo, createdAt, data, codec, originalSize, messageMeta, tx);
             Acquired = false;
         }
 
@@ -267,17 +273,24 @@ private:
         TInstant CreatedAt;
         size_t Size;
         TVector<std::pair<TString, TString>> MessageMeta;
-        TOriginalMessage(const ui64 sequenceNumber, const TInstant createdAt, const size_t size)
+        const NTable::TTransaction* Tx;
+
+        TOriginalMessage(const ui64 sequenceNumber, const TInstant createdAt, const size_t size,
+                         const NTable::TTransaction* tx)
             : SeqNo(sequenceNumber)
             , CreatedAt(createdAt)
             , Size(size)
+            , Tx(tx)
         {}
+
         TOriginalMessage(const ui64 sequenceNumber, const TInstant createdAt, const size_t size,
-                         TVector<std::pair<TString, TString>>&& messageMeta)
+                         TVector<std::pair<TString, TString>>&& messageMeta,
+                         const NTable::TTransaction* tx)
             : SeqNo(sequenceNumber)
             , CreatedAt(createdAt)
             , Size(size)
             , MessageMeta(std::move(messageMeta))
+            , Tx(tx)
         {}
     };
 
@@ -328,6 +341,8 @@ public:
         Y_UNUSED(createTimestamp);
         Y_FAIL("Do not use this method");
     };
+
+    void WriteEncoded(TContinuationToken&& continuationToken, TWriteMessage&& message) override;
 
     void WriteEncoded(TContinuationToken&&, TStringBuf, ECodec, ui32,
                       TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing()) override {

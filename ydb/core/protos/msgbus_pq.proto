@@ -120,6 +120,7 @@ message TPersQueuePartitionRequest {
     optional string OwnerCookie = 3; //mandatory for write
     optional int64 MessageNo = 12; //mandatory for write
     optional int64 CmdWriteOffset = 13; //optional
+    optional int64 WriteId = 23;
 
     repeated TCmdWrite CmdWrite = 4;
     optional TCmdGetMaxSeqNo CmdGetMaxSeqNo = 5;

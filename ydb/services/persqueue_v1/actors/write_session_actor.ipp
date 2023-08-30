@@ -154,12 +154,9 @@ inline void FillChunkDataFromReq(
     *msgMeta = msg.metadata_items();
 }
 
-namespace NGRpcProxy {
-namespace V1 {
+namespace NGRpcProxy::V1 {
 
 using namespace Ydb::PersQueue::V1;
-
-static const ui32 MAX_RESERVE_REQUESTS_INFLIGHT = 5;
 
 static const ui32 MAX_BYTES_INFLIGHT = 1_MB;
 static const TDuration SOURCEID_UPDATE_PERIOD = TDuration::Hours(1);
@@ -295,8 +292,9 @@ template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::Die(const TActorContext& ctx) {
     if (State == ES_DYING)
         return;
-    if (Writer)
-        ctx.Send(Writer, new TEvents::TEvPoisonPill());
+    for (auto& [_, writer] : Writers) {
+        ctx.Send(writer.PartitionWriterActor, new TEvents::TEvPoisonPill());
+    }
 
     if (SessionsActive) {
         SessionsActive.Dec();
@@ -339,7 +337,7 @@ void TWriteSessionActor<UseMigrationProtocol>::CheckFinish(const TActorContext& 
         CloseSession("out of order Writes done before initialization", PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
     }
-    if (!PendingRequest && !PendingQuotaRequest && QuotedRequests.empty() && SentRequests.empty() && AcceptedRequests.empty()) {
+    if (PendingRequests.empty() && !PendingQuotaRequest && !AnyRequests()) {
         CloseSession("", PersQueue::ErrorCode::OK, ctx);
         return;
     }
@@ -928,7 +926,6 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NKqp::TEvKqp::TEvQueryResp
         GetOrProcessPartition(ctx);
         return;
     } else if (State == EState::ES_WAIT_TABLE_REQUEST_2) {
-
         SourceIdUpdatesInflight--;
         if (!SourceIdUpdatesInflight) {
             LastSourceIdUpdate = ctx.Now();
@@ -1033,10 +1030,8 @@ void TWriteSessionActor<UseMigrationProtocol>::ProceedPartition(const ui32 parti
         return;
     }
 
-    Writer = ctx.RegisterWithSameMailbox(NPQ::CreatePartitionWriter(
-            ctx.SelfID, {}, PartitionTabletId, Partition, ExpectedGeneration,
-            SourceId, TPartitionWriterOpts().WithDeduplication(UseDeduplication)
-    ));
+    InitPartitionWriter("", "", ctx);
+
     State = ES_WAIT_WRITER_INIT;
 
     ui32 border = AppData(ctx)->PQConfig.GetWriteInitLatencyBigMs();
@@ -1146,11 +1141,21 @@ void TWriteSessionActor<UseMigrationProtocol>::MakeAndSentInitResponse(
 
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev, const TActorContext& ctx) {
-    if (State != ES_WAIT_WRITER_INIT) {
-        return CloseSession("got init result but not wait for it", PersQueue::ErrorCode::ERROR, ctx);
+    const auto& result = *ev->Get();
+
+    auto writer = FindPartitionWriter(result.SessionId, result.TxId);
+    Y_VERIFY(writer != nullptr);
+
+    if (!result.SessionId && !result.TxId) {
+        if (State != ES_WAIT_WRITER_INIT) {
+            return CloseSession("got init result but not wait for it", PersQueue::ErrorCode::ERROR, ctx);
+        }
+    } else {
+        if (State != ES_INITED) {
+            return CloseSession("got init result but not wait for it", PersQueue::ErrorCode::ERROR, ctx);
+        }
     }
 
-    const auto& result = *ev->Get();
     if (!result.IsSuccess()) {
         const auto& error = result.GetError();
         if (error.Response.HasErrorCode()) {
@@ -1160,13 +1165,17 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::T
         }
     }
 
-    OwnerCookie = result.GetResult().OwnerCookie;
+    writer->OnEvInitResult(ev);
+
     const auto& maxSeqNo = result.GetResult().SourceIdInfo.GetSeqNo();
     if (!UseDeduplication) {
         Y_VERIFY(maxSeqNo == 0);
     }
-    MakeAndSentInitResponse(maxSeqNo, ctx);
 
+    if (!result.SessionId && !result.TxId) {
+        OwnerCookie = result.GetResult().OwnerCookie;
+        MakeAndSentInitResponse(maxSeqNo, ctx);
+    }
 }
 
 template<bool UseMigrationProtocol>
@@ -1175,18 +1184,21 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::T
         return CloseSession("got write permission but not wait for it", PersQueue::ErrorCode::ERROR, ctx);
     }
 
-    Y_VERIFY(!SentRequests.empty());
-    auto writeRequest = std::move(SentRequests.front());
+    auto* writer = FindPartitionWriter(ev->Get()->SessionId, ev->Get()->TxId);
+    Y_VERIFY(writer != nullptr);
+
+    Y_VERIFY(!writer->SentRequests.empty());
+    auto writeRequest = std::move(writer->SentRequests.front());
 
     if (ev->Get()->Cookie != writeRequest->Cookie) {
         return CloseSession("out of order reserve bytes response from server, may be previous is lost", PersQueue::ErrorCode::ERROR, ctx);
     }
 
-    SentRequests.pop_front();
+    writer->SentRequests.pop_front();
 
     ui64 diff = writeRequest->ByteSize;
 
-    AcceptedRequests.emplace_back(std::move(writeRequest));
+    writer->AcceptedRequests.emplace_back(std::move(writeRequest));
 
     BytesInflight_ -= diff;
     if (BytesInflight) {
@@ -1201,22 +1213,21 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::T
         }
     }
 
-    if (!IsQuotaRequired() && PendingRequest) {
-        SendRequest(std::move(PendingRequest), ctx);
-    } else if (!QuotedRequests.empty()) {
-        SendRequest(std::move(QuotedRequests.front()), ctx);
-        QuotedRequests.pop_front();
+    if (!IsQuotaRequired() && !PendingRequests.empty()) {
+        SendRequest(*writer, std::move(PendingRequests.front()), ctx);
+        PendingRequests.pop_front();
+    } else if (!writer->QuotedRequests.empty()) {
+        SendRequest(*writer, std::move(writer->QuotedRequests.front()), ctx);
+        writer->QuotedRequests.pop_front();
     }
 }
 
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::ProcessWriteResponse(
-        const NKikimrClient::TPersQueuePartitionResponse& response, const TActorContext& ctx
+        const NKikimrClient::TPersQueuePartitionResponse& response, TPartitionWriter& writer, const TActorContext& ctx
 ) {
-
-    auto writeRequest = std::move(AcceptedRequests.front());
-    AcceptedRequests.pop_front();
-
+    auto writeRequest = std::move(writer.AcceptedRequests.front());
+    writer.AcceptedRequests.pop_front();
 
     auto addAckMigration = [this](
             const TPersQueuePartitionResponse::TCmdWriteResult& res,
@@ -1361,19 +1372,21 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::T
         }
     }
 
+    auto* writer = FindPartitionWriter(result.SessionId, result.TxId);
+    Y_VERIFY(writer != nullptr);
 
-    if (AcceptedRequests.empty()) {
+    if (writer->AcceptedRequests.empty()) {
         CloseSession("got too many replies from server, internal error", PersQueue::ErrorCode::ERROR, ctx);
         return;
     }
 
-    const auto& writeRequest = AcceptedRequests.front();
+    const auto& writeRequest = writer->AcceptedRequests.front();
     const auto& resp = result.Record.GetPartitionResponse();
 
     if (resp.GetCookie() != writeRequest->Cookie) {
         return CloseSession("out of order write response from server, may be previous is lost", PersQueue::ErrorCode::ERROR, ctx);
     }
-    ProcessWriteResponse(resp, ctx);
+    ProcessWriteResponse(resp, *writer, ctx);
 }
 
 template<bool UseMigrationProtocol>
@@ -1399,11 +1412,39 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvTabletPipe::TEvClientDe
 
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&& ev, const TActorContext& ctx) {
-    if (!PendingRequest) {
-        PendingRequest = new TWriteRequestInfo(++NextRequestCookie);
+    const auto& writeRequest = ev->Request.write_request();
+
+    if constexpr (!UseMigrationProtocol) {
+        if (writeRequest.has_tx() && !AppData(ctx)->FeatureFlags.GetEnableTopicServiceTx()) {
+            CloseSession("Disabled transaction support for TopicService.",
+                         PersQueue::ErrorCode::ERROR, ctx);
+            return;
+        }
     }
 
-    auto& request = PendingRequest->PartitionWriteRequest->Record;
+    if (PendingRequests.empty()) {
+        PendingRequests.emplace_back(new TWriteRequestInfo(++NextRequestCookie));
+    } else if constexpr (!UseMigrationProtocol) {
+        Y_VERIFY(!PendingRequests.back()->UserWriteRequests.empty());
+
+        auto& last = PendingRequests.back()->UserWriteRequests.back()->Request.write_request();
+
+        if (writeRequest.has_tx()) {
+            if (last.has_tx()) {
+                if ((writeRequest.tx().session() != last.tx().session()) ||
+                    (writeRequest.tx().id() != last.tx().id())) {
+                    PendingRequests.emplace_back(new TWriteRequestInfo(++NextRequestCookie));
+                }
+            } else {
+                PendingRequests.emplace_back(new TWriteRequestInfo(++NextRequestCookie));
+            }
+        } else if (last.has_tx()) {
+            PendingRequests.emplace_back(new TWriteRequestInfo(++NextRequestCookie));
+        }
+    }
+
+    auto pendingRequest = PendingRequests.back();
+    auto& request = pendingRequest->PartitionWriteRequest->Record;
     ui64 payloadSize = 0;
 
     auto addDataMigration = [&](const StreamingWriteClientMessage::WriteRequest& writeRequest, const i32 messageIndex) {
@@ -1450,7 +1491,6 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
         maxMessageMetadataSize = std::max(maxMessageMetadataSize, currMetadataSize);
     };
 
-    const auto& writeRequest = ev->Request.write_request();
     if constexpr (UseMigrationProtocol) {
         for (i32 messageIndex = 0; messageIndex != writeRequest.sequence_numbers_size(); ++messageIndex) {
             addDataMigration(writeRequest, messageIndex);
@@ -1459,15 +1499,21 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
         for (i32 messageIndex = 0; messageIndex != writeRequest.messages_size(); ++messageIndex) {
             addData(writeRequest, messageIndex);
         }
+
+        if (writeRequest.has_tx()) {
+            InitPartitionWriter(writeRequest.tx().session(), writeRequest.tx().id(), ctx);
+        }
     }
 
-    PendingRequest->UserWriteRequests.push_back(std::move(ev));
-    PendingRequest->ByteSize = request.ByteSize();
+    pendingRequest->UserWriteRequests.push_back(std::move(ev));
+    pendingRequest->ByteSize = request.ByteSize();
+
     auto msgMetaEnabled = AppData(ctx)->FeatureFlags.GetEnableTopicMessageMeta();
     if (!msgMetaEnabled && maxMessageMetadataSize > 0) {
         CloseSession("Message level metadata support is disabled on server size", PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
     }
+
     if (maxMessageMetadataSize > MAX_METADATA_SIZE_PER_MESSAGE) {
         CloseSession(
                 TStringBuilder() << "Message level metadata size is limited to " << MAX_METADATA_SIZE_PER_MESSAGE
@@ -1476,21 +1522,36 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
         );
         return;
     }
+
     if (const auto ru = CalcRuConsumption(payloadSize)) {
-        PendingRequest->RequiredQuota += ru;
-        if (MaybeRequestQuota(PendingRequest->RequiredQuota, EWakeupTag::RlAllowed, ctx)) {
-            Y_VERIFY(!PendingQuotaRequest);
-            PendingQuotaRequest = std::move(PendingRequest);
+        pendingRequest->RequiredQuota += ru;
+
+        if (!PendingQuotaRequest) {
+            if (MaybeRequestQuota(PendingRequests.front()->RequiredQuota, EWakeupTag::RlAllowed, ctx)) {
+                PendingQuotaRequest = std::move(PendingRequests.front());
+                PendingRequests.pop_front();
+            }
         }
     } else {
-        if (!PendingQuotaRequest && SentRequests.size() < MAX_RESERVE_REQUESTS_INFLIGHT) {
-            SendRequest(std::move(PendingRequest), ctx);
+        TPartitionWriter* writer = nullptr;
+        if constexpr (UseMigrationProtocol) {
+            Y_VERIFY(Writers.size() == 1);
+            writer = &Writers.begin()->second;
+        } else {
+            const auto& [sessionId, txId] = pendingRequest->GetTransactionId();
+            writer = FindPartitionWriter(sessionId, txId);
+            Y_VERIFY(writer != nullptr);
+        }
+
+        if (!PendingQuotaRequest && writer->SentRequests.size() < MAX_RESERVE_REQUESTS_INFLIGHT) {
+            SendRequest(*writer, std::move(PendingRequests.front()), ctx);
+            PendingRequests.pop_front();
         }
     }
 }
 
 template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::SendRequest(typename TWriteRequestInfo::TPtr&& request, const TActorContext& ctx) {
+void TWriteSessionActor<UseMigrationProtocol>::SendRequest(TPartitionWriter& writer, typename TWriteRequestInfo::TPtr&& request, const TActorContext& ctx) {
     Y_VERIFY(request->PartitionWriteRequest);
 
     i64 diff = 0;
@@ -1507,8 +1568,8 @@ void TWriteSessionActor<UseMigrationProtocol>::SendRequest(typename TWriteReques
         BytesInflightTotal.Inc(diff);
     }
 
-    ctx.Send(Writer, std::move(request->PartitionWriteRequest));
-    SentRequests.push_back(std::move(request));
+    ctx.Send(writer.PartitionWriterActor, std::move(request->PartitionWriteRequest));
+    writer.SentRequests.push_back(std::move(request));
 }
 
 template<bool UseMigrationProtocol>
@@ -1754,21 +1815,29 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvents::TEvWakeup::TPtr& 
         case EWakeupTag::RecheckAcl:
             return RecheckACL(ctx);
 
-        case EWakeupTag::RlAllowed:
+        case EWakeupTag::RlAllowed: {
             if (auto counters = Request->GetCounters()) {
                 counters->AddConsumedRequestUnits(PendingQuotaRequest->RequiredQuota);
             }
 
-            if (SentRequests.size() < MAX_RESERVE_REQUESTS_INFLIGHT) {
-                SendRequest(std::move(PendingQuotaRequest), ctx);
+            const auto& [sessionId, txId] = PendingQuotaRequest->GetTransactionId();
+            auto* writer = FindPartitionWriter(sessionId, txId);
+            Y_VERIFY(writer != nullptr);
+
+            if (writer->SentRequests.size() < MAX_RESERVE_REQUESTS_INFLIGHT) {
+                SendRequest(*writer, std::move(PendingQuotaRequest), ctx);
             } else {
-                QuotedRequests.push_back(std::move(PendingQuotaRequest));
+                writer->QuotedRequests.push_back(std::move(PendingQuotaRequest));
             }
 
-            if (PendingQuotaRequest = std::move(PendingRequest)) {
-                Y_VERIFY(MaybeRequestQuota(PendingQuotaRequest->RequiredQuota, EWakeupTag::RlAllowed, ctx));
+            if (!PendingRequests.empty()) {
+                Y_VERIFY(MaybeRequestQuota(PendingRequests.front()->RequiredQuota, EWakeupTag::RlAllowed, ctx));
+                PendingQuotaRequest = std::move(PendingRequests.front());
+                PendingRequests.pop_front();
             }
+
             break;
+        }
 
         case EWakeupTag::RlNoResource:
         case EWakeupTag::RlInitNoResource:
@@ -1803,6 +1872,74 @@ void TWriteSessionActor<UseMigrationProtocol>::RecheckACL(const TActorContext& c
     }
 }
 
+template<bool UseMigrationProtocol>
+auto TWriteSessionActor<UseMigrationProtocol>::FindPartitionWriter(const TString& sessionId, const TString& txId) -> TPartitionWriter*
+{
+    auto p = Writers.find(std::make_pair(sessionId, txId));
+    if (p == Writers.end()) {
+        return nullptr;
+    }
+    return &p->second;
 }
+
+template<bool UseMigrationProtocol>
+void TWriteSessionActor<UseMigrationProtocol>::InitPartitionWriter(const TString& sessionId, const TString& txId,
+                                                                   const TActorContext& ctx)
+{
+    auto key = std::make_pair(sessionId, txId);
+    if (auto p = Writers.find(key); p != Writers.end()) {
+        return;
+    }
+
+    auto [p, _] = Writers.emplace(std::piecewise_construct,
+                                  std::forward_as_tuple(key),
+                                  std::forward_as_tuple(BytesInflight,
+                                                        BytesInflightTotal,
+                                                        BytesInflight_,
+                                                        BytesInflightTotal_));
+    auto& writer = p->second;
+
+    auto it = PartitionToTablet.find(Partition);
+    ui64 tabletId = it != PartitionToTablet.end() ? it->second : 0;
+
+    TPartitionWriterOpts opts;
+    opts.WithDeduplication(UseDeduplication);
+    if constexpr (!UseMigrationProtocol) {
+        if (sessionId && txId) {
+            Y_VERIFY(Request->GetDatabaseName());
+            opts.WithDatabase(*Request->GetDatabaseName());
+            opts.WithTopicPath(InitRequest.path());
+            opts.WithSessionId(sessionId);
+            opts.WithTxId(txId);
+            if (Request->GetSerializedToken()) {
+                opts.WithToken(Request->GetSerializedToken());
+            }
+            if (Request->GetTraceId()) {
+                opts.WithTraceId(*Request->GetTraceId());
+            }
+            if (Request->GetRequestType()) {
+                opts.WithRequestType(*Request->GetRequestType());
+            }
+        }
+    }
+
+    TActorId actor = ctx.RegisterWithSameMailbox(NPQ::CreatePartitionWriter(
+        ctx.SelfID, {}, tabletId, Partition, ExpectedGeneration,
+        SourceId, opts
+    ));
+    writer.PartitionWriterActor = actor;
+}
+
+template<bool UseMigrationProtocol>
+bool TWriteSessionActor<UseMigrationProtocol>::AnyRequests() const
+{
+    for (auto& [_, writer] : Writers) {
+        if (writer.AnyRequests()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 }
 }

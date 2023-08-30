@@ -822,6 +822,25 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         TVector<TCounters> Counters_;
     };
 
+    struct TTestConfig {
+        bool OneShot = false;
+        ui32 ListenerThreads = 1;
+    };
+
+    TVector<TTestConfig> testConfigs = {
+        {.OneShot = false, .ListenerThreads = 1},
+        {.OneShot = true, .ListenerThreads = 1},
+        {.OneShot = true, .ListenerThreads = 4},
+        {.OneShot = true, .ListenerThreads = 63},
+    };
+
+    THttpServer::TOptions ApplyConfig(const THttpServer::TOptions& opts, const TTestConfig& cfg) {
+        THttpServer::TOptions res = opts;
+        res.OneShotPoll = cfg.OneShot;
+        res.nListenerThreads = cfg.ListenerThreads;
+        return res;
+    }
+
     Y_UNIT_TEST(TestStartStop) {
         TPortManager pm;
         const ui16 port = pm.GetPort();
@@ -830,9 +849,9 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         TShooter shooter(threadCount, port);
 
         TString res = TestData();
-        for (bool oneShot : {true, false}) {
+        for (const auto& cfg : testConfigs) {
             TEchoServer serverImpl(res);
-            THttpServer server(&serverImpl, THttpServer::TOptions(port).EnableKeepAlive(true).SetOneShotPoll(oneShot));
+            THttpServer server(&serverImpl, ApplyConfig(THttpServer::TOptions(port).EnableKeepAlive(true), cfg));
             for (size_t i = 0; i < 100; ++i) {
                 UNIT_ASSERT(server.Start());
                 shooter.WaitProgress();
@@ -884,9 +903,9 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
 
         TString res = TestData();
 
-        for (bool oneShot : {true, false}) {
+        for (const auto& cfg : testConfigs) {
             TMaxConnServer serverImpl(res);
-            THttpServer server(&serverImpl, THttpServer::TOptions(port).EnableKeepAlive(true).SetMaxConnections(maxConnections).SetOneShotPoll(oneShot));
+            THttpServer server(&serverImpl, ApplyConfig(THttpServer::TOptions(port).EnableKeepAlive(true).SetMaxConnections(maxConnections), cfg));
 
             UNIT_ASSERT(server.Start());
 

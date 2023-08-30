@@ -68,14 +68,6 @@ SRCS(
     chunk_client/read_limit.cpp
     chunk_client/ready_event_reader_base.cpp
 
-    converters/boolean_converter.cpp
-    converters/converter.cpp
-    converters/floating_point_converter.cpp
-    converters/helper.cpp
-    converters/integer_converter.cpp
-    converters/null_converter.cpp
-    converters/string_converter.cpp
-
     journal_client/public.cpp
     journal_client/config.cpp
 

@@ -1930,7 +1930,7 @@ message TLocalPgWireConfig {
 }
 
 message TKafkaProxyConfig {
-    optional bool EnableKafkaProxy = 1 [default = true];
+    optional bool EnableKafkaProxy = 1 [default = false];
 
     optional int32 ListeningPort = 2 [default = 9092];
     optional string SslCertificate = 3;

@@ -5670,46 +5670,56 @@ TExprNode::TPtr ExpandConstraintsOf(const TExprNode::TPtr& node, TExprContext& c
 TExprNode::TPtr ExpandCostsOf(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
 
-    TString json;
-    TStringOutput out(json);
-    NJson::TJsonWriter jsonWriter(&out, true);
+    TNodeMap<TString> visitedNodes;
+    std::function<TString(const TExprNode::TPtr& node)> printNode = [&](const TExprNode::TPtr& node) -> TString {
+        auto [it, emplaced] = visitedNodes.emplace(node.Get(), "");
+        if (!emplaced) {
+            return it->second;
+        }
 
-    VisitExpr(node, [&](const TExprNode::TPtr& node) {
-        auto stat = typesCtx.GetStats(node.Get());
-
-        if (stat || node->ChildrenSize()) {
-            jsonWriter.OpenMap();
-            jsonWriter.WriteKey("Name");
-            jsonWriter.Write(node->Content());
-            if (stat) {
-                if (stat->Cost) {
-                    jsonWriter.WriteKey("Cost");
-                    jsonWriter.Write(*stat->Cost);
-                }
-                jsonWriter.WriteKey("Cols");
-                jsonWriter.Write(stat->Ncols);
-                jsonWriter.WriteKey("Rows");
-                jsonWriter.Write(stat->Nrows);
-            }
-            if (node->ChildrenSize()) {
-                jsonWriter.WriteKey("Children");
-                jsonWriter.OpenArray();
+        std::vector<TString> chInfo;
+        for (const auto& child : node->ChildrenList()) {
+            auto res = printNode(child);
+            if (res) {
+                chInfo.emplace_back(std::move(res));
             }
         }
-        return true;
-    }, [&](const TExprNode::TPtr& node) {
-        auto stat = typesCtx.GetStats(node.Get());
 
-        if (stat || node->ChildrenSize()) {
-            if (node->ChildrenSize()) {
+        auto stat = typesCtx.GetStats(node.Get());
+        if (!chInfo.empty() || stat) {
+            TStringOutput out(it->second);
+            NJson::TJsonWriter jsonWriter(&out, false);
+            jsonWriter.OpenMap();
+            if (node->Content()) {
+                jsonWriter.Write("Name", node->Content());
+            }
+            if (stat) {
+                if (stat->Cost) {
+                    jsonWriter.Write("Cost", *stat->Cost);
+                }
+                jsonWriter.Write("Cols", stat->Ncols);
+                jsonWriter.Write("Rows", stat->Nrows);
+            }
+            if (!chInfo.empty()) {
+                jsonWriter.WriteKey("Children");
+                jsonWriter.OpenArray();
+                for (const auto& info : chInfo) {
+                    jsonWriter.UnsafeWrite(info);
+                }
                 jsonWriter.CloseArray();
             }
             jsonWriter.CloseMap();
+            jsonWriter.Flush();
         }
-        return true;
-    });
 
-    jsonWriter.Flush();
+        return it->second;
+    };
+
+    TString json = printNode(node);
+
+    if (!json) {
+        json = "{}";
+    }
 
     return ctx.Builder(node->Pos())
         .Callable("Json")

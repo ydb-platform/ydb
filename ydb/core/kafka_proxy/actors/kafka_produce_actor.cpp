@@ -215,7 +215,7 @@ void TKafkaProduceActor::ProcessRequests(const TActorContext& ctx) {
     }
 
     if (EnqueueInitialization()) {
-        PendingRequests.push_back({Requests.front()});
+        PendingRequests.push_back(std::make_shared<TPendingRequest>(Requests.front()));
         Requests.pop_front();
 
         ProcessRequest(PendingRequests.back(), ctx);
@@ -316,11 +316,11 @@ size_t PartsCount(const TProduceRequestData* r) {
     return result;
 }
 
-void TKafkaProduceActor::ProcessRequest(TPendingRequest& pendingRequest, const TActorContext& ctx) {
-    auto* r = pendingRequest.Request->Get()->Request;
+void TKafkaProduceActor::ProcessRequest(TPendingRequest::TPtr pendingRequest, const TActorContext& ctx) {
+    auto* r = pendingRequest->Request->Get()->Request;
 
-    pendingRequest.Results.resize(PartsCount(r));
-    pendingRequest.StartTime = ctx.Now();
+    pendingRequest->Results.resize(PartsCount(r));
+    pendingRequest->StartTime = ctx.Now();
 
     size_t position = 0;
     for(const auto& topicData : r->TopicData) {
@@ -335,16 +335,16 @@ void TKafkaProduceActor::ProcessRequest(TPendingRequest& pendingRequest, const T
                 cookieInfo.TopicPath = topicPath;
                 cookieInfo.PartitionId = partitionId;
                 cookieInfo.Position = position;
-                cookieInfo.Request = &pendingRequest;
+                cookieInfo.Request = pendingRequest;
 
-                pendingRequest.WaitAcceptingCookies.insert(ownCookie);
-                pendingRequest.WaitResultCookies.insert(ownCookie);
+                pendingRequest->WaitAcceptingCookies.insert(ownCookie);
+                pendingRequest->WaitResultCookies.insert(ownCookie);
 
                 auto ev = Convert(partitionData, *topicData.Name, ownCookie, ClientDC);
 
                 Send(writer.second, std::move(ev));
             } else {
-                auto& result = pendingRequest.Results[position];
+                auto& result = pendingRequest->Results[position];
                 switch (writer.first) {
                     case NOT_FOUND:
                         result.ErrorCode = EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION;
@@ -359,7 +359,7 @@ void TKafkaProduceActor::ProcessRequest(TPendingRequest& pendingRequest, const T
         }
     }
 
-    if (pendingRequest.WaitResultCookies.empty()) {
+    if (pendingRequest->WaitResultCookies.empty()) {
         // All request for unknown topic or empty request
         SendResults(ctx);
     } else {
@@ -407,8 +407,6 @@ void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr reque
     partitionResult.Value = request;
     cookieInfo.Request->WaitResultCookies.erase(cookie);
 
-    Cookies.erase(it);
-
     if (!r->IsSuccess()) {
         auto wit = Writers.find(cookieInfo.TopicPath);
         if (wit != Writers.end()) {
@@ -424,6 +422,8 @@ void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr reque
     if (cookieInfo.Request->WaitResultCookies.empty()) {
         SendResults(ctx);
     }
+
+    Cookies.erase(it);
 }
 
 EKafkaErrors Convert(TEvPartitionWriter::TEvWriteResponse::EErrors value) {
@@ -443,17 +443,17 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
 
     // We send the results in the order of receipt of the request
     while (!PendingRequests.empty()) {
-        auto& pendingRequest = PendingRequests.front();
+        auto pendingRequest = PendingRequests.front();
 
         // We send the response by timeout. This is possible, for example, if the event was lost or the PartitionWrite died.
-        bool expired = expireTime > pendingRequest.StartTime;
+        bool expired = expireTime > pendingRequest->StartTime;
 
-        if (!expired && !pendingRequest.WaitResultCookies.empty()) {
+        if (!expired && !pendingRequest->WaitResultCookies.empty()) {
             return;
         }
 
-        auto* r = pendingRequest.Request->Get()->Request;
-        auto correlationId = pendingRequest.Request->Get()->CorrelationId;
+        auto* r = pendingRequest->Request->Get()->Request;
+        auto correlationId = pendingRequest->Request->Get()->CorrelationId;
 
         KAFKA_LOG_D("Send result for correlationId " << correlationId << ". Expired=" << expired);
 
@@ -474,7 +474,7 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
             for(size_t j = 0; j < partitionCount; ++j) {
                 const auto& partitionData = topicData.PartitionData[j];
                 auto& partitionResponse = topicResponse.PartitionResponses[j];
-                const auto& result = pendingRequest.Results[position++];
+                const auto& result = pendingRequest->Results[position++];
 
                 partitionResponse.Index = partitionData.Index;
 
@@ -505,11 +505,11 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
 
         Send(Context->ConnectionId, new TEvKafka::TEvResponse(correlationId, response));
 
-        if (!pendingRequest.WaitAcceptingCookies.empty()) {
+        if (!pendingRequest->WaitAcceptingCookies.empty()) {
             if (!expired) {
                 TStringBuilder sb;
                 sb << "All TEvWriteResponse were received, but not all TEvWriteAccepted. Unreceived cookies:";
-                for(auto cookie : pendingRequest.WaitAcceptingCookies) {
+                for(auto cookie : pendingRequest->WaitAcceptingCookies) {
                     sb << " " << cookie;
                 }
                 KAFKA_LOG_W(sb);
@@ -517,6 +517,13 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
             if (&TKafkaProduceActor::StateAccepting == CurrentStateFunc()) {
                 Become(&TKafkaProduceActor::StateWork);
             }
+        }
+
+        for(auto cookie : pendingRequest->WaitAcceptingCookies) {
+            Cookies.erase(cookie);
+        }
+        for(auto cookie : pendingRequest->WaitResultCookies) {
+            Cookies.erase(cookie);
         }
 
         PendingRequests.pop_front();

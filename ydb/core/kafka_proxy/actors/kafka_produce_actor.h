@@ -118,7 +118,7 @@ private:
 
     // Logic
     void ProcessRequests(const TActorContext& ctx);
-    void ProcessRequest(TPendingRequest& pendingRequest, const TActorContext& ctx);
+    void ProcessRequest(std::shared_ptr<TPendingRequest> pendingRequest, const TActorContext& ctx);
 
     void SendResults(const TActorContext& ctx);
 
@@ -142,6 +142,8 @@ private:
     TDeque<TEvKafka::TEvProduceRequest::TPtr> Requests;
 
     struct TPendingRequest {
+        using TPtr = std::shared_ptr<TPendingRequest>;
+
         TPendingRequest(TEvKafka::TEvProduceRequest::TPtr request)
             : Request(request) {
         }
@@ -160,14 +162,14 @@ private:
 
         TInstant StartTime;
     };
-    TDeque<TPendingRequest> PendingRequests;
+    TDeque<TPendingRequest::TPtr> PendingRequests;
 
     struct TCookieInfo {
         TString TopicPath;
         ui32 PartitionId;
         size_t Position;
 
-        TPendingRequest* Request;
+        TPendingRequest::TPtr Request;
     };
     std::map<ui64, TCookieInfo> Cookies;
 

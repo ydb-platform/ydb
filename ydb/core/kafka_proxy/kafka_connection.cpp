@@ -16,22 +16,9 @@ namespace NKafka {
 using namespace NActors;
 using namespace NKikimr;
 
-
-char Hex(const unsigned char c) {
-    return c < 10 ? '0' + c : 'A' + c - 10;
-}
-
-void Print(const TString& marker, TBuffer& buffer, ssize_t length) {
-    TStringBuilder sb;
-    for (ssize_t i = 0; i < length; ++i) {
-        char c = buffer.Data()[i];
-        if (i > 0) {
-            sb << ", ";
-        }
-        sb << "0x" << Hex((c & 0xF0) >> 4) << Hex(c & 0x0F);
-    }
-    KAFKA_LOG_ERROR("Packet " << marker << ": " << sb);
-}
+static constexpr size_t HeaderSize = sizeof(TKafkaInt16) /* apiKey */ +
+                                     sizeof(TKafkaVersion) /* version */ +
+                                     sizeof(TKafkaInt32) /* correlationId */;
 
 class TKafkaConnection: public TActorBootstrapped<TKafkaConnection>, public TNetworkConfig {
 public:
@@ -43,6 +30,10 @@ public:
         size_t Size = 0;
         TKafkaInt32 ExpectedSize = 0;
         TBuffer Buffer;
+
+        TKafkaInt16 ApiKey;
+        TKafkaVersion ApiVersion;
+        TKafkaInt32 CorrelationId;
 
         TRequestHeaderData Header;
         std::unique_ptr<TApiMessage> Message;
@@ -72,7 +63,7 @@ public:
     std::unordered_map<ui64, Msg::TPtr> PendingRequests;
     std::deque<Msg::TPtr> PendingRequestsQueue;
 
-    enum EReadSteps { SIZE_READ, SIZE_PREPARE, INFLIGTH_CHECK, MESSAGE_READ, MESSAGE_PROCESS };
+    enum EReadSteps { SIZE_READ, SIZE_PREPARE, INFLIGTH_CHECK, HEADER_READ, HEADER_PROCESS, MESSAGE_READ, MESSAGE_PROCESS };
     EReadSteps Step;
 
     TReadDemand Demand;
@@ -229,11 +220,6 @@ protected:
                                                << ", Size=" << Request->Size);
 
         Msg::TPtr r = Request;
-
-        if (!Context->Authenticated() && RequireAuthentication(static_cast<EApiKey>(Request->Header.RequestApiKey))) {
-            KAFKA_LOG_ERROR("unauthenticated request: ApiKey=" << Request->Header.RequestApiKey);
-            return PassAway();
-        }
 
         PendingRequestsQueue.push_back(r);
         PendingRequests[r->Header.CorrelationId] = r;
@@ -405,10 +391,20 @@ protected:
 
                     case SIZE_PREPARE:
                         NormalizeNumber(Request->ExpectedSize);
-                        if ((ui64)Request->ExpectedSize > Context->Config.GetMaxMessageSize()) {
-                            KAFKA_LOG_ERROR("message is big. Size: " << Request->ExpectedSize << ". MaxSize: " << Context->Config.GetMaxMessageSize());
+                        if (Request->ExpectedSize < 0) {
+                            KAFKA_LOG_ERROR("Wrong message size. Size: " << Request->ExpectedSize);
                             return PassAway();
                         }
+                        if ((ui64)Request->ExpectedSize > Context->Config.GetMaxMessageSize()) {
+                            KAFKA_LOG_ERROR("message is big. Size: " << Request->ExpectedSize << ". MaxSize: "
+                                                                     << Context->Config.GetMaxMessageSize());
+                            return PassAway();
+                        }
+                        if (static_cast<size_t>(Request->ExpectedSize) < HeaderSize) {
+                            KAFKA_LOG_ERROR("message is small. Size: " << Request->ExpectedSize);
+                            return PassAway();
+                        }
+
                         Step = INFLIGTH_CHECK;
 
                     case INFLIGTH_CHECK:
@@ -423,43 +419,58 @@ protected:
                         InflightSize += Request->ExpectedSize;
                         Step = MESSAGE_READ;
 
+                    case HEADER_READ:
+                        KAFKA_LOG_T("start read header. ExpectedSize=" << Request->ExpectedSize);
+
+                        Request->Buffer.Resize(HeaderSize);
+                        Demand = TReadDemand(Request->Buffer.Data(), HeaderSize);
+
+                        Step = HEADER_PROCESS;
+                        break;
+                    
+                    case HEADER_PROCESS:
+                        Request->ApiKey = *(TKafkaInt16*)Request->Buffer.Data();
+                        Request->ApiVersion = *(TKafkaVersion*)(Request->Buffer.Data() + sizeof(TKafkaInt16));
+                        Request->CorrelationId = *(TKafkaInt32*)(Request->Buffer.Data() + sizeof(TKafkaInt16) + sizeof(TKafkaVersion));
+
+                        NormalizeNumber(Request->ApiKey);
+                        NormalizeNumber(Request->ApiVersion);
+                        NormalizeNumber(Request->CorrelationId);
+
+                        if (PendingRequests.contains(Request->CorrelationId)) {
+                            KAFKA_LOG_ERROR("CorrelationId " << Request->CorrelationId << " already processing");
+                            return PassAway();
+                        }
+                        if (!Context->Authenticated() && RequireAuthentication(static_cast<EApiKey>(Request->ApiKey))) {
+                            KAFKA_LOG_ERROR("unauthenticated request: ApiKey=" << Request->ApiKey);
+                            return PassAway();
+                        }
+
+                        Step = MESSAGE_READ;
+
                     case MESSAGE_READ:
                         KAFKA_LOG_T("start read new message. ExpectedSize=" << Request->ExpectedSize);
 
                         Request->Buffer.Resize(Request->ExpectedSize);
-                        Demand = TReadDemand(Request->Buffer.Data(), Request->ExpectedSize);
+                        Demand = TReadDemand(Request->Buffer.Data() + HeaderSize, Request->ExpectedSize - HeaderSize);
 
                         Step = MESSAGE_PROCESS;
                         break;
 
                     case MESSAGE_PROCESS:
-                        TKafkaInt16 apiKey = *(TKafkaInt16*)Request->Buffer.Data();
-                        TKafkaVersion apiVersion = *(TKafkaVersion*)(Request->Buffer.Data() + sizeof(TKafkaInt16));
-                        TKafkaInt32 correlationId = *(TKafkaInt32*)(Request->Buffer.Data() + sizeof(TKafkaInt16) + sizeof(TKafkaInt16));
-
-                        NormalizeNumber(apiKey);
-                        NormalizeNumber(apiVersion);
-                        NormalizeNumber(correlationId);
-
-                        KAFKA_LOG_D("received message. ApiKey=" << apiKey << ", Version=" << apiVersion << ", CorrelationId=" << correlationId);
-
-                        if (PendingRequests.contains(correlationId)) {
-                            KAFKA_LOG_ERROR("CorrelationId " << correlationId << " already processing");
-                            return PassAway();
-                        }
-
-                        // Print("received", Request->Buffer, Request->ExpectedSize);
+                        KAFKA_LOG_D("received message. ApiKey=" << Request->ApiKey << ", Version=" << Request->ApiVersion << ", CorrelationId=" << Request->CorrelationId);
 
                         TKafkaReadable readable(Request->Buffer);
 
-                        Request->Message = CreateRequest(apiKey);
                         try {
-                            Request->Header.Read(readable, RequestHeaderVersion(apiKey, apiVersion));
-                            Request->Message->Read(readable, apiVersion);
+                            Request->Message = CreateRequest(Request->ApiKey);
+
+                            Request->Header.Read(readable, RequestHeaderVersion(Request->ApiKey, Request->ApiVersion));
+                            Request->Message->Read(readable, Request->ApiVersion);
                         } catch(const yexception& e) {
-                            KAFKA_LOG_ERROR("error on processing message: ApiKey=" << apiKey
-                                                                    << ", Version=" << apiVersion
-                                                                    << ", CorrelationId=" << correlationId
+                            KAFKA_LOG_ERROR("error on processing message: ApiKey=" << Request->ApiKey
+                                                                    << ", Version=" << Request->ApiVersion
+                                                                    << ", CorrelationId=" << Request->CorrelationId
                                                                     << ", Error=" <<  e.what());
                             return PassAway();
                         }

@@ -18,11 +18,13 @@ inline TLegacyLockMask::TLegacyLockMask(TLegacyLockBitmap value)
 
 inline ELockType TLegacyLockMask::Get(int index) const
 {
+    YT_VERIFY(index >= 0);
     return ELockType((Data_ >> (BitsPerType * index)) & TypeMask);
 }
 
 inline void TLegacyLockMask::Set(int index, ELockType lock)
 {
+    YT_VERIFY(index >= 0);
     YT_VERIFY(lock <= MaxOldLockType);
     Data_ &= ~(TypeMask << (BitsPerType * index));
     Data_ |= static_cast<TLegacyLockBitmap>(lock) << (BitsPerType * index);
@@ -54,6 +56,7 @@ inline TLockMask::TLockMask(TLockBitmap bitmap, int size)
 
 inline ELockType TLockMask::Get(int index) const
 {
+    YT_VERIFY(index >= 0);
     auto wordIndex = index / LocksPerWord;
     if (wordIndex < std::ssize(Bitmap_)) {
         auto wordPosition = index & (LocksPerWord - 1);
@@ -66,6 +69,7 @@ inline ELockType TLockMask::Get(int index) const
 
 inline void TLockMask::Set(int index, ELockType lock)
 {
+    YT_VERIFY(index >= 0);
     if (index >= Size_) {
         Reserve(index + 1);
     }

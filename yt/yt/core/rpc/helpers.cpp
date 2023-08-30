@@ -434,12 +434,7 @@ TTraceContextPtr CreateCallTraceContext(std::string service, std::string method)
     }
 
     auto traceContext = oldTraceContext->CreateChild(Format("RpcClient:%v.%v", service, method));
-
     traceContext->SetAllocationTagsPtr(oldTraceContext->GetAllocationTagsPtr());
-
-    if (GetCurrentMemoryTag() && !traceContext->FindAllocationTag<TMemoryTag>(NTracing::MemoryTagLiteral)) {
-        traceContext->SetAllocationTag<TMemoryTag>(NTracing::MemoryTagLiteral, GetCurrentMemoryTag());
-    }
 
     return traceContext;
 }

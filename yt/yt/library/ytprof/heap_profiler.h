@@ -23,10 +23,6 @@ int AbslStackUnwinder(void** frames, int*,
 
 using TMemoryTag = uintptr_t;
 
-TMemoryTag GetMemoryTag();
-
-TMemoryTag SetMemoryTag(TMemoryTag newTag);
-
 THashMap<TMemoryTag, ui64> GetEstimatedMemoryUsage();
 
 void UpdateMemoryUsageSnapshot(THashMap<TMemoryTag, ui64> usageSnapshot);

@@ -15,8 +15,6 @@
 #include <yt/yt/core/misc/ring_queue.h>
 #include <yt/yt/core/misc/shutdown.h>
 
-#include <library/cpp/yt/memory/memory_tag.h>
-
 #include <util/thread/lfqueue.h>
 
 namespace NYT::NConcurrency {
@@ -647,41 +645,6 @@ private:
 ISuspendableInvokerPtr CreateSuspendableInvoker(IInvokerPtr underlyingInvoker)
 {
     return New<TSuspendableInvoker>(std::move(underlyingInvoker));
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TMemoryTaggingInvoker
-    : public TInvokerWrapper
-{
-public:
-    TMemoryTaggingInvoker(IInvokerPtr invoker, TMemoryTag memoryTag)
-        : TInvokerWrapper(std::move(invoker))
-        , MemoryTag_(memoryTag)
-    { }
-
-    void Invoke(TClosure callback) override
-    {
-        UnderlyingInvoker_->Invoke(BIND_NO_PROPAGATE(
-            &TMemoryTaggingInvoker::RunCallback,
-            MakeStrong(this),
-            Passed(std::move(callback))));
-    }
-
-private:
-    TMemoryTag MemoryTag_;
-
-    void RunCallback(TClosure callback)
-    {
-        TCurrentInvokerGuard currentInvokerGuard(this);
-        TMemoryTagGuard memoryTagGuard(MemoryTag_);
-        callback();
-    }
-};
-
-IInvokerPtr CreateMemoryTaggingInvoker(IInvokerPtr underlyingInvoker, TMemoryTag tag)
-{
-    return New<TMemoryTaggingInvoker>(std::move(underlyingInvoker), tag);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

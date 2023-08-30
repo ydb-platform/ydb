@@ -27,7 +27,7 @@ TYPED_TEST(TRpcTest, ResponseWithAllocationTags)
 
     NYTProf::EnableMemoryProfilingTags();
 
-    auto initialMemoryUsage = GetMemoryUsageForTag(testMemoryTag);
+    auto initialMemoryUsage = NYTProf::GetEstimatedMemoryUsage()[testMemoryTag];
 
     auto actionQueue = New<TActionQueue>();
 
@@ -36,8 +36,9 @@ TYPED_TEST(TRpcTest, ResponseWithAllocationTags)
 
     TTestProxy proxy(this->CreateChannel());
 
-    constexpr auto size = 1_MB;
-    for (int i = 0; i < 10; ++i) {
+    constexpr auto size = 4_MB - 1_KB;
+    constexpr auto numberOfLoops = 10;
+    for (int i = 0; i < numberOfLoops; ++i) {
         auto context = CreateTraceContextFromCurrent("ResponseWithAllocationTags");
         auto contextGuard = TTraceContextGuard(context);
         context->SetAllocationTag(MemoryTagLiteral, testMemoryTag);
@@ -67,15 +68,19 @@ TYPED_TEST(TRpcTest, ResponseWithAllocationTags)
         responses.push_back(rspFutureProp);
     }
 
-    for (auto& rsp : responses) {
+    auto memoryUsageBefore = NYTProf::GetEstimatedMemoryUsage()[testMemoryTag];
+    EXPECT_LE(memoryUsageBefore, numberOfLoops * 1536_KB);
+
+    for (const auto& rsp : responses) {
         WaitFor(rsp).ValueOrThrow();
     }
 
     auto memoryUsageAfter = NYTProf::GetEstimatedMemoryUsage()[testMemoryTag];
-    auto deltaMemoryUsage = memoryUsageAfter - initialMemoryUsage;
-    EXPECT_GE(deltaMemoryUsage, 14_MB)
+    auto deltaMemoryUsage = memoryUsageAfter - initialMemoryUsage - memoryUsageBefore;
+    EXPECT_GE(deltaMemoryUsage, numberOfLoops * size * 6 / 5)
         << "InitialUsage: " << initialMemoryUsage << std::endl
-        << "After waiting: " << memoryUsageAfter;
+        << "MemoryUsage before waiting: " << memoryUsageBefore << std::endl
+        << "MemoryUsage after waiting: " << memoryUsageAfter;
 }
 
 #endif

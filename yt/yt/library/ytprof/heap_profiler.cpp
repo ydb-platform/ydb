@@ -180,20 +180,6 @@ THashMap<TMemoryTag, ui64> GetEstimatedMemoryUsage()
     return usage;
 }
 
-static thread_local TMemoryTag MemoryTag = 0;
-
-TMemoryTag GetMemoryTag()
-{
-    return MemoryTag;
-}
-
-TMemoryTag SetMemoryTag(TMemoryTag newTag)
-{
-    auto oldTag = MemoryTag;
-    MemoryTag = newTag;
-    return oldTag;
-}
-
 struct TMemoryUsageSnapshot
 {
     TSpinLock Lock;

@@ -47,6 +47,8 @@ using namespace NYPath;
 using namespace ::google::protobuf::io;
 using namespace ::google::protobuf::internal;
 
+using FieldDescriptor = google::protobuf::FieldDescriptor;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TNestedMessageWithCustomConverter
@@ -2030,22 +2032,26 @@ TEST(TResolveProtobufElementByYPath, Message)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TestScalarByYPath(const TYPath& path)
+void TestScalarByYPath(const TYPath& path, FieldDescriptor::Type type)
 {
     auto result = ResolveProtobufElementByYPath(ReflectProtobufMessageType<NYT::NYson::NProto::TMessage>(), path);
     EXPECT_TRUE(std::holds_alternative<std::unique_ptr<TProtobufScalarElement>>(result.Element));
     EXPECT_EQ(path, result.HeadPath);
     EXPECT_EQ("", result.TailPath);
+    EXPECT_EQ(
+        static_cast<TProtobufScalarElement::TType>(type),
+        std::get<std::unique_ptr<TProtobufScalarElement>>(result.Element)->Type
+    );
 }
 
 TEST(TResolveProtobufElementByYPath, Scalar)
 {
-    TestScalarByYPath("/uint32_field");
-    TestScalarByYPath("/repeated_int32_field/123");
-    TestScalarByYPath("/repeated_nested_message1/0/color");
-    TestScalarByYPath("/nested_message_map/abc/int32_field");
-    TestScalarByYPath("/string_to_int32_map/abc");
-    TestScalarByYPath("/int32_to_int32_map/100");
+    TestScalarByYPath("/uint32_field", FieldDescriptor::TYPE_UINT32);
+    TestScalarByYPath("/repeated_int32_field/123", FieldDescriptor::TYPE_INT32);
+    TestScalarByYPath("/repeated_nested_message1/0/color", FieldDescriptor::TYPE_ENUM);
+    TestScalarByYPath("/nested_message_map/abc/int32_field", FieldDescriptor::TYPE_INT32);
+    TestScalarByYPath("/string_to_int32_map/abc", FieldDescriptor::TYPE_INT32);
+    TestScalarByYPath("/int32_to_int32_map/100", FieldDescriptor::TYPE_INT32);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -631,7 +631,9 @@ TProtobufElement TProtobufField::GetElement(bool insideRepeated) const
             MessageType_
         });
     } else {
-        return std::make_unique<TProtobufScalarElement>();
+        return std::make_unique<TProtobufScalarElement>(TProtobufScalarElement{
+            static_cast<TProtobufScalarElement::TType>(GetType())
+        });
     }
 }
 

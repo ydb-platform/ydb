@@ -12,6 +12,7 @@ SRCS(
     depth_limiting_yson_consumer_ut.cpp
     filter_ut.cpp
     lexer_ut.cpp
+    protobuf_scalar_type_ut.cpp
     protobuf_yson_ut.cpp
     ypath_designated_yson_consumer_ut.cpp
     yson_parser_ut.cpp
@@ -20,6 +21,7 @@ SRCS(
     yson_ut.cpp
     yson_writer_ut.cpp
 
+    proto/protobuf_scalar_type_ut.proto
     proto/protobuf_yson_ut.proto
     proto/protobuf_yson_casing_ut.proto
 )

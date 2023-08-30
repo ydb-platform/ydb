@@ -75,6 +75,8 @@ struct TProtobufMessageElement
 
 struct TProtobufScalarElement
 {
+    YT_DEFINE_STRONG_TYPEDEF(TType, int);
+    TType Type;
 };
 
 struct TProtobufAttributeDictionaryElement

@@ -1,0 +1,49 @@
+package NYT.NYson.NProto;
+
+import "yt_proto/yt/core/misc/proto/protobuf_helpers.proto";
+import "yt_proto/yt/core/yson/proto/protobuf_interop.proto";
+import "yt_proto/yt/core/ytree/proto/attributes.proto";
+
+message TExampleMessage
+{
+    optional int32 int32_field = 1;
+    optional uint32 uint32_field = 2;
+    optional sint32 sint32_field = 3;
+    optional int64 int64_field = 4;
+    optional uint64 uint64_field = 5;
+    optional sint64 sint64_field = 6;
+    optional fixed32 fixed32_field = 7;
+    optional fixed64 fixed64_field = 8;
+    optional sfixed32 sfixed32_field = 9;
+    optional sfixed64 sfixed64_field = 10;
+    optional bool bool_field = 11;
+    optional string string_field = 12;
+    optional float float_field = 13;
+    optional double double_field = 14;
+
+    repeated int32 repeated_int32_field = 15;
+    repeated uint32 repeated_uint32_field = 16;
+    repeated sint32 repeated_sint32_field = 17;
+    repeated int64 repeated_int64_field = 18;
+    repeated uint64 repeated_uint64_field = 19;
+    repeated sint64 repeated_sint64_field = 20;
+    repeated fixed32 repeated_fixed32_field = 21;
+    repeated fixed64 repeated_fixed64_field = 22;
+    repeated sfixed32 repeated_sfixed32_field = 23;
+    repeated sfixed64 repeated_sfixed64_field = 24;
+    repeated bool repeated_bool_field = 25;
+    repeated string repeated_string_field = 26;
+    repeated float repeated_float_field = 27;
+    repeated double repeated_double_field = 28;
+
+    optional TExampleMessage nested_message1 = 29;
+    optional TExampleMessage nested_message2 = 30;
+
+    repeated TExampleMessage repeated_nested_message = 31;
+
+    map<string, TExampleMessage> nested_message_map = 33[(NYT.NYson.NProto.yson_map) = true];
+    map<string, int32> string_to_int32_map = 34[(NYT.NYson.NProto.yson_map) = true];
+    map<string, string> string_to_string_map = 35[(NYT.NYson.NProto.yson_map) = true];
+    map<int32, int32> int32_to_int32_map = 36[(NYT.NYson.NProto.yson_map) = true];
+    map<int32, string> int32_to_string_map = 37[(NYT.NYson.NProto.yson_map) = true];
+}

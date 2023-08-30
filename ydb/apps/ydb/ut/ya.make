@@ -8,6 +8,7 @@ DEPENDS(
 )
 
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
+ENV(YDB_FEATURE_FLAGS="enable_topic_service_tx")
 
 SRCS(
     workload-topic.cpp

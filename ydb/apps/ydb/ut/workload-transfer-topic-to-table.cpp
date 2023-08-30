@@ -79,7 +79,7 @@ TString ExecYdb(const TList<TString>& args)
     //
     // ydb -e grpc://${YDB_ENDPOINT} -d /${YDB_DATABASE} workload transfer topic-to-table ${args}
     //
-    return RunYdb({"workload", "transfer", "topic-to-table"}, args);
+    return RunYdb({"-v", "--user", "root", "--no-password", "workload", "transfer", "topic-to-table"}, args);
 }
 
 void RunYdb(const TList<TString>& args,
@@ -89,6 +89,19 @@ void RunYdb(const TList<TString>& args,
     ExecYdb(args);
     ExpectTopic({.Name=topic, .Partitions=topicPartitions, .Consumers=consumers});
     ExpectTable({.Name=table, .Partitions=tablePartitions});
+}
+
+Y_UNIT_TEST(Default_Run) {
+    RunYdb({"-v", "yql", "-s", R"(ALTER USER root PASSWORD "")"}, TList<TString>());
+
+    ExecYdb({"init"});
+    auto output = ExecYdb({"run", "-s", "10"});
+    ExecYdb({"clean"});
+
+    ui64 fullTime = GetFullTimeValue(output);
+
+    UNIT_ASSERT_GE(fullTime, 0);
+    UNIT_ASSERT_LT(fullTime, 10'000);
 }
 
 Y_UNIT_TEST(Default_Init_Clean)

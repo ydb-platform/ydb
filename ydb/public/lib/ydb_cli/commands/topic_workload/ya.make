@@ -12,6 +12,7 @@ SRCS(
     topic_workload_stats_collector.cpp
     topic_workload_writer.cpp
     topic_workload_reader.cpp
+    topic_workload_reader_transaction_support.cpp
     topic_workload.cpp
 )
 

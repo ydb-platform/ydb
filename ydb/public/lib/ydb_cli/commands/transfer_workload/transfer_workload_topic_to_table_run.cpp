@@ -1,25 +1,39 @@
-#include "topic_workload_run_full.h"
-#include "topic_workload_defines.h"
-#include "topic_workload_params.h"
+#include "transfer_workload_topic_to_table_run.h"
+#include "transfer_workload_defines.h"
 
+#include <ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_describe.h>
+#include <ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_params.h>
+#include <ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_reader.h>
+#include <ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_stats_collector.h>
+#include <ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_writer.h>
+#include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
+#include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_topic.h>
+
+#define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
+#undef INCLUDE_YDB_INTERNAL_H
+
+#include <util/generic/guid.h>
+
+#include <future>
+#include <thread>
 
 using namespace NYdb::NConsoleClient;
 
-TCommandWorkloadTopicRunFull::TCommandWorkloadTopicRunFull()
-    : TWorkloadCommand("full", {}, "Full workload")
+TCommandWorkloadTransferTopicToTableRun::TCommandWorkloadTransferTopicToTableRun() :
+    TWorkloadCommand("run", {}, "Run workload")
 {
 }
 
-void TCommandWorkloadTopicRunFull::Config(TConfig& config)
+void TCommandWorkloadTransferTopicToTableRun::Config(TConfig& config)
 {
     TYdbCommand::Config(config);
 
     config.SetFreeArgsNum(0);
 
-    // Common params
     config.Opts->AddLongOption('s', "seconds", "Seconds to run workload.")
-        .DefaultValue(60)
+        .DefaultValue(10)
         .StoreResult(&Scenario.TotalSec);
     config.Opts->AddLongOption('w', "window", "Output window duration in seconds.")
         .DefaultValue(1)
@@ -32,22 +46,24 @@ void TCommandWorkloadTopicRunFull::Config(TConfig& config)
         .DefaultValue(50)
         .StoreResult(&Scenario.Percentile);
     config.Opts->AddLongOption("warmup", "Warm-up time in seconds.")
-        .DefaultValue(5)
+        .DefaultValue(1)
         .StoreResult(&Scenario.WarmupSec);
     config.Opts->AddLongOption("topic", "Topic name.")
-        .DefaultValue(TOPIC)
+        .DefaultValue(NWorkloadTransfer::TOPIC)
         .StoreResult(&Scenario.TopicName);
+    config.Opts->AddLongOption("consumer-prefix", "Use consumers with names '<consumer-prefix>-0' ... '<consumer-prefix>-<n-1>' where n is set in the '--consumers' option.")
+        .DefaultValue(CONSUMER_PREFIX)
+        .StoreResult(&Scenario.ConsumerPrefix);
+    config.Opts->AddLongOption("table", "Table name.")
+        .DefaultValue(NWorkloadTransfer::TABLE)
+        .StoreResult(&Scenario.TableName);
 
-    // Specific params
     config.Opts->AddLongOption('p', "producer-threads", "Number of producer threads.")
         .DefaultValue(1)
         .StoreResult(&Scenario.ProducerThreadCount);
     config.Opts->AddLongOption('t', "consumer-threads", "Number of consumer threads.")
         .DefaultValue(1)
         .StoreResult(&Scenario.ConsumerThreadCount);
-    config.Opts->AddLongOption("consumer-prefix", "Use consumers with names '<consumer-prefix>-0' ... '<consumer-prefix>-<n-1>' where n is set in the '--consumers' option.")
-        .DefaultValue(CONSUMER_PREFIX)
-        .StoreResult(&Scenario.ConsumerPrefix);
     config.Opts->AddLongOption('c', "consumers", "Number of consumers in a topic.")
         .DefaultValue(1)
         .StoreResult(&Scenario.ConsumerCount);
@@ -64,16 +80,19 @@ void TCommandWorkloadTopicRunFull::Config(TConfig& config)
         .Optional()
         .DefaultValue((TStringBuilder() << NTopic::ECodec::RAW))
         .StoreMappedResultT<TString>(&Scenario.Codec, &TCommandWorkloadTopicParams::StrToCodec);
-    config.Opts->AddLongOption("direct", "Direct write to a partition node.")
-        .Hidden()
-        .StoreTrue(&Scenario.Direct);
+    config.Opts->AddLongOption("commit-period", "Waiting time between commit.")
+        .DefaultValue(1)
+        .StoreResult(&Scenario.CommitPeriod);
+    config.Opts->AddLongOption("use-topic-commit", "Use TopicAPI commit.")
+        .DefaultValue(false)
+        .StoreTrue(&Scenario.UseTopicApiCommit);
 
     config.Opts->MutuallyExclusive("message-rate", "byte-rate");
 
     config.IsNetworkIntensive = true;
 }
 
-void TCommandWorkloadTopicRunFull::Parse(TConfig& config)
+void TCommandWorkloadTransferTopicToTableRun::Parse(TConfig& config)
 {
     TClientCommand::Parse(config);
 
@@ -81,9 +100,9 @@ void TCommandWorkloadTopicRunFull::Parse(TConfig& config)
     Scenario.EnsureWarmupSecIsValid();
 }
 
-int TCommandWorkloadTopicRunFull::Run(TConfig& config)
+int TCommandWorkloadTransferTopicToTableRun::Run(TConfig& config)
 {
-    Scenario.UseTransactions = false;
+    Scenario.UseTransactions = true;
 
     return Scenario.Run(config);
 }

@@ -3,6 +3,8 @@
 #include <util/generic/yexception.h>
 #include <util/system/shellcommand.h>
 #include <util/system/env.h>
+#include <util/string/cast.h>
+#include <util/string/split.h>
 
 #include <library/cpp/testing/common/env.h>
 
@@ -42,4 +44,14 @@ TString RunYdb(const TList<TString>& args1, const TList<TString>& args2)
     }
 
     return command.GetOutput();
+}
+
+ui64 GetFullTimeValue(const TString& output)
+{
+    TVector<TString> lines, columns;
+
+    Split(output, "\n", lines);
+    Split(lines.back(), "\t", columns);
+
+    return FromString<ui64>(columns.back());
 }

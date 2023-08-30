@@ -12,6 +12,7 @@ TTopicWorkloadStats::TTopicWorkloadStats()
     , ReadBytes(0)
     , ReadMessages(0)
     , FullTimeHist(HighestTrackableTime, 5)
+    , CommitTxTimeHist(HighestTrackableTime, 2)
 {
 }
 
@@ -34,4 +35,9 @@ void TTopicWorkloadStats::AddEvent(const LagEvent& event)
 {
     LagMessagesHist.RecordValue(Min(event.LagMessages, HighestTrackableMessageCount));
     LagTimeHist.RecordValue(Min(event.LagTime, HighestTrackableTime));
+}
+
+void TTopicWorkloadStats::AddEvent(const CommitTxEvent& event)
+{
+    CommitTxTimeHist.RecordValue(Min(event.Time, HighestTrackableTime));
 }

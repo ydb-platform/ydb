@@ -60,6 +60,9 @@ public:
     ui32 Codec;
     TString TableName;
     ui32 TablePartitionCount = 1;
+    bool UseTransactions = false;
+    size_t CommitPeriod = 15;
+    bool UseTopicApiCommit = false;
 
 protected:
     void CreateTopic(const TString& database,

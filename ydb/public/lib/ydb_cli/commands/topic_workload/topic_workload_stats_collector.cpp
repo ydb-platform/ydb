@@ -24,15 +24,13 @@ TTopicWorkloadStatsCollector::TTopicWorkloadStatsCollector(
     , WindowStats(MakeHolder<TTopicWorkloadStats>())
 {
     for (size_t writerIdx = 0; writerIdx < writerCount; writerIdx++) {
-        auto writerQueue = MakeHolder<TAutoLockFreeQueue<TTopicWorkloadStats::WriterEvent>>();
-        WriterEventQueues.emplace_back(std::move(writerQueue));
+        AddQueue(WriterEventQueues);
     }
 
     for (size_t readerIdx = 0; readerIdx < readerCount; readerIdx++) {
-        auto readerQueue = MakeHolder<TAutoLockFreeQueue<TTopicWorkloadStats::ReaderEvent>>();
-        ReaderEventQueues.emplace_back(std::move(readerQueue));
-        auto lagQueue = MakeHolder<TAutoLockFreeQueue<TTopicWorkloadStats::LagEvent>>();
-        LagEventQueues.emplace_back(std::move(lagQueue));
+        AddQueue(ReaderEventQueues);
+        AddQueue(LagEventQueues);
+        AddQueue(CommitTxEventQueues);
     }
 }
 
@@ -127,6 +125,7 @@ void TTopicWorkloadStatsCollector::CollectThreadEvents()
     CollectThreadEvents(WriterEventQueues);
     CollectThreadEvents(ReaderEventQueues);
     CollectThreadEvents(LagEventQueues);
+    CollectThreadEvents(CommitTxEventQueues);
 }
 
 template<class T>
@@ -139,6 +138,13 @@ void TTopicWorkloadStatsCollector::CollectThreadEvents(TEventQueues<T>& queues)
             TotalStats.AddEvent(*event);
         }
     }
+}
+
+template<class T>
+void TTopicWorkloadStatsCollector::AddQueue(TEventQueues<T>& queues)
+{
+    auto queue = MakeHolder<TAutoLockFreeQueue<T>>();
+    queues.emplace_back(std::move(queue));
 }
 
 ui64 TTopicWorkloadStatsCollector::GetTotalReadMessages() const {
@@ -162,6 +168,11 @@ void TTopicWorkloadStatsCollector::AddReaderEvent(size_t readerIdx, const TTopic
 void TTopicWorkloadStatsCollector::AddLagEvent(size_t readerIdx, const TTopicWorkloadStats::LagEvent& event)
 {
     AddEvent(readerIdx, LagEventQueues, event);
+}
+
+void TTopicWorkloadStatsCollector::AddCommitTxEvent(size_t readerIdx, const TTopicWorkloadStats::CommitTxEvent& event)
+{
+    AddEvent(readerIdx, CommitTxEventQueues, event);
 }
 
 template<class T>

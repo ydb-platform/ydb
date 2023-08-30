@@ -1,4 +1,5 @@
 #include "topic_workload_reader.h"
+#include "topic_workload_reader_transaction_support.h"
 
 #include "topic_workload_describe.h"
 
@@ -7,17 +8,36 @@
 
 using namespace NYdb::NConsoleClient;
 
-void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams& params) {
+void TTopicWorkloadReader::RetryableReaderLoop(TTopicWorkloadReaderParams& params) {
+    const TInstant endTime = Now() + TDuration::Seconds(params.TotalSec + 3);
+
+    while (!*params.ErrorFlag && Now() < endTime) {
+        try {
+            ReaderLoop(params, endTime);
+        } catch (const yexception& ex) {
+            WRITE_LOG(params.Log, ELogPriority::TLOG_WARNING, TStringBuilder() << ex);
+        }
+    }
+}
+
+void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams& params, TInstant endTime) {
     auto topicClient = std::make_unique<NYdb::NTopic::TTopicClient>(params.Driver);
+    std::optional<TTransactionSupport> txSupport;
 
     auto consumerName = TCommandWorkloadTopicDescribe::GenerateConsumerName(params.ConsumerPrefix, params.ConsumerIdx);
     auto describeTopicResult = TCommandWorkloadTopicDescribe::DescribeTopic(params.Database, params.TopicName, params.Driver);
     auto consumers = describeTopicResult.GetConsumers();
+
     if (!std::any_of(consumers.begin(), consumers.end(), [consumerName](const auto& consumer) { return consumer.GetConsumerName() == consumerName; }))
     {
         WRITE_LOG(params.Log, ELogPriority::TLOG_EMERG, TStringBuilder() << "Topic '" << params.TopicName << "' doesn't have a consumer '" << consumerName << "'. Run command 'workload init' with parameter '--consumers'.");
         exit(EXIT_FAILURE);
     }
+    
+    if (params.UseTransactions) {
+        txSupport.emplace(params.Driver, params.TableName);
+    }
+
     NYdb::NTopic::TReadSessionSettings settings;
     settings.ConsumerName(consumerName).AppendTopics(params.TopicName);
 
@@ -34,7 +54,9 @@ void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams& params) {
 
     (*params.StartedCount)++;
 
-    const TInstant endTime = Now() + TDuration::Seconds(params.TotalSec + 3);
+    TInstant commitTime = Now() + TDuration::Seconds(params.CommitPeriod);
+
+    TVector<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent> stopPartitionSessionEvents;
 
     while (Now() < endTime && !*params.ErrorFlag) {
         TInstant st = TInstant::Now();
@@ -48,7 +70,7 @@ void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams& params) {
         }
 
         readSession->WaitEvent().Wait(TDuration::Seconds(1));
-        auto events = readSession->GetEvents(false);
+        TVector<NYdb::NTopic::TReadSessionEvent::TEvent> events = GetEvents(*readSession, params, txSupport);
 
         auto now = TInstant::Now();
         for (auto& event : events) {
@@ -59,12 +81,19 @@ void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams& params) {
                     ui64 fullTime = (now - message.GetCreateTime()).MilliSeconds();
                     params.StatsCollector->AddReaderEvent(params.ReaderIdx, {message.GetData().Size(), fullTime});
 
-                    WRITE_LOG(params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "Got message: " << message.GetMessageGroupId()
+                    if (txSupport) {
+                        txSupport->AppendRow(message.GetData());
+                    }
+
+                    WRITE_LOG(params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "Got message: " << message.GetMessageGroupId() 
                         << " topic " << message.GetPartitionSession()->GetTopicPath() << " partition " << message.GetPartitionSession()->GetPartitionId() 
                         << " offset " << message.GetOffset() << " seqNo " << message.GetSeqNo()
                         << " createTime " << message.GetCreateTime() << " fullTimeMs " << fullTime);
                 }
-                dataEvent->Commit();
+
+                if (!txSupport || params.UseTopicApiCommit) {
+                    dataEvent->Commit();
+                }
             } else if (auto* createPartitionStreamEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&event)) {
                 auto stream = createPartitionStreamEvent->GetPartitionSession();
                 ui64 startOffset = streamState[std::make_pair(stream->GetTopicPath(), stream->GetPartitionId())].StartOffset;
@@ -74,7 +103,13 @@ void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams& params) {
             } else if (auto* destroyPartitionStreamEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&event)) {
                 auto stream = destroyPartitionStreamEvent->GetPartitionSession();
                 streamState[std::make_pair(stream->GetTopicPath(), stream->GetPartitionId())].Stream = nullptr;
-                destroyPartitionStreamEvent->Confirm();
+
+                if (txSupport) {
+                    // gracefull shutdown. we will send confirmations later
+                    stopPartitionSessionEvents.push_back(std::move(*destroyPartitionStreamEvent));
+                } else {
+                    destroyPartitionStreamEvent->Confirm();
+                }
             } else if (auto* closeSessionEvent = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&event)) {
                 WRITE_LOG(params.Log, ELogPriority::TLOG_ERR, TStringBuilder() << "Read session closed: " << closeSessionEvent->DebugString());
                 *params.ErrorFlag = 1;
@@ -90,5 +125,68 @@ void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams& params) {
                 WRITE_LOG(params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << ackEvent->DebugString());
             }
         }
+
+        if (txSupport) {
+            TryCommitTx(params, txSupport, commitTime, stopPartitionSessionEvents);
+        }
     }
+}
+
+TVector<NYdb::NTopic::TReadSessionEvent::TEvent> TTopicWorkloadReader::GetEvents(NYdb::NTopic::IReadSession& readSession,
+                                                                                 TTopicWorkloadReaderParams& params,
+                                                                                 std::optional<TTransactionSupport>& txSupport)
+{
+    TVector<NYdb::NTopic::TReadSessionEvent::TEvent> events;
+    NTopic::TReadSessionGetEventSettings settings;
+
+    settings.Block(false);
+
+    if (txSupport && !params.UseTopicApiCommit) {
+        if (!txSupport->Transaction) {
+            txSupport->BeginTx();
+        }
+
+        settings.Tx(*txSupport->Transaction);
+    }
+
+    return readSession.GetEvents(settings);
+}
+
+void TTopicWorkloadReader::TryCommitTx(TTopicWorkloadReaderParams& params,
+                                       std::optional<TTransactionSupport>& txSupport,
+                                       TInstant& commitTime,
+                                       TVector<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>& stopPartitionSessionEvents)
+{
+    Y_VERIFY(txSupport);
+
+    if (commitTime > Now()) {
+        return;
+    }
+
+    TryCommitTableChanges(params, txSupport);
+    GracefullShutdown(stopPartitionSessionEvents);
+
+    commitTime += TDuration::Seconds(params.CommitPeriod);
+}
+
+void TTopicWorkloadReader::TryCommitTableChanges(TTopicWorkloadReaderParams& params,
+                                                 std::optional<TTransactionSupport>& txSupport)
+{
+    if (txSupport->Rows.empty()) {
+        return;
+    }
+
+    auto begin = TInstant::Now();
+    txSupport->CommitTx();
+    ui64 duration = (TInstant::Now() - begin).MilliSeconds();
+
+    params.StatsCollector->AddCommitTxEvent(params.ReaderIdx, {duration});
+}
+
+void TTopicWorkloadReader::GracefullShutdown(TVector<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>& stopPartitionSessionEvents)
+{
+    for (auto& event : stopPartitionSessionEvents) {
+        event.Confirm();
+    }
+    stopPartitionSessionEvents.clear();
 }

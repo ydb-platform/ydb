@@ -175,12 +175,16 @@ void TTopicOperationsScenario::StartConsumerThreads(std::vector<std::future<void
                 .StartedCount = count,
                 .Database = database,
                 .TopicName = TopicName,
+                .TableName = TableName,
                 .ConsumerIdx = consumerIdx,
                 .ConsumerPrefix = ConsumerPrefix,
-                .ReaderIdx = readerIdx
+                .ReaderIdx = readerIdx,
+                .UseTransactions = UseTransactions,
+                .UseTopicApiCommit = UseTopicApiCommit,
+                .CommitPeriod = CommitPeriod
             };
 
-            threads.push_back(std::async([readerParams = std::move(readerParams)]() mutable { TTopicWorkloadReader::ReaderLoop(readerParams); }));
+            threads.push_back(std::async([readerParams = std::move(readerParams)]() mutable { TTopicWorkloadReader::RetryableReaderLoop(readerParams); }));
         }
     }
 
@@ -213,7 +217,8 @@ void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void
             .ProducerId = TGUID::CreateTimebased().AsGuidString(),
             .PartitionId = (partitionSeed + writerIdx) % partitionCount,
             .Direct = Direct,
-            .Codec = Codec
+            .Codec = Codec,
+            .UseTransactions = UseTransactions
         };
 
         threads.push_back(std::async([writerParams = std::move(writerParams)]() mutable { TTopicWorkloadWriterWorker::WriterLoop(writerParams); }));

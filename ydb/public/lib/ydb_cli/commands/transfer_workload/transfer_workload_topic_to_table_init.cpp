@@ -42,6 +42,9 @@ void TCommandWorkloadTransferTopicToTableInit::Config(TConfig& config)
     config.Opts->AddLongOption("topic", "Topic name.")
         .DefaultValue(NWorkloadTransfer::TOPIC)
         .StoreResult(&Scenario.TopicName);
+    config.Opts->AddLongOption("consumer-prefix", "Use consumers with names '<consumer-prefix>-0' ... '<consumer-prefix>-<n-1>' where n is set in the '--consumers' option.")
+        .DefaultValue(NWorkloadTransfer::CONSUMER_PREFIX)
+        .StoreResult(&Scenario.ConsumerPrefix);
     config.Opts->AddLongOption("table", "Table name.")
         .DefaultValue(NWorkloadTransfer::TABLE)
         .StoreResult(&Scenario.TableName);

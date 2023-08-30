@@ -43,17 +43,14 @@ void ExpectTopic(const TTopicConfigurationMatcher& matcher)
     UNIT_ASSERT_VALUES_EQUAL(description.GetConsumers().size(), matcher.Consumers);
 }
 
-Y_UNIT_TEST(RunFull) {
+Y_UNIT_TEST(Default_RunFull) {
     ExecYdb({"init"});
     auto output = ExecYdb({"run", "full", "-s", "10"});
     ExecYdb({"clean"});
 
     TVector<TString> lines, columns;
 
-    Split(output, "\n", lines);
-    Split(lines.back(), "\t", columns);
-
-    auto fullTime = FromString<ui64>(columns.back());
+    ui64 fullTime = GetFullTimeValue(output);
 
     UNIT_ASSERT_GE(fullTime, 0);
     UNIT_ASSERT_LT(fullTime, 10'000);

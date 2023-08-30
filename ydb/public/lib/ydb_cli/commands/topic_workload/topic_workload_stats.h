@@ -19,12 +19,16 @@ namespace NYdb {
                 ui64 LagMessages;
                 ui64 LagTime;
             };
+            struct CommitTxEvent {
+                ui64 Time;
+            };
 
             TTopicWorkloadStats();
 
             void AddEvent(const WriterEvent& event);
             void AddEvent(const ReaderEvent& event);
             void AddEvent(const LagEvent& event);
+            void AddEvent(const CommitTxEvent& event);
 
             ui64 WriteBytes;
             ui64 WriteMessages;
@@ -35,6 +39,7 @@ namespace NYdb {
             ui64 ReadBytes;
             ui64 ReadMessages;
             NHdr::THistogram FullTimeHist;
+            NHdr::THistogram CommitTxTimeHist;
 
         private:
             constexpr static ui64 HighestTrackableTime = 100000;

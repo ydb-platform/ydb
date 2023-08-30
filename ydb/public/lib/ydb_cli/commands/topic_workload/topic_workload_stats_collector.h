@@ -25,6 +25,7 @@ namespace NYdb {
             void AddWriterEvent(size_t writerIdx, const TTopicWorkloadStats::WriterEvent& event);
             void AddReaderEvent(size_t readerIdx, const TTopicWorkloadStats::ReaderEvent& event);
             void AddLagEvent(size_t readerIdx, const TTopicWorkloadStats::LagEvent& event);
+            void AddCommitTxEvent(size_t readerIdx, const TTopicWorkloadStats::CommitTxEvent& event);
 
             ui64 GetTotalReadMessages() const;
             ui64 GetTotalWriteMessages() const;
@@ -38,6 +39,9 @@ namespace NYdb {
             void CollectThreadEvents(TEventQueues<T>& queues);
 
             template<class T>
+            static void AddQueue(TEventQueues<T>& queues);
+
+            template<class T>
             void AddEvent(size_t index, TEventQueues<T>& queues, const T& event);
 
             void PrintWindowStats(ui32 windowIt);
@@ -49,6 +53,7 @@ namespace NYdb {
             TEventQueues<TTopicWorkloadStats::WriterEvent> WriterEventQueues;
             TEventQueues<TTopicWorkloadStats::ReaderEvent> ReaderEventQueues;
             TEventQueues<TTopicWorkloadStats::LagEvent> LagEventQueues;
+            TEventQueues<TTopicWorkloadStats::CommitTxEvent> CommitTxEventQueues;
 
             bool Quiet;
             bool PrintTimestamp;

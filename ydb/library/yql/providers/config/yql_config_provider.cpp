@@ -251,6 +251,11 @@ namespace {
                         }
 
                         TStringBuf command = node->Child(2)->Content();
+                        if (command.length() && '_' == command[0]) {
+                            ctx.AddError(TIssue(ctx.GetPosition(node->Child(2)->Pos()), "Flags started with underscore are not allowed"));
+                            return {};
+                        }
+
                         TVector<TStringBuf> args;
                         for (size_t i = 3; i < node->ChildrenSize(); ++i) {
                             if (node->Child(i)->IsCallable("EvaluateAtom")) {
@@ -824,12 +829,12 @@ namespace {
 
                 Types.CostBasedOptimizerType = arg;
             }
-            else if (name == "EnableMatchRecognize" || name == "DisableMatchRecognize") {
+            else if (name == "_EnableMatchRecognize" || name == "DisableMatchRecognize") {
                 if (args.size() != 0) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                     return false;
                 }
-                Types.MatchRecognize = name == "EnableMatchRecognize";
+                Types.MatchRecognize = name == "_EnableMatchRecognize";
             }
             else {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Unsupported command: " << name));

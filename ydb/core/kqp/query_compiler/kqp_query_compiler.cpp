@@ -894,7 +894,14 @@ private:
             // Partitioning
             TVector<TString> partitionParams;
             TString clusterName;
-            dqIntegration->Partition(NYql::TDqSettings(), NYql::TDqSettings::TDefault::MaxTasksPerStage, source.Ref(), partitionParams, &clusterName, ctx, false);
+            // In runtime, number of tasks with Sources is limited by 2x of node count
+            // We prepare a lot of partitions and distribute them between these tasks
+            // Constraint of 1 task per partition is NOT valid anymore
+            // We choose 120 as number with a lot of divisors for even final distribution
+            //
+            // TODO: Replace with ydb.MaxTasksPerStage when implemented
+            //
+            dqIntegration->Partition(NYql::TDqSettings(), 120, source.Ref(), partitionParams, &clusterName, ctx, false);
             externalSource.SetTaskParamKey(TString(dataSourceCategory));
             for (const TString& partitionParam : partitionParams) {
                 externalSource.AddPartitionedTaskParams(partitionParam);

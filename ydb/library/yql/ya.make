@@ -8,6 +8,7 @@ RECURSE(
     providers
     public
     sql
+    tests
     tools
     udfs
     utils

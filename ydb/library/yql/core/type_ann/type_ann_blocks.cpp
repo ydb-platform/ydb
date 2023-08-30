@@ -713,7 +713,7 @@ IGraphTransformer::TStatus BlockMergeFinalizeHashedWrapper(const TExprNode::TPtr
     return IGraphTransformer::TStatus::Ok;
 }
 
-IGraphTransformer::TStatus WideToBlocksWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+IGraphTransformer::TStatus WideToBlocksWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
     if (!EnsureArgsCount(*input, 1U, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
@@ -722,6 +722,11 @@ IGraphTransformer::TStatus WideToBlocksWrapper(const TExprNode::TPtr& input, TEx
     if (!EnsureWideFlowType(input->Head(), ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
+
+    if (!ctx.Types.ArrowResolver) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Arrow resolver isn't available"));
+        return IGraphTransformer::TStatus::Error;
+    }    
 
     const auto multiType = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();
     TTypeAnnotationNode::TListType retMultiType;
@@ -732,6 +737,11 @@ IGraphTransformer::TStatus WideToBlocksWrapper(const TExprNode::TPtr& input, TEx
         }
 
         if (!EnsurePersistableType(input->Pos(), *type, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (ctx.Types.ArrowResolver->AreTypesSupported(ctx.Expr.GetPosition(input->Pos()), { type }, ctx.Expr) != IArrowResolver::OK) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Type " << *type << " is not supported in Block mode"));
             return IGraphTransformer::TStatus::Error;
         }
 

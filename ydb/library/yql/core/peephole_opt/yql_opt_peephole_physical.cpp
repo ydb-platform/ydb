@@ -93,7 +93,19 @@ bool IsArgumentsOnlyLambda(const TExprNode& lambda, TVector<ui32>& argIndices) {
     return true;
 }
 
-TExprNode::TPtr RebuildArgumentsOnlyLambdaForBlocks(const TExprNode& lambda, TExprContext& ctx) {
+TExprNode::TPtr RebuildArgumentsOnlyLambdaForBlocks(const TExprNode& lambda, TExprContext& ctx, TTypeAnnotationContext& types) {
+    TVector<const TTypeAnnotationNode*> argTypes;
+    for (auto arg : lambda.Head().ChildrenList()) {
+        argTypes.emplace_back(arg->GetTypeAnn());
+    }
+
+    YQL_ENSURE(types.ArrowResolver);
+    auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(lambda.Pos()), argTypes, ctx);
+    YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
+    if (resolveStatus != IArrowResolver::OK) {
+        return {};
+    }
+
     TVector<ui32> argIndicies;
     if (!IsArgumentsOnlyLambda(lambda, argIndicies)) {
         return {};
@@ -123,7 +135,7 @@ TExprNode::TPtr OptimizeWideToBlocks(const TExprNode::TPtr& node, TExprContext& 
     if (node->Head().IsCallable("WideMap")) {
         // swap if all outputs are arguments
         const auto& lambda = node->Head().Tail();
-        if (auto newLambda = RebuildArgumentsOnlyLambdaForBlocks(lambda, ctx)) {
+        if (auto newLambda = RebuildArgumentsOnlyLambdaForBlocks(lambda, ctx, types)) {
             YQL_CLOG(DEBUG, Core) << "Swap " << node->Head().Content() << " with " << node->Content();
             return ctx.Builder(node->Pos())
                 .Callable("WideMap")
@@ -5212,7 +5224,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
 TExprNode::TPtr OptimizeWideMapBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     const auto lambda = node->TailPtr();
     if (node->Head().IsCallable("WideFromBlocks")) {
-        if (auto newLambda = RebuildArgumentsOnlyLambdaForBlocks(*lambda, ctx)) {
+        if (auto newLambda = RebuildArgumentsOnlyLambdaForBlocks(*lambda, ctx, types)) {
             YQL_CLOG(DEBUG, Core) << "Swap " << node->Head().Content() << " with " << node->Content();
             return ctx.Builder(node->Pos())
                 .Callable("WideFromBlocks")

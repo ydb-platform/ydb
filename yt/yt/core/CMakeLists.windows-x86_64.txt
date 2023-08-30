@@ -89,27 +89,29 @@ target_sources(yt-yt-core PRIVATE
   ${CMAKE_SOURCE_DIR}/yt/yt/core/compression/zstd.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/action_queue.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/async_barrier.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/async_semaphore.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/async_rw_lock.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/async_stream.cpp
+  ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/async_semaphore.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/async_stream_pipe.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/coroutine.cpp
+  ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/async_stream.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/config.cpp
+  ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/coroutine.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/delayed_executor.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/execution_stack.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/fair_share_action_queue.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/fair_share_invoker_pool.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/fair_share_invoker_queue.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/fair_share_thread_pool.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/fair_share_queue_scheduler_thread.cpp
+  ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/fair_share_thread_pool.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/fair_throttler.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/fiber.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/fiber_scheduler_thread.cpp
+  ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/fiber.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/fls.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/new_fair_share_thread_pool.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/notify_manager.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/invoker_alarm.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/invoker_queue.cpp
+  ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/lease_manager.cpp
+  ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/new_fair_share_thread_pool.cpp
+  ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/nonblocking_batcher.cpp
+  ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/notify_manager.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/periodic_executor.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/periodic_yielder.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/pollable_detail.cpp
@@ -121,12 +123,11 @@ target_sources(yt-yt-core PRIVATE
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/suspendable_action_queue.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/system_invokers.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/thread_affinity.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/thread_pool.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/thread_pool_detail.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/thread_pool_poller.cpp
+  ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/thread_pool.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/throughput_throttler.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/two_level_fair_share_thread_pool.cpp
-  ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/lease_manager.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/logging/compression.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/logging/config.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/logging/formatter.cpp

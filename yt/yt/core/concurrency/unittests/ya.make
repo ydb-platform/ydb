@@ -23,7 +23,7 @@ SRCS(
     fls_ut.cpp
     invoker_alarm_ut.cpp
     invoker_pool_ut.cpp
-    nonblocking_batch_ut.cpp
+    nonblocking_batcher_ut.cpp
     nonblocking_queue_ut.cpp
     periodic_ut.cpp
     propagating_storage_ut.cpp

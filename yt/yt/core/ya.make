@@ -41,27 +41,29 @@ SRCS(
 
     concurrency/action_queue.cpp
     concurrency/async_barrier.cpp
-    concurrency/async_semaphore.cpp
     concurrency/async_rw_lock.cpp
-    concurrency/async_stream.cpp
+    concurrency/async_semaphore.cpp
     concurrency/async_stream_pipe.cpp
-    concurrency/coroutine.cpp
+    concurrency/async_stream.cpp
     concurrency/config.cpp
+    concurrency/coroutine.cpp
     concurrency/delayed_executor.cpp
     concurrency/execution_stack.cpp
     concurrency/fair_share_action_queue.cpp
     concurrency/fair_share_invoker_pool.cpp
     concurrency/fair_share_invoker_queue.cpp
-    concurrency/fair_share_thread_pool.cpp
     concurrency/fair_share_queue_scheduler_thread.cpp
+    concurrency/fair_share_thread_pool.cpp
     concurrency/fair_throttler.cpp
-    concurrency/fiber.cpp
     concurrency/fiber_scheduler_thread.cpp
+    concurrency/fiber.cpp
     concurrency/fls.cpp
-    concurrency/new_fair_share_thread_pool.cpp
-    concurrency/notify_manager.cpp
     concurrency/invoker_alarm.cpp
     concurrency/invoker_queue.cpp
+    concurrency/lease_manager.cpp
+    concurrency/new_fair_share_thread_pool.cpp
+    concurrency/nonblocking_batcher.cpp
+    concurrency/notify_manager.cpp
     concurrency/periodic_executor.cpp
     concurrency/periodic_yielder.cpp
     concurrency/pollable_detail.cpp
@@ -73,12 +75,11 @@ SRCS(
     concurrency/suspendable_action_queue.cpp
     concurrency/system_invokers.cpp
     concurrency/thread_affinity.cpp
-    concurrency/thread_pool.cpp
     concurrency/thread_pool_detail.cpp
     concurrency/thread_pool_poller.cpp
+    concurrency/thread_pool.cpp
     concurrency/throughput_throttler.cpp
     concurrency/two_level_fair_share_thread_pool.cpp
-    concurrency/lease_manager.cpp
 
     logging/compression.cpp
     logging/config.cpp

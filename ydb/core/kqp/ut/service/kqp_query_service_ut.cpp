@@ -1177,6 +1177,38 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             settings.FetchToken(results.GetNextFetchToken());
         }
     }
+
+    Y_UNIT_TEST(QueryDropDdl) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetQueryClient();
+
+        auto result = db.ExecuteQuery(R"(
+            CREATE TABLE TestDropDdl (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetResultSets().empty());
+
+        result = db.ExecuteQuery(R"(
+            DROP TABLE TestDropDdl;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = db.ExecuteQuery(R"(
+            SELECT * FROM TestDropDdl;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT(!result.IsSuccess());
+    }
 }
 
 } // namespace NKqp

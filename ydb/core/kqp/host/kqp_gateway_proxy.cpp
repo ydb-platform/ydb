@@ -553,7 +553,48 @@ public:
     }
 
     TFuture<TGenericResult> DropTable(const TString& cluster, const TString& table) override {
-        FORWARD_ENSURE_NO_PREPARE(DropTable, cluster, table);
+        CHECK_PREPARED_DDL(DropTable);
+
+        auto metadata = SessionCtx->Tables().GetTable(cluster, table).Metadata;
+
+        std::pair<TString, TString> pathPair;
+        TString error;
+        if (!SplitTablePath(metadata->Name, GetDatabase(), pathPair, error, false)) {
+            return MakeFuture(ResultFromError<TGenericResult>(error));
+        }
+
+        auto temporary = metadata->Temporary;
+        auto dropPromise = NewPromise<TGenericResult>();
+
+        NKikimrSchemeOp::TModifyScheme schemeTx;
+        schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
+        schemeTx.SetWorkingDir(pathPair.first);
+
+        auto* drop = schemeTx.MutableDrop();
+        drop->SetName(pathPair.second);
+
+        if (IsPrepare()) {
+            auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+            auto& phyTx = *phyQuery.AddTransactions();
+            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+            phyTx.MutableSchemeOperation()->MutableDropTable()->Swap(&schemeTx);
+
+            TGenericResult result;
+            result.SetSuccess();
+            dropPromise.SetValue(result);
+        } else {
+            if (temporary) {
+                auto code = Ydb::StatusIds::BAD_REQUEST;
+                auto error = TStringBuilder() << "Not allowed to drop temp table";
+                IKqpGateway::TGenericResult errResult;
+                errResult.AddIssue(NYql::TIssue(error));
+                errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
+                dropPromise.SetValue(errResult);
+            }
+            return Gateway->DropTable(cluster, table);
+        }
+
+        return dropPromise.GetFuture();
     }
 
     TFuture<TGenericResult> CreateTopic(const TString& cluster, Ydb::Topic::CreateTopicRequest&& request) override {

@@ -366,6 +366,7 @@ message TKqpPhyResult {
 message TKqpSchemeOperation {
     oneof Operation {
         NKikimrSchemeOp.TModifyScheme CreateTable = 1;
+        NKikimrSchemeOp.TModifyScheme DropTable = 2;
     }
 }
 

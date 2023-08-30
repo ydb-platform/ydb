@@ -1460,7 +1460,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(CreateTempTable) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -1542,6 +1542,11 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             querySelect, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_C(resultSelect.IsSuccess(), resultSelect.GetIssues().ToString());
 
+        bool allDoneOk = true;
+        NTestHelpers::CheckDelete(clientConfig, id, Ydb::StatusIds::SUCCESS, allDoneOk);
+
+        UNIT_ASSERT(allDoneOk);
+
         auto sessionAnother = client.GetSession().GetValueSync().GetSession();
         auto idAnother = sessionAnother.GetId();
         UNIT_ASSERT(id != idAnother);
@@ -1554,11 +1559,82 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         auto resultSelectAnother = sessionAnother.ExecuteQuery(
             querySelectAnother, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(!resultSelectAnother.IsSuccess());
+    }
+
+    Y_UNIT_TEST(TempTablesDrop) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(
+            serverSettings.SetWithSampleTables(false).SetEnableTempTables(true));
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+        auto client = kikimr.GetQueryClient();
+
+        auto session = client.GetSession().GetValueSync().GetSession();
+        auto id = session.GetId();
+
+        const auto queryCreate = Q_(R"(
+            --!syntax_pg
+            CREATE TEMP TABLE PgTemp (
+            key int2 PRIMARY KEY,
+            value int2))");
+
+        auto resultCreate = session.ExecuteQuery(queryCreate, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(resultCreate.IsSuccess(), resultCreate.GetIssues().ToString());
+
+        {
+            const auto querySelect = Q_(R"(
+                --!syntax_pg
+                SELECT * FROM PgTemp;
+            )");
+
+            auto resultSelect = session.ExecuteQuery(
+                querySelect, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(resultSelect.IsSuccess(), resultSelect.GetIssues().ToString());
+        }
+
+        const auto queryDrop = Q_(R"(
+            --!syntax_pg
+            DROP TABLE PgTemp;
+        )");
+
+        auto resultDrop = session.ExecuteQuery(
+            queryDrop, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(resultDrop.IsSuccess(), resultDrop.GetIssues().ToString());
+
+        {
+            const auto querySelect = Q_(R"(
+                --!syntax_pg
+                SELECT * FROM PgTemp;
+            )");
+
+            auto resultSelect = session.ExecuteQuery(
+                querySelect, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(!resultSelect.IsSuccess());
+        }
 
         bool allDoneOk = true;
         NTestHelpers::CheckDelete(clientConfig, id, Ydb::StatusIds::SUCCESS, allDoneOk);
 
         UNIT_ASSERT(allDoneOk);
+
+        auto sessionAnother = client.GetSession().GetValueSync().GetSession();
+        auto idAnother = sessionAnother.GetId();
+        UNIT_ASSERT(id != idAnother);
+
+        {
+            const auto querySelect = Q_(R"(
+                --!syntax_pg
+                SELECT * FROM PgTemp;
+            )");
+
+            auto resultSelect = sessionAnother.ExecuteQuery(
+                querySelect, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(!resultSelect.IsSuccess());
+        }
     }
 
     Y_UNIT_TEST(ValuesInsert) {

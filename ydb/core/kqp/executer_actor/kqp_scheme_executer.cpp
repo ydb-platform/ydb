@@ -55,17 +55,27 @@ public:
         }
 
         const auto& schemeOp = PhyTx->GetSchemeOperation();
-        auto modifyScheme = schemeOp.GetCreateTable();
-
-        if (Temporary) {
-            auto* createTable = modifyScheme.MutableCreateTable();
-            createTable->SetName(createTable->GetName() + SessionId);
-            createTable->SetPath(createTable->GetPath() + SessionId);
-        }
         switch (schemeOp.GetOperationCase()) {
-            case NKqpProto::TKqpSchemeOperation::kCreateTable:
+            case NKqpProto::TKqpSchemeOperation::kCreateTable: {
+                auto modifyScheme = schemeOp.GetCreateTable();
+                if (Temporary) {
+                    auto* createTable = modifyScheme.MutableCreateTable();
+                    createTable->SetName(createTable->GetName() + SessionId);
+                    createTable->SetPath(createTable->GetPath() + SessionId);
+                }
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kDropTable: {
+                auto modifyScheme = schemeOp.GetDropTable();
+                if (Temporary) {
+                    auto* dropTable = modifyScheme.MutableDrop();
+                    dropTable->SetName(dropTable->GetName() + SessionId);
+                }
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
 
             default:
                 InternalError(TStringBuilder() << "Unexpected scheme operation: "

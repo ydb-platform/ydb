@@ -964,10 +964,6 @@ public:
         }
 
         if (auto maybeDrop = TMaybeNode<TKiDropTable>(input)) {
-            if (!EnsureNotPrepare("DROP TABLE", input->Pos(), SessionCtx->Query(), ctx)) {
-                return SyncError();
-            }
-
             auto requireStatus = RequireChild(*input, 0);
             if (requireStatus.Level != TStatus::Ok) {
                 return SyncStatus(requireStatus);
@@ -997,40 +993,35 @@ public:
                 return SyncError();
             }
 
-            bool prepareOnly = SessionCtx->Query().PrepareOnly;
             bool missingOk = (maybeDrop.MissingOk().Cast().Value() == "1");
 
             NThreading::TFuture<IKikimrGateway::TGenericResult> future;
-            if (prepareOnly) {
-                future = CreateDummySuccess();
-            } else {
-                switch (tableTypeItem) {
-                    case ETableType::Table:
-                        future = Gateway->DropTable(table.Metadata->Cluster, table.Metadata->Name);
-                        if (missingOk) {
-                            future = future.Apply([](const NThreading::TFuture<IKikimrGateway::TGenericResult>& res) {
-                                auto operationResult = res.GetValue();
-                                bool pathNotExist = false;
-                                for (const auto& issue : operationResult.Issues()) {
-                                    WalkThroughIssues(issue, false, [&pathNotExist](const NYql::TIssue& issue, int level) {
-                                        Y_UNUSED(level);
-                                        pathNotExist |= (issue.GetCode() == NKikimrIssues::TIssuesIds::PATH_NOT_EXIST);
-                                    });
-                                }
-                                return pathNotExist ? CreateDummySuccess() : res;
-                            });
-                        }
-                        break;
-                    case ETableType::TableStore:
-                        future = Gateway->DropTableStore(cluster, ParseDropTableStoreSettings(maybeDrop.Cast()));
-                        break;
-                    case ETableType::ExternalTable:
-                        future = Gateway->DropExternalTable(cluster, ParseDropExternalTableSettings(maybeDrop.Cast()));
-                        break;
-                    case ETableType::Unknown:
-                        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Unsupported table type " << tableTypeString));
-                        return SyncError();
-                }
+            switch (tableTypeItem) {
+                case ETableType::Table:
+                    future = Gateway->DropTable(table.Metadata->Cluster, table.Metadata->Name);
+                    if (missingOk) {
+                        future = future.Apply([](const NThreading::TFuture<IKikimrGateway::TGenericResult>& res) {
+                            auto operationResult = res.GetValue();
+                            bool pathNotExist = false;
+                            for (const auto& issue : operationResult.Issues()) {
+                                WalkThroughIssues(issue, false, [&pathNotExist](const NYql::TIssue& issue, int level) {
+                                    Y_UNUSED(level);
+                                    pathNotExist |= (issue.GetCode() == NKikimrIssues::TIssuesIds::PATH_NOT_EXIST);
+                                });
+                            }
+                            return pathNotExist ? CreateDummySuccess() : res;
+                        });
+                    }
+                    break;
+                case ETableType::TableStore:
+                    future = Gateway->DropTableStore(cluster, ParseDropTableStoreSettings(maybeDrop.Cast()));
+                    break;
+                case ETableType::ExternalTable:
+                    future = Gateway->DropExternalTable(cluster, ParseDropExternalTableSettings(maybeDrop.Cast()));
+                    break;
+                case ETableType::Unknown:
+                    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Unsupported table type " << tableTypeString));
+                    return SyncError();
             }
 
             return WrapFuture(future,

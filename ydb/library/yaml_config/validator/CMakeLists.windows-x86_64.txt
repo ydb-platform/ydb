@@ -17,6 +17,7 @@ target_link_libraries(library-yaml_config-validator PUBLIC
 target_sources(library-yaml_config-validator PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config/validator/validator_builder.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config/validator/validator.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config/validator/validator_checks.cpp
 )
 generate_enum_serilization(library-yaml_config-validator
   ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config/validator/validator_builder.h

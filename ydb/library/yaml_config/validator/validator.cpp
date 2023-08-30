@@ -1,5 +1,7 @@
 #include "validator.h"
 
+#include "validator_checks.h"
+
 #include <util/string/cast.h>
 #include <util/system/types.h>
 
@@ -83,17 +85,20 @@ TValidationResult TValidator::Validate(const TString& documentStr) {
     return Validate(document.Root());
 }
 
-TValidator::TValidator() {}
+TValidator::TValidator(ENodeType nodeType)
+    : NodeType_(nodeType) {}
 
 TValidator::TValidator(TValidator&& validator)
-    : Required_(validator.Required_) {}
+    : Required_(validator.Required_)
+    , NodeType_(validator.NodeType_) {}
 
 TValidator::~TValidator() {}
 
-TGenericValidator::TGenericValidator() {}
+TGenericValidator::TGenericValidator()
+    : TBase(ENodeType::Generic) {}
 
 TGenericValidator::TGenericValidator(TGenericValidator&& validator)
-    : TValidator(std::move(validator))
+    : TBase(std::move(validator))
     , ValidatorPtrs_(std::move(validator.ValidatorPtrs_)) {}
 
 TValidationResult TGenericValidator::Validate(const NFyaml::TNodeRef& node) {
@@ -134,29 +139,39 @@ TValidationResult TGenericValidator::Validate(const NFyaml::TNodeRef& node) {
         addNewLine = true;
     }
 
-    return TVector<TValidationResult::TIssue>{{
+    TValidationResult result = TVector<TValidationResult::TIssue>{{
         node.Path(),
         message
     }};
+
+    // put checks code into separete function
+    // think about all combinations of checker name and errors
+    if (result.Ok()) {
+        performChecks(result, node);
+    }
+
+    return result;
 }
 
 void TGenericValidator::AddValidator(TSimpleSharedPtr<TValidator> validatorPtr) {
     ValidatorPtrs_.emplace_back(std::move(validatorPtr));
 }
 
-TMapValidator::TMapValidator() {}
+TMapValidator::TMapValidator()
+    : TBase(ENodeType::Map) {}
 
 TMapValidator::TMapValidator(TMapValidator&& validator)
-    : TValidator(std::move(validator))
+    : TBase(std::move(validator))
     , Children_(std::move(validator.Children_))
     , Opaque_(validator.Opaque_) {}
 
 TMapValidator::TMapValidator(THashMap<TString, TSimpleSharedPtr<TValidator>>&& children, bool Opaque)
-    : Children_(std::move(children))
+    : TBase(ENodeType::Map)
+    , Children_(std::move(children))
     , Opaque_(Opaque) {}
 
 TValidationResult TMapValidator::Validate(const TNodeRef& node) {
-    if (node.Type() != ENodeType::Mapping) {
+    if (node.Type() != NFyaml::ENodeType::Mapping) {
         return TValidationResult({{
             node.Path(),
             "Node must be Map"
@@ -198,21 +213,28 @@ TValidationResult TMapValidator::Validate(const TNodeRef& node) {
         }
     }
 
+    if (validationResult.Ok()) {
+        performChecks(validationResult, node);
+    }
+
     return validationResult;
 }
 
-TArrayValidator::TArrayValidator() {}
+TArrayValidator::TArrayValidator()
+    : TBase(ENodeType::Array) {}
 
 TArrayValidator::TArrayValidator(TArrayValidator&& validator)
-    : TValidator(std::move(validator))
+    : TBase(std::move(validator))
     , ItemValidatorPtr_(std::move(validator.ItemValidatorPtr_))
     , Unique_(validator.Unique_) {}
 
 TArrayValidator::TArrayValidator(TSimpleSharedPtr<TValidator> itemValidatorPtr, bool Unique)
-    : ItemValidatorPtr_(std::move(itemValidatorPtr)), Unique_(Unique) {}
+    : TBase(ENodeType::Array)
+    , ItemValidatorPtr_(std::move(itemValidatorPtr))
+    , Unique_(Unique) {}
 
 TValidationResult TArrayValidator::Validate(const TNodeRef& node) {
-    if (node.Type() != ENodeType::Sequence) {
+    if (node.Type() != NFyaml::ENodeType::Sequence) {
         return TValidationResult({{
             node.Path(),
             "Node must be Array"
@@ -226,22 +248,29 @@ TValidationResult TArrayValidator::Validate(const TNodeRef& node) {
 
     // TODO: check uniqueness
     Y_UNUSED(Unique_);
+
+    if (validationResult.Ok()) {
+        performChecks(validationResult, node);
+    }
+
     return validationResult;
 }
 
-TInt64Validator::TInt64Validator() {}
+TInt64Validator::TInt64Validator()
+    : TBase(ENodeType::Int64) {}
 
 TInt64Validator::TInt64Validator(TInt64Validator&& validator)
-    : TValidator(std::move(validator))
+    : TBase(std::move(validator))
     , Min_(validator.Min_)
     , Max_(validator.Max_) {}
 
 TInt64Validator::TInt64Validator(i64 min, i64 max)
-    : Min_(min)
+    : TBase(ENodeType::Int64)
+    , Min_(min)
     , Max_(max) {}
 
 TValidationResult TInt64Validator::Validate(const TNodeRef& node) {
-    if (node.Type() != ENodeType::Scalar) {
+    if (node.Type() != NFyaml::ENodeType::Scalar) {
         return TValidationResult({{
             node.Path(),
             "Node must be Scalar(Int64)"
@@ -271,6 +300,10 @@ TValidationResult TInt64Validator::Validate(const TNodeRef& node) {
         });
     }
 
+    if (validationResult.Ok()) {
+        performChecks(validationResult, node);
+    }
+
     return validationResult;
 }
 
@@ -282,28 +315,37 @@ void TInt64Validator::SetMax(i64 max) {
     Max_ = max;
 }
 
-TStringValidator::TStringValidator() {}
+TStringValidator::TStringValidator()
+    : TBase(ENodeType::String) {}
 
 TStringValidator::TStringValidator(TStringValidator&& validator)
-    : TValidator(std::move(validator)) {}
+    : TBase(std::move(validator)) {}
 
 TValidationResult TStringValidator::Validate(const TNodeRef& node) {
-    if (node.Type() != ENodeType::Scalar) {
+    if (node.Type() != NFyaml::ENodeType::Scalar) {
         return TValidationResult({{
             node.Path(),
             "Node must be Scalar(String)"
         }});
     }
-    return {};
+
+    TValidationResult validationResult;
+
+    if (validationResult.Ok()) {
+        performChecks(validationResult, node);
+    }
+
+    return validationResult;
 }
 
-TBoolValidator::TBoolValidator() {}
+TBoolValidator::TBoolValidator()
+    : TBase(ENodeType::Bool) {}
 
 TBoolValidator::TBoolValidator(TBoolValidator&& validator)
-    : TValidator(std::move(validator)) {}
+    : TBase(std::move(validator)) {}
 
 TValidationResult TBoolValidator::Validate(const TNodeRef& node) {
-    if (node.Type() != ENodeType::Scalar) {
+    if (node.Type() != NFyaml::ENodeType::Scalar) {
         return TValidationResult({{
             node.Path(),
             "Node must be Scalar(Bool)"
@@ -318,7 +360,12 @@ TValidationResult TBoolValidator::Validate(const TNodeRef& node) {
             "Value must be either true or false"
         }});
     }
-    return {};
+
+    TValidationResult validationResult;
+
+    performChecks(validationResult, node);
+
+    return validationResult;
 }
 
 } // namespace NYamlConfig::NValidator

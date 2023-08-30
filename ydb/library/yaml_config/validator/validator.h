@@ -12,6 +12,10 @@
 
 namespace NYamlConfig::NValidator {
 
+enum class ENodeType {
+    Generic, Map, Array, Int64, String, Bool
+};
+
 class TValidator;
 class TGenericValidator;
 class TMapValidator;
@@ -19,6 +23,22 @@ class TArrayValidator;
 class TInt64Validator;
 class TStringValidator;
 class TBoolValidator;
+
+class TGenericNodeWrapper;
+class TMapNodeWrapper;
+class TArrayNodeWrapper;
+class TInt64NodeWrapper;
+class TStringNodeWrapper;
+class TBoolNodeWrapper;
+
+class TGenericCheckContext;
+class TMapCheckContext;
+class TArrayCheckContext;
+class TInt64CheckContext;
+class TStringCheckContext;
+class TBoolCheckContext;
+
+class TCheckContext;
 
 class TGenericBuilder;
 
@@ -28,15 +48,20 @@ class TBuilder;
 
 TSimpleSharedPtr<TValidator> CreateValidatorPtr(const TSimpleSharedPtr<NDetail::TBuilder>& builder);
 
+template <typename TThis, typename TContext>
+class TValidatorCommonOps;
+
 }
 
 class TValidationResult {
+    friend class TCheckContext;
     friend class TGenericValidator;
     friend class TMapValidator;
     friend class TArrayValidator;
     friend class TInt64Validator;
     friend class TStringValidator;
     friend class TBoolValidator;
+    template <typename TThis, typename TContext> friend class NDetail::TValidatorCommonOps;
 
 public:
     struct TIssue {
@@ -76,23 +101,98 @@ class TValidator {
     friend TSimpleSharedPtr<TValidator> NYamlConfig::NValidator::NDetail::CreateValidatorPtr(const TSimpleSharedPtr<NDetail::TBuilder>& builder);
     friend class TMapValidator; // for .Required_
     friend class TGenericBuilder; // for .Required_
+    friend class TMapNodeWrapper; // NodeType
+    friend class TArrayNodeWrapper; // NodeType
 
 public:
-    TValidator();
-
     virtual TValidationResult Validate(const NFyaml::TNodeRef& node) = 0;
     TValidationResult Validate(const TString& document);
 
     virtual ~TValidator();
 
 protected:
+    bool Required_ = true;
+
+    TValidator(ENodeType nodeType);
     TValidator(TValidator&& validator);
 
 private:
-    bool Required_ = true;
+    ENodeType NodeType_;
 };
 
-class TGenericValidator : public TValidator {
+namespace NDetail {
+
+template <typename TThis, typename TContext>
+class TValidatorCommonOps : public TValidator {
+protected:
+    THashMap<TString, std::function<void(TContext&)>> Checkers_;
+
+    TValidatorCommonOps<TThis, TContext>(ENodeType nodeType);
+    TValidatorCommonOps<TThis, TContext>(TValidatorCommonOps<TThis, TContext>&& builder);
+
+    void performChecks(TValidationResult& validationResult, const NFyaml::TNodeRef& node);
+};
+
+template <typename TThis, typename TContext>
+TValidatorCommonOps<TThis, TContext>::TValidatorCommonOps(ENodeType nodeType)
+    : TValidator(nodeType) {}
+
+template <typename TThis, typename TContext>
+TValidatorCommonOps<TThis, TContext>::TValidatorCommonOps(TValidatorCommonOps<TThis, TContext>&& builder)
+    : TValidator(std::move(builder))
+    , Checkers_(std::move(builder.Checkers_)) {}
+
+template <typename TThis, typename TContext>
+void TValidatorCommonOps<TThis, TContext>::performChecks(TValidationResult& validationResult, const NFyaml::TNodeRef& node) {
+    TThis* This = static_cast<TThis*>(this);
+    for (auto& [checkName, checker] : Checkers_) {
+        // TODO: change node.Path() to stored path in validator (or maybe node.Path is better?)
+        TString nodePath = node.Path();
+        if (nodePath == "/") {
+            nodePath = "";
+        }
+
+        TContext context(node, nodePath, This);
+        try {
+            checker(context);
+        } catch (yexception& ye) {
+            context.AddError(ye.what());
+            context.someExpectFailed = true;
+        }
+        
+        if (context.someExpectFailed) {
+            if (context.Errors_.empty()) {
+                validationResult.AddIssue({node.Path(), checkName});
+            } else if (context.Errors_.size() == 1) {
+                validationResult.AddIssue({node.Path(), "Check \"" + checkName + "\" failed: " + context.Errors_[0]});
+            } else {
+                TString errorMessages;
+                
+                //TODO: add multiline errors support(and maybe extract big
+                //error creation into separete function)
+                bool newLine = false;
+                for (auto& error : context.Errors_) {
+                    if (newLine) {
+                        errorMessages += "\n";
+                    }
+                    errorMessages += error;
+                    newLine = true;
+                }
+
+                validationResult.AddIssue({node.Path(), "Check \"" + checkName + "\" failed: \n" + errorMessages});
+            }
+        }
+    }
+}
+
+}
+
+class TGenericValidator : public NDetail::TValidatorCommonOps<TGenericValidator, TGenericCheckContext> {
+    friend class TGenericNodeWrapper;
+    friend class TGenericBuilder;
+
+    using TBase = NDetail::TValidatorCommonOps<TGenericValidator, TGenericCheckContext>;
+
 public:
     TGenericValidator();
 
@@ -101,19 +201,22 @@ public:
     TValidationResult Validate(const NFyaml::TNodeRef& node) override;
     using TValidator::Validate;
 
-    void AddValidator(TSimpleSharedPtr<TValidator> validatorPtr);
-
 private:
     TVector<TSimpleSharedPtr<TValidator>> ValidatorPtrs_;
+
+    void AddValidator(TSimpleSharedPtr<TValidator> validatorPtr);
 };
 
-class TMapValidator : public TValidator {
+class TMapValidator : public NDetail::TValidatorCommonOps<TMapValidator, TMapCheckContext> {
+    friend class TMapNodeWrapper;
+    friend class TMapBuilder;
+
+    using TBase = NDetail::TValidatorCommonOps<TMapValidator, TMapCheckContext>;
+
 public:
     TMapValidator();
 
     TMapValidator(TMapValidator&& validator);
-
-    explicit TMapValidator(THashMap<TString, TSimpleSharedPtr<TValidator>>&& children, bool Opaque);
 
     TValidationResult Validate(const NFyaml::TNodeRef& node) override;
     using TValidator::Validate;
@@ -121,15 +224,20 @@ public:
 private:
     THashMap<TString, TSimpleSharedPtr<TValidator>> Children_;
     bool Opaque_;
+
+    TMapValidator(THashMap<TString, TSimpleSharedPtr<TValidator>>&& children, bool Opaque);
 };
 
-class TArrayValidator : public TValidator {
+class TArrayValidator : public NDetail::TValidatorCommonOps<TArrayValidator, TArrayCheckContext> {
+    friend class TArrayNodeWrapper;
+    friend class TArrayBuilder;
+
+    using TBase = NDetail::TValidatorCommonOps<TArrayValidator, TArrayCheckContext>;
+
 public:
     TArrayValidator();
 
     TArrayValidator(TArrayValidator&& validator);
-
-    TArrayValidator(TSimpleSharedPtr<TValidator> itemValidatorPtr, bool Unique);
 
     TValidationResult Validate(const NFyaml::TNodeRef& node) override;
     using TValidator::Validate;
@@ -137,15 +245,20 @@ public:
 private:
     TSimpleSharedPtr<TValidator> ItemValidatorPtr_;
     bool Unique_;
+
+    TArrayValidator(TSimpleSharedPtr<TValidator> itemValidatorPtr, bool Unique);
 };
 
-class TInt64Validator : public TValidator {
+class TInt64Validator : public NDetail::TValidatorCommonOps<TInt64Validator, TInt64CheckContext> {
+    friend class TInt64NodeWrapper;
+    friend class TInt64Builder;
+
+    using TBase = NDetail::TValidatorCommonOps<TInt64Validator, TInt64CheckContext>;
+
 public:
     TInt64Validator();
 
     TInt64Validator(TInt64Validator&& validator);
-    
-    TInt64Validator(i64 min, i64 max);
 
     TValidationResult Validate(const NFyaml::TNodeRef& node) override;
     using TValidator::Validate;
@@ -154,11 +267,18 @@ private:
     i64 Min_ = Min<i64>();
     i64 Max_ = Max<i64>();
 
+    TInt64Validator(i64 min, i64 max);
+
     void SetMin(i64 min);
     void SetMax(i64 max);
 };
 
-class TStringValidator : public TValidator {
+class TStringValidator : public NDetail::TValidatorCommonOps<TStringValidator, TStringCheckContext> {
+    friend class TStringNodeWrapper;
+    friend class TStringBuilder;
+
+    using TBase = NDetail::TValidatorCommonOps<TStringValidator, TStringCheckContext>;
+
 public:
     TStringValidator();
 
@@ -168,7 +288,12 @@ public:
     using TValidator::Validate;
 };
 
-class TBoolValidator : public TValidator {
+class TBoolValidator : public NDetail::TValidatorCommonOps<TBoolValidator, TBoolCheckContext> {
+    friend class TBoolNodeWrapper;
+    friend class TBoolBuilder;
+
+    using TBase = NDetail::TValidatorCommonOps<TBoolValidator, TBoolCheckContext>;
+
 public:
     TBoolValidator();
 

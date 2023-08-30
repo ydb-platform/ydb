@@ -1,6 +1,7 @@
 #pragma once
 
 #include "validator.h"
+#include "validator_checks.h"
 
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
@@ -14,10 +15,6 @@
 #include <functional>
 
 namespace NYamlConfig::NValidator {
-
-enum class EBuilderType {
-    Generic, Map, Array, Int64, String, Bool
-};
 
 class BuilderException : public yexception {};
 
@@ -38,7 +35,7 @@ class TBuilder {
     friend TSimpleSharedPtr<TValidator> NDetail::CreateValidatorPtr(const TSimpleSharedPtr<TBuilder>& builder);
 
 public:
-    TBuilder(EBuilderType builderType);
+    TBuilder(ENodeType nodeType);
 
     TBuilder(const TBuilder& builder) = default;
     TBuilder(TBuilder&& builder) = default;
@@ -49,30 +46,37 @@ public:
     virtual ~TBuilder() = default;
 
 protected:
-    const EBuilderType BuilderType_;
+    const ENodeType NodeType_;
     bool Required_ = true;
     TString Description_;
 };
 
-template <typename ThisType>
+template <typename TThis, typename TCheckContext>
 class TCommonBuilderOps : public TBuilder {
 public:
-    TCommonBuilderOps<ThisType>(EBuilderType builderType);
-    TCommonBuilderOps<ThisType>(const TBuilder& builder);
+    TCommonBuilderOps<TThis, TCheckContext>(ENodeType nodeType);
+    TCommonBuilderOps<TThis, TCheckContext>(const TCommonBuilderOps<TThis, TCheckContext>& builder);
 
-    ThisType& Optional();
-    ThisType& Required();
-    ThisType& Description(const TString& description);
+    TThis& Optional();
+    TThis& Required();
+    TThis& Description(const TString& description);
 
-    ThisType& Configure(std::function<void(ThisType&)> configurator = [](auto&){});
+    TThis& Configure(std::function<void(TThis&)> configurator = [](auto&){});
+
+    TThis& AddCheck(TString name, std::function<void(TCheckContext&)> checker);
+
+protected:
+    THashMap<TString, std::function<void(TCheckContext&)>> Checkers_;
 
 private:
-    ThisType& AsDerived();
+    TThis& AsDerived();
 };
 
 } // namespace NDetail
 
-class TGenericBuilder : public NDetail::TCommonBuilderOps<TGenericBuilder> {
+class TGenericBuilder : public NDetail::TCommonBuilderOps<TGenericBuilder, TGenericCheckContext> {
+    using TBase = NDetail::TCommonBuilderOps<TGenericBuilder, TGenericCheckContext>;
+
 public:
     TGenericBuilder();
 
@@ -84,8 +88,8 @@ public:
 
     TGenericBuilder(std::function<void(TGenericBuilder&)> configurator);
 
-    template <typename Builder>
-    TGenericBuilder& CanBe(Builder builder);
+    template <typename TBuilder>
+    TGenericBuilder& CanBe(TBuilder builder);
     TGenericBuilder& CanBeMap(std::function<void(TMapBuilder&)> configurator = [](auto&){});
     TGenericBuilder& CanBeArray(std::function<void(TArrayBuilder&)> configurator = [](auto&){});
     TGenericBuilder& CanBeInt64(std::function<void(TInt64Builder&)> configurator = [](auto&){});
@@ -95,18 +99,20 @@ public:
     TGenericValidator CreateValidator();
 
 private:
-    struct NodeTypeAndBuilder {
-        EBuilderType Type;
+    struct TTypedBuilder {
+        ENodeType Type;
         TSimpleSharedPtr<TBuilder> Builder;
 
-        NodeTypeAndBuilder();
-        NodeTypeAndBuilder(EBuilderType type, TSimpleSharedPtr<TBuilder> builder);
+        TTypedBuilder();
+        TTypedBuilder(ENodeType type, TSimpleSharedPtr<TBuilder> builder);
     };
 
     TVector<TSimpleSharedPtr<TBuilder>> PossibleBuilderPtrs_;
 };
 
-class TMapBuilder : public NDetail::TCommonBuilderOps<TMapBuilder> {
+class TMapBuilder : public NDetail::TCommonBuilderOps<TMapBuilder, TMapCheckContext> {
+    using TBase = NDetail::TCommonBuilderOps<TMapBuilder, TMapCheckContext>;
+
 public:
     TMapBuilder();
 
@@ -118,8 +124,8 @@ public:
 
     TMapBuilder(std::function<void(TMapBuilder&)> configurator);
 
-    template <typename Builder>
-    TMapBuilder& Field(const TString& field, Builder builder);
+    template <typename TBuilder>
+    TMapBuilder& Field(const TString& field, TBuilder builder);
 
     TMapBuilder& GenericField(const TString& field, std::function<void(TGenericBuilder&)> configurator = [](auto&){});
     TMapBuilder& Map(const TString& field, std::function<void(TMapBuilder&)> configurator = [](auto&){});
@@ -149,7 +155,9 @@ private:
     void ThrowIfAlreadyHasField(const TString& field);
 };
 
-class TArrayBuilder : public NDetail::TCommonBuilderOps<TArrayBuilder> {
+class TArrayBuilder : public NDetail::TCommonBuilderOps<TArrayBuilder, TArrayCheckContext> {
+    using TBase = NDetail::TCommonBuilderOps<TArrayBuilder, TArrayCheckContext>;
+
 public:
     TArrayBuilder();
 
@@ -163,8 +171,8 @@ public:
 
     TArrayBuilder& Unique();
 
-    template <typename Builder>
-    TArrayBuilder& Item(Builder builder);
+    template <typename TBuilder>
+    TArrayBuilder& Item(TBuilder builder);
     TArrayBuilder& MapItem(std::function<void(TMapBuilder&)> configurator = [](auto&){});
     TArrayBuilder& ArrayItem(std::function<void(TArrayBuilder&)> configurator = [](auto&){});
     TArrayBuilder& Int64Item(std::function<void(TInt64Builder&)> configurator = [](auto&){});
@@ -180,7 +188,9 @@ private:
     bool Unique_ = false;
 };
 
-class TInt64Builder : public NDetail::TCommonBuilderOps<TInt64Builder> {
+class TInt64Builder : public NDetail::TCommonBuilderOps<TInt64Builder, TInt64CheckContext> {
+    using TBase = NDetail::TCommonBuilderOps<TInt64Builder, TInt64CheckContext>;
+
 public:
     TInt64Builder();
 
@@ -203,7 +213,9 @@ private:
     i64 Max_ = ::Max<i64>();
 };
 
-class TStringBuilder : public NDetail::TCommonBuilderOps<TStringBuilder> {
+class TStringBuilder : public NDetail::TCommonBuilderOps<TStringBuilder, TStringCheckContext> {
+    using TBase = NDetail::TCommonBuilderOps<TStringBuilder, TStringCheckContext>;
+
 public:
     TStringBuilder();
 
@@ -218,7 +230,9 @@ public:
     TStringValidator CreateValidator();
 };
 
-class TBoolBuilder : public NDetail::TCommonBuilderOps<TBoolBuilder> {
+class TBoolBuilder : public NDetail::TCommonBuilderOps<TBoolBuilder, TBoolCheckContext> {
+    using TBase = NDetail::TCommonBuilderOps<TBoolBuilder, TBoolCheckContext>;
+
 public:
     TBoolBuilder();
 
@@ -233,40 +247,49 @@ public:
     TBoolValidator CreateValidator();
 };
 
-template <typename ThisType>
-NDetail::TCommonBuilderOps<ThisType>::TCommonBuilderOps(EBuilderType builderType)
-    : TBuilder(builderType) {}
+template <typename TThis, typename TCheckContext>
+NDetail::TCommonBuilderOps<TThis, TCheckContext>::TCommonBuilderOps(ENodeType nodeType)
+    : TBuilder(nodeType) {}
 
-template <typename ThisType>
-NDetail::TCommonBuilderOps<ThisType>::TCommonBuilderOps(const TBuilder& builder)
-    : TBuilder(builder) {}
+template <typename TThis, typename TCheckContext>
+NDetail::TCommonBuilderOps<TThis, TCheckContext>::TCommonBuilderOps(const TCommonBuilderOps<TThis, TCheckContext>& builder)
+    : TBuilder(builder), Checkers_(builder.Checkers_) {}
 
-template <typename ThisType>
-ThisType& NDetail::TCommonBuilderOps<ThisType>::AsDerived() {
-    return static_cast<ThisType&>(*this);
+template <typename TThis, typename TCheckContext>
+TThis& NDetail::TCommonBuilderOps<TThis, TCheckContext>::AsDerived() {
+    return static_cast<TThis&>(*this);
 }
 
-template <typename ThisType>
-ThisType& NDetail::TCommonBuilderOps<ThisType>::Optional() {
+template <typename TThis, typename TCheckContext>
+TThis& NDetail::TCommonBuilderOps<TThis, TCheckContext>::Optional() {
     Required_ = false;
     return AsDerived();
 }
 
-template <typename ThisType>
-ThisType& NDetail::TCommonBuilderOps<ThisType>::Required() {
+template <typename TThis, typename TCheckContext>
+TThis& NDetail::TCommonBuilderOps<TThis, TCheckContext>::Required() {
     Required_ = true;
     return AsDerived();
 }
 
-template <typename ThisType>
-ThisType& NDetail::TCommonBuilderOps<ThisType>::Description(const TString& description) {
+template <typename TThis, typename TCheckContext>
+TThis& NDetail::TCommonBuilderOps<TThis, TCheckContext>::Description(const TString& description) {
     Description_ = description;
     return AsDerived();
 }
 
-template <typename ThisType>
-ThisType& NDetail::TCommonBuilderOps<ThisType>::Configure(std::function<void(ThisType&)> configurator) {
+template <typename TThis, typename TCheckContext>
+TThis& NDetail::TCommonBuilderOps<TThis, TCheckContext>::Configure(std::function<void(TThis&)> configurator) {
     configurator(AsDerived());
+    return AsDerived();
+}
+
+template <typename TThis, typename TCheckContext>
+TThis& NDetail::TCommonBuilderOps<TThis, TCheckContext>::AddCheck(TString name, std::function<void(TCheckContext&)> checker) {
+    if (Checkers_.contains(name)) {
+        ythrow yexception() << "Already has check named \"" << name << "\"";
+    }
+    Checkers_[name] = checker;
     return AsDerived();
 }
 

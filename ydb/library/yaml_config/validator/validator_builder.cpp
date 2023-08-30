@@ -11,52 +11,40 @@ namespace NYamlConfig::NValidator {
 namespace NDetail {
 
 TSimpleSharedPtr<TValidator> CreateValidatorPtr(const TSimpleSharedPtr<TBuilder>& builder) {
-    switch (builder->BuilderType_) {
-        case EBuilderType::Generic: {
-            TGenericValidator v = static_cast<TGenericBuilder*>(builder.Get())->CreateValidator();
-            v.Required_ = builder->Required_;
-            return TSimpleSharedPtr<TValidator>(new TGenericValidator(std::move(v)));
+    switch (builder->NodeType_) {
+        case ENodeType::Generic: {
+            return MakeSimpleShared<TGenericValidator>(static_cast<TGenericBuilder*>(builder.Get())->CreateValidator());
         }
-        case EBuilderType::Map: {
-            TMapValidator v = static_cast<TMapBuilder*>(builder.Get())->CreateValidator();
-            v.Required_ = builder->Required_;
-            return TSimpleSharedPtr<TValidator>(new TMapValidator(std::move(v)));
+        case ENodeType::Map: {
+            return MakeSimpleShared<TMapValidator>(static_cast<TMapBuilder*>(builder.Get())->CreateValidator());
         }
-        case EBuilderType::Array: {
-            TArrayValidator v = static_cast<TArrayBuilder*>(builder.Get())->CreateValidator();
-            v.Required_ = builder->Required_;
-            return TSimpleSharedPtr<TValidator>(new TArrayValidator(std::move(v)));
+        case ENodeType::Array: {
+            return MakeSimpleShared<TArrayValidator>(static_cast<TArrayBuilder*>(builder.Get())->CreateValidator());
         }
-        case EBuilderType::Int64: {
-            TInt64Validator v = static_cast<TInt64Builder*>(builder.Get())->CreateValidator();
-            v.Required_ = builder->Required_;
-            return TSimpleSharedPtr<TValidator>(new TInt64Validator(std::move(v)));
+        case ENodeType::Int64: {
+            return MakeSimpleShared<TInt64Validator>(static_cast<TInt64Builder*>(builder.Get())->CreateValidator());
         }
-        case EBuilderType::String: {
-            TStringValidator v = static_cast<TStringBuilder*>(builder.Get())->CreateValidator();
-            v.Required_ = builder->Required_;
-            return TSimpleSharedPtr<TValidator>(new TStringValidator(std::move(v)));
+        case ENodeType::String: {
+            return MakeSimpleShared<TStringValidator>(static_cast<TStringBuilder*>(builder.Get())->CreateValidator());
         }
-        case EBuilderType::Bool: {
-            TBoolValidator v = static_cast<TBoolBuilder*>(builder.Get())->CreateValidator();
-            v.Required_ = builder->Required_;
-            return TSimpleSharedPtr<TValidator>(new TBoolValidator(std::move(v)));
+        case ENodeType::Bool: {
+            return MakeSimpleShared<TBoolValidator>(static_cast<TBoolBuilder*>(builder.Get())->CreateValidator());
         }
     }
 }
 
-TBuilder::TBuilder(EBuilderType builderType)
-    : BuilderType_(builderType) {}
+TBuilder::TBuilder(ENodeType nodeType)
+    : NodeType_(nodeType) {}
 
 TBuilder& TBuilder::operator=(const TBuilder& builder) {
-    Y_ASSERT(BuilderType_ == builder.BuilderType_);
+    Y_ASSERT(NodeType_ == builder.NodeType_);
     Required_ = builder.Required_;
     Description_ = builder.Description_;
     return *this;
 }
 
 TBuilder& TBuilder::operator=(TBuilder&& builder) {
-    Y_ASSERT(BuilderType_ == builder.BuilderType_);
+    Y_ASSERT(NodeType_ == builder.NodeType_);
     Required_ = builder.Required_;
     Description_ = std::move(builder.Description_);
     return *this;
@@ -64,23 +52,23 @@ TBuilder& TBuilder::operator=(TBuilder&& builder) {
 
 } // namespace NDetail
 
-TGenericBuilder::NodeTypeAndBuilder::NodeTypeAndBuilder() {}
+TGenericBuilder::TTypedBuilder::TTypedBuilder() {}
 
-TGenericBuilder::NodeTypeAndBuilder::NodeTypeAndBuilder(EBuilderType type, TSimpleSharedPtr<TBuilder> builder)
+TGenericBuilder::TTypedBuilder::TTypedBuilder(ENodeType type, TSimpleSharedPtr<TBuilder> builder)
     : Type(type)
     , Builder(std::move(builder)) {}
 
 
 // TGenericBuilder
 TGenericBuilder::TGenericBuilder()
-    : TCommonBuilderOps<TGenericBuilder>(EBuilderType::Generic) {};
+    : TBase(ENodeType::Generic) {};
 
 TGenericBuilder::TGenericBuilder(const TGenericBuilder& builder)
-    : TCommonBuilderOps<TGenericBuilder>(builder)
+    : TBase(builder)
     , PossibleBuilderPtrs_(builder.PossibleBuilderPtrs_) {}
 
 TGenericBuilder::TGenericBuilder(TGenericBuilder&& builder)
-    : TCommonBuilderOps<TGenericBuilder>(std::move(builder))
+    : TBase(std::move(builder))
     , PossibleBuilderPtrs_(std::move(builder.PossibleBuilderPtrs_)) {}
 
 TGenericBuilder& TGenericBuilder::operator=(const TGenericBuilder& builder) {
@@ -131,21 +119,22 @@ TGenericValidator TGenericBuilder::CreateValidator() {
         result.AddValidator(NDetail::CreateValidatorPtr(builderPtr));
     }
 
+    result.Checkers_ = Checkers_;
     result.Required_ = Required_;
 
     return result;
 }
 
 TMapBuilder::TMapBuilder()
-    : TCommonBuilderOps<TMapBuilder>(EBuilderType::Map) {}
+    : TBase(ENodeType::Map) {}
 
 TMapBuilder::TMapBuilder(const TMapBuilder& builder)
-    : TCommonBuilderOps<TMapBuilder>(builder)
+    : TBase(builder)
     , Children_(builder.Children_)
     , Opaque_(builder.Opaque_) {}
 
 TMapBuilder::TMapBuilder(TMapBuilder&& builder)
-    : TCommonBuilderOps<TMapBuilder>(std::move(builder))
+    : TBase(std::move(builder))
     , Children_(std::move(builder.Children_))
     , Opaque_(builder.Opaque_) {}
 
@@ -254,21 +243,26 @@ TMapValidator TMapBuilder::CreateValidator() {
         children[name] = NDetail::CreateValidatorPtr(builderPtr);
     }
 
-    return TMapValidator(std::move(children), Opaque_);
+    auto result = TMapValidator(std::move(children), Opaque_);
+
+    result.Checkers_ = Checkers_;
+    result.Required_ = Required_;
+
+    return result;
 }
 
 
 // TArrayBuilder
 TArrayBuilder::TArrayBuilder()
-    : TCommonBuilderOps<TArrayBuilder>(EBuilderType::Array) {}
+    : TBase(ENodeType::Array) {}
 
 TArrayBuilder::TArrayBuilder(const TArrayBuilder& builder)
-    : TCommonBuilderOps<TArrayBuilder>(builder)
+    : TBase(builder)
     , ItemPtr_(builder.ItemPtr_)
     , Unique_(builder.Unique_) {}
 
 TArrayBuilder::TArrayBuilder(TArrayBuilder&& builder)
-    : TCommonBuilderOps<TArrayBuilder>(std::move(builder))
+    : TBase(std::move(builder))
     , ItemPtr_(std::move(builder.ItemPtr_))
     , Unique_(builder.Unique_) {}
 
@@ -329,21 +323,24 @@ NDetail::TBuilder& TArrayBuilder::GetItem() {
 }
 
 TArrayValidator TArrayBuilder::CreateValidator() {
-    return TArrayValidator(NDetail::CreateValidatorPtr(ItemPtr_), Unique_);
+    auto result = TArrayValidator(NDetail::CreateValidatorPtr(ItemPtr_), Unique_);
+    result.Checkers_ = Checkers_;
+    result.Required_ = Required_;
+    return result;
 }
 
 
 // TInt64Builder
 TInt64Builder::TInt64Builder()
-    : TCommonBuilderOps<TInt64Builder>(EBuilderType::Int64) {}
+    : TBase(ENodeType::Int64) {}
 
 TInt64Builder::TInt64Builder(const TInt64Builder& builder)
-    : TCommonBuilderOps<TInt64Builder>(builder)
+    : TBase(builder)
     , Min_(builder.Min_)
     , Max_(builder.Max_) {}
 
 TInt64Builder::TInt64Builder(TInt64Builder&& builder)
-    : TCommonBuilderOps<TInt64Builder>(std::move(builder))
+    : TBase(std::move(builder))
     , Min_(builder.Min_)
     , Max_(builder.Max_) {}
 
@@ -383,19 +380,22 @@ TInt64Builder& TInt64Builder::Range(i64 min, i64 max) {
 }
 
 TInt64Validator TInt64Builder::CreateValidator() {
-    return TInt64Validator(Min_, Max_);
+    auto result = TInt64Validator(Min_, Max_);
+    result.Checkers_ = Checkers_;
+    result.Required_ = Required_;
+    return result;
 }
 
 
 // TStringBuilder
 TStringBuilder::TStringBuilder()
-    : TCommonBuilderOps<TStringBuilder>(EBuilderType::Int64) {}
+    : TBase(ENodeType::String) {}
 
 TStringBuilder::TStringBuilder(const TStringBuilder& builder)
-    : TCommonBuilderOps<TStringBuilder>(builder) {}
+    : TBase(builder) {}
 
 TStringBuilder::TStringBuilder(TStringBuilder&& builder)
-    : TCommonBuilderOps<TStringBuilder>(std::move(builder)) {}
+    : TBase(std::move(builder)) {}
 
 TStringBuilder& TStringBuilder::operator=(const TStringBuilder& builder) {
     TBuilder::operator=(builder);
@@ -413,19 +413,22 @@ TStringBuilder::TStringBuilder(std::function<void(TStringBuilder&)> configurator
 }
 
 TStringValidator TStringBuilder::CreateValidator() {
-    return TStringValidator();
+    auto result = TStringValidator();
+    result.Checkers_ = Checkers_;
+    result.Required_ = Required_;
+    return result;
 }
 
 
 // TBoolBuilder
 TBoolBuilder::TBoolBuilder()
-    : TCommonBuilderOps<TBoolBuilder>(EBuilderType::Bool) {}
+    : TBase(ENodeType::Bool) {}
 
 TBoolBuilder::TBoolBuilder(const TBoolBuilder& builder)
-    : TCommonBuilderOps<TBoolBuilder>(builder) {}
+    : TBase(builder) {}
 
 TBoolBuilder::TBoolBuilder(TBoolBuilder&& builder)
-    : TCommonBuilderOps<TBoolBuilder>(std::move(builder)) {}
+    : TBase(std::move(builder)) {}
 
 TBoolBuilder& TBoolBuilder::operator=(const TBoolBuilder& builder) {
     TBuilder::operator=(builder);
@@ -443,7 +446,10 @@ TBoolBuilder::TBoolBuilder(std::function<void(TBoolBuilder&)> configurator)
 }
 
 TBoolValidator TBoolBuilder::CreateValidator() {
-    return TBoolValidator();
+    auto result = TBoolValidator();
+    result.Checkers_ = Checkers_;
+    result.Required_ = Required_;
+    return result;
 }
 
 } // namespace NYamlConfig::NValidator

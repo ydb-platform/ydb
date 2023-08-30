@@ -2398,17 +2398,20 @@ size_t CalcMaxBlockItemSize(const TType* type) {
             return sz;
         }
         case NUdf::EDataSlot::String:
+        case NUdf::EDataSlot::Yson:
+        case NUdf::EDataSlot::JsonDocument:
             // size of offset part
             return sizeof(arrow::BinaryType::offset_type);
         case NUdf::EDataSlot::Utf8:
+        case NUdf::EDataSlot::Json:
             // size of offset part
             return sizeof(arrow::StringType::offset_type);
         default:
-            MKQL_ENSURE(false, "Unsupported data slot");
+            MKQL_ENSURE(false, "Unsupported data slot: " << slot);
         }
     }
 
-    MKQL_ENSURE(false, "Unsupported type");
+    MKQL_ENSURE(false, "Unsupported type: " << *type);
 }
 
 struct TComparatorTraits {

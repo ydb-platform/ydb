@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut_async_index)
 add_subdirectory(ut_backup)
 add_subdirectory(ut_base)
 add_subdirectory(ut_base_reboots)
@@ -25,6 +24,7 @@ add_subdirectory(ut_extsubdomain)
 add_subdirectory(ut_extsubdomain_reboots)
 add_subdirectory(ut_filestore_reboots)
 add_subdirectory(ut_helpers)
+add_subdirectory(ut_index)
 add_subdirectory(ut_index_build)
 add_subdirectory(ut_index_build_reboots)
 add_subdirectory(ut_login)

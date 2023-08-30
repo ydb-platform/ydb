@@ -454,13 +454,18 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
         }
     }
 
+    auto tableDbg = [&]() {
+        return TStringBuilder() << "Lookup: " << structType->ToString()
+           << ", for table: " << table.second->Metadata->Name;
+    };
+
     if (!keyColumnsCount) {
-        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Table lookup has no key columns."));
+        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Table lookup has no key columns. " + tableDbg()));
         return TStatus::Error;
     }
 
     if (structType->GetSize() != keyColumnsCount) {
-        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Table lookup contains non-key columns."));
+        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Table lookup contains non-key columns. " + tableDbg()));
         return TStatus::Error;
     }
 

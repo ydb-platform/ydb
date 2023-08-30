@@ -23,7 +23,7 @@ TRowsAndKeysResult PrecomputeRowsAndKeys(const TCondenseInputResult& condenseRes
 
     auto extractKeys = Build<TCoMap>(ctx, pos)
         .Input(rowsListArg)
-        .Lambda(MakeTableKeySelector(table, pos, ctx))
+        .Lambda(MakeTableKeySelector(table.Metadata, pos, ctx))
         .Done();
 
     auto variantType = Build<TCoVariantType>(ctx, pos)

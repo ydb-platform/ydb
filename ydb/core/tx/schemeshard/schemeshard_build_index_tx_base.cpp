@@ -266,6 +266,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
 
     switch (indexInfo->IndexType) {
     case NKikimrSchemeOp::EIndexType::EIndexTypeGlobal:
+    case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique:
         *index.mutable_global_index() = Ydb::Table::GlobalIndex();
         break;
     case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync:

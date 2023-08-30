@@ -7,23 +7,24 @@
 
 
 
-add_executable(ydb-core-tx-schemeshard-ut_async_index)
-target_compile_options(ydb-core-tx-schemeshard-ut_async_index PRIVATE
+add_executable(ydb-core-tx-schemeshard-ut_index)
+target_compile_options(ydb-core-tx-schemeshard-ut_index PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
-target_include_directories(ydb-core-tx-schemeshard-ut_async_index PRIVATE
+target_include_directories(ydb-core-tx-schemeshard-ut_index PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard
 )
-target_link_libraries(ydb-core-tx-schemeshard-ut_async_index PUBLIC
+target_link_libraries(ydb-core-tx-schemeshard-ut_index PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  library-cpp-cpuid_check
   cpp-testing-unittest_main
   core-tx-schemeshard
   core-testlib-default
   tx-schemeshard-ut_helpers
 )
-target_link_options(ydb-core-tx-schemeshard-ut_async_index PRIVATE
+target_link_options(ydb-core-tx-schemeshard-ut_index PRIVATE
   -ldl
   -lrt
   -Wl,--no-as-needed
@@ -33,21 +34,22 @@ target_link_options(ydb-core-tx-schemeshard-ut_async_index PRIVATE
   -lrt
   -ldl
 )
-target_sources(ydb-core-tx-schemeshard-ut_async_index PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_async_index/ut_async_index.cpp
+target_sources(ydb-core-tx-schemeshard-ut_index PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_index/ut_async_index.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_index/ut_unique_index.cpp
 )
 set_property(
   TARGET
-  ydb-core-tx-schemeshard-ut_async_index
+  ydb-core-tx-schemeshard-ut_index
   PROPERTY
   SPLIT_FACTOR
   60
 )
 add_yunittest(
   NAME
-  ydb-core-tx-schemeshard-ut_async_index
+  ydb-core-tx-schemeshard-ut_index
   TEST_TARGET
-  ydb-core-tx-schemeshard-ut_async_index
+  ydb-core-tx-schemeshard-ut_index
   TEST_ARG
   --print-before-suite
   --print-before-test
@@ -57,26 +59,27 @@ add_yunittest(
 )
 set_yunittest_property(
   TEST
-  ydb-core-tx-schemeshard-ut_async_index
+  ydb-core-tx-schemeshard-ut_index
   PROPERTY
   LABELS
   MEDIUM
 )
 set_yunittest_property(
   TEST
-  ydb-core-tx-schemeshard-ut_async_index
+  ydb-core-tx-schemeshard-ut_index
   PROPERTY
   PROCESSORS
   1
 )
 set_yunittest_property(
   TEST
-  ydb-core-tx-schemeshard-ut_async_index
+  ydb-core-tx-schemeshard-ut_index
   PROPERTY
   TIMEOUT
   600
 )
-target_allocator(ydb-core-tx-schemeshard-ut_async_index
-  cpp-malloc-jemalloc
+target_allocator(ydb-core-tx-schemeshard-ut_index
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
 )
-vcs_info(ydb-core-tx-schemeshard-ut_async_index)
+vcs_info(ydb-core-tx-schemeshard-ut_index)

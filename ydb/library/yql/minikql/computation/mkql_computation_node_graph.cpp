@@ -190,7 +190,8 @@ public:
 
     IComputationExternalNode* GetEntryPoint(size_t index, bool require) {
         MKQL_ENSURE(index < Runtime2ComputationEntryPoints.size() && (!require || Runtime2ComputationEntryPoints[index]),
-            "Pattern nodes can not get computation node by index: " << index << ", require: " << require);
+            "Pattern nodes can not get computation node by index: " << index << ", require: " << require
+                << ", Runtime2ComputationEntryPoints size: " << Runtime2ComputationEntryPoints.size());
         return Runtime2ComputationEntryPoints[index];
     }
 

@@ -25,6 +25,12 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
             }
         )");
         env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/UserDefinedIndex"),
+            {NLs::PathExist,
+             NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync),
+             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+             NLs::IndexKeys({"indexed"})});
     }
 
     Y_UNIT_TEST(OnlineBuild) {

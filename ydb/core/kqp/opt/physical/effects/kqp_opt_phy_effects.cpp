@@ -150,7 +150,7 @@ TMaybe<TCondenseInputResult> CondenseInputToDictByPk(const TExprBase& input, con
             .Args({"row_list"})
             .Body<TCoToDict>()
                 .List("row_list")
-                .KeySelector(MakeTableKeySelector(table, input.Pos(), ctx))
+                .KeySelector(MakeTableKeySelector(table.Metadata, input.Pos(), ctx))
                 .PayloadSelector(payloadSelector)
                 .Settings()
                     .Add().Build("One")
@@ -167,11 +167,39 @@ TMaybe<TCondenseInputResult> CondenseInputToDictByPk(const TExprBase& input, con
     };
 }
 
-TCoLambda MakeTableKeySelector(const TKikimrTableDescription& table, TPositionHandle pos, TExprContext& ctx) {
+TCoLambda MakeTableKeySelector(const TKikimrTableMetadataPtr meta, TPositionHandle pos, TExprContext& ctx) {
     auto keySelectorArg = TCoArgument(ctx.NewArgument(pos, "key_selector"));
 
     TVector<TExprBase> keyTuples;
-    for (const auto& key : table.Metadata->KeyColumnNames) {
+    keyTuples.reserve(meta->KeyColumnNames.size());
+    for (const auto& key : meta->KeyColumnNames) {
+        auto tuple = Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(key)
+            .Value<TCoMember>()
+                .Struct(keySelectorArg)
+                .Name().Build(key)
+                .Build()
+            .Done();
+
+        keyTuples.emplace_back(tuple);
+    }
+
+    return Build<TCoLambda>(ctx, pos)
+        .Args({keySelectorArg})
+        .Body<TCoAsStruct>()
+            .Add(keyTuples)
+            .Build()
+        .Done();
+}
+
+NYql::NNodes::TCoLambda MakeIndexPrefixKeySelector(const NYql::TIndexDescription& indexDesc, NYql::TPositionHandle pos,
+    NYql::TExprContext& ctx)
+{
+    auto keySelectorArg = TCoArgument(ctx.NewArgument(pos, "fk_selector"));
+
+    TVector<TExprBase> keyTuples;
+    keyTuples.reserve(indexDesc.KeyColumns.size());
+    for (const auto& key : indexDesc.KeyColumns) {
         auto tuple = Build<TCoNameValueTuple>(ctx, pos)
             .Name().Build(key)
             .Value<TCoMember>()

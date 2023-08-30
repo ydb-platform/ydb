@@ -49,7 +49,7 @@ struct TIndexDescription {
     enum class EType : ui32 {
         GlobalSync = 0,
         GlobalAsync = 1,
-
+        GlobalSyncUnique = 2,
     };
 
     // Index states here must be in sync with NKikimrSchemeOp::EIndexState protobuf
@@ -107,6 +107,8 @@ struct TIndexDescription {
         auto type = NYql::TIndexDescription::EType::GlobalSync;
         if (index.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync) {
             type = NYql::TIndexDescription::EType::GlobalAsync;
+        } else if (index.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique) {
+            type = NYql::TIndexDescription::EType::GlobalSyncUnique;
         }
 
         return type;
@@ -139,6 +141,8 @@ struct TIndexDescription {
     bool ItUsedForWrite() const {
         switch (Type) {
             case EType::GlobalSync:
+                return true;
+            case EType::GlobalSyncUnique:
                 return true;
             case EType::GlobalAsync:
                 return false;

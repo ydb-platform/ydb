@@ -35,7 +35,19 @@ NYql::NNodes::TMaybeNode<NYql::NNodes::TDqPhyPrecompute> PrecomputeTableLookupDi
     const THashSet<TString>& dataColumns, const THashSet<TString>& keyColumns, NYql::TPositionHandle pos,
     NYql::TExprContext& ctx);
 
-NYql::NNodes::TCoLambda MakeTableKeySelector(const NYql::TKikimrTableDescription& table, NYql::TPositionHandle pos,
+// Creates key selector using PK of given table
+NYql::NNodes::TCoLambda MakeTableKeySelector(const NYql::TKikimrTableMetadataPtr tableMeta, NYql::TPositionHandle pos,
+    NYql::TExprContext& ctx);
+
+// Creates key selector using user provided index columns.
+// It is important to note. This function looks at the _user_prvided_ set of columns.
+// Example: table with columns a, b, pk(a)
+//   case 1:
+//     user creates index for column b, index table pk(b,a). But this fuction must create selector only for column b
+//   case 2:
+//     user creates index for columns b, a, index table pk is same pk(b,a). But this function must crete selector for b, a
+
+NYql::NNodes::TCoLambda MakeIndexPrefixKeySelector(const NYql::TIndexDescription& indexDesc, NYql::TPositionHandle pos,
     NYql::TExprContext& ctx);
 
 NYql::NNodes::TCoLambda MakeRowsPayloadSelector(const NYql::NNodes::TCoAtomList& columns,

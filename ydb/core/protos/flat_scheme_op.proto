@@ -787,6 +787,7 @@ enum EIndexType {
     EIndexTypeInvalid = 0;
     EIndexTypeGlobal = 1;
     EIndexTypeGlobalAsync = 2;
+    EIndexTypeGlobalUnique = 3;
 }
 
 enum EIndexState {

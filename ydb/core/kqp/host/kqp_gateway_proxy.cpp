@@ -460,6 +460,9 @@ public:
                             case NYql::TIndexDescription::EType::GlobalAsync:
                                 indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync);
                                 break;
+                            case NYql::TIndexDescription::EType::GlobalSyncUnique:
+                                indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique);
+                                break;
                         }
 
                         indexDesc->SetState(static_cast<::NKikimrSchemeOp::EIndexState>(index.State));

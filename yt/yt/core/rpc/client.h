@@ -449,7 +449,7 @@ struct TMethodDescriptor
     using TReq##method##Ptr = ::NYT::TIntrusivePtr<TReq##method>; \
     using TErrorOrRsp##method##Ptr = ::NYT::TErrorOr<TRsp##method##Ptr>; \
     \
-    TReq##method##Ptr method() \
+    TReq##method##Ptr method() const \
     { \
         static const auto Descriptor = ::NYT::NRpc::TMethodDescriptor(#method) __VA_ARGS__; \
         return CreateRequest<TReq##method>(Descriptor); \
@@ -482,7 +482,7 @@ protected:
         const TServiceDescriptor& descriptor);
 
     template <class T>
-    TIntrusivePtr<T> CreateRequest(const TMethodDescriptor& methodDescriptor);
+    TIntrusivePtr<T> CreateRequest(const TMethodDescriptor& methodDescriptor) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

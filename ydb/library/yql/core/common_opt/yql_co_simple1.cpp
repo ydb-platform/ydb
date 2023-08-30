@@ -707,6 +707,8 @@ TExprNode::TPtr SimplifyLogical(const TExprNode::TPtr& node, TExprContext& ctx) 
         YQL_CLOG(DEBUG, Core) << node->Content() <<  " over Nothing";
         return node->HeadPtr();
     }
+
+    Y_UNUSED(negations);
 /*TODO Move to peephole
     if (size == negations) {
         YQL_CLOG(DEBUG, Core) << node->Content() <<  " over negations";
@@ -6260,7 +6262,16 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["ShuffleByKeys"] = map["PartitionsByKeys"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         if (IsEmpty(node->Head(), *optCtx.Types)) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over empty input.";
-            return ctx.Builder(node->Pos()).Apply(node->Tail()).With(0, KeepConstraints(node->HeadPtr(), node->Tail().Head().Head(), ctx)).Seal().Build();
+            auto lambdaResult = ctx.Builder(node->Pos()).Apply(node->Tail()).With(0, KeepConstraints(node->HeadPtr(), node->Tail().Head().Head(), ctx)).Seal().Build();
+            if (node->IsCallable("ShuffleByKeys")) {
+                auto lambdaType = node->Tail().GetTypeAnn();
+                if (lambdaType->GetKind() == ETypeAnnotationKind::Optional) {
+                    lambdaResult = ctx.NewCallable(lambdaResult->Pos(), "ToList", { lambdaResult });
+                } else if (lambdaType->GetKind() == ETypeAnnotationKind::Stream) {
+                    lambdaResult = ctx.NewCallable(lambdaResult->Pos(), "ForwardList", { lambdaResult });
+                }
+            }
+            return lambdaResult;
         }
         return node;
     };

@@ -3087,7 +3087,7 @@ private:
         return FromFirst<TEmptyConstraintNode>(input, output, ctx);
     }
 
-    TStatus AggregateWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
+    TStatus AggregateWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
         if (HasSetting(input->Tail(), "session"))
             return TStatus::Ok;
 
@@ -3099,6 +3099,7 @@ private:
             }
             input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(columns));
             input->AddConstraint(ctx.MakeConstraint<TDistinctConstraintNode>(columns));
+            return FromFirst<TEmptyConstraintNode>(input, output, ctx);
         }
         return TStatus::Ok;
     }

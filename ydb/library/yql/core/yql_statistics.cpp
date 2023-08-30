@@ -12,3 +12,18 @@ std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) 
     }
     return os;
 }
+
+bool TOptimizerStatistics::Empty() const {
+    return ! (Nrows || Ncols || Cost);
+}
+
+TOptimizerStatistics& TOptimizerStatistics::operator+=(const TOptimizerStatistics& other) {
+    Nrows += other.Nrows;
+    Ncols += other.Ncols;
+    if (Cost) {
+        Cost = *Cost + *other.Cost;
+    } else {
+        Cost = other.Cost;
+    }
+    return *this;
+}

@@ -12,6 +12,12 @@ add_subdirectory(events)
 add_subdirectory(partition_key_range)
 add_subdirectory(ut)
 add_subdirectory(writer)
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
 add_library(ydb-core-persqueue)
 target_link_libraries(ydb-core-persqueue PUBLIC

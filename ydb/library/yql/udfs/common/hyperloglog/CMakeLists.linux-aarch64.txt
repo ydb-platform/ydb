@@ -34,3 +34,41 @@ target_link_libraries(hyperloglog_udf.global PUBLIC
 target_sources(hyperloglog_udf.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/hyperloglog/hyperloglog_udf.cpp
 )
+
+add_shared_library(hyperloglog_udf.dyn)
+set_property(TARGET hyperloglog_udf.dyn PROPERTY
+  OUTPUT_NAME hyperloglog_udf
+)
+target_compile_options(hyperloglog_udf.dyn PRIVATE
+  -DBUILD_UDF
+  -DUDF_ABI_VERSION_MAJOR=2
+  -DUDF_ABI_VERSION_MINOR=28
+  -DUDF_ABI_VERSION_PATCH=0
+)
+target_link_libraries(hyperloglog_udf.dyn PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  yql-public-udf
+  public-udf-support
+  library-cpp-hyperloglog
+)
+target_link_options(hyperloglog_udf.dyn PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -Wl,-z,notext
+  -Wl,-Bsymbolic
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
+target_sources(hyperloglog_udf.dyn PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/hyperloglog/hyperloglog_udf.cpp
+)
+use_export_script(hyperloglog_udf.dyn
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udfs_exports.exports
+)
+vcs_info(hyperloglog_udf.dyn)

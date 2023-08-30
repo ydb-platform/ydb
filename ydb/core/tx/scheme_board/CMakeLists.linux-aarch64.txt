@@ -12,6 +12,12 @@ add_subdirectory(ut_monitoring)
 add_subdirectory(ut_populator)
 add_subdirectory(ut_replica)
 add_subdirectory(ut_subscriber)
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
 add_library(core-tx-scheme_board)
 target_link_libraries(core-tx-scheme_board PUBLIC

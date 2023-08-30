@@ -6,6 +6,13 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(gencrc)
+get_built_tool_path(
+  TOOL_gencrc_bin
+  TOOL_gencrc_dependency
+  library/cpp/digest/old_crc/gencrc
+  gencrc
+)
 
 add_library(cpp-digest-old_crc)
 target_link_libraries(cpp-digest-old_crc PUBLIC
@@ -20,9 +27,14 @@ add_custom_command(
   OUTPUT
   ${CMAKE_BINARY_DIR}/library/cpp/digest/old_crc/crc.inc
   DEPENDS
-  ${CMAKE_BINARY_DIR}/library/cpp/digest/old_crc/gencrc/gencrc
+  ${TOOL_gencrc_bin}
   COMMAND
-  ${CMAKE_BINARY_DIR}/library/cpp/digest/old_crc/gencrc/gencrc
+  ${TOOL_gencrc_bin}
   >
   crc.inc
 )
+if(NOT CMAKE_CROSSCOMPILING)
+  add_dependencies(cpp-digest-old_crc
+    gencrc
+)
+endif()

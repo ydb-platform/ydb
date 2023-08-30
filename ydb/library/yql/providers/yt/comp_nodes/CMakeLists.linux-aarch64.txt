@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(dq)
+add_subdirectory(ut)
 
 add_library(providers-yt-comp_nodes)
 target_compile_options(providers-yt-comp_nodes PRIVATE

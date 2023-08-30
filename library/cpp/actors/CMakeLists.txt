@@ -8,8 +8,10 @@
 
 add_subdirectory(actor_type)
 add_subdirectory(core)
+add_subdirectory(cppcoro)
 add_subdirectory(dnscachelib)
 add_subdirectory(dnsresolver)
+add_subdirectory(examples)
 add_subdirectory(helpers)
 add_subdirectory(http)
 add_subdirectory(interconnect)

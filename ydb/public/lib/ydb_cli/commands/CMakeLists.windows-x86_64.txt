@@ -8,6 +8,12 @@
 
 add_subdirectory(topic_workload)
 add_subdirectory(transfer_workload)
+get_built_tool_path(
+  TOOL_rescompiler_bin
+  TOOL_rescompiler_dependency
+  tools/rescompiler/bin
+  rescompiler
+)
 
 add_library(clicommands)
 target_link_libraries(clicommands PUBLIC

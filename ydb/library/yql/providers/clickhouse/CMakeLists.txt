@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(actors)
 add_subdirectory(expr_nodes)
 add_subdirectory(proto)
 add_subdirectory(provider)

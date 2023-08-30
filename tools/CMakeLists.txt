@@ -6,5 +6,6 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(archiver)
 add_subdirectory(enum_parser)
 add_subdirectory(rescompiler)

@@ -36,3 +36,39 @@ target_link_libraries(yson2_udf.global PUBLIC
 target_sources(yson2_udf.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/yson2/yson2_udf.cpp
 )
+
+add_shared_library(yson2_udf.dyn)
+set_property(TARGET yson2_udf.dyn PROPERTY
+  OUTPUT_NAME yson2_udf
+)
+target_compile_options(yson2_udf.dyn PRIVATE
+  -DBUILD_UDF
+  -DUDF_ABI_VERSION_MAJOR=2
+  -DUDF_ABI_VERSION_MINOR=28
+  -DUDF_ABI_VERSION_PATCH=0
+)
+target_link_libraries(yson2_udf.dyn PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  yql-public-udf
+  public-udf-support
+  cpp-containers-stack_vector
+  yson_pull
+  yql-minikql-dom
+)
+target_link_options(yson2_udf.dyn PRIVATE
+  -Wl,-platform_version,macos,11.0,11.0
+  -fPIC
+  -undefined
+  dynamic_lookup
+  -fPIC
+  -framework
+  CoreFoundation
+)
+target_sources(yson2_udf.dyn PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/yson2/yson2_udf.cpp
+)
+use_export_script(yson2_udf.dyn
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udfs_exports.exports
+)
+vcs_info(yson2_udf.dyn)

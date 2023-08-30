@@ -9,6 +9,12 @@
 add_subdirectory(json)
 add_subdirectory(protos)
 add_subdirectory(ut)
+get_built_tool_path(
+  TOOL_rescompiler_bin
+  TOOL_rescompiler_dependency
+  tools/rescompiler/bin
+  rescompiler
+)
 
 add_library(ydb-core-viewer)
 target_compile_options(ydb-core-viewer PRIVATE

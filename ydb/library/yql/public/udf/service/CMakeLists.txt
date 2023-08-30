@@ -8,3 +8,4 @@
 
 add_subdirectory(exception_policy)
 add_subdirectory(stub)
+add_subdirectory(terminate_policy)

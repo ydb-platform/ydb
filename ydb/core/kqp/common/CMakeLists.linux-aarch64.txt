@@ -10,6 +10,18 @@ add_subdirectory(compilation)
 add_subdirectory(events)
 add_subdirectory(shutdown)
 add_subdirectory(simple)
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
 add_library(core-kqp-common)
 target_compile_options(core-kqp-common PRIVATE

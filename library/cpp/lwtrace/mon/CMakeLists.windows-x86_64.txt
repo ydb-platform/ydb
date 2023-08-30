@@ -7,6 +7,12 @@
 
 
 add_subdirectory(analytics)
+get_built_tool_path(
+  TOOL_rescompiler_bin
+  TOOL_rescompiler_dependency
+  tools/rescompiler/bin
+  rescompiler
+)
 
 add_library(cpp-lwtrace-mon)
 target_link_libraries(cpp-lwtrace-mon PUBLIC

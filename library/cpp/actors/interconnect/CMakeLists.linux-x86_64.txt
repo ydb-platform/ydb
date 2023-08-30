@@ -8,6 +8,9 @@
 
 find_package(OpenSSL REQUIRED)
 add_subdirectory(mock)
+add_subdirectory(ut)
+add_subdirectory(ut_fat)
+add_subdirectory(ut_huge_cluster)
 
 add_library(cpp-actors-interconnect)
 target_link_libraries(cpp-actors-interconnect PUBLIC

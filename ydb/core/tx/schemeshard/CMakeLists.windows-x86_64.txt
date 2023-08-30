@@ -52,6 +52,24 @@ add_subdirectory(ut_topic_splitmerge)
 add_subdirectory(ut_ttl)
 add_subdirectory(ut_user_attributes)
 add_subdirectory(ut_user_attributes_reboots)
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
 add_library(core-tx-schemeshard)
 target_compile_options(core-tx-schemeshard PRIVATE

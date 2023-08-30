@@ -7,13 +7,16 @@
 
 
 add_subdirectory(actor_log)
+add_subdirectory(actor_system)
 add_subdirectory(actors)
 add_subdirectory(backtrace)
+add_subdirectory(bindings)
 add_subdirectory(failure_injector)
 add_subdirectory(fetch)
 add_subdirectory(log)
 add_subdirectory(test_http_server)
 add_subdirectory(threading)
+add_subdirectory(ut)
 
 add_library(library-yql-utils)
 target_link_libraries(library-yql-utils PUBLIC

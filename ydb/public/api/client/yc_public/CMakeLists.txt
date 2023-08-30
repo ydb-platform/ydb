@@ -9,3 +9,4 @@
 add_subdirectory(common)
 add_subdirectory(events)
 add_subdirectory(iam)
+add_subdirectory(logging)

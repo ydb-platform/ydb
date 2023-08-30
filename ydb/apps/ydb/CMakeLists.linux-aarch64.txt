@@ -8,6 +8,12 @@
 
 add_subdirectory(commands)
 add_subdirectory(ut)
+get_built_tool_path(
+  TOOL_rescompiler_bin
+  TOOL_rescompiler_dependency
+  tools/rescompiler/bin
+  rescompiler
+)
 
 add_executable(ydb)
 target_link_libraries(ydb PUBLIC

@@ -8,6 +8,7 @@
 
 add_subdirectory(events)
 add_subdirectory(proto)
+add_subdirectory(ut_helpers)
 
 add_library(fq-libs-quota_manager)
 target_compile_options(fq-libs-quota_manager PRIVATE

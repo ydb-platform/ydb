@@ -32,3 +32,40 @@ target_link_libraries(set_udf.global PUBLIC
 target_sources(set_udf.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/set/set_udf.cpp
 )
+
+add_shared_library(set_udf.dyn)
+set_property(TARGET set_udf.dyn PROPERTY
+  OUTPUT_NAME set_udf
+)
+target_compile_options(set_udf.dyn PRIVATE
+  -DBUILD_UDF
+  -DUDF_ABI_VERSION_MAJOR=2
+  -DUDF_ABI_VERSION_MINOR=28
+  -DUDF_ABI_VERSION_PATCH=0
+)
+target_link_libraries(set_udf.dyn PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  yql-public-udf
+  public-udf-support
+)
+target_link_options(set_udf.dyn PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -Wl,-z,notext
+  -Wl,-Bsymbolic
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
+target_sources(set_udf.dyn PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/set/set_udf.cpp
+)
+use_export_script(set_udf.dyn
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udfs_exports.exports
+)
+vcs_info(set_udf.dyn)

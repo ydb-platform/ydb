@@ -3,6 +3,7 @@ GTEST(unittester-federated-client)
 SRCS(
     client_ut.cpp
     connection_ut.cpp
+    cache_ut.cpp
 )
 
 PEERDIR(

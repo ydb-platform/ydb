@@ -5,7 +5,7 @@
 {{ ydb-short-name }} поддерживает два типа таблиц:
 
 * [строковые](../../../../concepts/datamodel/table.md);
-* [колоночные](../../../../concepts/column-table.md).
+* [колоночные](../../../../concepts/datamodel/table.md#column-tables).
 
 Тип таблицы при создании задается параметром `STORE`, где `ROW` означает [строковую таблицу](#row), а `COLUMN` — [колоночную](#olap-tables). По умолчанию, если параметр `STORE` не указан, создается строковая таблица.
 
@@ -197,7 +197,7 @@ CREATE TABLE series_with_families (
 
 {% endnote %}
 
-Вызов `CREATE TABLE` создает [колоночную таблицу](../../../../concepts/column-table.md) с указанной схемой данных и ключевыми колонками (`PRIMARY KEY`).
+Вызов `CREATE TABLE` создает [колоночную таблицу](../../../../concepts/datamodel/table.md#column-tables) с указанной схемой данных и ключевыми колонками (`PRIMARY KEY`).
 
 ```sql
 CREATE TABLE table_name (
@@ -219,7 +219,7 @@ WITH (
 
 ### Колонки {#olap-columns}
 
-Поддерживаемые типы данных в колоночных таблицах и ограничение на использование типов в первичных ключах или колонках данных описаны в разделе [поддерживаемые типы данных](../../../../concepts/column-table.md#olap-data-types) колоночных таблиц.
+Поддерживаемые типы данных в колоночных таблицах и ограничение на использование типов в первичных ключах или колонках данных описаны в разделе [колоночные таблицы](../../../../concepts/datamodel/table.md#column-tables).
 
 Обязательно указание `PRIMARY KEY` и `PARTITION BY` с непустым списком колонок.
 
@@ -257,7 +257,7 @@ WITH (
 
 Поддерживаемые параметры колоночных таблиц:
 
-* `AUTO_PARTITIONING_MIN_PARTITIONS_COUNT` — определяет минимальное физическое количество партиций для хранения данных (см. [{#T}](../../../../concepts/column-table.md#olap-tables-partitioning)).
+* `AUTO_PARTITIONING_MIN_PARTITIONS_COUNT` — определяет минимальное физическое количество партиций для хранения данных (см. [{#T}](../../../../concepts/datamodel/table.md#olap-tables-partitioning)).
 
 Например, следующий код создает колоночную таблицу с 10-ю партициями:
 

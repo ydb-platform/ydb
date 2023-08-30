@@ -1939,7 +1939,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         UNIT_ASSERT_VALUES_EQUAL(lastPart.EOS(), true);
     }
 
-    Y_UNIT_TEST(RetryOperation) {
+    Y_UNIT_TEST(RetryOperationTemplate) {
         TKikimrWithGrpcAndRootSchema server;
         NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
         NYdb::NTable::TTableClient client(driver);
@@ -1987,6 +1987,116 @@ R"___(<main>: Error: Transaction not found: , code: 2015
 
         TResultSetParser parser(*selectResult);
         UNIT_ASSERT(parser.TryNextRow());
+        driver.Stop(true);
+    }
+
+    void CheckRetryResult(const TStatus& status, const TVector<TResultSet>& resultSets, bool expectSuccess)
+    {
+        if (expectSuccess) {
+            UNIT_ASSERT(status.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(resultSets.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(resultSets[0].ColumnsCount(), 3);
+        } else {
+            UNIT_ASSERT(!status.IsSuccess());
+        }
+    }
+
+    void TestRetryOperationAsync(NYdb::NTable::TTableClient& client,
+        const TVector<EStatus>& retriableStatuses, bool expectSuccess,
+        TRetryOperationSettings settings = TRetryOperationSettings())
+    {
+        size_t retryNumber = 0;
+        TVector<TResultSet> resultSets;
+        auto operation = [&retryNumber, &resultSets, &retriableStatuses] (TSession session) {
+            // iterate over all providen statuses and return TStatus to emulate error
+            if (retryNumber < retriableStatuses.size()) {
+                TStatus status(retriableStatuses[retryNumber++], {});
+                return NThreading::MakeFuture<TStatus>(status);
+            }
+            auto queryStatus = session.ExecuteDataQuery(
+                "SELECT 1, 2, 3", TTxControl::BeginTx().CommitTx()).GetValueSync();
+            resultSets = queryStatus.GetResultSets();
+            return NThreading::MakeFuture<TStatus>(queryStatus);
+        };
+        auto operationWithoutSession = [&operation] (TTableClient client) {
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            return operation(session);
+        };
+
+        const auto retrySettings = settings.MaxRetries(retriableStatuses.size() + 1).Verbose(true);
+        auto result = client.RetryOperation(operation, retrySettings);
+        CheckRetryResult(result.GetValueSync(), resultSets, expectSuccess);
+
+        retryNumber = 0;
+        auto resultWithoutSession = client.RetryOperation(operationWithoutSession, retrySettings);
+        CheckRetryResult(resultWithoutSession.GetValueSync(), resultSets, expectSuccess);
+    }
+
+    void TestRetryOperationSync(NYdb::NTable::TTableClient& client,
+        const TVector<EStatus>& retriableStatuses, bool expectSuccess,
+        TRetryOperationSettings settings = TRetryOperationSettings())
+    {
+        size_t retryNumber = 0;
+        TVector<TResultSet> resultSets;
+        auto operation = [&retryNumber, &resultSets, &retriableStatuses] (TSession session) {
+            // iterate over all providen statuses and return TStatus to emulate error
+            if (retryNumber < retriableStatuses.size()) {
+                TStatus status(retriableStatuses[retryNumber++], {});
+                return status;
+            }
+            auto queryStatus = session.ExecuteDataQuery(
+                "SELECT 1, 2, 3", TTxControl::BeginTx().CommitTx()).GetValueSync();
+            resultSets = queryStatus.GetResultSets();
+            return TStatus(queryStatus);
+        };
+        auto operationWithoutSession = [&operation] (TTableClient client) {
+            auto session = client.CreateSession().GetValueSync().GetSession();
+            return operation(session);
+        };
+
+        const auto retrySettings = settings.MaxRetries(retriableStatuses.size() + 1).Verbose(true);
+        auto result = client.RetryOperationSync(operation, retrySettings);
+        CheckRetryResult(result, resultSets, expectSuccess);
+
+        retryNumber = 0;
+        auto resultWithoutSession = client.RetryOperationSync(operationWithoutSession, retrySettings);
+        CheckRetryResult(resultWithoutSession, resultSets, expectSuccess);
+    }
+
+    TVector<EStatus> GetRetriableAlwaysStatuses() {
+        return {EStatus::OVERLOADED, EStatus::CLIENT_RESOURCE_EXHAUSTED, EStatus::UNAVAILABLE,
+            EStatus::BAD_SESSION, EStatus::SESSION_BUSY};
+    }
+
+    TVector<EStatus> GetRetriableOnOptionStatuses() {
+        return {EStatus::NOT_FOUND, EStatus::UNDETERMINED, EStatus::TRANSPORT_UNAVAILABLE};
+    }
+
+    Y_UNIT_TEST(RetryOperationAsync) {
+        TKikimrWithGrpcAndRootSchema server;
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+        NYdb::NTable::TTableClient client(driver);
+
+        TestRetryOperationAsync(client, GetRetriableAlwaysStatuses(), true);
+        TestRetryOperationAsync(client, GetRetriableOnOptionStatuses(), false);
+        TestRetryOperationAsync(client, {EStatus::NOT_FOUND}, true, TRetryOperationSettings().RetryNotFound(true));
+        TestRetryOperationAsync(client, {EStatus::UNDETERMINED}, true, TRetryOperationSettings().Idempotent(true));
+        TestRetryOperationAsync(client, {EStatus::TRANSPORT_UNAVAILABLE}, true, TRetryOperationSettings().Idempotent(true));
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST(RetryOperationSync) {
+        TKikimrWithGrpcAndRootSchema server;
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+        NYdb::NTable::TTableClient client(driver);
+
+        TestRetryOperationSync(client, GetRetriableAlwaysStatuses(), true);
+        TestRetryOperationSync(client, GetRetriableOnOptionStatuses(), false);
+        TestRetryOperationSync(client, {EStatus::NOT_FOUND}, true, TRetryOperationSettings().RetryNotFound(true));
+        TestRetryOperationSync(client, {EStatus::UNDETERMINED}, true, TRetryOperationSettings().Idempotent(true));
+        TestRetryOperationSync(client, {EStatus::TRANSPORT_UNAVAILABLE}, true, TRetryOperationSettings().Idempotent(true));
+
         driver.Stop(true);
     }
 

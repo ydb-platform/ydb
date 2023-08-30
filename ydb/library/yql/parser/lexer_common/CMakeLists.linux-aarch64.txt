@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
 
 add_library(yql-parser-lexer_common)
 target_link_libraries(yql-parser-lexer_common PUBLIC

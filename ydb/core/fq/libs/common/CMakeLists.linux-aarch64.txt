@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
 
 add_library(fq-libs-common)
 target_compile_options(fq-libs-common PRIVATE

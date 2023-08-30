@@ -8,7 +8,6 @@
 
 add_subdirectory(actors)
 add_subdirectory(events)
-add_subdirectory(ut)
 
 add_library(fq-libs-control_plane_proxy)
 target_compile_options(fq-libs-control_plane_proxy PRIVATE

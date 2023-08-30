@@ -34,29 +34,3 @@ target_link_libraries(re2_udf.global PUBLIC
 target_sources(re2_udf.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/re2/re2_udf.cpp
 )
-
-add_shared_library(re2_udf.dyn)
-set_property(TARGET re2_udf.dyn PROPERTY
-  OUTPUT_NAME re2_udf
-)
-target_compile_options(re2_udf.dyn PRIVATE
-  -DBUILD_UDF
-  -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=28
-  -DUDF_ABI_VERSION_PATCH=0
-)
-target_link_libraries(re2_udf.dyn PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  yql-public-udf
-  public-udf-support
-  contrib-libs-re2
-  cpp-deprecated-enum_codegen
-)
-target_sources(re2_udf.dyn PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/re2/re2_udf.cpp
-)
-use_export_script(re2_udf.dyn
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udfs_exports.exports
-)
-vcs_info(re2_udf.dyn)

@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(cli)
 
 add_library(generic-connector-libcpp)
 target_link_libraries(generic-connector-libcpp PUBLIC

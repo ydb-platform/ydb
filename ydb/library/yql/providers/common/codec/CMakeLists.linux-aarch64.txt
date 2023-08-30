@@ -6,13 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
 
 add_library(providers-common-codec)
 target_compile_options(providers-common-codec PRIVATE

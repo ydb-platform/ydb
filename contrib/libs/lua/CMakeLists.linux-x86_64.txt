@@ -6,12 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-get_built_tool_path(
-  TOOL_archiver_bin
-  TOOL_archiver_dependency
-  tools/archiver
-  archiver
-)
 
 add_library(contrib-libs-lua)
 target_compile_options(contrib-libs-lua PRIVATE
@@ -38,11 +32,11 @@ add_custom_command(
   OUTPUT
   ${CMAKE_BINARY_DIR}/contrib/libs/lua/common.inc
   DEPENDS
-  ${TOOL_archiver_bin}
+  ${CMAKE_BINARY_DIR}/tools/archiver/archiver
   ${CMAKE_SOURCE_DIR}/contrib/libs/lua/common/stdlib.lua
   ${CMAKE_SOURCE_DIR}/contrib/libs/lua/common/json.lua
   COMMAND
-  ${TOOL_archiver_bin}
+  ${CMAKE_BINARY_DIR}/tools/archiver/archiver
   -q
   -x
   ${CMAKE_SOURCE_DIR}/contrib/libs/lua/common/stdlib.lua:
@@ -50,8 +44,3 @@ add_custom_command(
   -o
   ${CMAKE_BINARY_DIR}/contrib/libs/lua/common.inc
 )
-if(NOT CMAKE_CROSSCOMPILING)
-  add_dependencies(contrib-libs-lua
-    archiver
-)
-endif()

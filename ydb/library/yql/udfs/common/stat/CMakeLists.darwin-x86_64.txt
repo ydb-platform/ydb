@@ -7,7 +7,6 @@
 
 
 add_subdirectory(static)
-add_subdirectory(ut)
 
 add_library(stat_udf INTERFACE)
 target_link_libraries(stat_udf INTERFACE
@@ -34,35 +33,3 @@ target_link_libraries(stat_udf.global PUBLIC
 target_sources(stat_udf.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/stat/stat_udf.cpp
 )
-
-add_shared_library(stat_udf.dyn)
-set_property(TARGET stat_udf.dyn PROPERTY
-  OUTPUT_NAME stat_udf
-)
-target_compile_options(stat_udf.dyn PRIVATE
-  -DBUILD_UDF
-  -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=28
-  -DUDF_ABI_VERSION_PATCH=0
-)
-target_link_libraries(stat_udf.dyn PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  yql-public-udf
-  public-udf-support
-  common-stat-static
-)
-target_link_options(stat_udf.dyn PRIVATE
-  -Wl,-platform_version,macos,11.0,11.0
-  -fPIC
-  -undefined
-  dynamic_lookup
-  -fPIC
-)
-target_sources(stat_udf.dyn PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/stat/stat_udf.cpp
-)
-use_export_script(stat_udf.dyn
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udfs_exports.exports
-)
-vcs_info(stat_udf.dyn)

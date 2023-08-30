@@ -11,18 +11,6 @@ add_subdirectory(exceptions)
 add_subdirectory(fatal_error_handlers)
 add_subdirectory(operation)
 add_subdirectory(status)
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
 
 add_library(cpp-client-ydb_types)
 target_link_libraries(cpp-client-ydb_types PUBLIC

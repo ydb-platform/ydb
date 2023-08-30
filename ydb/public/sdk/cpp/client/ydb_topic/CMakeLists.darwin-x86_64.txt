@@ -8,13 +8,6 @@
 
 add_subdirectory(codecs)
 add_subdirectory(impl)
-add_subdirectory(ut)
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
 
 add_library(cpp-client-ydb_topic)
 target_link_libraries(cpp-client-ydb_topic PUBLIC

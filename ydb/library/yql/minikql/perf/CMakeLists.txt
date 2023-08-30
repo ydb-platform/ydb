@@ -7,8 +7,6 @@
 
 
 add_subdirectory(alloc)
-add_subdirectory(block_groupby)
-add_subdirectory(mprefetch)
 add_subdirectory(mt_param)
 add_subdirectory(packer)
 add_subdirectory(param)

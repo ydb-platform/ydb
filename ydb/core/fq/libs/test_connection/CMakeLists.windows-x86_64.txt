@@ -7,7 +7,6 @@
 
 
 add_subdirectory(events)
-add_subdirectory(ut)
 
 add_library(fq-libs-test_connection)
 target_compile_options(fq-libs-test_connection PRIVATE

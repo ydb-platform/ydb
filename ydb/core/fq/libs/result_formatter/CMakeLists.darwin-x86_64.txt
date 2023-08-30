@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
 
 add_library(fq-libs-result_formatter)
 target_compile_options(fq-libs-result_formatter PRIVATE

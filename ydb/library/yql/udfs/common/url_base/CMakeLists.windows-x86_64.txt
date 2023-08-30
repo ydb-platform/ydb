@@ -33,28 +33,3 @@ target_link_libraries(url_udf.global PUBLIC
 target_sources(url_udf.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/url_base/url_base.cpp
 )
-
-add_shared_library(url_udf.dyn)
-set_property(TARGET url_udf.dyn PROPERTY
-  OUTPUT_NAME url_udf
-)
-target_compile_options(url_udf.dyn PRIVATE
-  -DBUILD_UDF
-  -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=33
-  -DUDF_ABI_VERSION_PATCH=0
-)
-target_link_libraries(url_udf.dyn PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  yql-public-udf
-  public-udf-support
-  common-url_base-lib
-)
-target_sources(url_udf.dyn PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/url_base/url_base.cpp
-)
-use_export_script(url_udf.dyn
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udfs_exports.exports
-)
-vcs_info(url_udf.dyn)

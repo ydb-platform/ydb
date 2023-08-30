@@ -7,12 +7,6 @@
 
 
 add_subdirectory(proto)
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
 
 add_library(library-cpp-unified_agent_client)
 target_include_directories(library-cpp-unified_agent_client PRIVATE

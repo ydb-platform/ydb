@@ -6,6 +6,4 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(enum_parser)
 add_subdirectory(enum_serialization_runtime)
-add_subdirectory(parse_enum)

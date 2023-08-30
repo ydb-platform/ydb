@@ -10,12 +10,6 @@ add_subdirectory(ut_base_tenant)
 add_subdirectory(ut_encrypted_storage)
 add_subdirectory(ut_ext_tenant)
 add_subdirectory(ut_storage_tenant)
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
 
 add_library(core-tx-tx_proxy)
 target_compile_options(core-tx-tx_proxy PRIVATE

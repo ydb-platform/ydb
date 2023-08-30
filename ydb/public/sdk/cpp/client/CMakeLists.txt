@@ -7,8 +7,6 @@
 
 
 add_subdirectory(draft)
-add_subdirectory(extensions)
-add_subdirectory(helpers)
 add_subdirectory(iam)
 add_subdirectory(iam_private)
 add_subdirectory(impl)
@@ -20,7 +18,6 @@ add_subdirectory(ydb_discovery)
 add_subdirectory(ydb_driver)
 add_subdirectory(ydb_export)
 add_subdirectory(ydb_extension)
-add_subdirectory(ydb_federated_topic)
 add_subdirectory(ydb_import)
 add_subdirectory(ydb_monitoring)
 add_subdirectory(ydb_operation)

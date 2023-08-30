@@ -6,5 +6,4 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(dummy)
 add_subdirectory(native)

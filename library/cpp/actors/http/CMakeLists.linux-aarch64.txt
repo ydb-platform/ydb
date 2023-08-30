@@ -8,7 +8,6 @@
 
 find_package(OpenSSL REQUIRED)
 find_package(ZLIB REQUIRED)
-add_subdirectory(ut)
 
 add_library(cpp-actors-http)
 target_link_libraries(cpp-actors-http PUBLIC

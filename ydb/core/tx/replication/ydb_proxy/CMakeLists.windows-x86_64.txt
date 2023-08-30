@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(ut)
 
 add_library(tx-replication-ydb_proxy)
 target_compile_options(tx-replication-ydb_proxy PRIVATE

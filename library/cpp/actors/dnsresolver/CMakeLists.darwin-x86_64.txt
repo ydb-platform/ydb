@@ -7,7 +7,6 @@
 
 
 find_package(c-ares REQUIRED)
-add_subdirectory(ut)
 
 add_library(cpp-actors-dnsresolver)
 target_link_libraries(cpp-actors-dnsresolver PUBLIC

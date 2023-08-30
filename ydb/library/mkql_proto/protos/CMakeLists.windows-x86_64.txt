@@ -6,24 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-get_built_tool_path(
-  TOOL_grpc_cpp_bin
-  TOOL_grpc_cpp_dependency
-  contrib/tools/protoc/plugins/grpc_cpp
-  grpc_cpp
-)
-get_built_tool_path(
-  TOOL_protoc_bin
-  TOOL_protoc_dependency
-  contrib/tools/protoc/bin
-  protoc
-)
-get_built_tool_path(
-  TOOL_cpp_styleguide_bin
-  TOOL_cpp_styleguide_dependency
-  contrib/tools/protoc/plugins/cpp_styleguide
-  cpp_styleguide
-)
 
 add_library(library-mkql_proto-protos)
 set_property(TARGET library-mkql_proto-protos PROPERTY
@@ -50,8 +32,4 @@ target_proto_addincls(library-mkql_proto-protos
 target_proto_outs(library-mkql_proto-protos
   --cpp_out=${CMAKE_BINARY_DIR}/
   --cpp_styleguide_out=${CMAKE_BINARY_DIR}/
-)
-target_proto_plugin(library-mkql_proto-protos
-  grpc_cpp
-  grpc_cpp
 )

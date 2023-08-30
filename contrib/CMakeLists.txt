@@ -8,4 +8,3 @@
 
 add_subdirectory(libs)
 add_subdirectory(restricted)
-add_subdirectory(tools)

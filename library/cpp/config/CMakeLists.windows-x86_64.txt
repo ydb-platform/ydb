@@ -6,12 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-get_built_tool_path(
-  TOOL_archiver_bin
-  TOOL_archiver_dependency
-  tools/archiver
-  archiver
-)
 
 add_library(library-cpp-config)
 target_include_directories(library-cpp-config PUBLIC
@@ -38,10 +32,10 @@ add_custom_command(
   OUTPUT
   ${CMAKE_BINARY_DIR}/library/cpp/config/code.inc
   DEPENDS
-  ${TOOL_archiver_bin}
+  ${CMAKE_BINARY_DIR}/tools/archiver/archiver.exe
   ${CMAKE_SOURCE_DIR}/library/cpp/config/support/pp.lua
   COMMAND
-  ${TOOL_archiver_bin}
+  ${CMAKE_BINARY_DIR}/tools/archiver/archiver.exe
   -q
   -x
   ${CMAKE_SOURCE_DIR}/library/cpp/config/support/pp.lua:
@@ -53,8 +47,3 @@ target_ragel_lexers(library-cpp-config
   ${CMAKE_SOURCE_DIR}/library/cpp/config/markupfsm.h.rl6
   -CT0
 )
-if(NOT CMAKE_CROSSCOMPILING)
-  add_dependencies(library-cpp-config
-    archiver
-)
-endif()

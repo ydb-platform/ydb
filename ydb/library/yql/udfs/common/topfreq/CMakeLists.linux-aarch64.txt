@@ -7,7 +7,6 @@
 
 
 add_subdirectory(static)
-add_subdirectory(ut)
 
 add_library(topfreq_udf INTERFACE)
 target_link_libraries(topfreq_udf INTERFACE
@@ -36,41 +35,3 @@ target_link_libraries(topfreq_udf.global PUBLIC
 target_sources(topfreq_udf.global PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/topfreq/topfreq_udf.cpp
 )
-
-add_shared_library(topfreq_udf.dyn)
-set_property(TARGET topfreq_udf.dyn PROPERTY
-  OUTPUT_NAME topfreq_udf
-)
-target_compile_options(topfreq_udf.dyn PRIVATE
-  -DBUILD_UDF
-  -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=28
-  -DUDF_ABI_VERSION_PATCH=0
-)
-target_link_libraries(topfreq_udf.dyn PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  yql-public-udf
-  public-udf-support
-  common-topfreq-static
-)
-target_link_options(topfreq_udf.dyn PRIVATE
-  -ldl
-  -lrt
-  -Wl,--no-as-needed
-  -fPIC
-  -Wl,-z,notext
-  -Wl,-Bsymbolic
-  -fPIC
-  -lpthread
-  -lrt
-  -ldl
-)
-target_sources(topfreq_udf.dyn PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/topfreq/topfreq_udf.cpp
-)
-use_export_script(topfreq_udf.dyn
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udfs_exports.exports
-)
-vcs_info(topfreq_udf.dyn)

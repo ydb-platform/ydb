@@ -9,7 +9,6 @@
 find_package(OpenSSL REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(c-ares REQUIRED)
-add_subdirectory(src)
 add_subdirectory(third_party)
 
 add_library(contrib-libs-grpc)

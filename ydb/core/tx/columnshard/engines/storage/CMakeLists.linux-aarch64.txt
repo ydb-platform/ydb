@@ -7,12 +7,6 @@
 
 
 add_subdirectory(optimizer)
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
 
 add_library(columnshard-engines-storage)
 target_link_libraries(columnshard-engines-storage PUBLIC

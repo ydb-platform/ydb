@@ -7,12 +7,6 @@
 
 
 add_subdirectory(proto)
-get_built_tool_path(
-  TOOL_rescompiler_bin
-  TOOL_rescompiler_dependency
-  tools/rescompiler/bin
-  rescompiler
-)
 
 add_library(ydb-library-ydb_issue)
 target_link_libraries(ydb-library-ydb_issue PUBLIC

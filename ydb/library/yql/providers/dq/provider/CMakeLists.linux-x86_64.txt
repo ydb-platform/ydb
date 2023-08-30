@@ -7,7 +7,6 @@
 
 
 add_subdirectory(exec)
-add_subdirectory(ut)
 
 add_library(providers-dq-provider)
 target_compile_options(providers-dq-provider PRIVATE

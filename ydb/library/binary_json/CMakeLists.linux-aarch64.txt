@@ -7,12 +7,6 @@
 
 
 add_subdirectory(ut)
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
 
 add_library(ydb-library-binary_json)
 target_compile_options(ydb-library-binary_json PRIVATE

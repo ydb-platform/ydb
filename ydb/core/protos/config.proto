@@ -1766,6 +1766,7 @@ message TDataShardConfig {
     optional uint64 RestoreReadBufferSizeLimit = 16 [default = 268435456]; // 256 MB
     optional string CdcInitialScanTaskName = 17 [default = "cdc_initial_scan"];
     optional uint32 CdcInitialScanTaskPriority = 18 [default = 10];
+    optional bool DisabledOnSchemeShard = 19 [default = false];
 }
 
 message TColumnShardConfig {
@@ -1783,6 +1784,7 @@ message TColumnShardConfig {
 
     }
     optional TTablesStorageLayoutPolicy TablesStorageLayoutPolicy = 1;
+    optional bool DisabledOnSchemeShard = 2 [default = true];
 }
 
 message TSchemeShardConfig {

@@ -92,6 +92,7 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
         auto* exchangerSettings = infoExchangerRetrySettings->MutableExchangerSettings();
         exchangerSettings->SetStartDelayMs(10);
         exchangerSettings->SetMaxDelayMs(10);
+        AppConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
     }
 
     TKikimrSettings& SetAppConfig(const NKikimrConfig::TAppConfig& value) { AppConfig = value; return *this; }

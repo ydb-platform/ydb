@@ -110,7 +110,10 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings.Reset(MakeHolder<Tests::TServerSettings>(mbusPort, NKikimrProto::TAuthConfig(), settings.PQConfig));
     ServerSettings->SetDomainName(settings.DomainRoot);
     ServerSettings->SetKqpSettings(effectiveKqpSettings);
-    ServerSettings->SetAppConfig(settings.AppConfig);
+
+    NKikimrConfig::TAppConfig appConfig = settings.AppConfig;
+    appConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
+    ServerSettings->SetAppConfig(appConfig);
     ServerSettings->SetFeatureFlags(settings.FeatureFlags);
     ServerSettings->SetNodeCount(settings.NodeCount);
     ServerSettings->SetEnableKqpSpilling(enableSpilling);

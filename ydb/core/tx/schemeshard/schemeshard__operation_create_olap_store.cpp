@@ -329,6 +329,14 @@ public:
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
 
+        if (context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS))) {
+            if (AppData()->ColumnShardConfig.GetDisabledOnSchemeShard()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                    "OLAP schema operations are not supported");
+                return result;
+            }
+        }
+
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
@@ -387,18 +395,6 @@ public:
         TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
-            return result;
-        }
-
-        if (!AppData()->FeatureFlags.GetEnableOlapSchemaOperations()) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                "Olap schema operations are not supported");
-            return result;
-        }
-
-        if (context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS))) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                "Olap schema operations are not supported in serverless db");
             return result;
         }
 

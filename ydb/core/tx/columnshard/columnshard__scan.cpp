@@ -819,6 +819,7 @@ static bool FillPredicatesFromRange(NOlap::TReadDescription& read, const ::NKiki
 
     if (!read.PKRangesFilter.Add(fromPredicate, toPredicate, indexInfo)) {
         error = "Error building filter";
+        return false;
     }
     return true;
 }

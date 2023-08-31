@@ -2818,6 +2818,30 @@ bool IsWideBlockType(const TTypeAnnotationNode& type) {
     return blockLenType->Cast<TDataExprType>()->GetSlot() == EDataSlot::Uint64;
 }
 
+bool IsSupportedAsBlockType(TPositionHandle pos, const TTypeAnnotationNode& type, TExprContext& ctx, TTypeAnnotationContext& types) {
+    if (!types.ArrowResolver) {
+        return false;
+    }
+
+    auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(pos), { &type }, ctx);
+    YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
+    return resolveStatus == IArrowResolver::OK;
+}
+
+bool EnsureSupportedAsBlockType(TPositionHandle pos, const TTypeAnnotationNode& type, TExprContext& ctx, TTypeAnnotationContext& types) {
+    if (!types.ArrowResolver) {
+        ctx.AddError(TIssue(ctx.GetPosition(pos), "Arrow resolver isn't available"));
+        return false;
+    }
+
+    if (!IsSupportedAsBlockType(pos, type, ctx, types)) {
+        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Type " << type << " is not supported in Block mode"));
+        return false;
+    }
+
+    return true;
+}
+
 bool EnsureWideBlockType(TPositionHandle position, const TTypeAnnotationNode& type, TTypeAnnotationNode::TListType& blockItemTypes, TExprContext& ctx, bool allowScalar) {
     if (HasError(&type, ctx)) {
         return false;

@@ -5001,6 +5001,10 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
         std::string_view arrowFunctionName;
         if (node->IsList() || node->IsCallable({"And", "Or", "Xor", "Not", "Coalesce", "If", "Just", "Nth", "ToPg", "FromPg", "PgResolvedCall", "PgResolvedOp"}))
         {
+            if (node->IsCallable() && !IsSupportedAsBlockType(node->Pos(), *node->GetTypeAnn(), ctx, types)) {
+                return true;
+            }
+
             ui32 startIndex = 0;
             if (node->IsCallable("PgResolvedCall")) {
                 if (node->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Pg) {
@@ -5025,7 +5029,7 @@ bool CollectBlockRewrites(const TMultiExprType* multiInputType, bool keepInputCo
                 auto child = node->ChildPtr(index);
                 if (!child->GetTypeAnn()->IsComputable()) {
                     funcArgs.push_back(child);
-                } else  if (child->IsComplete()) {
+                } else if (child->IsComplete() && IsSupportedAsBlockType(child->Pos(), *child->GetTypeAnn(), ctx, types)) {
                     funcArgs.push_back(ctx.NewCallable(node->Pos(), "AsScalar", { child }));
                 } else if (auto rit = rewrites.find(child.Get()); rit != rewrites.end()) {
                     funcArgs.push_back(rit->second);

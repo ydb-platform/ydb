@@ -13,7 +13,7 @@
 namespace NYql {
 namespace NTypeAnnImpl {
 
-IGraphTransformer::TStatus AsScalarWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+IGraphTransformer::TStatus AsScalarWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
     if (!EnsureArgsCount(*input, 1U, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
@@ -26,6 +26,10 @@ IGraphTransformer::TStatus AsScalarWrapper(const TExprNode::TPtr& input, TExprNo
     auto type = input->Head().GetTypeAnn();
     if (type->GetKind() == ETypeAnnotationKind::Block || type->GetKind() == ETypeAnnotationKind::Scalar) {
         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Input type should not be a block or scalar"));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!EnsureSupportedAsBlockType(input->Pos(), *type, ctx.Expr, ctx.Types)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -723,11 +727,6 @@ IGraphTransformer::TStatus WideToBlocksWrapper(const TExprNode::TPtr& input, TEx
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!ctx.Types.ArrowResolver) {
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Arrow resolver isn't available"));
-        return IGraphTransformer::TStatus::Error;
-    }    
-
     const auto multiType = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();
     TTypeAnnotationNode::TListType retMultiType;
     for (const auto& type : multiType->GetItems()) {
@@ -740,8 +739,7 @@ IGraphTransformer::TStatus WideToBlocksWrapper(const TExprNode::TPtr& input, TEx
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (ctx.Types.ArrowResolver->AreTypesSupported(ctx.Expr.GetPosition(input->Pos()), { type }, ctx.Expr) != IArrowResolver::OK) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Type " << *type << " is not supported in Block mode"));
+        if (!EnsureSupportedAsBlockType(input->Pos(), *type, ctx.Expr, ctx.Types)) {
             return IGraphTransformer::TStatus::Error;
         }
 

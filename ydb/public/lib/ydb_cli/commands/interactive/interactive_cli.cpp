@@ -90,7 +90,7 @@ void TInteractiveCLI::Run() {
         Words.push_back(word);
     }
 
-    TFsPath homeDirPath(GetHomeDir());
+    TFsPath homeDirPath(HomeDir);
     TString historyFilePath(homeDirPath / ".ydb_history");
     std::unique_ptr<ILineReader> lineReader = CreateLineReader(Prompt, historyFilePath, Suggest{std::move(Words)});
 

@@ -1,3 +1,3 @@
 ``` bash
-composer require yandex-cloud/ydb-php-sdk
+composer require ydb-platform/ydb-php-sdk
 ```

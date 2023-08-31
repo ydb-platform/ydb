@@ -128,4 +128,35 @@
 
   {% include [auth-access-token](../../../../_includes/python/async/auth-access-token.md) %}
 
+- PHP
+
+  ```php
+  <?php
+
+  use YdbPlatform\Ydb\Ydb;
+  use YdbPlatform\Ydb\Auth\Implement\AccessTokenAuthentication;
+
+  $config = [
+
+      // Database path
+      'database'    => '/local',
+
+      // Database endpoint
+      'endpoint'    => 'localhost:2136',
+
+      // Auto discovery (dedicated server only)
+      'discovery'   => false,
+
+      // IAM config
+      'iam_config'  => [
+          'insecure' => true,
+          // 'root_cert_file' => './CA.pem', // Root CA file (uncomment for dedicated server)
+      ],
+      
+      'credentials' => new AccessTokenAuthentication('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA')
+  ];
+
+  $ydb = new Ydb($config);
+  ```
+
 {% endlist %}

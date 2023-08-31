@@ -104,4 +104,35 @@ Below are examples of the code for authentication using environment variables in
 
   {% include [auth-env](../../../../_includes/nodejs/auth-env.md) %}
 
+- PHP
+
+  ```php
+  <?php
+
+  use YdbPlatform\Ydb\Ydb;
+  use YdbPlatform\Ydb\Auth\EnvironCredentials;
+
+  $config = [
+
+      // Database path
+      'database'    => '/local',
+
+      // Database endpoint
+      'endpoint'    => 'localhost:2136',
+
+      // Auto discovery (dedicated server only)
+      'discovery'   => false,
+
+      // IAM config
+      'iam_config'  => [
+          'insecure' => true,
+          // 'root_cert_file' => './CA.pem', // Root CA file (uncomment for dedicated server)
+      ],
+      
+      'credentials' => new EnvironCredentials()
+  ];
+
+  $ydb = new Ydb($config);
+  ```
+
 {% endlist %}

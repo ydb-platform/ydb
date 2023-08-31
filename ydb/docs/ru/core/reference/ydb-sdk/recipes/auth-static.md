@@ -73,4 +73,8 @@
 
   {% include [auth-static](../../../../_includes/python/async/auth-static.md) %}
 
+- PHP
+
+  {% include [feature is not implemented](_includes/wip.md) %}
+
 {% endlist %}

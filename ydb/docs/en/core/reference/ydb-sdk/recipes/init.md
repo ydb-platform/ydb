@@ -98,4 +98,32 @@ Below are examples of the code for connecting to {{ ydb-short-name }} (driver cr
 
   {% include [work in progress message](_includes/addition.md) %}
 
+- PHP
+
+  ```php
+  <?php
+
+  use YdbPlatform\Ydb\Ydb;
+
+  $config = [
+      // Database path
+      'database'    => '/ru-central1/b1glxxxxxxxxxxxxxxxx/etn0xxxxxxxxxxxxxxxx',
+
+      // Database endpoint
+      'endpoint'    => 'ydb.serverless.yandexcloud.net:2135',
+
+      // Auto discovery (dedicated server only)
+      'discovery'   => false,
+
+      // IAM config
+      'iam_config'  => [
+          // 'root_cert_file' => './CA.pem', // Root CA file (uncomment for dedicated server)
+      ],
+      
+      'credentials' => new \YdbPlatform\Ydb\Auth\Implement\AccessTokenAuthentication('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA') // use from reference/ydb-sdk/auth
+  ];
+
+  $ydb = new Ydb($config);
+  ```
+
 {% endlist %}

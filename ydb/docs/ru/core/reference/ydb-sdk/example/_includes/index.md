@@ -19,23 +19,19 @@
 
 {% include [create_table.md](steps/02_create_table.md) %}
 
-{% if oss %}[C++](../example-cpp.md#create-table) | {% endif %} [C# (.NET)](../example-dotnet.md#create-table) | [Go](../go/index.md#create-table) | [Java](../java/index.md#create-table) | Node.js | PHP | [Python](../python/index.md#create-table)
+{% if oss %}[C++](../example-cpp.md#create-table) | {% endif %} [C# (.NET)](../example-dotnet.md#create-table) | [Go](../go/index.md#create-table) | [Java](../java/index.md#create-table) | Node.js | [PHP](../example-php.md#create-table) | [Python](../python/index.md#create-table)
 
 {% include [write_queries.md](steps/03_write_queries.md) %}
 
-{% if oss %}[C++](../example-cpp.md#write-queries) | {% endif %} [C# (.NET)](../example-dotnet.md#write-queries) | Go | [Java](../java/index.md#write-queries) | Node.js | PHP | [Python](../python/index.md#write-queries)
+{% if oss %}[C++](../example-cpp.md#write-queries) | {% endif %} [C# (.NET)](../example-dotnet.md#write-queries) | Go | [Java](../java/index.md#write-queries) | Node.js | [PHP](../example-php.md#write-queries) | [Python](../python/index.md#write-queries)
 
 {% include [query_processing.md](steps/04_query_processing.md) %}
 
-{% if oss %}[C++](../example-cpp.md#query-processing) |  {% endif %} [C# (.NET)](../example-dotnet.md#query-processing) | [Go](../go/index.md#query-processing) | [Java](../java/index.md#query-processing) | Node.js | PHP | [Python](../python/index.md#query-processing)
+{% if oss %}[C++](../example-cpp.md#query-processing) | {% endif %} [C# (.NET)](../example-dotnet.md#query-processing) | [Go](../go/index.md#query-processing) | [Java](../java/index.md#query-processing) | Node.js | P[PHP](../example-php.md#query-processing) | [Python](../python/index.md#query-processing)
 
 {% include [param_queries.md](steps/06_param_queries.md) %}
 
-{% if oss %}[C++](../example-cpp.md#param-queries) |  {% endif %} [C# (.NET)](../example-dotnet.md#param-queries) | [Go](../go/index.md#param-queries) | [Java](../java/index.md#param-queries) | Node.js | PHP | [Python](../python/index.md#param-queries)
-
-{% include [scan_query.md](steps/08_scan_query.md) %}
-
-{% if oss %}C++ |  {% endif %} [C# (.NET)](../example-dotnet.md#scan-query) | [Go](../go/index.md#scan-query) | [Java](../java/index.md#scan-query) | [Node.js](../example-nodejs.md#scan-query) | PHP | [Python](../python/index.md#scan-query)
+{% if oss %}[C++](../example-cpp.md#param-queries) | {% endif %} [C# (.NET)](../example-dotnet.md#param-queries) | [Go](../go/index.md#param-queries) | [Java](../java/index.md#param-queries) | Node.js | [PHP](../example-php.md#param-queries) | [Python](../python/index.md#param-queries)
 
 {% include [multistep_transactions.md](steps/09_multistep_transactions.md) %}
 

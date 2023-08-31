@@ -112,4 +112,53 @@
 
   {% include [auth-sa-data](../../../../_includes/python/async/auth-service-account.md) %}
 
+- PHP
+
+  ```php
+  <?php
+
+  use YdbPlatform\Ydb\Ydb;
+  use YdbPlatform\Ydb\Auth\JwtWithJsonAuthentication;
+
+  $config = [
+      'database'    => '/ru-central1/b1glxxxxxxxxxxxxxxxx/etn0xxxxxxxxxxxxxxxx',
+      'endpoint'    => 'ydb.serverless.yandexcloud.net:2135',
+      'discovery'   => false,
+      'iam_config'  => [
+          'temp_dir'       => './tmp', // Temp directory
+          // 'root_cert_file' => './CA.pem', // Root CA file (uncomment for dedicated server)ы
+      ],
+              
+      'credentials' => new JwtWithJsonAuthentication('./jwtjson.json')
+  ];
+
+  $ydb = new Ydb($config);
+  ```
+
+  или
+
+  ```php
+  <?php
+
+  use YdbPlatform\Ydb\Ydb;
+  use YdbPlatform\Ydb\Auth\JwtWithPrivateKeyAuthentication;
+
+  $config = [
+      'database'    => '/ru-central1/b1glxxxxxxxxxxxxxxxx/etn0xxxxxxxxxxxxxxxx',
+      'endpoint'    => 'ydb.serverless.yandexcloud.net:2135',
+      'discovery'   => false,
+      'iam_config'  => [
+          'temp_dir'           => './tmp', // Temp directory
+          // 'root_cert_file' => './CA.pem', // Root CA file (uncomment for dedicated server)
+
+      ],
+      
+      'credentials' => new JwtWithPrivateKeyAuthentication(
+          "ajexxxxxxxxx","ajeyyyyyyyyy",'./private.key')
+          
+  ];
+
+  $ydb = new Ydb($config);
+  ```
+
 {% endlist %}

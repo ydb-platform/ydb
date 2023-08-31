@@ -53,6 +53,37 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
    }
    ```
 
+- PHP
+
+  ```php
+  <?php
+
+  use YdbPlatform\Ydb\Ydb;
+
+  $config = [
+      // Database path
+      'database'    => '/ru-central1/b1glxxxxxxxxxxxxxxxx/etn0xxxxxxxxxxxxxxxx',
+
+      // Database endpoint
+      'endpoint'    => 'ydb.serverless.yandexcloud.net:2135',
+
+      // Auto discovery (dedicated server only)
+      'discovery'   => false,
+
+      // IAM config
+      'iam_config'  => [
+          // 'root_cert_file' => './CA.pem',  Root CA file (uncomment for dedicated server only)
+      ],
+      
+      'credentials' => new AccessTokenAuthentication('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA') // use from reference/ydb-sdk/auth
+  ];
+
+  $ydb = new Ydb($config);
+  $ydb->table()->retryTransaction(function(Session $session){
+    $session->query('SELECT 1;');
+  })
+  ```
+
 {% endlist %}
 
 ## Online Read-Only {#online-read-only}
@@ -96,6 +127,10 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
      }
    }
    ```
+
+- PHP
+
+  {% include [is not implemented](_includes/wip.md) %}
 
 {% endlist %}
 
@@ -141,6 +176,10 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
    }
    ```
 
+- PHP
+
+  {% include [is not implemented](_includes/wip.md) %}
+
 {% endlist %}
 
 ## Snapshot Read-Only {#snapshot-read-only}
@@ -184,5 +223,9 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
      }
    }
    ```
+
+- PHP
+
+  {% include [is not implemented](_includes/wip.md) %}
 
 {% endlist %}

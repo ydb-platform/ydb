@@ -67,14 +67,12 @@ public:
 		/// Swaps the Timespan with another one.
 
 	bool operator == (const Timespan& ts) const;
-	bool operator != (const Timespan& ts) const;
 	bool operator >  (const Timespan& ts) const;
 	bool operator >= (const Timespan& ts) const;
 	bool operator <  (const Timespan& ts) const;
 	bool operator <= (const Timespan& ts) const;
 
 	bool operator == (TimeDiff microSeconds) const;
-	bool operator != (TimeDiff microSeconds) const;
 	bool operator >  (TimeDiff microSeconds) const;
 	bool operator >= (TimeDiff microSeconds) const;
 	bool operator <  (TimeDiff microSeconds) const;
@@ -220,12 +218,6 @@ inline bool Timespan::operator == (const Timespan& ts) const
 }
 
 
-inline bool Timespan::operator != (const Timespan& ts) const
-{
-	return _span != ts._span;
-}
-
-
 inline bool Timespan::operator >  (const Timespan& ts) const
 {
 	return _span > ts._span;
@@ -253,12 +245,6 @@ inline bool Timespan::operator <= (const Timespan& ts) const
 inline bool Timespan::operator == (TimeDiff microSeconds) const
 {
 	return _span == microSeconds;
-}
-
-
-inline bool Timespan::operator != (TimeDiff microSeconds) const
-{
-	return _span != microSeconds;
 }
 
 

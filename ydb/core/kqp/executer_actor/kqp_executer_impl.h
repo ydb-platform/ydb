@@ -115,7 +115,7 @@ public:
         TKqpRequestCounters::TPtr counters,
         const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
         const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
-        ui64 spanVerbosity = 0, TString spanName = "no_name")
+        TDuration maximalSecretsSnapshotWaitTime, ui64 spanVerbosity = 0, TString spanName = "no_name")
         : Request(std::move(request))
         , Database(database)
         , UserToken(userToken)
@@ -123,6 +123,7 @@ public:
         , ExecuterSpan(spanVerbosity, std::move(Request.TraceId), spanName)
         , Planner(nullptr)
         , ExecuterRetriesConfig(executerRetriesConfig)
+        , MaximalSecretsSnapshotWaitTime(maximalSecretsSnapshotWaitTime)
     {
         TasksGraph.GetMeta().Snapshot = IKqpGateway::TKqpSnapshot(Request.Snapshot.Step, Request.Snapshot.TxId);
         TasksGraph.GetMeta().Arena = MakeIntrusive<NActors::TProtoArenaHolder>();
@@ -382,14 +383,35 @@ protected:
         return std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>();
     }
 
-    void FetchSecrets() {
+    void FetchSecrets(TVector<TString>&& secretNames) {
         YQL_ENSURE(NMetadata::NProvider::TServiceOperator::IsEnabled(), "metadata service is not active");
+        SecretNames = std::move(secretNames);
+
         this->Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvSubscribeExternal(GetSecretsSnapshotParser()));
+        this->Schedule(MaximalSecretsSnapshotWaitTime, new NActors::TEvents::TEvWakeup());
     }
 
     void HandleRefreshSubscriberData(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
-        this->Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvUnsubscribeExternal(GetSecretsSnapshotParser()));
         Secrets = ev->Get()->GetSnapshotPtrAs<NMetadata::NSecret::TSnapshot>();
+    
+        TString secretValue;
+        for (const TString& secretName : SecretNames) {
+            auto secretId = NMetadata::NSecret::TSecretId(UserToken->GetUserSID(), secretName);
+            if (!Secrets->GetSecretValue(NMetadata::NSecret::TSecretIdOrValue::BuildAsId(secretId), secretValue)) {
+                return;
+            }
+        }
+
+        UnsubscribeFromSecrets();
+    }
+
+    void HandleSecretsWaitingTimeout(NActors::TEvents::TEvWakeup::TPtr&) {
+        YQL_ENSURE(Secrets != nullptr, "secrets snapshot fetching timeout");
+        UnsubscribeFromSecrets();
+    }
+
+    void UnsubscribeFromSecrets() {
+        this->Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvUnsubscribeExternal(GetSecretsSnapshotParser()));
         OnSecretsFetched();
     }
 
@@ -1246,6 +1268,8 @@ protected:
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig ExecuterRetriesConfig;
 
     std::shared_ptr<NMetadata::NSecret::TSnapshot> Secrets;
+    TVector<TString> SecretNames;
+    TDuration MaximalSecretsSnapshotWaitTime;
 
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);
@@ -1256,13 +1280,15 @@ private:
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters, bool streamResult,
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-    const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, const TActorId& creator);
+    const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, const TActorId& creator,
+    TDuration maximalSecretsSnapshotWaitTime);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
-    TPreparedQueryHolder::TConstPtr preparedQuery, const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion);
+    TPreparedQueryHolder::TConstPtr preparedQuery, const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
+    TDuration maximalSecretsSnapshotWaitTime);
 
 } // namespace NKqp
 } // namespace NKikimr

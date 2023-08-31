@@ -171,6 +171,7 @@ public:
         const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
         const NKikimrProto::TTokenAccessorConfig& tokenAccessorConfig,
         const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
+        const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
         TVector<NKikimrKqp::TKqpSetting>&& settings,
         std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
         std::shared_ptr<TKqpProxySharedResources>&& kqpProxySharedResources)
@@ -179,6 +180,7 @@ public:
         , TableServiceConfig(tableServiceConfig)
         , TokenAccessorConfig(tokenAccessorConfig)
         , QueryServiceConfig(queryServiceConfig)
+        , MetadataProviderConfig(metadataProviderConfig)
         , KqpSettings(std::make_shared<const TKqpSettings>(std::move(settings)))
         , QueryReplayFactory(std::move(queryReplayFactory))
         , HttpGateway(NYql::IHTTPGateway::Make(&HttpGatewayConfig)) // TODO: pass config and counters
@@ -238,7 +240,7 @@ public:
         }
 
         // Create compile service
-        CompileService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpCompileService(TableServiceConfig,
+        CompileService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpCompileService(TableServiceConfig, MetadataProviderConfig,
             KqpSettings, ModuleResolverState, Counters, std::move(QueryReplayFactory), CredentialsFactory, HttpGateway));
         TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(
             MakeKqpCompileServiceID(SelfId().NodeId()), CompileService);
@@ -1363,7 +1365,7 @@ private:
 
         auto config = CreateConfig(KqpSettings, workerSettings);
 
-        IActor* sessionActor = CreateKqpSessionActor(SelfId(), sessionId, KqpSettings, workerSettings, HttpGateway, AsyncIoFactory, CredentialsFactory, ModuleResolverState, Counters);
+        IActor* sessionActor = CreateKqpSessionActor(SelfId(), sessionId, KqpSettings, workerSettings, HttpGateway, AsyncIoFactory, CredentialsFactory, ModuleResolverState, Counters, MetadataProviderConfig);
         auto workerId = TlsActivationContext->ExecutorThread.RegisterActor(sessionActor, TMailboxType::HTSwap, AppData()->UserPoolId);
         TKqpSessionInfo* sessionInfo = LocalSessions->Create(
             sessionId, workerId, database, dbCounters, supportsBalancing, GetSessionIdleDuration());
@@ -1559,6 +1561,7 @@ private:
     NKikimrConfig::TTableServiceConfig TableServiceConfig;
     NKikimrProto::TTokenAccessorConfig TokenAccessorConfig;
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
+    NKikimrConfig::TMetadataProviderConfig MetadataProviderConfig;
     TKqpSettings::TConstPtr KqpSettings;
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
     std::shared_ptr<IQueryReplayBackendFactory> QueryReplayFactory;
@@ -1613,11 +1616,12 @@ IActor* CreateKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
     const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
     const NKikimrProto::TTokenAccessorConfig& tokenAccessorConfig,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, 
+    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
     TVector<NKikimrKqp::TKqpSetting>&& settings,
     std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
     std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources)
 {
-    return new TKqpProxyService(logConfig, tableServiceConfig, tokenAccessorConfig, queryServiceConfig, std::move(settings),
+    return new TKqpProxyService(logConfig, tableServiceConfig, tokenAccessorConfig, queryServiceConfig, metadataProviderConfig, std::move(settings),
         std::move(queryReplayFactory),std::move(kqpProxySharedResources));
 }
 

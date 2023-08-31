@@ -97,7 +97,8 @@ public:
     TKqpWorkerActor(const TActorId& owner, const TString& sessionId, const TKqpSettings::TConstPtr& kqpSettings,
         const TKqpWorkerSettings& workerSettings, NYql::IHTTPGateway::TPtr httpGateway,
         TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
-        NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory)
+        NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+        const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig)
         : Owner(owner)
         , SessionId(sessionId)
         , Settings(workerSettings)
@@ -106,6 +107,7 @@ public:
         , Counters(counters)
         , CredentialsFactory(std::move(credentialsFactory))
         , Config(MakeIntrusive<TKikimrConfiguration>())
+        , MetadataProviderConfig(metadataProviderConfig)
         , CreationTime(TInstant::Now())
         , QueryId(0)
         , ShutdownState(std::nullopt)
@@ -134,7 +136,7 @@ public:
         Counters->ReportWorkerCreated(Settings.DbCounters);
 
         std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(
-            TlsActivationContext->ActorSystem(), Config, false);
+            TlsActivationContext->ActorSystem(), Config, false, nullptr, 2 * TDuration::Seconds(MetadataProviderConfig.GetRefreshPeriodSeconds()));
         Gateway = CreateKikimrIcGateway(Settings.Cluster, Settings.Database, std::move(loader),
             ctx.ExecutorThread.ActorSystem, ctx.SelfID.NodeId(), RequestCounters);
 
@@ -1064,6 +1066,7 @@ private:
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
     TIntrusivePtr<TKqpRequestCounters> RequestCounters;
     TKikimrConfiguration::TPtr Config;
+    NKikimrConfig::TMetadataProviderConfig MetadataProviderConfig;
     TInstant CreationTime;
     TIntrusivePtr<IKqpGateway> Gateway;
     TIntrusivePtr<IKqpHost> KqpHost;
@@ -1079,9 +1082,10 @@ IActor* CreateKqpWorkerActor(const TActorId& owner, const TString& sessionId,
     const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
     NYql::IHTTPGateway::TPtr httpGateway,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
-    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory)
+    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig)
 {
-    return new TKqpWorkerActor(owner, sessionId, kqpSettings, workerSettings, std::move(httpGateway), moduleResolverState, counters, std::move(credentialsFactory));
+    return new TKqpWorkerActor(owner, sessionId, kqpSettings, workerSettings, std::move(httpGateway), moduleResolverState, counters, std::move(credentialsFactory), metadataProviderConfig);
 }
 
 } // namespace NKqp

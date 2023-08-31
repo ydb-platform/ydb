@@ -128,8 +128,8 @@ public:
         const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
-        const TActorId& creator)
-        : TBase(std::move(request), database, userToken, counters, executerRetriesConfig, chanTransportVersion, TWilsonKqp::DataExecuter, "DataExecuter")
+        const TActorId& creator, TDuration maximalSecretsSnapshotWaitTime)
+        : TBase(std::move(request), database, userToken, counters, executerRetriesConfig, chanTransportVersion, maximalSecretsSnapshotWaitTime, TWilsonKqp::DataExecuter, "DataExecuter")
         , AsyncIoFactory(std::move(asyncIoFactory))
         , StreamResult(streamResult)
     {
@@ -295,6 +295,7 @@ public:
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, HandleRefreshSubscriberData);
                 hFunc(TEvPrivate::TEvResourcesSnapshot, HandleResolve);
+                hFunc(NActors::TEvents::TEvWakeup, HandleSecretsWaitingTimeout);
                 default:
                     UnexpectedEvent("WaitResolveState", ev->GetTypeRewrite());
             }
@@ -1655,9 +1656,11 @@ private:
     }
 
     void DoExecute() {
+        TVector<TString> secretNames;
         for (const auto& transaction : Request.Transactions) {
-            if (!transaction.Body->GetSecretNames().empty()) {                
+            for (const auto& secretName : transaction.Body->GetSecretNames()) {          
                 SecretSnapshotRequired = true;
+                secretNames.push_back(secretName);
             }
             for (const auto& stage : transaction.Body->GetStages()) {
                 if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kExternalSource) {
@@ -1671,7 +1674,7 @@ private:
             return Execute();
         }
         if (SecretSnapshotRequired) {
-            FetchSecrets();
+            FetchSecrets(std::move(secretNames));
         }
         if (ResourceSnapshotRequired) {
             GetResourcesSnapshot();
@@ -2412,10 +2415,10 @@ private:
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
     TKqpRequestCounters::TPtr counters, bool streamResult, const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
-    const TActorId& creator)
+    const TActorId& creator, TDuration maximalSecretsSnapshotWaitTime)
 {
     return new TKqpDataExecuter(std::move(request), database, userToken, counters, streamResult, executerRetriesConfig,
-        std::move(asyncIoFactory), chanTransportVersion, creator);
+        std::move(asyncIoFactory), chanTransportVersion, creator, maximalSecretsSnapshotWaitTime);
 }
 
 } // namespace NKqp

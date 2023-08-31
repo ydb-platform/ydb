@@ -10,6 +10,7 @@ namespace NKikimr {
 namespace NKqp {
 
 IActor* CreateKqpCompileService(const NKikimrConfig::TTableServiceConfig& serviceConfig,
+    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
     const TKqpSettings::TConstPtr& kqpSettings, TIntrusivePtr<TModuleResolverState> moduleResolverState,
     TIntrusivePtr<TKqpCounters> counters, std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
@@ -19,7 +20,8 @@ IActor* CreateKqpCompileComputationPatternService(const NKikimrConfig::TTableSer
     TIntrusivePtr<TKqpCounters> counters);
 
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
-    const NKikimrConfig::TTableServiceConfig& serviceConfig, NYql::IHTTPGateway::TPtr httpGateway,
+    const NKikimrConfig::TTableServiceConfig& serviceConfig,
+    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig, NYql::IHTTPGateway::TPtr httpGateway,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const TString& uid, const TKqpQueryId& query,

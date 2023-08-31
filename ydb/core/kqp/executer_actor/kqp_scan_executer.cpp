@@ -61,8 +61,9 @@ public:
         const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
         const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
         TPreparedQueryHolder::TConstPtr preparedQuery,
-        const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion)
-        : TBase(std::move(request), database, userToken, counters, executerRetriesConfig, chanTransportVersion, TWilsonKqp::ScanExecuter, "ScanExecuter")
+        const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
+        TDuration maximalSecretsSnapshotWaitTime)
+        : TBase(std::move(request), database, userToken, counters, executerRetriesConfig, chanTransportVersion, maximalSecretsSnapshotWaitTime, TWilsonKqp::ScanExecuter, "ScanExecuter")
         , PreparedQuery(preparedQuery)
         , AggregationSettings(aggregation)
     {
@@ -710,10 +711,11 @@ IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
-    TPreparedQueryHolder::TConstPtr preparedQuery, const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion)
+    TPreparedQueryHolder::TConstPtr preparedQuery, const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
+    TDuration maximalSecretsSnapshotWaitTime)
 {
     return new TKqpScanExecuter(std::move(request), database, userToken, counters, aggregation, executerRetriesConfig,
-        preparedQuery, chanTransportVersion);
+        preparedQuery, chanTransportVersion, maximalSecretsSnapshotWaitTime);
 }
 
 } // namespace NKqp

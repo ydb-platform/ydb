@@ -57,8 +57,8 @@ public:
         return NKikimrServices::TActivity::KQP_COMPILE_ACTOR;
     }
 
-    TKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
-        const TTableServiceConfig& serviceConfig, NYql::IHTTPGateway::TPtr httpGateway,
+    TKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings, const TTableServiceConfig& serviceConfig,
+        const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig, NYql::IHTTPGateway::TPtr httpGateway,
         TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
         const TString& uid, const TKqpQueryId& queryId,
@@ -75,6 +75,7 @@ public:
         , UserToken(userToken)
         , DbCounters(dbCounters)
         , Config(MakeIntrusive<TKikimrConfiguration>())
+        , MetadataProviderConfig(metadataProviderConfig)
         , CompilationTimeout(TDuration::MilliSeconds(serviceConfig.GetCompileTimeoutMs()))
         , CompileActorSpan(TWilsonKqp::CompileActor, std::move(traceId), "CompileActor")
         , TempTablesState(std::move(tempTablesState))
@@ -117,7 +118,7 @@ public:
         counters->TxProxyMon = new NTxProxy::TTxProxyMon(AppData(ctx)->Counters);
         std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader =
             std::make_shared<TKqpTableMetadataLoader>(
-                TlsActivationContext->ActorSystem(), Config, true, TempTablesState);
+                TlsActivationContext->ActorSystem(), Config, true, TempTablesState, 2 * TDuration::Seconds(MetadataProviderConfig.GetRefreshPeriodSeconds()));
         Gateway = CreateKikimrIcGateway(QueryId.Cluster, QueryId.Database, std::move(loader),
             ctx.ExecutorThread.ActorSystem, ctx.SelfID.NodeId(), counters);
         Gateway->SetToken(QueryId.Cluster, UserToken);
@@ -379,6 +380,7 @@ private:
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TKqpDbCountersPtr DbCounters;
     TKikimrConfiguration::TPtr Config;
+    NKikimrConfig::TMetadataProviderConfig MetadataProviderConfig;
     TDuration CompilationTimeout;
     TInstant StartTime;
     TDuration CompileCpuTime;
@@ -418,14 +420,14 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.PredicateExtract20 = serviceConfig.GetPredicateExtract20();
 }
 
-IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
-    const TTableServiceConfig& serviceConfig, NYql::IHTTPGateway::TPtr httpGateway,
+IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings, const TTableServiceConfig& serviceConfig,
+    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig, NYql::IHTTPGateway::TPtr httpGateway,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const TString& uid, const TKqpQueryId& query, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
     TKqpDbCountersPtr dbCounters, NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState)
 {
-    return new TKqpCompileActor(owner, kqpSettings, serviceConfig, std::move(httpGateway), moduleResolverState,
+    return new TKqpCompileActor(owner, kqpSettings, serviceConfig, metadataProviderConfig, std::move(httpGateway), moduleResolverState,
         counters, std::move(credentialsFactory),
         uid, query, userToken, dbCounters, std::move(traceId), std::move(tempTablesState));
 }

@@ -152,7 +152,8 @@ public:
             const TKqpWorkerSettings& workerSettings, NYql::IHTTPGateway::TPtr httpGateway,
             NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
             NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-            TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters)
+            TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
+            const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig)
         : Owner(owner)
         , SessionId(sessionId)
         , Counters(counters)
@@ -164,6 +165,7 @@ public:
         , KqpSettings(kqpSettings)
         , Config(CreateConfig(kqpSettings, workerSettings))
         , Transactions(*Config->_KqpMaxActiveTxPerSession.Get(), TDuration::Seconds(*Config->_KqpTxIdleTimeoutSec.Get()))
+        , MetadataProviderConfig(metadataProviderConfig)
     {
         RequestCounters = MakeIntrusive<TKqpRequestCounters>();
         RequestCounters->Counters = Counters;
@@ -220,7 +222,7 @@ public:
     void ForwardRequest(TEvKqp::TEvQueryRequest::TPtr& ev) {
         if (!WorkerId) {
             std::unique_ptr<IActor> workerActor(CreateKqpWorkerActor(SelfId(), SessionId, KqpSettings, Settings,
-                HttpGateway, ModuleResolverState, Counters, CredentialsFactory));
+                HttpGateway, ModuleResolverState, Counters, CredentialsFactory, MetadataProviderConfig));
             WorkerId = RegisterWithSameMailbox(workerActor.release());
         }
         TlsActivationContext->Send(new IEventHandle(*WorkerId, SelfId(), QueryState->RequestEv.release(), ev->Flags, ev->Cookie,
@@ -1046,7 +1048,7 @@ public:
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             RequestCounters, Settings.TableService.GetAggregationConfig(), Settings.TableService.GetExecuterRetriesConfig(),
-            AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr, Settings.TableService.GetChannelTransportVersion(), SelfId());
+            AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr, Settings.TableService.GetChannelTransportVersion(), SelfId(), 2 * TDuration::Seconds(MetadataProviderConfig.GetRefreshPeriodSeconds()));
 
         auto exId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);
@@ -2149,6 +2151,8 @@ private:
     NTxProxy::TRequestControls RequestControls;
 
     TKqpTempTablesState TempTablesState;
+
+    NKikimrConfig::TMetadataProviderConfig MetadataProviderConfig;
 };
 
 } // namespace
@@ -2157,9 +2161,10 @@ IActor* CreateKqpSessionActor(const TActorId& owner, const TString& sessionId,
     const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
     NYql::IHTTPGateway::TPtr httpGateway, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-    TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters)
+    TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
+    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig)
 {
-    return new TKqpSessionActor(owner, sessionId, kqpSettings, workerSettings, std::move(httpGateway), std::move(asyncIoFactory), std::move(credentialsFactory), std::move(moduleResolverState), counters);
+    return new TKqpSessionActor(owner, sessionId, kqpSettings, workerSettings, std::move(httpGateway), std::move(asyncIoFactory), std::move(credentialsFactory), std::move(moduleResolverState), counters, metadataProviderConfig);
 }
 
 }

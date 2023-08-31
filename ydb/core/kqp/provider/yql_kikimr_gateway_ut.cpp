@@ -302,28 +302,10 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->Columns.size(), 2);
     }
 
-    void CreateSecretObject(const TString& secretId, const TString& secretValue, TSession& session, TTestActorRuntime* runtime) {
+    void CreateSecretObject(const TString& secretId, const TString& secretValue, TSession& session) {
         auto createSecretQuery = TStringBuilder() << "CREATE OBJECT " << secretId << " (TYPE SECRET) WITH value = `" << secretValue << "`;";
         auto createSecretQueryResult = session.ExecuteSchemeQuery(createSecretQuery).GetValueSync();
         UNIT_ASSERT_C(createSecretQueryResult.GetStatus() == NYdb::EStatus::SUCCESS, createSecretQueryResult.GetIssues().ToString());
-
-        TDuration maximalWaitTime = TDuration::Seconds(20);
-        TInstant start = TInstant::Now();
-        bool created = false;
-        while (!created && TInstant::Now() - start <= maximalWaitTime) {
-            auto promise = NThreading::NewPromise<TDescribeSecretsResponse>();
-            runtime->Register(new TDescribeSecretsActor("", {secretId}, promise));
-            TDescribeSecretsResponse response = promise.GetFuture().GetValueSync();
-
-            if (response.Status == Ydb::StatusIds::SUCCESS) {
-                created = true;
-                break;
-            }
-            
-            Sleep(TDuration::Seconds(2));
-        }
-
-        UNIT_ASSERT_C(created, "Creating secret object timeout.\n");
     }
     
     Y_UNIT_TEST(TestLoadServiceAccountSecretValueFromExternalDataSourceMetadata) {
@@ -334,7 +316,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
 
         TString secretId = "mySaSecretId";
         TString secretValue = "mySaSecretValue";
-        CreateSecretObject(secretId, secretValue, session, kikimr.GetTestServer().GetRuntime());
+        CreateSecretObject(secretId, secretValue, session);
 
         TString externalDataSourceName = "/Root/ExternalDataSource";
         TString externalTableName = "/Root/ExternalTable";
@@ -372,7 +354,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
 
         TString secretId = "myPasswordSecretId";
         TString secretValue = "pswd";
-        CreateSecretObject(secretId, secretValue, session, kikimr.GetTestServer().GetRuntime());
+        CreateSecretObject(secretId, secretValue, session);
 
         TString externalDataSourceName = "/Root/ExternalDataSource";
         auto query = TStringBuilder() << R"(
@@ -402,11 +384,11 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
 
         TString secretPasswordId = "myPasswordSecretId";
         TString secretPasswordValue = "pswd";
-        CreateSecretObject(secretPasswordId, secretPasswordValue, session, kikimr.GetTestServer().GetRuntime());
+        CreateSecretObject(secretPasswordId, secretPasswordValue, session);
 
         TString secretSaId = "mySa";
         TString secretSaValue = "sign(mySa)";
-        CreateSecretObject(secretSaId, secretSaValue, session, kikimr.GetTestServer().GetRuntime());
+        CreateSecretObject(secretSaId, secretSaValue, session);
 
         TString externalDataSourceName = "/Root/ExternalDataSource";
         auto query = TStringBuilder() << R"(
@@ -439,11 +421,11 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
 
         TString awsAccessKeyIdSecretId = "awsAccessKeyIdSecretId";
         TString awsAccessKeyIdSecretValue = "key";
-        CreateSecretObject(awsAccessKeyIdSecretId, awsAccessKeyIdSecretValue, session, kikimr.GetTestServer().GetRuntime());
+        CreateSecretObject(awsAccessKeyIdSecretId, awsAccessKeyIdSecretValue, session);
 
         TString awsSecretAccessKeySecretId = "awsSecretAccessKeySecretId";
         TString awsSecretAccessKeySecretValue = "value";
-        CreateSecretObject(awsSecretAccessKeySecretId, awsSecretAccessKeySecretValue, session, kikimr.GetTestServer().GetRuntime());
+        CreateSecretObject(awsSecretAccessKeySecretId, awsSecretAccessKeySecretValue, session);
 
         TString externalDataSourceName = "/Root/ExternalDataSource";
         auto query = TStringBuilder() << R"(

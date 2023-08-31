@@ -418,13 +418,13 @@ void UpdateExternalDataSourceSecretsValue(TTableMetadataResult& externalDataSour
     }
 }
 
-NThreading::TFuture<TDescribeSecretsResponse> LoadExternalDataSourceSecretValues(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TActorSystem* actorSystem) {
+NThreading::TFuture<TDescribeSecretsResponse> LoadExternalDataSourceSecretValues(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TDuration maximalSecretsSnapshotWaitTime, TActorSystem* actorSystem) {
     const auto& authDescription = entry.ExternalDataSourceInfo->Description.GetAuth();
     switch (authDescription.identity_case()) {
         case NKikimrSchemeOp::TAuth::kServiceAccount: {
             const TString& saSecretId = authDescription.GetServiceAccount().GetSecretName();
             auto promise = NewPromise<TDescribeSecretsResponse>();
-            actorSystem->Register(new TDescribeSecretsActor(userToken ? userToken->GetUserSID() : "", {saSecretId}, promise));
+            actorSystem->Register(new TDescribeSecretsActor(userToken ? userToken->GetUserSID() : "", {saSecretId}, promise, maximalSecretsSnapshotWaitTime));
             return promise.GetFuture();
         }
 
@@ -434,7 +434,7 @@ NThreading::TFuture<TDescribeSecretsResponse> LoadExternalDataSourceSecretValues
         case NKikimrSchemeOp::TAuth::kBasic: {
             const TString& passwordSecretId = authDescription.GetBasic().GetPasswordSecretName();
             auto promise = NewPromise<TDescribeSecretsResponse>();
-            actorSystem->Register(new TDescribeSecretsActor(userToken ? userToken->GetUserSID() : "", {passwordSecretId}, promise));
+            actorSystem->Register(new TDescribeSecretsActor(userToken ? userToken->GetUserSID() : "", {passwordSecretId}, promise, maximalSecretsSnapshotWaitTime));
             return promise.GetFuture();
         }
 
@@ -442,7 +442,7 @@ NThreading::TFuture<TDescribeSecretsResponse> LoadExternalDataSourceSecretValues
             const TString& saSecretId = authDescription.GetMdbBasic().GetServiceAccountSecretName();
             const TString& passwordSecreId = authDescription.GetMdbBasic().GetPasswordSecretName();
             auto promise = NewPromise<TDescribeSecretsResponse>();
-            actorSystem->Register(new TDescribeSecretsActor(userToken ? userToken->GetUserSID() : "", {saSecretId, passwordSecreId}, promise));
+            actorSystem->Register(new TDescribeSecretsActor(userToken ? userToken->GetUserSID() : "", {saSecretId, passwordSecreId}, promise, maximalSecretsSnapshotWaitTime));
             return promise.GetFuture();
         }
 
@@ -450,7 +450,7 @@ NThreading::TFuture<TDescribeSecretsResponse> LoadExternalDataSourceSecretValues
             const TString& awsAccessKeyIdSecretId = authDescription.GetAws().GetAwsAccessKeyIdSecretName();
             const TString& awsAccessKeyKeySecretId = authDescription.GetAws().GetAwsSecretAccessKeySecretName();
             auto promise = NewPromise<TDescribeSecretsResponse>();
-            actorSystem->Register(new TDescribeSecretsActor(userToken ? userToken->GetUserSID() : "", {awsAccessKeyIdSecretId, awsAccessKeyKeySecretId}, promise));
+            actorSystem->Register(new TDescribeSecretsActor(userToken ? userToken->GetUserSID() : "", {awsAccessKeyIdSecretId, awsAccessKeyKeySecretId}, promise, maximalSecretsSnapshotWaitTime));
             return promise.GetFuture();            
         }
 
@@ -730,7 +730,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             promise.SetValue(externalDataSourceMetadata);
                             return;
                         }
-                        LoadExternalDataSourceSecretValues(entry, userToken, ActorSystem)
+                        LoadExternalDataSourceSecretValues(entry, userToken, MaximalSecretsSnapshotWaitTime, ActorSystem)
                             .Subscribe([promise, externalDataSourceMetadata](const TFuture<TDescribeSecretsResponse>& result) mutable
                         {
                             UpdateExternalDataSourceSecretsValue(externalDataSourceMetadata, result.GetValue());

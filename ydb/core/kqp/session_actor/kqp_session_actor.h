@@ -37,7 +37,8 @@ IActor* CreateKqpSessionActor(const TActorId& owner, const TString& sessionId,
     const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
     NYql::IHTTPGateway::TPtr httpGateway, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-    TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters);
+    TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
+    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig);
 
 IActor* CreateKqpTempTablesManager(TKqpTempTablesState tempTablesState, const TActorId& target);
 

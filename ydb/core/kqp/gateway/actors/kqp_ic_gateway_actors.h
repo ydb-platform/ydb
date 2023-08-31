@@ -132,10 +132,10 @@ struct TDescribeSecretsResponse {
 class TDescribeSecretsActor: public NActors::TActorBootstrapped<TDescribeSecretsActor> {
     STRICT_STFUNC(StateFunc,
         hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
+        hFunc(NActors::TEvents::TEvWakeup, Handle);
     )
 
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
-        Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvUnsubscribeExternal(GetSecretsSnapshotParser()));
         auto snapshot = ev->Get()->GetSnapshotAs<NMetadata::NSecret::TSnapshot>();
 
         TVector<TString> secretValues;
@@ -144,13 +144,21 @@ class TDescribeSecretsActor: public NActors::TActorBootstrapped<TDescribeSecrets
             TString secretValue;
             const bool isFound = snapshot->GetSecretValue(NMetadata::NSecret::TSecretIdOrValue::BuildAsId(secretId), secretValue);
             if (!isFound) {
-                Promise.SetValue(TDescribeSecretsResponse(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("secret with name '" + secretId.GetSecretId() + "' not found") }));
-                PassAway();
+                LastResponse = TDescribeSecretsResponse(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("secret with name '" + secretId.GetSecretId() + "' not found") });
                 return;
             }
             secretValues.push_back(secretValue);
         }
         Promise.SetValue(TDescribeSecretsResponse(secretValues));
+
+        UnsubscribeFromSecrets();
+        PassAway();
+    }
+
+    void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
+        Promise.SetValue(LastResponse);
+
+        UnsubscribeFromSecrets();
         PassAway();
     }
 
@@ -158,10 +166,16 @@ class TDescribeSecretsActor: public NActors::TActorBootstrapped<TDescribeSecrets
         return std::make_shared<NMetadata::NSecret::TSnapshotsFetcher>();
     }
 
+    void UnsubscribeFromSecrets() {
+        this->Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvUnsubscribeExternal(GetSecretsSnapshotParser()));
+    }
+
 public:
-    TDescribeSecretsActor(const TString& ownerUserId, const TVector<TString>& secretIds, NThreading::TPromise<TDescribeSecretsResponse> promise) 
+    TDescribeSecretsActor(const TString& ownerUserId, const TVector<TString>& secretIds, NThreading::TPromise<TDescribeSecretsResponse> promise, TDuration maximalSecretsSnapshotWaitTime) 
         : SecretIds(CreateSecretIds(ownerUserId, secretIds))
         , Promise(promise)
+        , LastResponse(Ydb::StatusIds::TIMEOUT, { NYql::TIssue("secrets snapshot fetching timeout") })
+        , MaximalSecretsSnapshotWaitTime(maximalSecretsSnapshotWaitTime)
     {}
 
     void Bootstrap() {
@@ -172,6 +186,7 @@ public:
         }
         
         this->Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvSubscribeExternal(GetSecretsSnapshotParser()));
+        this->Schedule(MaximalSecretsSnapshotWaitTime, new NActors::TEvents::TEvWakeup());
         Become(&TDescribeSecretsActor::StateFunc);
     }
 
@@ -187,6 +202,8 @@ private:
 private:
     const TVector<NMetadata::NSecret::TSecretId> SecretIds;
     NThreading::TPromise<TDescribeSecretsResponse> Promise;
+    TDescribeSecretsResponse LastResponse;
+    TDuration MaximalSecretsSnapshotWaitTime;
 };
 
 }

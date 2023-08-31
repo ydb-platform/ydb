@@ -148,7 +148,8 @@ bool HasSchemeOrFatalIssues(const NYql::TIssues& issues);
 IActor* CreateKqpWorkerActor(const TActorId& owner, const TString& sessionId,
     const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
     NYql::IHTTPGateway::TPtr httpGateway, TIntrusivePtr<TModuleResolverState> moduleResolverState,
-    TIntrusivePtr<TKqpCounters> counters, NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory);
+    TIntrusivePtr<TKqpCounters> counters, NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig);
 
 bool IsSameProtoType(const NKikimrMiniKQL::TType& actual, const NKikimrMiniKQL::TType& expected);
 

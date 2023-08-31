@@ -821,6 +821,7 @@ namespace Tests {
                                                                   Settings->AppConfig.GetTableServiceConfig(),
                                                                   Settings->AppConfig.GetAuthConfig().GetTokenAccessorConfig(),
                                                                   Settings->AppConfig.GetQueryServiceConfig(),
+                                                                  Settings->AppConfig.GetMetadataProviderConfig(),
                                                                   TVector<NKikimrKqp::TKqpSetting>(Settings->KqpSettings),
                                                                   nullptr, std::move(kqpProxySharedResources));
             TActorId kqpProxyServiceId = Runtime->Register(kqpProxyService, nodeIdx);

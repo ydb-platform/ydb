@@ -71,29 +71,14 @@ bool TSortColumn::operator == (TStringBuf rhsName) const
     return Name_ == rhsName;
 }
 
-bool TSortColumn::operator != (TStringBuf rhsName) const
-{
-    return !(*this == rhsName);
-}
-
 bool TSortColumn::operator == (const TString& rhsName) const
 {
     return *this == static_cast<TStringBuf>(rhsName);
 }
 
-bool TSortColumn::operator != (const TString& rhsName) const
-{
-    return !(*this == rhsName);
-}
-
 bool TSortColumn::operator == (const char* rhsName) const
 {
     return *this == static_cast<TStringBuf>(rhsName);
-}
-
-bool TSortColumn::operator != (const char* rhsName) const
-{
-    return !(*this == rhsName);
 }
 
 TSortColumn::operator TStringBuf() const

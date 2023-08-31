@@ -518,11 +518,8 @@ public:
     /// @}
 
     bool operator == (const TStringBuf rhsName) const;
-    bool operator != (const TStringBuf rhsName) const;
     bool operator == (const TString& rhsName) const;
-    bool operator != (const TString& rhsName) const;
     bool operator == (const char* rhsName) const;
-    bool operator != (const char* rhsName) const;
 
     // Intentionally implicit conversions.
     operator TString() const;

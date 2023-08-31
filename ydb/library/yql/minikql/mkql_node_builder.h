@@ -25,6 +25,21 @@ TDataType* UnpackOptionalData(TType* type, bool& isOptional);
 
 TBlockType::EShape GetResultShape(const TVector<TType*>& types);
 
+class TTupleLiteralBuilder {
+public:
+    TTupleLiteralBuilder(const TTypeEnvironment& env);
+    TTupleLiteralBuilder(const TTupleLiteralBuilder&) = default;
+    TTupleLiteralBuilder& operator=(const TTupleLiteralBuilder&) = default;
+    void Reserve(ui32 size);
+    TTupleLiteralBuilder& Add(TRuntimeNode value);
+    TTupleLiteral* Build();
+    void Clear();
+private:
+    const TTypeEnvironment& Env;
+    TVector<TType*> Types;
+    TVector<TRuntimeNode> Values;
+};
+
 class TStructTypeBuilder {
 public:
     TStructTypeBuilder(const TTypeEnvironment& env);

@@ -16,6 +16,20 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeBuilderTest) {
         UNIT_ASSERT_EQUAL(d2->GetType()->GetSchemeType(), NUdf::TDataType<ui32>::Id);
     }
 
+    Y_UNIT_TEST(TestTupleBuilder) {
+        TScopedAlloc alloc(__LOCATION__);
+        TTypeEnvironment env(alloc);
+        auto builder = TTupleLiteralBuilder(env);
+        const auto tuple = builder
+            .Add(TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod(true), NUdf::EDataSlot::Bool, env), true))
+            .Add(TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod(132), NUdf::EDataSlot::Uint32, env), true))
+            .Build();
+        UNIT_ASSERT_EQUAL(tuple->GetType()->GetKind(), TType::EKind::Tuple);
+        UNIT_ASSERT_VALUES_EQUAL(tuple->GetValuesCount(), 2);
+        builder.Clear();
+        UNIT_ASSERT_VALUES_EQUAL(builder.Build()->GetValuesCount(), 0);
+    }
+
     Y_UNIT_TEST(TestStructTypeBuilder) {
         TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment env(alloc);

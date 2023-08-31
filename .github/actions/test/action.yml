@@ -300,6 +300,8 @@ runs:
   - name: write tests summary
     if: always()
     shell: bash
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
     run: |
       
       cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY

@@ -7,7 +7,7 @@ import re
 from xml.etree import ElementTree as ET
 from pathlib import Path
 from typing import List
-from log_parser import ctest_log_parser, parse_yunit_fails, parse_gtest_fails, log_reader
+from log_parser import ctest_log_parser, parse_yunit_fails, parse_gtest_fails, log_reader, GTEST_MARK, YUNIT_MARK
 from junit_utils import add_junit_log_property, create_error_testcase, create_error_testsuite, suite_case_iterator
 from ctest_utils import CTestLog
 
@@ -58,12 +58,12 @@ def extract_logs(log_fp: io.StringIO, out_path: Path, url_prefix):
 
         first_line = ctest_buf[0]
 
-        if first_line.startswith("[==========]"):
+        if first_line.startswith(GTEST_MARK):
             for classname, method, err_lines in parse_gtest_fails(ctest_buf):
                 fn, path = save_log(err_lines, out_path, classname, method)
                 log_url = f"{url_prefix}{fn}"
                 shard.add_testcase(classname, method, path, log_url)
-        elif first_line.startswith("<-----"):
+        elif first_line.startswith(YUNIT_MARK):
             for classname, method, err_lines in parse_yunit_fails(ctest_buf):
                 fn, path = save_log(err_lines, out_path, classname, method)
                 log_url = f"{url_prefix}{fn}"

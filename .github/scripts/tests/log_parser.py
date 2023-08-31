@@ -10,6 +10,10 @@ def log_reader(fn, decompress, errors="backslashreplace"):
     return open(fn, "rt", errors=errors)
 
 
+GTEST_MARK = "[==========]"
+YUNIT_MARK = "<-----"
+
+
 def parse_gtest_fails(log):
     ilog = iter(log)
     while 1:

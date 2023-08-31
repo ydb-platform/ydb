@@ -4,12 +4,21 @@ import re
 from typing import TextIO
 import xml.etree.ElementTree as ET
 
-from log_parser import ctest_log_parser, log_reader
+from log_parser import ctest_log_parser, log_reader, GTEST_MARK, YUNIT_MARK
 from mute_utils import mute_target, remove_failure, update_suite_info, MuteTestCheck
 
 
 def find_targets_to_remove(log_fp):
-    return {target for target, reason, _ in ctest_log_parser(log_fp) if reason == "Failed"}
+    target_with_tests = set()
+    for target, reason, buf in ctest_log_parser(log_fp):
+        if reason != "Failed":
+            continue
+
+        for line in buf:
+            if line.startswith((GTEST_MARK, YUNIT_MARK)):
+                target_with_tests.add(target)
+                break
+    return target_with_tests
 
 
 shard_suffix_re = re.compile(r"_\d+$")

@@ -1,8 +1,10 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/testlib/cs_helper.h>
 #include <ydb/core/tx/tiering/external_data.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/fake_storage.h>
@@ -547,7 +549,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             TAtomic unusedPrev;
             runtime.GetAppData().Icb->SetValue("ColumnShardControls.GranuleIndexedPortionsCountLimit", 1, unusedPrev);
         }
-        for (ui32 i = 0; i < 4; ++i) {
+        for (ui32 i = 0; i < 8; ++i) {
             lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batch);
         }
         {
@@ -733,6 +735,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                     ReduceSize(it->first.BlobSize());
                     it = Blobs.erase(it);
                 } else {
+                    Cerr << "SKIPPED_BLOB:" << it->first << " deprecated=" << Barrier.IsDeprecated(it->first) << ";removable=" << it->second.IsRemovable() << ";" << Endl;
                     ++it;
                 }
             }
@@ -804,7 +807,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         server->SetupRootStoragePools(sender);
 
 //        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_NOTICE);
-        runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NLog::PRI_TRACE);
 //        runtime.SetLogPriority(NKikimrServices::BG_TASKS, NLog::PRI_DEBUG);
         //        runtime.SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NLog::PRI_DEBUG);
 
@@ -839,10 +842,11 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 Y_VERIFY(!msg->Hard);
                 if (msg->Collect) {
                     gcSourceData.SetBarrier(TCurrentBarrier(msg->CollectGeneration, msg->CollectStep));
+                    Cerr << "TEvBlobStorage::TEvCollectGarbage COLLECT:" << msg->CollectGeneration << "/" << msg->CollectStep << ":" << gcSource.DebugString() << ":" << ++gcCounter << ";" << bsCollector.StatusString() << Endl;
                 } else {
                     gcSourceData.RefreshBarrier();
+                    Cerr << "TEvBlobStorage::TEvCollectGarbage REFRESH:" << gcSource.DebugString() << ":" << ++gcCounter << "/" << bsCollector.StatusString() << Endl;
                 }
-                Cerr << "TEvBlobStorage::TEvCollectGarbage " << gcSource.DebugString() << ":" << ++gcCounter << "/" << bsCollector.StatusString() << Endl;
             }
             if (auto* msg = dynamic_cast<TEvBlobStorage::TEvPut*>(ev->StaticCastAsLocal<IEventBase>())) {
                 TGCSource gcSource(msg->Id.TabletID(), msg->Id.Channel());
@@ -888,7 +892,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 UNIT_ASSERT(GetValueResult(result.front(), "b")->GetProto().uint64_value() == purposeMinTimestamp);
             }
 
-            Y_VERIFY(bsCollector.GetChannelSize(2) <= purposeSize);
+            AFL_VERIFY(bsCollector.GetChannelSize(2) <= purposeSize)("collector", bsCollector.GetChannelSize(2))("purpose", purposeSize);
         }
 
         {

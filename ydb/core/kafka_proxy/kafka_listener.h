@@ -13,7 +13,7 @@ inline NActors::IActor* CreateKafkaListener(const NActors::TActorId& poller, con
         [=](TIntrusivePtr<TSocketDescriptor> socket, TNetworkConfig::TSocketAddressType address) {
             return CreateKafkaConnection(socket, address, config);
         },
-        NKikimrServices::EServiceKikimr::KAFKA_PROXY);
+        NKikimrServices::EServiceKikimr::KAFKA_PROXY, EErrorAction::Abort);
 }
 
 } // namespace NKafka

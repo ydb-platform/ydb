@@ -182,6 +182,7 @@ protected:
             hFunc(TEvPollerReady, HandleAccepting);
             hFunc(TEvPollerRegisterResult, HandleAccepting);
             HFunc(TEvKafka::TEvResponse, Handle);
+            sFunc(NActors::TEvents::TEvPoison, PassAway);
             default:
                 KAFKA_LOG_ERROR("TKafkaConnection: Unexpected " << ev.Get()->GetTypeName());
         }
@@ -499,16 +500,8 @@ protected:
                 }
             }
         }
-        if (event->Get()->Write) {
-            if (!FlushOutput()) {
-                return;
-            }
-        }
-        RequestPoller();
-    }
 
-    bool FlushOutput() {
-        return true; // TODO
+        RequestPoller();
     }
 
     void HandleConnected(TEvPollerRegisterResult::TPtr ev) {
@@ -524,6 +517,7 @@ protected:
             HFunc(TEvKafka::TEvResponse, Handle);
             HFunc(TEvKafka::TEvAuthResult, Handle);
             HFunc(TEvKafka::TEvHandshakeResult, Handle);
+            sFunc(NActors::TEvents::TEvPoison, PassAway);
             default:
                 KAFKA_LOG_ERROR("TKafkaConnection: Unexpected " << ev.Get()->GetTypeName());
         }

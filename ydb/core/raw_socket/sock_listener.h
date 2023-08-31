@@ -15,9 +15,15 @@ struct TListenerSettings {
     TString SslCertificatePem;
 };
 
+enum EErrorAction {
+    Ignore,
+    Abort
+};
+
 using TConnectionCreator = std::function<NActors::IActor* (TIntrusivePtr<TSocketDescriptor> socket, TNetworkConfig::TSocketAddressType address)>;
 
 NActors::IActor* CreateSocketListener(const NActors::TActorId& poller, const TListenerSettings& settings,
-                                      TConnectionCreator connectionCreator, NKikimrServices::EServiceKikimr service);
+                                      TConnectionCreator connectionCreator, NKikimrServices::EServiceKikimr service,
+                                      EErrorAction errorAction = EErrorAction::Ignore);
 
 } // namespace NKikimr::NRawSocket

@@ -930,7 +930,7 @@ namespace Tests {
             Runtime->RegisterService(MakePollerActorId(), actorId, nodeIdx);
         }
 
-        {
+        if (Settings->AppConfig.GetKafkaProxyConfig().GetEnableKafkaProxy()) {
             NKafka::TListenerSettings settings;
             settings.Port = Settings->AppConfig.GetKafkaProxyConfig().GetListeningPort();
             if (Settings->AppConfig.GetKafkaProxyConfig().HasSslCertificate()) {

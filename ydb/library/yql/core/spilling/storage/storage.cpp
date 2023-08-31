@@ -62,6 +62,7 @@ void TSpillMetaRecord::Pack (TBuffer &buf ) {
     buf.Resize(size);
 
     ui32 * bufPtr = (ui32*) buf.Data();
+    memset(bufPtr, 0, size);
     *(bufPtr) = RecordHash_;
     *(bufPtr+1) = Offset_;
     *(bufPtr+2) = RecordNumber_;

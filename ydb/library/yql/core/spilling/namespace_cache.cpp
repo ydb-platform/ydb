@@ -78,9 +78,6 @@ NThreading::TFuture<TOperationResults> TNamespaceCache::Save(const TString & obj
    
     bt.Promise = NThreading::NewPromise<TOperationResults>();
 
-    if ( !CurrSpillMetaFile_ ) {
-        NextNamespaceFile(true);
-    }
 
 
     with_lock(ToSaveLock_) {
@@ -575,7 +572,8 @@ void TNamespaceCache::ProcessSaveQueue() {
             ui32 size = saveTask.Buf->Size();
             ui64 offset = currSpillDataFile->Reserve(size);
             ui64 total = offset + size;
-            char * data = saveTask.Buf->Data();
+            TAtomicSharedPtr<TBuffer> bufToSave = saveTask.Buf; 
+            char * data = bufToSave->Data();
             ui32 taskObjId = saveTask.ObjId;
             ui32 prevObjId = taskObjId;
             TSpillMetaRecord mr{EOperationType::Add, saveTask.Name, offset, taskObjId, size, 0 };
@@ -637,15 +635,17 @@ void TNamespaceCache::ProcessLoadQueue() {
     ui32 taskPos = 0;
     bool loadTaskFound = false;
 
+    TLoadTask loadTask;
     with_lock(ToLoadLock_) {
         RemoveCompletedFromLoadQueue();
         loadTaskFound = FindNextTaskInLoadQueue(taskPos);
+        if (!loadTaskFound)
+            return;
+        loadTask = ToLoad_[taskPos];
     }
 
-    if (!loadTaskFound)
-        return;
 
-    TLoadTask& loadTask = ToLoad_[taskPos];
+
     TLoadOperationResults lr;
     ui32 fileInd = FindFileInd(loadTask.ObjId);
     TSpillMetaRecord mr;
@@ -671,7 +671,9 @@ void TNamespaceCache::ProcessLoadQueue() {
         YQL_LOG(ERROR) << "Wrong hash!!!:  " << "Buf hash: " << hash << " Meta hash: " << mr.DataHash() << Endl;
     }
 
-    SessionDataLoadedFromStorage_[loadTask.SessionId] += mr.DataSize();
+    with_lock(ToLoadLock_) {
+        SessionDataLoadedFromStorage_[loadTask.SessionId] += mr.DataSize();
+    }
 
 
     loadTask.Promise.SetValue(std::move(lr)); 
@@ -816,6 +818,9 @@ TNamespaceCache::TNamespaceCache(const TString& name, ui32 id, TAtomicSharedPtr<
     Name_(name), 
     Id_(id),
     StorageI_(storageI)  {
+
+    NextNamespaceFile(true);
+
 
     };
 

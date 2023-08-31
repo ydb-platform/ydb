@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(TYDBLibrarySpillingTest) {
         std::pair < THolder<ITempStorageProxy>, TOperationResults> tproxy = CreateFileStorageProxy(config, policy );
         THolder<ISession> session = tproxy.first->CreateSession();
         NThreading::TFuture<TOperationResults> ftr;
-        const ui32 bufSize = 1024*1024;
+        const ui32 bufSize = 1024 * sizeof(int);
         const ui32 iters = 1000;
         std::vector<TBuffer> buffers, buffers1;
 
@@ -65,7 +65,7 @@ Y_UNIT_TEST_SUITE(TYDBLibrarySpillingTest) {
         for (ui32 i = 0; i < iters; i++) {
             TBuffer buf(bufSize);
             buf.Resize(bufSize);
-            memset(buf.Data(), i+1, bufSize/sizeof(int) - 1 );
+            memset(buf.Data(), i+1, bufSize);
             buffers1.emplace_back(std::move(buf));
         }
         mi = NMemInfo::GetMemInfo();
@@ -127,7 +127,7 @@ Y_UNIT_TEST_SUITE(TYDBLibrarySpillingTest) {
         for (ui32 i = 0; i < iters; i++) {
             TBuffer buf(bufSize);
             buf.Resize(bufSize);
-            memset(buf.Data(), i+1, bufSize/sizeof(int) - 1 );
+            memset(buf.Data(), i+1, bufSize );
             ftr = session->Save(TString("Test"), TString("test" + std::to_string(i)), std::move(buf));
         }
         std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
@@ -200,7 +200,7 @@ Y_UNIT_TEST_SUITE(TYDBLibrarySpillingTest) {
         for (ui32 i = 0; i < iters; i++) {
             TBuffer buf(bufSize);
             buf.Resize(bufSize);
-            memset(buf.Data(), i+1, bufSize/sizeof(int) - 1 );
+            memset(buf.Data(), i+1, bufSize );
             ftr = session->Save(TString("Test"), TString("test" + std::to_string(i)), std::move(buf));
         }
         std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
@@ -249,7 +249,7 @@ Y_UNIT_TEST_SUITE(TYDBLibrarySpillingTest) {
             for (ui32 i = 0; i < iters; i++) {
               TBuffer buf(bufSize);
               buf.Resize(bufSize);
-              memset(buf.Data(), i + 1, bufSize / sizeof(int) - 1);
+              memset(buf.Data(), i + 1, bufSize );
               ftr = session->Save(TString("Test"),
                                   TString("test" + std::to_string(i)),
                                   std::move(buf));
@@ -325,7 +325,7 @@ Y_UNIT_TEST_SUITE(TYDBLibrarySpillingTest) {
         for (ui32 i = 0; i < iters; i++) {
             TBuffer buf(bufSize);
             buf.Resize(bufSize);
-            memset(buf.Data(), i+1, bufSize/sizeof(int) - 1 );
+            memset(buf.Data(), i+1, bufSize );
             ftr = st1->Save(std::move(buf));
         }
         CTEST << "Stream size after save: " << st1->Size() << Endl;        

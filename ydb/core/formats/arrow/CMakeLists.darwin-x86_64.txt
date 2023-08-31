@@ -31,6 +31,7 @@ target_link_libraries(core-formats-arrow PUBLIC
   formats-arrow-simple_builder
   formats-arrow-dictionary
   formats-arrow-transformer
+  cpp-actors-core
   ydb-library-arrow_kernels
   ydb-library-binary_json
   ydb-library-dynumber

@@ -1,4 +1,5 @@
 #pragma once
+#include "special_keys.h"
 #include <ydb/library/accessor/accessor.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
@@ -51,9 +52,14 @@ private:
     YDB_READONLY_DEF(TString, Data);
     YDB_READONLY(ui32, RowsCount, 0);
     YDB_READONLY(ui32, RawBytes, 0);
+    TFirstLastSpecialKeys SpecialKeys;
 public:
     size_t GetSize() const {
         return Data.size();
+    }
+
+    const TFirstLastSpecialKeys& GetSpecialKeys() const {
+        return SpecialKeys;
     }
 
     TString DebugString() const;
@@ -62,11 +68,12 @@ public:
     static bool BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch, const ui32 sizeLimit, std::optional<TSerializedBatch>& sbL, std::optional<TSerializedBatch>& sbR, TString* errorMessage);
     static TSerializedBatch Build(std::shared_ptr<arrow::RecordBatch> batch);
 
-    TSerializedBatch(TString&& schemaData, TString&& data, const ui32 rowsCount, const ui32 rawBytes)
+    TSerializedBatch(TString&& schemaData, TString&& data, const ui32 rowsCount, const ui32 rawBytes, const TFirstLastSpecialKeys& specialKeys)
         : SchemaData(schemaData)
         , Data(data)
         , RowsCount(rowsCount)
         , RawBytes(rawBytes)
+        , SpecialKeys(specialKeys)
     {
 
     }

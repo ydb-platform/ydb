@@ -3,10 +3,14 @@
 #include "permutations.h"
 #include "common/validation.h"
 #include <ydb/core/base/defs.h>
+
+#include <library/cpp/actors/core/log.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_vector.h>
 
 #include <util/string/builder.h>
+#include <util/string/join.h>
 
 #include <compare>
 
@@ -163,7 +167,7 @@ public:
 
     template<typename T = TArrayVecPtr> requires IsOwning
     std::shared_ptr<arrow::RecordBatch> RestoreBatch(const std::shared_ptr<arrow::Schema>& schema) const {
-        Y_VERIFY(Size() && Size() == schema->num_fields());
+        AFL_VERIFY(Size() && Size() == schema->num_fields())("columns", DebugString())("schema", JoinSeq(",", schema->field_names()));
         const auto& columns = *Columns;
         return arrow::RecordBatch::Make(schema, columns[0]->length(), columns);
     }

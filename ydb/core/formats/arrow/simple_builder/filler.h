@@ -19,8 +19,24 @@ public:
         return Delta + idx;
     }
     TIntSeqFiller(const CType delta = 0)
-        : Delta(delta)
-    {
+        : Delta(delta) {
+
+    }
+};
+
+template <class TArrowInt>
+class TIntConstFiller {
+public:
+    using TValue = TArrowInt;
+private:
+    using CType = typename TArrowInt::c_type;
+    const CType Value;
+public:
+    CType GetValue(const CType /*idx*/) const {
+        return Value;
+    }
+    TIntConstFiller(const CType value)
+        : Value(value) {
 
     }
 };

@@ -5,6 +5,7 @@
 #include <queue>
 #include "merging_sorted_input_stream.h"
 #include "switch_type.h"
+#include "size_calcer.h"
 
 namespace NKikimr::NArrow {
 

@@ -11,6 +11,7 @@ PEERDIR(
     ydb/core/formats/arrow/simple_builder
     ydb/core/formats/arrow/dictionary
     ydb/core/formats/arrow/transformer
+    library/cpp/actors/core
     ydb/library/arrow_kernels
     ydb/library/binary_json
     ydb/library/dynumber

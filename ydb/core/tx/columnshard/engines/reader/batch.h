@@ -4,6 +4,7 @@
 #include "read_filter_merger.h"
 
 #include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/engines/portion_info.h>
 

@@ -225,7 +225,7 @@ bool Append(arrow::ArrayBuilder& builder, const std::vector<typename T::c_type>&
 }
 
 template <typename T>
-bool Append(T& builder, const arrow::Array& array, int position) {
+bool Append(T& builder, const arrow::Array& array, int position, ui64* recordSize = nullptr) {
     return SwitchType(array.type_id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
         using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
@@ -236,10 +236,25 @@ bool Append(T& builder, const arrow::Array& array, int position) {
 
         if (typedArray.IsNull(position)) {
             auto status = typedBuilder.AppendNull();
+            if (recordSize) {
+                *recordSize += 4;
+            }
             return status.ok();
         } else {
-            auto status = typedBuilder.Append(typedArray.GetView(position));
-            return status.ok();
+            if constexpr (!arrow::has_string_view<typename TWrap::T>::value) {
+                auto status = typedBuilder.Append(typedArray.GetView(position));
+                if (recordSize) {
+                    *recordSize += sizeof(typedArray.GetView(position));
+                }
+                return status.ok();
+            }
+            if constexpr (arrow::has_string_view<typename TWrap::T>::value) {
+                auto status = typedBuilder.Append(typedArray.GetView(position));
+                if (recordSize) {
+                    *recordSize += typedArray.GetView(position).size();
+                }
+                return status.ok();
+            }
         }
     });
 }

@@ -159,9 +159,32 @@ std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::
     return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(std::move(fields)), srcBatch->num_rows(), std::move(columns));
 }
 
+std::shared_ptr<arrow::RecordBatch> ExtractColumnsValidate(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
+    const std::vector<TString>& columnNames) {
+    if (columnNames.empty()) {
+        return nullptr;
+    }
+    std::vector<std::shared_ptr<arrow::Field>> fields;
+    fields.reserve(columnNames.size());
+    std::vector<std::shared_ptr<arrow::Array>> columns;
+    columns.reserve(columnNames.size());
+
+    auto srcSchema = srcBatch->schema();
+    for (auto& name : columnNames) {
+        int pos = srcSchema->GetFieldIndex(name);
+        AFL_VERIFY(pos >= 0)("field_name", name);
+        fields.push_back(srcSchema->field(pos));
+        columns.push_back(srcBatch->column(pos));
+    }
+
+    return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(std::move(fields)), srcBatch->num_rows(), std::move(columns));
+}
+
 std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
                                                    const std::shared_ptr<arrow::Schema>& dstSchema,
                                                    bool addNotExisted) {
+    Y_VERIFY(srcBatch);
+    Y_VERIFY(dstSchema);
     std::vector<std::shared_ptr<arrow::Array>> columns;
     columns.reserve(dstSchema->num_fields());
 
@@ -175,13 +198,15 @@ std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::
                 }
                 columns.back() = *result;
             } else {
+                AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "not_found_column")("column", field->name())
+                    ("column_type", field->type()->ToString())("columns", JoinSeq(",", srcBatch->schema()->field_names()));
                 return nullptr;
             }
         }
 
         Y_VERIFY(columns.back());
         if (!columns.back()->type()->Equals(field->type())) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_incoming_batch")("reason", "invalid_column_type")("column", field->name())
+            AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_parse_incoming_batch")("reason", "invalid_column_type")("column", field->name())
                                 ("column_type", field->type()->ToString())("incoming_type", columns.back()->type()->ToString());
             return nullptr;
         }
@@ -486,6 +511,13 @@ std::vector<std::unique_ptr<arrow::ArrayBuilder>> MakeBuilders(const std::shared
 
     }
     return builders;
+}
+
+std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(const std::shared_ptr<arrow::Field>& field) {
+    std::unique_ptr<arrow::ArrayBuilder> builder;
+    auto status = arrow::MakeBuilder(arrow::default_memory_pool(), field->type(), &builder);
+    Y_VERIFY_OK(status);
+    return std::move(builder);
 }
 
 std::vector<std::shared_ptr<arrow::Array>> Finish(std::vector<std::unique_ptr<arrow::ArrayBuilder>>&& builders) {
@@ -874,6 +906,35 @@ std::shared_ptr<arrow::RecordBatch> ReallocateBatch(std::shared_ptr<arrow::Recor
         return nullptr;
     }
     return DeserializeBatch(SerializeBatch(original, arrow::ipc::IpcWriteOptions::Defaults()), original->schema());
+}
+
+std::shared_ptr<arrow::RecordBatch> MergeColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& rb) {
+    std::vector<std::shared_ptr<arrow::Array>> columns;
+    std::vector<std::shared_ptr<arrow::Field>> fields;
+    std::optional<ui32> recordsCount;
+    std::set<std::string> columnNames;
+    for (auto&& i : rb) {
+        if (!i) {
+            continue;
+        }
+        for (auto&& c : i->columns()) {
+            columns.emplace_back(c);
+            if (!recordsCount) {
+                recordsCount = c->length();
+            } else {
+                Y_VERIFY(*recordsCount == c->length());
+            }
+        }
+        for (auto&& f : i->schema()->fields()) {
+            Y_VERIFY(columnNames.emplace(f->name()).second);
+            fields.emplace_back(f);
+        }
+    }
+    if (columns.empty()) {
+        return nullptr;
+    }
+    auto schema = std::make_shared<arrow::Schema>(fields);
+    return arrow::RecordBatch::Make(schema, *recordsCount, columns);
 }
 
 }

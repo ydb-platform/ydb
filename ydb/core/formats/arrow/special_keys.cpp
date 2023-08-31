@@ -42,7 +42,9 @@ TFirstLastSpecialKeys::TFirstLastSpecialKeys(std::shared_ptr<arrow::RecordBatch>
     Y_VERIFY(Data->num_rows() == 1 || Data->num_rows() == 2);
 }
 
-TFirstLastSpecialKeys::TFirstLastSpecialKeys(const TString& data): TBase(data) {
+TFirstLastSpecialKeys::TFirstLastSpecialKeys(const TString& data)
+    : TBase(data)
+{
     Y_VERIFY(Data);
     Y_VERIFY_DEBUG(Data->ValidateFull().ok());
     Y_VERIFY(Data->num_rows() == 1 || Data->num_rows() == 2);

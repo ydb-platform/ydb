@@ -2600,7 +2600,7 @@ TExprNode::TPtr OptimizeReorder(const TExprNode::TPtr& node, TExprContext& ctx) 
     }
 
     if constexpr (IsTop || IsSort) {
-        if (ETypeAnnotationKind::Struct == GetSeqItemType(*node->Head().GetTypeAnn()).GetKind()) {
+        if (/*TODO: enable later*/false && ETypeAnnotationKind::Struct == GetSeqItemType(*node->Head().GetTypeAnn()).GetKind()) {
             std::set<ui32> indexes;
             if (node->Tail().Tail().IsList())
                 for (auto i = 0U; i < node->Tail().Tail().ChildrenSize(); ++i)

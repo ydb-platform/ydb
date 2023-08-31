@@ -1,0 +1,464 @@
+#!/usr/bin/env sh
+
+# Please keep this script in sync with arcadia/devtools/ya/opensource/ya
+
+# Shell commands follow
+# Next line is bilingual: it starts a comment in Python, but do nothing in shell
+""":"
+
+# Find a suitable python interpreter
+for cmd in python3 python; do
+    command -v > /dev/null $cmd && exec `command -v $cmd` $0 "$@"
+done
+
+echo "Python interpreter is not found in this system, please, install python or contact DEVTOOLSSUPPORT" >2
+
+exit 2
+
+":"""
+# Previous line is bilingual: it ends a comment in Python, but do nothing in shell
+# Shell commands end here
+# Python script follows
+
+import os
+import sys
+import platform
+import json
+
+URLS = ['https://proxy.sandbox.yandex-team.ru/5003447034', 'https://storage.yandex-team.ru/get-devtools/1871182/cb57f73ecaffd54df329444995a97a51/by_platform.json']
+MD5 = 'cb57f73ecaffd54df329444995a97a51'
+
+URLS3 = ['https://proxy.sandbox.yandex-team.ru/5003523433', 'https://storage.yandex-team.ru/get-devtools/1031349/295150c8b9a671979cd46f9ba45c19f2/by_platform.json']
+MD53 = '295150c8b9a671979cd46f9ba45c19f2'
+
+DEFAULT_PY_VER = 2
+
+RETRIES = 5
+HASH_PREFIX = 10
+
+PY3_HANDLERS = {
+    "ya3bin0", "ya3bin3",  # handers for tests
+    "krevedko",
+    "curl", "nvim", "gdb", "emacs", "grep", "jstyle", "nile", "sed", "vim",
+    "py23_utils",
+    'ydb',
+    'upload', 'download', 'paste', 'whoami',
+}
+
+PY2_HANDLERS = {
+    "ya2bin0", "ya2bin2",
+}
+
+EXPERIMENTAL_PY3_HANDLERS = set()
+
+DEVTOOLS_PY3_HANDLERS = set()
+
+
+def is_devtools():
+    # type: () -> bool
+    devtools_users = {'tldr', 'yetty', 'prettyboy', 'neksard', 'ival83', 'mikhnenko', 'aokhotin', 'somov', 'shadchin', 'albazh', 'grasscat', 'nogert', 'jolex007', 'aakuz', 'aripinen', 'sudilovskiy', 'tutelka', 'tutelka', 'vlasovskikh', 'vlasovskikh', 'and42', 'say', 'rudeshko', 'pg', 'artanis', 'hiddenpath', 'hiddenpath', 'khoden', 'bulatkhr', 'v-korovin', 'viknet', 'saxumcordis', 'vpozdyayev', 'vturov', 'vturov', 'vlad-savinov', 'slava', 'miripiruni', 'trushkin', 'griddic', 'ligreen', 'zaverden', 'kirpadmitriy', 'dmitko', 'dldmitry', 'lix0', 'yak-dmitriy', 'dankolesnikov', 'keepitsimple', 'workfork', 'vania-pooh', 'ilezhankin', 'igorart', 'thevery', 'ilia-vashurov', 'iaz1607', 'il2kondr4', 'ilyasiluyanov', 'trofimenkov', 'kirkharitonov', 'korum', 'tilacyn', 'maratik', 'miroslav2', 'spasitel', 'nslus', 'nsamokhin', 'r2d2', 'zhukoff-pavel', 'r-vetrov', 'gotocoding', 'svkov42', 'sabevzenko', 'belesev', 'svidyuk', 'snermolaev', 'spreis', 's-repalov', 'golovin-stan', 'ilikepugs', 'tekireeva', 'zumra6a', 'sareyu', 'thegeorg', 'snowball'}
+
+    user = os.environ.get('USER')
+    return bool(user and user in devtools_users)
+
+
+def create_dirs(path):
+    try:
+        os.makedirs(path)
+    except OSError as e:
+        import errno
+
+        if e.errno != errno.EEXIST:
+            raise
+
+    return path
+
+
+def home_dir():
+    # Do not trust $HOME, as it is unreliable in certain environments
+    # Temporarily delete os.environ["HOME"] to force reading current home directory from /etc/passwd
+    home_from_env = os.environ.pop("HOME", None)
+    try:
+        home_from_passwd = os.path.expanduser("~")
+        if os.path.isabs(home_from_passwd):
+            # This home dir is valid, prefer it over $HOME
+            return home_from_passwd
+        else:
+            # When python is built with musl (this is quire weird though),
+            # only users from /etc/passwd will be properly resolved,
+            # as musl does not have nss module for LDAP integration.
+            return home_from_env
+
+    finally:
+        if home_from_env is not None:
+            os.environ["HOME"] = home_from_env
+
+
+def misc_root():
+    return create_dirs(os.getenv('YA_CACHE_DIR') or os.path.join(home_dir(), '.ya'))
+
+
+def tool_root():
+    return create_dirs(os.getenv('YA_CACHE_DIR_TOOLS') or os.path.join(misc_root(), 'tools'))
+
+
+def ya_token():
+    def get_token_from_file():
+        try:
+            with open(os.environ.get('YA_TOKEN_PATH', os.path.join(home_dir(), '.ya_token')), 'r') as f:
+                return f.read().strip()
+        except:
+            pass
+    return os.getenv('YA_TOKEN') or get_token_from_file()
+
+
+TOOLS_DIR = tool_root()
+
+
+def uniq(size=6):
+    import string
+    import random
+
+    return ''.join(random.choice(string.ascii_lowercase + string.digits) for _ in range(size))
+
+
+_ssl_is_tuned = False
+
+
+def _tune_ssl():
+    global _ssl_is_tuned
+    if _ssl_is_tuned:
+        return
+    try:
+        import ssl
+        ssl._create_default_https_context = ssl._create_unverified_context
+    except AttributeError:
+        pass
+
+    try:
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    except (AttributeError, ImportError):
+        pass
+    _ssl_is_tuned = True
+
+
+def _fetch(url, into):
+    import hashlib
+    _tune_ssl()
+
+    try:
+        from urllib2 import urlopen
+        from urllib2 import Request
+        from urlparse import urlparse
+    except ImportError:
+        from urllib.request import urlopen
+        from urllib.request import Request
+        from urllib.parse import urlparse
+
+    request = Request(str(url))
+    request.add_header('User-Agent', 'ya-bootstrap')
+    if urlparse(url).netloc == 'proxy.sandbox.yandex-team.ru':
+        token = ya_token()
+        if token:
+            request.add_header('Authorization', 'OAuth {}'.format(token))
+
+    md5 = hashlib.md5()
+    sys.stderr.write('Downloading %s ' % url)
+    sys.stderr.flush()
+    conn = urlopen(request, timeout=10)
+    sys.stderr.write('[')
+    sys.stderr.flush()
+    try:
+        with open(into, 'wb') as f:
+            while True:
+                block = conn.read(1024 * 1024)
+                sys.stderr.write('.')
+                sys.stderr.flush()
+                if block:
+                    md5.update(block)
+                    f.write(block)
+                else:
+                    break
+        return md5.hexdigest()
+
+    finally:
+        sys.stderr.write('] ')
+        sys.stderr.flush()
+
+
+def _atomic_fetch(url, into, md5):
+    tmp_dest = into + '.' + uniq()
+    try:
+        real_md5 = _fetch(url, tmp_dest)
+        if real_md5 != md5:
+            raise Exception('MD5 mismatched: %s differs from %s' % (real_md5, md5))
+        os.rename(tmp_dest, into)
+        sys.stderr.write('OK\n')
+    except Exception as e:
+        sys.stderr.write('ERROR: ' + str(e) + '\n')
+        raise
+    finally:
+        try:
+            os.remove(tmp_dest)
+        except OSError:
+            pass
+
+
+def _extract(path, into):
+    import tarfile
+
+    tar = tarfile.open(path, errorlevel=2)
+
+    # tar.extractall() will try to set file ownership according to the attributes stored in the archive
+    # by calling TarFile.chown() method.
+    # As this information is hardly relevant to the point of deployment / extraction,
+    # it will just fail (python2) if ya is executed with root euid, or silently set non-existent numeric owner (python3)
+    # to the files being extracted.
+    # mock it with noop to retain current user ownership.
+    tar.chown = lambda *args, **kwargs: None
+
+    tar.extractall(path=into)
+    tar.close()
+
+
+def _get(urls, md5):
+    dest_path = os.path.join(TOOLS_DIR, md5[:HASH_PREFIX])
+
+    if not os.path.exists(dest_path):
+        for iter in range(RETRIES):
+            try:
+                _atomic_fetch(urls[iter % len(urls)], dest_path, md5)
+                break
+            except Exception:
+                if iter + 1 == RETRIES:
+                    raise
+                else:
+                    import time
+                    time.sleep(iter)
+
+    return dest_path
+
+
+def _get_dir(urls, md5, ya_name):
+    dest_dir = os.path.join(TOOLS_DIR, md5[:HASH_PREFIX] + '_d')
+
+    if os.path.isfile(os.path.join(dest_dir, ya_name)):
+        return dest_dir
+
+    try:
+        packed_path = _get(urls, md5)
+    except Exception:
+        if os.path.isfile(os.path.join(dest_dir, ya_name)):
+            return dest_dir
+        raise
+
+    tmp_dir = dest_dir + '.' + uniq()
+    try:
+        try:
+            _extract(packed_path, tmp_dir)
+        except Exception:
+            if os.path.isfile(os.path.join(dest_dir, ya_name)):
+                return dest_dir
+            raise
+
+        try:
+            os.rename(tmp_dir, dest_dir)
+        except OSError as e:
+            import errno
+            if e.errno != errno.ENOTEMPTY:
+                raise
+
+        return dest_dir
+    finally:
+        import shutil
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        try:
+            os.remove(packed_path)
+        except Exception:
+            pass
+
+
+def _mine_arc_root():
+    return os.path.dirname(os.path.realpath(__file__))
+
+
+def _parse_arguments():
+    use_python = None
+    use_python_set_force = False
+    print_sandbox_id = False
+    result_args = list(sys.argv[1:])
+    handler = None
+
+    if len(sys.argv) > 1:
+        for index, arg in enumerate(sys.argv[1:]):
+            if arg == "-3" or arg == "-2":
+                if arg == "-3":
+                    new_value = 3
+                elif arg == "-2":
+                    new_value = 2
+                else:
+                    raise NotImplementedError("Unknown argument: {}".format(arg))
+
+                if use_python is not None and use_python != new_value:
+                    sys.stderr.write("You can use only python2 (-2) OR python3 (-3) -based ya-bin, not both\n")
+                    exit(2)
+
+                use_python = new_value
+                use_python_set_force = True
+            elif arg.startswith("--print-sandbox-id="):
+                if print_sandbox_id:
+                    sys.stderr.write("You can print only one sandbox id at a time")
+                    exit(2)
+
+                print_sandbox_id = arg.split('=')[1]
+            else:
+                # Do not try to parse remaining part of command
+                result_args = result_args[index:]
+                break
+
+        # All ya script specific arguments found, search for handler
+
+        skippable_flags = ('--error-file',)
+        skip_next = False
+        for arg in result_args:
+            if not arg.startswith("-") and not skip_next:
+                handler = arg
+                break
+
+            skip_next = arg in skippable_flags
+
+    ENV_TRUE = ('yes', '1')
+
+    py3_handlers_disabled = os.environ.get('YA_DISABLE_PY3_HANDLERS') in ENV_TRUE
+
+    if py3_handlers_disabled:
+        use_python = 2
+        use_python_set_force = True  # Prevent ya-bin respawn
+    elif use_python == 3:
+        if not print_sandbox_id:
+            # will be shown only if user set `-3` by force
+            sys.stderr.write("!! python3-based ya-bin will be used, "
+                             "be prepared for some strange effects, "
+                             "don't be ashamed to write in DEVTOOLSSUPPORT about it\n")
+        pass
+    elif use_python == 2:
+        pass
+    elif handler in PY2_HANDLERS:
+        use_python = 2
+    elif handler in PY3_HANDLERS:
+        use_python = 3
+    else:
+        use_python = 23  # ya-bin/3 makes a decision
+
+    if not use_python_set_force and not py3_handlers_disabled and use_python != 3:
+        # User didn't set python version by force, didn't disable it, handler is under python2, so lets check experiments
+
+        ya_experimental = os.environ.get("YA_EXPERIMENTAL") in ENV_TRUE
+        if ya_experimental and handler in EXPERIMENTAL_PY3_HANDLERS:
+            sys.stderr.write("!! python3-based ya-bin will be used because of:\n"
+                            " * You enable `YA_EXPERIMENTAL` environment variable\n"
+                            " * Handler `{}` in the list of experimental python3-compatible handlers\n"
+                            "".format(handler))
+            use_python = 3
+        elif is_devtools() and handler in DEVTOOLS_PY3_HANDLERS:
+            sys.stderr.write("!! python3-based ya-bin will be used because of:\n"
+                                " * You are member of DEVTOOLS (it's just list of logins in `ya` script)\n"
+                                " * Handler `{}` in the list of experimental python3-compatible handlers for DEVTOOLS members\n"
+                                "".format(handler) )
+            use_python = 3
+
+    if use_python == 2:
+        urls, md5 = URLS, MD5
+    elif use_python == 3:
+        urls, md5 = URLS3, MD53
+    elif use_python == 23:
+        if DEFAULT_PY_VER == 2:
+            urls, md5 = URLS, MD5
+        elif DEFAULT_PY_VER == 3:
+            urls, md5 = URLS3, MD53
+        else:
+            raise NotImplementedError("Unknown default python version: {}".format(DEFAULT_PY_VER))
+    else:
+        raise NotImplementedError("Unknown python version: {}".format(use_python))
+    return md5, print_sandbox_id, result_args, urls, use_python, use_python_set_force
+
+
+def main():
+    if not os.path.exists(TOOLS_DIR):
+        os.makedirs(TOOLS_DIR)
+
+    md5, print_sandbox_id, result_args, urls, use_python, use_python_set_force = _parse_arguments()
+
+    with open(_get(urls, md5), 'r') as fp:
+        meta = json.load(fp)['data']
+    my_platform = platform.system().lower()
+    my_machine = platform.machine().lower()
+    if my_platform == 'linux':
+        if 'ppc64le' in platform.platform():
+            my_platform = 'linux-ppc64le'
+        elif 'aarch64' in platform.platform():
+            my_platform = 'linux-aarch64'
+        else:
+            my_platform = 'linux_musl'
+    if my_platform == 'darwin' and my_machine == 'arm64':
+        my_platform = 'darwin-arm64'
+
+    def _platform_key(target_platform):
+        """ match by max prefix length, prefer shortest """
+        def _key_for_platform(platform):
+            return len(os.path.commonprefix([target_platform, platform])), -len(platform)
+
+        return _key_for_platform
+
+    best_key = max(meta.keys(), key=_platform_key(my_platform))
+    value = meta[best_key]
+
+    if print_sandbox_id:
+        target = print_sandbox_id
+        best_target = max(meta.keys(), key=_platform_key(target))
+        sys.stdout.write(str(meta[best_target]['resource_id']) + '\n')
+        exit(0)
+
+    ya_name = {'win32': 'ya-bin.exe', 'win32-clang-cl': 'ya-bin.exe'}.get(best_key, 'ya-bin')  # XXX
+    ya_dir = _get_dir(value['urls'], value['md5'], ya_name)
+
+    # Popen `args` must have `str` type
+    ya_path = str(os.path.join(ya_dir, ya_name))
+
+    env = os.environ.copy()
+    if 'YA_SOURCE_ROOT' not in env:
+        src_root = _mine_arc_root()
+        if src_root is not None:
+            env['YA_SOURCE_ROOT'] = src_root
+
+    # For more info see YT-14105
+    for env_name in [
+        'LD_PRELOAD',
+        'Y_PYTHON_SOURCE_ROOT',
+    ]:
+        if env_name in os.environ:
+            sys.stderr.write("Warn: {}='{}' is specified and may affect the correct operation of the ya\n".format(env_name, env[env_name]))
+
+    env['YA_PYVER_REQUIRE'] = str(use_python)
+    if use_python_set_force:
+        env['YA_PYVER_SET_FORCED'] = 'yes'
+
+    if os.name == 'nt':
+        import subprocess
+
+        p = subprocess.Popen([ya_path] + result_args, env=env)
+        p.wait()
+        sys.exit(p.returncode)
+    else:
+        os.execve(ya_path, [ya_path] + result_args, env)
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except Exception as e:
+        sys.stderr.write('ERROR: ' + str(e) + '\n')
+        from traceback import format_exc
+        sys.stderr.write(format_exc() + "\n")
+        sys.exit(1)

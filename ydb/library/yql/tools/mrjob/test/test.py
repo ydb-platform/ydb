@@ -21,7 +21,7 @@ def test_libc():
 
     glibc_tag_count = 0
     for line in result.decode().split('\n'):
-        glibc_tag = re.search('GLIBC_[0-9\.]+', line)
+        glibc_tag = re.search(r'GLIBC_[0-9\.]+', line)
         if glibc_tag:
             glibc_tag_count += 1
             parts = glibc_tag.group().split('.')

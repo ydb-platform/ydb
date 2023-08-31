@@ -49,8 +49,9 @@ void TKafkaProduceActor::LogEvent(IEventHandle& ev) {
 }
 
 void TKafkaProduceActor::SendMetrics(const TString& topicName, size_t delta, const TString& name, const TActorContext& ctx) {
-    ctx.Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(delta, BuildLabels(Context, "", topicName, TStringBuilder() << "api.kafka.produce." << name, "")));
-    ctx.Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(delta, BuildLabels(Context, "", topicName, "api.kafka.produce.total_messages", ""))); 
+    auto topic = SplitPath(topicName).back();
+    ctx.Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(delta, BuildLabels(Context, "", topic, TStringBuilder() << "api.kafka.produce." << name, "")));
+    ctx.Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(delta, BuildLabels(Context, "", topic, "api.kafka.produce.total_messages", ""))); 
 }
 
 void TKafkaProduceActor::Bootstrap(const NActors::TActorContext& /*ctx*/) {

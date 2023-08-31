@@ -234,7 +234,7 @@ struct TScriptExecutionsYdbSetup {
     }
 
     THolder<TEvScriptLeaseUpdateResponse> UpdateLease(const TString& executionId, TDuration leaseDuration) {
-        GetRuntime()->Register(CreateScriptLeaseUpdateActor(GetRuntime()->AllocateEdgeActor(), TestDatabase, executionId, leaseDuration));
+        GetRuntime()->Register(CreateScriptLeaseUpdateActor(GetRuntime()->AllocateEdgeActor(), TestDatabase, executionId, leaseDuration, nullptr));
         auto reply = GetRuntime()->GrabEdgeEvent<TEvScriptLeaseUpdateResponse>();
         
         UNIT_ASSERT(reply != nullptr);

@@ -669,7 +669,7 @@ public:
             if (req->GetCancelAfterMs()) {
                 maxRunTime = TDuration::MilliSeconds(Min(req->GetCancelAfterMs(), maxRunTime.MilliSeconds()));
             }
-            Register(CreateScriptExecutionCreatorActor(std::move(ev), QueryServiceConfig, maxRunTime), TMailboxType::HTSwap, AppData()->SystemPoolId);
+            Register(CreateScriptExecutionCreatorActor(std::move(ev), QueryServiceConfig, Counters, maxRunTime), TMailboxType::HTSwap, AppData()->SystemPoolId);
         }
     }
 

@@ -294,6 +294,9 @@ public:
     void ReportSqlVersion(TKqpDbCountersPtr dbCounters, ui16 sqlVersion);
     void ReportTransaction(TKqpDbCountersPtr dbCounters, const TKqpTransactionInfo& txInfo);
 
+    void ReportLeaseUpdateLatency(const TDuration& duration);
+    void ReportRunActorLeaseUpdateBacklog(const TDuration& duration);
+
     void ReportWorkerCreated(TKqpDbCountersPtr dbCounters);
     void ReportWorkerFinished(TKqpDbCountersPtr dbCounters, TDuration lifeSpan);
     void ReportWorkerCleanupLatency(TKqpDbCountersPtr dbCounters, TDuration cleanupTime);
@@ -341,6 +344,10 @@ public:
     void RemoveDbCounters(const TString& database);
 
 public:
+    // Lease updates counters
+    ::NMonitoring::THistogramPtr LeaseUpdateLatency;
+    ::NMonitoring::THistogramPtr RunActorLeaseUpdateBacklog;
+
     // Transactions
     THashMap<TKqpTransactionInfo::EKind, TTxByKindCounters> TxByKind;
     ::NMonitoring::TDynamicCounters::TCounterPtr TxReplySizeExceededError;

@@ -48,13 +48,14 @@ class TRunScriptActor : public NActors::TActorBootstrapped<TRunScriptActor> {
     };
 
 public:
-    TRunScriptActor(const TString& executionId, const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration, TDuration leaseDuration, NKikimrConfig::TQueryServiceConfig&& queryServiceConfig)
+    TRunScriptActor(const TString& executionId, const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration, TDuration leaseDuration, NKikimrConfig::TQueryServiceConfig&& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters)
         : ExecutionId(executionId)
         , Request(request)
         , Database(database)
         , LeaseGeneration(leaseGeneration)
         , LeaseDuration(leaseDuration)
         , QueryServiceConfig(queryServiceConfig)
+        , Counters(counters)
     {}
 
     static constexpr char ActorName[] = "KQP_RUN_SCRIPT_ACTOR";
@@ -138,14 +139,16 @@ private:
     }
 
     void RunLeaseUpdater() {
-        Register(CreateScriptLeaseUpdateActor(SelfId(), Database, ExecutionId, LeaseDuration));
+        Register(CreateScriptLeaseUpdateActor(SelfId(), Database, ExecutionId, LeaseDuration, Counters));
         LeaseUpdateQueryRunning = true;
+        Counters->ReportRunActorLeaseUpdateBacklog(TInstant::Now() - LeaseUpdateScheduleTime);
     }
 
     // TODO: remove this after there will be a normal way to store results and generate execution id
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev) {
         switch (ev->Get()->Tag) {
         case EWakeUp::RunEvent:
+            LeaseUpdateScheduleTime = TInstant::Now();
             Schedule(LeaseDuration / LEASE_UPDATE_FREQUENCY, new NActors::TEvents::TEvWakeup(EWakeUp::UpdateLeaseEvent));
             RunState = ERunState::Running;
             CreateSession();
@@ -198,6 +201,7 @@ private:
 
         if (IsExecuting()) {
             TInstant leaseUpdateTime = ev->Get()->CurrentDeadline - LeaseDuration / LEASE_UPDATE_FREQUENCY;
+            LeaseUpdateScheduleTime = TInstant::Now();
             if (TInstant::Now() >= leaseUpdateTime) {
                 RunLeaseUpdater();
             } else {
@@ -478,7 +482,9 @@ private:
     const ui64 LeaseGeneration;
     const TDuration LeaseDuration;
     const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
+    TIntrusivePtr<TKqpCounters> Counters;
     TString SessionId;
+    TInstant LeaseUpdateScheduleTime;
     bool LeaseUpdateQueryRunning = false;
     bool FinalStatusIsSaved = false;
     bool FinishAfterLeaseUpdate = false;
@@ -506,8 +512,8 @@ private:
 
 } // namespace
 
-NActors::IActor* CreateRunScriptActor(const TString& executionId, const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration, TDuration leaseDuration, NKikimrConfig::TQueryServiceConfig queryServiceConfig) {
-    return new TRunScriptActor(executionId, request, database, leaseGeneration, leaseDuration, std::move(queryServiceConfig));
+NActors::IActor* CreateRunScriptActor(const TString& executionId, const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration, TDuration leaseDuration, NKikimrConfig::TQueryServiceConfig queryServiceConfig, TIntrusivePtr<TKqpCounters> counters) {
+    return new TRunScriptActor(executionId, request, database, leaseGeneration, leaseDuration, std::move(queryServiceConfig), counters);
 }
 
 } // namespace NKikimr::NKqp

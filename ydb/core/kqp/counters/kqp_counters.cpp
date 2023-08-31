@@ -738,6 +738,12 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
         }
     }
 
+    /* Lease updates counters */
+    LeaseUpdateLatency = KqpGroup->GetHistogram(
+        "LeaseUpdatesLatencyMs", NMonitoring::ExponentialHistogram(20, 2, 1));
+    RunActorLeaseUpdateBacklog = KqpGroup->GetHistogram(
+        "LeaseUpdatesBacklogMs", NMonitoring::LinearHistogram(30, 0, 1000));
+
     /* Transactions */
     CreateTxKindCounters(TKqpTransactionInfo::EKind::Pure, "Pure");
     CreateTxKindCounters(TKqpTransactionInfo::EKind::ReadOnly, "ReadOnly");
@@ -998,6 +1004,14 @@ void TKqpCounters::ReportTransaction(TKqpDbCountersPtr dbCounters, const TKqpTra
     if (txInfo.Status == TKqpTransactionInfo::EStatus::Committed) {
         UpdateTxCounters(txInfo, TxByKind);
     }
+}
+
+void TKqpCounters::ReportLeaseUpdateLatency(const TDuration& duration) {
+    LeaseUpdateLatency->Collect(duration.MilliSeconds());
+}
+
+void TKqpCounters::ReportRunActorLeaseUpdateBacklog(const TDuration& duration) {
+    RunActorLeaseUpdateBacklog->Collect(duration.MilliSeconds());
 }
 
 void TKqpCounters::ReportSqlVersion(TKqpDbCountersPtr dbCounters, ui16 sqlVersion) {

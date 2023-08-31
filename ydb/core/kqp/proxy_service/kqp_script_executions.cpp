@@ -326,9 +326,10 @@ private:
 };
 
 struct TCreateScriptExecutionActor : public TActorBootstrapped<TCreateScriptExecutionActor> {
-    TCreateScriptExecutionActor(TEvKqp::TEvScriptRequest::TPtr&& ev, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TDuration maxRunTime = SCRIPT_TIMEOUT_LIMIT, TDuration leaseDuration = TDuration::Zero())
+    TCreateScriptExecutionActor(TEvKqp::TEvScriptRequest::TPtr&& ev, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters, TDuration maxRunTime = SCRIPT_TIMEOUT_LIMIT, TDuration leaseDuration = TDuration::Zero())
         : Event(std::move(ev))
         , QueryServiceConfig(queryServiceConfig)
+        , Counters(counters)
         , LeaseDuration(leaseDuration ? leaseDuration : LEASE_DURATION)
         , MaxRunTime(maxRunTime)
     {
@@ -346,7 +347,7 @@ struct TCreateScriptExecutionActor : public TActorBootstrapped<TCreateScriptExec
         }
 
         // Start request
-        RunScriptActorId = Register(CreateRunScriptActor(ExecutionId, Event->Get()->Record, Event->Get()->Record.GetRequest().GetDatabase(), 1, LeaseDuration, QueryServiceConfig));
+        RunScriptActorId = Register(CreateRunScriptActor(ExecutionId, Event->Get()->Record, Event->Get()->Record.GetRequest().GetDatabase(), 1, LeaseDuration, QueryServiceConfig, Counters));
         Register(new TCreateScriptOperationQuery(ExecutionId, RunScriptActorId, Event->Get()->Record, operationTtl, resultsTtl, LeaseDuration, MaxRunTime));
     }
 
@@ -367,6 +368,7 @@ struct TCreateScriptExecutionActor : public TActorBootstrapped<TCreateScriptExec
 private:
     TEvKqp::TEvScriptRequest::TPtr Event;
     const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
+    TIntrusivePtr<TKqpCounters> Counters;
     TString ExecutionId;
     NActors::TActorId RunScriptActorId;
     const TDuration LeaseDuration;
@@ -465,11 +467,13 @@ class TScriptLeaseUpdateActor : public TActorBootstrapped<TScriptLeaseUpdateActo
 public:
     using IRetryPolicy = IRetryPolicy<const Ydb::StatusIds::StatusCode&>;
 
-    TScriptLeaseUpdateActor(const TActorId& runScriptActorId, const TString& database, const TString& executionId, TDuration leaseDuration)
+    TScriptLeaseUpdateActor(const TActorId& runScriptActorId, const TString& database, const TString& executionId, TDuration leaseDuration, TIntrusivePtr<TKqpCounters> counters)
         : RunScriptActorId(runScriptActorId)
         , Database(database)
         , ExecutionId(executionId)
         , LeaseDuration(leaseDuration)
+        , Counters(counters)
+        , LeaseUpdateStartTime(TInstant::Now())
     {}
 
     void CreateScriptLeaseUpdater() {
@@ -510,6 +514,9 @@ public:
     }
 
     void Reply(TEvScriptLeaseUpdateResponse::TPtr&& ev) {
+        if (Counters) {
+            Counters->ReportLeaseUpdateLatency(TInstant::Now() - LeaseUpdateStartTime);
+        }
         Send(RunScriptActorId, ev->Release().Release());
         PassAway();
     }
@@ -546,6 +553,8 @@ private:
     TString Database;
     TString ExecutionId;
     TDuration LeaseDuration;
+    TIntrusivePtr<TKqpCounters> Counters;
+    TInstant LeaseUpdateStartTime;
     IRetryPolicy::IRetryState::TPtr RetryState = nullptr;
 };
 
@@ -2081,8 +2090,8 @@ private:
 
 } // anonymous namespace
 
-NActors::IActor* CreateScriptExecutionCreatorActor(TEvKqp::TEvScriptRequest::TPtr&& ev, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TDuration maxRunTime) {
-    return new TCreateScriptExecutionActor(std::move(ev), queryServiceConfig, maxRunTime);
+NActors::IActor* CreateScriptExecutionCreatorActor(TEvKqp::TEvScriptRequest::TPtr&& ev, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters, TDuration maxRunTime) {
+    return new TCreateScriptExecutionActor(std::move(ev), queryServiceConfig, counters, maxRunTime);
 }
 
 NActors::IActor* CreateScriptExecutionsTablesCreator(THolder<NActors::IEventBase> resultEvent) {
@@ -2120,8 +2129,8 @@ NActors::IActor* CreateCancelScriptExecutionOperationActor(TEvCancelScriptExecut
     return new TCancelScriptExecutionOperationActor(std::move(ev));
 }
 
-NActors::IActor* CreateScriptLeaseUpdateActor(const TActorId& runScriptActorId, const TString& database, const TString& executionId, TDuration leaseDuration) {
-    return new TScriptLeaseUpdateActor(runScriptActorId, database, executionId, leaseDuration);
+NActors::IActor* CreateScriptLeaseUpdateActor(const TActorId& runScriptActorId, const TString& database, const TString& executionId, TDuration leaseDuration, TIntrusivePtr<TKqpCounters> counters) {
+    return new TScriptLeaseUpdateActor(runScriptActorId, database, executionId, leaseDuration, counters);
 }
 
 NActors::IActor* CreateSaveScriptExecutionResultMetaActor(const NActors::TActorId& replyActorId, const TString& database, const TString& executionId, const TString& serializedMeta) {

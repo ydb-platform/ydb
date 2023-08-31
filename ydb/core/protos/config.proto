@@ -1382,11 +1382,11 @@ message TTableServiceConfig {
 };
 
 message TQueryServiceConfig {
-    optional uint64 ScriptOperationTimeoutDefaultSeconds = 1;
-    optional uint64 ScriptForgetAfterDefaultSeconds = 2; // 0 = infinity
-    optional uint64 ScriptResultsTtlDefaultSeconds = 3; // 0 = infinity
-    optional uint64 ScriptResultSizeLimit = 4; // 0 = infinity
-    optional uint64 ScriptResultRowsLimit = 5; // 0 = infinity
+    optional uint64 ScriptOperationTimeoutDefaultSeconds = 1 [default = 604800]; // default = 1 week
+    optional uint64 ScriptForgetAfterDefaultSeconds = 2 [default = 31536000]; // default = 1 year; 0 = infinity
+    optional uint64 ScriptResultsTtlDefaultSeconds = 3 [default = 2592000];  // default = 1 month; 0 = infinity
+    optional uint64 ScriptResultSizeLimit = 4 [default = 0]; // 0 = infinity
+    optional uint64 ScriptResultRowsLimit = 5 [default = 0]; // 0 = infinity
 
     optional NYql.TS3GatewayConfig S3 = 6;
     optional NYql.THttpGatewayConfig HttpGateway = 7;

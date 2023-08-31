@@ -49,4 +49,5 @@ target_sources(core-formats-arrow PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/replace_key.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/size_calcer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/ssa_program_optimizer.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow/special_keys.cpp
 )

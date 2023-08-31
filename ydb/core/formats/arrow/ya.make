@@ -50,6 +50,7 @@ SRCS(
     size_calcer.cpp
     sort_cursor.h
     ssa_program_optimizer.cpp
+    special_keys.cpp
 )
 
 END()

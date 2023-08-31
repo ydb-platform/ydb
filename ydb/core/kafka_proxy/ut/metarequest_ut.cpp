@@ -17,8 +17,12 @@ Y_UNIT_TEST_SUITE(TMetadataActorTests) {
         return res;
     }
 
-    auto GetEvent(NPersQueue::TTestServer& server, const TActorId& edgeActor, const TVector<TString>& topics) {
+    auto GetEvent(NPersQueue::TTestServer& server, const TActorId& edgeActor, const TVector<TString>& topics, const TString& proxyHost = "") {
         NKikimrConfig::TKafkaProxyConfig Config;
+        if (proxyHost) {
+            Config.MutableProxy()->SetHostname(proxyHost);
+            Config.MutableProxy()->SetPort(9097);
+        }
 
         auto* runtime = server.CleverServer->GetRuntime();
         auto request = GetMetadataRequest(topics);
@@ -84,6 +88,20 @@ Y_UNIT_TEST_SUITE(TMetadataActorTests) {
         event = GetEvent(server, edgeId, {});
         response = dynamic_cast<TMetadataResponseData*>(event->Response.get());
         UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 0);
+
+        event = GetEvent(server, edgeId, {topicPath}, "proxy-host");
+        response = dynamic_cast<TMetadataResponseData*>(event->Response.get());
+        UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Brokers.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Brokers[0].NodeId, 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Brokers[0].Host, "proxy-host");
+        UNIT_ASSERT_VALUES_EQUAL(response->Brokers[0].Port, 9097);
+
+        for(auto& t : response->Topics) {
+            for(auto& p : t.Partitions) {
+                UNIT_ASSERT_VALUES_EQUAL(p.LeaderId, 1);
+            }
+        }
     }
 };
 

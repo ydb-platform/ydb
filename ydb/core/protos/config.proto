@@ -1938,6 +1938,13 @@ message TKafkaProxyConfig {
     optional uint64 MaxMessageSize = 4 [default = 268435456];
     optional uint64 MaxInflightSize = 5 [default = 268435456];
     optional uint64 PacketSize = 6 [default = 1500];
+
+    message TProxy {
+        optional string Hostname = 1;
+        optional int32 Port = 2 [default = 9092];
+    }
+
+    optional TProxy Proxy = 7;
 }
 
 message TAwsCompatibilityConfig {

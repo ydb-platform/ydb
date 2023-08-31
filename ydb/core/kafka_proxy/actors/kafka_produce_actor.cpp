@@ -356,8 +356,10 @@ void TKafkaProduceActor::ProcessRequest(TPendingRequest::TPtr pendingRequest, co
                 switch (writer.first) {
                     case NOT_FOUND:
                         result.ErrorCode = EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION;
+                        break;
                     case UNAUTHORIZED:
                         result.ErrorCode = EKafkaErrors::TOPIC_AUTHORIZATION_FAILED;
+                        break;
                     default:
                         result.ErrorCode = EKafkaErrors::UNKNOWN_SERVER_ERROR;
                 }
@@ -451,14 +453,19 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
     // We send the results in the order of receipt of the request
     while (!PendingRequests.empty()) {
         auto pendingRequest = PendingRequests.front();
-        auto* request = pendingRequest->Request->Get()->Request;
-        auto correlationId = pendingRequest->Request->Get()->CorrelationId;
-        EKafkaErrors metricsErrorCode = EKafkaErrors::NONE_ERROR;
         
         // We send the response by timeout. This is possible, for example, if the event was lost or the PartitionWrite died.
         bool expired = expireTime > pendingRequest->StartTime;
 
-        KAFKA_LOG_D("Send result for correlationId " << correlationId << ". Expired=" << expired);
+        if (!expired && !pendingRequest->WaitResultCookies.empty()) {
+            return;
+        }
+
+        auto* request = pendingRequest->Request->Get()->Request;
+        auto correlationId = pendingRequest->Request->Get()->CorrelationId;
+        EKafkaErrors metricsErrorCode = EKafkaErrors::NONE_ERROR;
+
+        KAFKA_LOG_D("Send result for correlation=" << correlationId << ". Expired=" << expired);
 
         const auto topicsCount = request->TopicData.size();
         auto response = std::make_shared<TProduceResponseData>();
@@ -479,13 +486,12 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
                 const auto& result = pendingRequest->Results[position++];
                 size_t recordsCount = partitionData.Records.has_value() ? partitionData.Records->Records.size() : 0;
                 partitionResponse.Index = partitionData.Index;
-                if (expired || pendingRequest->WaitResultCookies.empty()) {
-                    SendMetrics(TStringBuilder() << topicData.Name, recordsCount, "failed_messages", ctx);
-                } else if (EKafkaErrors::NONE_ERROR != result.ErrorCode ) {
-                    KAFKA_LOG_T("Partition result with error: ErrorCode=" << static_cast<int>(result.ErrorCode) << ", ErrorMessage=" << result.ErrorMessage);
+                if (EKafkaErrors::NONE_ERROR != result.ErrorCode) {
+                    KAFKA_LOG_T("Partition result with error: ErrorCode=" << static_cast<int>(result.ErrorCode) << ", ErrorMessage=" << result.ErrorMessage << ", #01");
                     partitionResponse.ErrorCode = result.ErrorCode;
                     metricsErrorCode = result.ErrorCode;
                     partitionResponse.ErrorMessage = result.ErrorMessage;
+
                     SendMetrics(TStringBuilder() << topicData.Name, recordsCount, "failed_messages", ctx);
                 } else {
                     auto* msg = result.Value->Get();
@@ -500,7 +506,7 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
                             partitionResponse.BaseOffset = lastResult.GetSeqNo();
                         }
                     } else {
-                        KAFKA_LOG_T("Partition result with error: ErrorCode=" << static_cast<int>(Convert(msg->GetError().Code)) << ", ErrorMessage=" << msg->GetError().Reason);
+                        KAFKA_LOG_T("Partition result with error: ErrorCode=" << static_cast<int>(Convert(msg->GetError().Code)) << ", ErrorMessage=" << msg->GetError().Reason << ", #02");
                         SendMetrics(TStringBuilder() << topicData.Name, recordsCount, "failed_messages", ctx);
                         partitionResponse.ErrorCode = Convert(msg->GetError().Code);
                         metricsErrorCode = Convert(msg->GetError().Code);

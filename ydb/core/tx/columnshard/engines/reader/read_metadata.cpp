@@ -5,6 +5,7 @@
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/columnshard__index_scan.h>
 #include <ydb/core/tx/columnshard/columnshard__stats_scan.h>
+#include <ydb/core/tx/columnshard/engines/indexed_read_data.h>
 #include <util/string/join.h>
 
 namespace NKikimr::NOlap {
@@ -25,8 +26,9 @@ std::shared_ptr<NOlap::TSelectInfo> TDataStorageAccessor::Select(const NOlap::TR
                             readDescription.PKRangesFilter);
 }
 
-std::vector<NOlap::TCommittedBlob> TDataStorageAccessor::GetCommitedBlobs(const NOlap::TReadDescription& readDescription) const {
-    return std::move(InsertTable->Read(readDescription.PathId, readDescription.GetSnapshot()));
+std::vector<NOlap::TCommittedBlob> TDataStorageAccessor::GetCommitedBlobs(const NOlap::TReadDescription& readDescription, const std::shared_ptr<arrow::Schema>& pkSchema) const {
+    
+    return std::move(InsertTable->Read(readDescription.PathId, readDescription.GetSnapshot(), pkSchema));
 }
 
 std::unique_ptr<NColumnShard::TScanIteratorBase> TReadMetadata::StartScan(const NOlap::TReadContext& readContext) const {
@@ -85,7 +87,7 @@ bool TReadMetadata::Init(const TReadDescription& readDescription, const TDataSto
         AllColumns.insert(AllColumns.end(), auxiliaryColumns.begin(), auxiliaryColumns.end());
     }
 
-    CommittedBlobs = dataAccessor.GetCommitedBlobs(readDescription);
+    CommittedBlobs = dataAccessor.GetCommitedBlobs(readDescription, ResultIndexSchema->GetIndexInfo().GetReplaceKey());
 
     THashSet<ui32> columnIds;
     for (auto& columnId : AllColumns) {

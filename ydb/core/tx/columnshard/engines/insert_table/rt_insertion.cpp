@@ -93,6 +93,11 @@ bool TInsertionSummary::IsOverloaded(const ui64 pathId) const {
 void TInsertionSummary::Clear() {
     StatsPrepared = {};
     StatsCommitted = {};
+    if (LocalInsertedCritical) {
+        --LocalInsertedCritical;
+        CriticalInserted.Dec();
+    }
+
     PathInfo.clear();
     Priorities.clear();
     Inserted.clear();
@@ -129,7 +134,7 @@ THashSet<NKikimr::NOlap::TWriteId> TInsertionSummary::GetInsertedByPathId(const 
 THashSet<NKikimr::NOlap::TWriteId> TInsertionSummary::GetDeprecatedInsertions(const TInstant timeBorder) const {
     THashSet<TWriteId> toAbort;
     for (auto& [writeId, data] : Inserted) {
-        if (data.DirtyTime && data.DirtyTime < timeBorder) {
+        if (data.GetMeta().GetDirtyWriteTime() && data.GetMeta().GetDirtyWriteTime() < timeBorder) {
             toAbort.insert(writeId);
         }
     }

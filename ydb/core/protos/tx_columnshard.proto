@@ -48,10 +48,9 @@ message TReadStats {
 
 message TLogicalMetadata {
     optional uint32 NumRows = 1;
-    repeated NKikimrSSA.TProgram.TConstant FirstPkValue = 2; // It's min PK if batch is sorted
-    repeated NKikimrSSA.TProgram.TConstant LastPkValue = 3; // It's max PK if batch is sorted
     optional uint64 RawBytes = 4;
     optional uint64 DirtyWriteTimeSeconds = 5;
+    optional string SpecialKeysRawData = 6;
 }
 
 message TMetadata {

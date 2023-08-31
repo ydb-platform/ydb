@@ -412,8 +412,6 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         blobRanges.push_back(MakeBlobRange(2, testBlob.size()));
 
         // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
-        TInstant writeTime = TInstant::Now();
-
         // load
         TColumnEngineForLogs engine(0);
         TSnapshot indexSnaphot(1, 1);
@@ -422,8 +420,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         engine.Load(db, lostBlobs);
 
         std::vector<TInsertedData> dataToIndex = {
-            {1, 2, paths[0], "", blobRanges[0].BlobId, "", writeTime, indexSnaphot},
-            {2, 1, paths[0], "", blobRanges[1].BlobId, "", writeTime, indexSnaphot}
+            TInsertedData(1, 2, paths[0], "", blobRanges[0].BlobId, {}, indexSnaphot),
+            TInsertedData(2, 1, paths[0], "", blobRanges[1].BlobId, {}, indexSnaphot)
         };
 
         // write
@@ -522,7 +520,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
             std::vector<TInsertedData> dataToIndex;
             dataToIndex.push_back(
-                TInsertedData{planStep, txId, pathId, "", blobRange.BlobId, "", TInstant::Now(), indexSnapshot});
+                TInsertedData{planStep, txId, pathId, "", blobRange.BlobId, {}, indexSnapshot});
 
             bool ok = Insert(engine, db, TSnapshot(planStep, txId), std::move(dataToIndex), blobs, step);
             UNIT_ASSERT(ok);
@@ -622,7 +620,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
             std::vector<TInsertedData> dataToIndex;
             dataToIndex.push_back(
-                TInsertedData{planStep, txId, pathId, "", blobRange.BlobId, "", TInstant::Now(), indexSnapshot});
+                TInsertedData{planStep, txId, pathId, "", blobRange.BlobId, {}, indexSnapshot});
 
             bool ok = Insert(engine, db, TSnapshot(planStep, txId), std::move(dataToIndex), blobs, step);
             // first overload returns ok: it's a postcondition
@@ -660,7 +658,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
             std::vector<TInsertedData> dataToIndex;
             dataToIndex.push_back(
-                TInsertedData{planStep, txId, pathId, "", blobRange.BlobId, "", TInstant::Now(), indexSnapshot});
+                TInsertedData(planStep, txId, pathId, "", blobRange.BlobId, {}, indexSnapshot));
 
             bool ok = Insert(engine, db, TSnapshot(planStep, txId), std::move(dataToIndex), blobs, step);
             bool overload = engine.GetOverloadedGranules(pathId);
@@ -703,7 +701,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
             std::vector<TInsertedData> dataToIndex;
             dataToIndex.push_back(
-                TInsertedData{planStep, txId, pathId, "", blobRange.BlobId, "", TInstant::Now(), indexSnapshot});
+                TInsertedData(planStep, txId, pathId, "", blobRange.BlobId, {}, indexSnapshot));
 
             bool ok = Insert(engine, db, TSnapshot(planStep, txId), std::move(dataToIndex), blobs, step);
             UNIT_ASSERT(ok);

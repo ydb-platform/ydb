@@ -8,6 +8,8 @@ namespace NKikimr::NEvWrite {
 TWriteData::TWriteData(const TWriteMeta& writeMeta, IDataContainer::TPtr data)
     : WriteMeta(writeMeta)
     , Data(data)
-{}
+{
+    Y_VERIFY(Data);
+}
 
 }

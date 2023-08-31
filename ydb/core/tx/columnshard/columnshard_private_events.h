@@ -6,6 +6,7 @@
 #include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/ev_write/write_data.h>
+#include <ydb/core/formats/arrow/special_keys.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -259,7 +260,7 @@ struct TEvPrivate {
         public:
             TPutBlobData() = default;
 
-            TPutBlobData(const TUnifiedBlobId& blobId, const TString& data, ui64 rowsCount, ui64 rawBytes, const TInstant dirtyTime)
+            TPutBlobData(const TUnifiedBlobId& blobId, const TString& data, const NArrow::TFirstLastSpecialKeys& specialKeys, ui64 rowsCount, ui64 rawBytes, const TInstant dirtyTime)
                 : BlobId(blobId)
                 , BlobData(data)
                 , RowsCount(rowsCount)
@@ -268,6 +269,7 @@ struct TEvPrivate {
                 LogicalMeta.SetNumRows(rowsCount);
                 LogicalMeta.SetRawBytes(rawBytes);
                 LogicalMeta.SetDirtyWriteTimeSeconds(dirtyTime.Seconds());
+                LogicalMeta.SetSpecialKeysRawData(specialKeys.SerializeToString());
             }
         };
 

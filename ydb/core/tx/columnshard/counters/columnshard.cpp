@@ -34,6 +34,14 @@ TCSCounters::TCSCounters()
 
     SplitCompactionGranuleBytes = TBase::GetValueAutoAggregationsClient("SplitCompaction/Bytes");
     SplitCompactionGranulePortionsCount = TBase::GetValueAutoAggregationsClient("SplitCompaction/PortionsCount");
+
+    HistogramSuccessWritePutBlobsDurationMs = TBase::GetHistogram("SuccessWritePutBlobsDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
+    HistogramFailedWritePutBlobsDurationMs = TBase::GetHistogram("FailedWritePutBlobsDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
+    HistogramWriteTxCompleteDurationMs = TBase::GetHistogram("WriteTxCompleteDurationMs", NMonitoring::ExponentialHistogram(18, 2, 5));
+    WritePutBlobsCount = TBase::GetValue("WritePutBlobs");
+    WriteRequests = TBase::GetValue("WriteRequests");
+    FailedWriteRequests = TBase::GetDeriviative("FailedWriteRequests");
+    SuccessWriteRequests = TBase::GetDeriviative("SuccessWriteRequests");
 }
 
 }

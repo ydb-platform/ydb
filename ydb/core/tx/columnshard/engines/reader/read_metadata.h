@@ -2,6 +2,7 @@
 #include "conveyor_task.h"
 #include "description.h"
 #include "read_context.h"
+#include "read_filter_merger.h"
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/counters.h>
@@ -63,7 +64,7 @@ public:
     TDataStorageAccessor(const std::unique_ptr<NOlap::TInsertTable>& insertTable,
                                  const std::unique_ptr<NOlap::IColumnEngine>& index);
     std::shared_ptr<NOlap::TSelectInfo> Select(const NOlap::TReadDescription& readDescription, const THashSet<ui32>& columnIds) const;
-    std::vector<NOlap::TCommittedBlob> GetCommitedBlobs(const NOlap::TReadDescription& readDescription) const;
+    std::vector<NOlap::TCommittedBlob> GetCommitedBlobs(const NOlap::TReadDescription& readDescription, const std::shared_ptr<arrow::Schema>& pkSchema) const;
 };
 
 // Holds all metadata that is needed to perform read/scan

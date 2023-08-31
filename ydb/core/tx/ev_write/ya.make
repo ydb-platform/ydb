@@ -16,7 +16,7 @@ PEERDIR(
     library/cpp/actors/core
     library/cpp/actors/wilson
 
-    # Temporary fix dep ydb/core/tx/columnshard  
+    # Temporary fix dep ydb/core/tx/columnshard
     ydb/core/tablet_flat/protos
     ydb/core/tablet_flat
     ydb/core/blobstorage/vdisk/protos

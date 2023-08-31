@@ -1,4 +1,5 @@
 #pragma once
+#include "meta.h"
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/engines/defs.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
@@ -6,42 +7,45 @@
 namespace NKikimr::NOlap {
 
 struct TInsertedData {
+private:
+    TInsertedDataMeta Meta;
 public:
+
+    const TInsertedDataMeta& GetMeta() const {
+        return Meta;
+    }
+
     ui64 ShardOrPlan = 0;
     ui64 WriteTxId = 0;
     ui64 PathId = 0;
     TString DedupId;
     TUnifiedBlobId BlobId;
-    TString Metadata;
-    TInstant DirtyTime;
 
     TInsertedData() = delete; // avoid invalid TInsertedData anywhere
 
-    TInsertedData(ui64 writeTxId, ui64 pathId, TString dedupId, const TUnifiedBlobId& blobId,
-                  const NKikimrTxColumnShard::TLogicalMetadata& meta, const TInstant& writeTime, const TSnapshot& schemaVersion)
-        : WriteTxId(writeTxId)
-        , PathId(pathId)
-        , DedupId(dedupId)
-        , BlobId(blobId)
-        , DirtyTime(writeTime)
-        , SchemaVersion(schemaVersion)
-    {
-        Y_VERIFY(meta.SerializeToString(&Metadata));
-    }
-
     TInsertedData(ui64 shardOrPlan, ui64 writeTxId, ui64 pathId, TString dedupId, const TUnifiedBlobId& blobId,
-                  const TString& meta, const TInstant& writeTime, const std::optional<TSnapshot>& schemaVersion)
-        : ShardOrPlan(shardOrPlan)
+                  const ui32 numRows, const ui64 rawBytes, const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<TString>& columnNames, const TInstant writeTime, const TSnapshot& schemaVersion)
+        : Meta(writeTime, numRows, rawBytes, batch, columnNames)
+        , ShardOrPlan(shardOrPlan)
         , WriteTxId(writeTxId)
         , PathId(pathId)
         , DedupId(dedupId)
         , BlobId(blobId)
-        , Metadata(meta)
-        , DirtyTime(writeTime)    {
-        if (schemaVersion) {
-            SchemaVersion = *schemaVersion;
-            Y_VERIFY(SchemaVersion.Valid());
-        }
+        , SchemaVersion(schemaVersion)
+    {
+        Y_VERIFY(SchemaVersion.Valid());
+    }
+
+    TInsertedData(ui64 shardOrPlan, ui64 writeTxId, ui64 pathId, TString dedupId, const TUnifiedBlobId& blobId,
+        const NKikimrTxColumnShard::TLogicalMetadata& proto, const TSnapshot& schemaVersion)
+        : Meta(proto)
+        , ShardOrPlan(shardOrPlan)
+        , WriteTxId(writeTxId)
+        , PathId(pathId)
+        , DedupId(dedupId)
+        , BlobId(blobId)
+        , SchemaVersion(schemaVersion) {
+        Y_VERIFY(SchemaVersion.Valid());
     }
 
     bool operator < (const TInsertedData& key) const {
@@ -115,16 +119,26 @@ private:
     TUnifiedBlobId BlobId;
     TSnapshot CommitSnapshot;
     TSnapshot SchemaSnapshot;
+    YDB_READONLY_DEF(std::optional<NArrow::TReplaceKey>, First);
+    YDB_READONLY_DEF(std::optional<NArrow::TReplaceKey>, Last);
 public:
-    TCommittedBlob(const TUnifiedBlobId& blobId, const TSnapshot& snapshot, const TSnapshot& schemaSnapshot)
+    const NArrow::TReplaceKey& GetFirstVerified() const {
+        Y_VERIFY(First);
+        return *First;
+    }
+
+    const NArrow::TReplaceKey& GetLastVerified() const {
+        Y_VERIFY(Last);
+        return *Last;
+    }
+
+    TCommittedBlob(const TUnifiedBlobId& blobId, const TSnapshot& snapshot, const TSnapshot& schemaSnapshot, const std::optional<NArrow::TReplaceKey>& first, const std::optional<NArrow::TReplaceKey>& last)
         : BlobId(blobId)
         , CommitSnapshot(snapshot)
         , SchemaSnapshot(schemaSnapshot)
+        , First(first)
+        , Last(last)
     {}
-
-    static TCommittedBlob BuildKeyBlob(const TUnifiedBlobId& blobId) {
-        return TCommittedBlob(blobId, TSnapshot::Zero(), TSnapshot::Zero());
-    }
 
     /// It uses trick then we place key wtih planStep:txId in container and find them later by BlobId only.
     /// So hash() and equality should depend on BlobId only.

@@ -24,11 +24,8 @@ TInsertionSummary::TCounters TInsertTable::Commit(IDbWrapper& dbTable, ui64 plan
         std::optional<TInsertedData> data = Summary.ExtractInserted(writeId);
         Y_VERIFY(data, "Commit %" PRIu64 ":%" PRIu64 " : writeId %" PRIu64 " not found", planStep, txId, (ui64)writeId);
 
-        NKikimrTxColumnShard::TLogicalMetadata meta;
-        if (meta.ParseFromString(data->Metadata)) {
-            counters.Rows += meta.GetNumRows();
-            counters.RawBytes += meta.GetRawBytes();
-        }
+        counters.Rows += data->GetMeta().GetNumRows();
+        counters.RawBytes += data->GetMeta().GetRawBytes();
         counters.Bytes += data->BlobSize();
 
         dbTable.EraseInserted(*data);
@@ -108,22 +105,32 @@ bool TInsertTable::Load(IDbWrapper& dbTable, const TInstant loadTime) {
     return dbTable.Load(*this, loadTime);
 }
 
-std::vector<TCommittedBlob> TInsertTable::Read(ui64 pathId, const TSnapshot& snapshot) const {
+std::vector<TCommittedBlob> TInsertTable::Read(ui64 pathId, const TSnapshot& snapshot, const std::shared_ptr<arrow::Schema>& pkSchema) const {
     const TPathInfo* pInfo = Summary.GetPathInfoOptional(pathId);
     if (!pInfo) {
         return {};
     }
 
-    std::vector<TCommittedBlob> ret;
+    std::vector<const TInsertedData*> ret;
     ret.reserve(pInfo->GetCommitted().size());
 
     for (const auto& data : pInfo->GetCommitted()) {
         if (std::less_equal<TSnapshot>()(data.GetSnapshot(), snapshot)) {
-            ret.emplace_back(TCommittedBlob(data.BlobId, data.GetSnapshot(), data.GetSchemaSnapshot()));
+            ret.emplace_back(&data);
         }
     }
+    const auto pred = [pkSchema](const TInsertedData* l, const TInsertedData* r) {
+        return l->GetMeta().GetMin(pkSchema) < r->GetMeta().GetMin(pkSchema);
+    };
+    std::sort(ret.begin(), ret.end(), pred);
 
-    return ret;
+    std::vector<TCommittedBlob> result;
+    result.reserve(ret.size());
+    for (auto&& i : ret) {
+        result.emplace_back(TCommittedBlob(i->BlobId, i->GetSnapshot(), i->GetSchemaSnapshot(), i->GetMeta().GetMin(pkSchema), i->GetMeta().GetMax(pkSchema)));
+    }
+
+    return result;
 }
 
 }

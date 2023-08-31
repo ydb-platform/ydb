@@ -12,6 +12,7 @@
 #include "inflight_request_tracker.h"
 #include "counters/columnshard.h"
 
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
@@ -212,7 +213,7 @@ public:
     };
 
 private:
-    void OverloadWriteFail(const EOverloadStatus& overloadReason, const NEvWrite::TWriteData& writeData, std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx);
+    void OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteData& writeData, std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx);
     EOverloadStatus CheckOverloaded(const ui64 tableId) const;
 
 protected:

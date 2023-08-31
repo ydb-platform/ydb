@@ -61,7 +61,7 @@ public:
     THashSet<TWriteId> DropPath(IDbWrapper& dbTable, ui64 pathId);
     void EraseCommitted(IDbWrapper& dbTable, const TInsertedData& key);
     void EraseAborted(IDbWrapper& dbTable, const TInsertedData& key);
-    std::vector<TCommittedBlob> Read(ui64 pathId, const TSnapshot& snapshot) const;
+    std::vector<TCommittedBlob> Read(ui64 pathId, const TSnapshot& snapshot, const std::shared_ptr<arrow::Schema>& pkSchema) const;
     bool Load(IDbWrapper& dbTable, const TInstant loadTime);
 private:
 

@@ -438,19 +438,13 @@ struct Schema : NIceDb::Schema {
     // InsertTable activities
 
     static void InsertTable_Upsert(NIceDb::TNiceDb& db, EInsertTableIds recType, const TInsertedData& data) {
-        if (data.GetSchemaSnapshot().Valid()) {
-            db.Table<InsertTable>().Key((ui8)recType, data.ShardOrPlan, data.WriteTxId, data.PathId, data.DedupId).Update(
-                NIceDb::TUpdate<InsertTable::BlobId>(data.BlobId.ToStringLegacy()),
-                NIceDb::TUpdate<InsertTable::Meta>(data.Metadata),
-                NIceDb::TUpdate<InsertTable::IndexPlanStep>(data.GetSchemaSnapshot().GetPlanStep()),
-                NIceDb::TUpdate<InsertTable::IndexTxId>(data.GetSchemaSnapshot().GetTxId())
-            );
-        } else {
-            db.Table<InsertTable>().Key((ui8)recType, data.ShardOrPlan, data.WriteTxId, data.PathId, data.DedupId).Update(
-                NIceDb::TUpdate<InsertTable::BlobId>(data.BlobId.ToStringLegacy()),
-                NIceDb::TUpdate<InsertTable::Meta>(data.Metadata)
-            );
-        }
+        Y_VERIFY(data.GetSchemaSnapshot().Valid());
+        db.Table<InsertTable>().Key((ui8)recType, data.ShardOrPlan, data.WriteTxId, data.PathId, data.DedupId).Update(
+            NIceDb::TUpdate<InsertTable::BlobId>(data.BlobId.ToStringLegacy()),
+            NIceDb::TUpdate<InsertTable::Meta>(data.GetMeta().SerializeToProto().SerializeAsString()),
+            NIceDb::TUpdate<InsertTable::IndexPlanStep>(data.GetSchemaSnapshot().GetPlanStep()),
+            NIceDb::TUpdate<InsertTable::IndexTxId>(data.GetSchemaSnapshot().GetTxId())
+        );
     }
 
     static void InsertTable_Erase(NIceDb::TNiceDb& db, EInsertTableIds recType, const TInsertedData& data) {
@@ -484,56 +478,7 @@ struct Schema : NIceDb::Schema {
     static bool InsertTable_Load(NIceDb::TNiceDb& db,
                                  const IBlobGroupSelector* dsGroupSelector,
                                  NOlap::TInsertTableAccessor& insertTable,
-                                 const TInstant& loadTime) {
-        auto rowset = db.Table<InsertTable>().GreaterOrEqual(0, 0, 0, 0, "").Select();
-        if (!rowset.IsReady())
-            return false;
-
-        while (!rowset.EndOfSet()) {
-            EInsertTableIds recType = (EInsertTableIds)rowset.GetValue<InsertTable::Committed>();
-            ui64 shardOrPlan = rowset.GetValue<InsertTable::ShardOrPlan>();
-            ui64 writeTxId = rowset.GetValueOrDefault<InsertTable::WriteTxId>();
-            ui64 pathId = rowset.GetValue<InsertTable::PathId>();
-            TString dedupId = rowset.GetValue<InsertTable::DedupId>();
-            TString strBlobId = rowset.GetValue<InsertTable::BlobId>();
-            TString metaStr = rowset.GetValue<InsertTable::Meta>();
-
-            std::optional<NOlap::TSnapshot> indexSnapshot;
-            if (rowset.HaveValue<InsertTable::IndexPlanStep>()) {
-                ui64 indexPlanStep = rowset.GetValue<InsertTable::IndexPlanStep>();
-                ui64 indexTxId = rowset.GetValue<InsertTable::IndexTxId>();
-                indexSnapshot = NOlap::TSnapshot(indexPlanStep, indexTxId);
-            }
-
-            TString error;
-            NOlap::TUnifiedBlobId blobId = NOlap::TUnifiedBlobId::ParseFromString(strBlobId, dsGroupSelector, error);
-            Y_VERIFY(blobId.IsValid(), "Failied to parse blob id: %s", error.c_str());
-
-            TInstant writeTime = loadTime;
-            NKikimrTxColumnShard::TLogicalMetadata meta;
-            if (meta.ParseFromString(metaStr) && meta.HasDirtyWriteTimeSeconds()) {
-                writeTime = TInstant::Seconds(meta.GetDirtyWriteTimeSeconds());
-            }
-
-            TInsertedData data(shardOrPlan, writeTxId, pathId, dedupId, blobId, metaStr, writeTime, indexSnapshot);
-
-            switch (recType) {
-                case EInsertTableIds::Inserted:
-                    insertTable.AddInserted(std::move(data), true);
-                    break;
-                case EInsertTableIds::Committed:
-                    insertTable.AddCommitted(std::move(data), true);
-                    break;
-                case EInsertTableIds::Aborted:
-                    insertTable.AddAborted(std::move(data), true);
-                    break;
-            }
-
-            if (!rowset.Next())
-                return false;
-        }
-        return true;
-    }
+                                 const TInstant& loadTime);
 
     // IndexGranules activities
 

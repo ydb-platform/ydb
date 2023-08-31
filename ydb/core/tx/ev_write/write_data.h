@@ -2,8 +2,9 @@
 
 #include <ydb/core/tx/long_tx_service/public/types.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/library/accessor/accessor.h>
 
-
+#include <library/cpp/actors/core/monotonic.h>
 
 namespace NKikimr::NEvWrite {
 
@@ -26,6 +27,7 @@ class TWriteMeta {
     YDB_ACCESSOR(ui64, WritePartId, 0);
     YDB_ACCESSOR_DEF(TString, DedupId);
 
+    YDB_READONLY(TMonotonic, WriteStartInstant, TMonotonic::Now());
 public:
     TWriteMeta(const ui64 writeId, const ui64 tableId, const NActors::TActorId& source)
         : WriteId(writeId)

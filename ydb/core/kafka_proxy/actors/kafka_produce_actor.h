@@ -131,6 +131,7 @@ private:
 
     TString LogPrefix();
     void LogEvent(IEventHandle& ev);
+    void SendMetrics(const TString& topicName, size_t delta, const TString& name, const TActorContext& ctx);
 
 private:
     const TContext::TPtr Context;

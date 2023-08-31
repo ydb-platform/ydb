@@ -10,6 +10,7 @@ NActors::IActor* CreateKafkaApiVersionsActor(const TContext::TPtr context, const
 
 TApiVersionsResponseData::TPtr GetApiVersions() {
     TApiVersionsResponseData::TPtr response = std::make_shared<TApiVersionsResponseData>();
+    response->ErrorCode = EKafkaErrors::NONE_ERROR;
     response->ApiKeys.resize(6);
 
     response->ApiKeys[0].ApiKey = PRODUCE;
@@ -41,8 +42,8 @@ TApiVersionsResponseData::TPtr GetApiVersions() {
 
 void TKafkaApiVersionsActor::Bootstrap(const NActors::TActorContext& ctx) {
     Y_UNUSED(Message);
-
-    Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, GetApiVersions()));
+    auto apiVersions = GetApiVersions();
+    Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, apiVersions, static_cast<EKafkaErrors>(apiVersions->ErrorCode)));
     Die(ctx);
 }
 

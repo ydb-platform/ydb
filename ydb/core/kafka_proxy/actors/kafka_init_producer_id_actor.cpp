@@ -22,8 +22,8 @@ TInitProducerIdResponseData::TPtr GetResponse(const NActors::TActorContext& ctx)
 
 void TKafkaInitProducerIdActor::Bootstrap(const NActors::TActorContext& ctx) {
     Y_UNUSED(Message);
-
-    Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, GetResponse(ctx)));
+    auto response = GetResponse(ctx);
+    Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, response, static_cast<EKafkaErrors>(response->ErrorCode)));
     Die(ctx);
 }
 

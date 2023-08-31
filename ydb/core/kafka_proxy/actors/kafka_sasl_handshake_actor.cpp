@@ -34,7 +34,7 @@ void TKafkaSaslHandshakeActor::SendResponse(const TString& errorMessage, EKafkaE
     responseToClient->ErrorCode = kafkaError;
     responseToClient->Mechanisms.insert(responseToClient->Mechanisms.end(), SUPPORTED_SASL_MECHANISMS.begin(), SUPPORTED_SASL_MECHANISMS.end());
 
-    auto evResponse = std::make_shared<TEvKafka::TEvResponse>(CorrelationId, responseToClient);
+    auto evResponse = std::make_shared<TEvKafka::TEvResponse>(CorrelationId, responseToClient, kafkaError);
     auto handshakeResult = new TEvKafka::TEvHandshakeResult(authStep, evResponse, saslMechanism, errorMessage);
     Send(Context->ConnectionId, handshakeResult);
 }

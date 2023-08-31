@@ -30,7 +30,10 @@ struct TContext {
     EAuthSteps AuthenticationStep = EAuthSteps::WAIT_HANDSHAKE;
     TString SaslMechanism;
 
-    TString Database;
+    TString DatabasePath;
+    TString FolderId;
+    TString CloudId;
+    TString DatabaseId;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TString ClientDC;
 

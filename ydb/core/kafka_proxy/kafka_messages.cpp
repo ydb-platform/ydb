@@ -6,6 +6,18 @@
 
 namespace NKafka {
 
+const std::unordered_map<EApiKey, TString> EApiKeyNames = {
+    {EApiKey::HEADER, "HEADER"},
+    {EApiKey::PRODUCE, "PRODUCE"},
+    {EApiKey::FETCH, "FETCH"},
+    {EApiKey::METADATA, "METADATA"},
+    {EApiKey::SASL_HANDSHAKE, "SASL_HANDSHAKE"},
+    {EApiKey::API_VERSIONS, "API_VERSIONS"},
+    {EApiKey::INIT_PRODUCER_ID, "INIT_PRODUCER_ID"},
+    {EApiKey::SASL_AUTHENTICATE, "SASL_AUTHENTICATE"},
+};
+
+
 std::unique_ptr<TApiMessage> CreateRequest(i16 apiKey) {
     switch (apiKey) {
         case PRODUCE:

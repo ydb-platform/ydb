@@ -18,6 +18,8 @@ struct TEvKafka {
         EvAuthResult,
         EvHandshakeResult,
         EvWakeup,
+        EvUpdateCounter,
+        EvUpdateHistCounter,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -39,27 +41,31 @@ struct TEvKafka {
     };
 
     struct TEvResponse : public TEventLocal<TEvResponse, EvResponse> {
-        TEvResponse(const ui64 correlationId, const TApiMessage::TPtr response)
+        TEvResponse(const ui64 correlationId, const TApiMessage::TPtr response, EKafkaErrors errorCode)
             : CorrelationId(correlationId)
-            , Response(std::move(response)) {
+            , Response(std::move(response))
+            , ErrorCode(errorCode) {
         }
 
         const ui64 CorrelationId;
         const TApiMessage::TPtr Response;
+        const EKafkaErrors ErrorCode;
     };
 
     struct TEvAuthResult : public TEventLocal<TEvAuthResult, EvAuthResult> {
+
         TEvAuthResult(EAuthSteps authStep, std::shared_ptr<TEvKafka::TEvResponse> clientResponse, TString error = "")
             : AuthStep(authStep)
             , Error(error)
             , ClientResponse(clientResponse) {
         }
 
-        TEvAuthResult(EAuthSteps authStep, std::shared_ptr<TEvKafka::TEvResponse> clientResponse, TIntrusiveConstPtr<NACLib::TUserToken> token, TString database,
-                      TString folderId, TString serviceAccountId, TString databaseId, TString coordinator, TString resourcePath, TString error = "")
+        TEvAuthResult(EAuthSteps authStep, std::shared_ptr<TEvKafka::TEvResponse> clientResponse, TIntrusiveConstPtr<NACLib::TUserToken> token, TString databasePath, TString databaseId,
+                      TString folderId, TString cloudId, TString serviceAccountId, TString coordinator, TString resourcePath, TString error = "")
             : AuthStep(authStep)
             , UserToken(token)
-            , Database(database)
+            , DatabasePath(databasePath)
+            , CloudId(cloudId)
             , FolderId(folderId)
             , ServiceAccountId(serviceAccountId)
             , DatabaseId(databaseId)
@@ -71,7 +77,8 @@ struct TEvKafka {
 
         EAuthSteps AuthStep;
         TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-        TString Database;
+        TString DatabasePath;
+        TString CloudId;
         TString FolderId;
         TString ServiceAccountId;
         TString DatabaseId;
@@ -95,6 +102,28 @@ struct TEvKafka {
         TString Error;
         TString SaslMechanism;
         std::shared_ptr<TEvKafka::TEvResponse> ClientResponse;
+    };
+
+    struct TEvUpdateCounter : public TEventLocal<TEvUpdateCounter, EvUpdateCounter> {
+        i64 Delta;
+        TVector<std::pair<TString, TString>> Labels;
+
+        TEvUpdateCounter(const i64 delta, const TVector<std::pair<TString, TString>> labels)
+        : Delta(delta)
+        , Labels(labels)
+        {}
+    };
+
+    struct TEvUpdateHistCounter : public TEventLocal<TEvUpdateHistCounter, EvUpdateHistCounter> {
+        i64 Value;
+        ui64 Count;
+        TVector<std::pair<TString, TString>> Labels;
+
+        TEvUpdateHistCounter(const i64 value, const ui64 count, const TVector<std::pair<TString, TString>> labels)
+        : Value(value)
+        , Count(count)
+        , Labels(labels)
+        {}
     };
 
     struct TEvWakeup : public TEventLocal<TEvWakeup, EvWakeup> {

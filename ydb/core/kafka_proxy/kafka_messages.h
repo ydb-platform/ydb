@@ -25,7 +25,7 @@ enum EApiKey {
     SASL_AUTHENTICATE = 36, // [ZK_BROKER, BROKER, CONTROLLER] 
 };
 
-
+extern const std::unordered_map<EApiKey, TString> EApiKeyNames;
 
 
 

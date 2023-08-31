@@ -46,7 +46,9 @@
 #include <ydb/core/security/ldap_auth_provider.h>
 #include <ydb/core/base/user_registry.h>
 #include <ydb/core/health_check/health_check.h>
+#include <ydb/core/kafka_proxy/actors/kafka_metrics_actor.h>
 #include <ydb/core/kafka_proxy/kafka_listener.h>
+#include <ydb/core/kafka_proxy/kafka_metrics.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
@@ -940,6 +942,10 @@ namespace Tests {
             IActor* actor = NKafka::CreateKafkaListener(MakePollerActorId(), settings, Settings->AppConfig.GetKafkaProxyConfig());
             TActorId actorId = Runtime->Register(actor, nodeIdx);
             Runtime->RegisterService(TActorId{}, actorId, nodeIdx);
+
+            IActor* metricsActor = CreateKafkaMetricsActor(NKafka::TKafkaMetricsSettings{Runtime->GetAppData().Counters->GetSubgroup("counters", "kafka_proxy")});
+            TActorId metricsActorId = Runtime->Register(metricsActor, nodeIdx);
+            Runtime->RegisterService(NKafka::MakeKafkaMetricsServiceID(), metricsActorId, nodeIdx);
         }
 
         if (Settings->EnableYq) {

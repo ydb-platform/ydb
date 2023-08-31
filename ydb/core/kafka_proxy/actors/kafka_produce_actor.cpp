@@ -1,4 +1,6 @@
 #include "kafka_produce_actor.h"
+#include "../kafka_metrics.h"
+
 
 #include <contrib/libs/protobuf/src/google/protobuf/util/time_util.h>
 
@@ -44,6 +46,11 @@ TString TKafkaProduceActor::LogPrefix() {
 
 void TKafkaProduceActor::LogEvent(IEventHandle& ev) {
     KAFKA_LOG_T("Received event: " << ev.GetTypeName());
+}
+
+void TKafkaProduceActor::SendMetrics(const TString& topicName, size_t delta, const TString& name, const TActorContext& ctx) {
+    ctx.Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(delta, BuildLabels(Context, "", topicName, TStringBuilder() << "api.kafka.produce." << name, "")));
+    ctx.Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(delta, BuildLabels(Context, "", topicName, "api.kafka.produce.total_messages", ""))); 
 }
 
 void TKafkaProduceActor::Bootstrap(const NActors::TActorContext& /*ctx*/) {
@@ -231,7 +238,7 @@ size_t TKafkaProduceActor::EnqueueInitialization() {
     for(const auto& e : Requests) {
         auto* r = e->Get()->Request;
         for(const auto& topicData : r->TopicData) {
-            const auto& topicPath = NormalizePath(Context->Database, *topicData.Name);
+            const auto& topicPath = NormalizePath(Context->DatabasePath, *topicData.Name);
             if (!Topics.contains(topicPath)) {
                 requireInitialization = true;
                 TopicsForInitialization.insert(topicPath);
@@ -324,7 +331,7 @@ void TKafkaProduceActor::ProcessRequest(TPendingRequest::TPtr pendingRequest, co
 
     size_t position = 0;
     for(const auto& topicData : r->TopicData) {
-        const TString& topicPath = NormalizePath(Context->Database, *topicData.Name);
+        const TString& topicPath = NormalizePath(Context->DatabasePath, *topicData.Name);
         for(const auto& partitionData : topicData.PartitionData) {
             const auto partitionId = partitionData.Index;
 
@@ -438,35 +445,29 @@ EKafkaErrors Convert(TEvPartitionWriter::TEvWriteResponse::EErrors value) {
 
 void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
     auto expireTime = ctx.Now() - REQUEST_EXPIRATION_INTERVAL;
-
     KAFKA_LOG_T("Sending results. QueueSize= " << PendingRequests.size() << ", ExpirationTime=" << expireTime);
 
     // We send the results in the order of receipt of the request
     while (!PendingRequests.empty()) {
         auto pendingRequest = PendingRequests.front();
-
+        auto* request = pendingRequest->Request->Get()->Request;
+        auto correlationId = pendingRequest->Request->Get()->CorrelationId;
+        EKafkaErrors metricsErrorCode = EKafkaErrors::NONE_ERROR;
+        
         // We send the response by timeout. This is possible, for example, if the event was lost or the PartitionWrite died.
         bool expired = expireTime > pendingRequest->StartTime;
 
-        if (!expired && !pendingRequest->WaitResultCookies.empty()) {
-            return;
-        }
-
-        auto* r = pendingRequest->Request->Get()->Request;
-        auto correlationId = pendingRequest->Request->Get()->CorrelationId;
-
         KAFKA_LOG_D("Send result for correlationId " << correlationId << ". Expired=" << expired);
 
-        const auto topicsCount = r->TopicData.size();
+        const auto topicsCount = request->TopicData.size();
         auto response = std::make_shared<TProduceResponseData>();
         response->Responses.resize(topicsCount);
 
         size_t position = 0;
 
         for(size_t i = 0; i < topicsCount; ++i) {
-            const auto& topicData = r->TopicData[i];
+            const auto& topicData = request->TopicData[i];
             const auto partitionCount = topicData.PartitionData.size();
-
             auto& topicResponse =  response->Responses[i];
             topicResponse.Name = topicData.Name;
             topicResponse.PartitionResponses.resize(partitionCount);
@@ -475,35 +476,40 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
                 const auto& partitionData = topicData.PartitionData[j];
                 auto& partitionResponse = topicResponse.PartitionResponses[j];
                 const auto& result = pendingRequest->Results[position++];
-
+                size_t recordsCount = partitionData.Records.has_value() ? partitionData.Records->Records.size() : 0;
                 partitionResponse.Index = partitionData.Index;
-
-                if (EKafkaErrors::NONE_ERROR != result.ErrorCode) {
+                if (expired || pendingRequest->WaitResultCookies.empty()) {
+                    SendMetrics(TStringBuilder() << topicData.Name, recordsCount, "failed_messages", ctx);
+                } else if (EKafkaErrors::NONE_ERROR != result.ErrorCode ) {
                     KAFKA_LOG_T("Partition result with error: ErrorCode=" << static_cast<int>(result.ErrorCode) << ", ErrorMessage=" << result.ErrorMessage);
                     partitionResponse.ErrorCode = result.ErrorCode;
+                    metricsErrorCode = result.ErrorCode;
                     partitionResponse.ErrorMessage = result.ErrorMessage;
+                    SendMetrics(TStringBuilder() << topicData.Name, recordsCount, "failed_messages", ctx);
                 } else {
                     auto* msg = result.Value->Get();
                     if (msg->IsSuccess()) {
                         KAFKA_LOG_T("Partition result success.");
                         partitionResponse.ErrorCode = EKafkaErrors::NONE_ERROR;
                         auto& writeResults = msg->Record.GetPartitionResponse().GetCmdWriteResult();
-
                         if (!writeResults.empty()) {
+                            SendMetrics(TStringBuilder() << topicData.Name, writeResults.size(), "successful_messages", ctx);
                             auto& lastResult = writeResults.at(writeResults.size() - 1);
                             partitionResponse.LogAppendTimeMs = lastResult.GetWriteTimestampMS();
                             partitionResponse.BaseOffset = lastResult.GetSeqNo();
                         }
                     } else {
                         KAFKA_LOG_T("Partition result with error: ErrorCode=" << static_cast<int>(Convert(msg->GetError().Code)) << ", ErrorMessage=" << msg->GetError().Reason);
+                        SendMetrics(TStringBuilder() << topicData.Name, recordsCount, "failed_messages", ctx);
                         partitionResponse.ErrorCode = Convert(msg->GetError().Code);
+                        metricsErrorCode = Convert(msg->GetError().Code);
                         partitionResponse.ErrorMessage = msg->GetError().Reason;
                     }
                 }
             }
         }
 
-        Send(Context->ConnectionId, new TEvKafka::TEvResponse(correlationId, response));
+        Send(Context->ConnectionId, new TEvKafka::TEvResponse(correlationId, response, metricsErrorCode));
 
         if (!pendingRequest->WaitAcceptingCookies.empty()) {
             if (!expired) {

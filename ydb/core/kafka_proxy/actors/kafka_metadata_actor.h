@@ -45,6 +45,7 @@ private:
     TMetadataResponseData::TPtr Response;
     THashMap<TActorId, TVector<ui64>> TopicIndexes;
     THashSet<ui64> AllClusterNodes;
+    EKafkaErrors ErrorCode = EKafkaErrors::NONE_ERROR;
 };
 
 } // namespace NKafka

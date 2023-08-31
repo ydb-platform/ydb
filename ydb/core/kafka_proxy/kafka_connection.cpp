@@ -6,6 +6,7 @@
 #include "kafka_events.h"
 #include "kafka_log_impl.h"
 #include "actors/actors.h"
+#include "kafka_metrics.h"
 
 #include <strstream>
 #include <sstream>
@@ -38,7 +39,11 @@ public:
         TRequestHeaderData Header;
         std::unique_ptr<TApiMessage> Message;
 
+        TInstant StartTime;
+        TString Method;
+
         TApiMessage::TPtr Response;
+        EKafkaErrors ResponseErrorCode;
     };
 
     static constexpr TDuration InactivityTimeout = TDuration::Minutes(10);
@@ -161,6 +166,24 @@ protected:
         return sb;
     }
 
+    void SendRequestMetrics(const TActorContext& ctx) {
+        if (Context) {
+            ctx.Send(MakeKafkaMetricsServiceID(),
+                        new TEvKafka::TEvUpdateCounter(1, BuildLabels(Context, Request->Method, "", "api.kafka.request.count", "")));
+            ctx.Send(MakeKafkaMetricsServiceID(),
+                        new TEvKafka::TEvUpdateCounter(Request->Size, BuildLabels(Context, Request->Method, "", "api.kafka.request.bytes", "")));
+        }
+    }
+
+    void SendResponseMetrics(const TString method, const TInstant requestStartTime, EKafkaErrors errorCode, const TActorContext& ctx) {
+        TDuration duration = TInstant::Now() - requestStartTime;
+        ctx.Send(MakeKafkaMetricsServiceID(),
+            new TEvKafka::TEvUpdateHistCounter(static_cast<i64>(duration.MilliSeconds()), 1, BuildLabels(Context, method, "", "api.kafka.response.duration_milliseconds", "")
+        ));
+        ctx.Send(MakeKafkaMetricsServiceID(),
+            new TEvKafka::TEvUpdateCounter(1, BuildLabels(Context, method, "", "api.kafka.response.count", TStringBuilder() << (i16)errorCode)));
+    }
+
     void OnAccept() {
         InactivityTimer.Reset();
         TBase::Become(&TKafkaConnection::StateConnected);
@@ -220,13 +243,13 @@ protected:
         KAFKA_LOG_D("process message: ApiKey=" << Request->Header.RequestApiKey << ", ExpectedSize=" << Request->ExpectedSize
                                                << ", Size=" << Request->Size);
 
-        Msg::TPtr r = Request;
+        Request->Method = EApiKeyNames.find(static_cast<EApiKey>(Request->Header.RequestApiKey))->second;
 
-        PendingRequestsQueue.push_back(r);
-        PendingRequests[r->Header.CorrelationId] = r;
+        PendingRequestsQueue.push_back(Request);
+        PendingRequests[Request->Header.CorrelationId] = Request;
 
         TApiMessage* message = Request->Message.get();
-
+        SendRequestMetrics(ctx);
         switch (Request->Header.RequestApiKey) {
             case PRODUCE:
                 HandleMessage(&Request->Header, dynamic_cast<TProduceRequestData*>(message), ctx);
@@ -260,12 +283,12 @@ protected:
 
     void Handle(TEvKafka::TEvResponse::TPtr response, const TActorContext& ctx) {
         auto r = response->Get();
-        Reply(r->CorrelationId, r->Response, ctx);
+        Reply(r->CorrelationId, r->Response, r->ErrorCode, ctx);
     }
 
     void Handle(TEvKafka::TEvAuthResult::TPtr ev, const TActorContext& ctx) {
         auto event = ev->Get();
-        Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, ctx);
+        Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, event->ClientResponse->ErrorCode, ctx);
 
         auto authStep = event->AuthStep;
         if (authStep == EAuthSteps::FAILED) {
@@ -275,16 +298,19 @@ protected:
         }
 
         Context->UserToken = event->UserToken;
-        Context->Database = event->Database;
+        Context->DatabasePath = event->DatabasePath;
         Context->AuthenticationStep = authStep;
-        Context->RlContext = {event->Coordinator, event->ResourcePath, event->Database, event->UserToken->GetSerializedToken()};
+        Context->RlContext = {event->Coordinator, event->ResourcePath, event->DatabasePath, event->UserToken->GetSerializedToken()};
+        Context->DatabaseId = event->DatabaseId;
+        Context->CloudId = event->CloudId;
+        Context->FolderId = event->FolderId;
 
         KAFKA_LOG_D("Authentificated successful. SID=" << Context->UserToken->GetUserSID());
     }
 
     void Handle(TEvKafka::TEvHandshakeResult::TPtr ev, const TActorContext& ctx) {
         auto event = ev->Get();
-        Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, ctx);
+        Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, event->ClientResponse->ErrorCode, ctx);
 
         auto authStep = event->AuthStep;
         if (authStep == EAuthSteps::FAILED) {
@@ -297,7 +323,7 @@ protected:
         Context->AuthenticationStep = authStep;
     }
 
-    void Reply(const ui64 correlationId, TApiMessage::TPtr response, const TActorContext& ctx) {
+    void Reply(const ui64 correlationId, TApiMessage::TPtr response, EKafkaErrors errorCode, const TActorContext& ctx) {
         auto it = PendingRequests.find(correlationId);
         if (it == PendingRequests.end()) {
             KAFKA_LOG_ERROR("Unexpected correlationId " << correlationId);
@@ -306,21 +332,22 @@ protected:
 
         auto request = it->second;
         request->Response = response;
+        request->ResponseErrorCode = errorCode;
         request->Buffer.Clear();
 
-        ProcessReplyQueue();
+        ProcessReplyQueue(ctx);
 
         DoRead(ctx);
     }
 
-    void ProcessReplyQueue() {
+    void ProcessReplyQueue(const TActorContext& ctx) {
         while(!PendingRequestsQueue.empty()) {
             auto& request = PendingRequestsQueue.front();
             if (request->Response.get() == nullptr) {
                 break;
             }
 
-            Reply(&request->Header, request->Response.get());
+            Reply(&request->Header, request->Response.get(), request->Method, request->StartTime, request->ResponseErrorCode, ctx);
 
             InflightSize -= request->ExpectedSize;
 
@@ -329,7 +356,7 @@ protected:
         }
     }
 
-    void Reply(const TRequestHeaderData* header, const TApiMessage* reply) {
+    void Reply(const TRequestHeaderData* header, const TApiMessage* reply, const TString method, const TInstant requestStartTime, EKafkaErrors errorCode, const TActorContext& ctx) {
         TKafkaVersion headerVersion = ResponseHeaderVersion(header->RequestApiKey, header->RequestApiVersion);
         TKafkaVersion version = header->RequestApiVersion;
 
@@ -340,7 +367,7 @@ protected:
 
         TBufferedWriter buffer(Socket.Get(), Context->Config.GetPacketSize());
         TKafkaWritable writable(buffer);
-
+        SendResponseMetrics(method, requestStartTime, errorCode, ctx);
         try {
             writable << size;
             responseHeader.Write(writable, headerVersion);
@@ -360,7 +387,6 @@ protected:
 
     void DoRead(const TActorContext& ctx) {
         KAFKA_LOG_T("DoRead: Demand=" << Demand.Length << ", Step=" << static_cast<i32>(Step));
-
         for (;;) {
             while (Demand) {
                 ssize_t received = 0;
@@ -459,9 +485,8 @@ protected:
                         break;
 
                     case MESSAGE_PROCESS:
-                        KAFKA_LOG_D("received message. ApiKey=" << Request->ApiKey << ", Version=" << Request->ApiVersion << ", CorrelationId=" << Request->CorrelationId);
-
-                        TKafkaReadable readable(Request->Buffer);
+                        Request->StartTime = TInstant::Now();
+                        KAFKA_LOG_D("received message. ApiKey=" << Request->ApiKey << ", Version=" << Request->ApiVersion << ", CorrelationId=" << Request->CorrelationId);TKafkaReadable readable(Request->Buffer);
 
                         try {
                             Request->Message = CreateRequest(Request->ApiKey);

@@ -48,7 +48,7 @@ TActorId TKafkaMetadataActor::SendTopicRequest(const TMetadataRequestData::TMeta
     TGetPartitionsLocationRequest locationRequest{};
     locationRequest.Topic = topicRequest.Name.value();
     locationRequest.Token = Context->UserToken->GetSerializedToken();
-    locationRequest.Database = Context->Database;
+    locationRequest.Database = Context->DatabasePath;
 
     PendingResponses++;
 
@@ -59,6 +59,7 @@ void TKafkaMetadataActor::AddTopicError(
     TMetadataResponseData::TMetadataResponseTopic& topic, EKafkaErrors errorCode
 ) {
     topic.ErrorCode = errorCode;
+    ErrorCode = errorCode;
 }
 
 void TKafkaMetadataActor::AddTopicResponse(TMetadataResponseData::TMetadataResponseTopic& topic, TEvLocationResponse* response) {
@@ -134,7 +135,7 @@ void TKafkaMetadataActor::HandleResponse(TEvLocationResponse::TPtr ev, const TAc
 
 void TKafkaMetadataActor::RespondIfRequired(const TActorContext& ctx) {
     if (PendingResponses == 0) {
-        Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response));
+        Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, ErrorCode));
         Die(ctx);
     }
 }

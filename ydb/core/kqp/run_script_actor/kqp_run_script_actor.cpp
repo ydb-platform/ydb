@@ -224,8 +224,10 @@ private:
         auto resp = MakeHolder<TEvKqpExecuter::TEvStreamDataAck>();
         resp->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
         resp->Record.SetFreeSpace(QueryServiceConfig.GetScriptResultSizeLimit()
-                                 ? QueryServiceConfig.GetScriptResultSizeLimit()
-                                 : std::numeric_limits<ui64>::max());
+                                 ? QueryServiceConfig.GetScriptResultSizeLimit() > std::numeric_limits<i64>::max() 
+                                    ? std::numeric_limits<i64>::max()
+                                    : static_cast<i64>(QueryServiceConfig.GetScriptResultSizeLimit())
+                                 : std::numeric_limits<i64>::max());
 
         LOG_D("Send stream data ack"
             << ", seqNo: " << ev->Get()->Record.GetSeqNo()

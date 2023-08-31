@@ -87,7 +87,7 @@ private:
 
     void HandleWork(TEvKqpExecuter::TEvStreamDataAck::TPtr& ev) {
         ui64 seqNo = ev->Get()->Record.GetSeqNo();
-        ui64 freeSpace = ev->Get()->Record.GetFreeSpace();
+        i64 freeSpace = ev->Get()->Record.GetFreeSpace();
 
         LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId
             << ", send ack to channelId: " << ChannelId

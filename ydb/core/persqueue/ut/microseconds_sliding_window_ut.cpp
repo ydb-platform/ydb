@@ -8,11 +8,7 @@ Y_UNIT_TEST_SUITE(TMicrosecondsSlidingWindow) {
 
 Y_UNIT_TEST(Basic) {
     TMicrosecondsSlidingWindow sw(60, TDuration::Minutes(1));
-
     TInstant now = TInstant::Now();
-    sw.Update(now);
-    now += TDuration::Seconds(60);
-    sw.Update(now);
 
     sw.Update(TDuration::Seconds(5).MicroSeconds(), now);
     now += TDuration::Seconds(58);
@@ -47,6 +43,10 @@ Y_UNIT_TEST(Basic) {
     now += TDuration::Seconds(20);
     sw.Update(now);
     UNIT_ASSERT_EQUAL(sw.GetValue(), 40'000'000);
+
+    now += TDuration::Seconds(180);
+    sw.Update(TDuration::Seconds(180).MicroSeconds(), now);
+    UNIT_ASSERT_EQUAL(sw.GetValue(), 60'000'000);
 }
 
 } //Y_UNIT_TEST_SUITE

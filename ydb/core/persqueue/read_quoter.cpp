@@ -74,12 +74,13 @@ void TReadQuoter::HandleWakeUp(TEvents::TEvWakeup::TPtr&, const TActorContext& c
 }
 
 void TReadQuoter::ProcessInflightQueue(const TActorContext& ctx) {
+    auto now = ctx.Now();
     while (!WaitingInflightReadRequests.empty() && RequestsInflight < AppData(ctx)->PQConfig.GetMaxInflightReadRequestsPerPartition()) {
         auto readEvent(std::move(WaitingInflightReadRequests.front()));
         WaitingInflightReadRequests.pop_front();
         StartQuoting(readEvent, ctx);
         if (WaitingInflightReadRequests.size() == 0) {
-            InflightLimitSlidingWindow.Update((ctx.Now() - InflightIsFullStartTime).MicroSeconds(), ctx.Now());
+            InflightLimitSlidingWindow.Update((now - InflightIsFullStartTime).MicroSeconds(), now);
             UpdateCounters(ctx);
         }
     }
@@ -154,10 +155,12 @@ void TReadQuoter::HandleUpdateAccountQuotaCounters(NAccountReadQuoterEvents::TEv
 }
 
 void TReadQuoter::UpdateCounters(const TActorContext& ctx) {
+    auto now = ctx.Now();
     if (!WaitingInflightReadRequests.empty()) {
-        InflightLimitSlidingWindow.Update((ctx.Now() - InflightIsFullStartTime).MicroSeconds(), ctx.Now());
+        InflightLimitSlidingWindow.Update((now - InflightIsFullStartTime).MicroSeconds(), now);
+        InflightIsFullStartTime = now;
     } else {
-        InflightLimitSlidingWindow.Update(ctx.Now());
+        InflightLimitSlidingWindow.Update(now);
     }
     Send(PartitionActor, new NReadQuoterEvents::TEvQuotaCountersUpdated(InflightLimitSlidingWindow.GetValue() / 60));
 }
@@ -175,10 +178,8 @@ void TReadQuoter::HandlePoisonPill(TEvents::TEvPoisonPill::TPtr&, const TActorCo
 void TReadQuoter::UpdateQuota(const TActorContext &ctx) {
     TVector<std::pair<TString, ui64>> updatedQuotas;
     for (auto& [consumerStr, consumerQuota] : ConsumerQuotas) {
-        if (consumerQuota.PartitionPerConsumerQuotaTracker.UpdateConfigIfChanged(
-        GetConsumerReadBurst(ctx),
-        GetConsumerReadSpeed(ctx))) {
-             updatedQuotas.push_back({consumerStr, consumerQuota.PartitionPerConsumerQuotaTracker.GetTotalSpeed()});
+        if (consumerQuota.PartitionPerConsumerQuotaTracker.UpdateConfigIfChanged(GetConsumerReadBurst(ctx), GetConsumerReadSpeed(ctx))) {
+            updatedQuotas.push_back({consumerStr, consumerQuota.PartitionPerConsumerQuotaTracker.GetTotalSpeed()});
         }
     }
     auto totalQuotaUpdated = PartitionTotalQuotaTracker.UpdateConfigIfChanged(GetTotalPartitionReadBurst(ctx), GetTotalPartitionReadSpeed(ctx));

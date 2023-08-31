@@ -237,7 +237,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename IContext::TEvReadF
             case TClientMessage::kCommitOffsetRequest: {
                 const auto& req = request.commit_offset_request();
 
-                if(ReadWithoutConsumer) {
+                if (ReadWithoutConsumer) {
                     return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "can't commit when reading without a consumer", ctx);
                 }
                 if (!RangesMode || !req.commit_offsets_size()) {
@@ -967,7 +967,10 @@ void TReadSessionActor<UseMigrationProtocol>::InitSession(const TActorContext& c
     }
 
     for (auto& [_, holder] : Topics) {
-        holder.PipeClient = CreatePipeClient(holder.TabletID, ctx);
+        if (!ReadWithoutConsumer) {
+            holder.PipeClient = CreatePipeClient(holder.TabletID, ctx);
+        }
+        
         Y_VERIFY(holder.FullConverter);
         auto it = TopicGroups.find(holder.FullConverter->GetInternalName());
         if (it != TopicGroups.end()) {
@@ -980,7 +983,7 @@ void TReadSessionActor<UseMigrationProtocol>::InitSession(const TActorContext& c
     for (const auto& [topicName, topic] : Topics) {
         if (ReadWithoutConsumer) {
             if (topic.Groups.size() == 0) {
-                return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "explicitly specify the partitions when reading without a consumer", ctx); //savnik: groups for migration protocol?
+                return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "explicitly specify the partitions when reading without a consumer", ctx);
             }
             for (auto group : topic.Groups) {
                 SendLockPartitionToSelf(group-1, topicName, topic, ctx);

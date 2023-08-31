@@ -18,6 +18,10 @@ namespace NKikimr::NStorage {
             }
             Record.SetInitial(true);
         }
+
+        bool IsUseful() const {
+            return Record.NewBoundNodeIdsSize() || Record.DeletedBoundNodeIdsSize();
+        }
     };
 
     struct TEvNodeConfigReversePush

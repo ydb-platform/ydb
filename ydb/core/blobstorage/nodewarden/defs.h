@@ -7,6 +7,7 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/mailbox_queue_revolving.h>
 #include <library/cpp/actors/core/invoke.h>
+#include <library/cpp/actors/core/io_dispatcher.h>
 
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/protos/config.pb.h>
@@ -41,6 +42,7 @@
 #include <library/cpp/digest/crc32c/crc32c.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 #include <library/cpp/openssl/crypto/sha.h>
+#include <library/cpp/json/json_value.h>
 
 #include <util/folder/dirut.h>
 #include <util/folder/tempdir.h>

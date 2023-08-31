@@ -6,7 +6,13 @@ SRCS(
     group_stat_aggregator.h
     node_warden.h
     node_warden_cache.cpp
-    node_warden_distributed_config.cpp
+    node_warden_distconf.cpp
+    node_warden_distconf.h
+    node_warden_distconf_binding.cpp
+    node_warden_distconf_fsm.cpp
+    node_warden_distconf_mon.cpp
+    node_warden_distconf_persistent_storage.cpp
+    node_warden_distconf_scatter_gather.cpp
     node_warden_events.h
     node_warden_group.cpp
     node_warden_group_resolver.cpp

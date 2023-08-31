@@ -196,7 +196,12 @@ void TNodeWarden::Bootstrap() {
 
     // Start a statically configured set
     if (Cfg->BlobStorageConfig.HasServiceSet()) {
-        ApplyServiceSet(Cfg->BlobStorageConfig.GetServiceSet(), true, false, false);
+        const auto& serviceSet = Cfg->BlobStorageConfig.GetServiceSet();
+        if (serviceSet.GroupsSize()) {
+            ApplyServiceSet(Cfg->BlobStorageConfig.GetServiceSet(), true, false, false);
+        } else {
+            Groups.try_emplace(0); // group is gonna be configured soon by DistributedConfigKeeper
+        }
         StartStaticProxies();
     }
     EstablishPipe();

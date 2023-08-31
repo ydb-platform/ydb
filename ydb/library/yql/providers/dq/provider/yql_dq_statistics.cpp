@@ -59,6 +59,10 @@ public:
                         State->TypeCtx->SetStats(input.Get(), std::move(std::make_shared<TOptimizerStatistics>(*stat)));
                     }
                 }
+            }
+            // Don't propagate statistics and costs in case of EquiJoin, join reordering only works if costs have
+            // not been propagated yet
+            else if (TCoEquiJoin::Match(input.Get())){
             } else {
                 // default sum propagation
                 TOptimizerStatistics stat;

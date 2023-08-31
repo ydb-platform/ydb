@@ -95,7 +95,7 @@ def main():
                 for f in files:
                     if os.path.islink(os.path.join(root, f)):
                         continue
-                    file_src = os.path.join(root, f)
+                    file_src = os.path.normpath(os.path.join(root, f))
                     assert file_src.startswith(source_root)
                     file_dst = os.path.join(dst, os.path.relpath(root, abs_docs_dir), f)
                     copy_file(file_src, file_dst, overwrite=is_overwrite_existing, orig_path=file_src[len(source_root):])

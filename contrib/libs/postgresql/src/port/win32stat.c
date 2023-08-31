@@ -140,34 +140,50 @@ int
 _pgfstat64(int fileno, struct stat *buf)
 {
 	HANDLE		hFile = (HANDLE) _get_osfhandle(fileno);
-	BY_HANDLE_FILE_INFORMATION fiData;
+	DWORD		fileType = FILE_TYPE_UNKNOWN;
+	unsigned short st_mode;
 
-	if (hFile == INVALID_HANDLE_VALUE || buf == NULL)
+	if (buf == NULL)
 	{
 		errno = EINVAL;
 		return -1;
 	}
 
-	/*
-	 * Check if the fileno is a data stream.  If so, unless it has been
-	 * redirected to a file, getting information through its HANDLE will fail,
-	 * so emulate its stat information in the most appropriate way and return
-	 * it instead.
-	 */
-	if ((fileno == _fileno(stdin) ||
-		 fileno == _fileno(stdout) ||
-		 fileno == _fileno(stderr)) &&
-		!GetFileInformationByHandle(hFile, &fiData))
+	fileType = pgwin32_get_file_type(hFile);
+	if (errno != 0)
+		return -1;
+
+	switch (fileType)
 	{
-		memset(buf, 0, sizeof(*buf));
-		buf->st_mode = _S_IFCHR;
-		buf->st_dev = fileno;
-		buf->st_rdev = fileno;
-		buf->st_nlink = 1;
-		return 0;
+			/* The specified file is a disk file */
+		case FILE_TYPE_DISK:
+			return fileinfo_to_stat(hFile, buf);
+
+			/*
+			 * The specified file is a socket, a named pipe, or an anonymous
+			 * pipe.
+			 */
+		case FILE_TYPE_PIPE:
+			st_mode = _S_IFIFO;
+			break;
+			/* The specified file is a character file */
+		case FILE_TYPE_CHAR:
+			st_mode = _S_IFCHR;
+			break;
+			/* Unused flag and unknown file type */
+		case FILE_TYPE_REMOTE:
+		case FILE_TYPE_UNKNOWN:
+		default:
+			errno = EINVAL;
+			return -1;
 	}
 
-	return fileinfo_to_stat(hFile, buf);
+	memset(buf, 0, sizeof(*buf));
+	buf->st_mode = st_mode;
+	buf->st_dev = fileno;
+	buf->st_rdev = fileno;
+	buf->st_nlink = 1;
+	return 0;
 }
 
 #endif							/* WIN32 */

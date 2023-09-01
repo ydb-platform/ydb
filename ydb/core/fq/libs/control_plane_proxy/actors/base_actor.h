@@ -19,6 +19,73 @@ using namespace NActors;
 using namespace NThreading;
 using namespace NYdb;
 
+template<typename TDerived>
+class TPlainBaseActor : public NActors::TActorBootstrapped<TDerived> {
+public:
+    using TBase = NActors::TActorBootstrapped<TDerived>;
+    using TBase::Become;
+    using TBase::PassAway;
+    using TBase::SelfId;
+    using TBase::Send;
+
+public:
+    TPlainBaseActor(const TActorId& successActorId,
+               const TActorId& errorActorId,
+               TDuration requestTimeout,
+               const NPrivate::TRequestCommonCountersPtr& counters)
+        : Counters(counters)
+        , SuccessActorId(successActorId)
+        , ErrorActorId(errorActorId)
+        , RequestTimeout(requestTimeout) { }
+
+    void Bootstrap() {
+        CPP_LOG_T("TBaseActor Bootstrap started. Actor id: " << SelfId());
+        Become(&TDerived::StateFunc, RequestTimeout, new NActors::TEvents::TEvWakeup());
+        Counters->InFly->Inc();
+        BootstrapImpl();
+    }
+
+    template<class THandler>
+    void SendRequestToSender(TAutoPtr<THandler> handle) {
+        Counters->Ok->Inc();
+        Send(handle->Forward(SuccessActorId));
+        PassAway();
+    }
+
+    void SendRequestToSender(IEventBase* event) {
+        Counters->Ok->Inc();
+        Send(SuccessActorId, event);
+        PassAway();
+    }
+
+    void SendErrorMessageToSender(IEventBase* event,
+                                  NActors::TActorIdentity::TEventFlags flags = 0,
+                                  ui64 cookie                                = 0) {
+        Counters->Error->Inc();
+        Send(ErrorActorId, event, flags, cookie);
+        PassAway();
+    }
+
+    void HandleTimeout() {
+        CPP_LOG_D("TBaseActor Timeout occurred. Actor id: "
+                  << SelfId());
+        Counters->Timeout->Inc();
+        SendErrorMessageToSender(MakeTimeoutEventImpl(
+            MakeErrorIssue(TIssuesIds::TIMEOUT,
+                           "Timeout occurred. Try repeating the request later")));
+    }
+
+protected:
+    virtual void BootstrapImpl() = 0;
+    virtual IEventBase* MakeTimeoutEventImpl(NYql::TIssue issue) = 0;
+
+protected:
+    const NPrivate::TRequestCommonCountersPtr Counters;
+    const TActorId SuccessActorId;
+    const TActorId ErrorActorId;
+    const TDuration RequestTimeout;
+};
+
 template<typename T>
 struct TBaseActorTypeTag {
     using TRequest  = typename T::TRequest;
@@ -26,9 +93,9 @@ struct TBaseActorTypeTag {
 };
 
 template<typename TDerived>
-class TBaseActor : public NActors::TActorBootstrapped<TDerived> {
+class TBaseActor : public TPlainBaseActor<TDerived> {
 public:
-    using TBase = NActors::TActorBootstrapped<TDerived>;
+    using TBase = TPlainBaseActor<TDerived>;
     using TBase::Become;
     using TBase::PassAway;
     using TBase::SelfId;
@@ -42,40 +109,16 @@ public:
                const TEventRequestPtr request,
                TDuration requestTimeout,
                const NPrivate::TRequestCommonCountersPtr& counters)
-        : Request(std::move(request))
-        , Counters(counters)
-        , ProxyActorId(proxyActorId)
-        , ResponseActorId(Request->Sender)
-        , RequestTimeout(requestTimeout) { }
-
-    void Bootstrap() {
-        CPP_LOG_T("TBaseActor Bootstrap started. Actor id: " << SelfId());
-        Become(&TDerived::StateFunc, RequestTimeout, new NActors::TEvents::TEvWakeup());
-        Counters->InFly->Inc();
-        BootstrapImpl();
-    }
+        : TPlainBaseActor<TDerived>(proxyActorId,
+                                    request->Sender,
+                                    std::move(requestTimeout),
+                                    counters)
+        , Request(std::move(request)) { }
 
     void SendErrorMessageToSender(const NYql::TIssue& issue) {
-        Counters->Error->Inc();
-        NYql::TIssues issues;
-        issues.AddIssue(issue);
-        Send(ResponseActorId, new TEventResponse(issues, {}), 0, Request->Cookie);
-        PassAway();
-    }
-
-    void SendRequestToSender() {
-        Counters->Ok->Inc();
-        Send(Request->Forward(ProxyActorId));
-        PassAway();
-    }
-
-    void HandleTimeout() {
-        CPP_LOG_D("TBaseActor Timeout occurred. Actor id: "
-                  << SelfId());
-        Counters->Timeout->Inc();
-        SendErrorMessageToSender(MakeErrorIssue(
-            TIssuesIds::TIMEOUT,
-            "Timeout occurred. Try repeating the request later"));
+        TBase::SendErrorMessageToSender(new TEventResponse({issue}, {}),
+                                        0,
+                                        Request->Cookie);
     }
 
     void HandleError(const TString& message, EStatus status, const NYql::TIssues& issues) {
@@ -92,15 +135,17 @@ public:
         SendErrorMessageToSender(std::move(issue));
     }
 
-private:
-    virtual void BootstrapImpl() = 0;
+    void SendRequestToSender() {
+        TBase::SendRequestToSender(Request);
+    }
+
+protected:
+    IEventBase* MakeTimeoutEventImpl(NYql::TIssue issue) final {
+        return new TEventResponse({std::move(issue)}, {});
+    };
 
 protected:
     const TEventRequestPtr Request;
-    const NPrivate::TRequestCommonCountersPtr Counters;
-    const TActorId ProxyActorId;
-    const TActorId ResponseActorId;
-    const TDuration RequestTimeout;
 };
 
 } // namespace NPrivate

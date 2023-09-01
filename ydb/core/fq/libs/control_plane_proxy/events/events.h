@@ -312,11 +312,6 @@ struct TEvControlPlaneProxy {
             EvCreateConnectionRequest>::TBaseControlPlaneRequest;
         
         bool ComputeYDBIsAlreadyExistFlag = false;
-        // Check that connection does not exist in CPS
-        bool CPSListingFinished = false;
-        size_t CPSConnectionCount = 0;
-        // ??
-        bool IsInDeleteCreateState = false;
     };
 
     template<>

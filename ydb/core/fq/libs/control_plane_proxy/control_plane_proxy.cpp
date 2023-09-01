@@ -1350,53 +1350,13 @@ private:
                                                             CredentialsProviderFactory);
             }
 
-            if (!ev->Get()->ComputeYDBOperationWasPerformed && !ev->Get()->ComputeYDBIsAlreadyExistFlag) {
+            if (!ev->Get()->ComputeYDBOperationWasPerformed) {
                 Register(NPrivate::MakeCreateConnectionActor(ControlPlaneProxyActorId(),
                                                              std::move(ev),
                                                              Config.RequestTimeout,
                                                              Counters,
                                                              Config.CommonConfig,
-                                                             Signer,
-                                                             true));
-                return;
-            }
-
-            if (ev->Get()->ComputeYDBIsAlreadyExistFlag && !ev->Get()->CPSListingFinished) {
-                ev->Get()->ComputeYDBOperationWasPerformed = false;
-                Register(MakeListConnectionActor(ControlPlaneProxyActorId(),
-                                                 std::move(ev),
-                                                 Counters,
-                                                 Config.RequestTimeout,
-                                                 availablePermissions));
-                return;
-            }
-
-            if (ev->Get()->ComputeYDBIsAlreadyExistFlag &&
-                !ev->Get()->ComputeYDBOperationWasPerformed) {
-                if (ev->Get()->CPSConnectionCount != 0) {
-                    CPS_LOG_E("CreateConnectionRequest, Connection with such name already exists: "
-                              << scope << " " << user << " " << NKikimr::MaskTicket(token)
-                              << " " << request.DebugString());
-                    Send(ev->Sender,
-                         new TEvControlPlaneProxy::TEvCreateConnectionResponse(
-                             NYql::TIssues{
-                                 NYql::TIssue{"Connection with such name already exists"}},
-                             subjectType),
-                         0,
-                         ev->Cookie);
-                    requestCounters.IncError();
-                    TDuration delta = TInstant::Now() - startTime;
-                    requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
-                    probe(delta, false, false);
-                    return;
-                }
-
-                Register(NPrivate::MakeDropCreateConnectionActor(ControlPlaneProxyActorId(),
-                                                                 std::move(ev),
-                                                                 Config.RequestTimeout,
-                                                                 Counters,
-                                                                 Config.CommonConfig,
-                                                                 Signer));
+                                                             Signer));
                 return;
             }
         }

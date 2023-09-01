@@ -393,8 +393,7 @@ private:
                 TDuration::Seconds(30),
                 Counters,
                 CommonConfig,
-                Signer,
-                true
+                Signer
             ));
         }
         if (Connections.empty()) {
@@ -422,8 +421,7 @@ private:
                 SelfId(),
                 request,
                 TDuration::Seconds(30),
-                Counters,
-                true
+                Counters
             ));
         }
 

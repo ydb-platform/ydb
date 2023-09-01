@@ -39,13 +39,6 @@ NActors::IActor* MakeDiscoverYDBConnectionNameActor(
     TDuration requestTimeout,
     TPermissions permissions);
 
-NActors::IActor* MakeListConnectionActor(
-    const TActorId& proxyActorId,
-    const TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr& request,
-    TCounters& counters,
-    TDuration requestTimeout,
-    TPermissions permissions);
-
 /// Discover binding_name
 
 NActors::IActor* MakeDiscoverYDBBindingNameActor(

@@ -132,47 +132,6 @@ TString DescribeConnectionErrorMessageFactoryMethod(const NYql::TIssues& issues)
     return "Couldn't resolve connection";
 };
 
-NActors::IActor* MakeListConnectionActor(
-    const TActorId& proxyActorId,
-    const TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr& request,
-    TCounters& counters,
-    TDuration requestTimeout,
-    TPermissions permissions) {
-    auto cpsRequestFactory =
-        [](const TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr& event) {
-            FederatedQuery::ListConnectionsRequest result;
-            auto connectionName = event->Get()->Request.content().name();
-            result.mutable_filter()->set_name(connectionName);
-            result.set_limit(2);
-            return result;
-        };
-    auto cpsRequestPostProcessor =
-        [](TEvControlPlaneStorage::TEvListConnectionsRequest& event) {
-            event.IsExactNameMatch = true;
-        };
-    auto entityNameExtractorFactoryMethod =
-        [](const TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr& event,
-           const FederatedQuery::ListConnectionsResult& result) {
-            event->Get()->CPSListingFinished = true;
-            event->Get()->CPSConnectionCount = result.connection_size();
-        };
-
-    return new TControlPlaneStorageRequesterActor<
-        TEvControlPlaneProxy::TEvCreateConnectionRequest,
-        TEvControlPlaneProxy::TEvCreateConnectionResponse,
-        TEvControlPlaneStorage::TEvListConnectionsRequest,
-        TEvControlPlaneStorage::TEvListConnectionsResponse>(
-        proxyActorId,
-        request,
-        requestTimeout,
-        counters.GetCommonCounters(RTC_DESCRIBE_CPS_ENTITY),
-        permissions,
-        cpsRequestFactory,
-        DescribeConnectionErrorMessageFactoryMethod,
-        entityNameExtractorFactoryMethod,
-        cpsRequestPostProcessor);
-}
-
 NActors::IActor* MakeDiscoverYDBConnectionNameActor(
     const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr& request,

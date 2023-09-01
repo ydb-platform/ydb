@@ -1,21 +1,5 @@
 #include "line_reader.h"
 
-#if defined(_WIN64) || defined(_WIN32) || defined(__WIN32__)
-
-#include <util/generic/yexception.h>
-
-namespace NYdb {
-namespace NConsoleClient {
-
-std::unique_ptr<ILineReader> CreateLineReader(std::string, std::string, Suggest) {
-    throw yexception() << "Interactive CLI not supported on Windows";
-}
-
-}
-}
-
-#else
-
 #include <util/generic/string.h>
 #include <util/system/file.h>
 
@@ -174,5 +158,3 @@ std::unique_ptr<ILineReader> CreateLineReader(std::string prompt, std::string hi
 
 }
 }
-
-#endif

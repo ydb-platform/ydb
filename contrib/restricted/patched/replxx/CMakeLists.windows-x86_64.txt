@@ -8,8 +8,10 @@
 
 
 add_library(restricted-patched-replxx)
+target_compile_options(restricted-patched-replxx PUBLIC
+  -DREPLXX_STATIC
+)
 target_compile_options(restricted-patched-replxx PRIVATE
-  -DREPLXX_BUILDING_DLL
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 target_include_directories(restricted-patched-replxx PUBLIC

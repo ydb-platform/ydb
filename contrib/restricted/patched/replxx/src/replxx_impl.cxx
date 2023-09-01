@@ -2407,10 +2407,11 @@ Replxx::ACTION_RESULT Replxx::ReplxxImpl::clear_screen( char32_t c ) {
 }
 
 Replxx::ACTION_RESULT Replxx::ReplxxImpl::bracketed_paste( char32_t ) {
-	static const UnicodeString BRACK_PASTE_SUFF( "\033[201~" );
-	static const int BRACK_PASTE_SLEN( BRACK_PASTE_SUFF.length() );
 	UnicodeString buf;
-	while ( char32_t c = read_unicode_character() ) {
+	while ( char32_t c = _terminal.read_char() ) {
+		if ( c == KEY::PASTE_FINISH ) {
+ 			break;
+ 		}
 		if ( ( c == '\r' ) || ( c == KEY::control( 'M' ) ) ) {
 			c = '\n';
 		}
@@ -2418,10 +2419,6 @@ Replxx::ACTION_RESULT Replxx::ReplxxImpl::bracketed_paste( char32_t ) {
 			c = '\t';
 		}
 		buf.push_back( c );
-		if ( ( c == '~' ) && buf.ends_with( BRACK_PASTE_SUFF.begin(), BRACK_PASTE_SUFF.end() ) ) {
-			buf.erase( buf.length() - BRACK_PASTE_SLEN, BRACK_PASTE_SLEN );
-			break;
-		}
 	}
 	_data.insert( _pos, buf, 0, buf.length() );
 	_pos += buf.length();

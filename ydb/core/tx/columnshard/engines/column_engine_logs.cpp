@@ -718,13 +718,11 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
             std::vector<std::shared_ptr<TPortionInfo>> orderedPortions = spg->GroupOrderedPortionsByPK(snapshot);
             for (const auto& portionInfo : orderedPortions) {
                 Y_VERIFY(portionInfo->Produced());
-                if (!pkRangesFilter.IsPortionInUsage(*portionInfo, VersionedIndex.GetLastSchema()->GetIndexInfo())) {
-                    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_skipped")
-                        ("granule", granule)("portion", portionInfo->DebugString());
+                const bool skipPortion = !pkRangesFilter.IsPortionInUsage(*portionInfo, VersionedIndex.GetLastSchema()->GetIndexInfo());
+                AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", skipPortion ? "portion_skipped" : "portion_selected")
+                    ("granule", granule)("portion", portionInfo->DebugString());
+                if (skipPortion) {
                     continue;
-                } else {
-                    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portion_selected")
-                        ("granule", granule)("portion", portionInfo->DebugString());
                 }
                 out->PortionsOrderedPK.emplace_back(portionInfo);
                 granuleHasDataForSnaphsot = true;

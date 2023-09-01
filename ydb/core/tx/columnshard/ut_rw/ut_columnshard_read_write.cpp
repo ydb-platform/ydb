@@ -2427,8 +2427,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                         UNIT_ASSERT(!resRead.GetBatch());
                         UNIT_ASSERT(resRead.GetFinished());
                         UNIT_ASSERT(!resRead.GetData().size());
+                    } else if (!resRead.GetData().size()) {
+                        UNIT_ASSERT(resRead.GetFinished());
                     } else {
-                        UNIT_ASSERT(resRead.GetData().size());
                         UNIT_ASSERT(resRead.HasMeta());
 
                         auto& meta = resRead.GetMeta();

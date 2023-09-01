@@ -300,6 +300,20 @@ private:
     void OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter);
     void OnAdditiveSummaryChange() const;
 public:
+    std::vector<std::shared_ptr<TPortionInfo>> GroupOrderedPortionsByPK(const TSnapshot& snapshot) const {
+        std::vector<std::shared_ptr<TPortionInfo>> portions;
+        for (auto&& i : Portions) {
+            if (i.second->IsVisible(snapshot)) {
+                portions.emplace_back(i.second);
+            }
+        }
+        const auto pred = [](const std::shared_ptr<TPortionInfo>& l, const std::shared_ptr<TPortionInfo>& r) {
+            return l->IndexKeyStart() < r->IndexKeyStart();
+        };
+        std::sort(portions.begin(), portions.end(), pred);
+        return portions;
+    }
+
     NOlap::TSerializationStats BuildSerializationStats(ISnapshotSchema::TPtr schema) const {
         NOlap::TSerializationStats result;
         for (auto&& i : GetHardSummary().GetColumnIdsSortedBySizeDescending()) {

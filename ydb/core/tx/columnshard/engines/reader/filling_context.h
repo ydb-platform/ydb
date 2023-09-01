@@ -32,6 +32,10 @@ private:
 
     bool CheckBufferAvailable() const;
 public:
+    TIndexedReadData& GetOwner() {
+        return Owner;
+    }
+
     std::shared_ptr<TGranulesLiveControl> GetGranulesLiveContext() const {
         return GranulesLiveContext;
     }

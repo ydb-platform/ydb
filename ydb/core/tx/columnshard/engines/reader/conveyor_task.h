@@ -2,8 +2,8 @@
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 #include <ydb/library/accessor/accessor.h>
 
-namespace NKikimr::NOlap::NIndexedReader {
-class TGranulesFillingContext;
+namespace NKikimr::NOlap {
+class IDataReader;
 }
 
 namespace NKikimr::NColumnShard {
@@ -23,7 +23,7 @@ public:
         bool DataProcessed = false;
     protected:
         TDataTasksProcessorContainer GetTasksProcessorContainer() const;
-        virtual bool DoApply(NOlap::NIndexedReader::TGranulesFillingContext& indexedDataRead) const = 0;
+        virtual bool DoApply(NOlap::IDataReader& indexedDataRead) const = 0;
         virtual bool DoExecuteImpl() = 0;
 
         virtual bool DoExecute() override final;
@@ -37,7 +37,7 @@ public:
 
         using TPtr = std::shared_ptr<ITask>;
         virtual ~ITask() = default;
-        bool Apply(NOlap::NIndexedReader::TGranulesFillingContext& indexedDataRead) const;
+        bool Apply(NOlap::IDataReader& indexedDataRead) const;
 
         bool IsDataProcessed() const noexcept {
             return DataProcessed;
@@ -99,7 +99,7 @@ public:
         return Object;
     }
 
-    void Add(NOlap::NIndexedReader::TGranulesFillingContext& context, IDataTasksProcessor::ITask::TPtr task);
+    void Add(NOlap::IDataReader& reader, IDataTasksProcessor::ITask::TPtr task);
 };
 
 }

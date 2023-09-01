@@ -76,7 +76,7 @@ private:
     NOlap::TReadContext Context;
     TReadyResults ReadyResults;
     NOlap::TReadMetadata::TConstPtr ReadMetadata;
-    NOlap::TIndexedReadData IndexedData;
+    std::shared_ptr<NOlap::IDataReader> IndexedData;
     ui64 ItemsRead = 0;
     const i64 MaxRowsInBatch = 5000;
 public:
@@ -90,8 +90,7 @@ public:
     virtual TString DebugString() const override {
         return TStringBuilder()
             << "ready_results:(" << ReadyResults.DebugString() << ");"
-            << "has_buffer:" << IndexedData.GetMemoryAccessor()->HasBuffer() << ";"
-            << "indexed_data:(" << IndexedData.DebugString() << ")"
+            << "indexed_data:(" << IndexedData->DebugString() << ")"
             ;
     }
 
@@ -102,12 +101,12 @@ public:
     void AddData(const TBlobRange& blobRange, TString data) override;
 
     bool Finished() const  override {
-        return IndexedData.IsFinished() && ReadyResults.empty();
+        return IndexedData->IsFinished() && ReadyResults.empty();
     }
 
     NOlap::TPartialReadResult GetBatch() override;
 
-    TBlobRange GetNextBlobToRead() override;
+    std::optional<NBlobCache::TBlobRange> GetNextBlobToRead() override;
 
 private:
     void FillReadyResults();

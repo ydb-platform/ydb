@@ -24,7 +24,7 @@ private:
         const THashSet<const void*>& batchesToDedup);
 
 protected:
-    virtual bool DoApply(NOlap::NIndexedReader::TGranulesFillingContext& indexedDataRead) const override;
+    virtual bool DoApply(IDataReader& indexedDataRead) const override;
     virtual bool DoExecuteImpl() override;
 public:
 

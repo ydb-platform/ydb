@@ -22,8 +22,9 @@ bool TAssembleBatch::DoExecuteImpl() {
     return true;
 }
 
-bool TAssembleBatch::DoApply(TGranulesFillingContext& owner) const {
-    TBatch* batch = owner.GetBatchInfo(BatchAddress);
+bool TAssembleBatch::DoApply(IDataReader& owner) const {
+    auto& reader = owner.GetMeAs<TIndexedReadData>();
+    TBatch* batch = reader.GetGranulesContext().GetBatchInfo(BatchAddress);
     if (batch) {
         batch->InitBatch(FullBatch);
     }

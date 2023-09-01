@@ -2,6 +2,7 @@
 #include <ydb/core/tx/columnshard/common/portion.h>
 #include <ydb/core/formats/arrow/replace_key.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
+#include <ydb/library/accessor/accessor.h>
 #include <util/stream/output.h>
 
 namespace NKikimr::NOlap {

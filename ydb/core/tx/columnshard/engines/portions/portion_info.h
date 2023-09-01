@@ -23,6 +23,8 @@ private:
 public:
     static constexpr const ui32 BLOB_BYTES_LIMIT = 8 * 1024 * 1024;
 
+    std::vector<const TColumnRecord*> GetColumnChunksPointers(const ui32 columnId) const;
+
     void ResetMeta() {
         Meta = TPortionMeta();
     }
@@ -54,7 +56,8 @@ public:
     bool IsEvicted() const { return Meta.GetProduced() == TPortionMeta::EProduced::EVICTED; }
     bool CanHaveDups() const { return !Produced(); /* || IsInserted(); */ }
     bool CanIntersectOthers() const { return !Valid() || IsInserted() || IsEvicted(); }
-    size_t NumRecords() const { return Records.size(); }
+    size_t NumChunks() const { return Records.size(); }
+    size_t NumBlobs() const;
 
     TPortionInfo CopyWithFilteredColumns(const THashSet<ui32>& columnIds) const;
 
@@ -170,6 +173,20 @@ public:
             sum += rec.BlobRange.Size;
         }
         return sum;
+    }
+
+    bool IsVisible(const TSnapshot& snapshot) const {
+        if (Empty()) {
+            return false;
+        }
+
+        bool visible = (MinSnapshot <= snapshot);
+        if (visible && RemoveSnapshot.Valid()) {
+            visible = snapshot < RemoveSnapshot;
+        }
+
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "IsVisible")("analyze_portion", DebugString())("visible", visible)("snapshot", snapshot.DebugString());
+        return visible;
     }
 
     void UpdateRecordsMeta(TPortionMeta::EProduced produced) {

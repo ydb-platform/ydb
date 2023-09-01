@@ -3,32 +3,13 @@
 
 namespace NKikimr::NOlap::NIndexedReader {
 
-bool TSortableBatchPosition::IsSameSchema(const std::shared_ptr<arrow::Schema> schema) const {
-    if (Fields.size() != (size_t)schema->num_fields()) {
-        return false;
-    }
-    for (ui32 i = 0; i < Fields.size(); ++i) {
-        if (Fields[i]->type() != schema->field(i)->type()) {
-            return false;
-        }
-        if (Fields[i]->name() != schema->field(i)->name()) {
-            return false;
-        }
-    }
-    return true;
-}
-
 NJson::TJsonValue TSortableBatchPosition::DebugJson() const {
     NJson::TJsonValue result;
     result["reverse"] = ReverseSort;
     result["records_count"] = RecordsCount;
     result["position"] = Position;
-    Y_VERIFY(Columns.size() == Fields.size());
-    for (ui32 i = 0; i < Columns.size(); ++i) {
-        auto& jsonColumn = result["columns"].AppendValue(NJson::JSON_MAP);
-        jsonColumn["name"] = Fields[i]->name();
-        jsonColumn["value"] = NArrow::DebugString(Columns[i], Position);
-    }
+    result["sorting"] = Sorting.DebugJson(Position);
+    result["data"] = Data.DebugJson(Position);
     return result;
 }
 
@@ -105,7 +86,8 @@ std::optional<ui64> TSortableBatchPosition::FindPosition(std::shared_ptr<arrow::
 
 void TMergePartialStream::PutControlPoint(std::shared_ptr<TSortableBatchPosition> point) {
     Y_VERIFY(point);
-    Y_VERIFY(point->IsSameSchema(SortSchema));
+    Y_VERIFY(point->IsSameSortingSchema(SortSchema));
+    Y_VERIFY(point->IsReverseSort() == Reverse);
     Y_VERIFY(++ControlPoints == 1);
 
     SortHeap.emplace_back(TBatchIterator(*point));
@@ -133,11 +115,11 @@ void TMergePartialStream::AddPoolSource(const std::optional<ui32> poolId, std::s
 
 void TMergePartialStream::AddNewToHeap(const std::optional<ui32> poolId, std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NArrow::TColumnFilter> filter, const bool restoreHeap) {
     if (!filter || filter->IsTotalAllowFilter()) {
-        SortHeap.emplace_back(TBatchIterator(batch, nullptr, SortSchema->field_names(), Reverse, poolId));
+        SortHeap.emplace_back(TBatchIterator(batch, nullptr, SortSchema->field_names(), DataSchema ? DataSchema->field_names() : std::vector<std::string>(), Reverse, poolId));
     } else if (filter->IsTotalDenyFilter()) {
         return;
     } else {
-        SortHeap.emplace_back(TBatchIterator(batch, filter, SortSchema->field_names(), Reverse, poolId));
+        SortHeap.emplace_back(TBatchIterator(batch, filter, SortSchema->field_names(), DataSchema ? DataSchema->field_names() : std::vector<std::string>(), Reverse, poolId));
     }
     if (restoreHeap) {
         std::push_heap(SortHeap.begin(), SortHeap.end());
@@ -152,11 +134,24 @@ void TMergePartialStream::RemoveControlPoint() {
     SortHeap.pop_back();
 }
 
-bool TMergePartialStream::DrainCurrent() {
+bool TMergePartialStream::DrainCurrent(std::shared_ptr<TRecordBatchBuilder> builder, const std::optional<TSortableBatchPosition>& readTo, const bool includeFinish) {
     if (SortHeap.empty()) {
         return false;
     }
     while (SortHeap.size()) {
+        if (readTo) {
+            auto position = TBatchIterator::TPosition(SortHeap.front());
+            if (includeFinish) {
+                if (position.GetKeyColumns().Compare(*readTo) == std::partial_ordering::greater) {
+                    return true;
+                }
+            } else {
+                if (position.GetKeyColumns().Compare(*readTo) != std::partial_ordering::less) {
+                    return true;
+                }
+            }
+        }
+
         auto currentPosition = DrainCurrentPosition();
         if (currentPosition.IsControlPoint()) {
             return false;
@@ -165,10 +160,15 @@ bool TMergePartialStream::DrainCurrent() {
             continue;
         }
         if (CurrentKeyColumns) {
-            Y_VERIFY(CurrentKeyColumns->Compare(currentPosition.GetKeyColumns()) != std::partial_ordering::greater);
+            AFL_VERIFY(CurrentKeyColumns->Compare(currentPosition.GetKeyColumns()) == std::partial_ordering::less)("merge_debug", DebugJson());
         }
         CurrentKeyColumns = currentPosition.GetKeyColumns();
-        return true;
+        if (builder) {
+            builder->AddRecord(*CurrentKeyColumns);
+        }
+        if (!readTo) {
+            return true;
+        }
     }
     return false;
 }
@@ -183,6 +183,26 @@ NJson::TJsonValue TMergePartialStream::TBatchIterator::DebugJson() const {
     }
     result["key"] = KeyColumns.DebugJson();
     return result;
+}
+
+TSortableScanData::TSortableScanData(std::shared_ptr<arrow::RecordBatch> batch, const std::vector<std::string>& columns) {
+    for (auto&& i : columns) {
+        auto c = batch->GetColumnByName(i);
+        AFL_VERIFY(c)("column_name", i)("columns", JoinSeq(",", columns));
+        Columns.emplace_back(c);
+        auto f = batch->schema()->GetFieldByName(i);
+        Fields.emplace_back(f);
+    }
+}
+
+void TRecordBatchBuilder::AddRecord(const TSortableBatchPosition& position) {
+    Y_VERIFY(position.GetData().GetColumns().size() == Builders.size());
+    Y_VERIFY_DEBUG(IsSameFieldsSequence(position.GetData().GetFields(), Fields));
+//    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "record_add_on_read")("record", position.DebugJson());
+    for (ui32 i = 0; i < position.GetData().GetColumns().size(); ++i) {
+        NArrow::Append(*Builders[i], *position.GetData().GetColumns()[i], position.GetPosition());
+    }
+    ++RecordsCount;
 }
 
 }

@@ -859,8 +859,8 @@ void TColumnShard::MapExternBlobs(const TActorContext& /*ctx*/, NOlap::TReadMeta
     }
 
     THashSet<TUnifiedBlobId> uniqBlobs;
-    for (auto& portion : metadata.SelectInfo->Portions) {
-        for (auto& rec : portion.Records) {
+    for (auto& portion : metadata.SelectInfo->PortionsOrderedPK) {
+        for (auto& rec : portion->Records) {
             uniqBlobs.insert(rec.BlobRange.BlobId);
         }
     }

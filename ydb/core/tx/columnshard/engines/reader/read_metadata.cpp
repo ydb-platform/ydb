@@ -225,4 +225,16 @@ std::shared_ptr<NIndexedReader::IOrderPolicy> TReadMetadata::BuildSortingPolicy(
     return result;
 }
 
+std::shared_ptr<NKikimr::NOlap::IDataReader> TReadMetadata::BuildReader(const NOlap::TReadContext& context, const TConstPtr& self) const {
+//    return std::make_shared<NPlainReader::TPlainReadData>(self, context);
+    auto result = std::make_shared<TIndexedReadData>(self, context);
+    result->InitRead();
+    return result;
+}
+
+NIndexedReader::TSortableBatchPosition TReadMetadata::BuildSortedPosition(const NArrow::TReplaceKey& key) const {
+    return NIndexedReader::TSortableBatchPosition(key.ToBatch(GetReplaceKey()), 0,
+        GetReplaceKey()->field_names(), {}, IsDescSorted());
+}
+
 }

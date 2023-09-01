@@ -54,11 +54,12 @@ bool TAssembleFilter::DoExecuteImpl() {
     return true;
 }
 
-bool TAssembleFilter::DoApply(TGranulesFillingContext& owner) const {
+bool TAssembleFilter::DoApply(IDataReader& owner) const {
     Y_VERIFY(OriginalCount);
-    owner.GetCounters().OriginalRowsCount->Add(OriginalCount);
-    owner.GetCounters().AssembleFilterCount->Add(1);
-    TBatch* batch = owner.GetBatchInfo(BatchAddress);
+    auto& reader = owner.GetMeAs<TIndexedReadData>();
+    reader.GetCounters().OriginalRowsCount->Add(OriginalCount);
+    reader.GetCounters().AssembleFilterCount->Add(1);
+    TBatch* batch = reader.GetGranulesContext().GetBatchInfo(BatchAddress);
     if (batch) {
         batch->InitFilter(Filter, FilteredBatch, OriginalCount, EarlyFilter);
     }

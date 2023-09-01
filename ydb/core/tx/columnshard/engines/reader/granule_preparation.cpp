@@ -1,4 +1,5 @@
 #include "granule_preparation.h"
+#include <ydb/core/tx/columnshard/engines/indexed_read_data.h>
 
 namespace NKikimr::NOlap::NIndexedReader {
 
@@ -69,8 +70,9 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> TTaskGranulePreparation::Specia
     return out;
 }
 
-bool TTaskGranulePreparation::DoApply(NOlap::NIndexedReader::TGranulesFillingContext& indexedDataRead) const {
-    indexedDataRead.GetGranuleVerified(GranuleId)->OnGranuleDataPrepared(std::move(BatchesInGranule));
+bool TTaskGranulePreparation::DoApply(IDataReader& indexedDataRead) const {
+    auto& readData = indexedDataRead.GetMeAs<TIndexedReadData>();
+    readData.GetGranulesContext().GetGranuleVerified(GranuleId)->OnGranuleDataPrepared(std::move(BatchesInGranule));
     return true;
 }
 

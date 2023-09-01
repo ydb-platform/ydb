@@ -91,7 +91,7 @@ private:
     YDB_READONLY_DEF(TBatchFetchedInfo, FetchedInfo);
     THashMap<TBlobRange, TPortionInfo::TAssembleBlobInfo> Data;
     TGranule* Owner;
-    const TPortionInfo* PortionInfo = nullptr;
+    const TPortionInfo PortionInfo;
 
     YDB_READONLY_DEF(std::optional<std::set<ui32>>, CurrentColumnIds);
     std::set<ui32> AskedColumnIds;
@@ -117,7 +117,7 @@ public:
     }
 
     bool AllowEarlyFilter() const {
-        return PortionInfo->AllowEarlyFilter();
+        return PortionInfo.AllowEarlyFilter();
     }
     const TBatchAddress& GetBatchAddress() const {
         return BatchAddress;
@@ -131,7 +131,7 @@ public:
         return GetUsefulBytes(FetchedBytes);
     }
 
-    TBatch(const TBatchAddress& address, TGranule& owner, const TPortionInfo& portionInfo, const ui64 predictedBatchSize);
+    TBatch(const TBatchAddress& address, TGranule& owner, TPortionInfo&& portionInfo, const ui64 predictedBatchSize);
     bool AddIndexedReady(const TBlobRange& bRange, const TString& blobData);
     bool AskedColumnsAlready(const std::set<ui32>& columnIds) const;
 
@@ -155,7 +155,7 @@ public:
     }
 
     const TPortionInfo& GetPortionInfo() const {
-        return *PortionInfo;
+        return PortionInfo;
     }
 };
 }

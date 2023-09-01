@@ -38,7 +38,7 @@ void TGranule::OnBatchReady(const TBatch& batchInfo, std::shared_ptr<arrow::Reco
     CheckReady();
 }
 
-TBatch& TGranule::RegisterBatchForFetching(const TPortionInfo& portionInfo) {
+TBatch& TGranule::RegisterBatchForFetching(TPortionInfo&& portionInfo) {
     const ui64 batchSize = portionInfo.GetRawBytes(Owner->GetReadMetadata()->GetAllColumns());
     RawDataSize += batchSize;
     const ui64 filtersSize = portionInfo.NumRows() * (8 + 8);
@@ -50,7 +50,7 @@ TBatch& TGranule::RegisterBatchForFetching(const TPortionInfo& portionInfo) {
     Y_VERIFY(!ReadyFlag);
     ui32 batchGranuleIdx = Batches.size();
     WaitBatches.emplace(batchGranuleIdx);
-    Batches.emplace_back(TBatchAddress(GranuleId, batchGranuleIdx), *this, portionInfo, batchSize);
+    Batches.emplace_back(TBatchAddress(GranuleId, batchGranuleIdx), *this, std::move(portionInfo), batchSize);
     Y_VERIFY(GranuleBatchNumbers.emplace(batchGranuleIdx).second);
     Owner->OnNewBatch(Batches.back());
     return Batches.back();
@@ -149,7 +149,7 @@ void TGranule::CheckReady() {
             ACFL_DEBUG("event", "granule_preparation")("predicted_size", RawDataSize)("real_size", RawDataSizeReal);
             std::vector<std::shared_ptr<arrow::RecordBatch>> inGranule = std::move(RecordBatches);
             auto processor = Owner->GetTasksProcessor();
-            processor.Add(*Owner, std::make_shared<TTaskGranulePreparation>(std::move(inGranule), std::move(BatchesToDedup), GranuleId, Owner->GetReadMetadata(), processor.GetObject()));
+            processor.Add(Owner->GetOwner(), std::make_shared<TTaskGranulePreparation>(std::move(inGranule), std::move(BatchesToDedup), GranuleId, Owner->GetReadMetadata(), processor.GetObject()));
         }
     }
 }

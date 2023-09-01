@@ -45,7 +45,7 @@ void TGranuleMeta::UpsertPortion(const TPortionInfo& info) {
         it = Portions.emplace(portionNew->GetPortion(), portionNew).first;
     } else {
         OnBeforeChangePortion(it->second);
-        *it->second = info;
+        it->second = std::make_shared<TPortionInfo>(info);
     }
     OnAfterChangePortion(it->second);
 }

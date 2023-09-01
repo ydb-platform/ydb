@@ -1491,7 +1491,6 @@ void TestReadWithProgram(const TestTableDescription& table = {})
             UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
             UNIT_ASSERT_EQUAL(resRead.GetBatch(), 0);
             UNIT_ASSERT_EQUAL(resRead.GetFinished(), true);
-            UNIT_ASSERT(resRead.GetData().size() > 0);
 
             auto& meta = resRead.GetMeta();
             auto& schema = meta.GetSchema();
@@ -1501,11 +1500,12 @@ void TestReadWithProgram(const TestTableDescription& table = {})
 
             switch (i) {
                 case 1:
+                    UNIT_ASSERT(resRead.GetData().size() > 0);
                     UNIT_ASSERT(CheckColumns(readData[0], meta, {"level", "timestamp"}));
                     UNIT_ASSERT(DataHas(readData, schema, {0, 100}, true));
                     break;
                 case 2:
-                    UNIT_ASSERT(CheckColumns(readData[0], meta, {"level", "timestamp"}, 0));
+                    UNIT_ASSERT(resRead.GetData().size() == 0);
                     break;
                 default:
                     break;
@@ -2355,16 +2355,12 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             std::optional<TBorder> From;
             std::optional<TBorder> To;
             std::optional<ui32> ExpectedCount;
-            bool DataReadOnEmpty = false;
 
-            TTestCaseOptions()
-                : DataReadOnEmpty(false)
-            {}
+            TTestCaseOptions() = default;
 
             TTestCaseOptions& SetFrom(const TBorder& border) { From = border; return *this; }
             TTestCaseOptions& SetTo(const TBorder& border) { To = border; return *this; }
             TTestCaseOptions& SetExpectedCount(ui32 count) { ExpectedCount = count; return *this; }
-            TTestCaseOptions& SetDataReadOnEmpty(bool flag) { DataReadOnEmpty = flag; return *this; }
 
             TSerializedTableRange MakeRange(const std::vector<std::pair<TString, TTypeInfo>>& pk) const {
                 std::vector<TString> mem;
@@ -2422,13 +2418,12 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     UNIT_ASSERT(event);
 
                     auto& resRead = Proto(event);
-                    Cerr << "[" << __LINE__ << "] " << Owner.YdbPk[0].second.GetTypeId() << " "
-                        << resRead.GetBatch() << " " << resRead.GetData().size() << "\n";
+                    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("0_type_id", Owner.YdbPk[0].second.GetTypeId())("batch", resRead.GetBatch())("data_size", resRead.GetData().size());
 
                     UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
                     UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
                     UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
-                    if (ExpectedCount && !*ExpectedCount && !DataReadOnEmpty) {
+                    if (ExpectedCount && !*ExpectedCount) {
                         UNIT_ASSERT(!resRead.GetBatch());
                         UNIT_ASSERT(resRead.GetFinished());
                         UNIT_ASSERT(!resRead.GetData().size());
@@ -2485,13 +2480,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             }
 
             ~TTestCase() {
-                try {
-                    Execute();
-                    Cerr << "TEST CASE " << TestCaseName << " FINISHED" << Endl;
-                } catch (...) {
-                    Cerr << "TEST CASE " << TestCaseName << " FAILED" << Endl;
-                    throw;
-                }
+                Execute();
+                Cerr << "TEST CASE " << TestCaseName << " FINISHED" << Endl;
             }
         };
 
@@ -2620,14 +2610,13 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             TTabletReadPredicateTest testAgent(runtime, planStep, txId, table.Pk);
             testAgent.Test(":1)").SetTo(TBorder(val1, false)).SetExpectedCount(1);
             testAgent.Test(":1]").SetTo(TBorder(val1, true)).SetExpectedCount(2);
-            testAgent.Test(":0)").SetTo(TBorder(val0, false)).SetExpectedCount(0).SetDataReadOnEmpty(true);
+            testAgent.Test(":0)").SetTo(TBorder(val0, false)).SetExpectedCount(0);
             testAgent.Test(":0]").SetTo(TBorder(val0, true)).SetExpectedCount(1);
 
             testAgent.Test("[0:0]").SetFrom(TBorder(val0, true)).SetTo(TBorder(val0, true)).SetExpectedCount(1);
             testAgent.Test("[0:1)").SetFrom(TBorder(val0, true)).SetTo(TBorder(val1, false)).SetExpectedCount(1);
-            testAgent.Test("(0:1)").SetFrom(TBorder(val0, false)).SetTo(TBorder(val1, false)).SetExpectedCount(0).SetDataReadOnEmpty(true);
-            testAgent.Test("outscope1").SetFrom(TBorder(val1M, true)).SetTo(TBorder(val1M_1, true))
-                .SetExpectedCount(0).SetDataReadOnEmpty(isStrPk0);
+            testAgent.Test("(0:1)").SetFrom(TBorder(val0, false)).SetTo(TBorder(val1, false)).SetExpectedCount(0);
+            testAgent.Test("outscope1").SetFrom(TBorder(val1M, true)).SetTo(TBorder(val1M_1, true)).SetExpectedCount(0);
 //            VERIFIED AS INCORRECT INTERVAL (its good)
 //            testAgent.Test("[0-0)").SetFrom(TTabletReadPredicateTest::TBorder(0, true)).SetTo(TBorder(0, false)).SetExpectedCount(0);
 
@@ -2642,7 +2631,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 }
             } else {
                 testAgent.Test("(numRows:").SetFrom(TBorder(valNumRows, false)).SetExpectedCount(0);
-                testAgent.Test("(numRows-1:").SetFrom(TBorder(valNumRows_1, false)).SetExpectedCount(0).SetDataReadOnEmpty(true);
+                testAgent.Test("(numRows-1:").SetFrom(TBorder(valNumRows_1, false)).SetExpectedCount(0);
                 testAgent.Test("(numRows-2:").SetFrom(TBorder(valNumRows_2, false)).SetExpectedCount(1);
                 testAgent.Test("[numRows-1:").SetFrom(TBorder(valNumRows_1, true)).SetExpectedCount(1);
             }

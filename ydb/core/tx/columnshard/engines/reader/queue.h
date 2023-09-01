@@ -6,31 +6,32 @@ namespace NKikimr::NOlap {
 
 class TBatchBlobRange {
 private:
-    const ui64 GranuleId;
+    const ui64 ObjectId;
     const TBlobRange Range;
 public:
-    ui64 GetGranuleId() const {
-        return GranuleId;
+    ui64 GetObjectId() const {
+        return ObjectId;
     }
 
     const TBlobRange& GetRange() const {
         return Range;
     }
 
-    TBatchBlobRange(const ui64 granuleId, const TBlobRange range)
-        : GranuleId(granuleId)
+    TBatchBlobRange(const ui64 objectId, const TBlobRange range)
+        : ObjectId(objectId)
         , Range(range)
     {
-
+        Y_VERIFY(range.BlobId.IsValid());
     }
 };
 
-class TFetchBlobsQueue {
+template <class TFetchTask>
+class TFetchBlobsQueueImpl {
 private:
     bool StoppedFlag = false;
-    std::deque<TBatchBlobRange> IteratorBlobsSequential;
+    std::deque<TFetchTask> IteratorBlobsSequential;
 public:
-    const std::deque<TBatchBlobRange>& GetIteratorBlobsSequential() const noexcept {
+    const std::deque<TFetchTask>& GetIteratorBlobsSequential() const noexcept {
         return IteratorBlobsSequential;
     }
 
@@ -51,15 +52,30 @@ public:
         return IteratorBlobsSequential.size();
     }
 
-    const TBatchBlobRange* front() const {
+    const TFetchTask* front() const {
         if (!IteratorBlobsSequential.size()) {
             return nullptr;
         }
         return &IteratorBlobsSequential.front();
     }
-    TBlobRange pop_front();
 
-    void emplace_back(const ui64 granuleId, const TBlobRange& range);
+    std::optional<TBlobRange> pop_front() {
+        if (!StoppedFlag && IteratorBlobsSequential.size()) {
+            auto result = IteratorBlobsSequential.front();
+            IteratorBlobsSequential.pop_front();
+            return result.GetRange();
+        } else {
+            return {};
+        }
+    }
+
+    void emplace_back(const ui64 objectId, const TBlobRange& range) {
+        Y_VERIFY(!StoppedFlag);
+        IteratorBlobsSequential.emplace_back(objectId, range);
+    }
+
 };
+
+using TFetchBlobsQueue = TFetchBlobsQueueImpl<TBatchBlobRange>;
 
 }

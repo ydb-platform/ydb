@@ -38,20 +38,20 @@ struct TSelectInfo {
     };
 
     std::vector<TGranuleRecord> Granules; // ordered by key (ascending)
-    std::vector<TPortionInfo> Portions;
+    std::vector<std::shared_ptr<TPortionInfo>> PortionsOrderedPK;
 
-    NColumnShard::TContainerAccessorWithDirection<std::vector<TPortionInfo>> GetPortionsOrdered(const bool reverse) const {
-        return NColumnShard::TContainerAccessorWithDirection<std::vector<TPortionInfo>>(Portions, reverse);
+    NColumnShard::TContainerAccessorWithDirection<std::vector<std::shared_ptr<TPortionInfo>>> GetPortionsOrdered(const bool reverse) const {
+        return NColumnShard::TContainerAccessorWithDirection<std::vector<std::shared_ptr<TPortionInfo>>>(PortionsOrderedPK, reverse);
     }
 
     NColumnShard::TContainerAccessorWithDirection<std::vector<TGranuleRecord>> GetGranulesOrdered(const bool reverse) const {
         return NColumnShard::TContainerAccessorWithDirection<std::vector<TGranuleRecord>>(Granules, reverse);
     }
 
-    size_t NumRecords() const {
+    size_t NumChunks() const {
         size_t records = 0;
-        for (auto& portionInfo : Portions) {
-            records += portionInfo.NumRecords();
+        for (auto& portionInfo : PortionsOrderedPK) {
+            records += portionInfo->NumChunks();
         }
         return records;
     }
@@ -59,13 +59,13 @@ struct TSelectInfo {
     TStats Stats() const {
         TStats out;
         out.Granules = Granules.size();
-        out.Portions = Portions.size();
+        out.Portions = PortionsOrderedPK.size();
 
         THashSet<TUnifiedBlobId> uniqBlob;
-        for (auto& portionInfo : Portions) {
-            out.Records += portionInfo.NumRecords();
-            out.Rows += portionInfo.NumRows();
-            for (auto& rec : portionInfo.Records) {
+        for (auto& portionInfo : PortionsOrderedPK) {
+            out.Records += portionInfo->NumChunks();
+            out.Rows += portionInfo->NumRows();
+            for (auto& rec : portionInfo->Records) {
                 uniqBlob.insert(rec.BlobRange.BlobId);
             }
         }
@@ -84,10 +84,10 @@ struct TSelectInfo {
             }
             out << "; ";
         }
-        if (info.Portions.size()) {
+        if (info.PortionsOrderedPK.size()) {
             out << "portions:";
-            for (auto& portionInfo : info.Portions) {
-                out << portionInfo;
+            for (auto& portionInfo : info.PortionsOrderedPK) {
+                out << portionInfo->DebugString();
             }
         }
         return out;

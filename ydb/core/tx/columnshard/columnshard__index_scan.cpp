@@ -8,31 +8,30 @@ TColumnShardScanIterator::TColumnShardScanIterator(NOlap::TReadMetadata::TConstP
     : Context(context)
     , ReadyResults(context.GetCounters())
     , ReadMetadata(readMetadata)
-    , IndexedData(ReadMetadata, false, context)
 {
-    IndexedData.InitRead();
+    IndexedData = ReadMetadata->BuildReader(context, ReadMetadata);
     Y_VERIFY(ReadMetadata->IsSorted());
 
     if (ReadMetadata->Empty()) {
-        IndexedData.Abort();
+        IndexedData->Abort();
     }
 }
 
 void TColumnShardScanIterator::AddData(const TBlobRange& blobRange, TString data) {
-    IndexedData.AddData(blobRange, data);
+    IndexedData->AddData(blobRange, data);
 }
 
-NKikimr::NOlap::TPartialReadResult TColumnShardScanIterator::GetBatch() {
+NOlap::TPartialReadResult TColumnShardScanIterator::GetBatch() {
     FillReadyResults();
     return ReadyResults.pop_front();
 }
 
-NKikimr::NColumnShard::TBlobRange TColumnShardScanIterator::GetNextBlobToRead() {
-    return IndexedData.ExtractNextBlob(ReadyResults.size());
+std::optional<NBlobCache::TBlobRange> TColumnShardScanIterator::GetNextBlobToRead() {
+    return IndexedData->ExtractNextBlob(ReadyResults.size());
 }
 
 void TColumnShardScanIterator::FillReadyResults() {
-    auto ready = IndexedData.GetReadyResults(MaxRowsInBatch);
+    auto ready = IndexedData->ExtractReadyResults(MaxRowsInBatch);
     i64 limitLeft = ReadMetadata->Limit == 0 ? INT64_MAX : ReadMetadata->Limit - ItemsRead;
     for (size_t i = 0; i < ready.size() && limitLeft; ++i) {
         if (ready[i].GetResultBatch()->num_rows() == 0 && !ready[i].GetLastReadKey()) {
@@ -49,10 +48,10 @@ void TColumnShardScanIterator::FillReadyResults() {
     }
 
     if (limitLeft == 0) {
-        IndexedData.Abort();
+        IndexedData->Abort();
     }
 
-    if (IndexedData.IsFinished()) {
+    if (IndexedData->IsFinished()) {
         Context.MutableProcessor().Stop();
     }
 }
@@ -62,15 +61,15 @@ bool TColumnShardScanIterator::HasWaitingTasks() const {
 }
 
 TColumnShardScanIterator::~TColumnShardScanIterator() {
-    IndexedData.Abort();
+    IndexedData->Abort();
     ReadMetadata->ReadStats->PrintToLog();
 }
 
 void TColumnShardScanIterator::Apply(IDataTasksProcessor::ITask::TPtr task) {
-    if (!task->IsDataProcessed() || Context.GetProcessor().IsStopped() || !task->IsSameProcessor(Context.GetProcessor())) {
+    if (!task->IsDataProcessed() || Context.GetProcessor().IsStopped() || !task->IsSameProcessor(Context.GetProcessor()) || IndexedData->IsFinished()) {
         return;
     }
-    Y_VERIFY(task->Apply(IndexedData.GetGranulesContext()));
+    Y_VERIFY(task->Apply(*IndexedData));
 }
 
 }

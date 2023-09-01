@@ -20,11 +20,73 @@ private:
     std::shared_ptr<arrow::RecordBatch> LastReadKey;
 
 public:
+    ui64 GetRecordsCount() const {
+        return ResultBatch ? ResultBatch->num_rows() : 0;
+    }
+
+    void InitDirection(const bool reverse) {
+        if (reverse && ResultBatch && ResultBatch->num_rows()) {
+            auto permutation = NArrow::MakePermutation(ResultBatch->num_rows(), true);
+            ResultBatch = NArrow::TStatusValidator::GetValid(arrow::compute::Take(ResultBatch, permutation)).record_batch();
+        }
+    }
+
+    void StripColumns(const std::shared_ptr<arrow::Schema>& schema) {
+        if (ResultBatch) {
+            ResultBatch = NArrow::ExtractColumns(ResultBatch, schema);
+        }
+    }
+
+    void BuildLastKey(const std::shared_ptr<arrow::Schema>& schema) {
+        Y_VERIFY(!LastReadKey);
+        if (ResultBatch && ResultBatch->num_rows()) {
+            auto keyColumns = NArrow::ExtractColumns(ResultBatch, schema);
+            Y_VERIFY(keyColumns);
+            LastReadKey = keyColumns->Slice(keyColumns->num_rows() - 1);
+        }
+    }
+
+    static std::vector<TPartialReadResult> SplitResults(const std::vector<TPartialReadResult>& resultsExt, const ui32 maxRecordsInResult) {
+        std::vector<TPartialReadResult> result;
+        std::shared_ptr<arrow::RecordBatch> currentBatch;
+        for (auto&& i : resultsExt) {
+            std::shared_ptr<arrow::RecordBatch> currentBatchSplitting = i.ResultBatch;
+            while (currentBatchSplitting && currentBatchSplitting->num_rows()) {
+                const ui32 currentRecordsCount = currentBatch ? currentBatch->num_rows() : 0;
+                if (currentRecordsCount + currentBatchSplitting->num_rows() < maxRecordsInResult) {
+                    if (!currentBatch) {
+                        currentBatch = currentBatchSplitting;
+                    } else {
+                        currentBatch = NArrow::CombineBatches({currentBatch, currentBatchSplitting});
+                    }
+                    currentBatchSplitting = nullptr;
+                } else {
+                    auto currentSlice = currentBatchSplitting->Slice(0, maxRecordsInResult - currentRecordsCount);
+                    if (!currentBatch) {
+                        currentBatch = currentSlice;
+                    } else {
+                        currentBatch = NArrow::CombineBatches({currentBatch, currentSlice});
+                    }
+                    result.emplace_back(TPartialReadResult(nullptr, currentBatch));
+                    currentBatch = nullptr;
+                    currentBatchSplitting = currentBatchSplitting->Slice(maxRecordsInResult - currentRecordsCount);
+                }
+            }
+        }
+        if (currentBatch && currentBatch->num_rows()) {
+            result.emplace_back(TPartialReadResult(nullptr, currentBatch));
+        }
+        return result;
+    }
+
     void Slice(const ui32 offset, const ui32 length) {
         ResultBatch = ResultBatch->Slice(offset, length);
     }
 
     void ApplyProgram(const NOlap::TProgramContainer& program) {
+        if (!program.HasProgram()) {
+            return;
+        }
         Y_VERIFY(!MemoryGuardInternal);
         auto status = program.ApplyProgram(ResultBatch);
         if (!status.ok()) {
@@ -82,7 +144,7 @@ public:
     virtual bool HasWaitingTasks() const = 0;
     virtual bool Finished() const = 0;
     virtual NOlap::TPartialReadResult GetBatch() = 0;
-    virtual NBlobCache::TBlobRange GetNextBlobToRead() { return NBlobCache::TBlobRange(); }
+    virtual std::optional<NBlobCache::TBlobRange> GetNextBlobToRead() { return {}; }
     virtual TString DebugString() const {
         return "NO_DATA";
     }

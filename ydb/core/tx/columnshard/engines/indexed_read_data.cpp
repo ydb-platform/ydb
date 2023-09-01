@@ -79,23 +79,28 @@ void TIndexedReadData::InitRead() {
     ui64 portionsBytes = 0;
     std::set<ui64> granulesReady;
     ui64 prevGranule = 0;
-    for (auto& portionInfo : ReadMetadata->SelectInfo->GetPortionsOrdered(ReadMetadata->IsDescSorted())) {
+    THashSet<ui32> columnIdsHash;
+    for (auto&& i : ReadMetadata->GetAllColumns()) {
+        columnIdsHash.emplace(i);
+    }
+    for (auto& portionSorted : ReadMetadata->SelectInfo->GetPortionsOrdered(ReadMetadata->IsDescSorted())) {
+        auto portionInfo = portionSorted->CopyWithFilteredColumns(columnIdsHash);
         portionsBytes += portionInfo.BlobsBytes();
         Y_VERIFY_S(portionInfo.Records.size(), "ReadMeatadata: " << *ReadMetadata);
 
         NIndexedReader::TGranule::TPtr granule = GranulesContext->UpsertGranule(portionInfo.GetGranule());
-        granule->RegisterBatchForFetching(portionInfo);
         if (prevGranule != portionInfo.GetGranule()) {
             Y_VERIFY(granulesReady.emplace(portionInfo.GetGranule()).second);
             prevGranule = portionInfo.GetGranule();
         }
+        granule->RegisterBatchForFetching(std::move(portionInfo));
     }
     GranulesContext->PrepareForStart();
 
     Context.GetCounters().PortionBytes->Add(portionsBytes);
     auto& stats = ReadMetadata->ReadStats;
     stats->IndexGranules = ReadMetadata->SelectInfo->Granules.size();
-    stats->IndexPortions = ReadMetadata->SelectInfo->Portions.size();
+    stats->IndexPortions = ReadMetadata->SelectInfo->PortionsOrderedPK.size();
     stats->IndexBatches = ReadMetadata->NumIndexedBlobs();
     stats->CommittedBatches = ReadMetadata->CommittedBlobs.size();
     stats->SchemaColumns = ReadMetadata->GetSchemaColumnsCount();
@@ -148,7 +153,7 @@ TIndexedReadData::MakeNotIndexedBatch(const std::shared_ptr<arrow::RecordBatch>&
     return preparedBatch;
 }
 
-std::vector<TPartialReadResult> TIndexedReadData::GetReadyResults(const int64_t maxRowsInBatch) {
+std::vector<TPartialReadResult> TIndexedReadData::DoExtractReadyResults(const int64_t maxRowsInBatch) {
     Y_VERIFY(SortReplaceDescription);
     auto& indexInfo = ReadMetadata->GetIndexInfo();
 
@@ -188,14 +193,7 @@ std::vector<TPartialReadResult> TIndexedReadData::GetReadyResults(const int64_t 
         GranulesContext->DrainNotIndexedBatches(nullptr);
     }
 
-    // Extract ready to out granules: ready granules that are not blocked by other (not ready) granules
-    Y_VERIFY(GranulesContext);
-    auto out = ReadyToOut(maxRowsInBatch);
-    const bool requireResult = GranulesContext->IsFinished(); // not indexed or the last indexed read (even if it's empty)
-    if (requireResult && out.empty()) {
-        out.push_back(TPartialReadResult(nullptr, NArrow::MakeEmptyBatch(ReadMetadata->GetResultSchema())));
-    }
-    return out;
+    return ReadyToOut(maxRowsInBatch);
 }
 
 /// @return batches that are not blocked by others
@@ -344,21 +342,18 @@ std::vector<TPartialReadResult> TIndexedReadData::MakeResult(std::vector<std::ve
     return out;
 }
 
-TIndexedReadData::TIndexedReadData(NOlap::TReadMetadata::TConstPtr readMetadata,
-    const bool internalRead, const TReadContext& context)
-    : Context(context)
-    , ReadMetadata(readMetadata)
-    , OnePhaseReadMode(internalRead)
+TIndexedReadData::TIndexedReadData(NOlap::TReadMetadata::TConstPtr readMetadata, const TReadContext& context)
+    : TBase(context, readMetadata)
+    , OnePhaseReadMode(context.GetIsInternalRead())
 {
-    Y_VERIFY(ReadMetadata->SelectInfo);
 }
 
-bool TIndexedReadData::IsFinished() const {
+bool TIndexedReadData::DoIsFinished() const {
     Y_VERIFY(GranulesContext);
     return NotIndexed.empty() && FetchBlobsQueue.empty() && PriorityBlobsQueue.empty() && GranulesContext->IsFinished();
 }
 
-void TIndexedReadData::Abort() {
+void TIndexedReadData::DoAbort() {
     Y_VERIFY(GranulesContext);
     Context.MutableProcessor().Stop();
     FetchBlobsQueue.Stop();
@@ -368,36 +363,36 @@ void TIndexedReadData::Abort() {
     WaitCommitted.clear();
 }
 
-NKikimr::NOlap::TBlobRange TIndexedReadData::ExtractNextBlob(const bool hasReadyResults) {
+std::optional<TBlobRange> TIndexedReadData::DoExtractNextBlob(const bool hasReadyResults) {
     Y_VERIFY(GranulesContext);
     while (auto* f = PriorityBlobsQueue.front()) {
-        if (!GranulesContext->IsGranuleActualForProcessing(f->GetGranuleId())) {
-            ACFL_DEBUG("event", "!IsGranuleActualForProcessing")("granule_id", f->GetGranuleId());
+        if (!GranulesContext->IsGranuleActualForProcessing(f->GetObjectId())) {
+            ACFL_DEBUG("event", "!IsGranuleActualForProcessing")("granule_id", f->GetObjectId());
             PriorityBlobsQueue.pop_front();
             continue;
         }
 
-        GranulesContext->ForceStartProcessGranule(f->GetGranuleId(), f->GetRange());
+        GranulesContext->ForceStartProcessGranule(f->GetObjectId(), f->GetRange());
         Context.GetCounters().OnPriorityFetch(f->GetRange().Size);
         return PriorityBlobsQueue.pop_front();
     }
 
     while (auto* f = FetchBlobsQueue.front()) {
-        if (!GranulesContext->IsGranuleActualForProcessing(f->GetGranuleId())) {
-            ACFL_DEBUG("event", "!IsGranuleActualForProcessing")("granule_id", f->GetGranuleId());
+        if (!GranulesContext->IsGranuleActualForProcessing(f->GetObjectId())) {
+            ACFL_DEBUG("event", "!IsGranuleActualForProcessing")("granule_id", f->GetObjectId());
             FetchBlobsQueue.pop_front();
             continue;
         }
 
-        if (GranulesContext->TryStartProcessGranule(f->GetGranuleId(), f->GetRange(), hasReadyResults)) {
+        if (GranulesContext->TryStartProcessGranule(f->GetObjectId(), f->GetRange(), hasReadyResults)) {
             Context.GetCounters().OnGeneralFetch(f->GetRange().Size);
             return FetchBlobsQueue.pop_front();
         } else {
             Context.GetCounters().OnProcessingOverloaded();
-            return TBlobRange();
+            return {};
         }
     }
-    return TBlobRange();
+    return {};
 }
 
 void TIndexedReadData::AddNotIndexed(const TBlobRange& blobRange, const TString& column) {
@@ -415,7 +410,7 @@ void TIndexedReadData::AddNotIndexed(const TUnifiedBlobId& blobId, const std::sh
     WaitCommitted.erase(it);
 }
 
-void TIndexedReadData::AddData(const TBlobRange& blobRange, const TString& data) {
+void TIndexedReadData::DoAddData(const TBlobRange& blobRange, const TString& data) {
     if (GranulesContext->IsFinished()) {
         ACFL_DEBUG("event", "AddData on GranulesContextFinished");
         return;

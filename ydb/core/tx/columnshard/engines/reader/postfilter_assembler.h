@@ -22,7 +22,7 @@ private:
 
     const TBatchAddress BatchAddress;
 protected:
-    virtual bool DoApply(TGranulesFillingContext& owner) const override;
+    virtual bool DoApply(IDataReader& owner) const override;
     virtual bool DoExecuteImpl() override;
 public:
     virtual TString GetTaskClassIdentifier() const override {

@@ -109,7 +109,7 @@ public:
 
         Y_VERIFY(!ScanIterator);
         MemoryAccessor = std::make_shared<NOlap::TActorBasedMemoryAccesor>(SelfId(), "CSScan/Result");
-        NOlap::TReadContext context(MakeTasksProcessor(), ScanCountersPool, MemoryAccessor);
+        NOlap::TReadContext context(MakeTasksProcessor(), ScanCountersPool, MemoryAccessor, false);
         ScanIterator = ReadMetadataRanges[ReadMetadataIndex]->StartScan(context);
 
         // propagate self actor id // TODO: FlagSubscribeOnSession ?
@@ -149,12 +149,13 @@ private:
         THashMap<TUnifiedBlobId, std::vector<NBlobCache::TBlobRange>> ranges;
         while (InFlightGuard.CanTake()) {
             auto blobRange = ScanIterator->GetNextBlobToRead();
-            if (!blobRange.BlobId.IsValid()) {
+            if (!blobRange) {
                 break;
             }
-            InFlightGuard.Take(blobRange.Size);
+            Y_VERIFY(blobRange->BlobId.IsValid());
+            InFlightGuard.Take(blobRange->Size);
             ++InFlightReads;
-            ranges[blobRange.BlobId].emplace_back(blobRange);
+            ranges[blobRange->BlobId].emplace_back(*blobRange);
         }
         if (!InFlightGuard.CanTake()) {
             ScanCountersPool.OnReadingOverloaded();
@@ -191,7 +192,9 @@ private:
             ACFL_DEBUG("event", "TEvTaskProcessedResult");
             auto t = static_pointer_cast<IDataTasksProcessor::ITask>(ev->Get()->GetResult());
             Y_VERIFY_DEBUG(dynamic_pointer_cast<IDataTasksProcessor::ITask>(ev->Get()->GetResult()));
-            ScanIterator->Apply(t);
+            if (!ScanIterator->Finished()) {
+                ScanIterator->Apply(t);
+            }
             if (!ScanIterator->HasWaitingTasks() && !NoTasksStartInstant) {
                 NoTasksStartInstant = Now();
             }
@@ -372,7 +375,7 @@ private:
         // The loop has finished without any progress!
         LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
             "Scan " << ScanActorId << " is hanging"
-            << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
+            << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId << " debug: " << ScanIterator->DebugString());
         Y_VERIFY_DEBUG(false);
     }
 
@@ -445,7 +448,7 @@ private:
             return Finish();
         }
 
-        NOlap::TReadContext context(MakeTasksProcessor(), ScanCountersPool, MemoryAccessor);
+        NOlap::TReadContext context(MakeTasksProcessor(), ScanCountersPool, MemoryAccessor, false);
         ScanIterator = ReadMetadataRanges[ReadMetadataIndex]->StartScan(context);
         // Used in TArrowToYdbConverter
         ResultYqlSchema.clear();

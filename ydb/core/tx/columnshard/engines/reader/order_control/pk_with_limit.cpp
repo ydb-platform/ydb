@@ -115,7 +115,7 @@ std::vector<TGranule::TPtr> TPKSortingWithLimit::DoDetachReadyGranules(TResultCo
 
 TPKSortingWithLimit::TPKSortingWithLimit(TReadMetadata::TConstPtr readMetadata)
     : TBase(readMetadata)
-    , MergeStream(readMetadata->GetIndexInfo(readMetadata->GetSnapshot()).GetReplaceKey(), readMetadata->IsDescSorted())
+    , MergeStream(readMetadata->GetIndexInfo(readMetadata->GetSnapshot()).GetReplaceKey(), nullptr, readMetadata->IsDescSorted())
 {
     CurrentItemsLimit = ReadMetadata->Limit;
 }

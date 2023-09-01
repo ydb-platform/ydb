@@ -116,6 +116,13 @@ TString TPortionInfo::DebugString() const {
         sb << "remove_snapshot:(" << RemoveSnapshot.DebugString() << ");";
     }
     sb << "chunks:(" << Records.size() << ");";
+    if (IS_TRACE_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD)) {
+        std::set<TString> blobIds;
+        for (auto&& i : Records) {
+            blobIds.emplace(::ToString(i.BlobRange.BlobId));
+        }
+        sb << "blobs:" << JoinSeq(",", blobIds) << ";blobs_count:" << blobIds.size() << ";";
+    }
     return sb << ")";
 }
 
@@ -153,6 +160,25 @@ bool TPortionInfo::HasPkMinMax() const {
         }
     }
     return result;
+}
+
+std::vector<const NKikimr::NOlap::TColumnRecord*> TPortionInfo::GetColumnChunksPointers(const ui32 columnId) const {
+    std::vector<const TColumnRecord*> result;
+    for (auto&& c : Records) {
+        if (c.ColumnId == columnId) {
+            Y_VERIFY(c.Chunk == result.size());
+            result.emplace_back(&c);
+        }
+    }
+    return result;
+}
+
+size_t TPortionInfo::NumBlobs() const {
+    THashSet<TUnifiedBlobId> blobIds;
+    for (auto&& i : Records) {
+        blobIds.emplace(i.BlobRange.BlobId);
+    }
+    return blobIds.size();
 }
 
 std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble() const {

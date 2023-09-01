@@ -17,15 +17,14 @@ class TScanIteratorBase;
 
 namespace NKikimr::NOlap {
 
-class TIndexedReadData {
+class TIndexedReadData: public IDataReader, TNonCopyable {
 private:
-    TReadContext Context;
+    using TBase = IDataReader;
     std::unique_ptr<NIndexedReader::TGranulesFillingContext> GranulesContext;
     THashMap<TUnifiedBlobId, NOlap::TCommittedBlob> WaitCommitted;
 
     TFetchBlobsQueue FetchBlobsQueue;
     TFetchBlobsQueue PriorityBlobsQueue;
-    NOlap::TReadMetadata::TConstPtr ReadMetadata;
     bool OnePhaseReadMode = false;
     std::vector<std::shared_ptr<arrow::RecordBatch>> NotIndexed;
 
@@ -41,28 +40,24 @@ private:
     bool IsIndexedBlob(const TBlobRange& blobRange) const {
         return IndexedBlobSubscriber.contains(blobRange);
     }
-public:
-    TIndexedReadData(NOlap::TReadMetadata::TConstPtr readMetadata, const bool internalRead, const TReadContext& context);
-
-    TString DebugString() const {
+protected:
+    virtual TString DoDebugString() const override {
         return TStringBuilder()
-            << "internal:" << OnePhaseReadMode << ";"
             << "wait_committed:" << WaitCommitted.size() << ";"
             << "granules_context:(" << (GranulesContext ? GranulesContext->DebugString() : "NO") << ");"
             ;
     }
 
-    const std::shared_ptr<TActorBasedMemoryAccesor>& GetMemoryAccessor() const {
-        return Context.GetMemoryAccessor();
-    }
+    /// @returns batches and corresponding last keys in correct order (i.e. sorted by by PK)
+    virtual std::vector<TPartialReadResult> DoExtractReadyResults(const int64_t maxRowsInBatch) override;
 
-    const NColumnShard::TConcreteScanCounters& GetCounters() const noexcept {
-        return Context.GetCounters();
-    }
+    virtual void DoAbort() override;
+    virtual bool DoIsFinished() const override;
 
-    const NColumnShard::TDataTasksProcessorContainer& GetTasksProcessor() const noexcept {
-        return Context.GetProcessor();
-    }
+    virtual void DoAddData(const TBlobRange& blobRange, const TString& data) override;
+    virtual std::optional<TBlobRange> DoExtractNextBlob(const bool hasReadyResults) override;
+public:
+    TIndexedReadData(NOlap::TReadMetadata::TConstPtr readMetadata, const TReadContext& context);
 
     NIndexedReader::TGranulesFillingContext& GetGranulesContext() {
         Y_VERIFY(GranulesContext);
@@ -70,13 +65,6 @@ public:
     }
 
     void InitRead();
-    void Abort();
-    bool IsFinished() const;
-
-    /// @returns batches and corresponding last keys in correct order (i.e. sorted by by PK)
-    std::vector<TPartialReadResult> GetReadyResults(const int64_t maxRowsInBatch);
-
-    void AddData(const TBlobRange& blobRange, const TString& data);
 
     NOlap::TReadMetadata::TConstPtr GetReadMetadata() const {
         return ReadMetadata;
@@ -92,12 +80,6 @@ public:
     void AddBlobToFetchInFront(const ui64 granuleId, const TBlobRange& range) {
         PriorityBlobsQueue.emplace_back(granuleId, range);
     }
-
-    bool HasMoreBlobs() const {
-        return FetchBlobsQueue.size() || PriorityBlobsQueue.size();
-    }
-
-    TBlobRange ExtractNextBlob(const bool hasReadyResults);
 
 private:
     std::shared_ptr<arrow::RecordBatch> MakeNotIndexedBatch(

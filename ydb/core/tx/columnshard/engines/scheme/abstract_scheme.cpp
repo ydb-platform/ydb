@@ -28,7 +28,7 @@ std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::NormalizeBatch(const ISnaps
         auto& resultField = resultArrowSchema->fields()[i];
         auto columnId = GetIndexInfo().GetColumnId(resultField->name());
         auto oldColumnIndex = dataSchema.GetFieldIndex(columnId);
-        if (oldColumnIndex >= 0) { // ClumnExists
+        if (oldColumnIndex >= 0) { // ColumnExists
             auto oldColumnInfo = dataSchema.GetFieldByIndex(oldColumnIndex);
             Y_VERIFY(oldColumnInfo);
             auto columnData = batch->GetColumnByName(oldColumnInfo->name());

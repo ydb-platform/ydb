@@ -9,13 +9,18 @@ namespace {
 class TReadActor : public TActorBootstrapped<TReadActor> {
 private:
     void BuildResult(const TActorContext& ctx) {
-        auto ready = IndexedData.GetReadyResults(Max<i64>());
+        auto ready = IndexedData->ExtractReadyResults(Max<i64>());
         LOG_S_TRACE("Ready results with " << ready.size() << " batches at tablet " << TabletId << " (read)");
-
-        size_t next = 1;
-        for (auto it = ready.begin(); it != ready.end(); ++it, ++next) {
-            const bool lastOne = IndexedData.IsFinished() && (next == ready.size());
-            SendResult(ctx, it->GetResultBatch(), lastOne);
+        if (ready.empty()) {
+            if (IndexedData->IsFinished()) {
+                SendResult(ctx, nullptr, true);
+            }
+        } else {
+            size_t next = 1;
+            for (auto it = ready.begin(); it != ready.end(); ++it, ++next) {
+                const bool lastOne = IndexedData->IsFinished() && (next == ready.size());
+                SendResult(ctx, it->GetResultBatch(), lastOne);
+            }
         }
     }
 public:
@@ -35,11 +40,11 @@ public:
         , BlobCacheActorId(NBlobCache::MakeBlobCacheServiceId())
         , Result(std::move(event))
         , ReadMetadata(readMetadata)
-        , IndexedData(ReadMetadata, true, NOlap::TReadContext(counters))
         , Deadline(deadline)
         , ColumnShardActorId(columnShardActorId)
         , RequestCookie(requestCookie)
         , ReturnedBatchNo(0)
+        , Counters(counters)
     {}
 
     void Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult::TPtr& ev, const TActorContext& ctx) {
@@ -58,7 +63,7 @@ public:
 
         Y_VERIFY(event.Data.size() == event.BlobRange.Size, "%zu, %d", event.Data.size(), event.BlobRange.Size);
 
-        IndexedData.AddData(event.BlobRange, event.Data);
+        IndexedData->AddData(event.BlobRange, event.Data);
 
         BuildResult(ctx);
         DieFinished(ctx);
@@ -75,7 +80,7 @@ public:
     void SendErrorResult(const TActorContext& ctx, NKikimrTxColumnShard::EResultStatus status) {
         Y_VERIFY(status != NKikimrTxColumnShard::EResultStatus::SUCCESS);
         SendResult(ctx, {}, true, status);
-        IndexedData.Abort();
+        IndexedData->Abort();
     }
 
     void SendResult(const TActorContext& ctx, const std::shared_ptr<arrow::RecordBatch>& batch, bool finished = false,
@@ -84,16 +89,15 @@ public:
         auto& proto = Proto(chunkEvent.get());
 
         TString data;
-        if (batch) {
+        if (batch && batch->num_rows()) {
             data = NArrow::SerializeBatchNoCompression(batch);
 
             auto metadata = proto.MutableMeta();
             metadata->SetFormat(NKikimrTxColumnShard::FORMAT_ARROW);
             metadata->SetSchema(GetSerializedSchema(batch));
-        }
-
-        if (status == NKikimrTxColumnShard::EResultStatus::SUCCESS) {
-            Y_VERIFY(!data.empty());
+            if (status == NKikimrTxColumnShard::EResultStatus::SUCCESS) {
+                Y_VERIFY(!data.empty());
+            }
         }
 
         proto.SetBatch(ReturnedBatchNo);
@@ -132,7 +136,7 @@ public:
     }
 
     void DieFinished(const TActorContext& ctx) {
-        if (IndexedData.IsFinished()) {
+        if (IndexedData->IsFinished()) {
             LOG_S_DEBUG("Finished read (with " << ReturnedBatchNo << " batches sent) at tablet " << TabletId);
             Send(ColumnShardActorId, new TEvPrivate::TEvReadFinished(RequestCookie));
             Die(ctx);
@@ -140,9 +144,8 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        IndexedData.InitRead();
-
-        LOG_S_DEBUG("Starting read (" << IndexedData.DebugString() << ") at tablet " << TabletId);
+        IndexedData = ReadMetadata->BuildReader(NOlap::TReadContext(Counters, true), ReadMetadata);
+        LOG_S_DEBUG("Starting read (" << IndexedData->DebugString() << ") at tablet " << TabletId);
 
         bool earlyExit = false;
         if (Deadline != TInstant::Max()) {
@@ -159,9 +162,9 @@ public:
             SendTimeouts(ctx);
             ctx.Send(SelfId(), new TEvents::TEvPoisonPill());
         } else {
-            while (IndexedData.HasMoreBlobs()) {
-                const auto blobRange = IndexedData.ExtractNextBlob(false);
-                SendReadRequest(ctx, blobRange);
+            while (const auto blobRange = IndexedData->ExtractNextBlob(false)) {
+                Y_VERIFY(blobRange->BlobId.IsValid());
+                SendReadRequest(ctx, *blobRange);
             }
             BuildResult(ctx);
         }
@@ -203,11 +206,12 @@ private:
     TActorId BlobCacheActorId;
     std::unique_ptr<TEvColumnShard::TEvReadResult> Result;
     NOlap::TReadMetadata::TConstPtr ReadMetadata;
-    NOlap::TIndexedReadData IndexedData;
+    std::shared_ptr<NOlap::IDataReader> IndexedData;
     TInstant Deadline;
     TActorId ColumnShardActorId;
     const ui64 RequestCookie;
     ui32 ReturnedBatchNo;
+    const TConcreteScanCounters Counters;
     mutable TString SerializedSchema;
 
     TString GetSerializedSchema(const std::shared_ptr<arrow::RecordBatch>& batch) const {

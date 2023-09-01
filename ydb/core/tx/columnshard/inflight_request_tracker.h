@@ -53,8 +53,8 @@ public:
                 continue;
             }
 
-            for (const auto& portion : readMeta->SelectInfo->Portions) {
-                const ui64 portionId = portion.GetPortion();
+            for (const auto& portion : readMeta->SelectInfo->PortionsOrderedPK) {
+                const ui64 portionId = portion->GetPortion();
                 auto it = PortionUseCount.find(portionId);
                 Y_VERIFY(it != PortionUseCount.end(), "Portion id %" PRIu64 " not found in request %" PRIu64, portionId, cookie);
                 if (it->second == 1) {
@@ -62,7 +62,7 @@ public:
                 } else {
                     it->second--;
                 }
-                for (auto& rec : portion.Records) {
+                for (auto& rec : portion->Records) {
                     if (blobTracker.SetBlobInUse(rec.BlobRange.BlobId, false)) {
                         freedBlobs.emplace(rec.BlobRange.BlobId);
                     }
@@ -105,10 +105,10 @@ private:
         Y_VERIFY(selectInfo);
         SelectStatsDelta += selectInfo->Stats();
 
-        for (const auto& portion : readMeta->SelectInfo->Portions) {
-            const ui64 portionId = portion.GetPortion();
+        for (const auto& portion : readMeta->SelectInfo->PortionsOrderedPK) {
+            const ui64 portionId = portion->GetPortion();
             PortionUseCount[portionId]++;
-            for (auto& rec : portion.Records) {
+            for (auto& rec : portion->Records) {
                 blobTracker.SetBlobInUse(rec.BlobRange.BlobId, true);
             }
         }

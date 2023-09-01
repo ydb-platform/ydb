@@ -144,6 +144,9 @@ private:
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadata>;
 
+    NIndexedReader::TSortableBatchPosition BuildSortedPosition(const NArrow::TReplaceKey& key) const;
+    std::shared_ptr<IDataReader> BuildReader(const NOlap::TReadContext& context, const TConstPtr& self) const;
+
     const std::vector<ui32>& GetAllColumns() const {
         return AllColumns;
     }
@@ -225,7 +228,7 @@ public:
 
     bool Empty() const {
         Y_VERIFY(SelectInfo);
-        return SelectInfo->Portions.empty() && CommittedBlobs.empty();
+        return SelectInfo->PortionsOrderedPK.empty() && CommittedBlobs.empty();
     }
 
     std::shared_ptr<arrow::Schema> GetSortingKey() const {
@@ -253,9 +256,9 @@ public:
         return ResultIndexSchema->GetIndexInfo().GetPrimaryKey();
     }
 
-    size_t NumIndexedRecords() const {
+    size_t NumIndexedChunks() const {
         Y_VERIFY(SelectInfo);
-        return SelectInfo->NumRecords();
+        return SelectInfo->NumChunks();
     }
 
     size_t NumIndexedBlobs() const {
@@ -267,7 +270,7 @@ public:
 
     void Dump(IOutputStream& out) const override {
         out << "columns: " << GetSchemaColumnsCount()
-            << " index records: " << NumIndexedRecords()
+            << " index chunks: " << NumIndexedChunks()
             << " index blobs: " << NumIndexedBlobs()
             << " committed blobs: " << CommittedBlobs.size()
       //      << " with program steps: " << (Program ? Program->Steps.size() : 0)

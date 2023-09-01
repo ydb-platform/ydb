@@ -1,6 +1,7 @@
 #include "plugin.h"
 
 #include "error_helpers.h"
+#include "progress_merger.h"
 
 #include <ydb/library/yql/providers/yt/lib/log/yt_logger.h>
 #include <ydb/library/yql/providers/yt/lib/yt_download/yt_download.h>
@@ -26,8 +27,9 @@
 #include <yt/cpp/mapreduce/interface/config.h>
 #include <yt/cpp/mapreduce/interface/logging/logger.h>
 
-#include <library/cpp/yson/node/node_io.h>
+#include <library/cpp/yt/threading/rw_spin_lock.h>
 
+#include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/yson/parser.h>
 #include <library/cpp/yson/writer.h>
 
@@ -44,6 +46,14 @@ namespace NYT::NYqlPlugin {
 namespace NNative {
 
 using namespace NYson;
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TActiveQuery
+{
+    TProgressMerger ProgressMerger;
+    std::optional<TString> Plan;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -171,7 +181,7 @@ public:
         YQL_LOG(INFO) << "YQL plugin initialized";
     }
 
-    TQueryResult GuardedRun(TString impersonationUser, TString queryText, TYsonString settings)
+    TQueryResult GuardedRun(TQueryId queryId, TString impersonationUser, TString queryText, TYsonString settings)
     {
         auto credentials = MakeIntrusive<NYql::TCredentials>();
         if (YTTokenPath_) {
@@ -186,6 +196,19 @@ public:
 
         auto program = ProgramFactory_->Create("-memory-", queryText);
         program->SetOperationAttrsYson(PatchQueryAttributes(OperationAttributes_, settings));
+
+        auto maybeToOptional = [] (const TMaybe<TString>& maybeStr) -> std::optional<TString> {
+            if (!maybeStr) {
+                return std::nullopt;
+            }
+            return *maybeStr;
+        };
+
+        program->SetProgressWriter([&] (const NYql::TOperationProgress& progress) {
+            auto guard = WriterGuard(ProgressSpinLock);
+            ActiveQueriesProgress_[queryId].ProgressMerger.MergeWith(progress);
+            ActiveQueriesProgress_[queryId].Plan = maybeToOptional(program->GetQueryPlan());
+        });
 
         NSQLTranslation::TTranslationSettings sqlSettings;
         sqlSettings.ClusterMapping = Clusters_;
@@ -228,28 +251,51 @@ public:
             yson.OnEndList();
         }
 
-        auto maybeToOptional = [] (const TMaybe<TString>& maybeStr) -> std::optional<TString> {
-            if (!maybeStr) {
-                return std::nullopt;
-            }
-            return *maybeStr;
-        };
+        TString progress;
+        {
+            auto guard = WriterGuard(ProgressSpinLock);
+            progress = ActiveQueriesProgress_[queryId].ProgressMerger.ToYsonString();
+            ActiveQueriesProgress_.erase(queryId);
+        }
 
         return {
             .YsonResult = result.Empty() ? std::nullopt : std::make_optional(result.Str()),
             .Plan = maybeToOptional(program->GetQueryPlan()),
             .Statistics = maybeToOptional(program->GetStatistics()),
+            .Progress = progress,
             .TaskInfo = maybeToOptional(program->GetTasksInfo()),
         };
     }
 
-    TQueryResult Run(TString impersonationUser, TString queryText, TYsonString settings) noexcept override
+    TQueryResult Run(TQueryId queryId, TString impersonationUser, TString queryText, TYsonString settings) noexcept override
     {
         try {
-            return GuardedRun(impersonationUser, queryText, settings);
+            return GuardedRun(queryId, impersonationUser, queryText, settings);
         } catch (const std::exception& ex) {
+            {
+                auto guard = WriterGuard(ProgressSpinLock);
+                ActiveQueriesProgress_.erase(queryId);
+            }
+
             return TQueryResult{
-                .YsonError = ExceptionToYtErrorYson(ex),
+                .YsonError = MessageToYtErrorYson(ex.what()),
+            };
+        }
+    }
+
+    TQueryResult GetProgress(TQueryId queryId) noexcept override
+    {
+        auto guard = ReaderGuard(ProgressSpinLock);
+        if (ActiveQueriesProgress_.contains(queryId)) {
+            TQueryResult result;
+            if (ActiveQueriesProgress_[queryId].ProgressMerger.HasChangesSinceLastFlush()) {
+                result.Plan = ActiveQueriesProgress_[queryId].Plan;
+                result.Progress = ActiveQueriesProgress_[queryId].ProgressMerger.ToYsonString();
+            }
+            return result;
+        } else {
+            return TQueryResult{
+                .YsonError = MessageToYtErrorYson(Format("No progress for queryId: %v", queryId)),
             };
         }
     }
@@ -266,6 +312,8 @@ private:
     std::optional<TString> DefaultCluster_;
     THashMap<TString, TString> Modules_;
     TYsonString OperationAttributes_;
+    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, ProgressSpinLock);
+    THashMap<TQueryId, TActiveQuery> ActiveQueriesProgress_;
 
     TString PatchQueryAttributes(TYsonString configAttributes, TYsonString querySettings)
     {

@@ -10,7 +10,7 @@ namespace NYT::NYqlPlugin {
 
 TString IssuesToYtErrorYson(const NYql::TIssues& issues);
 
-TString ExceptionToYtErrorYson(const std::exception& exception);
+TString MessageToYtErrorYson(const TString& message);
 
 ////////////////////////////////////////////////////////////////////////////////
 

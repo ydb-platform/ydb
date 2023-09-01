@@ -54,6 +54,8 @@ struct TBridgeQueryResult
     ssize_t PlanLength = 0;
     const char* Statistics = nullptr;
     ssize_t StatisticsLength = 0;
+    const char* Progress = nullptr;
+    ssize_t ProgressLength = 0;
     const char* TaskInfo = nullptr;
     ssize_t TaskInfoLength = 0;
 
@@ -62,7 +64,8 @@ struct TBridgeQueryResult
 };
 
 using TFuncBridgeFreeQueryResult = void(TBridgeQueryResult* result);
-using TFuncBridgeRun = TBridgeQueryResult*(TBridgeYqlPlugin* plugin, const char* impersonationUser, const char* queryText, const char* settings);
+using TFuncBridgeRun = TBridgeQueryResult*(TBridgeYqlPlugin* plugin, const char* queryId, const char* impersonationUser, const char* queryText, const char* settings);
+using TFuncBridgeGetProgress = TBridgeQueryResult*(TBridgeYqlPlugin* plugin, const char* queryId);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -70,6 +73,7 @@ using TFuncBridgeRun = TBridgeQueryResult*(TBridgeYqlPlugin* plugin, const char*
     XX(BridgeCreateYqlPlugin) \
     XX(BridgeFreeYqlPlugin) \
     XX(BridgeFreeQueryResult) \
-    XX(BridgeRun)
+    XX(BridgeRun) \
+    XX(BridgeGetProgress)
 
 ////////////////////////////////////////////////////////////////////////////////

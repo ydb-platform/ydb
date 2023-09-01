@@ -27,6 +27,7 @@ target_link_libraries(yql-plugin-native PUBLIC
   yql-core-file_storage
   core-file_storage-proto
   core-file_storage-http_download
+  yql-core-progress_merger
   core-services-mounts
   yql-core-user_data
   library-yql-minikql
@@ -38,6 +39,7 @@ target_link_libraries(yql-plugin-native PUBLIC
   providers-common-udf_resolve
   providers-solomon-gateway
   providers-solomon-provider
+  library-yql-core
   yql-core-url_preprocessing
   yt-gateway-native
   yt-lib-log
@@ -47,6 +49,7 @@ target_link_libraries(yql-plugin-native PUBLIC
 )
 target_sources(yql-plugin-native PRIVATE
   ${CMAKE_SOURCE_DIR}/yt/yql/plugin/native/error_helpers.cpp
+  ${CMAKE_SOURCE_DIR}/yt/yql/plugin/native/progress_merger.cpp
 )
 
 add_global_library_for(yql-plugin-native.global yql-plugin-native)
@@ -69,6 +72,7 @@ target_link_libraries(yql-plugin-native.global PUBLIC
   yql-core-file_storage
   core-file_storage-proto
   core-file_storage-http_download
+  yql-core-progress_merger
   core-services-mounts
   yql-core-user_data
   library-yql-minikql
@@ -80,6 +84,7 @@ target_link_libraries(yql-plugin-native.global PUBLIC
   providers-common-udf_resolve
   providers-solomon-gateway
   providers-solomon-provider
+  library-yql-core
   yql-core-url_preprocessing
   yt-gateway-native
   yt-lib-log

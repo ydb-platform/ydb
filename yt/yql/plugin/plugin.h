@@ -5,6 +5,8 @@
 
 #include <library/cpp/logger/log.h>
 
+#include <library/cpp/yt/string/guid.h>
+
 #include <library/cpp/yt/yson_string/string.h>
 
 #include <optional>
@@ -12,6 +14,10 @@
 namespace NYT::NYqlPlugin {
 
 using namespace NYson;
+
+////////////////////////////////////////////////////////////////////////////////
+
+using TQueryId = TGuid;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -39,6 +45,7 @@ struct TQueryResult
     std::optional<TString> YsonResult;
     std::optional<TString> Plan;
     std::optional<TString> Statistics;
+    std::optional<TString> Progress;
     std::optional<TString> TaskInfo;
 
     //! YSON representation of a YT error.
@@ -49,9 +56,13 @@ struct TQueryResult
 //! There are two major implementation: one of them is based
 //! on YQL code and another wraps the pure C bridge interface, which
 //! is implemented by a dynamic library.
+/*!
+*  \note Thread affinity: any
+*/
 struct IYqlPlugin
 {
-    virtual TQueryResult Run(TString impersonationUser, TString queryText, TYsonString settings) noexcept = 0;
+    virtual TQueryResult Run(TQueryId queryId, TString impersonationUser, TString queryText, TYsonString settings) noexcept = 0;
+    virtual TQueryResult GetProgress(TQueryId queryId) noexcept = 0;
 
     virtual ~IYqlPlugin() = default;
 };

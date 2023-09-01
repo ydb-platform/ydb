@@ -51,31 +51,45 @@ void BridgeFreeQueryResult(TBridgeQueryResult* result)
     delete result;
 }
 
-TBridgeQueryResult* BridgeRun(TBridgeYqlPlugin* plugin, const char* impersonationUser, const char* queryText, const char* settings)
+void FillString(const char*& str, ssize_t& strLength, const std::optional<TString>& original)
+{
+    if (!original) {
+        str = nullptr;
+        strLength = 0;
+        return;
+    }
+    char* copy = new char[original->size() + 1];
+    memcpy(copy, original->data(), original->size() + 1);
+    str = copy;
+    strLength = original->size();
+}
+
+TBridgeQueryResult* BridgeRun(TBridgeYqlPlugin* plugin, const char* queryId, const char* impersonationUser, const char* queryText, const char* settings)
 {
     static const auto EmptyMap = TYsonString(TString("{}"));
 
     auto* nativePlugin = reinterpret_cast<IYqlPlugin*>(plugin);
     auto* bridgeResult = new TBridgeQueryResult;
 
-    auto fillString = [] (const char*& str, ssize_t& strLength, const std::optional<TString>& original) {
-        if (!original) {
-            str = nullptr;
-            strLength = 0;
-            return;
-        }
-        char* copy = new char[original->size() + 1];
-        memcpy(copy, original->data(), original->size() + 1);
-        str = copy;
-        strLength = original->size();
-    };
+    auto result = nativePlugin->Run(NYT::TGuid::FromString(queryId), TString(impersonationUser), TString(queryText), settings ? TYsonString(TString(settings)) : EmptyMap);
+    FillString(bridgeResult->YsonResult, bridgeResult->YsonResultLength, result.YsonResult);
+    FillString(bridgeResult->Plan, bridgeResult->PlanLength, result.Plan);
+    FillString(bridgeResult->Statistics, bridgeResult->StatisticsLength, result.Statistics);
+    FillString(bridgeResult->Progress, bridgeResult->ProgressLength, result.Progress);
+    FillString(bridgeResult->TaskInfo, bridgeResult->TaskInfoLength, result.TaskInfo);
+    FillString(bridgeResult->YsonError, bridgeResult->YsonErrorLength, result.YsonError);
 
-    auto result = nativePlugin->Run(TString(impersonationUser), TString(queryText), settings ? TYsonString(TString(settings)) : EmptyMap);
-    fillString(bridgeResult->YsonResult, bridgeResult->YsonResultLength, result.YsonResult);
-    fillString(bridgeResult->Plan, bridgeResult->PlanLength, result.Plan);
-    fillString(bridgeResult->Statistics, bridgeResult->StatisticsLength, result.Statistics);
-    fillString(bridgeResult->TaskInfo, bridgeResult->TaskInfoLength, result.TaskInfo);
-    fillString(bridgeResult->YsonError, bridgeResult->YsonErrorLength, result.YsonError);
+    return bridgeResult;
+}
+
+TBridgeQueryResult* BridgeGetProgress(TBridgeYqlPlugin* plugin, const char* queryId)
+{
+    auto* nativePlugin = reinterpret_cast<IYqlPlugin*>(plugin);
+    auto* bridgeResult = new TBridgeQueryResult;
+
+    auto result = nativePlugin->GetProgress(NYT::TGuid::FromString(queryId));
+    FillString(bridgeResult->Plan, bridgeResult->PlanLength, result.Plan);
+    FillString(bridgeResult->Progress, bridgeResult->ProgressLength, result.Progress);
 
     return bridgeResult;
 }

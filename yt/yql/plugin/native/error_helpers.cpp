@@ -14,7 +14,7 @@ const int IssueToErrorCodesShift = 30000;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ExceptionToYtErrorYson(const std::exception& exception)
+TString MessageToYtErrorYson(const TString& message)
 {
     TStringStream yson;
     ::NYson::TYsonWriter writer(&yson);
@@ -23,7 +23,7 @@ TString ExceptionToYtErrorYson(const std::exception& exception)
     writer.OnKeyedItem("code");
     writer.OnInt64Scalar(1); // Generic error
     writer.OnKeyedItem("message");
-    writer.OnStringScalar(exception.what());
+    writer.OnStringScalar(message);
     writer.OnKeyedItem("attributes");
     writer.OnBeginMap();
     writer.OnEndMap();

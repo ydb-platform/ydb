@@ -13,6 +13,20 @@ namespace NBridge {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
+std::optional<TString> ToString(const char* str, size_t strLength)
+{
+    if (!str) {
+        return std::nullopt;
+    }
+    return TString(str, strLength);
+}
+
+} // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TDynamicYqlPlugin
 {
 public:
@@ -73,22 +87,30 @@ public:
         BridgePlugin_ = BridgeCreateYqlPlugin(&bridgeOptions);
     }
 
-    TQueryResult Run(TString impersonationUser, TString queryText, NYson::TYsonString settings) noexcept override
+    TQueryResult Run(TQueryId queryId, TString impersonationUser, TString queryText, NYson::TYsonString settings) noexcept override
     {
         auto settingsString = settings ? settings.ToString() : "{}";
-        auto* bridgeQueryResult = BridgeRun(BridgePlugin_, impersonationUser.data(), queryText.data(), settingsString.data());
-        auto toString = [] (const char* str, size_t strLength) -> std::optional<TString> {
-            if (!str) {
-                return std::nullopt;
-            }
-            return TString(str, strLength);
-        };
+        auto queryIdStr = ToString(queryId);
+        auto* bridgeQueryResult = BridgeRun(BridgePlugin_, queryIdStr.data(), impersonationUser.data(), queryText.data(), settingsString.data());
         TQueryResult queryResult = {
-            .YsonResult = toString(bridgeQueryResult->YsonResult, bridgeQueryResult->YsonResultLength),
-            .Plan = toString(bridgeQueryResult->Plan, bridgeQueryResult->PlanLength),
-            .Statistics = toString(bridgeQueryResult->Statistics, bridgeQueryResult->StatisticsLength),
-            .TaskInfo = toString(bridgeQueryResult->TaskInfo, bridgeQueryResult->TaskInfoLength),
-            .YsonError = toString(bridgeQueryResult->YsonError, bridgeQueryResult->YsonErrorLength),
+            .YsonResult = ToString(bridgeQueryResult->YsonResult, bridgeQueryResult->YsonResultLength),
+            .Plan = ToString(bridgeQueryResult->Plan, bridgeQueryResult->PlanLength),
+            .Statistics = ToString(bridgeQueryResult->Statistics, bridgeQueryResult->StatisticsLength),
+            .Progress = ToString(bridgeQueryResult->Progress, bridgeQueryResult->ProgressLength),
+            .TaskInfo = ToString(bridgeQueryResult->TaskInfo, bridgeQueryResult->TaskInfoLength),
+            .YsonError = ToString(bridgeQueryResult->YsonError, bridgeQueryResult->YsonErrorLength),
+        };
+        BridgeFreeQueryResult(bridgeQueryResult);
+        return queryResult;
+    }
+
+    TQueryResult GetProgress(TQueryId queryId) noexcept override
+    {
+        auto queryIdStr = ToString(queryId);
+        auto* bridgeQueryResult = BridgeGetProgress(BridgePlugin_, queryIdStr.data());
+        TQueryResult queryResult = {
+            .Plan = ToString(bridgeQueryResult->Plan, bridgeQueryResult->PlanLength),
+            .Progress = ToString(bridgeQueryResult->Progress, bridgeQueryResult->ProgressLength),
         };
         BridgeFreeQueryResult(bridgeQueryResult);
         return queryResult;

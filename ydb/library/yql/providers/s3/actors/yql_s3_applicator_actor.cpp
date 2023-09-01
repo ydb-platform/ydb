@@ -301,9 +301,14 @@ public:
 
     void PopRequests() {
         while (!RequestQueue.empty() && HttpRequestInflight < 100) {
-            RequestQueue.front()(*this);
-            RequestQueue.pop();
-            HttpRequestInflight++;
+            try {
+                RequestQueue.front()(*this);
+                RequestQueue.pop();
+                HttpRequestInflight++;
+            } catch (const std::exception& e) {
+                LOG_E("Exception: " << e.what());
+                Finish(true, TStringBuilder{} << "Error while processing HTTP request: " << e.what());
+            }
         }
     }
 

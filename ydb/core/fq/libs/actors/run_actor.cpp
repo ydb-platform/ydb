@@ -822,7 +822,8 @@ private:
 
     void HandleFinish(TEvents::TEvEffectApplicationResult::TPtr ev) {
         if (ev->Get()->FatalError) {
-            // TODO: special fatal error handling
+            Fail(ev->Get()->Issues.ToOneLineString());
+            return;
         }
         if (ev->Get()->Issues) {
             LOG_W("Effect Issues: " << ev->Get()->Issues.ToOneLineString());

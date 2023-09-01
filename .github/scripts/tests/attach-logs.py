@@ -28,7 +28,6 @@ def make_filename(n, *parts):
 def save_log(err_lines: List[str], out_path: Path, *parts):
     for x in range(128):
         fn = make_filename(x, *parts)
-        print(f"save {fn} for {'::'.join(parts)}")
         path = out_path.joinpath(fn)
         try:
             with open(path, "xt") as fp:
@@ -37,6 +36,7 @@ def save_log(err_lines: List[str], out_path: Path, *parts):
         except FileExistsError:
             pass
         else:
+            print(f"save {fn} for {'::'.join(parts)}")
             return fn, path
 
     raise Exception("Unable to create file")
@@ -56,20 +56,26 @@ def extract_logs(log_fp: io.StringIO, out_path: Path, url_prefix):
         if not ctest_buf:
             continue
 
-        first_line = ctest_buf[0]
+        line_no = 0
+        while line_no < len(ctest_buf):
+            if ctest_buf[line_no].startswith((YUNIT_MARK, GTEST_MARK)):
+                break
+            line_no += 1
+        else:
+            continue
 
-        if first_line.startswith(GTEST_MARK):
-            for classname, method, err_lines in parse_gtest_fails(ctest_buf):
+        if ctest_buf[line_no].startswith(GTEST_MARK):
+            for classname, method, err_lines in parse_gtest_fails(ctest_buf[line_no:]):
                 fn, path = save_log(err_lines, out_path, classname, method)
                 log_url = f"{url_prefix}{fn}"
                 shard.add_testcase(classname, method, path, log_url)
-        elif first_line.startswith(YUNIT_MARK):
-            for classname, method, err_lines in parse_yunit_fails(ctest_buf):
+        elif ctest_buf[line_no].startswith(YUNIT_MARK):
+            for classname, method, err_lines in parse_yunit_fails(ctest_buf[line_no:]):
                 fn, path = save_log(err_lines, out_path, classname, method)
                 log_url = f"{url_prefix}{fn}"
                 shard.add_testcase(classname, method, path, log_url)
         else:
-            pass
+            raise Exception("We checked known test markers in the while loop")
 
     return ctestlog
 

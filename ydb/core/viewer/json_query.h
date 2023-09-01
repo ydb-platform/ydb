@@ -540,6 +540,36 @@ private:
                 }
             }
 
+            if (Schema == "multi") {
+                NJson::TJsonValue& jsonResults = jsonResponse["result"];
+                jsonResults.SetType(NJson::JSON_ARRAY);
+                for (auto it = ResultSets.begin(); it != ResultSets.end(); ++it) {
+                    NYdb::TResultSet resultSet(*it);
+                    const auto& columnsMeta = resultSet.GetColumnsMeta();
+                    NJson::TJsonValue& jsonResult = jsonResults.AppendValue({});
+
+                    NJson::TJsonValue& jsonColumns = jsonResult["columns"];
+                    jsonColumns.SetType(NJson::JSON_ARRAY);
+                    for (size_t columnNum = 0; columnNum < columnsMeta.size(); ++columnNum) {
+                        NJson::TJsonValue& jsonColumn = jsonColumns.AppendValue({});
+                        const NYdb::TColumn& columnMeta = columnsMeta[columnNum];
+                        jsonColumn["name"] = columnMeta.Name;
+                        jsonColumn["type"] = columnMeta.Type.ToString();
+                    }
+
+                    NJson::TJsonValue& jsonRows = jsonResult["rows"];
+                    NYdb::TResultSetParser rsParser(resultSet);
+                    while (rsParser.TryNextRow()) {
+                        NJson::TJsonValue& jsonRow = jsonRows.AppendValue({});
+                        jsonRow.SetType(NJson::JSON_ARRAY);
+                        for (size_t columnNum = 0; columnNum < columnsMeta.size(); ++columnNum) {
+                            NJson::TJsonValue& jsonColumn = jsonRow.AppendValue({});
+                            jsonColumn = ColumnValueToJsonValue(rsParser.ColumnParser(columnNum));
+                        }
+                    }
+                }
+            }
+
             if (Schema == "ydb") {
                 NJson::TJsonValue& jsonResults = jsonResponse["result"];
                 jsonResults.SetType(NJson::JSON_ARRAY);
@@ -576,7 +606,7 @@ struct TJsonRequestParameters<TJsonQuery> {
                       {"name":"direct","in":"query","description":"force processing query on current node","required":false,"type":"boolean"},
                       {"name":"syntax","in":"query","description":"query syntax (yql_v1, pg)","required":false,"type":"string"},
                       {"name":"database","in":"query","description":"database name","required":false,"type":"string"},
-                      {"name":"schema","in":"query","description":"result format schema (classic, modern, ydb)","required":false,"type":"string"},
+                      {"name":"schema","in":"query","description":"result format schema (classic, modern, ydb, multi)","required":false,"type":"string"},
                       {"name":"stats","in":"query","description":"return stats (profile)","required":false,"type":"string"},
                       {"name":"action","in":"query","description":"execute method (execute-scan, execute-script, execute-query, execute-data,explain-ast, explain-scan, explain-script, explain-query, explain-data)","required":false,"type":"string"},
                       {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"}])___";

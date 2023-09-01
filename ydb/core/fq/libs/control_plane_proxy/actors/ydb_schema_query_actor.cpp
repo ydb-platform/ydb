@@ -293,6 +293,14 @@ public:
         FirstStatus.Clear();
     }
 
+    static NYdb::TStatus ExtractStatus(const TAsyncStatus& future) {
+        try {
+            return std::move(future.GetValueSync()); // can throw an exception
+        } catch (...) {
+            return NYdb::TStatus{EStatus::BAD_REQUEST, NYql::TIssues{NYql::TIssue{CurrentExceptionMessage()}}};
+        }
+    }
+
     void InitiateSchemaQueryExecution(const TString& schemeQuery) {
         CPP_LOG_I("TSchemaQueryYDBActor Executing schema query. Actor id: "
                   << TBase::SelfId() << " SchemeQuery: " << schemeQuery);
@@ -305,7 +313,7 @@ public:
                         self        = SelfId()](const TAsyncStatus& future) {
                 actorSystem->Send(self,
                                   new typename TEvPrivate::TEvQueryExecutionResponse{
-                                      std::move(future.GetValueSync()),
+                                      ExtractStatus(future),
                                   });
             });
     }

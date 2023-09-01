@@ -23,6 +23,8 @@ SRCS(
     kafka_metrics.cpp
 )
 
+GENERATE_ENUM_SERIALIZATION(kafka.h)
+
 PEERDIR(
     library/cpp/actors/core
     library/cpp/actors/protos

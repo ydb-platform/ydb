@@ -2,11 +2,12 @@
 #include <ydb/core/raw_socket/sock_config.h>
 #include <ydb/core/util/address_classifier.h>
 
+#include "actors/actors.h"
 #include "kafka_connection.h"
 #include "kafka_events.h"
 #include "kafka_log_impl.h"
-#include "actors/actors.h"
 #include "kafka_metrics.h"
+
 
 #include <strstream>
 #include <sstream>
@@ -175,13 +176,14 @@ protected:
         }
     }
 
-    void SendResponseMetrics(const TString method, const TInstant requestStartTime, EKafkaErrors errorCode, const TActorContext& ctx) {
+    void SendResponseMetrics(const TString method, const TInstant requestStartTime, i32 bytes, EKafkaErrors errorCode, const TActorContext& ctx) {
         TDuration duration = TInstant::Now() - requestStartTime;
         ctx.Send(MakeKafkaMetricsServiceID(),
-            new TEvKafka::TEvUpdateHistCounter(static_cast<i64>(duration.MilliSeconds()), 1, BuildLabels(Context, method, "", "api.kafka.response.duration_milliseconds", "")
-        ));
+            new TEvKafka::TEvUpdateHistCounter(static_cast<i64>(duration.MilliSeconds()), 1, BuildLabels(Context, method, "", "api.kafka.response.duration_milliseconds", "")));
         ctx.Send(MakeKafkaMetricsServiceID(),
-            new TEvKafka::TEvUpdateCounter(1, BuildLabels(Context, method, "", "api.kafka.response.count", TStringBuilder() << (i16)errorCode)));
+            new TEvKafka::TEvUpdateCounter(1, BuildLabels(Context, method, "", "api.kafka.response.count", ToString(errorCode))));
+        ctx.Send(MakeKafkaMetricsServiceID(),
+            new TEvKafka::TEvUpdateCounter(bytes, BuildLabels(Context, method, "", "api.kafka.response.bytes", "")));
     }
 
     void OnAccept() {
@@ -367,7 +369,7 @@ protected:
 
         TBufferedWriter buffer(Socket.Get(), Context->Config.GetPacketSize());
         TKafkaWritable writable(buffer);
-        SendResponseMetrics(method, requestStartTime, errorCode, ctx);
+        SendResponseMetrics(method, requestStartTime, size, errorCode, ctx);
         try {
             writable << size;
             responseHeader.Write(writable, headerVersion);

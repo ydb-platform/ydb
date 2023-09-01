@@ -7,11 +7,18 @@
 
 
 add_subdirectory(ut)
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
 add_library(ydb-core-kafka_proxy)
 target_link_libraries(ydb-core-kafka_proxy PUBLIC
   contrib-libs-cxxsupp
   yutil
+  tools-enum_parser-enum_serialization_runtime
   cpp-actors-core
   cpp-actors-protos
   ydb-core-base
@@ -32,4 +39,9 @@ target_sources(ydb-core-kafka_proxy PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_messages_int.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_records.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_metrics.cpp
+)
+generate_enum_serilization(ydb-core-kafka_proxy
+  ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/kafka.h
+  INCLUDE_HEADERS
+  ydb/core/kafka_proxy/kafka.h
 )

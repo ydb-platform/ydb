@@ -35,7 +35,7 @@
                         "Key1 (true)"
                     ],
                     "scan_by": [
-                        "Key2 (false, true)"
+                        "Key2 (null, true)"
                     ],
                     "type": "Lookup"
                 }

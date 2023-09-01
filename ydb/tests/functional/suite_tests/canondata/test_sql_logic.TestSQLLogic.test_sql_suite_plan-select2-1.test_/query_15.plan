@@ -5,7 +5,7 @@
         "Plans": [
             {
                 "Node Type": "ResultSet_1",
-                "PlanNodeId": 11,
+                "PlanNodeId": 9,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
                     {
@@ -16,11 +16,11 @@
                                 "Name": "Limit"
                             }
                         ],
-                        "PlanNodeId": 10,
+                        "PlanNodeId": 8,
                         "Plans": [
                             {
                                 "Node Type": "Merge",
-                                "PlanNodeId": 9,
+                                "PlanNodeId": 7,
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
@@ -48,7 +48,7 @@
                                                     "e"
                                                 ],
                                                 "ReadRange": [
-                                                    "a (n/a)",
+                                                    "a (null)",
                                                     "b (-\u221e, +\u221e)",
                                                     "c (-\u221e, +\u221e)",
                                                     "d (-\u221e, +\u221e)",
@@ -57,7 +57,7 @@
                                                 "Table": "sqllogictest_select2-1.test_plan/t1"
                                             }
                                         ],
-                                        "PlanNodeId": 8,
+                                        "PlanNodeId": 6,
                                         "Tables": [
                                             "sqllogictest_select2-1.test_plan/t1"
                                         ]
@@ -78,20 +78,7 @@
                 ]
             },
             {
-                "Node Type": "Precompute_0_0",
-                "Parent Relationship": "InitPlan",
-                "PlanNodeId": 6,
-                "PlanNodeType": "Materialize",
-                "Plans": [
-                    {
-                        "Node Type": "Stage",
-                        "PlanNodeId": 5
-                    }
-                ],
-                "Subplan Name": "CTE tx_result_binding_0_0"
-            },
-            {
-                "Node Type": "Precompute_0_1",
+                "Node Type": "Precompute_0",
                 "Parent Relationship": "InitPlan",
                 "PlanNodeId": 4,
                 "PlanNodeType": "Materialize",
@@ -148,7 +135,7 @@
                         ]
                     }
                 ],
-                "Subplan Name": "CTE tx_result_binding_0_1"
+                "Subplan Name": "CTE tx_result_binding_0_0"
             }
         ]
     },
@@ -182,7 +169,7 @@
                         "e"
                     ],
                     "lookup_by": [
-                        "a (n/a)"
+                        "a (null)"
                     ],
                     "scan_by": [
                         "b (-\u221e, +\u221e)",

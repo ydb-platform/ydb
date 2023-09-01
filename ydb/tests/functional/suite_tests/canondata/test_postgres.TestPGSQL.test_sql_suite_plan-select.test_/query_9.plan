@@ -4,7 +4,7 @@
         "PlanNodeType": "Query",
         "Plans": [
             {
-                "Node Type": "ResultSet_1",
+                "Node Type": "ResultSet",
                 "PlanNodeId": 4,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
@@ -38,7 +38,7 @@
                                                 ],
                                                 "ReadLimit": "1001",
                                                 "ReadRange": [
-                                                    "unique1 (0, 20)",
+                                                    "unique1 (null, 20)",
                                                     "unique2 (-\u221e, +\u221e)"
                                                 ],
                                                 "Reverse": true,
@@ -77,7 +77,7 @@
                     "limit": "1001",
                     "reverse": true,
                     "scan_by": [
-                        "unique1 (0, 20)",
+                        "unique1 (null, 20)",
                         "unique2 (-\u221e, +\u221e)"
                     ],
                     "type": "Scan"

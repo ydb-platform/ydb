@@ -78,6 +78,27 @@ TMaybeNode<TDqPhyPrecompute> BuildLookupKeysPrecompute(const TExprBase& input, T
         .Done();
 }
 
+bool IsLiteralNothing(TExprBase node) {
+    if (node.Maybe<TCoNothing>()) {
+        auto* type = node.Raw()->GetTypeAnn();
+        if (type->GetKind() != ETypeAnnotationKind::Optional) {
+            return false;
+        }
+        type = type->Cast<TOptionalExprType>()->GetItemType();
+
+        if (type->GetKind() != ETypeAnnotationKind::Data) {
+            return false;
+        }
+
+        auto slot = type->Cast<TDataExprType>()->GetSlot();
+        auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;
+
+        return (NKikimr::NScheme::NTypeIds::IsYqlType(typeId) && NKikimr::NSchemeShard::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(typeId)));
+    } else {
+        return false;
+    }
+}
+
 TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!node.Maybe<TKqlReadTable>()) {
         return node;
@@ -97,7 +118,7 @@ TExprBase KqpBuildReadTableStage(TExprBase node, TExprContext& ctx, const TKqpOp
                 return false;
             }
 
-            if (!value.Maybe<TCoDataCtor>() && !value.Maybe<TCoParameter>()) {
+            if (!value.Maybe<TCoDataCtor>() && !value.Maybe<TCoParameter>() && !IsLiteralNothing(value)) {
                 literalRange = false;
             }
 
@@ -392,7 +413,7 @@ bool RequireLookupPrecomputeStage(const TKqlLookupTable& lookup) {
                     } else {
                         return true;
                     }
-                } else {
+                } else if (!tuple.Value().IsValid() || !IsLiteralNothing(tuple.Value().Cast())) {
                     return true;
                 }
             }

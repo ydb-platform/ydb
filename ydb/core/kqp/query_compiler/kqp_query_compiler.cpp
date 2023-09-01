@@ -108,7 +108,7 @@ NKqpProto::EKqpPhyTableKind GetPhyTableKind(EKikimrTableKind kind) {
         case EKikimrTableKind::SysView:
             return NKqpProto::TABLE_KIND_SYS_VIEW;
         case EKikimrTableKind::External:
-            return NKqpProto::TABLE_KIND_EXTERNAL; 
+            return NKqpProto::TABLE_KIND_EXTERNAL;
         default:
             return NKqpProto::TABLE_KIND_UNSPECIFIED;
     }
@@ -193,6 +193,33 @@ void FillColumns(const TContainer& columns, const TKikimrTableMetadata& tableMet
     }
 }
 
+void FillNothing(TCoNothing expr, NKqpProto::TKqpPhyLiteralValue& value) {
+    auto* typeann = expr.Raw()->GetTypeAnn();
+    YQL_ENSURE(typeann->GetKind() == ETypeAnnotationKind::Optional);
+    typeann = typeann->Cast<TOptionalExprType>()->GetItemType();
+    YQL_ENSURE(typeann->GetKind() == ETypeAnnotationKind::Data);
+    auto slot = typeann->Cast<TDataExprType>()->GetSlot();
+    auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;
+
+    YQL_ENSURE(NKikimr::NScheme::NTypeIds::IsYqlType(typeId) &&
+        NKikimr::NSchemeShard::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(typeId)));
+
+    value.MutableType()->SetKind(NKikimrMiniKQL::Optional);
+    auto* toFill = value.MutableType()->MutableOptional()->MutableItem();
+
+    toFill->SetKind(NKikimrMiniKQL::ETypeKind::Data);
+    toFill->MutableData()->SetScheme(typeId);
+
+    if (slot == EDataSlot::Decimal) {
+        const auto paramsDataType = typeann->Cast<TDataExprParamsType>();
+        auto precision = FromString<ui8>(paramsDataType->GetParamOne());
+        auto scale = FromString<ui8>(paramsDataType->GetParamTwo());
+        toFill->MutableData()->MutableDecimalParams()->SetPrecision(precision);
+        toFill->MutableData()->MutableDecimalParams()->SetScale(scale);
+    }
+
+    value.MutableValue()->SetNullFlagValue(::google::protobuf::NullValue::NULL_VALUE);
+}
 
 void FillKeyBound(const TVarArgCallable<TExprBase>& bound, NKqpProto::TKqpPhyKeyBound& boundProto) {
     if (bound.Maybe<TKqlKeyInc>()) {
@@ -217,6 +244,8 @@ void FillKeyBound(const TVarArgCallable<TExprBase>& bound, NKqpProto::TKqpPhyKey
             paramElementProto.SetElementIndex(FromString<ui32>(key.Cast<TCoNth>().Index().Value()));
         } else if (auto maybeLiteral = key.Maybe<TCoDataCtor>()) {
             FillLiteralProto(maybeLiteral.Cast(), *protoValue.MutableLiteralValue());
+        } else if (auto maybeNull = key.Maybe<TCoNothing>()) {
+            FillNothing(maybeNull.Cast(), *protoValue.MutableLiteralValue());
         } else {
             YQL_ENSURE(false, "Unexpected key bound: " << key.Ref().Content());
         }
@@ -343,6 +372,8 @@ void FillLookup(const TKqpLookupTable& lookup, NKqpProto::TKqpPhyOpLookup& looku
 
                 if (auto maybeParam = tuple.Value().Maybe<TCoParameter>()) {
                     protoColumn.MutableParamValue()->SetParamName(maybeParam.Cast().Name().StringValue());
+                } else if (auto maybeNothing = tuple.Value().Maybe<TCoNothing>()) {
+                    FillNothing(maybeNothing.Cast(), *protoColumn.MutableLiteralValue());
                 } else {
                     YQL_ENSURE(tuple.Value().Maybe<TCoDataCtor>(), "" << tuple.Value().Ref().Dump());
                     FillLiteralProto(tuple.Value().Cast<TCoDataCtor>(), *protoColumn.MutableLiteralValue());

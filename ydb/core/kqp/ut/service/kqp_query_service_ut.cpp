@@ -244,7 +244,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
 
         CompareYson(R"([
             [[1];[202u];["Value2"]];
@@ -364,7 +364,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT(!result.GetStats()->GetPlan().Defined());
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
     }
 
     Y_UNIT_TEST(ExecStatsPlan) {

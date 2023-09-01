@@ -4,7 +4,7 @@
         "PlanNodeType": "Query",
         "Plans": [
             {
-                "Node Type": "ResultSet_1",
+                "Node Type": "ResultSet",
                 "PlanNodeId": 4,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
@@ -52,7 +52,7 @@
                                                 ],
                                                 "ReadLimit": "1001",
                                                 "ReadRange": [
-                                                    "unique1 (0, 10)",
+                                                    "unique1 (null, 10)",
                                                     "unique2 (-\u221e, +\u221e)"
                                                 ],
                                                 "Table": "postgres_select.test_plan/onek"
@@ -103,7 +103,7 @@
                     ],
                     "limit": "1001",
                     "scan_by": [
-                        "unique1 (0, 10)",
+                        "unique1 (null, 10)",
                         "unique2 (-\u221e, +\u221e)"
                     ],
                     "type": "Scan"

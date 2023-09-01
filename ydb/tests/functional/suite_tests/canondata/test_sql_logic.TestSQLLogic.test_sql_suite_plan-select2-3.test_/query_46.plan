@@ -4,7 +4,7 @@
         "PlanNodeType": "Query",
         "Plans": [
             {
-                "Node Type": "ResultSet_1",
+                "Node Type": "ResultSet",
                 "PlanNodeId": 4,
                 "PlanNodeType": "ResultSet",
                 "Plans": [
@@ -39,7 +39,7 @@
                                                     "c"
                                                 ],
                                                 "ReadRange": [
-                                                    "a (0)",
+                                                    "a (null)",
                                                     "b (-\u221e, +\u221e)",
                                                     "c (-\u221e, +\u221e)",
                                                     "d (-\u221e, +\u221e)",
@@ -79,7 +79,7 @@
                         "c"
                     ],
                     "lookup_by": [
-                        "a (0)"
+                        "a (null)"
                     ],
                     "scan_by": [
                         "b (-\u221e, +\u221e)",

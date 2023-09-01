@@ -120,8 +120,7 @@ Y_UNIT_TEST(SimpleRange) {
         )",
         R"([
             [[100];["Value20"]];[[101];["Value21"]];[[102];["Value22"]];[[103];["Value23"]]
-        ])",
-        2);
+        ])");
 
     TestRange(
         R"(

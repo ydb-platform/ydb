@@ -628,6 +628,10 @@ private:
                     return literal.Cast().Literal().StringValue();
                 }
 
+                if (auto literal = key.Maybe<TCoNothing>()) {
+                    return TString("null");
+                }
+
                 return TString("n/a");
             };
 
@@ -1340,6 +1344,10 @@ private:
 
             if (auto literal = key.Maybe<TCoDataCtor>()) {
                 return literal.Cast().Literal().StringValue();
+            }
+
+            if (auto literal = key.Maybe<TCoNothing>()) {
+                return TString("null");
             }
 
             return TString("n/a");

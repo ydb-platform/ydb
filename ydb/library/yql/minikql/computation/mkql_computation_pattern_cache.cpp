@@ -200,6 +200,7 @@ TComputationPatternLRUCache::TComputationPatternLRUCache(TComputationPatternLRUC
     : Cache(std::make_unique<TLRUPatternCacheImpl>(CacheMaxElementsSize, configuration.MaxSizeBytes, CacheMaxElementsSize, configuration.MaxCompiledSizeBytes))
     , Configuration(configuration)
     , Hits(counters->GetCounter("PatternCache/Hits", true))
+    , HitsCompiled(counters->GetCounter("PatternCache/HitsCompiled", true))
     , Waits(counters->GetCounter("PatternCache/Waits", true))
     , Misses(counters->GetCounter("PatternCache/Misses", true))
     , NotSuitablePattern(counters->GetCounter("PatternCache/NotSuitablePattern", true))
@@ -222,6 +223,10 @@ std::shared_ptr<TPatternCacheEntry> TComputationPatternLRUCache::Find(const TStr
     std::lock_guard<std::mutex> lock(Mutex);
     if (auto it = Cache->Find(serializedProgram)) {
         ++*Hits;
+
+        if ((*it)->Pattern->IsCompiled())
+            ++*HitsCompiled;
+
         return *it;
     }
 

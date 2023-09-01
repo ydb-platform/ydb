@@ -183,6 +183,7 @@ private:
     const Config Configuration;
 
     NMonitoring::TDynamicCounters::TCounterPtr Hits;
+    NMonitoring::TDynamicCounters::TCounterPtr HitsCompiled;
     NMonitoring::TDynamicCounters::TCounterPtr Waits;
     NMonitoring::TDynamicCounters::TCounterPtr Misses;
     NMonitoring::TDynamicCounters::TCounterPtr NotSuitablePattern;

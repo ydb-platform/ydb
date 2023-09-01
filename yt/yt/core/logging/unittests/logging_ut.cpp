@@ -387,11 +387,42 @@ TEST_F(TLoggingTest, Rule)
         })"))));
 
     EXPECT_TRUE(rule->IsApplicable("some_service", ELogFamily::PlainText));
+    EXPECT_TRUE(rule->IsApplicable("some_service", ELogFamily::Structured));
     EXPECT_FALSE(rule->IsApplicable("bus", ELogFamily::PlainText));
+    EXPECT_FALSE(rule->IsApplicable("bus", ELogFamily::Structured));
     EXPECT_FALSE(rule->IsApplicable("bus", ELogLevel::Debug, ELogFamily::PlainText));
+    EXPECT_FALSE(rule->IsApplicable("bus", ELogLevel::Debug, ELogFamily::Structured));
     EXPECT_FALSE(rule->IsApplicable("some_service", ELogLevel::Debug, ELogFamily::PlainText));
+    EXPECT_FALSE(rule->IsApplicable("some_service", ELogLevel::Debug, ELogFamily::Structured));
     EXPECT_TRUE(rule->IsApplicable("some_service", ELogLevel::Warning, ELogFamily::PlainText));
+    EXPECT_TRUE(rule->IsApplicable("some_service", ELogLevel::Warning, ELogFamily::Structured));
     EXPECT_TRUE(rule->IsApplicable("some_service", ELogLevel::Info, ELogFamily::PlainText));
+    EXPECT_TRUE(rule->IsApplicable("some_service", ELogLevel::Info, ELogFamily::Structured));
+}
+
+TEST_F(TLoggingTest, RuleWithFamily)
+{
+    auto rule = New<TRuleConfig>();
+    rule->Load(ConvertToNode(TYsonString(TStringBuf(
+        R"({
+            exclude_categories = [ bus ];
+            min_level = info;
+            writers = [ some_writer ];
+            family = plain_text;
+        })"))));
+
+    EXPECT_TRUE(rule->IsApplicable("some_service", ELogFamily::PlainText));
+    EXPECT_FALSE(rule->IsApplicable("some_service", ELogFamily::Structured));
+    EXPECT_FALSE(rule->IsApplicable("bus", ELogFamily::PlainText));
+    EXPECT_FALSE(rule->IsApplicable("bus", ELogFamily::Structured));
+    EXPECT_FALSE(rule->IsApplicable("bus", ELogLevel::Debug, ELogFamily::PlainText));
+    EXPECT_FALSE(rule->IsApplicable("bus", ELogLevel::Debug, ELogFamily::Structured));
+    EXPECT_FALSE(rule->IsApplicable("some_service", ELogLevel::Debug, ELogFamily::PlainText));
+    EXPECT_FALSE(rule->IsApplicable("some_service", ELogLevel::Debug, ELogFamily::Structured));
+    EXPECT_TRUE(rule->IsApplicable("some_service", ELogLevel::Warning, ELogFamily::PlainText));
+    EXPECT_FALSE(rule->IsApplicable("some_service", ELogLevel::Warning, ELogFamily::Structured));
+    EXPECT_TRUE(rule->IsApplicable("some_service", ELogLevel::Info, ELogFamily::PlainText));
+    EXPECT_FALSE(rule->IsApplicable("some_service", ELogLevel::Info, ELogFamily::Structured));
 }
 
 TEST_F(TLoggingTest, LogManager)

@@ -103,14 +103,9 @@ void TLogWriterConfig::Register(TRegistrar registrar)
     });
 }
 
-ELogFamily TLogWriterConfig::GetFamily() const
-{
-    return Format == ELogFormat::PlainText ? ELogFamily::PlainText : ELogFamily::Structured;
-}
-
 bool TLogWriterConfig::AreSystemMessagesEnabled() const
 {
-    return EnableSystemMessages.value_or(GetFamily() == ELogFamily::PlainText);
+    return EnableSystemMessages.value_or(Format == ELogFormat::PlainText);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -127,7 +122,7 @@ void TRuleConfig::Register(TRegistrar registrar)
         .Default(ELogLevel::Maximum);
     registrar.Parameter("family", &TThis::Family)
         .Alias("message_format")
-        .Default(ELogFamily::PlainText);
+        .Default();
     registrar.Parameter("writers", &TThis::Writers)
         .NonEmpty();
 }
@@ -135,7 +130,7 @@ void TRuleConfig::Register(TRegistrar registrar)
 bool TRuleConfig::IsApplicable(TStringBuf category, ELogFamily family) const
 {
     return
-        Family == family &&
+        (!Family || *Family == family) &&
         ExcludeCategories.find(category) == ExcludeCategories.end() &&
         (!IncludeCategories || IncludeCategories->find(category) != IncludeCategories->end());
 }
@@ -146,7 +141,6 @@ bool TRuleConfig::IsApplicable(TStringBuf category, ELogLevel level, ELogFamily 
         IsApplicable(category, family) &&
         MinLevel <= level && level <= MaxLevel;
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -198,36 +192,6 @@ void TLogManagerConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("compression_thread_count", &TThis::CompressionThreadCount)
         .Default(1);
-
-    registrar.Postprocessor([] (TThis* config) {
-        THashMap<TString, ELogFamily> writerNameToFamily;
-        for (const auto& [writerName, writerConfig] : config->Writers) {
-            try {
-                auto typedWriterConfig = ConvertTo<TLogWriterConfigPtr>(writerConfig);
-                EmplaceOrCrash(writerNameToFamily, writerName, typedWriterConfig->GetFamily());
-            } catch (const std::exception& ex) {
-                THROW_ERROR_EXCEPTION("Malformed configuration of writer %Qv",
-                    writerName)
-                    << ex;
-            }
-        }
-
-        for (const auto& [ruleIndex, rule] : Enumerate(config->Rules)) {
-            for (const auto& writerName : rule->Writers) {
-                auto it = writerNameToFamily.find(writerName);
-                if (it == writerNameToFamily.end()) {
-                    THROW_ERROR_EXCEPTION("Unknown writer %Qv", writerName);
-                }
-                if (rule->Family != it->second) {
-                    THROW_ERROR_EXCEPTION("Writer %Qv has family %Qlv while rule %v has family %Qlv",
-                        writerName,
-                        it->second,
-                        ruleIndex,
-                        rule->Family);
-                }
-            }
-        }
-    });
 }
 
 TLogManagerConfigPtr TLogManagerConfig::ApplyDynamic(const TLogManagerDynamicConfigPtr& dynamicConfig) const

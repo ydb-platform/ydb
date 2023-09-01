@@ -1,0 +1,107 @@
+[
+    {
+        "Label" = "Simple";
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "out";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            "\"boolean\",\"number\",\"signed\",\"unsigned\",\"utf\"\n1,0,100,23,\"aaa\"\n\\N,3.14159,-5,\\N,\"ddd\"\n1,2.5,\\N,75,\"abc\"\n\\N,-23.3,-666,150,\"aaa\"\n1,333.3,777,150,\"iii\"\n0,-6.6,-13,150,\"zzz\"\n0,-17,15,200,\"qqq\"\n\\N,1,-200,\\N,\"bbb\"\n\\N,2,\\N,761,\"ccc\"\n0,-5.555,-9,911,\"kkk\"\n"
+                        ]
+                    ];
+                    [
+                        #
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Label" = "Tuples";
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "out";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            "\"many\"\n23,100,\"aaa\",0,1\n\\N,-5,\"ddd\",3.14159,\\N\n75,\\N,\"abc\",2.5,1\n150,-666,\"aaa\",-23.3,\\N\n150,777,\"iii\",333.3,1\n150,-13,\"zzz\",-6.6,0\n200,15,\"qqq\",-17,0\n\\N,-200,\"bbb\",1,\\N\n761,\\N,\"ccc\",2,\\N\n911,-9,\"kkk\",-5.555,0\n"
+                        ]
+                    ];
+                    [
+                        #
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Label" = "Lists";
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "out";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            "\"boolean\",\"number\",\"signed\",\"unsigned\",\"utf\"\n\"[1,1,1,0,0,0]\",\"[0,3.14159,2.5,-23.3,333.3,-6.6,-17,1,2,-5.555]\",\"[100,-5,-666,777,-13,15,-200,-9]\",\"[23,75,150,150,150,200,761,911]\",\"['aaa','ddd','abc','aaa','iii','zzz','qqq','bbb','ccc','kkk']\"\n"
+                        ]
+                    ];
+                    [
+                        #
+                    ]
+                ]
+            }
+        ]
+    }
+]

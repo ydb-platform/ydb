@@ -1,0 +1,53 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "animal";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            "wombat"
+                        ]
+                    ];
+                    [
+                        [
+                            "dog"
+                        ]
+                    ];
+                    [
+                        [
+                            "chipmunk"
+                        ]
+                    ];
+                    [
+                        [
+                            "hamster"
+                        ]
+                    ];
+                    [
+                        [
+                            "dingo"
+                        ]
+                    ]
+                ]
+            }
+        ]
+    }
+]

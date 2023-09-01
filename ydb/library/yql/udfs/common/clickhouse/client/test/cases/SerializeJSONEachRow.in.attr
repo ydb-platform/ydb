@@ -1,0 +1,10 @@
+{"_yql_row_spec"={
+	"Type"=["StructType";[
+		["unsigned";["OptionalType";["DataType";"Uint32"]]];
+		["signed";["OptionalType";["DataType";"Int32"]]];
+		["utf";["DataType";"Utf8"]];
+		["number";["DataType";"Double"]];
+		["boolean";["OptionalType";["DataType";"Bool"]]]
+	]];
+}}
+

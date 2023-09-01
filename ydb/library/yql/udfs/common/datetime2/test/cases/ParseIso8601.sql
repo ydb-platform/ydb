@@ -1,0 +1,1 @@
+select DateTime::ParseIso8601("2106-01-01T00:00:00"), DateTime::ParseIso8601("2200-01-01T00:00:00"), DateTime::ParseIso8601("2106-02-01T00:00:00");

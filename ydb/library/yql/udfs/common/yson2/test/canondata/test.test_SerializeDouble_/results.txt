@@ -1,0 +1,66 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "DataType";
+                                    "Yson"
+                                ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Json"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        {
+                            "double1" = {
+                                "$type" = "double";
+                                "$value" = "1.0000000001"
+                            };
+                            "double2" = {
+                                "$type" = "double";
+                                "$value" = "1.000000001"
+                            };
+                            "double3" = {
+                                "$type" = "double";
+                                "$value" = "1000000000.5"
+                            };
+                            "double4" = {
+                                "$type" = "double";
+                                "$value" = "10000000005"
+                            };
+                            "double5" = {
+                                "$type" = "double";
+                                "$value" = "10000000000.5"
+                            };
+                            "double6" = {
+                                "$type" = "double";
+                                "$value" = "100000000005"
+                            }
+                        };
+                        [
+                            "{\"double1\":1.0000000001,\"double2\":1.000000001,\"double3\":1000000000.5,\"double4\":10000000005,\"double5\":10000000000.5,\"double6\":100000000005}"
+                        ]
+                    ]
+                ]
+            }
+        ]
+    }
+]

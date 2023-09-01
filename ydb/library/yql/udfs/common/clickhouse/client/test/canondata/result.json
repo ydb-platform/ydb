@@ -1,0 +1,37 @@
+{
+    "test.test[ParseFromYdb]": [
+        {
+            "uri": "file://test.test_ParseFromYdb_/results.txt"
+        }
+    ],
+    "test.test[SerializeCSVWithNames]": [
+        {
+            "uri": "file://test.test_SerializeCSVWithNames_/results.txt"
+        }
+    ],
+    "test.test[SerializeJSONEachRow]": [
+        {
+            "uri": "file://test.test_SerializeJSONEachRow_/results.txt"
+        }
+    ],
+    "test.test[SerializeParquetPartitioned]": [
+        {
+            "uri": "file://test.test_SerializeParquetPartitioned_/results.txt"
+        }
+    ],
+    "test.test[SerializeParquet]": [
+        {
+            "uri": "file://test.test_SerializeParquet_/results.txt"
+        }
+    ],
+    "test.test[SerializeTSVWithNames]": [
+        {
+            "uri": "file://test.test_SerializeTSVWithNames_/results.txt"
+        }
+    ],
+    "test.test[YqlType]": [
+        {
+            "uri": "file://test.test_YqlType_/results.txt"
+        }
+    ]
+}

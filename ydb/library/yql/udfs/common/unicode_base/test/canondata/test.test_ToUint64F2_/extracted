@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Fatal: Execution
+
+    <tmp_path>/program.sql:<main>:2:1: Fatal: Execution of node: Result
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:2:1: Fatal: Converted value falls out of Uint64 range
+        	SELECT
+	^

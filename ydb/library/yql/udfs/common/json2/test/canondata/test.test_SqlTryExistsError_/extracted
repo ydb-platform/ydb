@@ -1,0 +1,10 @@
+<tmp_path>/program.sql:<main>: Fatal: Execution
+
+    <tmp_path>/program.sql:<main>:12:1: Fatal: Execution of node: Result
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:14:12: Fatal: ydb/library/yql/udfs/common/json2/sql_exists.h:xxx: Error executing jsonpath:
+jsonpath:1:8: Error: Expected object, code: 4701
+
+        	    Json2::SqlTryExists($json, $path, AsDict());
+	           ^

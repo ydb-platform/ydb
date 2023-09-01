@@ -1,0 +1,57 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "key";
+                                [
+                                    "DataType";
+                                    "String"
+                                ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "ListType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        "1";
+                        [
+                            "a";
+                            "c";
+                            "b"
+                        ]
+                    ];
+                    [
+                        "2";
+                        [
+                            "x";
+                            "y";
+                            "u"
+                        ]
+                    ];
+                    [
+                        "3";
+                        [
+                            "m"
+                        ]
+                    ]
+                ]
+            }
+        ]
+    }
+]

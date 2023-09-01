@@ -17,5 +17,7 @@ PEERDIR(
 END()
 
 RECURSE_FOR_TESTS(
+    test
     ut
 )
+

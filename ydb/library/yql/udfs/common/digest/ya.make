@@ -25,3 +25,7 @@ PEERDIR(
 ADDINCL(contrib/libs/highwayhash)
 
 END()
+
+RECURSE_FOR_TESTS(
+    test
+)

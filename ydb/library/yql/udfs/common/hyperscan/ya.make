@@ -23,3 +23,7 @@ ELSE()
     LIBRARY()
     END()
 ENDIF()
+
+RECURSE_FOR_TESTS(
+    test
+)

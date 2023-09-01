@@ -1,0 +1,67 @@
+{
+    "test.test[Find]": [
+        {
+            "uri": "file://test.test_Find_/results.txt"
+        }
+    ],
+    "test.test[IsCategory]": [
+        {
+            "uri": "file://test.test_IsCategory_/results.txt"
+        }
+    ],
+    "test.test[List]": [
+        {
+            "uri": "file://test.test_List_/results.txt"
+        }
+    ],
+    "test.test[Remove]": [
+        {
+            "uri": "file://test.test_Remove_/results.txt"
+        }
+    ],
+    "test.test[Replace]": [
+        {
+            "uri": "file://test.test_Replace_/results.txt"
+        }
+    ],
+    "test.test[Strip]": [
+        {
+            "uri": "file://test.test_Strip_/results.txt"
+        }
+    ],
+    "test.test[ToUint64F0]": [
+        {
+            "uri": "file://test.test_ToUint64F0_/extracted"
+        }
+    ],
+    "test.test[ToUint64F1]": [
+        {
+            "uri": "file://test.test_ToUint64F1_/extracted"
+        }
+    ],
+    "test.test[ToUint64F2]": [
+        {
+            "uri": "file://test.test_ToUint64F2_/extracted"
+        }
+    ],
+    "test.test[ToUint64]": [
+        {
+            "uri": "file://test.test_ToUint64_/results.txt"
+        }
+    ],
+    "test.test[To]": [
+        {
+            "uri": "file://test.test_To_/results.txt"
+        }
+    ],
+    "test.test[TryToUint64]": [
+        {
+            "uri": "file://test.test_TryToUint64_/results.txt"
+        }
+    ],
+    "test.test[Unicode]": [
+        {
+            "uri": "file://test.test_Unicode_/results.txt"
+        }
+    ]
+}

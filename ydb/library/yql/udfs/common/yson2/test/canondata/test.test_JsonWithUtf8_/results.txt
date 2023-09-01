@@ -1,0 +1,67 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Json"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Json"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "column2";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ];
+                            [
+                                "column3";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Json"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            "\"\xD0\xA5\xD1\x8D\xD0\xBB\xD0\xBB\xD0\xBE\xD1\x83!\""
+                        ];
+                        [
+                            "\"\xC3\x90\xC2\xA5\xC3\x91\xC2\x8D\xC3\x90\xC2\xBB\xC3\x90\xC2\xBB\xC3\x90\xC2\xBE\xC3\x91\xC2\x83!\""
+                        ];
+                        %true;
+                        [
+                            "\"\xC3\x90\xC2\xA5\xC3\x91\xC2\x8D\xC3\x90\xC2\xBB\xC3\x90\xC2\xBB\xC3\x90\xC2\xBE\xC3\x91\xC2\x83!\""
+                        ]
+                    ]
+                ]
+            }
+        ]
+    }
+]

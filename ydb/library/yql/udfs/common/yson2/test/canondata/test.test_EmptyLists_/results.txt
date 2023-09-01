@@ -1,0 +1,50 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "DataType";
+                                    "Uint64"
+                                ]
+                            ];
+                            [
+                                "column2";
+                                [
+                                    "ListType";
+                                    [
+                                        "OptionalType";
+                                        [
+                                            "DataType";
+                                            "Int64"
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %false;
+                        "0";
+                        []
+                    ]
+                ]
+            }
+        ]
+    }
+]

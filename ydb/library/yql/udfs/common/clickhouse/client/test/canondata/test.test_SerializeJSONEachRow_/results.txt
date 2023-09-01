@@ -1,0 +1,107 @@
+[
+    {
+        "Label" = "Simple";
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "out";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            "{\"boolean\":1,\"number\":0,\"signed\":100,\"unsigned\":23,\"utf\":\"aaa\"}\n{\"boolean\":null,\"number\":3.14159,\"signed\":-5,\"unsigned\":null,\"utf\":\"ddd\"}\n{\"boolean\":1,\"number\":2.5,\"signed\":null,\"unsigned\":75,\"utf\":\"abc\"}\n{\"boolean\":null,\"number\":-23.3,\"signed\":-666,\"unsigned\":150,\"utf\":\"aaa\"}\n{\"boolean\":1,\"number\":333.3,\"signed\":777,\"unsigned\":150,\"utf\":\"iii\"}\n{\"boolean\":0,\"number\":-6.6,\"signed\":-13,\"unsigned\":150,\"utf\":\"zzz\"}\n{\"boolean\":0,\"number\":-17,\"signed\":15,\"unsigned\":200,\"utf\":\"qqq\"}\n{\"boolean\":null,\"number\":1,\"signed\":-200,\"unsigned\":null,\"utf\":\"bbb\"}\n{\"boolean\":null,\"number\":2,\"signed\":null,\"unsigned\":761,\"utf\":\"ccc\"}\n{\"boolean\":0,\"number\":-5.555,\"signed\":-9,\"unsigned\":911,\"utf\":\"kkk\"}\n"
+                        ]
+                    ];
+                    [
+                        #
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Label" = "Tuples";
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "out";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            "{\"many\":[23,100,\"aaa\",0,1]}\n{\"many\":[null,-5,\"ddd\",3.14159,null]}\n{\"many\":[75,null,\"abc\",2.5,1]}\n{\"many\":[150,-666,\"aaa\",-23.3,null]}\n{\"many\":[150,777,\"iii\",333.3,1]}\n{\"many\":[150,-13,\"zzz\",-6.6,0]}\n{\"many\":[200,15,\"qqq\",-17,0]}\n{\"many\":[null,-200,\"bbb\",1,null]}\n{\"many\":[761,null,\"ccc\",2,null]}\n{\"many\":[911,-9,\"kkk\",-5.555,0]}\n"
+                        ]
+                    ];
+                    [
+                        #
+                    ]
+                ]
+            }
+        ]
+    };
+    {
+        "Label" = "Lists";
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "out";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            "{\"boolean\":[1,1,1,0,0,0],\"number\":[0,3.14159,2.5,-23.3,333.3,-6.6,-17,1,2,-5.555],\"signed\":[100,-5,-666,777,-13,15,-200,-9],\"unsigned\":[23,75,150,150,150,200,761,911],\"utf\":[\"aaa\",\"ddd\",\"abc\",\"aaa\",\"iii\",\"zzz\",\"qqq\",\"bbb\",\"ccc\",\"kkk\"]}\n"
+                        ]
+                    ];
+                    [
+                        #
+                    ]
+                ]
+            }
+        ]
+    }
+]

@@ -1,0 +1,53 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "TzTimestamp"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "TzTimestamp"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "column2";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "TzTimestamp"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        #;
+                        #;
+                        #
+                    ]
+                ]
+            }
+        ]
+    }
+]

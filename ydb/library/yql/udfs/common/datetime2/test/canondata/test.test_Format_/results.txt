@@ -1,0 +1,48 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            "% year 1970 monthFullName January monthShortName Jan month 01 day 01 hours 00 minutes 00 seconds 00 tz +0000 tzname GMT text"
+                        ]
+                    ];
+                    [
+                        [
+                            "% year 2018 monthFullName December monthShortName Dec month 12 day 01 hours 01 minutes 02 seconds 03.456789 tz +0300 tzname Europe/Moscow text"
+                        ]
+                    ];
+                    [
+                        [
+                            "% year 2011 monthFullName March monthShortName Mar month 03 day 13 hours 03 minutes 15 seconds 00 tz -0700 tzname America/Los_Angeles text"
+                        ]
+                    ];
+                    [
+                        [
+                            "% year 2011 monthFullName November monthShortName Nov month 11 day 06 hours 01 minutes 15 seconds 00 tz -0700 tzname America/Los_Angeles text"
+                        ]
+                    ]
+                ]
+            }
+        ]
+    }
+]

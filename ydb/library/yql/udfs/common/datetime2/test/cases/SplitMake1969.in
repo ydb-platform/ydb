@@ -1,0 +1,8 @@
+{
+    "fdate"="1969-12-31";
+    "fdatetime"="1969-12-31T23:00:00Z";
+    "ftimestamp"="1969-12-31T23:00:00.000000Z";
+    "ftzdate"="1969-12-31,Canada/Central";
+    "ftzdatetime"="1969-12-31T16:00:00,Canada/Central";
+    "ftztimestamp"="1969-12-31T23:00:00.000000,Canada/Central"
+};

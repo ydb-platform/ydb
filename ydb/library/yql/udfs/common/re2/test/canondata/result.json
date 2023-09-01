@@ -1,0 +1,37 @@
+{
+    "test.test[BackslashInLike]": [
+        {
+            "uri": "file://test.test_BackslashInLike_/results.txt"
+        }
+    ],
+    "test.test[BasicOptions]": [
+        {
+            "uri": "file://test.test_BasicOptions_/results.txt"
+        }
+    ],
+    "test.test[Basic]": [
+        {
+            "uri": "file://test.test_Basic_/results.txt"
+        }
+    ],
+    "test.test[DefOptions]": [
+        {
+            "uri": "file://test.test_DefOptions_/results.txt"
+        }
+    ],
+    "test.test[MutableLambda]": [
+        {
+            "uri": "file://test.test_MutableLambda_/results.txt"
+        }
+    ],
+    "test.test[SkipGroup]": [
+        {
+            "uri": "file://test.test_SkipGroup_/results.txt"
+        }
+    ],
+    "test.test[Space]": [
+        {
+            "uri": "file://test.test_Space_/results.txt"
+        }
+    ]
+}

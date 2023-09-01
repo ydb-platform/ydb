@@ -1,0 +1,47 @@
+{
+    "test.test[ListDistinctDictInDict]": [
+        {
+            "uri": "file://test.test_ListDistinctDictInDict_/results.txt"
+        }
+    ],
+    "test.test[ListDistinctDict]": [
+        {
+            "uri": "file://test.test_ListDistinctDict_/results.txt"
+        }
+    ],
+    "test.test[ListDistinctLazyList]": [
+        {
+            "uri": "file://test.test_ListDistinctLazyList_/results.txt"
+        }
+    ],
+    "test.test[ListDistinctLimit]": [
+        {
+            "uri": "file://test.test_ListDistinctLimit_/results.txt"
+        }
+    ],
+    "test.test[ListDistinctSingular]": [
+        {
+            "uri": "file://test.test_ListDistinctSingular_/results.txt"
+        }
+    ],
+    "test.test[ListDistinctStructInDict]": [
+        {
+            "uri": "file://test.test_ListDistinctStructInDict_/results.txt"
+        }
+    ],
+    "test.test[ListDistinctTuple]": [
+        {
+            "uri": "file://test.test_ListDistinctTuple_/results.txt"
+        }
+    ],
+    "test.test[ListDistinctVariant]": [
+        {
+            "uri": "file://test.test_ListDistinctVariant_/results.txt"
+        }
+    ],
+    "test.test[ListDistinct]": [
+        {
+            "uri": "file://test.test_ListDistinct_/results.txt"
+        }
+    ]
+}

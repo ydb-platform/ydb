@@ -1,0 +1,134 @@
+{
+    "bottles": {},
+    "resources": {
+        "4748237118": "http://s3.mds.yandex.net/test-devtools-registry/4748237118",
+        "4748241015": "http://s3.mds.yandex.net/test-devtools-registry/4748241015",
+        "4748280193": "http://s3.mds.yandex.net/test-devtools-registry/4748280193",
+        "4748318935": "http://s3.mds.yandex.net/test-devtools-registry/4748318935",
+        "4748341848": "http://s3.mds.yandex.net/test-devtools-registry/4748341848",
+        "2319130389": "http://s3.mds.yandex.net/test-devtools-registry/2319130389",
+        "1966560555": "http://s3.mds.yandex.net/test-devtools-registry/1966560555",
+        "360916612": "http://s3.mds.yandex.net/test-devtools-registry/360916612",
+        "2989597929": "http://s3.mds.yandex.net/test-devtools-registry/2989597929",
+        "2989596911": "http://s3.mds.yandex.net/test-devtools-registry/2989596911",
+        "2989598506": "http://s3.mds.yandex.net/test-devtools-registry/2989598506",
+        "3864777619": "http://s3.mds.yandex.net/test-devtools-registry/3864777619",
+        "2989596149": "http://s3.mds.yandex.net/test-devtools-registry/2989596149",
+        "2989597467": "http://s3.mds.yandex.net/test-devtools-registry/2989597467",
+        "3877389803": "http://s3.mds.yandex.net/test-devtools-registry/3877389803",
+        "3877389564": "http://s3.mds.yandex.net/test-devtools-registry/3877389564",
+        "3877390008": "http://s3.mds.yandex.net/test-devtools-registry/3877390008",
+        "3877389037": "http://s3.mds.yandex.net/test-devtools-registry/3877389037",
+        "3877389242": "http://s3.mds.yandex.net/test-devtools-registry/3877389242",
+        "3877388826": "http://s3.mds.yandex.net/test-devtools-registry/3877388826",
+        "5011256055": "http://s3.mds.yandex.net/test-devtools-registry/5011256055",
+        "5011278671": "http://s3.mds.yandex.net/test-devtools-registry/5011278671",
+        "3833498694": "http://s3.mds.yandex.net/test-devtools-registry/3833498694",
+        "4940640829": "http://s3.mds.yandex.net/test-devtools-registry/4940640829",
+        "4940633745": "http://s3.mds.yandex.net/test-devtools-registry/4940633745",
+        "4588378868": "http://s3.mds.yandex.net/test-devtools-registry/4588378868",
+        "4588370003": "http://s3.mds.yandex.net/test-devtools-registry/4588370003",
+        "4588389789": "http://s3.mds.yandex.net/test-devtools-registry/4588389789",
+        "4588396480": "http://s3.mds.yandex.net/test-devtools-registry/4588396480",
+        "4635443430": "http://s3.mds.yandex.net/test-devtools-registry/4635443430",
+        "4635426988": "http://s3.mds.yandex.net/test-devtools-registry/4635426988",
+        "4635449932": "http://s3.mds.yandex.net/test-devtools-registry/4635449932",
+        "4635451669": "http://s3.mds.yandex.net/test-devtools-registry/4635451669",
+        "4991298338": "http://s3.mds.yandex.net/test-devtools-registry/4991298338",
+        "4991308971": "http://s3.mds.yandex.net/test-devtools-registry/4991308971",
+        "4991323673": "http://s3.mds.yandex.net/test-devtools-registry/4991323673",
+        "4991310596": "http://s3.mds.yandex.net/test-devtools-registry/4991310596",
+        "4991328977": "http://s3.mds.yandex.net/test-devtools-registry/4991328977"
+    },
+    "resources_descriptions": {
+        "4748237118": "Clang 14.0.6 for darwin arm64",
+        "4748241015": "Clang 14.0.6 for darwin x86_64",
+        "4748280193": "Clang 14.0.6 for linux aarch64",
+        "4748318935": "Clang 14.0.6 for linux x86_64",
+        "4748341848": "Clang 14.0.6 for windows-x86_64",
+        "2319130389": "GDB 8.3 toolkit for darwin-arm64",
+        "1966560555": "Ubuntu 14 x86-64 native SDK (patched, v3)",
+        "360916612": "binutils 2.26 for linux_ubuntu_10.04_lucid",
+        "2989597929": "devtools/huge_python/python for darwin",
+        "2989596911": "devtools/huge_python/python for darwin-arm64",
+        "2989598506": "devtools/huge_python/python for linux",
+        "3864777619": "devtools/huge_python/python for linux-aarch64",
+        "2989596149": "devtools/huge_python/python for linux-ppc64le",
+        "2989597467": "devtools/huge_python/python for win32",
+        "3877389803": "devtools/huge_python3/python3 for darwin",
+        "3877389564": "devtools/huge_python3/python3 for darwin-arm64",
+        "3877390008": "devtools/huge_python3/python3 for linux",
+        "3877389037": "devtools/huge_python3/python3 for linux-aarch64",
+        "3877389242": "devtools/huge_python3/python3 for linux-ppc64le",
+        "3877388826": "devtools/huge_python3/python3 for win32-clang-cl",
+        "5011256055": "devtools/ya/test/programs/test_tool/bin/test_tool for linux",
+        "5011278671": "devtools/ya/test/programs/test_tool/bin3/test_tool3 for linux",
+        "3833498694": "gdb 11.2 for osx_10.15_catalina",
+        "4940640829": "gdb for linux-aarch64",
+        "4940633745": "gdb for linux-x86_64",
+        "4588378868": "lld darwin x86_64",
+        "4588370003": "lld for darwin arm64",
+        "4588389789": "lld for linux aarch64",
+        "4588396480": "lld for linux x86_64",
+        "4635443430": "ya-tc for darwin",
+        "4635426988": "ya-tc for darwin-arm64",
+        "4635449932": "ya-tc for linux",
+        "4635451669": "ya-tc for linux-aarch64",
+        "4991298338": "ymake for darwin",
+        "4991308971": "ymake for darwin-arm64",
+        "4991323673": "ymake for linux",
+        "4991310596": "ymake for linux-aarch64",
+        "4991328977": "ymake.exe for win32-clang-cl"
+    },
+    "tasks": {
+        "1032896450": {
+            "darwin-arm64": "2319130389"
+        },
+        "1549947872": {
+            "linux-aarch64": "3864777619"
+        },
+        "1277485811": {
+            "darwin": "2989597929",
+            "darwin-arm64": "2989596911",
+            "linux": "2989598506",
+            "linux-ppc64le": "2989596149",
+            "win32": "2989597467"
+        },
+        "1539939628": {
+            "Darwin-19.6.0-x86_64-i386-64bit": "3833498694"
+        },
+        "1885745585": {
+            "linux-aarch64": "4940640829"
+        },
+        "1885743377": {
+            "linux-x86_64": "4940633745"
+        },
+        "1797086833": {
+            "darwin": "4635443430"
+        },
+        "1797086849": {
+            "darwin-arm64": "4635426988"
+        },
+        "1797086885": {
+            "linux": "4635449932"
+        },
+        "1797086903": {
+            "linux-aarch64": "4635451669"
+        },
+        "1901124324": {
+            "darwin": "4991298338"
+        },
+        "1901124336": {
+            "darwin-arm64": "4991308971"
+        },
+        "1901124267": {
+            "linux": "4991323673"
+        },
+        "1901124396": {
+            "linux-aarch64": "4991310596"
+        },
+        "1901124302": {
+            "win32-clang-cl": "4991328977"
+        }
+    }
+}

@@ -43,9 +43,13 @@
   "ROADMAP.md":"ydb/github_toplevel/ROADMAP.md",
   "SECURITY.md":"ydb/github_toplevel/SECURITY.md",
   "build/internal/conf/internal.conf":"ydb/github_toplevel/build/internal/conf/internal.conf",
+  "build/mapping.conf.json":"devtools/ya/opensource/mapping.conf.json",
+  "build/ya.conf.json":"devtools/ya/opensource/ya.conf.json",
   "clang.toolchain":"ydb/github_toplevel/clang.toolchain",
   "generate_cmake":"ydb/github_toplevel/generate_cmake",
   "go.mod":"ydb/github_toplevel/go.mod",
   "go.sum":"ydb/github_toplevel/go.sum",
-  "scripts/generate_dump.sh":"ydb/github_toplevel/scripts/generate_dump.sh"
+  "scripts/generate_dump.sh":"ydb/github_toplevel/scripts/generate_dump.sh",
+  "ya":"devtools/ya/opensource/ya",
+  "ya.conf":"devtools/ya/opensource/ya.conf"
 }

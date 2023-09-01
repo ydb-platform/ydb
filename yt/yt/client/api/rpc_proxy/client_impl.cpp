@@ -1732,7 +1732,7 @@ NProto::EMaintenanceComponent ConvertMaintenanceComponentToProto(EMaintenanceCom
         case EMaintenanceComponent::Host:
             return NProto::EMaintenanceComponent::MC_HOST;
         default:
-            THROW_ERROR_EXCEPTION("Invalid maintenance component %Qv", component);
+            THROW_ERROR_EXCEPTION("Invalid maintenance component %Qlv", component);
     }
 }
 

@@ -261,7 +261,6 @@ public:
             TString endpoint;
             TVector<TString> aliveHosts;
             for (const auto& host : databaseInfo.GetMap().at("hosts").GetArraySafe()) {
-
                 // all host services must be alive
                 bool alive = true;
                 for (const auto& service: host.GetMap().at("services").GetArraySafe()) {
@@ -395,6 +394,10 @@ private:
 
 NActors::IActor* CreateDatabaseResolver(NActors::TActorId httpProxy, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) {
     return new TDatabaseResolver(httpProxy, credentialsFactory);
+}
+
+NActors::TActorId MakeDatabaseResolverActorId() {
+    return NActors::TActorId(0, "DBRESOLVER");
 }
 
 } /* namespace NFq */

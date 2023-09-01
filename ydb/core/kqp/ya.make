@@ -61,6 +61,7 @@ RECURSE(
     counters
     executer_actor
     expr_nodes
+    federated_query
     gateway
     host
     node_service

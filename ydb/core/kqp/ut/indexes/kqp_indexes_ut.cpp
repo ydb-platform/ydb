@@ -52,8 +52,9 @@ TIntrusivePtr<IKqpHost> CreateKikimrQueryProcessor(TIntrusivePtr<IKqpGateway> ga
     UNIT_ASSERT(TryParseFromTextFormat(defaultSettingsStream, defaultSettings));
     kikimrConfig->Init(defaultSettings.GetDefaultSettings(), cluster, settings, true);
 
-    return NKqp::CreateKqpHost(gateway, cluster, "/Root", kikimrConfig, moduleResolver, NYql::IHTTPGateway::Make(), funcRegistry,
-        keepConfigChanges);
+    auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({NYql::IHTTPGateway::Make(), nullptr, nullptr, nullptr});
+    return NKqp::CreateKqpHost(gateway, cluster, "/Root", kikimrConfig, moduleResolver,
+                               federatedQuerySetup, funcRegistry, funcRegistry, keepConfigChanges);
 }
 
 NYql::NNodes::TExprBase GetExpr(const TString& ast, NYql::TExprContext& ctx, NYql::IModuleResolver* moduleResolver) {

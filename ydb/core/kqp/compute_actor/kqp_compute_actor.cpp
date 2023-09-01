@@ -10,6 +10,8 @@
 #include <ydb/core/kqp/runtime/kqp_stream_lookup_factory.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_sink_factory.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h>
+#include <ydb/library/yql/providers/generic/actors/yql_generic_source_factory.h>
+
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -55,13 +57,23 @@ TComputationNodeFactory GetKqpActorComputeFactory(TKqpScanComputeContext* comput
 
 namespace NKqp {
 
-NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(TIntrusivePtr<TKqpCounters> counters, const NYql::IHTTPGateway::TPtr& httpGateway, const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory) {
+NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
+    TIntrusivePtr<TKqpCounters> counters,
+    std::optional<TKqpFederatedQuerySetup> federatedQuerySetup) {
     auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
     RegisterStreamLookupActorFactory(*factory, counters);
     RegisterKqpReadActor(*factory, counters);
-    RegisterS3ReadActorFactory(*factory, credentialsFactory, httpGateway);
-    RegisterS3WriteActorFactory(*factory, credentialsFactory, httpGateway);
     RegisterSequencerActorFactory(*factory, counters);
+
+    if (federatedQuerySetup) {
+        RegisterS3ReadActorFactory(*factory, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->HttpGateway);
+        RegisterS3WriteActorFactory(*factory,  federatedQuerySetup->CredentialsFactory, federatedQuerySetup->HttpGateway);
+
+        if (federatedQuerySetup->ConnectorClient) {
+            RegisterGenericReadActorFactory(*factory, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->ConnectorClient);
+        }
+    }
+
     return factory;
 }
 

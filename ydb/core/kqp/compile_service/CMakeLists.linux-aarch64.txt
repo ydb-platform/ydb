@@ -17,9 +17,9 @@ target_link_libraries(core-kqp-compile_service PUBLIC
   yutil
   ydb-core-actorlib_impl
   ydb-core-base
-  core-kqp-host
   kqp-common-simple
-  providers-common-http_gateway
+  core-kqp-federated_query
+  core-kqp-host
 )
 target_sources(core-kqp-compile_service PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/compile_service/kqp_compile_actor.cpp

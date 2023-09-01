@@ -9,6 +9,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/kqp/federated_query
     ydb/core/testlib
     ydb/library/yql/public/udf
     ydb/library/yql/udfs/common/string

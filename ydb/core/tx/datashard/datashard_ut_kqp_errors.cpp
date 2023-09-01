@@ -50,7 +50,7 @@ public:
         Server = new TServer(serverSettings);
         Runtime = Server->GetRuntime();
 
-        Runtime->SetLogPriority(NKikimrServices::KQP_RESOURCE_MANAGER, NLog::PRI_DEBUG);
+        Runtime->SetLogPriority(NKikimrServices::KQP_RESOURCE_MANAGER, NActors::NLog::PRI_DEBUG);
 
         TDispatchOptions rmReady;
         rmReady.CustomFinalCondition = [this] {
@@ -65,7 +65,7 @@ public:
         };
         Runtime->DispatchEvents(rmReady);
 
-        Runtime->SetLogPriority(NKikimrServices::KQP_RESOURCE_MANAGER, NLog::PRI_NOTICE);
+        Runtime->SetLogPriority(NKikimrServices::KQP_RESOURCE_MANAGER, NActors::NLog::PRI_NOTICE);
 //        Runtime->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
 //        Runtime->SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
         Runtime->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_TRACE);

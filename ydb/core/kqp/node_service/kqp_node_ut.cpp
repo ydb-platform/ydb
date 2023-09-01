@@ -184,8 +184,8 @@ public:
         Runtime->EnableScheduleForActor(ResourceManagerActorId, true);
         WaitForBootstrap();
 
-        auto httpGateway = NYql::IHTTPGateway::Make();
-        auto asyncIoFactory = CreateKqpAsyncIoFactory(KqpCounters, httpGateway, nullptr);
+        auto FederatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({NYql::IHTTPGateway::Make(), nullptr, nullptr, nullptr});
+        auto asyncIoFactory = CreateKqpAsyncIoFactory(KqpCounters, FederatedQuerySetup);
         auto kqpNode = CreateKqpNodeService(config, KqpCounters, CompFactory.Get(), asyncIoFactory);
         KqpNodeActorId = Runtime->Register(kqpNode);
         Runtime->EnableScheduleForActor(KqpNodeActorId, true);

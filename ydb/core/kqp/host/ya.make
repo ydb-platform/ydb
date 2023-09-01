@@ -12,6 +12,7 @@ SRCS(
 PEERDIR(
     ydb/core/base
     ydb/core/kqp/common
+    ydb/core/kqp/federated_query
     ydb/core/kqp/opt
     ydb/core/kqp/provider
     ydb/core/tx/long_tx_service/public
@@ -23,6 +24,7 @@ PEERDIR(
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/common/udf_resolve
     ydb/library/yql/providers/config
+    ydb/library/yql/providers/generic/provider
     ydb/library/yql/providers/result/provider
     ydb/library/yql/providers/s3/provider
 )

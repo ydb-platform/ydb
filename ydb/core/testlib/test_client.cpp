@@ -819,11 +819,11 @@ namespace Tests {
 
             IActor* kqpProxyService = NKqp::CreateKqpProxyService(Settings->AppConfig.GetLogConfig(),
                                                                   Settings->AppConfig.GetTableServiceConfig(),
-                                                                  Settings->AppConfig.GetAuthConfig().GetTokenAccessorConfig(),
                                                                   Settings->AppConfig.GetQueryServiceConfig(),
                                                                   Settings->AppConfig.GetMetadataProviderConfig(),
                                                                   TVector<NKikimrKqp::TKqpSetting>(Settings->KqpSettings),
-                                                                  nullptr, std::move(kqpProxySharedResources));
+                                                                  nullptr, std::move(kqpProxySharedResources),
+                                                                  Settings->FederatedQuerySetupFactory);
             TActorId kqpProxyServiceId = Runtime->Register(kqpProxyService, nodeIdx);
             Runtime->RegisterService(NKqp::MakeKqpProxyID(Runtime->GetNodeId(nodeIdx)), kqpProxyServiceId, nodeIdx);
         }

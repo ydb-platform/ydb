@@ -14,6 +14,7 @@ target_compile_options(kqp-ut-common PRIVATE
 target_link_libraries(kqp-ut-common PUBLIC
   contrib-libs-cxxsupp
   yutil
+  core-kqp-federated_query
   ydb-core-testlib
   yql-public-udf
   string_udf

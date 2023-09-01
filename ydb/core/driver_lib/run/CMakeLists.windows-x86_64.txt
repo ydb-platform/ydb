@@ -68,6 +68,7 @@ target_link_libraries(run PUBLIC
   ydb-core-keyvalue
   ydb-core-kafka_proxy
   ydb-core-kqp
+  core-kqp-federated_query
   core-kqp-rm_service
   ydb-core-load_test
   ydb-core-local_pgwire

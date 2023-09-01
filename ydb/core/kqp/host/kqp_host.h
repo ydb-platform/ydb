@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
@@ -100,8 +101,8 @@ public:
 
 TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway,
     const TString& cluster, const TString& database, NYql::TKikimrConfiguration::TPtr config, NYql::IModuleResolver::TPtr moduleResolver,
-    NYql::IHTTPGateway::TPtr httpGateway, const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry = nullptr, bool keepConfigChanges = false, bool isInternalCall = false,
-    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory = nullptr, TKqpTempTablesState::TConstPtr tempTablesState = nullptr);
+    std::optional<TKqpFederatedQuerySetup> federatedQuerySetup, const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry = nullptr,
+    bool keepConfigChanges = false, bool isInternalCall = false, TKqpTempTablesState::TConstPtr tempTablesState = nullptr);
 
 } // namespace NKqp
 } // namespace NKikimr

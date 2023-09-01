@@ -48,6 +48,7 @@ target_link_libraries(ydb-core-testlib PUBLIC
   core-kesus-tablet
   ydb-core-keyvalue
   ydb-core-kqp
+  core-kqp-federated_query
   ydb-core-metering
   ydb-core-mind
   core-mind-address_classification

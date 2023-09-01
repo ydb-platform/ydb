@@ -1,5 +1,7 @@
 #include "run_actor_params.h"
 
+#include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
+
 namespace NFq {
 
 using namespace NActors;
@@ -71,6 +73,7 @@ TRunActorParams::TRunActorParams(
     , Scope(scope)
     , AuthToken(authToken)
     , DatabaseResolver(databaseResolver)
+    , MdbEndpointGenerator(NFq::MakeMdbEndpointGeneratorGeneric(config.GetCommon().GetMdbTransformHost()))
     , QueryId(queryId)
     , UserId(userId)
     , Owner(owner)

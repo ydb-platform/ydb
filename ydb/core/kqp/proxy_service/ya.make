@@ -26,6 +26,7 @@ PEERDIR(
     ydb/core/tx/schemeshard
     ydb/library/query_actor
     ydb/library/yql/providers/common/http_gateway
+    ydb/library/yql/providers/common/proto
     ydb/library/yql/public/issue
     ydb/public/api/protos
     ydb/public/lib/operation_id

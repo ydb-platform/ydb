@@ -1,10 +1,12 @@
 #pragma once
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 
 #include <library/cpp/actors/core/actorid.h>
 
 #include <util/datetime/base.h>
+
 
 namespace NKikimr::NKqp {
 
@@ -49,11 +51,12 @@ TPeerStats CalcPeerStats(const TVector<NKikimrKqp::TKqpProxyNodeResources>& data
 
 IActor* CreateKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
     const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
-    const NKikimrProto::TTokenAccessorConfig& tokenAccessorConfig,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, 
     const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
     TVector<NKikimrKqp::TKqpSetting>&& settings,
     std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
-    std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources);
+    std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources,
+    IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory
+    );
 
 }  // namespace NKikimr::NKqp

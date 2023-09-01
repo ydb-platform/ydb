@@ -7,14 +7,14 @@
 
 
 
-add_executable(ydb-core-kqp-ut-federated_query)
-target_compile_options(ydb-core-kqp-ut-federated_query PRIVATE
+add_executable(ydb-core-kqp-ut-federated_query-s3)
+target_compile_options(ydb-core-kqp-ut-federated_query-s3 PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
-target_include_directories(ydb-core-kqp-ut-federated_query PRIVATE
+target_include_directories(ydb-core-kqp-ut-federated_query-s3 PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp
 )
-target_link_libraries(ydb-core-kqp-ut-federated_query PUBLIC
+target_link_libraries(ydb-core-kqp-ut-federated_query-s3 PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
@@ -22,11 +22,11 @@ target_link_libraries(ydb-core-kqp-ut-federated_query PUBLIC
   ydb-core-kqp
   libs-aws-sdk-cpp-aws-cpp-sdk-s3
   kqp-ut-common
+  ut-federated_query-common
   yql-sql-pg_dummy
-  cpp-client-ydb_operation
   client-ydb_types-operation
 )
-target_link_options(ydb-core-kqp-ut-federated_query PRIVATE
+target_link_options(ydb-core-kqp-ut-federated_query-s3 PRIVATE
   -ldl
   -lrt
   -Wl,--no-as-needed
@@ -36,21 +36,21 @@ target_link_options(ydb-core-kqp-ut-federated_query PRIVATE
   -lrt
   -ldl
 )
-target_sources(ydb-core-kqp-ut-federated_query PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/federated_query/kqp_federated_query_ut.cpp
+target_sources(ydb-core-kqp-ut-federated_query-s3 PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/federated_query/s3/kqp_federated_query_ut.cpp
 )
 set_property(
   TARGET
-  ydb-core-kqp-ut-federated_query
+  ydb-core-kqp-ut-federated_query-s3
   PROPERTY
   SPLIT_FACTOR
   1
 )
 add_yunittest(
   NAME
-  ydb-core-kqp-ut-federated_query
+  ydb-core-kqp-ut-federated_query-s3
   TEST_TARGET
-  ydb-core-kqp-ut-federated_query
+  ydb-core-kqp-ut-federated_query-s3
   TEST_ARG
   --print-before-suite
   --print-before-test
@@ -60,26 +60,26 @@ add_yunittest(
 )
 set_yunittest_property(
   TEST
-  ydb-core-kqp-ut-federated_query
+  ydb-core-kqp-ut-federated_query-s3
   PROPERTY
   LABELS
   MEDIUM
 )
 set_yunittest_property(
   TEST
-  ydb-core-kqp-ut-federated_query
+  ydb-core-kqp-ut-federated_query-s3
   PROPERTY
   PROCESSORS
   1
 )
 set_yunittest_property(
   TEST
-  ydb-core-kqp-ut-federated_query
+  ydb-core-kqp-ut-federated_query-s3
   PROPERTY
   TIMEOUT
   600
 )
-target_allocator(ydb-core-kqp-ut-federated_query
+target_allocator(ydb-core-kqp-ut-federated_query-s3
   cpp-malloc-jemalloc
 )
-vcs_info(ydb-core-kqp-ut-federated_query)
+vcs_info(ydb-core-kqp-ut-federated_query-s3)

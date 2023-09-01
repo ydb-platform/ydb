@@ -83,6 +83,7 @@ PEERDIR(
     ydb/core/keyvalue
     ydb/core/kafka_proxy
     ydb/core/kqp
+    ydb/core/kqp/federated_query
     ydb/core/kqp/rm_service
     ydb/core/load_test
     ydb/core/local_pgwire

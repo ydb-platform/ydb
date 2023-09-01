@@ -1,6 +1,7 @@
 #include "db_async_resolver_impl.h"
 
 #include <library/cpp/actors/core/actorsystem.h>
+#include <ydb/core/fq/libs/events/events.h>
 
 namespace NFq {
 using namespace NThreading;
@@ -10,13 +11,13 @@ TDatabaseAsyncResolverImpl::TDatabaseAsyncResolverImpl(
     const NActors::TActorId& recipient,
     const TString& ydbMvpEndpoint,
     const TString& mdbGateway,
-    NYql::IMdbEndpointGenerator::TPtr&& mdbEndpointGenerator, 
+    const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator, 
     const TString& traceId)
     : ActorSystem(actorSystem)
     , Recipient(recipient)
     , YdbMvpEndpoint(ydbMvpEndpoint)
     , MdbGateway(mdbGateway)
-    , mdbEndpointGenerator(std::move(mdbEndpointGenerator))
+    , MdbEndpointGenerator(mdbEndpointGenerator)
     , TraceId(traceId)
 {
 }
@@ -45,7 +46,7 @@ TFuture<NYql::TDatabaseResolverResponse> TDatabaseAsyncResolverImpl::ResolveIds(
 
     ActorSystem->Send(new NActors::IEventHandle(Recipient, callbackId,
         new TEvents::TEvEndpointRequest(ids, YdbMvpEndpoint, MdbGateway,
-            TraceId, mdbEndpointGenerator)));
+            TraceId, MdbEndpointGenerator)));
 
     return promise.GetFuture();
 }

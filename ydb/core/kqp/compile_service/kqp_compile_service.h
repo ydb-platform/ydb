@@ -3,8 +3,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
-#include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
-#include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
+#include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -13,19 +12,19 @@ IActor* CreateKqpCompileService(const NKikimrConfig::TTableServiceConfig& servic
     const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
     const TKqpSettings::TConstPtr& kqpSettings, TIntrusivePtr<TModuleResolverState> moduleResolverState,
     TIntrusivePtr<TKqpCounters> counters, std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
-    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-    NYql::IHTTPGateway::TPtr httpGateway);
+    std::optional<TKqpFederatedQuerySetup> federatedQuerySetup
+    );
 
 IActor* CreateKqpCompileComputationPatternService(const NKikimrConfig::TTableServiceConfig& serviceConfig,
     TIntrusivePtr<TKqpCounters> counters);
 
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
-    const NKikimrConfig::TTableServiceConfig& serviceConfig,
-    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig, NYql::IHTTPGateway::TPtr httpGateway,
+    const NKikimrConfig::TTableServiceConfig& serviceConfig, 
+    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
-    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const TString& uid, const TKqpQueryId& query,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
+    std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
     TKqpDbCountersPtr dbCounters, NWilson::TTraceId traceId = {},
     TKqpTempTablesState::TConstPtr tempTablesState = nullptr);
 

@@ -88,6 +88,8 @@ struct TDatabaseResolverResponse {
 
 class IDatabaseAsyncResolver {
 public:
+    using TPtr = std::shared_ptr<IDatabaseAsyncResolver>;
+
     using TDatabaseAuthMap = THashMap<std::pair<TString, EDatabaseType>, NYql::TDatabaseAuth>;
 
     virtual NThreading::TFuture<NYql::TDatabaseResolverResponse> ResolveIds(const TDatabaseAuthMap& ids) const = 0;

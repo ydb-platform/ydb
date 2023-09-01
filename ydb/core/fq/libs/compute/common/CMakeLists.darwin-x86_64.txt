@@ -16,6 +16,7 @@ target_link_libraries(libs-compute-common PUBLIC
   contrib-libs-cxxsupp
   yutil
   libs-config-protos
+  fq-libs-db_id_async_resolver_impl
   fq-libs-grpc
   fq-libs-shared_resources
   providers-dq-provider

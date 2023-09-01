@@ -9,9 +9,9 @@ SRCS(
 PEERDIR(
     ydb/core/actorlib_impl
     ydb/core/base
-    ydb/core/kqp/host
     ydb/core/kqp/common/simple
-    ydb/library/yql/providers/common/http_gateway
+    ydb/core/kqp/federated_query
+    ydb/core/kqp/host
 )
 
 YQL_LAST_ABI_VERSION()

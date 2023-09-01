@@ -105,16 +105,6 @@ TString EncodeSessionId(ui32 nodeId, const TString& id) {
     return NOperationId::ProtoToString(opId);
 }
 
-void ParseGrpcEndpoint(const TString& endpoint, TString& address, bool& useSsl) {
-    TStringBuf scheme;
-    TStringBuf host;
-    TStringBuf uri;
-    NHttp::CrackURL(endpoint, scheme, host, uri);
-
-    address = ToString(host);
-    useSsl = scheme == "grpcs";
-}
-
 class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
     struct TEvPrivate {
         enum EEv {
@@ -169,43 +159,30 @@ public:
 
     TKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
         const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
-        const NKikimrProto::TTokenAccessorConfig& tokenAccessorConfig,
         const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
         const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
         TVector<NKikimrKqp::TKqpSetting>&& settings,
         std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
-        std::shared_ptr<TKqpProxySharedResources>&& kqpProxySharedResources)
-        : HttpGatewayConfig(CreateHttpGatewayConfig())
-        , LogConfig(logConfig)
+        std::shared_ptr<TKqpProxySharedResources>&& kqpProxySharedResources,
+        IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory
+        ): LogConfig(logConfig)
         , TableServiceConfig(tableServiceConfig)
-        , TokenAccessorConfig(tokenAccessorConfig)
         , QueryServiceConfig(queryServiceConfig)
         , MetadataProviderConfig(metadataProviderConfig)
         , KqpSettings(std::make_shared<const TKqpSettings>(std::move(settings)))
+        , FederatedQuerySetupFactory(federatedQuerySetupFactory)
         , QueryReplayFactory(std::move(queryReplayFactory))
-        , HttpGateway(NYql::IHTTPGateway::Make(&HttpGatewayConfig)) // TODO: pass config and counters
         , PendingRequests()
         , ModuleResolverState()
         , KqpProxySharedResources(std::move(kqpProxySharedResources))
     {}
 
     void Bootstrap(const TActorContext &ctx) {
-        if (TokenAccessorConfig.GetEnabled()) {
-            TString caContent;
-            if (const auto& path = TokenAccessorConfig.GetSslCaCert()) {
-                caContent = TUnbufferedFileInput(path).ReadAll();
-            }
-
-            TString endpointAddress;
-            bool useSsl = false;
-            ParseGrpcEndpoint(TokenAccessorConfig.GetEndpoint(), endpointAddress, useSsl);
-
-            CredentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(endpointAddress, useSsl, caContent, TokenAccessorConfig.GetConnectionPoolSize());
-        }
-
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(KQP_PROVIDER));
         Counters = MakeIntrusive<TKqpCounters>(AppData()->Counters, &TlsActivationContext->AsActorContext());
-        AsyncIoFactory = CreateKqpAsyncIoFactory(Counters, HttpGateway, CredentialsFactory);
+        // NOTE: some important actors are constructed within next call
+        FederatedQuerySetup = FederatedQuerySetupFactory->Make(ctx.ActorSystem());
+        AsyncIoFactory = CreateKqpAsyncIoFactory(Counters, FederatedQuerySetup);
         ModuleResolverState = MakeIntrusive<TModuleResolverState>();
 
         LocalSessions = std::make_unique<TLocalSessionsRegistry>(AppData()->RandomProvider);
@@ -241,7 +218,7 @@ public:
 
         // Create compile service
         CompileService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpCompileService(TableServiceConfig, MetadataProviderConfig,
-            KqpSettings, ModuleResolverState, Counters, std::move(QueryReplayFactory), CredentialsFactory, HttpGateway));
+            KqpSettings, ModuleResolverState, Counters, std::move(QueryReplayFactory), FederatedQuerySetup));
         TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(
             MakeKqpCompileServiceID(SelfId().NodeId()), CompileService);
 
@@ -1365,7 +1342,7 @@ private:
 
         auto config = CreateConfig(KqpSettings, workerSettings);
 
-        IActor* sessionActor = CreateKqpSessionActor(SelfId(), sessionId, KqpSettings, workerSettings, HttpGateway, AsyncIoFactory, CredentialsFactory, ModuleResolverState, Counters, MetadataProviderConfig);
+        IActor* sessionActor = CreateKqpSessionActor(SelfId(), sessionId, KqpSettings, workerSettings, FederatedQuerySetup, AsyncIoFactory, ModuleResolverState, Counters, MetadataProviderConfig);
         auto workerId = TlsActivationContext->ExecutorThread.RegisterActor(sessionActor, TMailboxType::HTSwap, AppData()->UserPoolId);
         TKqpSessionInfo* sessionInfo = LocalSessions->Create(
             sessionId, workerId, database, dbCounters, supportsBalancing, GetSessionIdleDuration());
@@ -1545,27 +1522,16 @@ private:
         }
     }
 
-    static NYql::THttpGatewayConfig CreateHttpGatewayConfig() {
-        NYql::THttpGatewayConfig config;
-        config.SetMaxInFlightCount(2000);
-        config.SetMaxSimulatenousDownloadsSize(2000000000);
-        config.SetBuffersSizePerStream(5000000);
-        config.SetConnectionTimeoutSeconds(15);
-        config.SetRequestTimeoutSeconds(0);
-        return config;
-    }
-
 private:
-    NYql::THttpGatewayConfig HttpGatewayConfig;
     NKikimrConfig::TLogConfig LogConfig;
     NKikimrConfig::TTableServiceConfig TableServiceConfig;
-    NKikimrProto::TTokenAccessorConfig TokenAccessorConfig;
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     NKikimrConfig::TMetadataProviderConfig MetadataProviderConfig;
     TKqpSettings::TConstPtr KqpSettings;
-    NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+    IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory;
+    std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     std::shared_ptr<IQueryReplayBackendFactory> QueryReplayFactory;
-    NYql::IHTTPGateway::TPtr HttpGateway;
+    NYql::NConnector::IClient::TPtr ConnectorClient;
 
     std::optional<TPeerStats> PeerStats;
     TKqpProxyRequestTracker PendingRequests;
@@ -1614,15 +1580,16 @@ private:
 
 IActor* CreateKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
     const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
-    const NKikimrProto::TTokenAccessorConfig& tokenAccessorConfig,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, 
     const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig,
     TVector<NKikimrKqp::TKqpSetting>&& settings,
     std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
-    std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources)
+    std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources,
+    IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory
+    )
 {
-    return new TKqpProxyService(logConfig, tableServiceConfig, tokenAccessorConfig, queryServiceConfig, metadataProviderConfig, std::move(settings),
-        std::move(queryReplayFactory),std::move(kqpProxySharedResources));
+    return new TKqpProxyService(logConfig, tableServiceConfig, queryServiceConfig, metadataProviderConfig, std::move(settings),
+        std::move(queryReplayFactory), std::move(kqpProxySharedResources), std::move(federatedQuerySetupFactory));
 }
 
 } // namespace NKikimr::NKqp

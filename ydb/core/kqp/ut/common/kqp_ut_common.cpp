@@ -131,6 +131,10 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     if (settings.LogStream)
         ServerSettings->SetLogBackend(new TStreamLogBackend(settings.LogStream));
 
+    if (settings.FederatedQuerySetupFactory) {
+        ServerSettings->SetFederatedQuerySetupFactory(settings.FederatedQuerySetupFactory);
+    }
+
     Server.Reset(MakeHolder<Tests::TServer>(*ServerSettings));
     Server->EnableGRpc(grpcPort);
     Server->SetupDefaultProfiles();

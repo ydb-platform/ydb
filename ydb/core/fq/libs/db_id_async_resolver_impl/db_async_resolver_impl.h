@@ -1,6 +1,5 @@
 #pragma once
 
-#include <ydb/core/fq/libs/events/events.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/mdb_endpoint_generator.h>
 #include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
@@ -14,7 +13,7 @@ public:
         const NActors::TActorId& recipient,
         const TString& ydbMvpEndpoint,
         const TString& mdbGateway,
-        NYql::IMdbEndpointGenerator::TPtr&& endpointGenerator, 
+        const NYql::IMdbEndpointGenerator::TPtr& endpointGenerator, 
         const TString& traceId = ""
     );
 
@@ -24,7 +23,7 @@ private:
     const NActors::TActorId Recipient;
     const TString YdbMvpEndpoint;
     const TString MdbGateway;
-    NYql::IMdbEndpointGenerator::TPtr mdbEndpointGenerator;
+    const NYql::IMdbEndpointGenerator::TPtr MdbEndpointGenerator;
     const TString TraceId;
 };
 

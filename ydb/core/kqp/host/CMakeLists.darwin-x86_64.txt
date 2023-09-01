@@ -16,6 +16,7 @@ target_link_libraries(core-kqp-host PUBLIC
   yutil
   ydb-core-base
   core-kqp-common
+  core-kqp-federated_query
   core-kqp-opt
   core-kqp-provider
   tx-long_tx_service-public
@@ -27,6 +28,7 @@ target_link_libraries(core-kqp-host PUBLIC
   providers-common-http_gateway
   providers-common-udf_resolve
   yql-providers-config
+  providers-generic-provider
   providers-result-provider
   providers-s3-provider
 )

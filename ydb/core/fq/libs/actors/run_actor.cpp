@@ -59,7 +59,6 @@
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/control_plane_storage/util.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
-#include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
 #include <ydb/core/fq/libs/gateway/empty_gateway.h>
 #include <ydb/core/fq/libs/private_client/events.h>
 #include <ydb/core/fq/libs/private_client/private_client.h>
@@ -1832,7 +1831,7 @@ private:
             Params.DatabaseResolver,
             Params.Config.GetCommon().GetYdbMvpCloudEndpoint(),
             Params.Config.GetCommon().GetMdbGateway(),
-            NFq::MakeMdbEndpointGeneratorGeneric(Params.Config.GetCommon().GetMdbTransformHost()),
+            Params.MdbEndpointGenerator,
             Params.QueryId);
         {
             // TBD: move init to better place

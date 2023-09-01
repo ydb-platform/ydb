@@ -1391,6 +1391,8 @@ message TQueryServiceConfig {
     optional NYql.TS3GatewayConfig S3 = 6;
     optional NYql.THttpGatewayConfig HttpGateway = 7;
     optional NYql.TGenericConnectorConfig Connector = 8;
+    optional string MdbGateway = 9;
+    optional bool MdbTransformHost = 10;
 }
 
 // Config describes immediate controls and allows

@@ -1,11 +1,10 @@
 #pragma once
 
+#include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/protos/config.pb.h>
-#include <ydb/core/kqp/common/simple/temp_tables.h>
-#include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
-#include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 
 #include <library/cpp/actors/core/actorid.h>
@@ -35,10 +34,11 @@ struct TKqpWorkerSettings {
 
 IActor* CreateKqpSessionActor(const TActorId& owner, const TString& sessionId,
     const TKqpSettings::TConstPtr& kqpSettings, const TKqpWorkerSettings& workerSettings,
-    NYql::IHTTPGateway::TPtr httpGateway, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
+    NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
-    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig);
+    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig
+    );
 
 IActor* CreateKqpTempTablesManager(TKqpTempTablesState tempTablesState, const TActorId& target);
 

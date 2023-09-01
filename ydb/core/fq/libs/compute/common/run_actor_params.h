@@ -98,6 +98,7 @@ struct TRunActorParams { // TODO2 : Change name
     const NYdb::NFq::TScope Scope;
     const TString AuthToken;
     const NActors::TActorId DatabaseResolver;
+    const NYql::IMdbEndpointGenerator::TPtr MdbEndpointGenerator;
     const TString QueryId;
     const TString UserId;
     const TString Owner;

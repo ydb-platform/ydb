@@ -107,6 +107,7 @@ class TTestConnectionActor : public NActors::TActorBootstrapped<TTestConnectionA
     TActorId DatabaseResolverActor;
     std::shared_ptr<NYql::IDatabaseAsyncResolver> DbResolver;
     NYql::IHTTPGateway::TPtr HttpGateway;
+    NYql::IMdbEndpointGenerator::TPtr MdbEndpointGenerator;
 
 public:
     TTestConnectionActor(
@@ -131,6 +132,7 @@ public:
         , Counters(counters)
         , Signer(signer)
         , HttpGateway(httpGateway)
+        , MdbEndpointGenerator(NFq::MakeMdbEndpointGeneratorGeneric(commonConfig.GetMdbTransformHost()))
     {}
 
     static constexpr char ActorName[] = "YQ_TEST_CONNECTION";
@@ -144,7 +146,7 @@ public:
         DbResolver = std::make_shared<NFq::TDatabaseAsyncResolverImpl>(
                         NActors::TActivationContext::ActorSystem(), DatabaseResolverActor,
                         CommonConfig.GetYdbMvpCloudEndpoint(), CommonConfig.GetMdbGateway(),
-                        NFq::MakeMdbEndpointGeneratorGeneric(CommonConfig.GetMdbTransformHost())
+                        MdbEndpointGenerator
                         );
 
         Become(&TTestConnectionActor::StateFunc);

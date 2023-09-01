@@ -13,7 +13,7 @@ SRCS(
 PEERDIR(
     ydb/core/docapi
     ydb/core/kqp/common
-    ydb/library/yql/providers/common/http_gateway
+    ydb/core/kqp/federated_query
     ydb/public/lib/operation_id
 )
 

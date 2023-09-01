@@ -18,6 +18,8 @@
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/sql/sql.h>
 
@@ -891,17 +893,16 @@ class TKqpHost : public IKqpHost {
 public:
     TKqpHost(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster, const TString& database,
         TKikimrConfiguration::TPtr config, IModuleResolver::TPtr moduleResolver,
-        NYql::IHTTPGateway::TPtr httpGateway,
+        std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
         const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges,
-        bool isInternalCall, NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, TKqpTempTablesState::TConstPtr tempTablesState = nullptr)
+        bool isInternalCall, TKqpTempTablesState::TConstPtr tempTablesState = nullptr)
         : Gateway(gateway)
         , Cluster(cluster)
         , ExprCtx(new TExprContext())
         , ModuleResolver(moduleResolver)
         , KeepConfigChanges(keepConfigChanges)
         , IsInternalCall(isInternalCall)
-        , CredentialsFactory(std::move(credentialsFactory))
-        , HttpGateway(std::move(httpGateway))
+        , FederatedQuerySetup(federatedQuerySetup)
         , SessionCtx(new TKikimrSessionContext(funcRegistry, config, TAppData::TimeProvider, TAppData::RandomProvider))
         , ClustersMap({{Cluster, TString(KikimrProviderName)}})
         , TypesCtx(MakeIntrusive<TTypeAnnotationContext>())
@@ -1495,7 +1496,7 @@ private:
         auto state = MakeIntrusive<NYql::TS3State>();
         state->Types = TypesCtx.Get();
         state->FunctionRegistry = FuncRegistry;
-        state->CredentialsFactory = CredentialsFactory;
+        state->CredentialsFactory = FederatedQuerySetup->CredentialsFactory;
 
         //
         // TODO: Use TS3GatewayConfig from Kikimr Config when added
@@ -1509,16 +1510,34 @@ private:
         }
         state->Configuration->Init(cfg, TypesCtx);
 
-        auto dataSource = NYql::CreateS3DataSource(state, HttpGateway);
-        auto dataSink = NYql::CreateS3DataSink(state, HttpGateway);
+        auto dataSource = NYql::CreateS3DataSource(state, FederatedQuerySetup->HttpGateway);
+        auto dataSink = NYql::CreateS3DataSink(state, FederatedQuerySetup->HttpGateway);
 
         TypesCtx->AddDataSource(NYql::S3ProviderName, std::move(dataSource));
         TypesCtx->AddDataSink(NYql::S3ProviderName, std::move(dataSink));
     }
 
+    void InitGenericProvider() {
+        if (!FederatedQuerySetup->ConnectorClient) {
+            return;
+        }
+
+        auto state = MakeIntrusive<NYql::TGenericState>(
+            TypesCtx.Get(),
+            FuncRegistry,
+            FederatedQuerySetup->DatabaseAsyncResovler,
+            FederatedQuerySetup->ConnectorClient,
+            nullptr
+        );
+
+        TypesCtx->AddDataSource(NYql::GenericProviderName, NYql::CreateGenericDataSource(state));
+        TypesCtx->AddDataSink(NYql::GenericProviderName, NYql::CreateGenericDataSink(state));
+    }
+
     void Init(EKikimrQueryType queryType) {
-        if (queryType == EKikimrQueryType::Script || queryType == EKikimrQueryType::Query) {
+        if ((queryType == EKikimrQueryType::Script || queryType == EKikimrQueryType::Query) && FederatedQuerySetup) {
             InitS3Provider();
+            InitGenericProvider();
         }
 
         KqpRunner = CreateKqpRunner(Gateway, Cluster, TypesCtx, SessionCtx, *FuncRegistry, TAppData::TimeProvider, TAppData::RandomProvider);
@@ -1642,8 +1661,7 @@ private:
     IModuleResolver::TPtr ModuleResolver;
     bool KeepConfigChanges;
     bool IsInternalCall;
-    NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
-    NYql::IHTTPGateway::TPtr HttpGateway;
+    std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
 
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
     THashMap<TString, TString> ClustersMap;
@@ -1683,11 +1701,12 @@ Ydb::Table::QueryStatsCollection::Mode GetStatsMode(NYql::EKikimrStatsMode stats
 
 TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway,
     const TString& cluster, const TString& database, TKikimrConfiguration::TPtr config, IModuleResolver::TPtr moduleResolver,
-    NYql::IHTTPGateway::TPtr httpGateway, const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges, bool isInternalCall,
-    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, TKqpTempTablesState::TConstPtr tempTablesState)
+    std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
+    const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges, bool isInternalCall,
+    TKqpTempTablesState::TConstPtr tempTablesState)
 {
-    return MakeIntrusive<TKqpHost>(gateway, cluster, database, config, moduleResolver, std::move(httpGateway), funcRegistry,
-        keepConfigChanges, isInternalCall, std::move(credentialsFactory), std::move(tempTablesState));
+    return MakeIntrusive<TKqpHost>(gateway, cluster, database, config, moduleResolver, federatedQuerySetup, funcRegistry,
+                                   keepConfigChanges, isInternalCall, std::move(tempTablesState));
 }
 
 } // namespace NKqp

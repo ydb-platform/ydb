@@ -277,13 +277,9 @@ private:
                         HaveBlocks_ = true;
                         maxBlockItemSize = std::max(maxBlockItemSize, CalcMaxBlockItemSize(types[i]->GetItemType()));
                     }
-                    if (output[outIndex] != nullptr) {
-                        ValuePointers_[i] = &InputValues_[i];
-                    }
                     outIndex++;
-                } else {
-                    ValuePointers_[i] = &InputValues_[i];
                 }
+                ValuePointers_[i] = &InputValues_[i];
             }
             const size_t maxBlockLen = CalcBlockLen(maxBlockItemSize);
             for (ui32 i = 0, outIndex = 0; i < width; ++i) {

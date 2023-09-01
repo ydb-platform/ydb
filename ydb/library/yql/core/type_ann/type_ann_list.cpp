@@ -2572,7 +2572,7 @@ namespace {
                         continue;
                     }
 
-                    if (const auto commonType = CommonType<false>(input.Pos(), p.first, item->GetItemType(), ctx.Expr)) {
+                    if (const auto commonType = CommonType<false, true>(input.Pos(), p.first, item->GetItemType(), ctx.Expr)) {
                         p.first = commonType;
                         ++p.second;
                         continue;
@@ -7135,7 +7135,7 @@ namespace {
         }
 
         input->SetTypeAnn(input->Head().GetTypeAnn());
-        
+
         return IGraphTransformer::TStatus::Ok;
     }
 

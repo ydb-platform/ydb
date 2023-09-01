@@ -1287,6 +1287,7 @@ const TTaggedExprType* DryType(const TTaggedExprType* type, bool& hasOptional, T
     return nullptr;
 }
 
+template<bool Silent>
 const TDataExprType* CommonType(TPositionHandle pos, const TDataExprType* one, const TDataExprType* two, TExprContext& ctx) {
     const auto slot1 = one->GetSlot();
     const auto slot2 = two->GetSlot();
@@ -1301,10 +1302,12 @@ const TDataExprType* CommonType(TPositionHandle pos, const TDataExprType* one, c
             return ctx.MakeType<TDataExprType>(*super);
     }
 
-    ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Cannot infer common type for " << GetDataTypeInfo(slot1).Name << " and " << GetDataTypeInfo(slot2).Name));
+    if constexpr (!Silent)
+        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Cannot infer common type for " << GetDataTypeInfo(slot1).Name << " and " << GetDataTypeInfo(slot2).Name));
     return nullptr;
 }
 
+template<bool Silent>
 const TPgExprType* CommonType(TPositionHandle pos, const TPgExprType* one, const TPgExprType* two, TExprContext& ctx) {
     if (one->GetId() == two->GetId()) {
         return one;
@@ -1318,36 +1321,39 @@ const TPgExprType* CommonType(TPositionHandle pos, const TPgExprType* one, const
         return one;
     }
 
-    ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Cannot infer common type for " << one->GetName() << " and " << two->GetName()));
+    if constexpr (!Silent)
+        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Cannot infer common type for " << one->GetName() << " and " << two->GetName()));
     return nullptr;
 }
 
+template<bool Silent>
 const TDataExprType* CommonType(TPositionHandle pos, const TResourceExprType* resource, const TDataExprType* data, TExprContext& ctx) {
     const auto slot = data->GetSlot();
     const auto& tag = resource->GetTag();
     if (tag == "Yson2.Node" && EDataSlot::Yson == slot)
         return data;
 
-    ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Incompatible resourse '" << tag << "' with " << GetDataTypeInfo(slot).Name));
+    if constexpr (!Silent)
+        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Incompatible resourse '" << tag << "' with " << GetDataTypeInfo(slot).Name));
     return nullptr;
 }
 
-template<bool Strict, class SequenceType>
+template<bool Strict, bool Silent, class SequenceType>
 const SequenceType* CommonItemType(TPositionHandle pos, const SequenceType* one, const SequenceType* two, TExprContext& ctx) {
-    if (const auto join = CommonType<Strict>(pos, one->GetItemType(), two->GetItemType(), ctx))
+    if (const auto join = CommonType<Strict, Silent>(pos, one->GetItemType(), two->GetItemType(), ctx))
         return ctx.MakeType<SequenceType>(join);
     return nullptr;
 }
 
-template<bool Strict>
+template<bool Strict, bool Silent>
 const TDictExprType* CommonType(TPositionHandle pos, const TDictExprType* one, const TDictExprType* two, TExprContext& ctx) {
-    if (const auto joinKey = CommonType<Strict>(pos, one->GetKeyType(), two->GetKeyType(), ctx))
-        if (const auto join = CommonType<Strict>(pos, one->GetPayloadType(), two->GetPayloadType(), ctx))
+    if (const auto joinKey = CommonType<Strict, Silent>(pos, one->GetKeyType(), two->GetKeyType(), ctx))
+        if (const auto join = CommonType<Strict, Silent>(pos, one->GetPayloadType(), two->GetPayloadType(), ctx))
             return ctx.MakeType<TDictExprType>(joinKey, join);
     return nullptr;
 }
 
-template<bool Strict, bool Relaxed = false>
+template<bool Strict, bool Silent, bool Relaxed = false>
 const TStructExprType* CommonType(TPositionHandle pos, const TStructExprType* one, const TStructExprType* two, TExprContext& ctx) {
     auto itemsOne = one->GetItems();
     auto itemsTwo = two->GetItems();
@@ -1392,7 +1398,7 @@ const TStructExprType* CommonType(TPositionHandle pos, const TStructExprType* on
         if (name != itemsTwo[i]->GetName())
             return nullptr;
 
-        if (const auto join = CommonType<Strict>(pos, itemsOne[i]->GetItemType(), itemsTwo[i]->GetItemType(), ctx))
+        if (const auto join = CommonType<Strict, Silent>(pos, itemsOne[i]->GetItemType(), itemsTwo[i]->GetItemType(), ctx))
             itemsOne[i] = ctx.MakeType<TItemExprType>(name, join);
         else
             return nullptr;
@@ -1400,7 +1406,7 @@ const TStructExprType* CommonType(TPositionHandle pos, const TStructExprType* on
     return ctx.MakeType<TStructExprType>(itemsOne);
 }
 
-template<bool Strict, bool Relaxed = false>
+template<bool Strict, bool Silent, bool Relaxed = false>
 const TTupleExprType* CommonType(TPositionHandle pos, const TTupleExprType* one, const TTupleExprType* two, TExprContext& ctx) {
     auto itemsOne = one->GetItems();
     auto itemsTwo = two->GetItems();
@@ -1426,7 +1432,7 @@ const TTupleExprType* CommonType(TPositionHandle pos, const TTupleExprType* one,
     return ctx.MakeType<TTupleExprType>(itemsOne);
 }
 
-template<bool Strict>
+template<bool Strict, bool Silent>
 const TVariantExprType* CommonType(TPositionHandle pos, const TVariantExprType* one, const TVariantExprType* two, TExprContext& ctx) {
     const auto underOne = one->GetUnderlyingType();
     const auto underTwo = two->GetUnderlyingType();
@@ -1436,11 +1442,11 @@ const TVariantExprType* CommonType(TPositionHandle pos, const TVariantExprType* 
 
     switch (kind) {
         case ETypeAnnotationKind::Tuple:
-            if (const auto dry = CommonType<Strict, true>(pos, underOne->Cast<TTupleExprType>(), underTwo->Cast<TTupleExprType>(), ctx))
+            if (const auto dry = CommonType<Strict, Silent, true>(pos, underOne->Cast<TTupleExprType>(), underTwo->Cast<TTupleExprType>(), ctx))
                 return ctx.MakeType<TVariantExprType>(dry);
             break;
         case ETypeAnnotationKind::Struct:
-            if (const auto dry = CommonType<Strict, true>(pos, underOne->Cast<TStructExprType>(), underTwo->Cast<TStructExprType>(), ctx))
+            if (const auto dry = CommonType<Strict, Silent, true>(pos, underOne->Cast<TStructExprType>(), underTwo->Cast<TStructExprType>(), ctx))
                 return ctx.MakeType<TVariantExprType>(dry);
             break;
         default:
@@ -1665,10 +1671,10 @@ const TTypeAnnotationNode* JoinCommonDryKeyType(TPositionHandle position, bool o
         dryTwo = ctx.MakeType<TOptionalExprType>(dryTwo);
     }
 
-    return CommonType<true>(position, dryOne, dryTwo, ctx);
+    return CommonType<true, false>(position, dryOne, dryTwo, ctx);
 }
 
-template<bool Strict>
+template<bool Strict, bool Silent>
 const TTypeAnnotationNode* CommonType(TPositionHandle pos, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx) {
     if (!(one && two))
         return nullptr;
@@ -1683,32 +1689,33 @@ const TTypeAnnotationNode* CommonType(TPositionHandle pos, const TTypeAnnotation
     if (const auto kindOne = one->GetKind(), kindTwo = two->GetKind(); kindOne == kindTwo) {
         switch (kindOne) {
             case ETypeAnnotationKind::Data:
-                return CommonType(pos, one->Cast<TDataExprType>(), two->Cast<TDataExprType>(), ctx);
+                return CommonType<Silent>(pos, one->Cast<TDataExprType>(), two->Cast<TDataExprType>(), ctx);
             case ETypeAnnotationKind::Optional:
-                return CommonItemType<Strict>(pos, one->Cast<TOptionalExprType>(), two->Cast<TOptionalExprType>(), ctx);
+                return CommonItemType<Strict, Silent>(pos, one->Cast<TOptionalExprType>(), two->Cast<TOptionalExprType>(), ctx);
             case ETypeAnnotationKind::List:
-                return CommonItemType<Strict>(pos, one->Cast<TListExprType>(), two->Cast<TListExprType>(), ctx);
+                return CommonItemType<Strict, Silent>(pos, one->Cast<TListExprType>(), two->Cast<TListExprType>(), ctx);
             case ETypeAnnotationKind::Flow:
-                return CommonItemType<Strict>(pos, one->Cast<TFlowExprType>(), two->Cast<TFlowExprType>(), ctx);
+                return CommonItemType<Strict, Silent>(pos, one->Cast<TFlowExprType>(), two->Cast<TFlowExprType>(), ctx);
             case ETypeAnnotationKind::Stream:
-                return CommonItemType<Strict>(pos, one->Cast<TStreamExprType>(), two->Cast<TStreamExprType>(), ctx);
+                return CommonItemType<Strict, Silent>(pos, one->Cast<TStreamExprType>(), two->Cast<TStreamExprType>(), ctx);
             case ETypeAnnotationKind::Dict:
-                return CommonType<Strict>(pos, one->Cast<TDictExprType>(), two->Cast<TDictExprType>(), ctx);
+                return CommonType<Strict, Silent>(pos, one->Cast<TDictExprType>(), two->Cast<TDictExprType>(), ctx);
             case ETypeAnnotationKind::Tuple:
-                return CommonType<Strict>(pos, one->Cast<TTupleExprType>(), two->Cast<TTupleExprType>(), ctx);
+                return CommonType<Strict, Silent>(pos, one->Cast<TTupleExprType>(), two->Cast<TTupleExprType>(), ctx);
             case ETypeAnnotationKind::Struct:
-                return CommonType<Strict>(pos, one->Cast<TStructExprType>(), two->Cast<TStructExprType>(), ctx);
+                return CommonType<Strict, Silent>(pos, one->Cast<TStructExprType>(), two->Cast<TStructExprType>(), ctx);
             case ETypeAnnotationKind::Variant:
-                return CommonType<Strict>(pos, one->Cast<TVariantExprType>(), two->Cast<TVariantExprType>(), ctx);
+                return CommonType<Strict, Silent>(pos, one->Cast<TVariantExprType>(), two->Cast<TVariantExprType>(), ctx);
             case ETypeAnnotationKind::Tagged:
-                return CommonType<Strict>(pos, one->Cast<TTaggedExprType>(), two->Cast<TTaggedExprType>(), ctx);
+                return CommonType<Strict, Silent>(pos, one->Cast<TTaggedExprType>(), two->Cast<TTaggedExprType>(), ctx);
             case ETypeAnnotationKind::Pg:
-                return CommonType(pos, one->Cast<TPgExprType>(), two->Cast<TPgExprType>(), ctx);
+                return CommonType<Silent>(pos, one->Cast<TPgExprType>(), two->Cast<TPgExprType>(), ctx);
             default:
                 break;
         }
 
-        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Cannot infer common type for " << kindOne));
+        if constexpr (!Silent)
+            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Cannot infer common type for " << kindOne));
     } else {
         if constexpr (!Strict) {
             if (ETypeAnnotationKind::Pg == kindOne) {
@@ -1739,32 +1746,34 @@ const TTypeAnnotationNode* CommonType(TPositionHandle pos, const TTypeAnnotation
                 return one;
             } else if (ETypeAnnotationKind::Resource == kindOne && ETypeAnnotationKind::Data == kindTwo) {
                 if constexpr (!Strict)
-                    return CommonType(pos, one->Cast<TResourceExprType>(), two->Cast<TDataExprType>(), ctx);
+                    return CommonType<Silent>(pos, one->Cast<TResourceExprType>(), two->Cast<TDataExprType>(), ctx);
             } else if (ETypeAnnotationKind::Resource == kindTwo && ETypeAnnotationKind::Data == kindOne) {
                 if constexpr (!Strict)
-                    return CommonType(pos, two->Cast<TResourceExprType>(), one->Cast<TDataExprType>(), ctx);
+                    return CommonType<Silent>(pos, two->Cast<TResourceExprType>(), one->Cast<TDataExprType>(), ctx);
             }
         }
 
-        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Cannot infer common type for " << kindOne << " and " << kindTwo));
+        if constexpr (!Silent)
+            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Cannot infer common type for " << kindOne << " and " << kindTwo));
     }
 
     return nullptr;
 }
 
-template const TTypeAnnotationNode* CommonType<true>(TPositionHandle pos, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx);
-template const TTypeAnnotationNode* CommonType<false>(TPositionHandle pos, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx);
+template const TTypeAnnotationNode* CommonType<true, false>(TPositionHandle pos, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx);
+template const TTypeAnnotationNode* CommonType<false, false>(TPositionHandle pos, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx);
+template const TTypeAnnotationNode* CommonType<false, true>(TPositionHandle pos, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx);
 
 const TTypeAnnotationNode* CommonType(TPositionHandle position, const TTypeAnnotationNode::TSpanType& types, TExprContext& ctx) {
     switch (types.size()) {
         case 0U: return nullptr;
         case 1U: return types.front();
-        case 2U: return CommonType<false>(position, types.front(), types.back(), ctx);
+        case 2U: return CommonType<false, false>(position, types.front(), types.back(), ctx);
         default: break;
     }
 
     const auto left = types.size() >> 1U, right = types.size() - left;
-    return CommonType<false>(position, CommonType(position, types.first(left), ctx), CommonType(position, types.last(right), ctx), ctx);
+    return CommonType<false, false>(position, CommonType(position, types.first(left), ctx), CommonType(position, types.last(right), ctx), ctx);
 }
 
 const TTypeAnnotationNode* CommonTypeForChildren(const TExprNode& node, TExprContext& ctx) {

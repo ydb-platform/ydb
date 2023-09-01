@@ -27,8 +27,9 @@ namespace NYql {
 
 class THorizontalJoinBase {
 public:
-    THorizontalJoinBase(const TYtState::TPtr& state, const TOpDeps& opDeps, const TNodeSet& hasWorldDeps)
+    THorizontalJoinBase(const TYtState::TPtr& state, const std::vector<const TExprNode*>& opDepsOrder, const TOpDeps& opDeps, const TNodeSet& hasWorldDeps)
         : State_(state)
+        , OpDepsOrder(opDepsOrder)
         , OpDeps(opDeps)
         , HasWorldDeps(hasWorldDeps)
         , MaxTables(State_->Configuration->MaxInputTables.Get().GetOrElse(DEFAULT_MAX_INPUT_TABLES))
@@ -58,6 +59,7 @@ protected:
 
 protected:
     TYtState::TPtr State_;
+    const std::vector<const TExprNode*>& OpDepsOrder;
     const TOpDeps& OpDeps;
     const TNodeSet& HasWorldDeps;
 
@@ -82,8 +84,8 @@ class THorizontalJoinOptimizer: public THorizontalJoinBase {
     using TGroupKey = std::tuple<TString, TMaybe<TSampleParams>, const TExprNode*, ui32>;
 
 public:
-    THorizontalJoinOptimizer(const TYtState::TPtr& state, const TOpDeps& opDeps, const TNodeSet& hasWorldDeps, TProcessedNodesSet* processedNodes)
-        : THorizontalJoinBase(state, opDeps, hasWorldDeps)
+    THorizontalJoinOptimizer(const TYtState::TPtr& state, const std::vector<const TExprNode*>& opDepsOrder, const TOpDeps& opDeps, const TNodeSet& hasWorldDeps, TProcessedNodesSet* processedNodes)
+        : THorizontalJoinBase(state, opDepsOrder, opDeps, hasWorldDeps)
         , ProcessedNodes(processedNodes)
     {
     }
@@ -123,8 +125,8 @@ class TMultiHorizontalJoinOptimizer: public THorizontalJoinBase {
     using TGroupKey = std::tuple<TString, std::set<ui64>, TMaybe<TSampleParams>, const TExprNode*, ui32>;
 
 public:
-    TMultiHorizontalJoinOptimizer(const TYtState::TPtr& state, const TOpDeps& opDeps, const TNodeSet& hasWorldDeps)
-        : THorizontalJoinBase(state, opDeps, hasWorldDeps)
+    TMultiHorizontalJoinOptimizer(const TYtState::TPtr& state, const std::vector<const TExprNode*>& opDepsOrder, const TOpDeps& opDeps, const TNodeSet& hasWorldDeps)
+        : THorizontalJoinBase(state, opDepsOrder, opDeps, hasWorldDeps)
     {
     }
 
@@ -149,8 +151,8 @@ class TOutHorizontalJoinOptimizer: public THorizontalJoinBase {
     using TGroupKey = std::tuple<TString, const TExprNode*, const TExprNode*, const TExprNode*, const TExprNode*, ui32>;
 
 public:
-    TOutHorizontalJoinOptimizer(const TYtState::TPtr& state, const TOpDeps& opDeps, const TNodeSet& hasWorldDeps)
-        : THorizontalJoinBase(state, opDeps, hasWorldDeps)
+    TOutHorizontalJoinOptimizer(const TYtState::TPtr& state, const std::vector<const TExprNode*>& opDepsOrder, const TOpDeps& opDeps, const TNodeSet& hasWorldDeps)
+        : THorizontalJoinBase(state, opDepsOrder, opDeps, hasWorldDeps)
     {
     }
 

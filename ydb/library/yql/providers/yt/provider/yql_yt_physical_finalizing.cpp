@@ -54,6 +54,7 @@ public:
         output = input;
 
         TOpDeps opDeps;
+        std::vector<const TExprNode*> opDepsOrder;
         TNodeSet hasWorldDeps; // Operations, which have world dependencies on them from another nodes
         TNodeSet toCombine;
         TNodeSet neverCombine;
@@ -62,6 +63,15 @@ public:
 
         bool enableChunkCombining = IsChunkCombiningEnabled();
 
+        auto storeDep = [&opDeps, &opDepsOrder](const TYtOutput& out, const TExprNode* reader, const TExprNode* sec, const TExprNode* path) {
+            const auto realOp = GetRealOperation(out.Operation()).Raw();
+            auto& res = opDeps[realOp];
+            if (res.empty()) {
+                opDepsOrder.push_back(realOp);
+            }
+            res.emplace_back(reader, sec, out.Raw(), path);
+        };
+
         VisitExpr(input, [&](const TExprNode::TPtr& node)->bool {
             if (auto maybeOp = TMaybeNode<TYtTransientOpBase>(node)) {
                 auto op = maybeOp.Cast();
@@ -69,7 +79,7 @@ public:
                     for (auto path: section.Paths()) {
                         if (auto maybeOutput = path.Table().Maybe<TYtOutput>()) {
                             auto out = maybeOutput.Cast();
-                            opDeps[GetRealOperation(out.Operation()).Raw()].emplace_back(op.Raw(), section.Raw(), out.Raw(), path.Raw());
+                            storeDep(out, op.Raw(), section.Raw(), path.Raw());
                             if (enableChunkCombining) {
                                 CollectForCombine(out, toCombine, neverCombine);
                             }
@@ -83,7 +93,7 @@ public:
                     for (auto path: section.Paths()) {
                         if (auto maybeOutput = path.Table().Maybe<TYtOutput>()) {
                             auto out = maybeOutput.Cast();
-                            opDeps[GetRealOperation(out.Operation()).Raw()].emplace_back(read.Raw(), section.Raw(), out.Raw(), path.Raw());
+                            storeDep(out, read.Raw(), section.Raw(), path.Raw());
                             if (enableChunkCombining) {
                                 CollectForCombine(out, toCombine, neverCombine);
                             }
@@ -94,21 +104,21 @@ public:
             else if (auto maybePublish = TMaybeNode<TYtPublish>(node)) {
                 auto publish = maybePublish.Cast();
                 for (auto out: publish.Input()) {
-                    opDeps[GetRealOperation(out.Operation()).Raw()].emplace_back(publish.Raw(), nullptr, out.Raw(), nullptr);
+                    storeDep(out, publish.Raw(), nullptr, nullptr);
                 }
             }
             else if (auto maybeLength = TMaybeNode<TYtLength>(node)) {
                 auto length = maybeLength.Cast();
                 if (auto maybeOutput = length.Input().Maybe<TYtOutput>()) {
                     auto out = maybeOutput.Cast();
-                    opDeps[GetRealOperation(out.Operation()).Raw()].emplace_back(length.Raw(), nullptr, out.Raw(), nullptr);
+                    storeDep(out, length.Raw(), nullptr, nullptr);
                 }
             }
             else if (auto maybeTableContent = TMaybeNode<TYtTableContent>(node)) {
                 auto tableContent = maybeTableContent.Cast();
                 if (auto maybeOutput = tableContent.Input().Maybe<TYtOutput>()) {
                     auto out = maybeOutput.Cast();
-                    opDeps[GetRealOperation(out.Operation()).Raw()].emplace_back(tableContent.Raw(), nullptr, out.Raw(), nullptr);
+                    storeDep(out, tableContent.Raw(), nullptr, nullptr);
                     if (enableChunkCombining) {
                         CollectForCombine(out, toCombine, neverCombine);
                     }
@@ -118,7 +128,7 @@ public:
                 auto resWrite = maybeResWrite.Cast();
                 if (auto maybeOutput = resWrite.Data().Maybe<TYtOutput>()) {
                     auto out = maybeOutput.Cast();
-                    opDeps[GetRealOperation(out.Operation()).Raw()].emplace_back(resWrite.Raw(), nullptr, out.Raw(), nullptr);
+                    storeDep(out, resWrite.Raw(), nullptr, nullptr);
                     if (enableChunkCombining) {
                         CollectForCombine(out, toCombine, neverCombine);
                     }
@@ -128,13 +138,13 @@ public:
                 auto sqlIn = maybeSqlIn.Cast();
                 if (auto maybeOutput = sqlIn.Collection().Maybe<TYtOutput>()) {
                     auto out = maybeOutput.Cast();
-                    opDeps[GetRealOperation(out.Operation()).Raw()].emplace_back(sqlIn.Raw(), nullptr, out.Raw(), nullptr);
+                    storeDep(out, sqlIn.Raw(), nullptr, nullptr);
                 }
             }
             else if (auto maybeStatOut = TMaybeNode<TYtStatOut>(node)) {
                 auto statOut = maybeStatOut.Cast();
                 auto out = statOut.Input();
-                opDeps[GetRealOperation(out.Operation()).Raw()].emplace_back(statOut.Raw(), nullptr, out.Raw(), nullptr);
+                storeDep(out, statOut.Raw(), nullptr, nullptr);
                 if (enableChunkCombining) {
                     CollectForCombine(out, toCombine, neverCombine);
                 }
@@ -155,6 +165,7 @@ public:
 
             return true;
         });
+        YQL_ENSURE(opDeps.size() == opDepsOrder.size());
 
         const auto disableOptimizers = State_->Configuration->DisableOptimizers.Get().GetOrElse(TSet<TString>());
 
@@ -243,7 +254,7 @@ public:
         }
 
         if (!disableOptimizers.contains("UnorderedOuts") && ctx.IsConstraintEnabled<TSortedConstraintNode>()) {
-            status = OptimizeUnorderedOuts(input, output, opDeps, lefts, ctx);
+            status = OptimizeUnorderedOuts(input, output, opDepsOrder, opDeps, lefts, ctx);
             if (status.Level != TStatus::Ok) {
                 return status;
             }
@@ -397,21 +408,21 @@ public:
         }
 
         if (!disableOptimizers.contains("HorizontalJoin")) {
-            status = THorizontalJoinOptimizer(State_, opDeps, hasWorldDeps, &ProcessedHorizontalJoin).Optimize(output, output, ctx);
+            status = THorizontalJoinOptimizer(State_, opDepsOrder, opDeps, hasWorldDeps, &ProcessedHorizontalJoin).Optimize(output, output, ctx);
             if (status.Level != TStatus::Ok) {
                 return status;
             }
         }
 
         if (!disableOptimizers.contains("MultiHorizontalJoin")) {
-            status = TMultiHorizontalJoinOptimizer(State_, opDeps, hasWorldDeps).Optimize(output, output, ctx);
+            status = TMultiHorizontalJoinOptimizer(State_, opDepsOrder, opDeps, hasWorldDeps).Optimize(output, output, ctx);
             if (status.Level != TStatus::Ok) {
                 return status;
             }
         }
 
         if (!disableOptimizers.contains("OutHorizontalJoin")) {
-            status = TOutHorizontalJoinOptimizer(State_, opDeps, hasWorldDeps).Optimize(output, output, ctx);
+            status = TOutHorizontalJoinOptimizer(State_, opDepsOrder, opDeps, hasWorldDeps).Optimize(output, output, ctx);
             if (status.Level != TStatus::Ok) {
                 return status;
             }
@@ -855,12 +866,11 @@ private:
         return TStatus::Ok;
     }
 
-    TStatus OptimizeUnorderedOuts(TExprNode::TPtr input, TExprNode::TPtr& output, const TOpDeps& opDeps, const TNodeSet& lefts, TExprContext& ctx) {
-        TVector<const TOpDeps::value_type*> matchedOps;
-        for (auto& x: opDeps) {
-            auto writer = x.first;
+    TStatus OptimizeUnorderedOuts(TExprNode::TPtr input, TExprNode::TPtr& output, const std::vector<const TExprNode*>& opDepsOrder, const TOpDeps& opDeps, const TNodeSet& lefts, TExprContext& ctx) {
+        std::vector<const TExprNode*> matchedOps;
+        for (auto writer: opDepsOrder) {
             if (!TYtEquiJoin::Match(writer) && !writer->StartsExecution() && (!writer->HasResult() || writer->GetResult().Type() != TExprNode::World)) {
-                matchedOps.push_back(&x);
+                matchedOps.push_back(writer);
             }
         }
 
@@ -868,15 +878,13 @@ private:
             return TStatus::Ok;
         }
 
-        Sort(matchedOps, [](const TOpDeps::value_type* m1, const TOpDeps::value_type* m2) { return m1->first->UniqueId() < m2->first->UniqueId(); });
-
         TNodeOnNodeOwnedMap replaces;
         TNodeOnNodeOwnedMap newOps;
-        for (auto x: matchedOps) {
-            auto writer = x->first;
+        for (auto writer: matchedOps) {
             TDynBitMap orderedOuts;
             TDynBitMap unorderedOuts;
-            for (auto& item: x->second) {
+            const auto& readers = opDeps.at(writer);
+            for (auto& item: readers) {
                 auto out = TYtOutput(std::get<2>(item));
                 if (IsUnorderedOutput(out)) {
                     unorderedOuts.Set(FromString<size_t>(out.OutIndex().Value()));
@@ -890,7 +898,7 @@ private:
                     if (newOp) {
                         newOps[writer] = newOp;
                     }
-                    for (auto& item: x->second) {
+                    for (auto& item: readers) {
                         auto out = std::get<2>(item);
                         replaces[out] = Build<TYtOutput>(ctx, out->Pos())
                             .Operation(newOp ? newOp : out->ChildPtr(TYtOutput::idx_Operation))

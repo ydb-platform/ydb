@@ -630,9 +630,9 @@ TExprNode::TPtr THorizontalJoinOptimizer::HandleList(const TExprNode::TPtr& node
             }
 
             const size_t mapInputCount = map.Input().Item(0).Paths().Size();
-            if (InputCount + mapInputCount > MaxTables) {
+            if (const auto nextCount = InputCount + mapInputCount; nextCount > MaxTables) {
                 if (MakeJoinedMap(node->Pos(), ctx)) {
-                    YQL_CLOG(INFO, ProviderYt) << "HorizontalJoin: split by max input tables: " << (InputCount + mapInputCount);
+                    YQL_CLOG(INFO, ProviderYt) << "HorizontalJoin: split by max input tables: " << nextCount;
                 }
                 // Reinit outNdx because MakeJoinedMap() clears JoinedMaps
                 outNdx = JoinedMaps.size();
@@ -1224,8 +1224,7 @@ TExprNode::TPtr THorizontalJoinOptimizer::RebuildList(const TExprNode::TPtr& nod
 IGraphTransformer::TStatus TMultiHorizontalJoinOptimizer::Optimize(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     THashMap<TGroupKey, TVector<TYtMap>> mapGroups;
 
-    for (auto& x: OpDeps) {
-        auto writer = x.first;
+    for (auto writer: OpDepsOrder) {
         if (auto maybeMap = TMaybeNode<TYtMap>(writer)) {
             auto map = maybeMap.Cast();
             if (IsGoodForHorizontalJoin(map)) {
@@ -1261,7 +1260,7 @@ IGraphTransformer::TStatus TMultiHorizontalJoinOptimizer::Optimize(TExprNode::TP
 
                 if (good) {
                     std::set<ui64> readerIds;
-                    for (auto& reader: x.second) {
+                    for (auto& reader: OpDeps.at(writer)) {
                         readerIds.insert(std::get<0>(reader)->UniqueId());
                     }
                     ui32 flags = 0;
@@ -1333,15 +1332,15 @@ IGraphTransformer::TStatus TMultiHorizontalJoinOptimizer::Optimize(TExprNode::TP
 bool TMultiHorizontalJoinOptimizer::HandleGroup(const TVector<TYtMap>& maps, TExprContext& ctx) {
     for (TYtMap map: maps) {
         const size_t mapInputCount = map.Input().Item(0).Paths().Size();
-        if (InputCount + mapInputCount > MaxTables) {
+        if (const auto nextCount = InputCount + mapInputCount; nextCount > MaxTables) {
             if (MakeJoinedMap(ctx)) {
-                YQL_CLOG(INFO, ProviderYt) << "MultiHorizontalJoin: split by max input tables: " << (InputCount + mapInputCount);
+                YQL_CLOG(INFO, ProviderYt) << "MultiHorizontalJoin: split by max input tables: " << nextCount;
             }
         }
 
-        if (JoinedMaps.size() + 1 > MaxOutTables) {
+        if (const auto nextMapCount = JoinedMaps.size() + 1; nextMapCount > MaxOutTables) {
             if (MakeJoinedMap(ctx)) {
-                YQL_CLOG(INFO, ProviderYt) << "MultiHorizontalJoin: split by max output tables: " << (JoinedMaps.size() + 1);
+                YQL_CLOG(INFO, ProviderYt) << "MultiHorizontalJoin: split by max output tables: " << nextMapCount;
             }
         }
 
@@ -1727,9 +1726,9 @@ bool TOutHorizontalJoinOptimizer::HandleGroup(TPositionHandle pos, const TGroupK
     auto itemType = std::get<2>(key)->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
 
     for (TYtMap map: maps) {
-        if (JoinedMaps.size() + 1 > MaxOutTables) {
+        if (const auto nextMapCount = JoinedMaps.size() + 1; nextMapCount > MaxOutTables) {
             if (MakeJoinedMap(pos, key, itemType, ctx)) {
-                YQL_CLOG(INFO, ProviderYt) << "OutHorizontalJoin: split by max output tables: " << (JoinedMaps.size() + 1);
+                YQL_CLOG(INFO, ProviderYt) << "OutHorizontalJoin: split by max output tables: " << nextMapCount;
             }
         }
 
@@ -1804,8 +1803,7 @@ IGraphTransformer::TStatus TOutHorizontalJoinOptimizer::Optimize(TExprNode::TPtr
     THashMap<TGroupKey, TVector<TYtMap>> opGroups;
     THashMap<TGroupKey, TVector<TYtMap>> tableGroups;
 
-    for (auto& x: OpDeps) {
-        auto writer = x.first;
+    for (auto writer: OpDepsOrder) {
         if (IsGoodForOutHorizontalJoin(writer)) {
             auto map = TYtMap(writer);
             auto section = map.Input().Item(0);
@@ -1837,7 +1835,7 @@ IGraphTransformer::TStatus TOutHorizontalJoinOptimizer::Optimize(TExprNode::TPtr
         }
 
         opGroups.clear();
-        for (auto& reader: x.second) {
+        for (auto& reader: OpDeps.at(writer)) {
             if (IsGoodForOutHorizontalJoin(std::get<0>(reader))) {
                 auto map = TYtMap(std::get<0>(reader));
                 auto section = map.Input().Item(0);
@@ -1870,9 +1868,6 @@ IGraphTransformer::TStatus TOutHorizontalJoinOptimizer::Optimize(TExprNode::TPtr
                 continue;
             }
 
-            Sort(group.second.begin(), group.second.end(),
-                [](const TYtMap& m1, const TYtMap& m2) { return m1.Ref().UniqueId() < m2.Ref().UniqueId(); });
-
             if (!HandleGroup(writer->Pos(), group.first, group.second, ctx)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -1891,9 +1886,6 @@ IGraphTransformer::TStatus TOutHorizontalJoinOptimizer::Optimize(TExprNode::TPtr
             if (group.second.size() < 2) {
                 continue;
             }
-
-            Sort(group.second.begin(), group.second.end(),
-                [](const TYtMap& m1, const TYtMap& m2) { return m1.Ref().UniqueId() < m2.Ref().UniqueId(); });
 
             if (!HandleGroup(std::get<2>(group.first)->Pos(), group.first, group.second, ctx)) {
                 return IGraphTransformer::TStatus::Error;

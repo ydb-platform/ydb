@@ -5791,11 +5791,39 @@ TRuntimeNode TProgramBuilder::ScalarApply(const TArrayRef<const TRuntimeNode>& a
     return TRuntimeNode(builder.Build(), false);
 }
 
+namespace {
+using namespace NYql::NMatchRecognize;
+TRuntimeNode PatternToRuntimeNode(const TRowPattern& pattern, const TProgramBuilder& programBuilder) {
+    const auto& env = programBuilder.GetTypeEnvironment();
+    TTupleLiteralBuilder patternBuilder(env);
+    for (const auto& term: pattern) {
+        TTupleLiteralBuilder termBuilder(env);
+        for (const auto& factor: term) {
+            TStructLiteralBuilder factorBuilder(env);
+            factorBuilder.Add("Primary", factor.Primary.index() == 0 ?
+                programBuilder.NewDataLiteral<NUdf::EDataSlot::String>(std::get<0>(factor.Primary)) :
+                PatternToRuntimeNode(std::get<1>(factor.Primary), programBuilder)
+            );
+            factorBuilder.Add("QuantityMin", programBuilder.NewDataLiteral<ui64>(factor.QuantityMin));
+            factorBuilder.Add("QuantityMax", programBuilder.NewDataLiteral<ui64>(factor.QuantityMax));
+            factorBuilder.Add("Greedy", programBuilder.NewDataLiteral<bool>(factor.Greedy));
+            factorBuilder.Add("Output", programBuilder.NewDataLiteral<bool>(factor.Output));
+            termBuilder.Add({factorBuilder.Build(), true});
+        }
+        patternBuilder.Add({termBuilder.Build(), true});
+    }
+    return {patternBuilder.Build(), true};
+};
+
+} //namespace
+
 TRuntimeNode TProgramBuilder::MatchRecognizeCore(
     TRuntimeNode inputStream,
     const TUnaryLambda& getPartitionKeySelectorNode,
     const TArrayRef<TStringBuf>& partitionColumns,
-    const TArrayRef<std::pair<TStringBuf, TBinaryLambda>>& getMeasures
+    const TArrayRef<std::pair<TStringBuf, TBinaryLambda>>& getMeasures,
+    const NYql::NMatchRecognize::TRowPattern& pattern,
+    const TArrayRef<std::pair<TStringBuf, TTernaryLambda>>& getDefines
 ) {
     MKQL_ENSURE(RuntimeVersion >= 42, "MatchRecognize is not supported in runtime version " << RuntimeVersion);
 
@@ -5808,8 +5836,9 @@ TRuntimeNode TProgramBuilder::MatchRecognizeCore(
     indexRangeTypeBuilder.Add("To", TDataType::Create(NUdf::TDataType<ui64>::Id, Env));
     const auto& rangeList = TListType::Create(indexRangeTypeBuilder.Build(), Env);
     TStructTypeBuilder matchedVarsTypeBuilder(Env);
-    //assume simple pattern with one var "A" that always match TODO fixme
-    matchedVarsTypeBuilder.Add("A", rangeList);
+    for (const auto& var: GetPatternVars(pattern)) {
+        matchedVarsTypeBuilder.Add(var, rangeList);
+    }
     TRuntimeNode matchedVarsArg = Arg(matchedVarsTypeBuilder.Build());
 
     //---These vars may be empty in case of no measures
@@ -5889,6 +5918,35 @@ TRuntimeNode TProgramBuilder::MatchRecognizeCore(
     }
     auto outputType = (TType*)TFlowType::Create(outputRowType, Env);
 
+    THashMap<TStringBuf , size_t> patternVarLookup;
+    for (ui32 i = 0; i != AS_TYPE(TStructType, matchedVarsArg.GetStaticType())->GetMembersCount(); ++i){
+        patternVarLookup[AS_TYPE(TStructType, matchedVarsArg.GetStaticType())->GetMemberName(i)] = i;
+    }
+
+    THashMap<TStringBuf , size_t> defineLookup;
+    for (size_t i = 0; i != getDefines.size(); ++i) {
+        defineLookup[getDefines[i].first] = i;
+    }
+    std::vector<TRuntimeNode> defineNames(patternVarLookup.size());
+    std::vector<TRuntimeNode> defineNodes(patternVarLookup.size());
+
+    const auto& defineInputDataArg = Arg(TListType::Create(inputRowType, Env));
+    const auto& currentRowIndexArg = Arg(TDataType::Create(NUdf::TDataType<ui64>::Id, Env));
+    for (const auto& [v, i]: patternVarLookup) {
+        defineNames[i] = NewDataLiteral<NUdf::EDataSlot::String>(v);
+        if (const auto it = defineLookup.find(v); it != defineLookup.end()) {
+            defineNodes[i] = getDefines[it->second].second(defineInputDataArg, matchedVarsArg, currentRowIndexArg);
+        }
+        else { //no predicate for var
+            if ("$" == v || "^" == v) {
+                //DO nothing, //will be handled in a specific way
+            }
+            else { // a var without a predicate matches any row
+                defineNodes[i] = NewDataLiteral<bool>(true);
+            }
+        }
+    }
+
     TCallableBuilder callableBuilder(GetTypeEnvironment(), "MatchRecognizeCore", outputType);
     auto indexType = TDataType::Create(NUdf::TDataType<ui32>::Id, Env);
     auto indexListType = TListType::Create(indexType, Env);
@@ -5907,6 +5965,16 @@ TRuntimeNode TProgramBuilder::MatchRecognizeCore(
     callableBuilder.Add(TRuntimeNode(TListLiteral::Create(measureColumnIndexes.data(), measureColumnIndexes.size(), indexListType, Env), true));
     for (const auto& m: measures) {
         callableBuilder.Add(m);
+    }
+
+    callableBuilder.Add(PatternToRuntimeNode(pattern, *this));
+
+    callableBuilder.Add(currentRowIndexArg);
+    callableBuilder.Add(defineInputDataArg);
+    const auto stringType = NewDataType(NUdf::EDataSlot::String);
+    callableBuilder.Add(TRuntimeNode(TListLiteral::Create(defineNames.begin(), defineNames.size(), TListType::Create(stringType, Env), Env), true));
+    for (const auto& d: defineNodes) {
+        callableBuilder.Add(d);
     }
     return TRuntimeNode(callableBuilder.Build(), false);
 }

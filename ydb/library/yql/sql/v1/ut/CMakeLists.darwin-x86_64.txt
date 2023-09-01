@@ -18,6 +18,7 @@ target_link_libraries(ydb-library-yql-sql-v1-ut PUBLIC
   cpp-testing-unittest_main
   yql-sql-v1
   udf-service-exception_policy
+  yql-core-sql_types
   library-yql-sql
   yql-sql-pg_dummy
   sql-v1-format

@@ -14,7 +14,7 @@ public:
             std::pair<TPosition, TVector<TNamedLambda>>&& measures,
             std::pair<TPosition, ERowsPerMatch>&& rowsPerMatch,
             std::pair<TPosition, TAfterMatchSkipTo>&& skipTo,
-            std::pair<TPosition, TRowPatternPtr>&& pattern,
+            std::pair<TPosition, NYql::NMatchRecognize::TRowPattern>&& pattern,
             std::pair<TPosition, TNodePtr>&& subset,
             std::pair<TPosition, TVector<TNamedLambda>>&& definitions
             ): TAstListNode(pos, {BuildAtom(pos, "block")})
@@ -43,7 +43,7 @@ private:
             std::pair<TPosition, TVector<TNamedLambda>>&& measures,
             std::pair<TPosition, ERowsPerMatch>&& rowsPerMatch,
             std::pair<TPosition, TAfterMatchSkipTo>&& skipTo,
-            std::pair<TPosition, TRowPatternPtr>&& pattern,
+            std::pair<TPosition, NYql::NMatchRecognize::TRowPattern>&& pattern,
             std::pair<TPosition, TNodePtr>&& subset,
             std::pair<TPosition, TVector<TNamedLambda>>&& definitions
             ) {
@@ -110,7 +110,7 @@ private:
         ));
     }
 
-    TPtr PatternFactor(const TPosition& pos, const TRowPatternFactor& factor) {
+    TPtr PatternFactor(const TPosition& pos, const NYql::NMatchRecognize::TRowPatternFactor& factor) {
         return BuildTuple(pos, {
                 factor.Primary.index() == 0 ?
                     BuildQuotedAtom(pos, std::get<0>(factor.Primary)) :
@@ -123,16 +123,16 @@ private:
     }
 
 
-    TPtr PatternTerm(const TPosition& pos, const TRowPatternTerm& term) {
+    TPtr PatternTerm(const TPosition& pos, const NYql::NMatchRecognize::TRowPatternTerm& term) {
         auto factors = Y();
         for (const auto& f: term)
             factors->Add(PatternFactor(pos, f));
         return Q(std::move(factors));
     }
 
-    TPtr Pattern(const TPosition& pos, const TRowPatternPtr& pattern) {
+    TPtr Pattern(const TPosition& pos, const NYql::NMatchRecognize::TRowPattern& pattern) {
         TNodePtr patternNode = Y("MatchRecognizePattern");
-        for (const auto& t: pattern->Terms) {
+        for (const auto& t: pattern) {
             patternNode->Add(PatternTerm(pos, t));
         }
         return patternNode;

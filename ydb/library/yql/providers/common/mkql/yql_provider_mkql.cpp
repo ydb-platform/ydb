@@ -5,6 +5,8 @@
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
+#include <ydb/library/yql/core/yql_match_recognize.h>
+
 #include <ydb/library/yql/core/yql_join.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 
@@ -860,10 +862,16 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
         //explore params
         const auto& measures = params->ChildRef(0);
+        const auto& pattern = params->ChildRef(3);
+        const auto& defines = params->ChildRef(4);
 
         //explore measures
         const auto measureNames = measures->ChildRef(2);
         constexpr size_t FirstMeasureLambdaIndex = 3;
+
+        //explore defines
+        const auto defineNames = defines->ChildRef(2);
+        const size_t FirstDefineLambdaIndex = 3;
 
         TVector<TStringBuf> partitionColumnNames;
         for (const auto& n: partitionColumns->Children()) {
@@ -873,6 +881,17 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         TProgramBuilder::TUnaryLambda getPartitionKeySelector = [partitionKeySelector, &ctx](TRuntimeNode inputRowArg){
             return MkqlBuildLambda(*partitionKeySelector, ctx, {inputRowArg});
         };
+
+        TVector<std::pair<TStringBuf, TProgramBuilder::TTernaryLambda>> getDefines(defineNames->ChildrenSize());
+        for (size_t i = 0; i != defineNames->ChildrenSize(); ++i) {
+            getDefines[i] = std::pair{
+                    defineNames->ChildRef(i)->Content(),
+                    [i, defines, &ctx](TRuntimeNode data, TRuntimeNode matchedVars, TRuntimeNode rowIndex) {
+                        return MkqlBuildLambda(*defines->ChildRef(FirstDefineLambdaIndex + i), ctx,
+                                               {data, matchedVars, rowIndex});
+                    }
+            };
+        }
 
         TVector<std::pair<TStringBuf, TProgramBuilder::TBinaryLambda>> getMeasures(measureNames->ChildrenSize());
         for (size_t i = 0; i != measureNames->ChildrenSize(); ++i) {
@@ -889,7 +908,9 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
                 MkqlBuildExpr(*inputStream, ctx),
                 getPartitionKeySelector,
                 partitionColumnNames,
-                getMeasures
+                getMeasures,
+                NYql::NMatchRecognize::ConvertPattern(pattern, ctx.ExprCtx),
+                getDefines
                 );
     });
 

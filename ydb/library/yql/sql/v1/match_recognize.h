@@ -1,5 +1,6 @@
 #pragma once
 #include "node.h"
+#include <ydb/library/yql/core/sql_types/match_recognize.h>
 #include <util/generic/ptr.h>
 
 namespace NSQLTranslationV1 {
@@ -36,26 +37,6 @@ struct TAfterMatchSkipTo {
     TString Var;
 };
 
-struct TRowPattern;
-
-using TRowPatternPtr = std::unique_ptr<TRowPattern>;
-
-using TRowPatternPrimary = std::variant<TString, TRowPatternPtr>;
-
-struct TRowPatternFactor{
-    TRowPatternPrimary Primary;
-    uint64_t QuantityMin;
-    uint64_t QuantityMax;
-    bool Greedy;
-    bool Output; //include in output with ALL ROW PER MATCH
-};
-
-using TRowPatternTerm = std::vector<TRowPatternFactor>;
-
-struct TRowPattern {
-    std::vector<TRowPatternTerm> Terms;
-};
-
 class TMatchRecognizeBuilder: public TSimpleRefCount<TMatchRecognizeBuilder> {
 public:
     TMatchRecognizeBuilder(
@@ -65,7 +46,7 @@ public:
             std::pair<TPosition, TVector<TNamedLambda>>&& measures,
             std::pair<TPosition, ERowsPerMatch>&& rowsPerMatch,
             std::pair<TPosition, TAfterMatchSkipTo>&& skipTo,
-            std::pair<TPosition, TRowPatternPtr>&& pattern,
+            std::pair<TPosition, NYql::NMatchRecognize::TRowPattern>&& pattern,
             std::pair<TPosition, TNodePtr>&& subset,
             std::pair<TPosition, TVector<TNamedLambda>>&& definitions
             )
@@ -88,7 +69,7 @@ private:
     std::pair<TPosition, TVector<TNamedLambda>> Measures;
     std::pair<TPosition, ERowsPerMatch> RowsPerMatch;
     std::pair<TPosition, TAfterMatchSkipTo> SkipTo;
-    std::pair<TPosition, TRowPatternPtr> Pattern;
+    std::pair<TPosition, NYql::NMatchRecognize::TRowPattern> Pattern;
     std::pair<TPosition, TNodePtr> Subset;
     std::pair<TPosition, TVector<TNamedLambda>> Definitions;
 };

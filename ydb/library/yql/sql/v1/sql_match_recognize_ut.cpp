@@ -1,6 +1,7 @@
 #include "sql_ut.h"
 #include "match_recognize.h"
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/core/sql_types/match_recognize.h>
 #include <ydb/library/yql/sql/sql.h>
 #include <util/generic/map.h>
 
@@ -426,7 +427,7 @@ FROM Input MATCH_RECOGNIZE(
         auto getTheFactor = [](const NYql::TAstNode* root) {
             const auto& patternCallable = FindMatchRecognizeParam(root, "pattern");
             const auto& factor =  patternCallable->GetChild(1)->GetChild(1)->GetChild(0)->GetChild(1);
-            return NSQLTranslationV1::TRowPatternFactor{
+            return NYql::NMatchRecognize::TRowPatternFactor{
                     TString(), //primary var or subexpression, not used in this test
                     FromString<uint64_t>(factor->GetChild(1)->GetChild(1)->GetContent()), //QuantityMin
                     FromString<uint64_t>(factor->GetChild(2)->GetChild(1)->GetContent()), //QuantityMax

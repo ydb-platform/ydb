@@ -17,22 +17,6 @@ TString PatternVar(const TRule_row_pattern_variable_name& node, TSqlMatchRecogni
     return Id(node.GetRule_identifier1(), ctx);
 }
 
-std::unordered_set<TString> GetAllPatternVars(const TRowPatternPtr& pattern){
-    std::unordered_set<TString> result;
-    for (const auto& t: pattern->Terms) {
-        for (const auto& f: t) {
-            if (f.Primary.index() == 0) {
-                result.insert(std::get<0>(f.Primary));
-            }
-            else {
-                auto nested = GetAllPatternVars(std::get<1>(f.Primary));
-                result.insert(nested.cbegin(), nested.cend());
-            }
-        }
-    }
-    return result;
-}
-
 } //namespace
 
 TMatchRecognizeBuilderPtr TSqlMatchRecognizeClause::CreateBuilder(const NSQLv1Generated::TRule_row_pattern_recognition_clause &matchRecognizeClause) {
@@ -101,7 +85,7 @@ TMatchRecognizeBuilderPtr TSqlMatchRecognizeClause::CreateBuilder(const NSQLv1Ge
                 EAfterMatchSkipTo::ToLast == skipTo.second.To ||
                 EAfterMatchSkipTo::To == skipTo.second.To;
         if (varRequired) {
-            const auto& allVars = GetAllPatternVars(pattern);
+            const auto& allVars = NYql::NMatchRecognize::GetPatternVars(pattern);
             if (allVars.find(skipTo.second.Var) == allVars.cend()) {
                 Ctx.Error(skipTo.first) << "Unknown pattern variable in AFTER MATCH";
                 return {};
@@ -234,12 +218,12 @@ std::pair<TPosition, TAfterMatchSkipTo> TSqlMatchRecognizeClause::ParseAfterMatc
     }
 }
 
-TRowPatternTerm TSqlMatchRecognizeClause::ParsePatternTerm(const TRule_row_pattern_term& node){
-    TRowPatternTerm term;
+NYql::NMatchRecognize::TRowPatternTerm TSqlMatchRecognizeClause::ParsePatternTerm(const TRule_row_pattern_term& node){
+    NYql::NMatchRecognize::TRowPatternTerm term;
     TPosition pos;
     for (const auto& factor: node.GetBlock1()) {
         const auto& primaryVar = factor.GetRule_row_pattern_factor1().GetRule_row_pattern_primary1();
-        TRowPatternPrimary primary;
+        NYql::NMatchRecognize::TRowPatternPrimary primary;
         bool output = true;
         switch(primaryVar.GetAltCase()){
             case TRule_row_pattern_primary::kAltRowPatternPrimary1:
@@ -259,7 +243,7 @@ TRowPatternTerm TSqlMatchRecognizeClause::ParsePatternTerm(const TRule_row_patte
                 } else {
                     Ctx.Error(TokenPosition(primaryVar.GetAlt_row_pattern_primary4().GetToken1()))
                             << "To big nesting level in the pattern";
-                    return TRowPatternTerm{};
+                    return NYql::NMatchRecognize::TRowPatternTerm{};
                 }
                 break;
             }
@@ -318,17 +302,17 @@ TRowPatternTerm TSqlMatchRecognizeClause::ParsePatternTerm(const TRule_row_patte
                     Y_FAIL("You should change implementation according to grammar changes");
             }
         }
-        term.push_back(TRowPatternFactor{std::move(primary), quantityMin, quantityMax, greedy, output});
+        term.push_back(NYql::NMatchRecognize::TRowPatternFactor{std::move(primary), quantityMin, quantityMax, greedy, output});
     }
     return term;
 }
 
-TRowPatternPtr TSqlMatchRecognizeClause::ParsePattern(const TRule_row_pattern& node){
-    TVector<TRowPatternTerm> result;
-    result.emplace_back(ParsePatternTerm(node.GetRule_row_pattern_term1()));
+NYql::NMatchRecognize::TRowPattern TSqlMatchRecognizeClause::ParsePattern(const TRule_row_pattern& node){
+    TVector<NYql::NMatchRecognize::TRowPatternTerm> result;
+    result.push_back(ParsePatternTerm(node.GetRule_row_pattern_term1()));
     for (const auto& term: node.GetBlock2())
         result.push_back(ParsePatternTerm(term.GetRule_row_pattern_term2()));
-    return std::make_unique<TRowPattern>(TRowPattern{std::move(result)});
+    return result;
 }
 
 TNamedLambda TSqlMatchRecognizeClause::ParseOneDefinition(const TRule_row_pattern_definition& node){

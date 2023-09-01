@@ -92,4 +92,5 @@ public:
 private:
     const std::vector<TMatchedVar>& Vars;
 };
+
 }//namespace NKikimr::NMiniKQL::NMatchRecognize

@@ -71,5 +71,4 @@ TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& 
     return result;
 }
 
-
 } //namespace NYql

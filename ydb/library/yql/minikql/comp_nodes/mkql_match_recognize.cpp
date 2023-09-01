@@ -8,20 +8,20 @@
 
 namespace NKikimr::NMiniKQL {
 
-namespace {
+namespace NMatchRecognize {
 
 enum class EMeasureColumnSource {Classifier = 0, MatchNumber = 1, Input};
-using TMeasureInputColumnOrder = std::vector<std::pair<EMeasureColumnSource, size_t>>;
+using TMeasureInputColumnOrder = TVector<std::pair<EMeasureColumnSource, size_t>>;
 
 enum class EOutputColumnSource {PartitionKey, Measure};
-using TOutputColumnOrder = std::vector<std::pair<EOutputColumnSource, size_t>>;
+using TOutputColumnOrder = TVector<std::pair<EOutputColumnSource, size_t>>;
 
-using namespace NMatchRecognize;
+using namespace NYql::NMatchRecognize;
 
 //Process one partition of input data
 struct IProcessMatchRecognize {
     ///return true if it has output data ready
-    virtual bool ProcessInputRow(NUdf::TUnboxedValue&& row) = 0;
+    virtual bool ProcessInputRow(NUdf::TUnboxedValue&& row, TComputationContext& ctx) = 0;
     virtual NUdf::TUnboxedValue GetOutputIfReady(TComputationContext& ctx) = 0;
     virtual bool ProcessEndOfData() = 0;
     virtual ~IProcessMatchRecognize(){}
@@ -32,34 +32,42 @@ public:
     TStreamMatchRecognize(
             NUdf::TUnboxedValue&& partitionKey,
             IComputationExternalNode* matchedVarsArg,
-            std::vector<IComputationNode*>& measures,
+            TVector<IComputationNode*>& measures,
             const TOutputColumnOrder& outputColumnOrder,
+            IComputationExternalNode* currentRowIndexArg,
+            const TVector<IComputationNode*>& defines,
             const TContainerCacheOnContext& cache
     )
         : PartitionKey(std::move(partitionKey))
         , MatchedVarsArg(matchedVarsArg)
         , Measures(measures)
         , OutputColumnOrder(outputColumnOrder)
+        , CurrentRowIndexArg(currentRowIndexArg)
+        , Defines(defines)
         , Cache(cache)
-        , MatchedVars(2) //Assume pattern (A B B)*, where A matches every 3rd row (i%3 == 0) and B matches the rest
+        , MatchedVars(Defines.size())
         , HasMatch(false)
         , RowCount(0)
     {
     }
 
-    bool ProcessInputRow(NUdf::TUnboxedValue&& row) override{
+    bool ProcessInputRow(NUdf::TUnboxedValue&& row, TComputationContext& ctx) override{
         Y_UNUSED(row);
-        //Assume pattern (A B B)*, where A matches every 3rd row (i%3 == 0) and B matches the rest
-        switch (RowCount % 3) {
-            case 0:
-                MatchedVars[0].push_back({RowCount, RowCount});
-                break;
-            case 1:
-                MatchedVars[1].push_back({RowCount, RowCount});
-                break;
-            case 2:
-                MatchedVars[1].back().second++;
-                break;
+        CurrentRowIndexArg->SetValue(ctx, NUdf::TUnboxedValuePod(RowCount));
+        for (size_t i = 0; i != Defines.size(); ++i) {
+            const auto& d = Defines[i]->GetValue(ctx);
+            if (d && d.GetOptionalValue().Get<bool>()) {
+                auto& var = MatchedVars[i];
+                if (var.empty()) {
+                    var.emplace_back(RowCount, RowCount);
+                }
+                else if (var.back().second + 1 == RowCount) {
+                    ++var.back().second;
+                }
+                else {
+                    var.emplace_back(RowCount, RowCount);
+                }
+            }
         }
         ++RowCount;
         return HasMatch;
@@ -86,14 +94,17 @@ public:
         return result;
     }
     bool ProcessEndOfData() override {
+        //Assume match at the the end of each partition
         HasMatch = true;
         return HasMatch;
     }
 private:
     const NUdf::TUnboxedValue PartitionKey;
     IComputationExternalNode* const MatchedVarsArg;
-    const std::vector<IComputationNode*>& Measures;
+    const TVector<IComputationNode*>& Measures;
     const TOutputColumnOrder& OutputColumnOrder;
+    IComputationExternalNode* const CurrentRowIndexArg;
+    const TVector<IComputationNode*>& Defines;
     const TContainerCacheOnContext& Cache;
     TMatchedVars MatchedVars;
     bool HasMatch;
@@ -109,8 +120,10 @@ public:
                            IComputationNode *partitionKey,
                            TType* partitionKeyType,
                            IComputationExternalNode* matchedVarsArg,
-                           std::vector<IComputationNode*>&& measures,
-                           TOutputColumnOrder&& outputColumnOrder
+                           TVector<IComputationNode*>&& measures,
+                           TOutputColumnOrder&& outputColumnOrder,
+                           IComputationExternalNode* currentRowIndexArg,
+                           const TVector<IComputationNode*>& defines
     )
     :TBaseComputation(mutables, inputFlow, kind, EValueRepresentation::Embedded)
     , InputFlow(inputFlow)
@@ -120,6 +133,8 @@ public:
     , MatchedVarsArg(matchedVarsArg)
     , Measures(measures)
     , OutputColumnOrder(outputColumnOrder)
+    , CurrentRowIndexArg(currentRowIndexArg)
+    , Defines(defines)
     , Cache(mutables)
     {}
 
@@ -132,6 +147,8 @@ public:
                     MatchedVarsArg,
                     Measures,
                     OutputColumnOrder,
+                    CurrentRowIndexArg,
+                    Defines,
                     Cache
             );
         }
@@ -161,8 +178,10 @@ private:
             IComputationNode* partitionKey,
             TType* partitionKeyType,
             IComputationExternalNode* matchedVarsArg,
-            const std::vector<IComputationNode*>& measures,
+            const TVector<IComputationNode*>& measures,
             const TOutputColumnOrder& outputColumnOrder,
+            IComputationExternalNode* currentRowIndexArg,
+            const TVector<IComputationNode*>& defines,
             const TContainerCacheOnContext& cache
         )
             : TComputationValue<TState>(memInfo)
@@ -172,13 +191,15 @@ private:
             , MatchedVarsArg(matchedVarsArg)
             , Measures(measures)
             , OutputColumnOrder(outputColumnOrder)
+            , CurrentRowIndexArg(currentRowIndexArg)
+            , Defines(defines)
             , Cache(cache)
         {
         }
 
         void ProcessInputRow(NUdf::TUnboxedValue&& row, TComputationContext& ctx) {
             auto partition = GetPartitionHandler(row, ctx);
-            if (partition->second->ProcessInputRow(std::move(row))) {
+            if (partition->second->ProcessInputRow(std::move(row), ctx)) {
                 HasReadyOutput.push(partition);
             }
         }
@@ -220,6 +241,8 @@ private:
                         MatchedVarsArg,
                         Measures,
                         OutputColumnOrder,
+                        CurrentRowIndexArg,
+                        Defines,
                         Cache
                 ));
             }
@@ -238,8 +261,10 @@ private:
 
         //to be passed to partitions
         IComputationExternalNode* const MatchedVarsArg;
-        std::vector<IComputationNode*> Measures;
+        TVector<IComputationNode*> Measures;
         const TOutputColumnOrder& OutputColumnOrder;
+        IComputationExternalNode* const CurrentRowIndexArg;
+        const TVector<IComputationNode*>& Defines;
         const TContainerCacheOnContext& Cache;
     };
 
@@ -248,9 +273,13 @@ private:
         if (const auto flow = FlowDependsOn(InputFlow)) {
             Own(flow, InputRowArg);
             Own(flow, MatchedVarsArg);
+            Own(flow, CurrentRowIndexArg);
             DependsOn(flow, PartitionKey);
             for (auto& m: Measures) {
                 DependsOn(flow, m);
+            }
+            for (auto& d: Defines) {
+                DependsOn(flow, d);
             }
         }
     }
@@ -260,8 +289,10 @@ private:
     IComputationNode* const PartitionKey;
     TType* const PartitionKeyType;
     IComputationExternalNode* const MatchedVarsArg;
-    std::vector<IComputationNode*> Measures;
+    TVector<IComputationNode*> Measures;
     TOutputColumnOrder OutputColumnOrder;
+    IComputationExternalNode* const CurrentRowIndexArg;
+    const TVector<IComputationNode*> Defines;
     const TContainerCacheOnContext Cache;
 };
 
@@ -291,8 +322,33 @@ TOutputColumnOrder GetOutputColumnOrder(TRuntimeNode partitionKyeColumnsIndexes,
     return result;
 }
 
-std::vector<IComputationNode*> ConvertVectorOfCallables(const std::vector<TRuntimeNode>& v, const TComputationNodeFactoryContext& ctx) {
-    std::vector<IComputationNode*> result;
+TRowPattern ConvertPattern(const TRuntimeNode& pattern) {
+    TVector<TRowPatternTerm> result;
+    const auto& inputPattern = AS_VALUE(TTupleLiteral, pattern);
+    for (ui32 i = 0; i != inputPattern->GetValuesCount(); ++i) {
+        const auto& inputTerm = AS_VALUE(TTupleLiteral, inputPattern->GetValue(i));
+        TVector<TRowPatternFactor> term;
+        for (ui32 j = 0; j != inputTerm->GetValuesCount(); ++j) {
+            const auto& inputFactor = AS_VALUE(TTupleLiteral,  inputTerm->GetValue(j));
+            MKQL_ENSURE(inputFactor->GetValuesCount() == 5, "Internal logic error");
+            const auto& primary = inputFactor->GetValue(0);
+            term.push_back(TRowPatternFactor{
+                    primary.IsImmediate() ?
+                        TRowPatternPrimary(TString(AS_VALUE(TDataLiteral, primary)->AsValue().AsStringRef())) :
+                        ConvertPattern(primary),
+                    AS_VALUE(TDataLiteral, inputFactor->GetValue(1))->AsValue().Get<ui64>(),
+                    AS_VALUE(TDataLiteral, inputFactor->GetValue(2))->AsValue().Get<ui64>(),
+                    AS_VALUE(TDataLiteral, inputFactor->GetValue(3))->AsValue().Get<bool>(),
+                    AS_VALUE(TDataLiteral, inputFactor->GetValue(4))->AsValue().Get<bool>()
+            });
+        }
+        result.push_back(std::move(term));
+    }
+    return result;
+}
+
+TVector<IComputationNode*> ConvertVectorOfCallables(const TVector<TRuntimeNode>& v, const TComputationNodeFactoryContext& ctx) {
+    TVector<IComputationNode*> result;
     result.reserve(v.size());
     for (auto& c: v) {
         result.push_back(LocateNode(ctx.NodeLocator, *c.GetNode()));
@@ -300,10 +356,12 @@ std::vector<IComputationNode*> ConvertVectorOfCallables(const std::vector<TRunti
     return result;
 }
 
-} //namespace
+} //namespace NMatchRecognize
+
 
 
 IComputationNode* WrapMatchRecognizeCore(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    using namespace NMatchRecognize;
     size_t inputIndex = 0;
     const auto& inputFlow = callable.GetInput(inputIndex++);
     const auto& inputRowArg = callable.GetInput(inputIndex++);
@@ -314,16 +372,28 @@ IComputationNode* WrapMatchRecognizeCore(TCallable& callable, const TComputation
     const auto& inputRowColumnCount = callable.GetInput(inputIndex++);
     const auto& matchedVarsArg = callable.GetInput(inputIndex++);
     const auto& measureColumnIndexes = callable.GetInput(inputIndex++);
-    std::vector<TRuntimeNode> measures;
+    TVector<TRuntimeNode> measures;
     for (size_t i = 0; i != AS_VALUE(TListLiteral, measureColumnIndexes)->GetItemsCount(); ++i) {
         measures.push_back(callable.GetInput(inputIndex++));
     }
+    const auto& pattern = callable.GetInput(inputIndex++);
+    const auto& currentRowIndexArg = callable.GetInput(inputIndex++);
+    const auto& defineInputDataArg = callable.GetInput(inputIndex++);
+    const auto& defineNames = callable.GetInput(inputIndex++);
+    TVector<TRuntimeNode> defines ;
+    for (size_t i = 0; i != AS_VALUE(TListLiteral, defineNames)->GetItemsCount(); ++i) {
+        defines.push_back(callable.GetInput(inputIndex++));
+    }
     MKQL_ENSURE(callable.GetInputsCount() == inputIndex, "Wrong input count");
+
     Y_UNUSED(measureInputDataArg);
     Y_UNUSED(measureSpecialColumnIndexes);
     Y_UNUSED(inputRowColumnCount);
+    Y_UNUSED(pattern);
+    Y_UNUSED(defineInputDataArg);
 
-    return new TMatchRecognizeWrapper(ctx.Mutables, GetValueRepresentation(inputFlow.GetStaticType())
+    return new TMatchRecognizeWrapper(ctx.Mutables
+        , GetValueRepresentation(inputFlow.GetStaticType())
         , LocateNode(ctx.NodeLocator, *inputFlow.GetNode())
         , static_cast<IComputationExternalNode*>(LocateNode(ctx.NodeLocator, *inputRowArg.GetNode()))
         , LocateNode(ctx.NodeLocator, *partitionKeySelector.GetNode())
@@ -331,6 +401,8 @@ IComputationNode* WrapMatchRecognizeCore(TCallable& callable, const TComputation
         , static_cast<IComputationExternalNode*>(LocateNode(ctx.NodeLocator, *matchedVarsArg.GetNode()))
         , ConvertVectorOfCallables(measures, ctx)
         , GetOutputColumnOrder(partitionColumnIndexes, measureColumnIndexes)
+        , static_cast<IComputationExternalNode*>(LocateNode(ctx.NodeLocator, *currentRowIndexArg.GetNode()))
+        , ConvertVectorOfCallables(defines, ctx)
     );
 }
 

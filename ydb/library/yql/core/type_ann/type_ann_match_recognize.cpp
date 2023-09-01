@@ -1,5 +1,6 @@
 #include "type_ann_match_recognize.h"
 #include <ydb/library/yql/core/sql_types/match_recognize.h>
+#include <ydb/library/yql/core/yql_match_recognize.h>
 
 namespace NYql::NTypeAnnImpl {
 
@@ -54,26 +55,8 @@ MatchRecognizeParamsWrapper(const TExprNode::TPtr &input, TExprNode::TPtr &outpu
 
 namespace {
 
-
-const std::unordered_set<TString> GetPrimaryVars(const TExprNode::TPtr& pattern, TContext &ctx, size_t nestingLevel) {
-    std::unordered_set<TString> result;
-    for (const auto& term: pattern->Children()) {
-        for (const auto& factor: term->Children()) {
-            YQL_ENSURE(EnsureArgsCount(*factor, 5, ctx.Expr), "Expect 5 args");
-            if (factor->ChildRef(0)->IsAtom()) {
-                result.insert(TString(factor->ChildRef(0)->Content()));
-            } else {
-                YQL_ENSURE(nestingLevel < NYql::NMatchRecognize::MaxPatternNesting, "To big nesting level in the pattern");
-                auto subExprVars = GetPrimaryVars(factor->ChildRef(0), ctx, ++nestingLevel);
-                result.insert(subExprVars.begin(), subExprVars.end());
-            }
-        }
-    }
-    return result;
-}
-
 const TStructExprType* GetMatchedRowsRangesType(const TExprNode::TPtr& pattern, TContext &ctx) {
-    auto vars = GetPrimaryVars(pattern, ctx, 0);
+    auto vars = GetPatternVars(NYql::NMatchRecognize::ConvertPattern(pattern, ctx.Expr, 0));
     TVector<const TItemExprType*> items;
     for (const auto& var: vars) {
         const auto& item = ctx.Expr.MakeType<TStructExprType>(TVector<const TItemExprType*>{

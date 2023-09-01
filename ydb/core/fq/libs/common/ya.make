@@ -1,5 +1,7 @@
 LIBRARY()
 
+GENERATE_ENUM_SERIALIZATION(util.h)
+
 SRCS(
     cache.h
     compression.cpp

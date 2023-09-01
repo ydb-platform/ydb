@@ -29,39 +29,6 @@ struct TTaskInternal {
     TString NewTenantName;
 };
 
-    TString GetServiceAccountId(const FederatedQuery::IamAuth& auth) {
-        return auth.has_service_account()
-                ? auth.service_account().id()
-                : TString{};
-    }
-
-    TString ExtractServiceAccountId(const FederatedQuery::Connection& c) {
-        switch (c.content().setting().connection_case()) {
-        case FederatedQuery::ConnectionSetting::kYdbDatabase: {
-            return GetServiceAccountId(c.content().setting().ydb_database().auth());
-        }
-        case FederatedQuery::ConnectionSetting::kDataStreams: {
-            return GetServiceAccountId(c.content().setting().data_streams().auth());
-        }
-        case FederatedQuery::ConnectionSetting::kObjectStorage: {
-            return GetServiceAccountId(c.content().setting().object_storage().auth());
-        }
-        case FederatedQuery::ConnectionSetting::kMonitoring: {
-            return GetServiceAccountId(c.content().setting().monitoring().auth());
-        }
-        case FederatedQuery::ConnectionSetting::kClickhouseCluster: {
-            return GetServiceAccountId(c.content().setting().clickhouse_cluster().auth());
-        }
-        case FederatedQuery::ConnectionSetting::kPostgresqlCluster: {
-            return GetServiceAccountId(c.content().setting().postgresql_cluster().auth());
-        }
-        // Do not replace with default. Adding a new connection should cause a compilation error
-        case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
-        break;
-        }
-        return {};
-    }
-
 std::pair<TString, NYdb::TParams> MakeSql(const TTaskInternal& taskInternal, const TInstant& nowTimestamp, const TInstant& taskLeaseUntil) {
 
     if (taskInternal.ShouldSkipTask) {

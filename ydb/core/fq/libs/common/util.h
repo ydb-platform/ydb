@@ -4,6 +4,7 @@
 #include <array>
 
 #include <google/protobuf/repeated_field.h>
+#include <ydb/public/api/protos/draft/fq.pb.h>
 
 #include <library/cpp/iterator/mapped.h>
 #include <util/generic/string.h>
@@ -11,6 +12,14 @@
 #include <util/string/join.h>
 
 namespace NFq {
+
+enum class EYdbComputeAuth {
+    UNKNOWN,
+    NONE,
+    SERVICE_ACCOUNT,
+    BASIC,
+    MDB_BASIC
+};
 
 template<std::size_t K, typename T, std::size_t N>
 auto CreateArray(const T(&list)[N]) -> std::array<T, K> {
@@ -45,5 +54,19 @@ TString EncloseAndEscapeString(const TString& value, char enclosingChar);
 TString EncloseAndEscapeString(const TString& value,
                                const TString& enclosingSeq,
                                const TString& replaceWith);
+
+TString ExtractServiceAccountId(const FederatedQuery::ConnectionSetting& setting);
+
+TString ExtractServiceAccountId(const FederatedQuery::ConnectionContent& content);
+
+TString ExtractServiceAccountId(const FederatedQuery::Connection& connection);
+
+TMaybe<TString> GetLogin(const FederatedQuery::ConnectionSetting& setting);
+
+TMaybe<TString> GetPassword(const FederatedQuery::ConnectionSetting& setting);
+
+EYdbComputeAuth GetYdbComputeAuthMethod(const FederatedQuery::ConnectionSetting& setting);
+
+FederatedQuery::IamAuth GetAuth(const FederatedQuery::Connection& connection);
 
 }  // namespace NFq

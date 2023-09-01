@@ -92,52 +92,78 @@ TString SignAccountId(const TString& id, const TSigner::TPtr& signer) {
     return signer ? signer->SignAccountId(id) : TString{};
 }
 
-TMaybe<TString> CreateSecretObjectQuery(const FederatedQuery::IamAuth& auth,
-                                        const TString& name,
-                                        const TSigner::TPtr& signer) {
+TMaybe<TString> CreateSecretObjectQuery(const FederatedQuery::ConnectionSetting& setting,
+                                const TString& name,
+                                const TSigner::TPtr& signer) {
     using namespace fmt::literals;
-    switch (auth.identity_case()) {
-        case FederatedQuery::IamAuth::kServiceAccount: {
-            if (!signer) {
-                return {};
-            }
-            return fmt::format(R"(
-                UPSERT OBJECT {external_source} (TYPE SECRET) WITH value={signature};
-            )",
-                               "external_source"_a = EncloseAndEscapeString(name, '`'),
-                               "signature"_a       = EncloseAndEscapeString(
-                                   SignAccountId(auth.service_account().id(), signer), '`'));
-        }
-        case FederatedQuery::IamAuth::kNone:
-        case FederatedQuery::IamAuth::kCurrentIam:
-        // Do not replace with default. Adding a new auth item should cause a compilation error
-        case FederatedQuery::IamAuth::IDENTITY_NOT_SET:
-            return {};
+    TString secretObjects;
+    auto serviceAccountId = ExtractServiceAccountId(setting);
+    if (serviceAccountId) {
+        secretObjects = signer ? fmt::format(
+            R"(
+                    UPSERT OBJECT {sa_secret_name} (TYPE SECRET) WITH value={signature};
+                )", 
+            "sa_secret_name"_a = EncloseAndEscapeString("k1" + name, '`'),
+            "signature"_a       = EncloseAndEscapeString(SignAccountId(serviceAccountId, signer), '`')) : std::string{};
     }
+
+    auto password = GetPassword(setting);
+    if (password) {
+        secretObjects += fmt::format(
+                R"(
+                    UPSERT OBJECT {password_secret_name} (TYPE SECRET) WITH value={password};
+                )", 
+            "password_secret_name"_a = EncloseAndEscapeString("k2" + name, '`'),
+            "password"_a = EncloseAndEscapeString(*password, '`'));
+    }
+
+    return secretObjects ? secretObjects : TMaybe<TString>{};
 }
 
-TString CreateAuthParamsQuery(const FederatedQuery::IamAuth& auth,
+TString CreateAuthParamsQuery(const FederatedQuery::ConnectionSetting& setting,
                               const TString& name,
                               const TSigner::TPtr& signer) {
     using namespace fmt::literals;
-    switch (auth.identity_case()) {
-        case FederatedQuery::IamAuth::kNone:
-            return R"(, AUTH_METHOD="NONE")";
-        case FederatedQuery::IamAuth::kServiceAccount:
-            return fmt::format(R"(,
-                AUTH_METHOD="SERVICE_ACCOUNT",
-                SERVICE_ACCOUNT_ID={service_account_id},
-                SERVICE_ACCOUNT_SECRET_NAME={secret_name}
-            )",
-                               "service_account_id"_a =
-                                   EncloseAndEscapeString(auth.service_account().id(), '"'),
-                               "external_source"_a = EncloseAndEscapeString(name, '"'),
-                               "secret_name"_a =
-                                   EncloseAndEscapeString(signer ? name : TString{}, '"'));
-        case FederatedQuery::IamAuth::kCurrentIam:
-        // Do not replace with default. Adding a new auth item should cause a compilation error
-        case FederatedQuery::IamAuth::IDENTITY_NOT_SET:
+    auto authMethod = GetYdbComputeAuthMethod(setting);
+    switch (authMethod) {
+        case EYdbComputeAuth::UNKNOWN:
             return {};
+        case EYdbComputeAuth::NONE:
+            return fmt::format(R"(, AUTH_METHOD="{auth_method}")", "auth_method"_a = ToString(authMethod));
+        case EYdbComputeAuth::SERVICE_ACCOUNT:
+            return fmt::format(
+                R"(,
+                    AUTH_METHOD="{auth_method}",
+                    SERVICE_ACCOUNT_ID={service_account_id},
+                    SERVICE_ACCOUNT_SECRET_NAME={sa_secret_name}
+                )",
+            "auth_method"_a = ToString(authMethod),
+            "service_account_id"_a = EncloseAndEscapeString(ExtractServiceAccountId(setting), '"'),
+            "sa_secret_name"_a = EncloseAndEscapeString(signer ? "k1" + name : TString{}, '"'));
+        case EYdbComputeAuth::BASIC:
+            return fmt::format(
+                    R"(,
+                        AUTH_METHOD="{auth_method}",
+                        LOGIN={login},
+                        PASSWORD_SECRET_NAME={password_secret_name}
+                    )",
+                "auth_method"_a = ToString(authMethod),
+                "login"_a = EncloseAndEscapeString(GetLogin(setting).GetOrElse({}), '"'),
+                "password_secret_name"_a = EncloseAndEscapeString(signer ? "k1" + name : TString{}, '"'));
+        case EYdbComputeAuth::MDB_BASIC:
+            return fmt::format(
+                R"(,
+                        AUTH_METHOD="{auth_method}",
+                        SERVICE_ACCOUNT_ID="{service_account_id}",
+                        SERVICE_ACCOUNT_SECRET_NAME="{sa_secret_name}",
+                        LOGIN={login},
+                        PASSWORD_SECRET_NAME={password_secret_name}
+                    )",
+                "auth_method"_a = ToString(authMethod),
+                "service_account_id"_a = EncloseAndEscapeString(ExtractServiceAccountId(setting), '"'),
+                "sa_secret_name"_a = EncloseAndEscapeString(signer ? "k1" + name : TString{}, '"'),
+                "login"_a = EncloseAndEscapeString(GetLogin(setting).GetOrElse({}), '"'),
+                "password_secret_name"_a = EncloseAndEscapeString(signer ? "k2" + name : TString{}, '"'));
     }
 }
 
@@ -147,44 +173,77 @@ TString MakeCreateExternalDataSourceQuery(
     const TSigner::TPtr& signer) {
     using namespace fmt::literals;
 
-    auto sourceName = connectionContent.name();
-    auto bucketName = connectionContent.setting().object_storage().bucket();
+    TString sourceType;
+    TString locationValue;
+    TString locationKey;
+    switch (connectionContent.setting().connection_case()) {
+        case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
+        case FederatedQuery::ConnectionSetting::kYdbDatabase:
+        break;
+        case FederatedQuery::ConnectionSetting::kClickhouseCluster:
+            locationKey = "MDB_CLUSTER_ID";
+            sourceType = "ClickHouse";
+            locationValue = EscapeString(connectionContent.setting().clickhouse_cluster().database_id(), '"');
+        break;
+        case FederatedQuery::ConnectionSetting::kDataStreams:
+        break;
+        case FederatedQuery::ConnectionSetting::kObjectStorage: {
+            locationKey = "LOCATION";
+            auto bucketName = connectionContent.setting().object_storage().bucket();
+            locationValue = objectStorageEndpoint + "/" + EscapeString(bucketName, '"') + "/";
+            sourceType = "ObjectStorage";
+            break;
+        }
+        case FederatedQuery::ConnectionSetting::kMonitoring:
+        break;
+        case FederatedQuery::ConnectionSetting::kPostgresqlCluster:
+            locationKey = "MDB_CLUSTER_ID";
+            locationValue = EscapeString(connectionContent.setting().postgresql_cluster().database_id(), '"');
+            sourceType = "PostgreSQL";
+        break;
+    }
 
+    auto sourceName = connectionContent.name();
     return fmt::format(
         R"(
                 CREATE EXTERNAL DATA SOURCE {external_source} WITH (
-                    SOURCE_TYPE="ObjectStorage",
-                    LOCATION="{location}"
+                    SOURCE_TYPE="{source_type}",
+                    {location_key}="{location_value}"
                     {auth_params}
                 );
             )",
+        "source_type"_a = sourceType,
         "external_source"_a = EncloseAndEscapeString(sourceName, '`'),
-        "location"_a = objectStorageEndpoint + "/" + EscapeString(bucketName, '"') + "/",
+        "location_key"_a = locationKey,
+        "location_value"_a = locationValue,
         "auth_params"_a =
-            CreateAuthParamsQuery(connectionContent.setting().object_storage().auth(),
+            CreateAuthParamsQuery(connectionContent.setting(),
                                   connectionContent.name(),
                                   signer));
 }
 
-TMaybe<TString> DropSecretObjectQuery(const FederatedQuery::IamAuth& auth,
-                                      const TString& name,
-                                      const TSigner::TPtr& signer) {
+TMaybe<TString> DropSecretObjectQuery(const TString& name) {
     using namespace fmt::literals;
-    switch (auth.identity_case()) {
-        case FederatedQuery::IamAuth::kServiceAccount: {
-            if (!signer) {
-                return {};
-            }
-            return fmt::format("DROP OBJECT {secret_name} (TYPE SECRET);",
-                               "secret_name"_a =
-                                   EncloseAndEscapeString(name, '`'));
-        }
-        case FederatedQuery::IamAuth::kNone:
-        case FederatedQuery::IamAuth::kCurrentIam:
-        // Do not replace with default. Adding a new auth item should cause a compilation error
-        case FederatedQuery::IamAuth::IDENTITY_NOT_SET:
-            return {};
-    }
+    return fmt::format(
+            R"(
+                DROP OBJECT {secret_name1} (TYPE SECRET);
+                DROP OBJECT {secret_name2} (TYPE SECRET);
+                DROP OBJECT {secret_name3} (TYPE SECRET); -- for backward compatibility
+            )",
+        "secret_name1"_a = EncloseAndEscapeString("k1" + name, '`'),
+        "secret_name2"_a = EncloseAndEscapeString("k2" + name, '`'),
+        "secret_name3"_a = EncloseAndEscapeString(name, '`'));
+}
+
+TString MakeDeleteExternalDataSourceQuery(
+    const FederatedQuery::ConnectionContent& connectionContent,
+    const TSigner::TPtr&) {
+    using namespace fmt::literals;
+    return fmt::format(
+        R"(
+                DROP EXTERNAL DATA SOURCE {external_source};
+           )",
+        "external_source"_a = EncloseAndEscapeString(connectionContent.name(), '`'));
 }
 
 TString MakeDeleteExternalDataTableQuery(const TString& tableName) {

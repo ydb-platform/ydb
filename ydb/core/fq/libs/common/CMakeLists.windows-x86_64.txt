@@ -7,6 +7,12 @@
 
 
 add_subdirectory(ut)
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
 add_library(fq-libs-common)
 target_compile_options(fq-libs-common PRIVATE
@@ -15,6 +21,7 @@ target_compile_options(fq-libs-common PRIVATE
 target_link_libraries(fq-libs-common PUBLIC
   contrib-libs-cxxsupp
   yutil
+  tools-enum_parser-enum_serialization_runtime
   library-cpp-blockcodecs
   libs-control_plane_storage-events
   fq-libs-events
@@ -28,4 +35,9 @@ target_sources(fq-libs-common PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/common/entity_id.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/common/util.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/common/rows_proto_splitter.cpp
+)
+generate_enum_serilization(fq-libs-common
+  ${CMAKE_SOURCE_DIR}/ydb/core/fq/libs/common/util.h
+  INCLUDE_HEADERS
+  ydb/core/fq/libs/common/util.h
 )

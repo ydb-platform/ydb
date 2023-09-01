@@ -7,13 +7,11 @@
 namespace NFq {
 namespace NPrivate {
 
-TMaybe<TString> CreateSecretObjectQuery(const FederatedQuery::IamAuth& auth,
+TMaybe<TString> CreateSecretObjectQuery(const FederatedQuery::ConnectionSetting& setting,
                                         const TString& name,
                                         const TSigner::TPtr& signer);
 
-TMaybe<TString> DropSecretObjectQuery(const FederatedQuery::IamAuth& auth,
-                                      const TString& name,
-                                      const TSigner::TPtr& signer);
+TMaybe<TString> DropSecretObjectQuery(const TString& name);
 
 TString MakeCreateExternalDataSourceQuery(
     const FederatedQuery::ConnectionContent& connectionContent,

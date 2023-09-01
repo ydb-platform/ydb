@@ -477,7 +477,7 @@ NActors::IActor* MakeCreateConnectionActor(
         auto& connectionContent = request->Get()->Request.content();
 
         auto createSecretStatement =
-            CreateSecretObjectQuery(connectionContent.setting().object_storage().auth(),
+            CreateSecretObjectQuery(connectionContent.setting(),
                                     connectionContent.name(),
                                     signer);
 
@@ -485,10 +485,7 @@ NActors::IActor* MakeCreateConnectionActor(
         if (createSecretStatement) {
             statements.push_back(
                 TSchemaQueryTask{.SQL         = *createSecretStatement,
-                                 .RollbackSQL = DropSecretObjectQuery(
-                                     connectionContent.setting().object_storage().auth(),
-                                     connectionContent.name(),
-                                     signer)});
+                                 .RollbackSQL = DropSecretObjectQuery(connectionContent.name())});
         }
 
         TScheduleErrorRecoverySQLGeneration alreadyExistRecoveryActorFactoryMethod =
@@ -556,11 +553,9 @@ NActors::IActor* MakeModifyConnectionActor(
         auto& newConnectionContent = request->Get()->Request.content();
 
         auto dropOldSecret =
-            DropSecretObjectQuery(oldConnectionContent.setting().object_storage().auth(),
-                                  oldConnectionContent.name(),
-                                  signer);
+            DropSecretObjectQuery(oldConnectionContent.name());
         auto createNewSecret =
-            CreateSecretObjectQuery(newConnectionContent.setting().object_storage().auth(),
+            CreateSecretObjectQuery(newConnectionContent.setting(),
                                     newConnectionContent.name(),
                                     signer);
         std::vector<TSchemaQueryTask> statements;
@@ -593,17 +588,14 @@ NActors::IActor* MakeModifyConnectionActor(
             statements.push_back(
                 TSchemaQueryTask{.SQL         = *dropOldSecret,
                                  .RollbackSQL = CreateSecretObjectQuery(
-                                     oldConnectionContent.setting().object_storage().auth(),
+                                     oldConnectionContent.setting(),
                                      oldConnectionContent.name(),
                                      signer)});
         }
         if (createNewSecret) {
             statements.push_back(
                 TSchemaQueryTask{.SQL         = *createNewSecret,
-                                 .RollbackSQL = DropSecretObjectQuery(
-                                     newConnectionContent.setting().object_storage().auth(),
-                                     newConnectionContent.name(),
-                                     signer)});
+                                 .RollbackSQL = DropSecretObjectQuery(newConnectionContent.name())});
         }
 
         statements.push_back(
@@ -666,9 +658,7 @@ NActors::IActor* MakeDeleteConnectionActor(
         auto& connectionContent = *request->Get()->ConnectionContent;
 
         auto dropSecret =
-            DropSecretObjectQuery(connectionContent.setting().object_storage().auth(),
-                                  connectionContent.name(),
-                                  signer);
+            DropSecretObjectQuery(connectionContent.name());
 
         std::vector<TSchemaQueryTask> statements = {TSchemaQueryTask{
             .SQL = TString{MakeDeleteExternalDataSourceQuery(connectionContent.name())},
@@ -679,7 +669,7 @@ NActors::IActor* MakeDeleteConnectionActor(
             statements.push_back(
                 TSchemaQueryTask{.SQL         = *dropSecret,
                                  .RollbackSQL = CreateSecretObjectQuery(
-                                     connectionContent.setting().object_storage().auth(),
+                                     connectionContent.setting(),
                                      connectionContent.name(),
                                      signer)});
         }

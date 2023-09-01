@@ -144,12 +144,12 @@ public:
         const FederatedQuery::ConnectionSetting::ConnectionCase& connectionCase) const {
         switch (connectionCase) {
             case FederatedQuery::ConnectionSetting::kObjectStorage:
+            case FederatedQuery::ConnectionSetting::kClickhouseCluster:
+            case FederatedQuery::ConnectionSetting::kPostgresqlCluster:
                 return true;
             case FederatedQuery::ConnectionSetting::kYdbDatabase:
-            case FederatedQuery::ConnectionSetting::kClickhouseCluster:
             case FederatedQuery::ConnectionSetting::kDataStreams:
             case FederatedQuery::ConnectionSetting::kMonitoring:
-            case FederatedQuery::ConnectionSetting::kPostgresqlCluster:
             case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
                 return false;
         }

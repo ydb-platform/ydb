@@ -1,6 +1,6 @@
 #include "synchronization_service.h"
 
-
+#include <ydb/core/fq/libs/common/util.h>
 #include <ydb/core/fq/libs/compute/common/config.h>
 #include <ydb/core/fq/libs/compute/common/utils.h>
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
@@ -21,7 +21,6 @@
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
-
 
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " << stream)
 #define LOG_W(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [SynchronizationService]: " << stream)
@@ -288,32 +287,12 @@ private:
         return {};
     }
 
-    FederatedQuery::IamAuth GetAuth(const FederatedQuery::Connection& connection) {
-        switch (connection.content().setting().connection_case()) {
-        case FederatedQuery::ConnectionSetting::kObjectStorage:
-            return connection.content().setting().object_storage().auth();
-        case FederatedQuery::ConnectionSetting::kYdbDatabase:
-            return connection.content().setting().ydb_database().auth();
-        case FederatedQuery::ConnectionSetting::kClickhouseCluster:
-            return connection.content().setting().clickhouse_cluster().auth();
-        case FederatedQuery::ConnectionSetting::kDataStreams:
-            return connection.content().setting().data_streams().auth();
-        case FederatedQuery::ConnectionSetting::kMonitoring:
-            return connection.content().setting().monitoring().auth();
-        case FederatedQuery::ConnectionSetting::kPostgresqlCluster:
-            return connection.content().setting().postgresql_cluster().auth();
-        case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
-            return FederatedQuery::IamAuth{};
-        }
-    }
-
     void ExcludeUnsupportedExternalDataSources() {
         TVector<TString> excludeIds;
         for (const auto& [_, connection]: Connections) {
             const auto& meta = connection.meta();
             const auto& content = connection.content();
             const auto& setting = content.setting();
-
             if (!ComputeConfig.IsConnectionCaseEnabled(setting.connection_case())) {
                 LOG_I("Exclude connection by type: scope = " << Scope << " , id = " << meta.id() << ", type = " << static_cast<int>(setting.connection_case()));
                 excludeIds.push_back(meta.id());

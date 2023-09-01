@@ -708,11 +708,12 @@ public:
             IsTabletIndexColumnId(id);
     }
 
-    bool IsSystemColumnEnable(int columnIdx) {
-        return ControlAttributesConfig_->EnableTableIndex && IsTableIndexColumnId(columnIdx) ||
-            ControlAttributesConfig_->EnableRangeIndex && IsRangeIndexColumnId(columnIdx) ||
-            ControlAttributesConfig_->EnableRowIndex && IsRowIndexColumnId(columnIdx) ||
-            ControlAttributesConfig_->EnableTabletIndex && IsTabletIndexColumnId(columnIdx);
+    bool IsSystemColumnEnable(int columnIndex)
+    {
+        return ControlAttributesConfig_->EnableTableIndex && IsTableIndexColumnId(columnIndex) ||
+            ControlAttributesConfig_->EnableRangeIndex && IsRangeIndexColumnId(columnIndex) ||
+            ControlAttributesConfig_->EnableRowIndex && IsRowIndexColumnId(columnIndex) ||
+            ControlAttributesConfig_->EnableTabletIndex && IsTabletIndexColumnId(columnIndex);
     }
 
     TSharedRef Encode(
@@ -881,8 +882,7 @@ private:
         TypedColumns_.reserve(batchColumns.Size());
         for (const auto* column : batchColumns) {
             // Ignoring null schema column and not enabled system columns.
-            auto columnSchema = FindColumnSchema(*column);
-            if (columnSchema) {
+            if (auto columnSchema = FindColumnSchema(*column)) {
                 TypedColumns_.push_back(TTypedBatchColumn{
                     column,
                     columnSchema->LogicalType()

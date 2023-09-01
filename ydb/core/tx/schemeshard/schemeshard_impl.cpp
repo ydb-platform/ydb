@@ -2675,7 +2675,8 @@ void TSchemeShard::PersistExternalDataSource(NIceDb::TNiceDb &db, TPathId pathId
         NIceDb::TUpdate<Schema::ExternalDataSource::Location>{externalDataSourceInfo->Location},
         NIceDb::TUpdate<Schema::ExternalDataSource::Installation>{externalDataSourceInfo->Installation},
         NIceDb::TUpdate<Schema::ExternalDataSource::Auth>{externalDataSourceInfo->Auth.SerializeAsString()},
-        NIceDb::TUpdate<Schema::ExternalDataSource::ExternalTableReferences>{externalDataSourceInfo->ExternalTableReferences.SerializeAsString()}
+        NIceDb::TUpdate<Schema::ExternalDataSource::ExternalTableReferences>{externalDataSourceInfo->ExternalTableReferences.SerializeAsString()},
+        NIceDb::TUpdate<Schema::ExternalDataSource::Properties>{externalDataSourceInfo->Properties.SerializeAsString()}
     );
 }
 

@@ -1781,6 +1781,10 @@ message TExternalTableReferences {
     repeated TReference References = 1;
 }
 
+message TExternalDataSourceProperties {
+    map<string, string> Properties = 1;
+}
+
 message TExternalDataSourceDescription {
     optional string Name = 1;
     optional NKikimrProto.TPathID PathId = 2;
@@ -1789,4 +1793,5 @@ message TExternalDataSourceDescription {
     optional string Location = 5;
     optional string Installation = 6;
     optional TAuth Auth = 7;
+    optional TExternalDataSourceProperties Properties = 8;
 }

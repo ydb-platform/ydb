@@ -26,6 +26,34 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
         TestLs(runtime, "/MyRoot/MyExternalDataSource", false, NLs::PathExist);
     }
 
+    Y_UNIT_TEST(CreateExternalDataSourceWithProperties) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateExternalDataSource(runtime, txId++, "/MyRoot",R"(
+                Name: "MyExternalDataSource"
+                SourceType: "PostgreSQL"
+                Location: "localhost:5432"
+                Auth {
+                    Basic {
+                        Login: "my_login",
+                        PasswordSecretName: "password_secret"
+                    }
+                }
+                Properties {
+                    Properties {
+                        key: "mdb_cluster_id",
+                        value: "id"
+                    }
+                }
+            )", {NKikimrScheme::StatusAccepted});
+
+        env.TestWaitNotification(runtime, 100);
+
+        TestLs(runtime, "/MyRoot/MyExternalDataSource", false, NLs::PathExist);
+    }
+
     Y_UNIT_TEST(DropExternalDataSource) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

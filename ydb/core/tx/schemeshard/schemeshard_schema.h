@@ -1680,9 +1680,10 @@ struct Schema : NIceDb::Schema {
         struct Installation : Column<6, NScheme::NTypeIds::Utf8> {};
         struct Auth : Column<7, NScheme::NTypeIds::String> {};
         struct ExternalTableReferences : Column<8, NScheme::NTypeIds::String> {};
+        struct Properties : Column<9, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
-        using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, SourceType, Location, Installation, Auth, ExternalTableReferences>;
+        using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, SourceType, Location, Installation, Auth, ExternalTableReferences, Properties>;
     };
 
     struct PersQueueGroupStats : Table<106> {

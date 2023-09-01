@@ -271,6 +271,7 @@ TTableMetadataResult GetExternalDataSourceMetadataResult(const NSchemeCache::TSc
     tableMeta->ExternalSource.DataSourceLocation = description.GetLocation();
     tableMeta->ExternalSource.DataSourceInstallation = description.GetInstallation();
     tableMeta->ExternalSource.DataSourceAuth = description.GetAuth();
+    tableMeta->ExternalSource.Properties = description.GetProperties();
     tableMeta->ExternalSource.DataSourcePath = tableName;
     return result;
 }

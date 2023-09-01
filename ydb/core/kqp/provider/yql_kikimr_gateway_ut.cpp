@@ -447,6 +447,52 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.AwsAccessKeyId, awsAccessKeyIdSecretValue);
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.AwsSecretAccessKey, awsSecretAccessKeySecretValue);
     }
+
+    Y_UNIT_TEST(TestLoadDataSourceProperties) {
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        TString secretPasswordId = "myPasswordSecretId";
+        TString secretPasswordValue = "pswd";
+        CreateSecretObject(secretPasswordId, secretPasswordValue, session);
+
+        TString secretSaId = "mySa";
+        TString secretSaValue = "sign(mySa)";
+        CreateSecretObject(secretSaId, secretSaValue, session);
+
+        TString externalDataSourceName = "/Root/ExternalDataSource";
+        auto query = TStringBuilder() << R"(
+            CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+                SOURCE_TYPE="PostgreSQL",
+                LOCATION="my-bucket",
+                AUTH_METHOD="MDB_BASIC",
+                SERVICE_ACCOUNT_ID="mysa",
+                SERVICE_ACCOUNT_SECRET_NAME=")" << secretSaId << R"(",
+                LOGIN="mylogin",
+                PASSWORD_SECRET_NAME=")" << secretPasswordId << R"(",
+                MDB_CLUSTER_ID="my_id",
+                DATABASE_NAME="my_db",
+                PROTOCOL="native",
+                USE_TLS="true"
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto responseFuture = GetIcGateway(kikimr.GetTestServer())->LoadTableMetadata(TestCluster, externalDataSourceName, IKikimrGateway::TLoadTableMetadataSettings());
+        responseFuture.Wait();
+
+        auto response = responseFuture.GetValue();
+        UNIT_ASSERT_C(response.Success(), response.Issues().ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Password, secretPasswordValue);
+        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.ServiceAccountIdSignature, secretSaValue);
+        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Properties.GetProperties().size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Properties.GetProperties().at("mdb_cluster_id"), "my_id");
+        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Properties.GetProperties().at("database_name"), "my_db");
+        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Properties.GetProperties().at("protocol"), "native");
+        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Properties.GetProperties().at("use_tls"), "true");
+    }
 }
 
 } // namespace NYql

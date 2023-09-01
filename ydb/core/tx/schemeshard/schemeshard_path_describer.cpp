@@ -848,6 +848,7 @@ void TPathDescriber::DescribeExternalDataSource(const TActorContext&, TPathId pa
     entry->SetLocation(externalDataSourceInfo->Location);
     entry->SetInstallation(externalDataSourceInfo->Installation);
     entry->MutableAuth()->CopyFrom(externalDataSourceInfo->Auth);
+    entry->MutableProperties()->CopyFrom(externalDataSourceInfo->Properties);
 }
 
 static bool ConsiderAsDropped(const TPath& path) {

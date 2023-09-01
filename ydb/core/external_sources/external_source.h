@@ -48,6 +48,12 @@ struct IExternalSource : public TThrRefBase {
         Can throw an exception in case of an error
     */
     virtual TMap<TString, TVector<TString>> GetParameters(const TString& content) const = 0;
+
+    /*
+        Validation of external data source properties.
+        If an error occurs, an exception is thrown.
+    */
+    virtual void ValidateProperties(const TString& properties) const = 0;
 };
 
 }

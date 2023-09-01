@@ -1,6 +1,7 @@
 #include "external_source.h"
 
 #include <ydb/core/protos/external_sources.pb.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/s3/path_generator/yql_s3_path_generator.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -92,6 +93,17 @@ struct TObjectStorageExternalSource : public IExternalSource {
         }
 
         return parameters;
+    }
+
+    virtual void ValidateProperties(const TString& properties) const override {
+        NKikimrSchemeOp::TExternalDataSourceProperties proto;
+        if (!proto.ParseFromString(properties)) {
+            ythrow TExternalSourceException() << "Internal error. Couldn't parse protobuf with properties for external data source";
+        }
+
+        if (!proto.GetProperties().empty()) {
+            ythrow TExternalSourceException() << "ObjectStorage source doesn't support any properties";
+        }
     }
 
 private:

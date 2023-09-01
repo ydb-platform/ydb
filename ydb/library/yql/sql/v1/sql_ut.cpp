@@ -5416,27 +5416,10 @@ Y_UNIT_TEST_SUITE(ExternalDataSource) {
                 USE plato;
                 CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
                     SOURCE_TYPE="ObjectStorage",
-                    AUTH_METHOD="NONE"
-                );
-            )" , "<main>:5:33: Error: INSTALLATION or LOCATION must be specified\n");
-
-        ExpectFailWithError(R"(
-                USE plato;
-                CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
-                    SOURCE_TYPE="ObjectStorage",
                     LOCATION="my-bucket"
                 );
             )" , "<main>:5:30: Error: AUTH_METHOD requires key\n");
 
-        ExpectFailWithError(R"(
-                USE plato;
-                CREATE EXTERNAL DATA SOURCE MyDataSource WITH (
-                    SOURCE_TYPE="ObjectStorage",
-                    LOCATION="my-bucket",
-                    AUTH_METHOD="NONE",
-                    OTHER="VALUE"
-                );
-            )" , "<main>:7:21: Error: Unknown external data source setting: OTHER\n");
 
         ExpectFailWithError(R"(
                 USE plato;

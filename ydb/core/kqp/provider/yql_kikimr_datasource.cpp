@@ -248,8 +248,11 @@ public:
 
         THashMap<TString, TString> properties = {{
             {"location", metadata.ExternalSource.DataSourceLocation },
-            {"installation", metadata.ExternalSource.DataSourceInstallation }
+            {"installation", metadata.ExternalSource.DataSourceInstallation },
+            {"source_type", metadata.ExternalSource.Type}
         }};
+
+        properties.insert(metadata.ExternalSource.Properties.GetProperties().begin(), metadata.ExternalSource.Properties.GetProperties().end());
 
         switch (metadata.ExternalSource.DataSourceAuth.identity_case()) {
             case NKikimrSchemeOp::TAuth::kServiceAccount:

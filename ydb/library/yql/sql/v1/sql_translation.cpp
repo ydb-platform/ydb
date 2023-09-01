@@ -4197,16 +4197,10 @@ bool TSqlTranslation::StoreDataSourceSettingsEntry(const TIdentifier& id, const 
         return false;
     }
 
-    if (IsIn({"source_type", "installation", "location",
-             "auth_method", "service_account_id", "service_account_secret_name",
-             "login", "password_secret_name", "aws_access_key_id_secret_name", "aws_secret_access_key_secret_name"}, key)) {
-        if (!StoreString(*value, result[key], Ctx, to_upper(key))) {
-            return false;
-        }
-    } else {
-        Ctx.Error() << "Unknown external data source setting: " << id.Name;
+    if (!StoreString(*value, result[key], Ctx, to_upper(key))) {
         return false;
     }
+
     return true;
 }
 
@@ -4227,10 +4221,6 @@ bool TSqlTranslation::ParseExternalDataSourceSettings(std::map<TString, TDeferre
         return false;
     }
     if (!ValidateAuthMethod(result)) {
-        return false;
-    }
-    if (result.find("installation") == result.end() && result.find("location") == result.end()) {
-        Ctx.Error() << "INSTALLATION or LOCATION must be specified";
         return false;
     }
     return true;

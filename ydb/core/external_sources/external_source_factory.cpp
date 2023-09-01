@@ -33,8 +33,8 @@ private:
 IExternalSourceFactory::TPtr CreateExternalSourceFactory() {
     return MakeIntrusive<TExternalSourceFactory>(TMap<TString, IExternalSource::TPtr>{
         {"ObjectStorage", CreateObjectStorageExternalSource()},
-        {"ClickHouse", CreateExternalDataSource(TString{NYql::GenericProviderName}, {"MDB_BASIC", "BASIC"})},
-        {"PostgreSQL", CreateExternalDataSource(TString{NYql::GenericProviderName}, {"MDB_BASIC", "BASIC"})}
+        {"ClickHouse", CreateExternalDataSource(TString{NYql::GenericProviderName}, {"MDB_BASIC", "BASIC"}, {"database_name", "protocol", "mdb_cluster_id", "use_tls"})},
+        {"PostgreSQL", CreateExternalDataSource(TString{NYql::GenericProviderName}, {"MDB_BASIC", "BASIC"}, {"database_name", "protocol", "mdb_cluster_id", "use_tls"})}
     });
 }
 

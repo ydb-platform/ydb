@@ -373,6 +373,7 @@ struct TExternalSource {
     TString AwsAccessKeyId;
     TString AwsSecretAccessKey;
     NKikimrSchemeOp::TAuth DataSourceAuth;
+    NKikimrSchemeOp::TExternalDataSourceProperties Properties;
 };
 
 struct TKikimrTableMetadata : public TThrRefBase {

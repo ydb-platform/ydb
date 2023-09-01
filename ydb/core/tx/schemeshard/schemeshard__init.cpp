@@ -1818,7 +1818,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 externalDataSource->Installation = rowset.GetValue<Schema::ExternalDataSource::Installation>();
                 Y_PROTOBUF_SUPPRESS_NODISCARD externalDataSource->Auth.ParseFromString(rowset.GetValue<Schema::ExternalDataSource::Auth>());
                 Y_PROTOBUF_SUPPRESS_NODISCARD externalDataSource->ExternalTableReferences.ParseFromString(rowset.GetValue<Schema::ExternalDataSource::ExternalTableReferences>());
-
+                Y_PROTOBUF_SUPPRESS_NODISCARD externalDataSource->Properties.ParseFromString(rowset.GetValue<Schema::ExternalDataSource::Properties>());
                 Self->IncrementPathDbRefCount(pathId);
 
                 if (!rowset.Next())

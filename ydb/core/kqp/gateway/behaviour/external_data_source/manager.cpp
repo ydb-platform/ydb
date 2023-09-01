@@ -50,6 +50,23 @@ void FillCreateExternalDataSourceDesc(NKikimrSchemeOp::TExternalDataSourceDescri
     } else {
         ythrow yexception() << "Internal error. Unknown auth method: " << authMethod;
     }
+
+    static const TSet<TString> properties {
+        "database_name",
+        "protocol",
+        "mdb_cluster_id",
+        "use_tls"
+    };
+
+    for (const auto& property: properties) {
+        if (auto value = settings.GetFeaturesExtractor().Extract(property)) {
+            externaDataSourceDesc.MutableProperties()->MutableProperties()->insert({property, *value});
+        }
+    }
+
+    if (!settings.GetFeaturesExtractor().IsFinished()) {
+        ythrow yexception() << "Unknown property: " << settings.GetFeaturesExtractor().GetRemainedParamsString();
+    }
 }
 
 NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus> SendSchemeRequest(TEvTxUserProxy::TEvProposeTransaction* request, TActorSystem* actorSystem, bool failedOnAlreadyExists = false)

@@ -40,6 +40,14 @@ bool CheckAuth(const TString& authMethod, const TVector<TString>& availableAuthM
     return true;
 }
 
+bool ValidateProperties(const NKikimrSchemeOp::TExternalDataSourceProperties& properties, TString& errStr) {
+    if (properties.ByteSizeLong() > MAX_PROTOBUF_SIZE) {
+        errStr = Sprintf("Maximum size of properties must be less or equal equal to %u but got %lu", MAX_PROTOBUF_SIZE, properties.ByteSizeLong());
+        return false;
+    }
+    return true;
+}
+
 bool ValidateAuth(const NKikimrSchemeOp::TAuth& auth, const NKikimr::NExternalSource::IExternalSource::TPtr& source, TString& errStr) {
     if (auth.ByteSizeLong() > MAX_PROTOBUF_SIZE) {
         errStr = Sprintf("Maximum size of authorization information must be less or equal equal to %u but got %lu", MAX_PROTOBUF_SIZE, auth.ByteSizeLong());
@@ -68,8 +76,10 @@ bool ValidateAuth(const NKikimrSchemeOp::TAuth& auth, const NKikimr::NExternalSo
 bool Validate(const NKikimrSchemeOp::TExternalDataSourceDescription& desc, const NKikimr::NExternalSource::IExternalSourceFactory::TPtr& factory, TString& errStr) {
     try {
         auto source = factory->GetOrCreate(desc.GetSourceType());
+        source->ValidateProperties(desc.GetProperties().SerializeAsString());
         return ValidateLocationAndInstallation(desc.GetLocation(), desc.GetInstallation(), errStr)
-            && ValidateAuth(desc.GetAuth(), source, errStr);
+            && ValidateAuth(desc.GetAuth(), source, errStr)
+            && ValidateProperties(desc.GetProperties(), errStr);
     } catch (...) {
         errStr = CurrentExceptionMessage();
         return false;
@@ -86,6 +96,7 @@ TExternalDataSourceInfo::TPtr CreateExternalDataSource(const NKikimrSchemeOp::TE
     externalDataSoureInfo->Installation = desc.GetInstallation();
     externalDataSoureInfo->AlterVersion = 1;
     externalDataSoureInfo->Auth.CopyFrom(desc.GetAuth());
+    externalDataSoureInfo->Properties.CopyFrom(desc.GetProperties());
     return externalDataSoureInfo;
 }
 

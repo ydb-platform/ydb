@@ -141,7 +141,7 @@ private:
 };
 
 void ReadGatewaysConfig(const TString& configFile, TGatewaysConfig* config) {
-    auto configData = TFileInput(configFile ? configFile : "../../cfg/local/gateways.conf").ReadAll();
+    auto configData = TFileInput(configFile ? configFile : "../../../../../yql/cfg/local/gateways.conf").ReadAll();
 
     using ::google::protobuf::TextFormat;
     if (!TextFormat::ParseFromString(configData, config)) {
@@ -151,7 +151,7 @@ void ReadGatewaysConfig(const TString& configFile, TGatewaysConfig* config) {
 
 TFileStoragePtr CreateFS(const TString& paramsFile, const TString& defYtServer) {
     TFileStorageConfig params;
-    LoadFsConfigFromFile(paramsFile ? paramsFile : "../../cfg/local/fs.conf", params);
+    LoadFsConfigFromFile(paramsFile ? paramsFile : "../../../../../yql/cfg/local/fs.conf", params);
     return WithAsync(CreateFileStorage(params, {MakeYtDownloader(params, defYtServer)}));
 }
 

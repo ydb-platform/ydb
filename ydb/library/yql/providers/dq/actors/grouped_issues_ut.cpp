@@ -29,14 +29,14 @@ TIntrusivePtr<AgileTimeProvider> CreateAgileTimeProvider(ui64 initial) {
 
 Y_UNIT_TEST_SUITE(TestIssuesGrouping) {
     Y_UNIT_TEST(ShouldCountEveryIssue) {
-        int iterations = 4;
-        int issueTypes = 4;
+        const int iterations = 4;
+        const int issueTypes = 4;
         int expectedNumberOfIssues[issueTypes];
 
         for (int i = 0; i < iterations; ++i) {
             NDq::GroupedIssues holder(CreateDefaultTimeProvider());
             for (int j = 0; j < issueTypes; ++j) {
-                expectedNumberOfIssues[j] = rand() % 100;
+                expectedNumberOfIssues[j] = 1 + rand() % 100;
                 for (int k = 0; k < expectedNumberOfIssues[j]; ++k) {
                     holder.AddIssue(TIssue(ToString(j)));
                 }

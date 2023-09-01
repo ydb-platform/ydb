@@ -1079,6 +1079,21 @@ NNodes::TExprBase DqPushAggregateCombineToStage(NNodes::TExprBase node, TExprCon
                 .Build()
             .Done();
 
+    if (HasContextFuncs(*lambda.Ptr())) {
+        lambda = Build<TCoLambda>(ctx, aggCombine.Pos())
+            .Args({ TStringBuf("stream") })
+            .Body<TCoWithContext>()
+                .Input<TExprApplier>()
+                    .Apply(lambda)
+                    .With(0, TStringBuf("stream"))
+                .Build()
+                .Name()
+                    .Value("Agg")
+                .Build()
+            .Build()
+        .Done();
+    }
+
     auto result = DqPushLambdaToStageUnionAll(dqUnion, lambda, {}, ctx, optCtx);
     if (!result) {
         return node;

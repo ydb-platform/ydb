@@ -24,7 +24,7 @@ std::vector<arrow::compute::InputType> ConvertToInputTypes(const TVector<TType*>
 arrow::compute::OutputType ConvertToOutputType(TType* output);
 
 class TBlockFuncNode : public TMutableComputationNode<TBlockFuncNode> {
-friend class TArrowNode;
+
 public:
     TBlockFuncNode(TComputationMutables& mutables, TStringBuf name, TVector<IComputationNode*>&& argsNodes,
         const TVector<TType*>& argsTypes, const arrow::compute::ScalarKernel& kernel,
@@ -44,6 +44,7 @@ private:
     private:
         const TBlockFuncNode* Parent_;
     };
+    friend class TArrowNode;
 
     struct TState : public TComputationValue<TState> {
         using TComputationValue::TComputationValue;

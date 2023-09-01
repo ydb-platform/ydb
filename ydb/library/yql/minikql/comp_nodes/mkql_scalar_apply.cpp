@@ -17,7 +17,6 @@ namespace NMiniKQL {
 namespace {
 
 class TScalarApplyWrapper : public TMutableComputationNode<TScalarApplyWrapper> {
-friend class TArrowNode;
 public:
     struct TAccessors {
         TAccessors(const TVector<TType*>& argsTypes, TType* returnType, const NUdf::IPgBuilder& pgBuilder)
@@ -124,6 +123,7 @@ public:
         const std::vector<arrow::ValueDescr> ArgsValuesDescr_;
         arrow::compute::ScalarKernel Kernel_;
     };
+    friend class TArrowNode;
 
     TScalarApplyWrapper(TComputationMutables& mutables, const TVector<TType*>& argsTypes, TType* returnType,
         TVector<IComputationNode*>&& args, TVector<IComputationExternalNode*>&& lambdaArgs, IComputationNode* lambdaRoot)

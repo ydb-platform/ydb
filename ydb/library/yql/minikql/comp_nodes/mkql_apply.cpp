@@ -14,7 +14,6 @@ namespace NMiniKQL {
 namespace {
 
 class TApplyWrapper: public TMutableCodegeneratorPtrNode<TApplyWrapper> {
-friend class TArrowNode;
     typedef TMutableCodegeneratorPtrNode<TApplyWrapper> TBaseComputation;
 public:
     struct TKernelState : public arrow::compute::KernelState {
@@ -89,6 +88,7 @@ public:
         const std::vector<arrow::ValueDescr> ArgsValuesDescr_;
         arrow::compute::ScalarKernel Kernel_;
     };
+    friend class TArrowNode;
 
     TApplyWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* callableNode,
         TComputationNodePtrVector&& argNodes, ui32 usedArgs, const NUdf::TSourcePosition& pos, TCallableType* callableType)

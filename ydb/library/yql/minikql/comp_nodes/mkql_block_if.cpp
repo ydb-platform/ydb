@@ -15,7 +15,6 @@ namespace NMiniKQL {
 namespace {
 
 class TBlockIfScalarWrapper : public TMutableComputationNode<TBlockIfScalarWrapper> {
-friend class TArrowNode;
 public:
     class TArrowNode : public IArrowKernelComputationNode {
     public:
@@ -61,6 +60,7 @@ public:
         const std::vector<arrow::ValueDescr> ArgsValuesDescr_;
         arrow::compute::ScalarKernel Kernel_;
     };
+    friend class TArrowNode;
 
     TBlockIfScalarWrapper(TComputationMutables& mutables, IComputationNode* pred, IComputationNode* thenNode, IComputationNode* elseNode, TType* resultType,
                           bool thenIsScalar, bool elseIsScalar, const TVector<TType*>& argsTypes)

@@ -10,11 +10,13 @@ namespace {
 
 template<typename T>
 ui64 ShiftByMaxNegative(T value) {
-    if (std::is_signed<T>()) {
+    static_assert(sizeof(T) <= sizeof(ui64));
+    //static_assert(std::is_integral_v<T>); //TODO fixme, very stange behaviour for floating point types
+    if constexpr (std::is_signed_v<T>) {
         if (value < 0) {
             return ui64(value + std::numeric_limits<T>::max() + T(1));
         }
-        return ui64(value) + ui64(std::numeric_limits<T>::max() + 1ul);
+        return ui64(value) + ui64(std::numeric_limits<T>::max()) + 1ul;
     }
     return ui64(value);
 }

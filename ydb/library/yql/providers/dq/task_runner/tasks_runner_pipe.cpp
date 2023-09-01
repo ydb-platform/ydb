@@ -1282,15 +1282,16 @@ public:
     }
 
     void ReadStderr() {
+        YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId, ToString(StageId));
         auto& input = Command->GetStderr();
         char buf[1024];
         size_t size;
         while ((size = input.Read(buf, sizeof(buf))) > 0) {
             auto str = TString(buf, size);
             Stderr += str;
-            YQL_CLOG(DEBUG, ProviderDq) << "stderr (" << StageId << " " << TraceId << " ) > `" << str << "'";
+            YQL_CLOG(DEBUG, ProviderDq) << "stderr > `" << str << "`";
         }
-        YQL_CLOG(DEBUG, ProviderDq) << "stderr (" << StageId << " " << TraceId << " ) finished";
+        YQL_CLOG(DEBUG, ProviderDq) << "stderr finished";
     }
 
     ui64 GetTaskId() const override {

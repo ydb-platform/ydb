@@ -1753,7 +1753,9 @@ public:
         , FileCache(options.FileCache)
         , Args {"yql@child", "tasks_runner_proxy"}
         , Env(options.Env)
-        , Revision(GetProgramCommitId())
+        , Revision(options.Revision
+            ? *options.Revision
+            : GetProgramCommitId())
         , TaskScheduler(1)
         , MaxProcesses(options.MaxProcesses)
         , PortoCtlPath(options.PortoCtlPath)
@@ -1895,7 +1897,7 @@ private:
         }
 
         TString exePath;
-        if (executorId.empty() || executorId == Revision) {
+        if (executorId.empty() || Revision.empty() || executorId == Revision) {
             exePath = ExePath;
         } else {
             auto maybeExeFile = FileCache->FindFile(executorId);

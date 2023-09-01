@@ -17,6 +17,7 @@ struct TPipeFactoryOptions {
     int MaxProcesses = 1;
     TString ContainerName;
     TString PortoCtlPath = "/usr/bin/porto";
+    TMaybe<TString> Revision; // revision override for tests
 };
 
 IProxyFactory::TPtr CreatePipeFactory(const TPipeFactoryOptions& options);

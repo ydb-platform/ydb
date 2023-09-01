@@ -466,13 +466,14 @@ NActors::IActor* MakeCreateConnectionActor(
     TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr request,
     TDuration requestTimeout,
     TCounters& counters,
+    TPermissions permissions,
     const NConfig::TCommonConfig& commonConfig,
     TSigner::TPtr signer) {
     auto queryFactoryMethod =
         [objectStorageEndpoint = commonConfig.GetObjectStorageEndpoint(),
          signer                = std::move(signer),
          requestTimeout,
-         &counters](const TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr& request)
+         &counters, permissions](const TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr& request)
         -> std::vector<TSchemaQueryTask> {
         auto& connectionContent = request->Get()->Request.content();
 
@@ -489,16 +490,15 @@ NActors::IActor* MakeCreateConnectionActor(
         }
 
         TScheduleErrorRecoverySQLGeneration alreadyExistRecoveryActorFactoryMethod =
-            [&request, requestTimeout, &counters](NActors::TActorId sender,
+            [&request, requestTimeout, &counters, permissions](NActors::TActorId sender,
                                                   const TStatus& status) {
-                Cerr << "Status 1 " << status.GetIssues().ToOneLineString() << Endl;
                 if (status.GetStatus() == NYdb::EStatus::ALREADY_EXISTS ||
                     status.GetIssues().ToOneLineString().Contains("error: path exist")) {
                     TActivationContext::ActorSystem()->Register(
                         new TGenerateRecoverySQLIfExternalDataSourceAlreadyExistsActor(
                             sender,
                             request,
-                            TPermissions{},
+                            permissions,
                             requestTimeout,
                             counters.GetCommonCounters(
                                 RTC_CREATE_CONNECTION_IN_YDB))); // change counter
@@ -698,26 +698,26 @@ NActors::IActor* MakeCreateBindingActor(
     const TActorId& proxyActorId,
     TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr request,
     TDuration requestTimeout,
-    TCounters& counters) {
+    TCounters& counters,
+    TPermissions permissions) {
     auto queryFactoryMethod =
         [requestTimeout,
-         &counters](const TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr& request)
+         &counters, permissions](const TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr& request)
         -> std::vector<TSchemaQueryTask> {
         auto& bindingContent     = request->Get()->Request.content();
         auto& externalSourceName = *request->Get()->ConnectionName;
         std::vector<TSchemaQueryTask> statements;
 
         TScheduleErrorRecoverySQLGeneration alreadyExistRecoveryActorFactoryMethod =
-            [&request, requestTimeout, &counters](NActors::TActorId sender,
+            [&request, requestTimeout, &counters, permissions](NActors::TActorId sender,
                                                   const TStatus& status) {
-                Cerr << "Status 1 " << status.GetIssues().ToOneLineString() << Endl;
                 if (status.GetStatus() == NYdb::EStatus::ALREADY_EXISTS ||
                     status.GetIssues().ToOneLineString().Contains("error: path exist")) {
                     TActivationContext::ActorSystem()->Register(
                         new TGenerateRecoverySQLIfExternalDataTableAlreadyExistsActor(
                             sender,
                             request,
-                            TPermissions{},
+                            permissions,
                             requestTimeout,
                             counters.GetCommonCounters(
                                 RTC_CREATE_CONNECTION_IN_YDB))); // change counter

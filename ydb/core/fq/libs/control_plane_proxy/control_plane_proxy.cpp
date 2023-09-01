@@ -1355,6 +1355,7 @@ private:
                                                              std::move(ev),
                                                              Config.RequestTimeout,
                                                              Counters,
+                                                             availablePermissions,
                                                              Config.CommonConfig,
                                                              Signer));
                 return;
@@ -1946,7 +1947,7 @@ private:
             }
 
             Register(MakeCreateBindingActor(
-                ControlPlaneProxyActorId(), std::move(ev), Config.RequestTimeout, Counters));
+                ControlPlaneProxyActorId(), std::move(ev), Config.RequestTimeout, Counters, availablePermissions));
             return;
         }
 

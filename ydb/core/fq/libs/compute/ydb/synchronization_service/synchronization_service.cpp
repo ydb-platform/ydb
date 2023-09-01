@@ -371,6 +371,7 @@ private:
                 request,
                 TDuration::Seconds(30),
                 Counters,
+                TPermissions{},
                 CommonConfig,
                 Signer
             ));
@@ -400,7 +401,8 @@ private:
                 SelfId(),
                 request,
                 TDuration::Seconds(30),
-                Counters
+                Counters,
+                TPermissions{}
             ));
         }
 

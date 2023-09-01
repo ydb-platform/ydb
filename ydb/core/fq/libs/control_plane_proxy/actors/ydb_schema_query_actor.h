@@ -16,6 +16,7 @@ NActors::IActor* MakeCreateConnectionActor(
     TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr request,
     TDuration requestTimeout,
     TCounters& counters,
+    TPermissions permissions,
     const NConfig::TCommonConfig& commonConfig,
     TSigner::TPtr signer);
 
@@ -40,7 +41,8 @@ NActors::IActor* MakeCreateBindingActor(
     const NActors::TActorId& proxyActorId,
     TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr request,
     TDuration requestTimeout,
-    TCounters& counters);
+    TCounters& counters,
+    TPermissions permissions);
 
 NActors::IActor* MakeModifyBindingActor(
     const NActors::TActorId& proxyActorId,

@@ -7,6 +7,7 @@
 
 
 add_subdirectory(order_control)
+add_subdirectory(plain_reader)
 get_built_tool_path(
   TOOL_enum_parser_bin
   TOOL_enum_parser_dependency
@@ -30,6 +31,7 @@ target_link_libraries(columnshard-engines-reader PUBLIC
   tx-columnshard-resources
   core-tx-program
   engines-reader-order_control
+  engines-reader-plain_reader
   columnshard-engines-scheme
   tools-enum_parser-enum_serialization_runtime
 )

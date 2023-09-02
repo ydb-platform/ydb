@@ -26,6 +26,7 @@ PEERDIR(
     ydb/core/tx/columnshard/resources
     ydb/core/tx/program
     ydb/core/tx/columnshard/engines/reader/order_control
+    ydb/core/tx/columnshard/engines/reader/plain_reader
     ydb/core/tx/columnshard/engines/scheme
 )
 

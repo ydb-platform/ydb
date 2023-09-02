@@ -2,6 +2,7 @@
 #include "order_control/default.h"
 #include "order_control/pk_with_limit.h"
 #include "order_control/not_sorted.h"
+#include "plain_reader/plain_read_data.h"
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/columnshard__index_scan.h>
 #include <ydb/core/tx/columnshard/columnshard__stats_scan.h>
@@ -226,10 +227,10 @@ std::shared_ptr<NIndexedReader::IOrderPolicy> TReadMetadata::BuildSortingPolicy(
 }
 
 std::shared_ptr<NKikimr::NOlap::IDataReader> TReadMetadata::BuildReader(const NOlap::TReadContext& context, const TConstPtr& self) const {
-//    return std::make_shared<NPlainReader::TPlainReadData>(self, context);
-    auto result = std::make_shared<TIndexedReadData>(self, context);
-    result->InitRead();
-    return result;
+    return std::make_shared<NPlainReader::TPlainReadData>(self, context);
+//    auto result = std::make_shared<TIndexedReadData>(self, context);
+//    result->InitRead();
+//    return result;
 }
 
 NIndexedReader::TSortableBatchPosition TReadMetadata::BuildSortedPosition(const NArrow::TReplaceKey& key) const {

@@ -159,8 +159,14 @@ bool TMergePartialStream::DrainCurrent(std::shared_ptr<TRecordBatchBuilder> buil
         if (currentPosition.IsDeleted()) {
             continue;
         }
+        auto& nextKeyColumnsPosition = currentPosition.GetKeyColumns();
         if (CurrentKeyColumns) {
-            AFL_VERIFY(CurrentKeyColumns->Compare(currentPosition.GetKeyColumns()) == std::partial_ordering::less)("merge_debug", DebugJson());
+            const bool linearExecutionCorrectness = CurrentKeyColumns->Compare(nextKeyColumnsPosition) == std::partial_ordering::less;
+            if (!linearExecutionCorrectness) {
+                const bool newSegmentScan = nextKeyColumnsPosition.GetPosition() == 0;
+                AFL_VERIFY(newSegmentScan && nextKeyColumnsPosition.Compare(*CurrentKeyColumns) == std::partial_ordering::less)
+                    ("merge_debug", DebugJson())("current_ext", nextKeyColumnsPosition.DebugJson())("newSegmentScan", newSegmentScan);
+            }
         }
         CurrentKeyColumns = currentPosition.GetKeyColumns();
         if (builder) {

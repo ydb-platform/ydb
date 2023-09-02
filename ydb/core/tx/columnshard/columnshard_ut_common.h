@@ -105,7 +105,6 @@ struct TTestSchema {
 
     struct TTableSpecials : public TStorageTier {
         std::vector<TStorageTier> Tiers;
-        bool CompositeMarks = false;
         bool WaitEmptyAfter = false;
 
         TTableSpecials() noexcept = default;
@@ -121,12 +120,6 @@ struct TTestSchema {
         TTableSpecials WithCodec(const TString& codec) const {
             TTableSpecials out = *this;
             out.SetCodec(codec);
-            return out;
-        }
-
-        TTableSpecials WithCompositeMarks(bool composite) const {
-            TTableSpecials out = *this;
-            out.CompositeMarks = composite;
             return out;
         }
 
@@ -248,7 +241,7 @@ struct TTestSchema {
         if (specials.CompressionLevel) {
             schema->MutableDefaultCompression()->SetCompressionLevel(*specials.CompressionLevel);
         }
-        schema->SetCompositeMarks(specials.CompositeMarks);
+        schema->SetCompositeMarks(true);
     }
 
     static void InitTtl(const TTableSpecials& specials, NKikimrSchemeOp::TColumnDataLifeCycle::TTtl* ttl) {
@@ -275,7 +268,9 @@ struct TTestSchema {
 
     static TString CreateTableTxBody(ui64 pathId, const std::vector<std::pair<TString, TTypeInfo>>& columns,
         const std::vector<std::pair<TString, TTypeInfo>>& pk,
-        const TTableSpecials& specials = {}) {
+        const TTableSpecials& specialsExt = {})
+    {
+        auto specials = specialsExt;
         NKikimrTxColumnShard::TSchemaTxBody tx;
         auto* table = tx.MutableEnsureTables()->AddTables();
         table->SetPathId(pathId);

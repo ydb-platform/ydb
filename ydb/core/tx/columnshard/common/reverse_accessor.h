@@ -75,6 +75,22 @@ public:
             return Container.rend();
         }
     }
+
+    TIterator begin() const {
+        if (!Reverse) {
+            return Container.cbegin();
+        } else {
+            return Container.crbegin();
+        }
+    }
+
+    TIterator end() const {
+        if (!Reverse) {
+            return Container.cend();
+        } else {
+            return Container.crend();
+        }
+    }
 };
 
 }

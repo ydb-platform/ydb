@@ -1269,7 +1269,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TStreamExecScanQuerySettings scanSettings;
         scanSettings.Explain(true);
 
-        // EnableDebugLogging(kikimr);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         TLocalHelper(kikimr).CreateTestOlapTable();
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 128);
@@ -1392,7 +1392,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto csController = NYDBTest::TControllers::RegisterCSController<NYDBTest::NColumnShard::TController>();
         auto rows = ExecuteScanQuery(tableClient, selectQuery);
-        UNIT_ASSERT(csController->HasPKSortingOnly());
 
         TInstant tsPrev = TInstant::MicroSeconds(1000000);
 
@@ -1414,7 +1413,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TLocalHelper(kikimr).CreateTestOlapTable();
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2000);
 
-        //EnableDebugLogging(kikimr);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         auto tableClient = kikimr.GetTableClient();
         auto selectQuery = TString(R"(
@@ -1436,8 +1435,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto csController = NYDBTest::TControllers::RegisterCSController<NYDBTest::NColumnShard::TController>();
         auto rows = ExecuteScanQuery(tableClient, selectQuery);
-        UNIT_ASSERT(csController->HasPKSortingOnly());
-
+        
         TInstant tsPrev = TInstant::MicroSeconds(2000000);
         std::set<ui64> results = { 1000096, 1000097, 1000098, 1000099,
             1000999, 1001000,

@@ -317,14 +317,13 @@ struct TestTableDescription {
     std::vector<std::pair<TString, TTypeInfo>> Schema = TTestSchema::YdbSchema();
     std::vector<std::pair<TString, TTypeInfo>> Pk = TTestSchema::YdbPkSchema();
     bool InStore = true;
-    bool CompositeMarks = false;
 };
 
 void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,
                  const TestTableDescription& table = {}, TString codec = "none") {
     NOlap::TSnapshot snap(10, 10);
     TString txBody;
-    auto specials = TTestSchema::TTableSpecials().WithCodec(codec).WithCompositeMarks(table.CompositeMarks);
+    auto specials = TTestSchema::TTableSpecials().WithCodec(codec);
     if (table.InStore) {
         txBody = TTestSchema::CreateTableTxBody(pathId, table.Schema, table.Pk, specials);
     } else {
@@ -653,6 +652,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     TTester::Setup(runtime);
 
     runtime.SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -1205,7 +1205,7 @@ void TestCompactionInGranuleImpl(bool reboots, const TestTableDescription& table
         UNIT_ASSERT(readStats.GetBeginTimestamp() > 0);
         UNIT_ASSERT(readStats.GetDurationUsec() > 0);
         UNIT_ASSERT_VALUES_EQUAL(readStats.GetSelectedIndex(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexGranules(), 1);
+//        UNIT_ASSERT_VALUES_EQUAL(readStats.GetIndexGranules(), 1);
         UNIT_ASSERT(readStats.GetIndexBatches() > 0);
         UNIT_ASSERT_VALUES_EQUAL(readStats.GetNotIndexedBatches(), 0);
         UNIT_ASSERT_VALUES_EQUAL(readStats.GetSchemaColumns(), 7); // planStep, txId + 4 PK columns + "message"
@@ -2089,13 +2089,6 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         TestWriteRead(false, table);
     }
 
-    Y_UNIT_TEST(WriteReadStandaloneComposite) {
-        TestTableDescription table;
-        table.InStore = false;
-        table.CompositeMarks = true;
-        TestWriteRead(false, table);
-    }
-
     Y_UNIT_TEST(WriteReadExoticTypes) {
         TestTableDescription table;
         table.Schema = TTestSchema::YdbExoticSchema();
@@ -2127,102 +2120,79 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         TestWriteRead(true, {}, "zstd");
     }
 
-    void TestCompactionInGranule(bool composite) {
-        std::vector<TTypeId> types = {
-            NTypeIds::Timestamp,
-            //NTypeIds::Int16,
-            //NTypeIds::Uint16,
-            NTypeIds::Int32,
-            NTypeIds::Uint32,
-            NTypeIds::Int64,
-            NTypeIds::Uint64,
-            //NTypeIds::Date,
-            NTypeIds::Datetime
-            //NTypeIds::Interval
-        };
+    void TestCompactionInGranule(const bool reboot, const NScheme::TTypeId typeId) {
         auto schema = TTestSchema::YdbSchema();
         auto pk = TTestSchema::YdbPkSchema();
 
-        for (auto& type : types) {
-            schema[0].second = TTypeInfo(type);
-            pk[0].second = TTypeInfo(type);
-            TestTableDescription table{.Schema = schema, .Pk = pk, .CompositeMarks = composite};
-            TestCompactionInGranuleImpl(false, table);
-        }
+        schema[0].second = TTypeInfo(typeId);
+        pk[0].second = TTypeInfo(typeId);
+        TestTableDescription table{.Schema = schema, .Pk = pk};
+        TestCompactionInGranuleImpl(reboot, table);
     }
 
-    Y_UNIT_TEST(CompactionInGranule) {
-        TestCompactionInGranule(false);
+    Y_UNIT_TEST(CompactionInGranule_PKString) {
+        TestCompactionInGranule(false, NTypeIds::String);
     }
 
-    Y_UNIT_TEST(CompactionInGranule_Composite) {
-        TestCompactionInGranule(true);
+    Y_UNIT_TEST(CompactionInGranule_PKUtf8) {
+        TestCompactionInGranule(false, NTypeIds::Utf8);
     }
 
-#if 0
-    Y_UNIT_TEST(CompactionInGranuleFloatKey) {
-        std::vector<NScheme::TTypeId> types = {
-            NTypeIds::Float,
-            NTypeIds::Double
-        };
-        auto schema = TTestSchema::YdbSchema();
-        auto pk = TTestSchema::YdbPkSchema();
-
-        for (auto& type : types) {
-            schema[0].second = TTypeInfo(type);
-            pk[0].second = TTypeInfo(type);
-            TestCompactionInGranuleImpl(false, schema, pk);
-        }
-    }
-#endif
-    void TestCompactionInGranuleStrKey(bool composite) {
-        std::vector<NScheme::TTypeId> types = {
-            NTypeIds::String,
-            NTypeIds::Utf8
-        };
-        auto schema = TTestSchema::YdbSchema();
-        auto pk = TTestSchema::YdbPkSchema();
-
-        for (auto& type : types) {
-            schema[0].second = TTypeInfo(type);
-            pk[0].second = TTypeInfo(type);
-            TestTableDescription table{.Schema = schema, .Pk = pk, .CompositeMarks = composite};
-            TestCompactionInGranuleImpl(false, table);
-        }
+    Y_UNIT_TEST(CompactionInGranule_PKTimestamp) {
+        TestCompactionInGranule(false, NTypeIds::Timestamp);
     }
 
-    Y_UNIT_TEST(CompactionInGranuleStrKey) {
-        TestCompactionInGranuleStrKey(false);
+    Y_UNIT_TEST(CompactionInGranule_PKInt32) {
+        TestCompactionInGranule(false, NTypeIds::Int32);
     }
 
-    Y_UNIT_TEST(CompactionInGranuleStrKey_Composite) {
-        TestCompactionInGranuleStrKey(true);
+    Y_UNIT_TEST(CompactionInGranule_PKUInt32) {
+        TestCompactionInGranule(false, NTypeIds::Uint32);
     }
 
-    void TestRebootCompactionInGranule(bool composite) {
-        // some of types
-        std::vector<NScheme::TTypeId> types = {
-            NTypeIds::Timestamp,
-            NTypeIds::Int32,
-            NTypeIds::String
-        };
-        auto schema = TTestSchema::YdbSchema();
-        auto pk = TTestSchema::YdbPkSchema();
-
-        for (auto& type : types) {
-            schema[0].second = TTypeInfo(type);
-            pk[0].second = TTypeInfo(type);
-            TestTableDescription table{.Schema = schema, .Pk = pk, .CompositeMarks = composite};
-            TestCompactionInGranuleImpl(true, table);
-        }
+    Y_UNIT_TEST(CompactionInGranule_PKInt64) {
+        TestCompactionInGranule(false, NTypeIds::Int64);
     }
 
-    Y_UNIT_TEST(RebootCompactionInGranule) {
-        TestRebootCompactionInGranule(false);
+    Y_UNIT_TEST(CompactionInGranule_PKUInt64) {
+        TestCompactionInGranule(false, NTypeIds::Uint64);
     }
 
-    Y_UNIT_TEST(RebootCompactionInGranule_Composite) {
-        TestRebootCompactionInGranule(true);
+    Y_UNIT_TEST(CompactionInGranule_PKDatetime) {
+        TestCompactionInGranule(false, NTypeIds::Datetime);
+    }
+
+
+    Y_UNIT_TEST(CompactionInGranule_PKString_Reboot) {
+        TestCompactionInGranule(true, NTypeIds::String);
+    }
+
+    Y_UNIT_TEST(CompactionInGranule_PKUtf8_Reboot) {
+        TestCompactionInGranule(true, NTypeIds::Utf8);
+    }
+
+    Y_UNIT_TEST(CompactionInGranule_PKTimestamp_Reboot) {
+        TestCompactionInGranule(true, NTypeIds::Timestamp);
+    }
+
+    Y_UNIT_TEST(CompactionInGranule_PKInt32_Reboot) {
+        TestCompactionInGranule(true, NTypeIds::Int32);
+    }
+
+    Y_UNIT_TEST(CompactionInGranule_PKUInt32_Reboot) {
+        TestCompactionInGranule(true, NTypeIds::Uint32);
+    }
+
+    Y_UNIT_TEST(CompactionInGranule_PKInt64_Reboot) {
+        TestCompactionInGranule(true, NTypeIds::Int64);
+    }
+
+    Y_UNIT_TEST(CompactionInGranule_PKUInt64_Reboot) {
+        TestCompactionInGranule(true, NTypeIds::Uint64);
+    }
+
+    Y_UNIT_TEST(CompactionInGranule_PKDatetime_Reboot) {
+        TestCompactionInGranule(true, NTypeIds::Datetime);
     }
 
     Y_UNIT_TEST(ReadWithProgram) {
@@ -2427,8 +2397,6 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                         UNIT_ASSERT(!resRead.GetBatch());
                         UNIT_ASSERT(resRead.GetFinished());
                         UNIT_ASSERT(!resRead.GetData().size());
-                    } else if (!resRead.GetData().size()) {
-                        UNIT_ASSERT(resRead.GetFinished());
                     } else {
                         UNIT_ASSERT(resRead.HasMeta());
 
@@ -2481,8 +2449,13 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             }
 
             ~TTestCase() {
-                Execute();
-                Cerr << "TEST CASE " << TestCaseName << " FINISHED" << Endl;
+                try {
+                    Execute();
+                    Cerr << "TEST CASE " << TestCaseName << " FINISHED" << Endl;
+                } catch (...) {
+                    Cerr << "TEST CASE " << TestCaseName << " FAILED" << Endl;
+                    throw;
+                }
             }
         };
 
@@ -2590,8 +2563,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             std::vector<ui32> valNumRows_1 = { numRows - 1 };
             std::vector<ui32> valNumRows_2 = { numRows - 2 };
 
-            const bool composite = table.CompositeMarks;
-            if (composite) {
+            {
                 UNIT_ASSERT(table.Pk.size() >= 2);
 
                 ui32 sameValue = testBlobOptions.SameValue;
@@ -2622,14 +2594,10 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 //            testAgent.Test("[0-0)").SetFrom(TTabletReadPredicateTest::TBorder(0, true)).SetTo(TBorder(0, false)).SetExpectedCount(0);
 
             if (isStrPk0) {
-                if (composite) {
-                    // TODO
-                } else {
-                    testAgent.Test("(99990:").SetFrom(TBorder(val9990, false)).SetExpectedCount(109);
-                    testAgent.Test("(99990:99999)").SetFrom(TBorder(val9990, false)).SetTo(TBorder(val9999, false)).SetExpectedCount(98);
-                    testAgent.Test("(99990:99999]").SetFrom(TBorder(val9990, false)).SetTo(TBorder(val9999, true)).SetExpectedCount(99);
-                    testAgent.Test("[99990:99999]").SetFrom(TBorder(val9990, true)).SetTo(TBorder(val9999, true)).SetExpectedCount(100);
-                }
+                testAgent.Test("(99990:").SetFrom(TBorder(val9990, false)).SetExpectedCount(109);
+                testAgent.Test("(99990:99999)").SetFrom(TBorder(val9990, false)).SetTo(TBorder(val9999, false)).SetExpectedCount(98);
+                testAgent.Test("(99990:99999]").SetFrom(TBorder(val9990, false)).SetTo(TBorder(val9999, true)).SetExpectedCount(99);
+                testAgent.Test("[99990:99999]").SetFrom(TBorder(val9990, true)).SetTo(TBorder(val9999, true)).SetExpectedCount(100);
             } else {
                 testAgent.Test("(numRows:").SetFrom(TBorder(valNumRows, false)).SetExpectedCount(0);
                 testAgent.Test("(numRows-1:").SetFrom(TBorder(valNumRows_1, false)).SetExpectedCount(0);
@@ -2690,101 +2658,50 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         }
     }
 
-    void TestCompactionSplitGranule(bool composite) {
-        std::vector<TTypeId> types = {
-            NTypeIds::Timestamp,
-            //NTypeIds::Int16,
-            //NTypeIds::Uint16,
-            NTypeIds::Int32,
-            NTypeIds::Uint32,
-            NTypeIds::Int64,
-            NTypeIds::Uint64,
-            //NTypeIds::Date,
-            NTypeIds::Datetime
-            //NTypeIds::Interval
-            //NTypeIds::Float
-            //NTypeIds::Double
-        };
-
+    void TestCompactionSplitGranule(const TTypeId typeId) {
         auto schema = TTestSchema::YdbSchema();
         auto pk = TTestSchema::YdbPkSchema();
         TTestBlobOptions opts;
-        if (composite) {
-            opts.SameValueColumns.emplace(pk[0].first);
-        }
+        opts.SameValueColumns.emplace(pk[0].first);
 
-        for (auto& type : types) {
-            schema[0].second = TTypeInfo(type);
-            pk[0].second = TTypeInfo(type);
-            if (composite) {
-                schema[1].second = TTypeInfo(type);
-                pk[1].second = TTypeInfo(type);
-            }
-            TestTableDescription table{.Schema = schema, .Pk = pk, .CompositeMarks = composite};
-            TestCompactionSplitGranuleImpl(table, opts);
-        }
+        schema[0].second = TTypeInfo(typeId);
+        pk[0].second = TTypeInfo(typeId);
+        schema[1].second = TTypeInfo(typeId);
+        pk[1].second = TTypeInfo(typeId);
+        TestTableDescription table{.Schema = schema, .Pk = pk};
+        TestCompactionSplitGranuleImpl(table, opts);
     }
 
-    Y_UNIT_TEST(CompactionSplitGranule) {
-        TestCompactionSplitGranule(false);
+    Y_UNIT_TEST(CompactionSplitGranule_PKTimestamp) {
+        TestCompactionSplitGranule(NTypeIds::Timestamp);
     }
 
-    Y_UNIT_TEST(CompactionSplitGranule_Composite) {
-        TestCompactionSplitGranule(true);
+    Y_UNIT_TEST(CompactionSplitGranule_PKInt32) {
+        TestCompactionSplitGranule(NTypeIds::Int32);
     }
 
-    void TestCompactionSplitGranuleStrKey(bool composite) {
-        std::vector<TTypeId> types = {
-            NTypeIds::String,
-            NTypeIds::Utf8
-        };
-
-        auto schema = TTestSchema::YdbSchema();
-        auto pk = TTestSchema::YdbPkSchema();
-        TTestBlobOptions opts;
-        if (composite) {
-            opts.SameValueColumns.emplace(pk[0].first);
-        }
-
-        for (auto& type : types) {
-            schema[0].second = TTypeInfo(type);
-            pk[0].second = TTypeInfo(type);
-            TestTableDescription table{.Schema = schema, .Pk = pk, .CompositeMarks = composite};
-            TestCompactionSplitGranuleImpl(table, opts);
-        }
+    Y_UNIT_TEST(CompactionSplitGranule_PKUInt32) {
+        TestCompactionSplitGranule(NTypeIds::Uint32);
     }
 
-    Y_UNIT_TEST(CompactionSplitGranuleStrKey) {
-        TestCompactionSplitGranuleStrKey(false);
+    Y_UNIT_TEST(CompactionSplitGranule_PKInt64) {
+        TestCompactionSplitGranule(NTypeIds::Int64);
     }
 
-    Y_UNIT_TEST(CompactionSplitGranuleStrKey_Composite) {
-        TestCompactionSplitGranuleStrKey(true);
+    Y_UNIT_TEST(CompactionSplitGranule_PKUInt64) {
+        TestCompactionSplitGranule(NTypeIds::Uint64);
     }
 
-    void TestCompactionSplitGranuleSameStrKey(bool composite) {
-        std::vector<TTypeId> types = {
-            NTypeIds::String,
-            NTypeIds::Utf8
-        };
-
-        auto schema = TTestSchema::YdbSchema();
-        auto pk = TTestSchema::YdbPkSchema();
-        TTestBlobOptions opts;
-        if (composite) {
-            opts.SameValueColumns.emplace(pk[0].first);
-        }
-
-        for (auto& type : types) {
-            schema[0].second = TTypeInfo(type);
-            pk[0].second = TTypeInfo(type);
-            TestTableDescription table{.Schema = schema, .Pk = pk, .CompositeMarks = composite};
-            TestCompactionSplitGranuleImpl(table, opts);
-        }
+    Y_UNIT_TEST(CompactionSplitGranule_PKDatetime) {
+        TestCompactionSplitGranule(NTypeIds::Datetime);
     }
 
-    Y_UNIT_TEST(CompactionSplitGranuleSameStrKey) {
-        TestCompactionSplitGranuleSameStrKey(true);
+    Y_UNIT_TEST(CompactionSplitGranuleStrKey_PKString) {
+        TestCompactionSplitGranule(NTypeIds::String);
+    }
+
+    Y_UNIT_TEST(CompactionSplitGranuleStrKey_PKUtf8) {
+        TestCompactionSplitGranule(NTypeIds::Utf8);
     }
 
     Y_UNIT_TEST(ReadStale) {

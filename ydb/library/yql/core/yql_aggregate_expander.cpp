@@ -615,7 +615,7 @@ TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& strea
                                 parent.Add(1, ExpandType(Node->Pos(), *originalType, Ctx));
                             } else {
                                 parent
-                                    .Callable(1, "Null")
+                                    .Callable(1, "NullType")
                                     .Seal();
                             }
                         }

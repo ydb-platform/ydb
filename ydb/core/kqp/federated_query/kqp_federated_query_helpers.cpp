@@ -41,6 +41,8 @@ namespace NKikimr::NKqp {
         HttpGatewayConfig = queryServiceConfig.HasHttpGateway() ? queryServiceConfig.GetHttpGateway() : DefaultHttpGatewayConfig();
         HttpGateway = NYql::IHTTPGateway::Make(&HttpGatewayConfig);
 
+        S3GatewayConfig = queryServiceConfig.GetS3();
+
         // Initialize Token Accessor
         if (appConfig.GetAuthConfig().HasTokenAccessorConfig()) {
             const auto& tokenAccessorConfig = appConfig.GetAuthConfig().GetTokenAccessorConfig();
@@ -93,11 +95,12 @@ namespace NKikimr::NKqp {
             HttpGateway,
             ConnectorClient,
             CredentialsFactory,
-            nullptr};
+            nullptr,
+            S3GatewayConfig};
 
         // Init DatabaseAsyncResolver only if all requirements are met
         if (DatabaseResolverActorId && MdbGateway && MdbEndpointGenerator) {
-            result.DatabaseAsyncResovler = std::make_shared<NFq::TDatabaseAsyncResolverImpl>(
+            result.DatabaseAsyncResolver = std::make_shared<NFq::TDatabaseAsyncResolverImpl>(
                 actorSystem,
                 DatabaseResolverActorId.value(),
                 "", // TODO: use YDB Gateway endpoint?

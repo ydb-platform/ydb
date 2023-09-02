@@ -1498,17 +1498,7 @@ private:
         state->FunctionRegistry = FuncRegistry;
         state->CredentialsFactory = FederatedQuerySetup->CredentialsFactory;
 
-        //
-        // TODO: Use TS3GatewayConfig from Kikimr Config when added
-        //
-        NYql::TS3GatewayConfig cfg;
-        cfg.SetMaxReadSizePerQuery(100_GB);
-        {
-            auto& setting = *cfg.AddDefaultSettings();
-            setting.SetName("UseBlocksSource");
-            setting.SetValue("true");
-        }
-        state->Configuration->Init(cfg, TypesCtx);
+        state->Configuration->Init(FederatedQuerySetup->S3GatewayConfig, TypesCtx);
 
         auto dataSource = NYql::CreateS3DataSource(state, FederatedQuerySetup->HttpGateway);
         auto dataSink = NYql::CreateS3DataSink(state, FederatedQuerySetup->HttpGateway);
@@ -1525,7 +1515,7 @@ private:
         auto state = MakeIntrusive<NYql::TGenericState>(
             TypesCtx.Get(),
             FuncRegistry,
-            FederatedQuerySetup->DatabaseAsyncResovler,
+            FederatedQuerySetup->DatabaseAsyncResolver,
             FederatedQuerySetup->ConnectorClient,
             nullptr
         );

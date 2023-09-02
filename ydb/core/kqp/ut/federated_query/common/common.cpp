@@ -27,7 +27,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         featureFlags.SetEnableScriptExecutionOperations(true);
 
         auto federatedQuerySetupFactory = std::make_shared<TKqpFederatedQuerySetupFactoryMock>(
-            httpGateway, connectorClient, nullptr, nullptr
+            httpGateway, connectorClient, nullptr, nullptr, appConfig ? appConfig->GetQueryServiceConfig().GetS3() : NYql::TS3GatewayConfig()
         );
 
         auto settings = TKikimrSettings()

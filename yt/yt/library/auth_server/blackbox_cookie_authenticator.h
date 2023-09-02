@@ -1,0 +1,15 @@
+#pragma once
+
+#include "public.h"
+
+namespace NYT::NAuth {
+
+////////////////////////////////////////////////////////////////////////////////
+
+ICookieAuthenticatorPtr CreateBlackboxCookieAuthenticator(
+    TBlackboxCookieAuthenticatorConfigPtr config,
+    IBlackboxServicePtr blackboxService);
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NAuth

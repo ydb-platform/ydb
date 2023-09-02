@@ -9,6 +9,7 @@ PROTO_NAMESPACE(yt)
 SRCS(
     protobuf_format_ut.proto
 
+    arrow_writer_ut.cpp
     check_schema_compatibility_ut.cpp
     check_type_compatibility_ut.cpp
     chunk_replica_ut.cpp
@@ -66,8 +67,11 @@ PEERDIR(
     yt/yt/client/formats
     yt/yt/client/unittests/mock
     yt/yt/library/named_value
+    yt/yt/ytlib
 
     yt/yt_proto/yt/formats
+
+    contrib/libs/apache/arrow
 )
 
 RESOURCE(

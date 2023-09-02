@@ -1,0 +1,1606 @@
+syntax = "proto2";
+
+option go_package = "github.com/ydb-platform/ydb/library/cpp/porto/proto;myapi";
+
+/*
+   Portod daemon listens on /run/portod.socket unix socket.
+
+   Request:    Varint32 length, TPortoRequest  request
+   Response:   Varint32 length, TPortoResponse response
+
+   Command is defined by optional nested message field.
+   Result will be in nested message with the same name.
+
+   Push notification is send as out of order response.
+
+   Access level depends on client container and uid.
+
+   See defails in porto.md or manpage porto
+
+   TContainer, TVolume and related methods are Porto v5 API.
+*/
+
+package Porto;
+
+// List of error codes
+enum EError {
+    // No errors occured.
+    Success = 0;
+
+    // Unclassified error, usually unexpected syscall fail.
+    Unknown = 1;
+
+    // Unknown method or bad request.
+    InvalidMethod = 2;
+
+    // Container with specified name already exists.
+    ContainerAlreadyExists = 3;
+
+    // Container with specified name doesn't exist.
+    ContainerDoesNotExist = 4;
+
+    // Unknown property specified.
+    InvalidProperty = 5;
+
+    // Unknown data specified.
+    InvalidData = 6;
+
+    // Invalid value of property or data.
+    InvalidValue = 7;
+
+    // Can't perform specified operation in current container state.
+    InvalidState = 8;
+
+    // Permanent faulure: old kernel version, missing feature, configuration, etc.
+    NotSupported = 9;
+
+    // Temporary failure: too much objects, not enough memory, etc.
+    ResourceNotAvailable = 10;
+
+    // Insufficient rights for performing requested operation.
+    Permission = 11;
+
+    // Can't create new volume with specified name, because there is already one.
+    VolumeAlreadyExists = 12;
+
+    // Volume with specified name doesn't exist.
+    VolumeNotFound = 13;
+
+    // Not enough disk space.
+    NoSpace = 14;
+
+    // Object in use.
+    Busy = 15;
+
+    // Volume already linked with container.
+    VolumeAlreadyLinked = 16;
+
+    // Volume not linked with container.
+    VolumeNotLinked = 17;
+
+    // Layer with this name already exists.
+    LayerAlreadyExists = 18;
+
+    // Layer with this name not found.
+    LayerNotFound = 19;
+
+    // Property has no value, data source permanently not available.
+    NoValue = 20;
+
+    // Volume under construction or destruction.
+    VolumeNotReady = 21;
+
+    // Cannot parse or execute command.
+    InvalidCommand = 22;
+
+    // Error code is lost or came from future.
+    LostError = 23;
+
+    // Device node not found.
+    DeviceNotFound = 24;
+
+    // Path does not match restricitons or does not exist.
+    InvalidPath = 25;
+
+    // Wrong or unuseable ip address.
+    InvalidNetworkAddress = 26;
+
+    // Porto in system maintenance state.
+    PortoFrozen = 27;
+
+    // Label with this name is not set.
+    LabelNotFound = 28;
+
+    // Label name does not meet restrictions.
+    InvalidLabel = 29;
+
+    // Errors in tar, on archive extraction
+    HelperError = 30;
+    HelperFatalError = 31;
+
+    // Generic object not found.
+    NotFound = 404;
+
+    // Reserved error code for client library.
+    SocketError = 502;
+
+    // Reserved error code for client library.
+    SocketUnavailable = 503;
+
+    // Reserved error code for client library.
+    SocketTimeout = 504;
+
+    // Portod close client connections on reload
+    PortodReloaded = 505;
+
+    // Reserved error code for taints.
+    Taint = 666;
+
+    // Reserved error codes 700-800 to docker
+    Docker = 700;
+    DockerImageNotFound = 701;
+
+    // Internal error code, not for users.
+    Queued = 1000;
+}
+
+
+message TPortoRequest {
+
+    /* System methods */
+
+    // Get portod version
+    optional TVersionRequest Version = 14;
+
+    // Get portod statistics
+    optional TGetSystemRequest GetSystem = 300;
+
+    // Change portod state (for host root user only)
+    optional TSetSystemRequest SetSystem = 301;
+
+    /* Container methods */
+
+    // Create new container
+    optional TCreateRequest Create = 1;
+
+    // Create new contaienr and auto destroy when client disconnects
+    optional TCreateRequest CreateWeak = 17;
+
+    // Force kill all and destroy container and nested containers
+    optional TDestroyRequest Destroy = 2;
+
+    // List container names in current namespace
+    optional TListRequest List = 3;
+
+    // Start contianer and parents if needed
+    optional TStartRequest Start = 7;
+
+    // Kill all and stop container
+    optional TStopRequest Stop = 8;
+
+    // Freeze execution
+    optional TPauseRequest Pause = 9;
+
+    // Resume execution
+    optional TResumeRequest Resume = 10;
+
+    // Send signal to main process
+    optional TKillRequest Kill = 13;
+
+    // Restart dead container
+    optional TRespawnRequest Respawn = 18;
+
+    // Wait for process finish or change of labels
+    optional TWaitRequest Wait = 16;
+
+    // Subscribe to push notifictaions
+    optional TWaitRequest AsyncWait = 19;
+    optional TWaitRequest StopAsyncWait = 128;
+
+    /* Container properties */
+
+    // List supported container properties
+    optional TListPropertiesRequest ListProperties = 11;
+
+    // Get one property
+    optional TGetPropertyRequest GetProperty = 4;
+
+    // Set one property
+    optional TSetPropertyRequest SetProperty = 5;
+
+    // Deprecated, now data properties are also read-only properties
+    optional TListDataPropertiesRequest ListDataProperties = 12;
+    optional TGetDataPropertyRequest GetDataProperty = 6;
+
+    // Get multiple properties for multiple containers
+    optional TGetRequest Get = 15;
+
+    /* Container API based on TContainer (Porto v5 API) */
+
+    // Create, configure and start container with volumes
+    optional TCreateFromSpecRequest CreateFromSpec = 230;
+
+    // Set multiple container properties
+    optional TUpdateFromSpecRequest UpdateFromSpec = 231;
+
+    // Get multiple properties for multiple containers
+    optional TListContainersRequest ListContainersBy = 232;
+
+    // Modify symlink in container
+    optional TSetSymlinkRequest SetSymlink = 125;
+
+    /* Container labels - user defined key-value */
+
+    // Find containers with labels
+    optional TFindLabelRequest FindLabel = 20;
+
+    // Atomic compare and set for label
+    optional TSetLabelRequest SetLabel = 21;
+
+    // Atomic add and return for counter in label
+    optional TIncLabelRequest IncLabel = 22;
+
+    /* Volume methods */
+
+    optional TListVolumePropertiesRequest ListVolumeProperties = 103;
+
+    // List layers and their properties
+    optional TListVolumesRequest ListVolumes = 107;
+
+    // Create, configure and build volume
+    optional TCreateVolumeRequest CreateVolume = 104;
+
+    // Change volume properties - for now only resize
+    optional TTuneVolumeRequest TuneVolume = 108;
+
+    // Volume API based on TVolume (Porto v5 API)
+    optional TNewVolumeRequest NewVolume = 126;
+    optional TGetVolumeRequest GetVolume = 127;
+
+    // Add link between container and volume
+    optional TLinkVolumeRequest LinkVolume = 105;
+
+    // Same as LinkVolume but fails if target is not supported
+    optional TLinkVolumeRequest LinkVolumeTarget = 120;
+
+    // Del link between container and volume
+    optional TUnlinkVolumeRequest UnlinkVolume = 106;
+
+    // Same as UnlinkVolume but fails if target is not supported
+    optional TUnlinkVolumeRequest UnlinkVolumeTarget = 121;
+
+    /* Layer methods */
+
+    // Import layer from tarball
+    optional TImportLayerRequest ImportLayer = 110;
+
+    // Remove layer
+    optional TRemoveLayerRequest RemoveLayer = 111;
+
+    // List layers
+    optional TListLayersRequest ListLayers = 112;
+
+    // Export volume or layer into tarball
+    optional TExportLayerRequest ExportLayer = 113;
+
+    // Get/set layer private (user defined string)
+    optional TGetLayerPrivateRequest GetLayerPrivate = 114;
+    optional TSetLayerPrivateRequest SetLayerPrivate = 115;
+
+    /* Storage methods */
+
+    // Volume creation creates required storage if missing
+
+    // List storages and meta storages
+    optional TListStoragesRequest ListStorages = 116;
+
+    optional TRemoveStorageRequest RemoveStorage = 117;
+
+    // Import storage from tarball
+    optional TImportStorageRequest ImportStorage = 118;
+
+    // Export storage into tarball
+    optional TExportStorageRequest ExportStorage = 119;
+
+    // Meta storage (bundle for storages and layers)
+
+    optional TMetaStorage CreateMetaStorage = 122;
+    optional TMetaStorage ResizeMetaStorage = 123;
+    optional TMetaStorage RemoveMetaStorage = 124;
+
+    // Convert path between containers
+    optional TConvertPathRequest ConvertPath = 200;
+
+    /* Process methods */
+
+    // Attach process to nested container
+    optional TAttachProcessRequest AttachProcess = 201;
+
+    // Find container for process
+    optional TLocateProcessRequest LocateProcess = 202;
+
+    // Attach one thread to nexted container
+    optional TAttachProcessRequest AttachThread = 203;
+
+    /* Docker images API */
+
+    optional TDockerImageStatusRequest dockerImageStatus = 303;
+    optional TDockerImageListRequest listDockerImages = 304;
+    optional TDockerImagePullRequest pullDockerImage = 305;
+    optional TDockerImageRemoveRequest removeDockerImage = 306;
+}
+
+
+message TPortoResponse {
+    // Actually always set, hack for adding new error codes
+    optional EError error = 1 [ default = LostError ];
+
+    // Human readable comment - must be shown to user as is
+    optional string errorMsg = 2;
+
+    optional uint64 timestamp = 1000;       // for next changed_since
+
+    /* System methods */
+
+    optional TVersionResponse Version = 8;
+
+    optional TGetSystemResponse GetSystem = 300;
+    optional TSetSystemResponse SetSystem = 301;
+
+    /* Container methods */
+
+    optional TListResponse List = 3;
+
+    optional TWaitResponse Wait = 11;
+
+    optional TWaitResponse AsyncWait = 19;
+
+    /* Container properties */
+
+    optional TListPropertiesResponse ListProperties = 6;
+
+    optional TGetPropertyResponse GetProperty = 4;
+
+
+    // Deprecated
+    optional TListDataPropertiesResponse ListDataProperties = 7;
+    optional TGetDataPropertyResponse GetDataProperty = 5;
+
+    optional TGetResponse Get = 10;
+
+    /* Container API based on TContainer (Porto v5 API) */
+
+    optional TListContainersResponse ListContainersBy = 232;
+
+    /* Container Labels */
+
+    optional TFindLabelResponse FindLabel = 20;
+    optional TSetLabelResponse SetLabel = 21;
+    optional TIncLabelResponse IncLabel = 22;
+
+    /* Volume methods */
+
+    optional TListVolumePropertiesResponse ListVolumeProperties = 12;
+
+    optional TListVolumesResponse ListVolumes = 9;
+
+    optional TVolumeDescription CreateVolume = 13;
+
+    optional TNewVolumeResponse NewVolume = 126;
+
+    optional TGetVolumeResponse GetVolume = 127;
+
+    optional TListLayersResponse ListLayers = 14;
+
+    optional TGetLayerPrivateResponse GetLayerPrivate = 16;
+
+    // List storages and meta storages
+    optional TListStoragesResponse ListStorages = 17;
+
+    optional TConvertPathResponse ConvertPath = 15;
+
+    // Process
+    optional TLocateProcessResponse LocateProcess = 18;
+
+    /* Docker images API */
+
+    optional TDockerImageStatusResponse dockerImageStatus = 302;
+	optional TDockerImageListResponse listDockerImages = 303;
+    optional TDockerImagePullResponse pullDockerImage = 304;
+}
+
+
+// Common objects
+
+
+message TStringMap {
+    message TStringMapEntry {
+        optional string key = 1;
+        optional string val = 2;
+    }
+    // TODO replace with map
+    // map<string, string> map = 1;
+    repeated TStringMapEntry map = 1;
+    optional bool merge = 2;        // in, default: replace
+}
+
+
+message TUintMap {
+    message TUintMapEntry {
+        optional string key = 1;
+        optional uint64 val = 2;
+    }
+    // TODO replace with map
+    // map<string, uint64> map = 1;
+    repeated TUintMapEntry map = 1;
+    optional bool merge = 2;        // in, default: replace
+}
+
+
+message TError {
+    optional EError error = 1 [ default = LostError ];
+    optional string msg = 2;
+}
+
+
+message TCred {
+    optional string user = 1;       // requires user or uid or both
+    optional fixed32 uid = 2;
+    optional string group = 3;
+    optional fixed32 gid = 4;
+    repeated fixed32 grp = 5;       // out, supplementary groups
+}
+
+
+message TCapabilities {
+    repeated string cap = 1;
+    optional string hex = 2;        // out
+}
+
+
+message TContainerCommandArgv {
+        repeated string argv = 1;
+}
+
+
+// Container
+
+
+message TContainerEnvVar {
+    optional string name = 1;    //required
+    optional string value = 2;
+    optional bool unset = 3;        // out
+    optional string salt = 4;
+    optional string hash = 5;
+}
+
+message TContainerEnv {
+    repeated TContainerEnvVar var = 1;
+    optional bool merge = 2;        // in, default: replace
+}
+
+
+message TContainerUlimit {
+    optional string type = 1;    //required
+    optional bool unlimited = 2;
+    optional uint64 soft = 3;
+    optional uint64 hard = 4;
+    optional bool inherited = 5;    // out
+}
+
+message TContainerUlimits {
+    repeated TContainerUlimit ulimit = 1;
+    optional bool merge = 2;        // in, default: replace
+}
+
+
+message TContainerControllers {
+    repeated string controller = 1;
+}
+
+
+message TContainerCgroup {
+    optional string controller = 1; //required
+    optional string path = 2;    //required
+    optional bool inherited = 3;
+}
+
+message TContainerCgroups {
+    repeated TContainerCgroup cgroup = 1;
+}
+
+
+message TContainerCpuSet {
+    optional string policy = 1;     // inherit|set|node|reserve|threads|cores
+    optional uint32 arg = 2;        // for node|reserve|threads|cores
+    optional string list = 3;       // for set
+    repeated uint32 cpu = 4;        // for set (used if list isn't set)
+    optional uint32 count = 5;      // out
+    optional string mems = 6;
+}
+
+
+message TContainerBindMount {
+    optional string source = 1;    //required
+    optional string target = 2;    //required
+    repeated string flag = 3;
+}
+
+message TContainerBindMounts {
+    repeated TContainerBindMount bind = 1;
+}
+
+
+message TContainerVolumeLink {
+    optional string volume = 1;    //required
+    optional string target = 2;
+    optional bool required = 3;
+    optional bool read_only = 4;
+}
+
+message TContainerVolumeLinks {
+    repeated TContainerVolumeLink link = 1;
+}
+
+
+message TContainerVolumes {
+    repeated string volume = 1;
+}
+
+
+message TContainerPlace {
+    optional string place = 1;    //required
+    optional string alias = 2;
+}
+
+message TContainerPlaceConfig {
+    repeated TContainerPlace cfg = 1;
+}
+
+
+message TContainerDevice {
+    optional string device = 1;    //required
+    optional string access = 2;    //required
+    optional string path = 3;
+    optional string mode = 4;
+    optional string user = 5;
+    optional string group = 6;
+}
+
+message TContainerDevices {
+    repeated TContainerDevice device = 1;
+    optional bool merge = 2;        // in, default: replace
+}
+
+
+message TContainerNetOption {
+    optional string opt = 1;    //required
+    repeated string arg = 2;
+}
+
+message TContainerNetConfig {
+    repeated TContainerNetOption cfg = 1;
+    optional bool inherited = 2;    // out
+}
+
+
+message TContainerIpLimit {
+    optional string policy = 1;     //required any|none|some
+    repeated string ip = 2;
+}
+
+
+message TContainerIpConfig {
+    message TContainerIp {
+        optional string dev = 1;    //required
+        optional string ip = 2;    //required
+    }
+    repeated TContainerIp cfg = 1;
+}
+
+
+message TVmStat {
+    optional uint64 count = 1;
+    optional uint64 size = 2;
+    optional uint64 max_size = 3;
+    optional uint64 used = 4;
+    optional uint64 max_used = 5;
+    optional uint64 anon = 6;
+    optional uint64 file = 7;
+    optional uint64 shmem = 8;
+    optional uint64 huge = 9;
+    optional uint64 swap = 10;
+    optional uint64 data = 11;
+    optional uint64 stack = 12;
+    optional uint64 code = 13;
+    optional uint64 locked = 14;
+    optional uint64 table = 15;
+}
+
+message TContainerStatus {
+    optional string absolute_name = 1;  // out, "/porto/..."
+    optional string state = 2;          // out
+    optional uint64 id = 3;             // out
+    optional uint32 level = 4;          // out
+    optional string parent = 5;         // out, "/porto/..."
+
+    optional string absolute_namespace = 6;    // out
+
+    optional int32 root_pid = 7;       // out
+    optional int32 exit_status = 8;    // out
+    optional int32 exit_code = 9;      // out
+    optional bool core_dumped = 10;     // out
+    optional TError start_error = 11;   // out
+    optional uint64 time = 12;          // out
+    optional uint64 dead_time = 13;     // out
+
+    optional TCapabilities capabilities_allowed = 14;           // out
+    optional TCapabilities capabilities_ambient_allowed = 15;   // out
+    optional string root_path = 16;     // out, in client namespace
+    optional uint64 stdout_offset = 17; // out
+    optional uint64 stderr_offset = 18; // out
+    optional string std_err = 69; // out
+    optional string std_out = 70; // out
+
+    optional uint64 creation_time = 19; // out
+    optional uint64 start_time = 20;    // out
+    optional uint64 death_time = 21;    // out
+    optional uint64 change_time = 22;   // out
+    optional bool no_changes = 23;      // out, change_time < changed_since
+    optional string extra_properties = 73;
+
+    optional TContainerCgroups cgroups = 24;     // out
+    optional TContainerCpuSet cpu_set_affinity = 25;     // out
+
+    optional uint64 cpu_usage = 26;            // out
+    optional uint64 cpu_usage_system = 27;     // out
+    optional uint64 cpu_wait = 28;             // out
+    optional uint64 cpu_throttled = 29;        // out
+
+    optional uint64 process_count = 30;        // out
+    optional uint64 thread_count = 31;         // out
+
+    optional TUintMap io_read = 32;        // out, bytes
+    optional TUintMap io_write = 33;       // out, bytes
+    optional TUintMap io_ops = 34;         // out, ops
+    optional TUintMap io_read_ops = 341;   // out, ops
+    optional TUintMap io_write_ops = 342;  // out, ops
+    optional TUintMap io_time = 35;        // out, ns
+    optional TUintMap io_pressure = 351;   // out
+
+    optional TUintMap place_usage = 36;
+    optional uint64 memory_usage = 37;         // out, bytes
+
+    optional uint64 memory_guarantee_total = 38;   // out
+
+    optional uint64 memory_limit_total = 39;   // out
+
+    optional uint64 anon_limit_total = 40;
+    optional uint64 anon_usage = 41;           // out, bytes
+    optional double cpu_guarantee_total = 42;
+    optional double cpu_guarantee_bound = 421;
+    optional double cpu_limit_total = 422;
+    optional double cpu_limit_bound = 423;
+
+    optional uint64 cache_usage = 43;          // out, bytes
+
+    optional uint64 hugetlb_usage = 44;        // out, bytes
+    optional uint64 hugetlb_limit = 45;
+
+    optional uint64 minor_faults = 46;         // out
+    optional uint64 major_faults = 47;         // out
+    optional uint64 memory_reclaimed = 48;     // out
+    optional TVmStat virtual_memory = 49;      // out
+
+    optional uint64 shmem_usage = 71;          // out, bytes
+    optional uint64 mlock_usage = 72;          // out, bytes
+
+    optional uint64 oom_kills = 50;            // out
+    optional uint64 oom_kills_total = 51;      // out
+    optional bool oom_killed = 52;             // out
+
+    optional TUintMap net_bytes = 54;          // out
+    optional TUintMap net_packets = 55;        // out
+    optional TUintMap net_drops = 56;          // out
+    optional TUintMap net_overlimits = 57;     // out
+    optional TUintMap net_rx_bytes = 58;       // out
+    optional TUintMap net_rx_packets = 59;     // out
+    optional TUintMap net_rx_drops = 60;       // out
+    optional TUintMap net_tx_bytes = 61;       // out
+    optional TUintMap net_tx_packets = 62;     // out
+    optional TUintMap net_tx_drops = 63;       // out
+
+    optional TContainerVolumeLinks volumes_linked = 64; // out
+    optional TContainerVolumes volumes_owned = 65;
+
+    repeated TError error = 66;   // out
+    repeated TError warning = 67; // out
+    repeated TError taint = 68;   // out
+}
+
+message TContainerSpec {
+    optional string name = 1;           // required / in client namespace
+    optional bool weak = 2;
+    optional string private = 3;
+    optional TStringMap labels = 4;
+
+    optional string command = 5;
+    optional TContainerCommandArgv command_argv = 76;
+    optional TContainerEnv env = 6;
+    optional TContainerEnv env_secret = 90;  // in, out hides values
+    optional TContainerUlimits ulimit = 7;
+    optional string core_command = 8;
+
+    optional bool isolate = 9;
+    optional string virt_mode = 10;
+    optional string enable_porto = 11;
+    optional string porto_namespace = 12;
+    optional string cgroupfs = 78;
+    optional bool userns = 79;
+
+    optional uint64 aging_time = 13;
+
+    optional TCred task_cred = 14;
+    optional string user = 15;
+    optional string group = 16;
+
+    optional TCred owner_cred = 17;
+    optional string owner_user = 18;
+    optional string owner_group = 19;
+    optional string owner_containers = 77;
+
+    optional TCapabilities capabilities = 20;
+    optional TCapabilities capabilities_ambient = 21;
+
+    optional string root = 22;          // in parent namespace
+    optional bool root_readonly = 23;
+    optional TContainerBindMounts bind = 24;
+    optional TStringMap symlink = 25;
+    optional TContainerDevices devices = 26;
+    optional TContainerPlaceConfig place = 27;
+    optional TUintMap place_limit = 28;
+
+    optional string cwd = 29;
+    optional string stdin_path = 30;
+    optional string stdout_path = 31;
+    optional string stderr_path = 32;
+    optional uint64 stdout_limit = 33;
+    optional uint32 umask = 34;
+
+    optional bool respawn = 35;
+    optional uint64 respawn_count = 36;
+    optional int64 max_respawns = 37;
+    optional uint64 respawn_delay = 38;
+
+    optional TContainerControllers controllers = 39;
+
+    optional string cpu_policy = 40;   // normal|idle|batch|high|rt
+    optional double cpu_weight = 41;   // 0.01 .. 100
+
+    optional double cpu_guarantee = 42;        // in cores
+    optional double cpu_limit = 43;            // in cores
+    optional double cpu_limit_total = 44;      // deprecated (value moved to TContainerStatus)
+    optional uint64 cpu_period = 45;           // ns
+
+    optional TContainerCpuSet cpu_set = 46;
+
+    optional uint64 thread_limit = 47;
+
+    optional string io_policy = 48;    // none|rt|high|normal|batch|idle
+    optional double io_weight = 49;    // 0.01 .. 100
+
+    optional TUintMap io_limit = 50;         // bps
+    optional TUintMap io_guarantee = 84;     // bps
+    optional TUintMap io_ops_limit = 51;     // iops
+    optional TUintMap io_ops_guarantee = 85; // iops
+
+    optional uint64 memory_guarantee = 52;     // bytes
+
+    optional uint64 memory_limit = 53;         // bytes
+
+    optional uint64 anon_limit = 54;
+    optional uint64 anon_max_usage = 55;
+
+    optional uint64 dirty_limit = 56;
+
+    optional uint64 hugetlb_limit = 57;
+
+    optional bool recharge_on_pgfault = 58;
+    optional bool pressurize_on_death = 59;
+    optional bool anon_only = 60;
+
+    optional int32 oom_score_adj = 61;         // -1000 .. +1000
+    optional bool oom_is_fatal = 62;
+
+    optional TContainerNetConfig net = 63;
+    optional TContainerIpLimit ip_limit = 64;
+    optional TContainerIpConfig ip = 65;
+    optional TContainerIpConfig default_gw = 66;
+    optional string hostname = 67;
+    optional string resolv_conf = 68;
+    optional string etc_hosts = 69;
+    optional TStringMap sysctl = 70;
+    optional TUintMap net_guarantee = 71;      // bytes per second
+    optional TUintMap net_limit = 72;          // bytes per second
+    optional TUintMap net_rx_limit = 73;       // bytes per second
+
+    optional TContainerVolumes volumes_required = 75;
+}
+
+message TContainer {
+    optional TContainerSpec spec = 1;    //required
+    optional TContainerStatus status = 2;
+    optional TError error = 3;
+}
+
+
+// Volumes
+
+message TVolumeDescription {
+    required string path = 1;           // path in client namespace
+    map<string, string> properties = 2;
+    repeated string containers = 3;     // linked containers (legacy)
+    repeated TVolumeLink links = 4;     // linked containers with details
+
+    optional uint64 change_time = 5;    // sec since epoch
+    optional bool no_changes = 6;       // change_time < changed_since
+}
+
+
+message TVolumeLink {
+    optional string container = 1;
+    optional string target = 2;         // absolute path in container, default: anon
+    optional bool required = 3;         // container cannot work without it
+    optional bool read_only = 4;
+    optional string host_target = 5;    // out, absolute path in host
+    optional bool container_root = 6;   // in, set container root
+    optional bool container_cwd = 7;    // in, set container cwd
+}
+
+message TVolumeResource {
+    optional uint64 limit = 1;          // bytes or inodes
+    optional uint64 guarantee = 2;      // bytes or inodes
+    optional uint64 usage = 3;          // out, bytes or inodes
+    optional uint64 available = 4;      // out, bytes or inodes
+}
+
+message TVolumeDirectory {
+    optional string path = 1;           // relative path in volume
+    optional TCred cred = 2;            // default: volume cred
+    optional fixed32 permissions = 3;   // default: volume permissions
+}
+
+message TVolumeSymlink {
+    optional string path = 1;           // relative path in volume
+    optional string target_path = 2;
+}
+
+message TVolumeShare {
+    optional string path = 1;           // relative path in volume
+    optional string origin_path = 2;    // absolute path to origin
+    optional bool cow = 3;              // default: mutable share
+}
+
+// Structured Volume description (Porto V5 API)
+
+message TVolumeSpec {
+    optional string path = 1;               // path in container, default: auto
+    optional string container = 2;          // defines root for paths, default: self (client container)
+    repeated TVolumeLink links = 3;         // initial links, default: anon link to self
+
+    optional string id = 4;                 // out
+    optional string state = 5;              // out
+
+    optional string private_value = 6;      // at most 4096 bytes
+
+    optional string device_name = 7;        // out
+
+    optional string backend = 10;           // default: auto
+    optional string place = 11;             // path in host or alias, default from client container
+    optional string storage = 12;           // persistent storage, path or name, default: non-persistent
+    repeated string layers = 13;            // name or path
+    optional bool read_only = 14;
+
+    // defines root directory user, group and permissions
+    optional TCred cred = 20;               // default: self task cred
+    optional fixed32 permissions = 21;      // default: 0775
+
+    optional TVolumeResource space = 22;
+    optional TVolumeResource inodes = 23;
+
+    optional TCred owner = 30;              // default: self owner
+    optional string owner_container = 31;   // default: self
+    optional string place_key = 32;         // out, key for place_limit
+    optional string creator = 33;           // out
+    optional bool auto_path = 34;           // out
+    optional uint32 device_index = 35;      // out
+    optional uint64 build_time = 37;        // out, sec since epoch
+
+    // customization at creation
+    repeated TVolumeDirectory directories = 40; // in
+    repeated TVolumeSymlink symlinks = 41;      // in
+    repeated TVolumeShare shares = 42;          // in
+
+    optional uint64 change_time = 50;       // out, sec since epoch
+    optional bool no_changes = 51;          // out, change_time < changed_since
+}
+
+
+message TLayer {
+    optional string name = 1;           // name or meta/name
+    optional string owner_user = 2;
+    optional string owner_group = 3;
+    optional uint64 last_usage = 4;     // out, sec since last usage
+    optional string private_value = 5;
+}
+
+
+message TStorage {
+    optional string name = 1;           // name or meta/name
+    optional string owner_user = 2;
+    optional string owner_group = 3;
+    optional uint64 last_usage = 4;     // out, sec since last usage
+    optional string private_value = 5;
+}
+
+
+message TMetaStorage {
+    optional string name = 1;
+    optional string place = 2;
+    optional string private_value = 3;
+    optional uint64 space_limit = 4;        // bytes
+    optional uint64 inode_limit = 5;        // inodes
+
+    optional uint64 space_used = 6;         // out, bytes
+    optional uint64 space_available = 7;    // out, bytes
+    optional uint64 inode_used = 8;         // out, inodes
+    optional uint64 inode_available = 9;    // out, inodes
+    optional string owner_user = 10;        // out
+    optional string owner_group = 11;       // out
+    optional uint64 last_usage = 12;        // out, sec since last usage
+}
+
+
+// COMMANDS
+
+// System
+
+// Get porto version
+message TVersionRequest {
+}
+
+message TVersionResponse {
+    optional string tag = 1;
+    optional string revision = 2;
+}
+
+
+// Get porto statistics
+message TGetSystemRequest {
+}
+
+message TGetSystemResponse {
+    optional string porto_version = 1;
+    optional string porto_revision = 2;
+    optional string kernel_version = 3;
+
+    optional fixed64 errors = 4;
+    optional fixed64 warnings = 5;
+    optional fixed64 porto_starts = 6;
+    optional fixed64 porto_uptime = 7;
+    optional fixed64 master_uptime = 8;
+    optional fixed64 taints = 9;
+
+    optional bool frozen = 10;
+    optional bool verbose = 100;
+    optional bool debug = 101;
+    optional fixed64 log_lines = 102;
+    optional fixed64 log_bytes = 103;
+
+    optional fixed64 stream_rotate_bytes = 104;
+    optional fixed64 stream_rotate_errors = 105;
+
+    optional fixed64 log_lines_lost = 106;
+    optional fixed64 log_bytes_lost = 107;
+    optional fixed64 log_open = 108;
+
+    optional fixed64 container_count = 200;
+    optional fixed64 container_limit = 201;
+    optional fixed64 container_running = 202;
+    optional fixed64 container_created = 203;
+    optional fixed64 container_started = 204;
+    optional fixed64 container_start_failed = 205;
+    optional fixed64 container_oom = 206;
+    optional fixed64 container_buried = 207;
+    optional fixed64 container_lost = 208;
+    optional fixed64 container_tainted = 209;
+
+    optional fixed64 volume_count = 300;
+    optional fixed64 volume_limit = 301;
+    optional fixed64 volume_created = 303;
+    optional fixed64 volume_failed = 304;
+    optional fixed64 volume_links = 305;
+    optional fixed64 volume_links_mounted = 306;
+    optional fixed64 volume_lost = 307;
+
+    optional fixed64 layer_import = 390;
+    optional fixed64 layer_export = 391;
+    optional fixed64 layer_remove = 392;
+
+    optional fixed64 client_count = 400;
+    optional fixed64 client_max = 401;
+    optional fixed64 client_connected = 402;
+
+    optional fixed64 request_queued = 500;
+    optional fixed64 request_completed = 501;
+    optional fixed64 request_failed = 502;
+    optional fixed64 request_threads = 503;
+    optional fixed64 request_longer_1s = 504;
+    optional fixed64 request_longer_3s = 505;
+    optional fixed64 request_longer_30s = 506;
+    optional fixed64 request_longer_5m = 507;
+
+    optional fixed64 fail_system = 600;
+    optional fixed64 fail_invalid_value = 601;
+    optional fixed64 fail_invalid_command = 602;
+    optional fixed64 fail_memory_guarantee = 603;
+    optional fixed64 fail_invalid_netaddr = 604;
+
+    optional fixed64 porto_crash = 666;
+
+    optional fixed64 network_count = 700;
+    optional fixed64 network_created = 701;
+    optional fixed64 network_problems = 702;
+    optional fixed64 network_repairs = 703;
+}
+
+
+// Change porto state
+message TSetSystemRequest {
+    optional bool frozen = 10;
+    optional bool verbose = 100;
+    optional bool debug = 101;
+}
+
+message TSetSystemResponse {
+}
+
+message TCreateFromSpecRequest {
+    optional TContainerSpec container = 1;    //required
+    repeated TVolumeSpec volumes = 2;
+    optional bool start = 3;
+}
+
+message TUpdateFromSpecRequest {
+    optional TContainerSpec container = 1;    //required
+    optional bool start = 2;
+}
+
+message TListContainersFilter {
+    optional string name = 1;    // name or wildcards, default: all
+    optional TStringMap labels = 2;
+    optional uint64 changed_since = 3;  // change_time >= changed_since
+}
+
+message TStreamDumpOptions {
+    optional uint64 stdstream_offset = 2; // default: 0
+    optional uint64 stdstream_limit = 3;  // default: 8Mb
+}
+
+message TListContainersFieldOptions {
+    repeated string properties = 1;       // property names, default: all
+    optional TStreamDumpOptions stdout_options = 2;    // for GetIndexed stdout
+    optional TStreamDumpOptions stderr_options = 3;    // for GetIndexed stderr
+}
+
+message TListContainersRequest {
+    repeated TListContainersFilter filters = 1;
+    optional TListContainersFieldOptions field_options = 2;
+}
+
+message TListContainersResponse {
+    repeated TContainer containers = 1;
+}
+
+// List available properties
+message TListPropertiesRequest {
+}
+
+message TListPropertiesResponse {
+    message TContainerPropertyListEntry {
+        optional string name = 1;
+        optional string desc = 2;
+        optional bool read_only = 3;
+        optional bool dynamic = 4;
+    }
+    repeated TContainerPropertyListEntry list = 1;
+}
+
+
+// deprecated, use ListProperties
+message TListDataPropertiesRequest {
+}
+
+message TListDataPropertiesResponse {
+    message TContainerDataListEntry {
+        optional string name = 1;
+        optional string desc = 2;
+    }
+    repeated TContainerDataListEntry list = 1;
+}
+
+
+// Create stopped container
+message TCreateRequest {
+    optional string name = 1;
+}
+
+
+// Stop and destroy container
+message TDestroyRequest {
+    optional string name = 1;
+}
+
+
+// List container names
+message TListRequest {
+    optional string mask = 1;
+    optional uint64 changed_since = 2;  // change_time >= changed_since
+}
+
+message TListResponse {
+    repeated string name = 1;
+    optional string absolute_namespace = 2;
+}
+
+
+// Read one property
+message TGetPropertyRequest {
+    optional string name = 1;
+    optional string property = 2;
+    // update cached counters
+    optional bool sync = 3;
+    optional bool real = 4;
+}
+
+message TGetPropertyResponse {
+    optional string value = 1;
+}
+
+
+// Alias for GetProperty, deprecated
+message TGetDataPropertyRequest {
+    optional string name = 1;
+    optional string data = 2;
+    // update cached counters
+    optional bool sync = 3;
+    optional bool real = 4;
+}
+
+message TGetDataPropertyResponse {
+    optional string value = 1;
+}
+
+
+// Change one property
+message TSetPropertyRequest {
+    optional string name = 1;
+    optional string property = 2;
+    optional string value = 3;
+}
+
+
+// Get multiple properties/data of many containers with one request
+message TGetRequest {
+    // list of containers or wildcards, "***" - all
+    repeated string name = 1;
+
+    // list of properties/data
+    repeated string variable = 2;
+
+    // do not wait busy containers
+    optional bool nonblock = 3;
+
+    // update cached counters
+    optional bool sync = 4;
+    optional bool real = 5;
+
+    // change_time >= changed_since
+    optional uint64 changed_since = 6;
+}
+
+message TGetResponse {
+    message TContainerGetValueResponse {
+        optional string variable = 1;
+        optional EError error = 2;
+        optional string errorMsg = 3;
+        optional string value = 4;
+    }
+
+    message TContainerGetListResponse {
+        optional string name = 1;
+        repeated TContainerGetValueResponse keyval = 2;
+
+        optional uint64 change_time = 3;
+        optional bool no_changes = 4;   // change_time < changed_since
+    }
+
+    repeated TContainerGetListResponse list = 1;
+}
+
+
+// Start stopped container
+message TStartRequest {
+    optional string name = 1;
+}
+
+
+// Restart dead container
+message TRespawnRequest {
+    optional string name = 1;
+}
+
+
+// Stop dead or running container
+message TStopRequest {
+    optional string name = 1;
+    // Timeout in 1/1000 seconds between SIGTERM and SIGKILL, default 30s
+    optional uint32 timeout_ms = 2;
+}
+
+
+// Freeze running container
+message TPauseRequest {
+    optional string name = 1;
+}
+
+
+// Unfreeze paused container
+message TResumeRequest {
+    optional string name = 1;
+}
+
+
+// Translate filesystem path between containers
+message TConvertPathRequest {
+    optional string path = 1;
+    optional string source = 2;
+    optional string destination = 3;
+}
+
+message TConvertPathResponse {
+    optional string path = 1;
+}
+
+
+// Wait while container(s) is/are in running state
+message TWaitRequest {
+    // list of containers or wildcards, "***" - all
+    repeated string name = 1;
+
+    // timeout in 1/1000 seconds, 0 - nonblock
+    optional uint32 timeout_ms = 2;
+
+    // list of label names or wildcards
+    repeated string label = 3;
+
+    // async wait with target_state works only once
+    optional string target_state = 4;
+}
+
+message TWaitResponse {
+    optional string name = 1;           // container name
+    optional string state = 2;          // container state or "timeout"
+    optional uint64 when = 3;           // unix time stamp in seconds
+    optional string label = 4;
+    optional string value = 5;
+}
+
+
+// Send signal main process in container
+message TKillRequest {
+    optional string name = 1;
+    optional int32 sig = 2;
+}
+
+
+// Move process into container
+message TAttachProcessRequest {
+    optional string name = 1;
+    optional uint32 pid = 2;
+    optional string comm = 3; // ignored if empty
+}
+
+
+// Determine container by pid
+message TLocateProcessRequest {
+    optional uint32 pid = 1;
+    optional string comm = 2; // ignored if empty
+}
+
+message TLocateProcessResponse {
+    optional string name = 1;
+}
+
+
+// Labels
+
+
+message TFindLabelRequest {
+    optional string mask = 1;           // containers name or wildcard
+    optional string state = 2;          // filter by container state
+    optional string label = 3;          // label name or wildcard
+    optional string value = 4;          // filter by label value
+}
+
+message TFindLabelResponse {
+    message TFindLabelEntry {
+        optional string name = 1;
+        optional string state = 2;
+        optional string label = 3;
+        optional string value = 4;
+    }
+    repeated TFindLabelEntry list = 1;
+}
+
+
+message TSetLabelRequest {
+    optional string name = 1;
+    optional string label = 2;
+    optional string value = 3;
+    optional string prev_value = 4;     // fail with Busy if does not match
+    optional string state = 5;          // fail with InvalidState if not match
+}
+
+message TSetLabelResponse {
+    optional string prev_value = 1;
+    optional string state = 2;
+}
+
+
+message TIncLabelRequest {
+    optional string name = 1;
+    optional string label = 2;          // missing label starts from 0
+    optional int64 add = 3 [ default = 1];
+}
+
+message TIncLabelResponse {
+    optional int64 result = 1;
+}
+
+
+message TSetSymlinkRequest {
+    optional string container = 1;
+    optional string symlink = 2;
+    optional string target = 3;
+}
+
+
+// Volumes
+
+
+message TNewVolumeRequest {
+    optional TVolumeSpec volume = 1;
+}
+
+message TNewVolumeResponse {
+    optional TVolumeSpec volume = 1;
+}
+
+
+message TGetVolumeRequest {
+    optional string container = 1;  // get paths in container, default: self (client container)
+    repeated string path = 2;       // volume path in container, default: all
+    optional uint64 changed_since = 3;  // change_time >= changed_since
+    repeated string label = 4;      // labels or wildcards
+}
+
+message TGetVolumeResponse {
+    repeated TVolumeSpec volume = 1;
+}
+
+
+// List available volume properties
+message TListVolumePropertiesRequest {
+}
+
+message TListVolumePropertiesResponse {
+    message TVolumePropertyDescription {
+        optional string name = 1;
+        optional string desc = 2;
+    }
+    repeated TVolumePropertyDescription list = 1;
+}
+
+
+// Create new volume
+// "createVolume" returns TVolumeDescription in "volume"
+message TCreateVolumeRequest {
+    optional string path = 1;
+    map<string, string> properties = 2;
+}
+
+
+message TLinkVolumeRequest {
+    optional string path = 1;
+    optional string container = 2;      // default - self (client container)
+    optional string target = 3;         // path in container, "" - anon
+    optional bool required = 4;         // stop container at fail
+    optional bool read_only = 5;
+}
+
+
+message TUnlinkVolumeRequest {
+    optional string path = 1;
+    optional string container = 2;      // default - self, "***" - all
+    optional bool strict = 3;           // non-lazy umount
+    optional string target = 4;         // path in container, "" - anon, default - "***" - all
+}
+
+
+message TListVolumesRequest {
+    optional string path = 1;
+    optional string container = 2;
+    optional uint64 changed_since = 3;  // change_time >= changed_since
+}
+
+message TListVolumesResponse {
+    repeated TVolumeDescription volumes = 1;
+}
+
+
+message TTuneVolumeRequest {
+    optional string path = 1;
+    map<string, string> properties = 2;
+}
+
+// Layers
+
+
+message TListLayersRequest {
+    optional string place = 1;  // default from client container
+    optional string mask = 2;
+}
+
+message TListLayersResponse {
+    repeated string layer = 1;  // layer names (legacy)
+    repeated TLayer layers = 2; // layer with description
+}
+
+
+message TImportLayerRequest {
+    optional string layer = 1;
+    optional string tarball = 2;
+    optional bool merge = 3;
+    optional string place = 4;
+    optional string private_value = 5;
+    optional string compress = 6;
+    optional bool verbose_error = 7;
+}
+
+
+message TExportLayerRequest {
+    optional string volume = 1;
+    optional string tarball = 2;
+    optional string layer = 3;
+    optional string place = 4;
+    optional string compress = 5;
+}
+
+
+message TRemoveLayerRequest {
+    optional string layer = 1;
+    optional string place = 2;
+    optional bool async = 3;
+}
+
+
+message TGetLayerPrivateRequest {
+    optional string layer = 1;
+    optional string place = 2;
+}
+
+message TGetLayerPrivateResponse {
+    optional string private_value = 1;
+}
+
+
+message TSetLayerPrivateRequest {
+    optional string layer = 1;
+    optional string place = 2;
+    optional string private_value = 3;
+}
+
+
+// Storages
+
+
+message TListStoragesRequest {
+    optional string place = 1;
+    optional string mask = 2; // "name" - storage, "name/" - meta-storage
+}
+
+message TListStoragesResponse {
+    repeated TStorage storages = 1;
+    repeated TMetaStorage meta_storages = 2;
+}
+
+
+message TRemoveStorageRequest {
+    optional string name = 1;
+    optional string place = 2;
+}
+
+
+message TImportStorageRequest {
+    optional string name = 1;
+    optional string tarball = 2;
+    optional string place = 3;
+    optional string private_value = 5;
+    optional string compress = 6;
+}
+
+
+message TExportStorageRequest {
+    optional string name = 1;
+    optional string tarball = 2;
+    optional string place = 3;
+    optional string compress = 4;
+}
+
+
+// Docker images API
+
+
+message TDockerImageConfig {
+    repeated string cmd = 1;
+    repeated string env = 2;
+}
+
+message TDockerImage {
+    required string id = 1;
+    repeated string tags = 2;
+    repeated string digests = 3;
+    repeated string layers = 4;
+    optional uint64 size = 5;
+    optional TDockerImageConfig config = 6;
+}
+
+
+message TDockerImageStatusRequest {
+    required string name = 1;
+    optional string place = 2;
+}
+
+message TDockerImageStatusResponse {
+    optional TDockerImage image = 1;
+}
+
+
+message TDockerImageListRequest {
+    optional string place = 1;
+    optional string mask = 2;
+}
+
+message TDockerImageListResponse {
+    repeated TDockerImage images = 1;
+}
+
+
+message TDockerImagePullRequest {
+    required string name = 1;
+    optional string place = 2;
+    optional string auth_token = 3;
+    optional string auth_path = 4;
+    optional string auth_service = 5;
+}
+
+message TDockerImagePullResponse {
+    optional TDockerImage image = 1;
+}
+
+
+message TDockerImageRemoveRequest {
+    required string name = 1;
+    optional string place = 2;
+}

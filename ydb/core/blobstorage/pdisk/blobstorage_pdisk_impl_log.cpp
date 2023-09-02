@@ -371,6 +371,8 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
         FirstLogChunkToParseCommits = ReadUnaligned<ui32>(firstChunk);
     }
 
+    bool suppressCompatibilityCheck = Cfg->FeatureFlags.GetSuppressCompatibilityCheck();
+
     char *compatibilityInfoEnd = nullptr;
     if (sysLogRecord->Version >= PDISK_SYS_LOG_RECORD_VERSION_7) {
         Y_VERIFY(firstChunkEnd);
@@ -386,24 +388,27 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
 
         char *compatibilityInfo = reinterpret_cast<char*>(protoSizePtrEnd);
         compatibilityInfoEnd = compatibilityInfo + protoSize;
-        auto storedCompatibilityInfo = NKikimrConfig::TStoredCompatibilityInfo();
 
         minSize += protoSize;
         Y_VERIFY_S(lastSysLogRecord.size() >= minSize,
                 "SysLogRecord is too small, minSize# " << minSize << " size# " << lastSysLogRecord.size());
-    
-        bool success = storedCompatibilityInfo.ParseFromArray(compatibilityInfo, protoSize);
-        Y_VERIFY(success);
 
-        bool isCompatible = CompatibilityInfo.CheckCompatibility(&storedCompatibilityInfo,
-                NKikimrConfig::TCompatibilityRule::PDisk, errorReason);
+        if (!suppressCompatibilityCheck) {
+            auto storedCompatibilityInfo = NKikimrConfig::TStoredCompatibilityInfo();
+        
+            bool success = storedCompatibilityInfo.ParseFromArray(compatibilityInfo, protoSize);
+            Y_VERIFY(success);
 
-        if (!isCompatible) {
-            LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDiskId
-                << " Incompatible version, ErrorReason# " << errorReason);
-            return false;
+            bool isCompatible = CompatibilityInfo.CheckCompatibility(&storedCompatibilityInfo,
+                    NKikimrConfig::TCompatibilityRule::PDisk, errorReason);
+
+            if (!isCompatible) {
+                LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << (ui32)PDiskId
+                    << " Incompatible version, ErrorReason# " << errorReason);
+                return false;
+            }
         }
-    } else if (sysLogRecord->Version != 0) {
+    } else if (!suppressCompatibilityCheck && sysLogRecord->Version != 0) {
         // Sys log is not empty, but it doesn't contain compatibility info record
         TString error;
         bool isCompatible = CompatibilityInfo.CheckCompatibility(nullptr,

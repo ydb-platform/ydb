@@ -767,7 +767,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 icCommon->AcceptUUID.emplace_back(item);
             }
 
-            if (!nsConfig.GetSuppressVersionCheck()) {
+            if (!nsConfig.GetSuppressVersionCheck() && !Config.GetFeatureFlags().GetSuppressCompatibilityCheck()) {
                 icCommon->VersionInfo = VERSION;
                 CheckVersionTag();
 

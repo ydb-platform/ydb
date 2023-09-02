@@ -196,9 +196,10 @@ public:
                 bool success = stored->ParseFromString(state.GetValue<Schema::State::CompatibilityInfo>());
                 Y_VERIFY(success);
             }
-            if (!CompatibilityInfo.CheckCompatibility(stored ? &*stored : nullptr, 
-                    NKikimrConfig::TCompatibilityRule::BlobStorageController,
-                    CompatibilityError)) {
+            if (!AppData()->FeatureFlags.GetSuppressCompatibilityCheck() && !CompatibilityInfo.CheckCompatibility(
+                        stored ? &*stored : nullptr, 
+                        NKikimrConfig::TCompatibilityRule::BlobStorageController,
+                        CompatibilityError)) {
                 IncompatibleData = true;
                 return true;
             }

@@ -840,6 +840,7 @@ message TFeatureFlags {
     optional bool EnableTopicMessageMeta = 100 [default = false];
     optional bool EnableIcNodeCache = 101 [default = true];
     optional bool EnableTempTables = 102 [default = false];
+    optional bool SuppressCompatibilityCheck = 103 [default = false];
 }
 
 message THttpProxyConfig {

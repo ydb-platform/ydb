@@ -356,12 +356,13 @@ namespace NKikimr {
                                       const TVDiskIdShort &selfVDisk,
                                       std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
                                       const TString &entryPoint,
-                                      TString& errorReason) {
+                                      TString& errorReason,
+                                      bool suppressCompatibilityCheck) {
         try {
             TSyncerData n(logPrefix, notifyId, selfVDisk, top);
             TString serProto = WithoutSignature(Convert(selfVDisk, top, entryPoint));
             n.ParseWOSignature(serProto);
-            return n.CheckCompatibility(errorReason);
+            return suppressCompatibilityCheck || n.CheckCompatibility(errorReason);
         } catch (yexception e) {
             errorReason = e.what();
             return false;
@@ -373,12 +374,13 @@ namespace NKikimr {
                                       const TVDiskIdShort &selfVDisk,
                                       std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
                                       const TContiguousSpan &entryPoint,
-                                      TString& errorReason) {
+                                      TString& errorReason,
+                                      bool suppressCompatibilityCheck) {
         try {
             TSyncerData n(logPrefix, notifyId, selfVDisk, top);
             TString serProto = WithoutSignature(Convert(selfVDisk, top, entryPoint)); //FIXME(innokentii) unnecessary copy
             n.ParseWOSignature(serProto);
-            return n.CheckCompatibility(errorReason);
+            return suppressCompatibilityCheck || n.CheckCompatibility(errorReason);
         } catch (yexception e) {
             errorReason = e.what();
             return false;

@@ -889,10 +889,13 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     }
 
     using TCurrent = NKikimrConfig::TCurrentCompatibilityInfo;
-    void TestRestartWithDifferentVersion(TCurrent oldInfo, TCurrent newInfo, bool isCompatible) {
+    void TestRestartWithDifferentVersion(TCurrent oldInfo, TCurrent newInfo, bool isCompatible, bool suppressCompatibilityCheck = false) {
         TCompatibilityInfoTest::Reset(&oldInfo);
     
-        TActorTestContext testCtx({ false });
+        TActorTestContext testCtx({
+            .IsBad = false,
+            .SuppressCompatibilityCheck = suppressCompatibilityCheck,
+        });
         TVDiskMock vdisk(&testCtx);
         vdisk.InitFull();
         vdisk.SendEvLogSync();
@@ -959,6 +962,20 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
                 .Application = "trunk",
             }.ToPB(),
+            true
+        );
+    }
+
+    Y_UNIT_TEST(YdbVersionSuppressCompatibilityCheck) {
+        TestRestartWithDifferentVersion(
+            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
+                .Application = "trunk",
+            }.ToPB(),
+            TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
+                .Application = "ydb",
+                .Version = TCompatibilityInfo::TProtoConstructor::TVersion{ .Year = 23, .Major = 3, .Minor = 8, .Hotfix = 0 },
+            }.ToPB(),
+            true,
             true
         );
     }

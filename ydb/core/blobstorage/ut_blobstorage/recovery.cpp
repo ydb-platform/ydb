@@ -26,30 +26,44 @@ Y_UNIT_TEST_SUITE(CompatibilityInfo) {
 
     ui32 passPoisons = 1000;
 
-    void TesCompatibilityForComponent(TVersion oldVersion, TVersion newVersion, EComponentId componentId,
-            bool isCompatible, TValidateCallback validateCallback) {
+    void TestCompatibilityForComponent(std::optional<TVersion> oldVersion, std::optional<TVersion> newVersion, EComponentId componentId,
+            bool isCompatible, TValidateCallback validateCallback, bool suppressCompatibilityCheck = false) {
         passPoisons = 1000;
         const TString build = "ydb";
     
-        auto oldInfoConstructor = TCurrentConstructor{
-            .Application = build,
-            .Version = TYdbVersion{
-                .Year = std::get<0>(oldVersion),
-                .Major = std::get<1>(oldVersion),
-                .Minor = std::get<2>(oldVersion),
-                .Hotfix = std::get<3>(oldVersion)
-            },
-        };
+        TCurrentConstructor oldInfoConstructor;
+        if (oldVersion) {
+            oldInfoConstructor = TCurrentConstructor{
+                .Application = build,
+                .Version = TYdbVersion{
+                    .Year = std::get<0>(*oldVersion),
+                    .Major = std::get<1>(*oldVersion),
+                    .Minor = std::get<2>(*oldVersion),
+                    .Hotfix = std::get<3>(*oldVersion)
+                },
+            };
+        } else {
+            oldInfoConstructor = TCurrentConstructor{
+                .Application = "trunk",
+            };
+        }
 
-        auto newInfoConstructor = TCurrentConstructor{
-            .Application = "ydb",
-            .Version = TYdbVersion{
-                .Year = std::get<0>(newVersion),
-                .Major = std::get<1>(newVersion),
-                .Minor = std::get<2>(newVersion),
-                .Hotfix = std::get<3>(newVersion)
-            },
-        };
+        TCurrentConstructor newInfoConstructor;
+        if (newVersion) {
+            newInfoConstructor = TCurrentConstructor{
+                .Application = build,
+                .Version = TYdbVersion{
+                    .Year = std::get<0>(*newVersion),
+                    .Major = std::get<1>(*newVersion),
+                    .Minor = std::get<2>(*newVersion),
+                    .Hotfix = std::get<3>(*newVersion)
+                },
+            };
+        } else {
+            newInfoConstructor = TCurrentConstructor{
+                .Application = "trunk",
+            };
+        }
 
         // Disable compatibility checks for all other components
         for (auto component : Components) {
@@ -75,6 +89,7 @@ Y_UNIT_TEST_SUITE(CompatibilityInfo) {
         TEnvironmentSetup env{{
             .NodeCount = 1,
             .Erasure = TBlobStorageGroupType::ErasureNone,
+            .SuppressCompatibilityCheck = suppressCompatibilityCheck,
         }};
         env.CreateBoxAndPool(1, 1);
 
@@ -157,26 +172,34 @@ Y_UNIT_TEST_SUITE(CompatibilityInfo) {
     auto componentBSController = NKikimrConfig::TCompatibilityRule::BlobStorageController;
 
     Y_UNIT_TEST(VDiskCompatible) {
-        TesCompatibilityForComponent({ 23, 1, 19, 0 }, { 23, 2, 1, 0 }, componentVDisk, true, ValidateForVDisk);
+        TestCompatibilityForComponent(TVersion{ 23, 1, 19, 0 }, TVersion{ 23, 2, 1, 0 }, componentVDisk, true, ValidateForVDisk);
     }
 
     Y_UNIT_TEST(VDiskIncompatible) {
-        TesCompatibilityForComponent({ 23, 1, 19, 0 }, { 23, 3, 1, 0 }, componentVDisk, false, ValidateForVDisk);
+        TestCompatibilityForComponent(TVersion{ 23, 1, 19, 0 }, TVersion{ 23, 3, 1, 0 }, componentVDisk, false, ValidateForVDisk);
     }
 
     Y_UNIT_TEST(VDiskIncompatibleWithDefault) {
-        TesCompatibilityForComponent({ 24, 2, 1, 0 }, { 24, 2, 1, 0 }, componentVDisk, true, ValidateForVDisk);
+        TestCompatibilityForComponent(TVersion{ 24, 2, 1, 0 }, TVersion{ 24, 2, 1, 0 }, componentVDisk, true, ValidateForVDisk);
+    }
+
+    Y_UNIT_TEST(VDiskSuppressCompatibilityCheck) {
+        TestCompatibilityForComponent(std::nullopt, TVersion{ 23, 3, 8, 0 }, componentVDisk, true, ValidateForVDisk, true);
     }
 
     Y_UNIT_TEST(BSControllerCompatible) {
-        TesCompatibilityForComponent({ 23, 1, 19, 0 }, { 23, 2, 1, 0 }, componentBSController, true, ValidateForBSController);
+        TestCompatibilityForComponent(TVersion{ 23, 1, 19, 0 }, TVersion{ 23, 2, 1, 0 }, componentBSController, true, ValidateForBSController);
     }
 
     Y_UNIT_TEST(BSControllerIncompatible) {
-        TesCompatibilityForComponent({ 23, 1, 19, 0 }, { 23, 3, 1, 0 }, componentBSController, false, ValidateForBSController);
+        TestCompatibilityForComponent(TVersion{ 23, 1, 19, 0 }, TVersion{ 23, 3, 1, 0 }, componentBSController, false, ValidateForBSController);
     }
 
     Y_UNIT_TEST(BSControllerIncompatibleWithDefault) {
-        TesCompatibilityForComponent({ 24, 2, 1, 0 }, { 24, 2, 1, 0 }, componentBSController, true, ValidateForBSController);
+        TestCompatibilityForComponent(TVersion{ 24, 2, 1, 0 }, TVersion{ 24, 2, 1, 0 }, componentBSController, true, ValidateForBSController);
+    }
+
+    Y_UNIT_TEST(BSControllerSuppressCompatibilityCheck) {
+        TestCompatibilityForComponent(std::nullopt, TVersion{ 23, 3, 8, 0 }, componentBSController, true, ValidateForBSController, true);
     }
 }

@@ -23,7 +23,7 @@ TCompatibilityInfo::TCompatibilityInfo() {
     // Current CompatibilityInfo
     /////////////////////////////////////////////////////////
     auto current = TCurrentConstructor{
-        .Application = "trunk"
+        .Application = "ydb"
     }.ToPB();
 
     // bool success = CompleteFromTag(current);
@@ -226,14 +226,13 @@ bool CheckNonPresent(const TCurrent* current, TComponentId componentId, TString&
     }
 }
 
-// By default two stable versions are considered compatible, if their Year is the same 
-// and Major differ for no more, than 1, regardless of their Application
-// Two unstable versions are compatible only if they have the same Application
-// Stable and non-stable versions are not compatible by default
-bool CheckDefaultRules(TString currentApplication, const NKikimrConfig::TYdbVersion* currentVersion, 
-        TString storedApplication, const NKikimrConfig::TYdbVersion* storedVersion) {
+// Default rules:
+// Two stable versions are compatible if their Year's are the same and their Major's differ for no more, than 1.
+// Two unstable versions are compatible.
+// Stable and non-stable versions are not compatible.
+bool CheckDefaultRules(const NKikimrConfig::TYdbVersion* currentVersion, const NKikimrConfig::TYdbVersion* storedVersion) {
     if (!currentVersion && !storedVersion) {
-        return currentApplication == storedApplication;
+        return true;
     }
     if (currentVersion && storedVersion) {
         if (!currentVersion->HasYear() || !storedVersion->HasYear()) {
@@ -255,22 +254,26 @@ bool CheckRule(std::optional<TString> app, const NKikimrConfig::TYdbVersion* ver
     if (app) {
         if (rule.HasApplication()) {
             if (rule.GetApplication() != *app) {
+                // this rule is not applicable to different application
                 return false;
             }
-            if (version == nullptr) {
+            if (!version) {
+                // rule for stable versions is not applicable to trunk
                 return true;
             }
         } else {
-            // non-stable app is incompatible with stable
-            if (version == nullptr) {
+            if (!version) {
+                // rule for stable versions is not applicable to trunk
                 return false;
             }
         }
     } else {
-        if (version == nullptr) {
+        if (!version) {
+            // neither application nor version is set, should not reach here
             return false;
         }
         if (rule.HasApplication()) {
+            // only rules, which are common to all applications, apply to version with no application info
             return false;
         }
     }
@@ -281,7 +284,7 @@ bool CheckRule(std::optional<TString> app, const NKikimrConfig::TYdbVersion* ver
 
 bool TCompatibilityInfo::CheckCompatibility(const TCurrent* current, const TStored* stored, TComponentId componentId, TString& errorReason) const {
     Y_VERIFY(current);
-    if (stored == nullptr) {
+    if (!stored) {
         // version record is not found
         return CheckNonPresent(current, componentId, errorReason);
     }
@@ -326,7 +329,7 @@ bool TCompatibilityInfo::CheckCompatibility(const TCurrent* current, const TStor
     if (permitted) {
         return true;
     } else {
-        if (CheckDefaultRules(currentApplication, currentVersion, storedApplication, storedVersion)) {
+        if (CheckDefaultRules(currentVersion, storedVersion)) {
             return true;
         } else {
             errorReason = "Versions are not compatible neither by common rule nor by provided rule sets, "
@@ -564,8 +567,8 @@ bool TCompatibilityInfo::CheckCompatibility(const TCurrent* current, const TOldF
 
     auto peerVersion = ParseVersionFromTag(peer.Tag);
     if (!peerVersion) {
-        // non-stable version is peer
-        if (current->GetApplication() == peer.Tag) {
+        if (!current->HasVersion()) {
+            // both peer and current versions are non-stable
             return true;
         }
         peerApplication = peer.Tag;

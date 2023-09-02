@@ -957,10 +957,10 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     Y_UNIT_TEST(YdbVersionTrunk) {
         TestRestartWithDifferentVersion(
             TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
-                .Application = "trunk",
+                .Application = "ydb",
             }.ToPB(),
             TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo{
-                .Application = "trunk",
+                .Application = "ydb",
             }.ToPB(),
             true
         );

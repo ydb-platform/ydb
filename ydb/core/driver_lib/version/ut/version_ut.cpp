@@ -603,7 +603,6 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         );
     }
 
-
     Y_UNIT_TEST(YDBAndNbs) {
         Test(
                 TCurrentCompatibilityInfo{
@@ -666,6 +665,31 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
                     }
                 }, 
                 true
+        );
+    }
+
+    Y_UNIT_TEST(TrunkYDBAndNbs) {
+        Test(
+                TCurrentCompatibilityInfo{
+                    .Application = "ydb",
+                }, 
+                TCurrentCompatibilityInfo{
+                    .Application = "nbs",
+                }, 
+                true,
+                EComponentId::Interconnect
+        );
+    }
+    Y_UNIT_TEST(TrunkAndStable) {
+        Test(
+                TCurrentCompatibilityInfo{
+                    .Application = "ydb",
+                }, 
+                TCurrentCompatibilityInfo{
+                    .Application = "ydb",
+                    .Version = TVersion{ .Year = 24, .Major = 3, .Minor = 1, .Hotfix = 0 },
+                }, 
+                false
         );
     }
 
@@ -753,7 +777,7 @@ Y_UNIT_TEST_SUITE(OldFormat) {
     Y_UNIT_TEST(Trunk) {
         TestOldFormat(
                 TCurrentCompatibilityInfo{
-                    .Application = "trunk"
+                    .Application = "ydb"
                 }, 
                 TOldFormat{
                     .Tag = "trunk",

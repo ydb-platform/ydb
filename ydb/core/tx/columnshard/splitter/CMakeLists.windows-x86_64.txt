@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(tx-columnshard-splitter)
 target_link_libraries(tx-columnshard-splitter PUBLIC
@@ -13,13 +14,16 @@ target_link_libraries(tx-columnshard-splitter PUBLIC
   yutil
   libs-apache-arrow
   columnshard-engines-storage
-  columnshard-engines-scheme
 )
 target_sources(tx-columnshard-splitter PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/splitter/splitter.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/splitter/batch_slice.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/splitter/chunks.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/splitter/simple.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/splitter/rb_splitter.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/splitter/stats.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/splitter/column_info.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/splitter/settings.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/splitter/scheme_info.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/splitter/blob_info.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/splitter/chunk_meta.cpp
 )

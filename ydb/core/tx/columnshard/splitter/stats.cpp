@@ -3,22 +3,22 @@
 
 namespace NKikimr::NOlap {
 
-std::optional<NKikimr::NOlap::TColumnSerializationStat> TSerializationStats::GetStatsForRecordBatch(const std::shared_ptr<arrow::Schema>& schema) const {
-    std::optional<TColumnSerializationStat> result;
+std::optional<TBatchSerializationStat> TSerializationStats::GetStatsForRecordBatch(const std::shared_ptr<arrow::Schema>& schema) const {
+    std::optional<TBatchSerializationStat> result;
     for (auto&& i : schema->fields()) {
         auto columnInfo = GetColumnInfo(i->name());
         if (!columnInfo) {
             return {};
         } else if (!result) {
-            result = *columnInfo;
+            result = TBatchSerializationStat(*columnInfo);
         } else {
-            result->Add(*columnInfo);
+            result->Merge(*columnInfo);
         }
     }
     return result;
 }
 
-std::optional<NKikimr::NOlap::TColumnSerializationStat> TSerializationStats::GetStatsForRecordBatch(const std::shared_ptr<arrow::RecordBatch>& rb) const {
+std::optional<TBatchSerializationStat> TSerializationStats::GetStatsForRecordBatch(const std::shared_ptr<arrow::RecordBatch>& rb) const {
     return GetStatsForRecordBatch(rb->schema());
 }
 

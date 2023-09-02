@@ -44,4 +44,28 @@ public:
     TCommonCountersOwner(const TString& module, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals = nullptr);
 };
 
+class TValueGuard {
+private:
+    NMonitoring::TDynamicCounters::TCounterPtr Value;
+    TAtomicCounter Counter;
+public:
+    TValueGuard(NMonitoring::TDynamicCounters::TCounterPtr value)
+        : Value(value) {
+
+    }
+
+    ~TValueGuard() {
+        Sub(Counter.Val());
+    }
+
+    void Add(const i64 value) {
+        Counter.Add(value);
+        Value->Add(value);
+    }
+    void Sub(const i64 value) {
+        Counter.Sub(value);
+        Value->Sub(value);
+    }
+};
+
 }

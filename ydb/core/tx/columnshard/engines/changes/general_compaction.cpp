@@ -19,7 +19,7 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
     auto resultSchema = context.SchemaVersions.GetLastSchema();
     for (auto&& i : portions) {
         auto dataSchema = context.SchemaVersions.GetSchema(i.GetPortionInfo().GetMinSnapshot());
-        batches.emplace_back(i.GetBatch(*dataSchema, *resultSchema));
+        batches.emplace_back(i.GetBatch(dataSchema, *resultSchema));
         Y_VERIFY(NArrow::IsSorted(batches.back(), resultSchema->GetIndexInfo().GetReplaceKey()));
     }
 
@@ -41,7 +41,7 @@ void TGeneralCompactColumnEngineChanges::DoWriteIndexComplete(NColumnShard::TCol
 void TGeneralCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     TBase::DoStart(self);
     auto& g = *GranuleMeta;
-    self.CSCounters.OnSplitCompactionInfo(g.GetAdditiveSummary().GetOther().GetPortionsSize(), g.GetAdditiveSummary().GetOther().GetPortionsCount());
+    self.CSCounters.OnSplitCompactionInfo(g.GetAdditiveSummary().GetCompacted().GetPortionsSize(), g.GetAdditiveSummary().GetCompacted().GetPortionsCount());
 }
 
 NColumnShard::ECumulativeCounters TGeneralCompactColumnEngineChanges::GetCounterIndex(const bool isSuccess) const {

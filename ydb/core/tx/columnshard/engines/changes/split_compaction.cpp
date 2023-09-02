@@ -400,7 +400,7 @@ void TSplitCompactColumnEngineChanges::DoWriteIndexComplete(NColumnShard::TColum
 void TSplitCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     TBase::DoStart(self);
     auto& g = *GranuleMeta;
-    self.CSCounters.OnSplitCompactionInfo(g.GetAdditiveSummary().GetOther().GetPortionsSize(), g.GetAdditiveSummary().GetOther().GetPortionsCount());
+    self.CSCounters.OnSplitCompactionInfo(g.GetAdditiveSummary().GetCompacted().GetPortionsSize(), g.GetAdditiveSummary().GetCompacted().GetPortionsCount());
 }
 
 NColumnShard::ECumulativeCounters TSplitCompactColumnEngineChanges::GetCounterIndex(const bool isSuccess) const {

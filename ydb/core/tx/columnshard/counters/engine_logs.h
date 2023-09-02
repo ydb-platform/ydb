@@ -10,7 +10,6 @@ namespace NKikimr::NColumnShard {
 class TBaseGranuleDataClassSummary {
 protected:
     i64 PortionsSize = 0;
-    i64 MaxColumnsSize = 0;
     i64 PortionsCount = 0;
     i64 RecordsCount = 0;
 public:
@@ -20,15 +19,20 @@ public:
     i64 GetRecordsCount() const {
         return RecordsCount;
     }
-    i64 GetMaxColumnsSize() const {
-        return MaxColumnsSize;
-    }
     i64 GetPortionsCount() const {
         return PortionsCount;
     }
 
     TString DebugString() const {
         return TStringBuilder() << "size:" << PortionsSize << ";count:" << PortionsCount << ";";
+    }
+
+    TBaseGranuleDataClassSummary operator+(const TBaseGranuleDataClassSummary& item) const {
+        TBaseGranuleDataClassSummary result;
+        result.PortionsSize = PortionsSize + item.PortionsSize;
+        result.PortionsCount = PortionsCount + item.PortionsCount;
+        result.RecordsCount = RecordsCount + item.RecordsCount;
+        return result;
     }
 };
 
@@ -81,16 +85,10 @@ public:
     {
     }
 
-    void OnFullData(const TBaseGranuleDataClassSummary& dataInfo) const {
-        FullData.OnPortionsInfo(dataInfo);
-    }
-
-    void OnInsertedData(const TBaseGranuleDataClassSummary& dataInfo) const {
-        InsertedData.OnPortionsInfo(dataInfo);
-    }
-
-    void OnCompactedData(const TBaseGranuleDataClassSummary& dataInfo) const {
-        CompactedData.OnPortionsInfo(dataInfo);
+    void OnPortionsDataRefresh(const TBaseGranuleDataClassSummary& inserted, const TBaseGranuleDataClassSummary& compacted) const {
+        FullData.OnPortionsInfo(inserted + compacted);
+        InsertedData.OnPortionsInfo(inserted);
+        CompactedData.OnPortionsInfo(compacted);
     }
 };
 
@@ -175,17 +173,36 @@ public:
                 Counters.emplace(i.first, TLineGuard(i.second));
             }
         }
-        void Add(const i64 value) {
-            GetLineGuard(value).Add(value);
+        void Add(const i64 value, const i64 count) {
+            GetLineGuard(value).Add(count);
         }
 
-        void Sub(const i64 value) {
-            GetLineGuard(value).Sub(value);
+        void Sub(const i64 value, const i64 count) {
+            GetLineGuard(value).Sub(count);
         }
     };
 
     std::shared_ptr<TGuard> BuildGuard() const {
         return std::make_shared<TGuard>(*this);
+    }
+
+    TIncrementalHistogram(const TString& moduleId, const TString& metricId, const TString& category, const std::set<i64>& values)
+        : TBase(moduleId) {
+        DeepSubGroup("metric", metricId);
+        if (category) {
+            DeepSubGroup("category", category);
+        }
+        std::optional<TString> predName;
+        for (auto&& i : values) {
+            if (!predName) {
+                Counters.emplace(i, TBase::GetValue("(-Inf," + ::ToString(i) + "]"));
+            } else {
+                Counters.emplace(i, TBase::GetValue("(" + *predName + "," + ::ToString(i) + "]"));
+            }
+            predName = ::ToString(i);
+        }
+        Y_VERIFY(predName);
+        PlusInf = TBase::GetValue("(" + *predName + ",+Inf)");
     }
 
     TIncrementalHistogram(const TString& moduleId, const TString& metricId, const TString& category, const std::map<i64, TString>& values)
@@ -247,12 +264,12 @@ public:
 
         void OnNewBlob(const NOlap::NPortion::EProduced produced, const ui64 size) const {
             Y_VERIFY((ui32)produced < Guards.size());
-            Guards[(ui32)produced]->Add(size);
+            Guards[(ui32)produced]->Add(size, size);
         }
 
         void OnDropBlob(const NOlap::NPortion::EProduced produced, const ui64 size) const {
             Y_VERIFY((ui32)produced < Guards.size());
-            Guards[(ui32)produced]->Sub(size);
+            Guards[(ui32)produced]->Sub(size, size);
         }
 
     };

@@ -18,6 +18,7 @@ protected:
     virtual void DoWriteIndexComplete(NColumnShard::TColumnShard& /*self*/, TWriteIndexCompleteContext& /*context*/) override {
 
     }
+    TSaverContext GetSaverContext(const ui32 pathId) const;
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
     std::vector<TPortionInfoWithBlobs> MakeAppendedPortions(const ui64 pathId,
         const std::shared_ptr<arrow::RecordBatch> batch,

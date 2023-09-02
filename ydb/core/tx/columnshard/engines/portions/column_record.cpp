@@ -1,6 +1,5 @@
 #include "column_record.h"
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/tx/columnshard/common/scalars.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
@@ -23,26 +22,9 @@ TChunkMeta::TChunkMeta(const TColumnChunkLoadContext& context, const TIndexInfo&
     }
 }
 
-TChunkMeta::TChunkMeta(const std::shared_ptr<arrow::Array>& column, const ui32 columnId, const TIndexInfo& indexInfo) {
-    Y_VERIFY(column);
-    Y_VERIFY(column->length());
-    NumRows = column->length();
-    RawBytes = NArrow::GetArrayDataSize(column);
-
-    if (indexInfo.GetMinMaxIdxColumns().contains(columnId)) {
-        std::pair<i32, i32> minMaxPos = {0, (column->length() - 1)};
-        if (!indexInfo.IsSortedColumn(columnId)) {
-            minMaxPos = NArrow::FindMinMaxPosition(column);
-            Y_VERIFY(minMaxPos.first >= 0);
-            Y_VERIFY(minMaxPos.second >= 0);
-        }
-
-        Min = NArrow::GetScalar(column, minMaxPos.first);
-        Max = NArrow::GetScalar(column, minMaxPos.second);
-
-        Y_VERIFY(Min);
-        Y_VERIFY(Max);
-    }
+TChunkMeta::TChunkMeta(const std::shared_ptr<arrow::Array>& column, const ui32 columnId, const TIndexInfo& indexInfo)
+    : TBase(column, indexInfo.GetMinMaxIdxColumns().contains(columnId), indexInfo.IsSortedColumn(columnId))
+{
 }
 
 NKikimrTxColumnShard::TIndexColumnMeta TChunkMeta::SerializeToProto() const {

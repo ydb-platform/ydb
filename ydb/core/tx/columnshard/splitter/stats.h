@@ -13,25 +13,50 @@
 
 namespace NKikimr::NOlap {
 
-class TColumnSerializationStat {
-private:
-    YDB_READONLY(ui64, SerializedBytes, 0);
-    YDB_READONLY(ui64, RecordsCount, 0);
+class TSimpleSerializationStat {
+protected:
+    ui64 SerializedBytes = 0;
+    ui64 RecordsCount = 0;
+    ui64 RawBytes = 0;
 public:
-    TColumnSerializationStat(const ui64 bytes, const ui64 recordsCount)
+    TSimpleSerializationStat() = default;
+    TSimpleSerializationStat(const ui64 bytes, const ui64 recordsCount, const ui64 rawBytes)
         : SerializedBytes(bytes)
         , RecordsCount(recordsCount)
+        , RawBytes(rawBytes)
     {
+        Y_VERIFY(SerializedBytes);
         Y_VERIFY(RecordsCount);
+        Y_VERIFY(RawBytes);
     }
 
-    TColumnSerializationStat RecalcForRecordsCount(const ui64 recordsCount) const {
-        return TColumnSerializationStat(SerializedBytes / RecordsCount * recordsCount, recordsCount);
+    ui64 GetSerializedBytes() const{
+        return SerializedBytes;
+    }
+    ui64 GetRecordsCount() const{
+        return RecordsCount;
+    }
+    ui64 GetRawBytes() const {
+        return RawBytes;
     }
 
-    void Add(const TColumnSerializationStat& item) {
-        SerializedBytes += item.SerializedBytes;
-        AFL_VERIFY(RecordsCount == item.RecordsCount)("self_count", RecordsCount)("new_count", item.RecordsCount);
+    void AddStat(const TSimpleSerializationStat& stat) {
+        SerializedBytes += stat.SerializedBytes;
+        RecordsCount += stat.RecordsCount;
+        RawBytes += stat.RawBytes;
+    }
+
+    void RemoveStat(const TSimpleSerializationStat& stat) {
+        Y_VERIFY(SerializedBytes >= stat.SerializedBytes);
+        SerializedBytes -= stat.SerializedBytes;
+        Y_VERIFY(RecordsCount >= stat.RecordsCount);
+        RecordsCount -= stat.RecordsCount;
+        Y_VERIFY(RawBytes >= stat.RawBytes);
+        RawBytes -= stat.RawBytes;
+    }
+
+    double GetPackedRecordSize() const {
+        return (double)SerializedBytes / RecordsCount;
     }
 
     std::optional<ui64> PredictOptimalPackRecordsCount(const ui64 recordsCount, const ui64 blobSize) const {
@@ -42,7 +67,7 @@ public:
         if (fullSize < blobSize) {
             return recordsCount;
         } else {
-            return std::floor(1.0 * fullSize / blobSize * recordsCount);
+            return std::floor(1.0 * blobSize / SerializedBytes * RecordsCount);
         }
     }
 
@@ -59,16 +84,70 @@ public:
     }
 };
 
+class TBatchSerializationStat: public TSimpleSerializationStat {
+private:
+    using TBase = TSimpleSerializationStat;
+public:
+    using TBase::TBase;
+    TBatchSerializationStat(const TSimpleSerializationStat& item)
+        : TBase(item)
+    {
+
+    }
+
+    void Merge(const TSimpleSerializationStat& item) {
+        SerializedBytes += item.GetSerializedBytes();
+        RawBytes += item.GetRawBytes();
+        AFL_VERIFY(RecordsCount == item.GetRecordsCount())("self_count", RecordsCount)("new_count", item.GetRecordsCount());
+    }
+
+};
+
+class TColumnSerializationStat: public TSimpleSerializationStat {
+private:
+    YDB_READONLY(ui32, ColumnId, 0);
+    YDB_READONLY_DEF(std::string, ColumnName);
+public:
+    TColumnSerializationStat(const ui32 columnId, const std::string& columnName)
+        : ColumnId(columnId)
+        , ColumnName(columnName) {
+
+    }
+
+    TColumnSerializationStat RecalcForRecordsCount(const ui64 recordsCount) const {
+        TColumnSerializationStat result(ColumnId, ColumnName);
+        result.Merge(TSimpleSerializationStat(SerializedBytes / RecordsCount * recordsCount, recordsCount, RawBytes / RecordsCount * recordsCount));
+        return result;
+    }
+
+    void Merge(const TSimpleSerializationStat& item) {
+        SerializedBytes += item.GetSerializedBytes();
+        RawBytes += item.GetRawBytes();
+        RecordsCount += item.GetRecordsCount();
+    }
+};
+
 class TSerializationStats {
 private:
     std::deque<TColumnSerializationStat> ColumnStat;
     std::map<ui32, TColumnSerializationStat*> StatsByColumnId;
     std::map<std::string, TColumnSerializationStat*> StatsByColumnName;
 public:
-    void AddStat(const ui32 columnId, const std::string& fieldName, const TColumnSerializationStat& info) {
-        ColumnStat.emplace_back(info);
-        StatsByColumnId.emplace(columnId, &ColumnStat.back());
-        StatsByColumnName.emplace(fieldName, &ColumnStat.back());
+    void Merge(const TSerializationStats& item) {
+        for (auto&& i : item.ColumnStat) {
+            AddStat(i);
+        }
+    }
+
+    void AddStat(const TColumnSerializationStat& info) {
+        auto it = StatsByColumnId.find(info.GetColumnId());
+        if (it == StatsByColumnId.end()) {
+            ColumnStat.emplace_back(info);
+            AFL_VERIFY(StatsByColumnId.emplace(info.GetColumnId(), &ColumnStat.back()).second)("column_id", info.GetColumnId())("column_name", info.GetColumnName());
+            AFL_VERIFY(StatsByColumnName.emplace(info.GetColumnName(), &ColumnStat.back()).second)("column_id", info.GetColumnId())("column_name", info.GetColumnName());
+        } else {
+            it->second->Merge(info);
+        }
     }
 
     std::optional<TColumnSerializationStat> GetColumnInfo(const ui32 columnId) const {
@@ -89,8 +168,8 @@ public:
         }
     }
 
-    std::optional<TColumnSerializationStat> GetStatsForRecordBatch(const std::shared_ptr<arrow::RecordBatch>& rb) const;
-    std::optional<TColumnSerializationStat> GetStatsForRecordBatch(const std::shared_ptr<arrow::Schema>& schema) const;
+    std::optional<TBatchSerializationStat> GetStatsForRecordBatch(const std::shared_ptr<arrow::RecordBatch>& rb) const;
+    std::optional<TBatchSerializationStat> GetStatsForRecordBatch(const std::shared_ptr<arrow::Schema>& schema) const;
 };
 
 }

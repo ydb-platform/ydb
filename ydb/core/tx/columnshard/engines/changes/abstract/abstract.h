@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/engines/portions/with_blobs.h>
 #include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/tx/columnshard/splitter/settings.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
 

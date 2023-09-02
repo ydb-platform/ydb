@@ -167,6 +167,7 @@ std::vector<const NKikimr::NOlap::TColumnRecord*> TPortionInfo::GetColumnChunksP
     for (auto&& c : Records) {
         if (c.ColumnId == columnId) {
             Y_VERIFY(c.Chunk == result.size());
+            Y_VERIFY(c.GetMeta().GetNumRowsVerified());
             result.emplace_back(&c);
         }
     }

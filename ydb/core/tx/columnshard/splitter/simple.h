@@ -3,6 +3,8 @@
 #include <ydb/core/tx/columnshard/counters/splitter.h>
 #include <ydb/core/tx/columnshard/engines/scheme/column_features.h>
 #include "stats.h"
+#include "chunks.h"
+#include "scheme_info.h"
 
 namespace NKikimr::NOlap {
 
@@ -138,6 +140,46 @@ public:
     std::vector<TSaverSplittedChunk> Split(std::shared_ptr<arrow::RecordBatch> data, const ui32 maxBlobSize) const;
     std::vector<TSaverSplittedChunk> SplitByRecordsCount(std::shared_ptr<arrow::RecordBatch> data, const std::vector<ui64>& recordsCount) const;
     std::vector<TSaverSplittedChunk> SplitBySizes(std::shared_ptr<arrow::RecordBatch> data, const TString& dataSerialization, const std::vector<ui64>& splitPartSizesExt) const;
+};
+
+class TSplittedColumnChunk: public IPortionColumnChunk {
+private:
+    using TBase = IPortionColumnChunk;
+    TSaverSplittedChunk Data;
+    ISchemaDetailInfo::TPtr SchemaInfo;
+protected:
+    virtual std::vector<IPortionColumnChunk::TPtr> DoInternalSplit(const TColumnSaver& saver, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const std::vector<ui64>& splitSizes) const override;
+    virtual const TString& DoGetData() const override {
+        return Data.GetSerializedChunk();
+    }
+    virtual ui32 DoGetRecordsCount() const override {
+        return Data.GetRecordsCount();
+    }
+
+    virtual TString DoDebugString() const override;
+
+    virtual TSimpleChunkMeta DoBuildSimpleChunkMeta() const override {
+        return TSimpleChunkMeta(Data.GetColumn(), SchemaInfo->NeedMinMaxForColumn(ColumnId), SchemaInfo->IsSortedColumn(ColumnId));
+    }
+
+public:
+
+    i64 GetSize() const {
+        return Data.GetSerializedChunk().size();
+    }
+
+    const TSaverSplittedChunk& GetData() const {
+        return Data;
+    }
+
+    TSplittedColumnChunk() = default;
+
+    TSplittedColumnChunk(const ui32 columnId, const TSaverSplittedChunk& data, ISchemaDetailInfo::TPtr schemaInfo)
+        : TBase(columnId)
+        , Data(data)
+        , SchemaInfo(schemaInfo) {
+
+    }
 };
 
 }

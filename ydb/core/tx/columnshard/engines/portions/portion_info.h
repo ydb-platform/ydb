@@ -25,6 +25,14 @@ public:
 
     std::vector<const TColumnRecord*> GetColumnChunksPointers(const ui32 columnId) const;
 
+    TSerializationStats GetSerializationStat(const ISnapshotSchema& schema) const {
+        TSerializationStats result;
+        for (auto&& i : Records) {
+            result.AddStat(i.GetSerializationStat(schema.GetFieldByColumnIdVerified(i.ColumnId)->name()));
+        }
+        return result;
+    }
+
     void ResetMeta() {
         Meta = TPortionMeta();
     }

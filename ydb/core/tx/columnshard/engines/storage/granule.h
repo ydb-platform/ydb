@@ -35,106 +35,52 @@ public:
 class TDataClassSummary: public NColumnShard::TBaseGranuleDataClassSummary {
 private:
     friend class TGranuleMeta;
+    THashMap<ui32, TSimpleSerializationStat> ColumnStats;
 public:
+    const THashMap<ui32, TSimpleSerializationStat>& GetColumnStats() const {
+        return ColumnStats;
+    }
+
     void AddPortion(const TPortionInfo& info) {
         const auto sizes = info.BlobsSizes();
         PortionsSize += sizes.first;
-        MaxColumnsSize += sizes.second;
         RecordsCount += info.NumRows();
         ++PortionsCount;
+
+        for (auto&& c : info.Records) {
+            auto it = ColumnStats.find(c.ColumnId);
+            if (it == ColumnStats.end()) {
+                it = ColumnStats.emplace(c.ColumnId, c.GetSerializationStat()).first;
+            } else {
+                it->second.AddStat(c.GetSerializationStat());
+            }
+        }
     }
 
     void RemovePortion(const TPortionInfo& info) {
         const auto sizes = info.BlobsSizes();
         PortionsSize -= sizes.first;
         Y_VERIFY(PortionsSize >= 0);
-        MaxColumnsSize -= sizes.second;
-        Y_VERIFY(MaxColumnsSize >= 0);
         RecordsCount -= info.NumRows();
         Y_VERIFY(RecordsCount >= 0);
         --PortionsCount;
         Y_VERIFY(PortionsCount >= 0);
-    }
 
-    TDataClassSummary operator+(const TDataClassSummary& item) const {
-        TDataClassSummary result;
-        result.PortionsSize = PortionsSize + item.PortionsSize;
-        result.MaxColumnsSize = MaxColumnsSize + item.MaxColumnsSize;
-        result.PortionsCount = PortionsCount + item.PortionsCount;
-        result.RecordsCount = RecordsCount + item.RecordsCount;
-        return result;
-    }
-};
-
-class TColumnSummary {
-private:
-    ui32 ColumnId;
-    ui64 PackedBlobsSize = 0;
-    ui64 PackedRecordsCount = 0;
-    ui64 InsertedBlobsSize = 0;
-    ui64 InsertedRecordsCount = 0;
-public:
-    void AddRecordsData(const bool isInserted, const ui64 records) {
-        if (isInserted) {
-            InsertedRecordsCount += records;
-        } else {
-            PackedRecordsCount += records;
+        for (auto&& c : info.Records) {
+            auto it = ColumnStats.find(c.ColumnId);
+            if (it == ColumnStats.end()) {
+                it = ColumnStats.emplace(c.ColumnId, c.GetSerializationStat()).first;
+            } else {
+                it->second.RemoveStat(c.GetSerializationStat());
+            }
         }
-    }
-
-    void AddBlobsData(const bool isInserted, const ui64 bytes) {
-        if (isInserted) {
-            InsertedBlobsSize += bytes;
-        } else {
-            PackedBlobsSize += bytes;
-        }
-    }
-
-    TColumnSummary(const ui32 columnId)
-        : ColumnId(columnId)
-    {
-
-    }
-
-    ui32 GetColumnId() const {
-        return ColumnId;
-    }
-
-    ui32 GetRecordsCount() const {
-        return PackedRecordsCount + InsertedRecordsCount;
-    }
-
-    ui64 GetBlobsSize() const {
-        return PackedBlobsSize + InsertedBlobsSize;
-    }
-
-    ui32 GetPackedRecordsCount() const {
-        return PackedRecordsCount;
-    }
-
-    ui64 GetPackedBlobsSize() const {
-        return PackedBlobsSize;
-    }
-};
-
-class TGranuleHardSummary {
-private:
-    std::vector<TColumnSummary> ColumnIdsSortedBySizeDescending;
-    bool DifferentBorders = false;
-    friend class TGranuleMeta;
-public:
-    bool GetDifferentBorders() const {
-        return DifferentBorders;
-    }
-    const std::vector<TColumnSummary>& GetColumnIdsSortedBySizeDescending() const {
-        return ColumnIdsSortedBySizeDescending;
     }
 };
 
 class TGranuleAdditiveSummary {
 private:
     TDataClassSummary Inserted;
-    TDataClassSummary Other;
+    TDataClassSummary Compacted;
     friend class TGranuleMeta;
 public:
     enum class ECompactionClass: ui32 {
@@ -148,8 +94,7 @@ public:
         if (GetActivePortionsCount() <= 1) {
             return ECompactionClass::NoCompaction;
         }
-        if (GetMaxColumnsSize() >= limits.GranuleBlobSplitSize ||
-            (i64)GetGranuleSize() >= limits.GranuleSizeForOverloadPrevent)
+        if ((i64)GetGranuleSize() >= limits.GranuleSizeForOverloadPrevent)
         {
             return ECompactionClass::Split;
         }
@@ -175,17 +120,14 @@ public:
     const TDataClassSummary& GetInserted() const {
         return Inserted;
     }
-    const TDataClassSummary& GetOther() const {
-        return Other;
+    const TDataClassSummary& GetCompacted() const {
+        return Compacted;
     }
     ui64 GetGranuleSize() const {
-        return (Inserted + Other).GetPortionsSize();
+        return Inserted.GetPortionsSize() + Compacted.GetPortionsSize();
     }
     ui64 GetActivePortionsCount() const {
-        return (Inserted + Other).GetPortionsCount();
-    }
-    ui64 GetMaxColumnsSize() const {
-        return (Inserted + Other).GetMaxColumnsSize();
+        return Inserted.GetPortionsCount() + Compacted.GetPortionsCount();
     }
 
     class TEditGuard: TNonCopyable {
@@ -201,23 +143,21 @@ public:
         }
 
         ~TEditGuard() {
-            Counters.OnCompactedData(Owner.GetOther());
-            Counters.OnInsertedData(Owner.GetInserted());
-            Counters.OnFullData(Owner.GetOther() + Owner.GetInserted());
+            Counters.OnPortionsDataRefresh(Owner.GetInserted(), Owner.GetCompacted());
         }
 
         void AddPortion(const TPortionInfo& info) {
             if (info.IsInserted()) {
                 Owner.Inserted.AddPortion(info);
             } else {
-                Owner.Other.AddPortion(info);
+                Owner.Compacted.AddPortion(info);
             }
         }
         void RemovePortion(const TPortionInfo& info) {
             if (info.IsInserted()) {
                 Owner.Inserted.RemovePortion(info);
             } else {
-                Owner.Other.RemovePortion(info);
+                Owner.Compacted.RemovePortion(info);
             }
         }
     };
@@ -227,7 +167,7 @@ public:
     }
 
     TString DebugString() const {
-        return TStringBuilder() << "inserted:(" << Inserted.DebugString() << ");other:(" << Other.DebugString() << "); ";
+        return TStringBuilder() << "inserted:(" << Inserted.DebugString() << ");other:(" << Compacted.DebugString() << "); ";
     }
 };
 
@@ -284,7 +224,6 @@ private:
     TMonotonic ModificationLastTime = TMonotonic::Now();
     THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
     mutable std::optional<TGranuleAdditiveSummary> AdditiveSummaryCache;
-    mutable std::optional<TGranuleHardSummary> HardSummaryCache;
 
     void RebuildHardMetrics() const;
     void RebuildAdditiveMetrics() const;
@@ -316,21 +255,17 @@ public:
 
     NOlap::TSerializationStats BuildSerializationStats(ISnapshotSchema::TPtr schema) const {
         NOlap::TSerializationStats result;
-        for (auto&& i : GetHardSummary().GetColumnIdsSortedBySizeDescending()) {
-            auto field = schema->GetFieldByColumnId(i.GetColumnId());
-            AFL_VERIFY(field)("column_id", i.GetColumnId())("schema", schema->DebugString());
-            result.AddStat(i.GetColumnId(), field->name(), NOlap::TColumnSerializationStat(i.GetBlobsSize(), i.GetRecordsCount()));
+        for (auto&& i : GetAdditiveSummary().GetCompacted().GetColumnStats()) {
+            auto field = schema->GetFieldByColumnId(i.first);
+            AFL_VERIFY(field)("column_id", i.first)("schema", schema->DebugString());
+            NOlap::TColumnSerializationStat columnInfo(i.first, field->name());
+            columnInfo.Merge(i.second);
+            result.AddStat(columnInfo);
         }
         return result;
     }
 
     TGranuleAdditiveSummary::ECompactionClass GetCompactionType(const TCompactionLimits& limits) const;
-    const TGranuleHardSummary& GetHardSummary() const {
-        if (!HardSummaryCache) {
-            RebuildHardMetrics();
-        }
-        return *HardSummaryCache;
-    }
     const TGranuleAdditiveSummary& GetAdditiveSummary() const;
     TCompactionPriority GetCompactionPriority() const {
         return TCompactionPriority(CompactionPriorityInfo, GetAdditiveSummary(), ModificationLastTime);

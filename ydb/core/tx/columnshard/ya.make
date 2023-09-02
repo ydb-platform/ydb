@@ -75,6 +75,7 @@ END()
 
 RECURSE(
     engines
+    splitter
 )
 
 RECURSE_FOR_TESTS(

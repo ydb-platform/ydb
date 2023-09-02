@@ -15,6 +15,13 @@ Y_UNIT_TEST_SUITE(Splitter) {
     private:
         mutable std::map<std::string, ui32> Decoder;
     public:
+        virtual bool NeedMinMaxForColumn(const ui32 /*columnId*/) const override {
+            return true;
+        }
+        virtual bool IsSortedColumn(const ui32 /*columnId*/) const override {
+            return false;
+        }
+
         virtual NKikimr::NOlap::TColumnSaver GetColumnSaver(const ui32 columnId) const override {
             return NKikimr::NOlap::TColumnSaver(nullptr, std::make_shared<NKikimr::NArrow::NSerialization::TFullDataSerializer>(arrow::ipc::IpcWriteOptions::Defaults()));
         }
@@ -22,7 +29,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
         virtual std::optional<NKikimr::NOlap::TColumnSerializationStat> GetColumnSerializationStats(const ui32 /*columnId*/) const override {
             return {};
         }
-        virtual std::optional<NKikimr::NOlap::TColumnSerializationStat> GetBatchSerializationStats(const std::shared_ptr<arrow::RecordBatch>& /*rb*/) const override {
+        virtual std::optional<NKikimr::NOlap::TBatchSerializationStat> GetBatchSerializationStats(const std::shared_ptr<arrow::RecordBatch>& /*rb*/) const override {
             return {};
         }
 
@@ -32,10 +39,15 @@ Y_UNIT_TEST_SUITE(Splitter) {
             return NKikimr::NOlap::TColumnLoader(nullptr, std::make_shared<NKikimr::NArrow::NSerialization::TFullDataDeserializer>(), schema, columnId);
         }
 
+        virtual std::shared_ptr<arrow::Field> GetField(const ui32 columnId) const override {
+            Y_VERIFY(false);
+            return nullptr;
+        }
+
         virtual ui32 GetColumnId(const std::string& columnName) const override {
             auto it = Decoder.find(columnName);
             if (it == Decoder.end()) {
-                it = Decoder.emplace(columnName, Decoder.size()).first;
+                it = Decoder.emplace(columnName, Decoder.size() + 1).first;
             }
             return it->second;
         }
@@ -62,7 +74,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
         void Execute(std::shared_ptr<arrow::RecordBatch> batch) {
             NKikimr::NColumnShard::TIndexationCounters counters("test");
             NKikimr::NOlap::TRBSplitLimiter limiter(counters.SplitterCounters, Schema, batch, NKikimr::NOlap::TSplitSettings());
-            std::vector<std::vector<NKikimr::NOlap::TOrderedColumnChunk>> chunksForBlob;
+            std::vector<std::vector<NKikimr::NOlap::IPortionColumnChunk::TPtr>> chunksForBlob;
             std::map<std::string, std::vector<std::shared_ptr<arrow::RecordBatch>>> restoredBatch;
             std::vector<i64> blobsSize;
             bool hasMultiSplit = false;
@@ -81,14 +93,14 @@ Y_UNIT_TEST_SUITE(Splitter) {
                     std::set<ui32> blobColumnChunks;
                     for (auto&& i : chunks) {
                         ++chunksCount;
-                        const ui32 columnId = i.GetChunkAddress().GetColumnId();
-                        recordsCountByColumn[columnId] += i.GetRecordsCount();
-                        restoredBatch[Schema->GetColumnName(columnId)].emplace_back(*Schema->GetColumnLoader(columnId).Apply(i.GetData()));
-                        blobSize += i.GetData().size();
-                        if (i.GetRecordsCount() != NKikimr::NOlap::TSplitSettings().GetMinRecordsCount() && !blobColumnChunks.emplace(columnId).second) {
+                        const ui32 columnId = i->GetColumnId();
+                        recordsCountByColumn[columnId] += i->GetRecordsCount();
+                        restoredBatch[Schema->GetColumnName(columnId)].emplace_back(*Schema->GetColumnLoader(columnId).Apply(i->GetData()));
+                        blobSize += i->GetData().size();
+                        if (i->GetRecordsCount() != NKikimr::NOlap::TSplitSettings().GetMinRecordsCount() && !blobColumnChunks.emplace(columnId).second) {
                             hasMultiSplit = true;
                         }
-                        sb << "(" << i.DebugString() << ")";
+                        sb << "(" << i->DebugString() << ")";
                     }
                     blobsSize.emplace_back(blobSize);
                     sb << "];";

@@ -22,6 +22,21 @@ TFilteredSnapshotSchema::TFilteredSnapshotSchema(ISnapshotSchema::TPtr originalS
     Schema = std::make_shared<arrow::Schema>(schemaFields);
 }
 
+TFilteredSnapshotSchema::TFilteredSnapshotSchema(ISnapshotSchema::TPtr originalSnapshot, const std::set<std::string>& columnNames)
+    : OriginalSnapshot(originalSnapshot) {
+    for (auto&& i : columnNames) {
+        ColumnIds.emplace(OriginalSnapshot->GetColumnId(i));
+    }
+    std::vector<std::shared_ptr<arrow::Field>> schemaFields;
+    for (auto&& i : OriginalSnapshot->GetSchema()->fields()) {
+        if (!columnNames.contains(i->name())) {
+            continue;
+        }
+        schemaFields.emplace_back(i);
+    }
+    Schema = std::make_shared<arrow::Schema>(schemaFields);
+}
+
 TColumnSaver TFilteredSnapshotSchema::GetColumnSaver(const ui32 columnId, const TSaverContext& context) const {
     Y_VERIFY(ColumnIds.contains(columnId));
     return OriginalSnapshot->GetColumnSaver(columnId, context);

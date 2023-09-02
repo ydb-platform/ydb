@@ -1,6 +1,9 @@
 #pragma once
 #include "chunks.h"
 #include "stats.h"
+#include "scheme_info.h"
+#include "column_info.h"
+#include "blob_info.h"
 #include <ydb/core/tx/columnshard/counters/indexation.h>
 #include <ydb/core/tx/columnshard/engines/scheme/column_features.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
@@ -9,16 +12,6 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 
 namespace NKikimr::NOlap {
-
-class ISchemaDetailInfo {
-public:
-    using TPtr = std::shared_ptr<ISchemaDetailInfo>;
-    virtual ~ISchemaDetailInfo() = default;
-    virtual ui32 GetColumnId(const std::string& fieldName) const = 0;
-    virtual TColumnSaver GetColumnSaver(const ui32 columnId) const = 0;
-    virtual std::optional<TColumnSerializationStat> GetColumnSerializationStats(const ui32 columnId) const = 0;
-    virtual std::optional<TColumnSerializationStat> GetBatchSerializationStats(const std::shared_ptr<arrow::RecordBatch>& rb) const = 0;
-};
 
 template <class TContainer>
 class TArrayView {
@@ -69,10 +62,20 @@ public:
     {
 
     }
+    virtual std::shared_ptr<arrow::Field> GetField(const ui32 columnId) const override {
+        return Schema->GetFieldByColumnId(columnId);
+    }
+    virtual bool NeedMinMaxForColumn(const ui32 columnId) const override {
+        return Schema->GetIndexInfo().GetMinMaxIdxColumns().contains(columnId);
+    }
+    virtual bool IsSortedColumn(const ui32 columnId) const override {
+        return Schema->GetIndexInfo().IsSortedColumn(columnId);
+    }
+
     virtual std::optional<TColumnSerializationStat> GetColumnSerializationStats(const ui32 columnId) const override {
         return Stats.GetColumnInfo(columnId);
     }
-    virtual std::optional<TColumnSerializationStat> GetBatchSerializationStats(const std::shared_ptr<arrow::RecordBatch>& rb) const override {
+    virtual std::optional<TBatchSerializationStat> GetBatchSerializationStats(const std::shared_ptr<arrow::RecordBatch>& rb) const override {
         return Stats.GetStatsForRecordBatch(rb);
     }
     virtual ui32 GetColumnId(const std::string& fieldName) const override {
@@ -83,31 +86,70 @@ public:
     }
 };
 
-class TBatchSerializedSlice {
-private:
+class TGeneralSerializedSlice {
+protected:
     std::vector<TSplittedColumn> Columns;
-    YDB_READONLY(ui64, Size, 0);
-    YDB_READONLY(ui32, RecordsCount, 0);
+    ui64 Size = 0;
+    ui32 RecordsCount = 0;
     ISchemaDetailInfo::TPtr Schema;
-    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, Batch);
     std::shared_ptr<NColumnShard::TSplitterCounters> Counters;
     TSplitSettings Settings;
+    TGeneralSerializedSlice() = default;
 public:
-    explicit TBatchSerializedSlice(TVectorView<TBatchSerializedSlice>&& objects) {
+    ui64 GetSize() const {
+        return Size;
+    }
+    ui32 GetRecordsCount() const {
+        return RecordsCount;
+    }
+
+    std::vector<std::vector<IPortionColumnChunk::TPtr>> GroupChunksByBlobs() {
+        std::vector<std::vector<IPortionColumnChunk::TPtr>> result;
+        std::vector<TSplittedBlob> blobs;
+        GroupBlobs(blobs);
+        for (auto&& i : blobs) {
+            result.emplace_back(i.GetChunks());
+        }
+        return result;
+    }
+
+    explicit TGeneralSerializedSlice(TVectorView<TGeneralSerializedSlice>&& objects) {
         Y_VERIFY(objects.size());
         std::swap(*this, objects.front());
         for (ui32 i = 1; i < objects.size(); ++i) {
             MergeSlice(std::move(objects[i]));
         }
     }
-    TBatchSerializedSlice(std::shared_ptr<arrow::RecordBatch> batch, ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const TSplitSettings& settings);
+    TGeneralSerializedSlice(const std::map<ui32, std::vector<IPortionColumnChunk::TPtr>>& data, ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const TSplitSettings& settings);
+    TGeneralSerializedSlice(ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const TSplitSettings& settings);
 
-    void MergeSlice(TBatchSerializedSlice&& slice);
+    void MergeSlice(TGeneralSerializedSlice&& slice);
 
     bool GroupBlobs(std::vector<TSplittedBlob>& blobs);
 
-    bool operator<(const TBatchSerializedSlice& item) const {
+    bool operator<(const TGeneralSerializedSlice& item) const {
         return Size < item.Size;
+    }
+};
+
+class TBatchSerializedSlice: public TGeneralSerializedSlice {
+private:
+    using TBase = TGeneralSerializedSlice;
+    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, Batch);
+public:
+    TBatchSerializedSlice(std::shared_ptr<arrow::RecordBatch> batch, ISchemaDetailInfo::TPtr schema, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const TSplitSettings& settings);
+
+    explicit TBatchSerializedSlice(TVectorView<TBatchSerializedSlice>&& objects)
+    {
+        Y_VERIFY(objects.size());
+        std::swap(*this, objects.front());
+        for (ui32 i = 1; i < objects.size(); ++i) {
+            MergeSlice(std::move(objects[i]));
+        }
+    }
+    void MergeSlice(TBatchSerializedSlice&& slice) {
+        Batch = NArrow::CombineBatches({Batch, slice.Batch});
+        TBase::MergeSlice(std::move(slice));
     }
 };
 

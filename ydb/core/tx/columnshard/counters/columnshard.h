@@ -24,8 +24,6 @@ private:
 
     NMonitoring::TDynamicCounters::TCounterPtr OverloadInsertTableBytes;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadInsertTableCount;
-    NMonitoring::TDynamicCounters::TCounterPtr OverloadGranuleBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr OverloadGranuleCount;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadShardBytes;
     NMonitoring::TDynamicCounters::TCounterPtr OverloadShardCount;
 
@@ -88,11 +86,6 @@ public:
     void OnOverloadInsertTable(const ui64 size) const {
         OverloadInsertTableBytes->Add(size);
         OverloadInsertTableCount->Add(1);
-    }
-
-    void OnOverloadGranule(const ui64 size) const {
-        OverloadGranuleBytes->Add(size);
-        OverloadGranuleCount->Add(1);
     }
 
     void OnOverloadShard(const ui64 size) const {

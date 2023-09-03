@@ -90,26 +90,13 @@ private:
         const ui64 MaxEvictBytes;
         std::shared_ptr<TTTLColumnEngineChanges> Changes;
         std::map<ui64, TDuration> DurationsForced;
-        const THashSet<ui64>& BusyGranules;
-        TTieringProcessContext(const ui64 maxEvictBytes, std::shared_ptr<TTTLColumnEngineChanges> changes, const THashSet<ui64>& busyGranules);
+        const THashSet<TPortionAddress>& BusyPortions;
+        TTieringProcessContext(const ui64 maxEvictBytes, std::shared_ptr<TTTLColumnEngineChanges> changes, const THashSet<TPortionAddress>& busyPortions);
     };
 
     TDuration ProcessTiering(const ui64 pathId, const TTiering& tiering, TTieringProcessContext& context) const;
     bool DrainEvictionQueue(std::map<TMonotonic, std::vector<TEvictionsController::TTieringWithPathId>>& evictionsQueue, TTieringProcessContext& context) const;
 public:
-    class TChangesConstructor : public TColumnEngineChanges {
-    public:
-        static std::shared_ptr<TInsertColumnEngineChanges> BuildInsertChanges(const TMark& defaultMark,
-                 std::vector<NOlap::TInsertedData>&& blobsToIndex, const TSnapshot& initSnapshot);
-
-        static std::shared_ptr<TCompactColumnEngineChanges> BuildCompactionChanges(std::unique_ptr<TCompactionInfo>&& info,
-                 const TCompactionLimits& limits, const TSnapshot& initSnapshot, const TCompactionSrcGranule& srcGranules);
-
-        static std::shared_ptr<TCleanupColumnEngineChanges> BuildCleanupChanges(const TSnapshot& initSnapshot);
-
-        static std::shared_ptr<TTTLColumnEngineChanges> BuildTtlChanges();
-    };
-
     enum ETableIdx {
         GRANULES = 0,
     };
@@ -133,10 +120,6 @@ public:
 
     const TVersionedIndex& GetVersionedIndex() const override {
         return VersionedIndex;
-    }
-
-    const THashSet<ui64>* GetOverloadedGranules(const ui64 pathId) const override {
-        return GranulesStorage->GetOverloaded(pathId);
     }
 
     TString SerializeMark(const NArrow::TReplaceKey& key) const override {
@@ -169,9 +152,9 @@ public:
     bool Load(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs, const THashSet<ui64>& pathsToDrop = {}) override;
 
     std::shared_ptr<TInsertColumnEngineChanges> StartInsert(std::vector<TInsertedData>&& dataToIndex) noexcept override;
-    std::shared_ptr<TCompactColumnEngineChanges> StartCompaction(std::unique_ptr<TCompactionInfo>&& compactionInfo, const TCompactionLimits& limits) noexcept override;
+    std::shared_ptr<TColumnEngineChanges> StartCompaction(const TCompactionLimits& limits, const THashSet<TPortionAddress>& busyPortions) noexcept override;
     std::shared_ptr<TCleanupColumnEngineChanges> StartCleanup(const TSnapshot& snapshot, THashSet<ui64>& pathsToDrop, ui32 maxRecords) noexcept override;
-    std::shared_ptr<TTTLColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction, const THashSet<ui64>& busyGranules,
+    std::shared_ptr<TTTLColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction, const THashSet<TPortionAddress>& busyPortions,
                                                    ui64 maxEvictBytes = TCompactionLimits::DEFAULT_EVICTION_BYTES) noexcept override;
 
     bool ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges,
@@ -184,7 +167,7 @@ public:
     std::shared_ptr<TSelectInfo> Select(ui64 pathId, TSnapshot snapshot,
                                         const THashSet<ui32>& columnIds,
                                         const TPKRangesFilter& pkRangesFilter) const override;
-    std::unique_ptr<TCompactionInfo> Compact(const TCompactionLimits& limits, const THashSet<ui64>& busyGranuleIds) override;
+    std::unique_ptr<TCompactionInfo> Compact(const TCompactionLimits& limits);
 
     bool IsPortionExists(const ui64 granuleId, const ui64 portionId) const {
         auto it = Granules.find(granuleId);

@@ -209,7 +209,7 @@ public:
         return Stage == EStage::Aborted;
     }
 
-    virtual THashSet<ui64> GetTouchedGranules() const = 0;
+    virtual THashSet<TPortionAddress> GetTouchedPortions() const = 0;
 
     void StartEmergency();
     void AbortEmergency();
@@ -232,7 +232,6 @@ public:
         Blobs = std::move(blobs);
     }
 
-    TSnapshot InitSnapshot = TSnapshot::Zero();
     THashMap<TBlobRange, TString> Blobs;
 
     virtual THashMap<TUnifiedBlobId, std::vector<TBlobRange>> GetGroupedBlobRanges() const = 0;

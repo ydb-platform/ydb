@@ -155,10 +155,6 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const
         case EOverloadStatus::Disk:
             IncCounter(COUNTER_OUT_OF_SPACE);
             break;
-        case EOverloadStatus::Granule:
-            IncCounter(COUNTER_WRITE_OVERLOAD);
-            CSCounters.OnOverloadGranule(writeData.GetSize());
-            break;
         case EOverloadStatus::InsertTable:
             IncCounter(COUNTER_WRITE_OVERLOAD);
             CSCounters.OnOverloadInsertTable(writeData.GetSize());
@@ -185,10 +181,6 @@ TColumnShard::EOverloadStatus TColumnShard::CheckOverloaded(const ui64 tableId) 
 
     if (InsertTable && InsertTable->IsOverloadedByCommitted(tableId)) {
         return EOverloadStatus::InsertTable;
-    }
-
-    if (TablesManager.IsOverloaded(tableId)) {
-        return EOverloadStatus::Granule;
     }
 
     if (WritesMonitor.ShardOverloaded()) {

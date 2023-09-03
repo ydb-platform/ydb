@@ -10,36 +10,13 @@
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/library/conclusion/status.h>
 #include "changes/indexation.h"
-#include "changes/in_granule_compaction.h"
-#include "changes/split_compaction.h"
+#include "changes/general_compaction.h"
 #include "changes/cleanup.h"
 #include "changes/ttl.h"
 
 #include <concepts>
 
 namespace NKikimr::NOlap {
-
-std::shared_ptr<NKikimr::NOlap::TCompactColumnEngineChanges> TColumnEngineForLogs::TChangesConstructor::BuildCompactionChanges(std::unique_ptr<TCompactionInfo>&& info,
-    const TCompactionLimits& limits, const TSnapshot& initSnapshot, const TCompactionSrcGranule& srcGranule) {
-    std::shared_ptr<TCompactColumnEngineChanges> result;
-    if (info->InGranule()) {
-        result = std::make_shared<TInGranuleCompactColumnEngineChanges>(limits, info->GetGranule(), srcGranule);
-    } else {
-        result = std::make_shared<TSplitCompactColumnEngineChanges>(limits, info->GetGranule(), srcGranule);
-    }
-    result->InitSnapshot = initSnapshot;
-    return result;
-}
-
-std::shared_ptr<NKikimr::NOlap::TCleanupColumnEngineChanges> TColumnEngineForLogs::TChangesConstructor::BuildCleanupChanges(const TSnapshot& initSnapshot) {
-    auto changes = std::make_shared<TCleanupColumnEngineChanges>();
-    changes->InitSnapshot = initSnapshot;
-    return changes;
-}
-
-std::shared_ptr<NKikimr::NOlap::TTTLColumnEngineChanges> TColumnEngineForLogs::TChangesConstructor::BuildTtlChanges() {
-    return std::make_shared<TTTLColumnEngineChanges>();
-}
 
 TColumnEngineForLogs::TColumnEngineForLogs(ui64 tabletId, const TCompactionLimits& limits)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, limits))
@@ -66,7 +43,6 @@ const TColumnEngineStats& TColumnEngineForLogs::GetTotalStats() {
     Counters.Tables = PathGranules.size();
     Counters.Granules = Granules.size();
     Counters.EmptyGranules = EmptyGranules.size();
-    Counters.OverloadedGranules = GranulesStorage->GetOverloadedGranulesCount();
 
     return Counters;
 }
@@ -230,7 +206,7 @@ bool TColumnEngineForLogs::LoadGranules(IDbWrapper& db) {
 bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs) {
     TSnapshot lastSnapshot(0, 0);
     const TIndexInfo* currentIndexInfo = nullptr;
-    return ColumnsTable->Load(db, [&](const TPortionInfo& portion, const TColumnChunkLoadContext& loadContext) {
+    auto result = ColumnsTable->Load(db, [&](const TPortionInfo& portion, const TColumnChunkLoadContext& loadContext) {
         if (!currentIndexInfo || lastSnapshot != portion.GetMinSnapshot()) {
             currentIndexInfo = &VersionedIndex.GetSchema(portion.GetMinSnapshot())->GetIndexInfo();
             lastSnapshot = portion.GetMinSnapshot();
@@ -242,6 +218,10 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db, THashSet<TUnifiedBlobId>&
         TColumnRecord rec(loadContext, *currentIndexInfo);
         GetGranulePtrVerified(portion.GetGranule())->AddColumnRecord(*currentIndexInfo, portion, rec, loadContext.GetPortionMeta());
     });
+    for (auto&& i : Granules) {
+        i.second->OnAfterPortionsLoad();
+    }
+    return result;
 }
 
 bool TColumnEngineForLogs::LoadCounters(IDbWrapper& db) {
@@ -278,13 +258,6 @@ std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(st
         }
 
         if (PathGranules.contains(pathId)) {
-            // Abort inserting if the path has overloaded granules.
-            if (GranulesStorage->GetOverloaded(pathId)) {
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_insertion_due_to_granule_overload")("path_id", pathId);
-                return {};
-            }
-
-            // TODO: cache PathToGranule for hot pathIds
             const auto& src = PathGranules[pathId];
             changes->PathToGranule[pathId].assign(src.begin(), src.end());
         } else {
@@ -301,22 +274,16 @@ std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(st
     return changes;
 }
 
-std::shared_ptr<TCompactColumnEngineChanges> TColumnEngineForLogs::StartCompaction(std::unique_ptr<TCompactionInfo>&& info,
-                                                                            const TCompactionLimits& limits) noexcept {
-    const ui64 pathId = info->GetGranule()->GetPathId();
-    Y_VERIFY(PathGranules.contains(pathId));
+std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(const TCompactionLimits& limits, const THashSet<TPortionAddress>& busyPortions) noexcept {
 
-    auto g = info->GetGranule();
-    for (const auto& [mark, pathGranule] : PathGranules[pathId]) {
-        if (pathGranule == g->GetGranuleId()) {
-            TCompactionSrcGranule srcGranule = TCompactionSrcGranule(mark);
-            auto changes = TChangesConstructor::BuildCompactionChanges(std::move(info), limits, LastSnapshot, srcGranule);
-            NYDBTest::TControllers::GetColumnShardController()->OnStartCompaction(changes);
-            return changes;
-        }
+    auto info = Compact(limits);
+    if (!info) {
+        return nullptr;
     }
-    Y_VERIFY(false);
-    return nullptr;
+
+    auto changes = info->GetGranule()->GetOptimizationTask(limits, info->GetGranule(), busyPortions);
+    NYDBTest::TControllers::GetColumnShardController()->OnStartCompaction(changes);
+    return changes;
 }
 
 std::shared_ptr<TCleanupColumnEngineChanges> TColumnEngineForLogs::StartCleanup(const TSnapshot& snapshot,
@@ -427,7 +394,7 @@ TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering
             if (!info->IsActive()) {
                 continue;
             }
-            if (context.BusyGranules.contains(info->GetGranule())) {
+            if (context.BusyPortions.contains(info->GetAddress())) {
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip ttl through busy granule")("granule_id", info->GetGranule());
                 continue;
             }
@@ -532,13 +499,13 @@ bool TColumnEngineForLogs::DrainEvictionQueue(std::map<TMonotonic, std::vector<T
     return hasChanges;
 }
 
-std::shared_ptr<TTTLColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THashMap<ui64, TTiering>& pathEviction, const THashSet<ui64>& busyGranules, ui64 maxEvictBytes) noexcept {
+std::shared_ptr<TTTLColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THashMap<ui64, TTiering>& pathEviction, const THashSet<TPortionAddress>& busyPortions, ui64 maxEvictBytes) noexcept {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartTtl")("external", pathEviction.size())
         ("internal", EvictionsController.MutableNextCheckInstantForTierings().size())
         ;
     auto changes = std::make_shared<TTTLColumnEngineChanges>();
 
-    TTieringProcessContext context(maxEvictBytes, changes, busyGranules);
+    TTieringProcessContext context(maxEvictBytes, changes, busyPortions);
     bool hasExternalChanges = false;
     for (auto&& i : pathEviction) {
         context.DurationsForced[i.first] = ProcessTiering(i.first, i.second, context);
@@ -738,14 +705,8 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
     return out;
 }
 
-std::unique_ptr<TCompactionInfo> TColumnEngineForLogs::Compact(const TCompactionLimits& limits, const THashSet<ui64>& busyGranuleIds) {
-    const auto filter = [&](const ui64 granuleId) {
-        if (busyGranuleIds.contains(granuleId)) {
-            return false;
-        }
-        return GetGranulePtrVerified(granuleId)->NeedCompaction(limits);
-    };
-    auto gCompaction = GranulesStorage->GetGranuleForCompaction(filter);
+std::unique_ptr<TCompactionInfo> TColumnEngineForLogs::Compact(const TCompactionLimits& /*limits*/) {
+    auto gCompaction = GranulesStorage->GetGranuleForCompaction();
     if (!gCompaction) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "no_granule_for_compaction");
         SignalCounters.NoCompactGranulesSelection->Add(1);
@@ -753,29 +714,8 @@ std::unique_ptr<TCompactionInfo> TColumnEngineForLogs::Compact(const TCompaction
     }
     std::shared_ptr<TGranuleMeta> compactGranule = GetGranulePtrVerified(*gCompaction);
 
-    if (compactGranule->IsOverloaded(limits)) {
-        SignalCounters.CompactOverloadGranulesSelection->Add(1);
-    }
-    const auto compactionType = compactGranule->GetCompactionType(limits);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "take_granule")("granule", compactGranule->DebugString())("compaction", compactionType);
-    switch (compactionType) {
-        case TGranuleAdditiveSummary::ECompactionClass::NoCompaction:
-        case TGranuleAdditiveSummary::ECompactionClass::WaitInternal:
-        {
-            SignalCounters.NoCompactGranulesSelection->Add(1);
-            return {};
-        }
-        case TGranuleAdditiveSummary::ECompactionClass::Split:
-        {
-            SignalCounters.SplitCompactGranulesSelection->Add(1);
-            return std::make_unique<TCompactionInfo>(compactGranule, false);
-        }
-        case TGranuleAdditiveSummary::ECompactionClass::Internal:
-        {
-            SignalCounters.InternalCompactGranulesSelection->Add(1);
-            return std::make_unique<TCompactionInfo>(compactGranule, true);
-        }
-    }
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "take_granule")("granule", compactGranule->DebugString());
+    return std::make_unique<TCompactionInfo>(compactGranule, false);
 }
 
 void TColumnEngineForLogs::OnTieringModified(std::shared_ptr<NColumnShard::TTiersManager> manager, const NColumnShard::TTtl& ttl) {
@@ -791,11 +731,11 @@ void TColumnEngineForLogs::OnTieringModified(std::shared_ptr<NColumnShard::TTier
 
 }
 
-TColumnEngineForLogs::TTieringProcessContext::TTieringProcessContext(const ui64 maxEvictBytes, std::shared_ptr<TTTLColumnEngineChanges> changes, const THashSet<ui64>& busyGranules)
+TColumnEngineForLogs::TTieringProcessContext::TTieringProcessContext(const ui64 maxEvictBytes, std::shared_ptr<TTTLColumnEngineChanges> changes, const THashSet<TPortionAddress>& busyPortions)
     : Now(TlsActivationContext ? AppData()->TimeProvider->Now() : TInstant::Now())
     , MaxEvictBytes(maxEvictBytes)
     , Changes(changes)
-    , BusyGranules(busyGranules)
+    , BusyPortions(busyPortions)
 {
 
 }

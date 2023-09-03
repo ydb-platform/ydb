@@ -47,25 +47,24 @@ private:
 class TBackgroundController {
 private:
     bool ActiveIndexing = false;
-    THashSet<ui64> IndexingGranules;
 
     using TCurrentCompaction = THashMap<ui64, NOlap::TPlanCompactionInfo>;
     TCurrentCompaction ActiveCompactionInfo;
-    THashMap<ui64, THashSet<ui64>> CompactionInfoGranules;
+    THashMap<ui64, THashSet<NOlap::TPortionAddress>> CompactionInfoPortions;
 
     bool ActiveCleanup = false;
-    THashSet<ui64> TtlGranules;
+    THashSet<NOlap::TPortionAddress> TtlPortions;
 
 public:
-    THashSet<ui64> GetConflictTTLGranules() const;
-    THashSet<ui64> GetBusyGranules() const;
+    THashSet<NOlap::TPortionAddress> GetConflictTTLPortions() const;
+    THashSet<NOlap::TPortionAddress> GetConflictCompactionPortions() const;
 
     void CheckDeadlines();
 
     bool StartCompaction(const NOlap::TPlanCompactionInfo& info, const NOlap::TColumnEngineChanges& changes);
     void FinishCompaction(const NOlap::TPlanCompactionInfo& info) {
         Y_VERIFY(ActiveCompactionInfo.erase(info.GetPathId()));
-        Y_VERIFY(CompactionInfoGranules.erase(info.GetPathId()));
+        Y_VERIFY(CompactionInfoPortions.erase(info.GetPathId()));
     }
     const TCurrentCompaction& GetActiveCompaction() const {
         return ActiveCompactionInfo;
@@ -78,7 +77,6 @@ public:
     void FinishIndexing() {
         Y_VERIFY(ActiveIndexing);
         ActiveIndexing = false;
-        IndexingGranules.clear();
     }
     bool IsIndexingActive() const {
         return ActiveIndexing;
@@ -98,11 +96,11 @@ public:
 
     void StartTtl(const NOlap::TColumnEngineChanges& changes);
     void FinishTtl() {
-        Y_VERIFY(!TtlGranules.empty());
-        TtlGranules.clear();
+        Y_VERIFY(!TtlPortions.empty());
+        TtlPortions.clear();
     }
     bool IsTtlActive() const {
-        return !TtlGranules.empty();
+        return !TtlPortions.empty();
     }
 
     bool HasSplitCompaction(const ui64 pathId) const {

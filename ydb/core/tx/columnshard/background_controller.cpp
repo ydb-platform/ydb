@@ -6,23 +6,20 @@ namespace NKikimr::NColumnShard {
 void TBackgroundController::StartTtl(const NOlap::TColumnEngineChanges& changes) {
     const NOlap::TTTLColumnEngineChanges* ttlChanges = dynamic_cast<const NOlap::TTTLColumnEngineChanges*>(&changes);
     Y_VERIFY(ttlChanges);
-    Y_VERIFY(TtlGranules.empty());
+    Y_VERIFY(TtlPortions.empty());
 
-    TtlGranules = ttlChanges->GetTouchedGranules();
+    TtlPortions = ttlChanges->GetTouchedPortions();
 }
 
 bool TBackgroundController::StartCompaction(const NOlap::TPlanCompactionInfo& info, const NOlap::TColumnEngineChanges& changes) {
     Y_VERIFY(ActiveCompactionInfo.emplace(info.GetPathId(), info).second);
-    Y_VERIFY(CompactionInfoGranules.emplace(info.GetPathId(), changes.GetTouchedGranules()).second);
+    Y_VERIFY(CompactionInfoPortions.emplace(info.GetPathId(), changes.GetTouchedPortions()).second);
     return true;
 }
 
-THashSet<ui64> TBackgroundController::GetConflictTTLGranules() const {
-    THashSet<ui64> result;
-    for (auto&& i : TtlGranules) {
-        Y_VERIFY(result.emplace(i).second);
-    }
-    for (auto&& i : CompactionInfoGranules) {
+THashSet<NOlap::TPortionAddress> TBackgroundController::GetConflictTTLPortions() const {
+    THashSet<NOlap::TPortionAddress> result = TtlPortions;
+    for (auto&& i : CompactionInfoPortions) {
         for (auto&& g : i.second) {
             Y_VERIFY(result.emplace(g).second);
         }
@@ -30,12 +27,9 @@ THashSet<ui64> TBackgroundController::GetConflictTTLGranules() const {
     return result;
 }
 
-THashSet<ui64> TBackgroundController::GetBusyGranules() const {
-    THashSet<ui64> result = IndexingGranules;
-    for (auto&& i : TtlGranules) {
-        Y_VERIFY(result.emplace(i).second);
-    }
-    for (auto&& i : CompactionInfoGranules) {
+THashSet<NOlap::TPortionAddress> TBackgroundController::GetConflictCompactionPortions() const {
+    THashSet<NOlap::TPortionAddress> result = TtlPortions;
+    for (auto&& i : CompactionInfoPortions) {
         for (auto&& g : i.second) {
             Y_VERIFY(result.emplace(g).second);
         }
@@ -52,9 +46,7 @@ void TBackgroundController::CheckDeadlines() {
     }
 }
 
-void TBackgroundController::StartIndexing(const NOlap::TColumnEngineChanges& changes) {
-    Y_VERIFY(IndexingGranules.empty());
-    IndexingGranules = changes.GetTouchedGranules();
+void TBackgroundController::StartIndexing(const NOlap::TColumnEngineChanges& /*changes*/) {
     Y_VERIFY(!ActiveIndexing);
     ActiveIndexing = true;
 }

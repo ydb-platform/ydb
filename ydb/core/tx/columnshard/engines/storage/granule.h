@@ -3,34 +3,11 @@
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/portion_info.h>
+#include "optimizer/optimizer.h"
 
 namespace NKikimr::NOlap {
 
 class TGranulesStorage;
-
-class TCompactionPriorityInfo {
-protected:
-    ui32 ProblemSequenceLength = 0;
-    TInstant NextAttemptInstant;
-public:
-    TInstant GetNextAttemptInstant() const {
-        return NextAttemptInstant;
-    }
-
-    void OnCompactionFailed() {
-        ++ProblemSequenceLength;
-        NextAttemptInstant = TInstant::Now() + TDuration::Seconds(1);
-    }
-
-    void OnCompactionFinished() {
-        ProblemSequenceLength = 0;
-        NextAttemptInstant = TInstant::Zero();
-    }
-
-    void OnCompactionCanceled() {
-        NextAttemptInstant = TInstant::Now() + TDuration::Seconds(1);
-    }
-};
 
 class TDataClassSummary: public NColumnShard::TBaseGranuleDataClassSummary {
 private:
@@ -171,44 +148,26 @@ public:
     }
 };
 
-class TCompactionPriority: public TCompactionPriorityInfo {
-public:
-    TGranuleAdditiveSummary::ECompactionClass GetPriorityClass() const {
-        return GranuleSummary.GetCompactionClass(TCompactionLimits(), LastModification, ConstructionInstant);
-    }
-
+class TCompactionPriority {
 private:
-    using TBase = TCompactionPriorityInfo;
-    TGranuleAdditiveSummary GranuleSummary;
-    TMonotonic LastModification;
+    i64 Weight = 0;
     TMonotonic ConstructionInstant = TMonotonic::Now();
-
-    ui64 GetWeightCorrected() const {
-        switch (GetPriorityClass()) {
-            case TGranuleAdditiveSummary::ECompactionClass::Split:
-                return GranuleSummary.GetGranuleSize();
-            case TGranuleAdditiveSummary::ECompactionClass::Internal:
-            case TGranuleAdditiveSummary::ECompactionClass::WaitInternal:
-                return GranuleSummary.GetInserted().GetPortionsSize();
-            case TGranuleAdditiveSummary::ECompactionClass::NoCompaction:
-                return GranuleSummary.GetGranuleSize() * GranuleSummary.GetActivePortionsCount() * GranuleSummary.GetActivePortionsCount();
-        }
-    }
 public:
-    TCompactionPriority(const TCompactionPriorityInfo& data, const TGranuleAdditiveSummary& granuleSummary, const TMonotonic lastModification)
-        : TBase(data)
-        , GranuleSummary(granuleSummary)
-        , LastModification(lastModification)
+    i64 GetWeight() const {
+        return Weight;
+    }
+
+    TCompactionPriority(std::shared_ptr<NStorageOptimizer::IOptimizerPlanner> planner)
+        : Weight(planner->GetUsefulMetric())
     {
 
     }
     bool operator<(const TCompactionPriority& item) const {
-        return std::tuple((ui32)GetPriorityClass(), GetWeightCorrected(), GranuleSummary.GetActivePortionsCount(), item.NextAttemptInstant)
-            < std::tuple((ui32)item.GetPriorityClass(), item.GetWeightCorrected(), item.GranuleSummary.GetActivePortionsCount(), NextAttemptInstant);
+        return std::tie(Weight) < std::tie(item.Weight);
     }
 
     TString DebugString() const {
-        return TStringBuilder() << "summary:(" << GranuleSummary.DebugString() << ");";
+        return TStringBuilder() << "summary:(" << Weight << ");";
     }
 
 };
@@ -229,28 +188,28 @@ private:
     void RebuildAdditiveMetrics() const;
 
     std::set<EActivity> Activity;
-    TCompactionPriorityInfo CompactionPriorityInfo;
     mutable bool AllowInsertionFlag = false;
     std::shared_ptr<TGranulesStorage> Owner;
     const NColumnShard::TGranuleDataCounters Counters;
     NColumnShard::TEngineLogsCounters::TPortionsInfoGuard PortionInfoGuard;
+    std::shared_ptr<NStorageOptimizer::IOptimizerPlanner> OptimizerPlanner;
 
     void OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> portionBefore);
     void OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter);
     void OnAdditiveSummaryChange() const;
 public:
+    std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> self, const THashSet<TPortionAddress>& busyPortions) const {
+        return OptimizerPlanner->GetOptimizationTask(limits, self, busyPortions);
+    }
+
     std::vector<std::shared_ptr<TPortionInfo>> GroupOrderedPortionsByPK(const TSnapshot& snapshot) const {
-        std::vector<std::shared_ptr<TPortionInfo>> portions;
+        return OptimizerPlanner->GetPortionsOrderedByPK(snapshot);
+    }
+
+    void OnAfterPortionsLoad() {
         for (auto&& i : Portions) {
-            if (i.second->IsVisible(snapshot)) {
-                portions.emplace_back(i.second);
-            }
+            OnAfterChangePortion(i.second);
         }
-        const auto pred = [](const std::shared_ptr<TPortionInfo>& l, const std::shared_ptr<TPortionInfo>& r) {
-            return l->IndexKeyStart() < r->IndexKeyStart();
-        };
-        std::sort(portions.begin(), portions.end(), pred);
-        return portions;
     }
 
     NOlap::TSerializationStats BuildSerializationStats(ISnapshotSchema::TPtr schema) const {
@@ -268,7 +227,7 @@ public:
     TGranuleAdditiveSummary::ECompactionClass GetCompactionType(const TCompactionLimits& limits) const;
     const TGranuleAdditiveSummary& GetAdditiveSummary() const;
     TCompactionPriority GetCompactionPriority() const {
-        return TCompactionPriority(CompactionPriorityInfo, GetAdditiveSummary(), ModificationLastTime);
+        return TCompactionPriority(OptimizerPlanner);
     }
 
     bool NeedCompaction(const TCompactionLimits& limits) const {
@@ -350,9 +309,6 @@ public:
     bool Empty() const noexcept { return Portions.empty(); }
 
     ui64 Size() const;
-    bool IsOverloaded(const TCompactionLimits& limits) const {
-        return (i64)Size() >= limits.GranuleOverloadSize;
-    }
 };
 
 } // namespace NKikimr::NOlap

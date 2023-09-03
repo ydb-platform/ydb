@@ -325,11 +325,9 @@ struct TExpected {
 
 bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, THashMap<TBlobRange, TString>&& blobs, ui32& step,
              const TExpected& /*expected*/, THashMap<TBlobRange, TString>* blobsPool = nullptr) {
-    auto compactionInfo = engine.Compact(TestLimits(), {});
-    UNIT_ASSERT(!!compactionInfo);
-
-    std::shared_ptr<TCompactColumnEngineChanges> changes = engine.StartCompaction(std::move(compactionInfo), TestLimits());
-    UNIT_ASSERT(changes->IsSplit());
+    std::shared_ptr<TCompactColumnEngineChanges> changes = dynamic_pointer_cast<TCompactColumnEngineChanges>(engine.StartCompaction(TestLimits(), {}));
+    UNIT_ASSERT(changes);
+    UNIT_ASSERT(!changes->IsSplit());
     //    UNIT_ASSERT_VALUES_EQUAL(changes->SwitchedPortions.size(), expected.SrcPortions);
     changes->SetBlobs(std::move(blobs));
     changes->StartEmergency();
@@ -605,7 +603,6 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         THashMap<TBlobRange, TString> blobs;
         ui64 numRows = 1000;
         ui64 rowPos = 0;
-        bool overload = false;
         for (ui64 txId = 1; txId <= 100; ++txId, rowPos += numRows) {
             TString testBlob = MakeTestBlob(rowPos, rowPos + numRows);
             auto blobRange = MakeBlobRange(++step, testBlob.size());
@@ -617,22 +614,13 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
                 TInsertedData{planStep, txId, pathId, "", blobRange.BlobId, {}, indexSnapshot});
 
             bool ok = Insert(engine, db, TSnapshot(planStep, txId), std::move(dataToIndex), blobs, step);
-            // first overload returns ok: it's a postcondition
-            if (!overload) {
-                UNIT_ASSERT(ok);
-            } else {
-                UNIT_ASSERT(!ok);
-                break;
-            }
-            overload = engine.GetOverloadedGranules(pathId);
+            UNIT_ASSERT(ok);
         }
-        UNIT_ASSERT(overload);
 
         { // check it's overloaded after reload
             TColumnEngineForLogs tmpEngine(0, TestLimits());
             tmpEngine.UpdateDefaultSchema(TSnapshot::Zero(), TIndexInfo(tableInfo));
             tmpEngine.Load(db, lostBlobs);
-            UNIT_ASSERT(tmpEngine.GetOverloadedGranules(pathId));
         }
 
         // compact
@@ -655,16 +643,13 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
                 TInsertedData(planStep, txId, pathId, "", blobRange.BlobId, {}, indexSnapshot));
 
             bool ok = Insert(engine, db, TSnapshot(planStep, txId), std::move(dataToIndex), blobs, step);
-            bool overload = engine.GetOverloadedGranules(pathId);
             UNIT_ASSERT(ok);
-            UNIT_ASSERT(!overload);
         }
 
         { // check it's not overloaded after reload
             TColumnEngineForLogs tmpEngine(0, TestLimits());
             tmpEngine.UpdateDefaultSchema(TSnapshot::Zero(), TIndexInfo(tableInfo));
             tmpEngine.Load(db, lostBlobs);
-            UNIT_ASSERT(!tmpEngine.GetOverloadedGranules(pathId));
         }
     }
 

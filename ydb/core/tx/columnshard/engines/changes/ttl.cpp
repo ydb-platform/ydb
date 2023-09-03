@@ -9,12 +9,12 @@ namespace NKikimr::NOlap {
 
 void TTTLColumnEngineChanges::DoDebugString(TStringOutput& out) const {
     TBase::DoDebugString(out);
-    if (ui32 evicted = PortionsToEvict.size()) {
-        out << "evict " << evicted << " portions";
+    if (PortionsToEvict.size()) {
+        out << "eviction=(count=" << PortionsToEvict.size() << ";portions=[";
         for (auto& info : PortionsToEvict) {
-            out << info.GetActualPortionInfo() << " (to " << info.GetFeatures().TargetTierName << ")";
+            out << info.GetActualPortionInfo() << ";to=" << info.GetFeatures().TargetTierName << ";";
         }
-        out << "; ";
+        out << "];";
     }
 }
 

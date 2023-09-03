@@ -26,7 +26,7 @@ protected:
     virtual bool DoOnAfterFilterAssembling(const std::shared_ptr<arrow::RecordBatch>& /*batch*/) {
         return true;
     }
-    virtual bool DoOnStartCompaction(const std::shared_ptr<NOlap::TColumnEngineChanges>& /*changes*/) {
+    virtual bool DoOnStartCompaction(std::shared_ptr<NOlap::TColumnEngineChanges>& /*changes*/) {
         return true;
     }
 public:
@@ -39,7 +39,7 @@ public:
     bool OnAfterFilterAssembling(const std::shared_ptr<arrow::RecordBatch>& batch) {
         return DoOnAfterFilterAssembling(batch);
     }
-    bool OnStartCompaction(const std::shared_ptr<NOlap::TColumnEngineChanges>& changes) {
+    bool OnStartCompaction(std::shared_ptr<NOlap::TColumnEngineChanges>& changes) {
         return DoOnStartCompaction(changes);
     }
 };
@@ -48,8 +48,28 @@ class TControllers {
 private:
     ICSController::TPtr CSController = std::make_shared<ICSController>();
 public:
+    template <class TController>
+    class TGuard: TNonCopyable {
+    private:
+        std::shared_ptr<TController> Controller;
+    public:
+        TGuard(std::shared_ptr<TController> controller)
+            : Controller(controller)
+        {
+            Y_VERIFY(Controller);
+        }
+
+        TController* operator->() {
+            return Controller.get();
+        }
+
+        ~TGuard() {
+            Singleton<TControllers>()->CSController = std::make_shared<ICSController>();
+        }
+    };
+
     template <class T, class... Types>
-    static std::shared_ptr<T> RegisterCSController(Types... args) {
+    static TGuard<T> RegisterCSControllerGuard(Types... args) {
         auto result = std::make_shared<T>(args...);
         Singleton<TControllers>()->CSController = result;
         return result;

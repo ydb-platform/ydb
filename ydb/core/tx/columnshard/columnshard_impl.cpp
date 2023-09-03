@@ -616,19 +616,12 @@ void TColumnShard::EnqueueBackgroundActivities(bool periodic, TBackgroundActivit
     }
 
     const TActorContext& ctx = ActorContext();
-    // Schedule either indexing or compaction.
-    if (activity.HasIndexation() || activity.HasCompaction()) {
-        [&] {
-            if (BackgroundController.IsIndexingActive()) {
-                return;
-            }
-            if (activity.HasCompaction()) {
-                SetupCompaction();
-            }
-            if (activity.HasIndexation()) {
-                SetupIndexation();
-            }
-        }();
+    if (activity.HasIndexation()) {
+        SetupIndexation();
+    }
+
+    if (activity.HasCompaction()) {
+        SetupCompaction();
     }
 
     if (activity.HasCleanup()) {
@@ -652,6 +645,9 @@ void TColumnShard::EnqueueBackgroundActivities(bool periodic, TBackgroundActivit
 }
 
 void TColumnShard::SetupIndexation() {
+    if (BackgroundController.IsIndexingActive()) {
+        return;
+    }
     CSCounters.OnSetupIndexation();
     ui32 blobs = 0;
     ui32 ignored = 0;
@@ -661,23 +657,11 @@ void TColumnShard::SetupIndexation() {
     dataToIndex.reserve(TLimits::MIN_SMALL_BLOBS_TO_INSERT);
     for (auto it = InsertTable->GetPathPriorities().rbegin(); it != InsertTable->GetPathPriorities().rend(); ++it) {
         for (auto* pathInfo : it->second) {
-            const bool hasSplitCompaction = BackgroundController.HasSplitCompaction(pathInfo->GetPathId());
-            const bool granulesOverloaded = TablesManager.GetPrimaryIndex()->HasOverloadedGranules(pathInfo->GetPathId());
             for (auto& data : pathInfo->GetCommitted()) {
                 ui32 dataSize = data.BlobSize();
                 Y_VERIFY(dataSize);
 
                 size += dataSize;
-                if (granulesOverloaded) {
-                    ++ignored;
-                    CSCounters.SkipIndexationInputDueToGranuleOverload(dataSize);
-                    continue;
-                }
-                if (hasSplitCompaction) {
-                    ++ignored;
-                    CSCounters.SkipIndexationInputDueToSplitCompaction(dataSize);
-                    continue;
-                }
                 ++blobs;
                 bytesToIndex += dataSize;
                 dataToIndex.push_back(&data);
@@ -738,17 +722,7 @@ void TColumnShard::SetupCompaction() {
     BackgroundController.CheckDeadlines();
     while (BackgroundController.GetCompactionsCount() < TSettings::MAX_ACTIVE_COMPACTIONS) {
         auto limits = CompactionLimits.Get();
-        auto compactionInfo = TablesManager.MutablePrimaryIndex().Compact(limits, BackgroundController.GetBusyGranules());
-        if (!compactionInfo) {
-            if (!BackgroundController.GetCompactionsCount()) {
-                LOG_S_DEBUG("Compaction not started: no portions to compact at tablet " << TabletID());
-            }
-            break;
-        }
-
-        LOG_S_DEBUG("Prepare " << compactionInfo->GetGranule()->DebugString() << "/" << compactionInfo->InGranule() << " at tablet " << TabletID());
-
-        auto indexChanges = TablesManager.MutablePrimaryIndex().StartCompaction(std::move(compactionInfo), limits);
+        auto indexChanges = TablesManager.MutablePrimaryIndex().StartCompaction(limits, BackgroundController.GetConflictCompactionPortions());
         if (!indexChanges) {
             if (!BackgroundController.GetCompactionsCount()) {
                 LOG_S_DEBUG("Compaction not started: cannot prepare compaction at tablet " << TabletID());
@@ -787,7 +761,7 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
     }
 
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
-    std::shared_ptr<NOlap::TTTLColumnEngineChanges> indexChanges = TablesManager.MutablePrimaryIndex().StartTtl(eviction, BackgroundController.GetConflictTTLGranules());
+    std::shared_ptr<NOlap::TTTLColumnEngineChanges> indexChanges = TablesManager.MutablePrimaryIndex().StartTtl(eviction, BackgroundController.GetConflictTTLPortions());
 
     if (!indexChanges) {
         LOG_S_INFO("Cannot prepare TTL at tablet " << TabletID());

@@ -9,6 +9,7 @@
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/core/tx/columnshard/engines/changes/cleanup.h>
 #include <ydb/core/tx/columnshard/operations/write_data.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <library/cpp/actors/protos/unittests.pb.h>
 #include <ydb/core/formats/arrow/simple_builder/filler.h>
 #include <ydb/core/formats/arrow/simple_builder/array.h>
@@ -26,6 +27,15 @@ namespace
 namespace NTypeIds = NScheme::NTypeIds;
 using TTypeId = NScheme::TTypeId;
 using TTypeInfo = NScheme::TTypeInfo;
+
+class TDisableCompactionController: public NKikimr::NYDBTest::ICSController {
+protected:
+    virtual bool DoOnStartCompaction(std::shared_ptr<NOlap::TColumnEngineChanges>& changes) {
+        changes = nullptr;
+        return true;
+    }
+public:
+};
 
 template <typename TKey = ui64>
 bool DataHas(const std::vector<TString>& blobs, const TString& srtSchema, std::pair<ui64, ui64> range,
@@ -648,6 +658,7 @@ void TestWriteReadLongTxDup() {
 }
 
 void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString codec = "") {
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDisableCompactionController>();
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
@@ -2652,8 +2663,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     UNIT_ASSERT_VALUES_EQUAL(numRawBytes, 0);
                 }
             }
-            UNIT_ASSERT(sumCompactedRows <= (triggerPortionSize - overlapSize) * numWrites + overlapSize);
-            UNIT_ASSERT(sumCompactedRows > 0.7 * (triggerPortionSize - overlapSize) * numWrites + overlapSize);
+            const ui64 fullSize = (triggerPortionSize - overlapSize) * numWrites + overlapSize;
+            Cerr << "compacted=" << sumCompactedRows << ";expected=" << fullSize << ";" << Endl;
+            UNIT_ASSERT(sumCompactedRows == fullSize);
             UNIT_ASSERT(sumCompactedBytes > sumCompactedRows);
         }
     }
@@ -2837,8 +2849,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 if (auto compact = dynamic_pointer_cast<NOlap::TCompactColumnEngineChanges>(msg->IndexChanges)) {
                     Y_VERIFY(compact->SwitchedPortions.size());
                     ++compactionsHappened;
-                    Cerr << "Compaction at snapshot "<< msg->IndexChanges->InitSnapshot
-                        << " old portions:";
+                    Cerr << "Compaction old portions:";
                     ui64 srcGranule{0};
                     for (const auto& portionInfo : compact->SwitchedPortions) {
                         const bool moved = compact->IsMovedPortion(portionInfo);
@@ -2858,8 +2869,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 if (auto cleanup = dynamic_pointer_cast<NOlap::TCleanupColumnEngineChanges>(msg->IndexChanges)) {
                     Y_VERIFY(cleanup->PortionsToDrop.size());
                     ++cleanupsHappened;
-                    Cerr << "Cleanup older than snapshot "<< msg->IndexChanges->InitSnapshot
-                        << " old portions:";
+                    Cerr << "Cleanup old portions:";
                     for (const auto& portion : cleanup->PortionsToDrop) {
                         ui64 portionId = portion.GetPortion();
                         Cerr << " " << portionId;
@@ -3036,7 +3046,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
         }
 
-        // Advance the time and trigger some more compactions and cleanups
+        // Advance the time and trigger some more cleanups withno compactions
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDisableCompactionController>();
         planStep += 2 * delay.MilliSeconds();
         numWrites = 2;
         for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++planStep, ++txId) {

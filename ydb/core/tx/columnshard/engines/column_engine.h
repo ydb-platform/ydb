@@ -170,7 +170,6 @@ public:
     i64 Tables{};
     i64 Granules{};
     i64 EmptyGranules{};
-    i64 OverloadedGranules{};
     i64 ColumnRecords{};
     i64 ColumnMetadataBytes{};
     THashMap<TPortionMeta::EProduced, TPortionsStats> StatsByType;
@@ -368,10 +367,6 @@ public:
     virtual const std::shared_ptr<arrow::Schema>& GetReplaceKey() const { return GetVersionedIndex().GetLastSchema()->GetIndexInfo().GetReplaceKey(); }
     virtual const std::shared_ptr<arrow::Schema>& GetSortingKey() const { return GetVersionedIndex().GetLastSchema()->GetIndexInfo().GetSortingKey(); }
     virtual const std::shared_ptr<arrow::Schema>& GetIndexKey() const { return GetVersionedIndex().GetLastSchema()->GetIndexInfo().GetIndexKey(); }
-    virtual const THashSet<ui64>* GetOverloadedGranules(const ui64 pathId) const = 0;
-    bool HasOverloadedGranules(const ui64 pathId) const {
-        return GetOverloadedGranules(pathId) != nullptr;
-    }
 
     virtual TString SerializeMark(const NArrow::TReplaceKey& key) const = 0;
     virtual NArrow::TReplaceKey DeserializeMark(const TString& key, std::optional<ui32> markNumKeys) const = 0;
@@ -381,13 +376,11 @@ public:
     virtual std::shared_ptr<TSelectInfo> Select(ui64 pathId, TSnapshot snapshot,
                                                 const THashSet<ui32>& columnIds,
                                                 const TPKRangesFilter& pkRangesFilter) const = 0;
-    virtual std::unique_ptr<TCompactionInfo> Compact(const TCompactionLimits& limits, const THashSet<ui64>& busyGranuleIds) = 0;
     virtual std::shared_ptr<TInsertColumnEngineChanges> StartInsert(std::vector<TInsertedData>&& dataToIndex) noexcept = 0;
-    virtual std::shared_ptr<TCompactColumnEngineChanges> StartCompaction(std::unique_ptr<TCompactionInfo>&& compactionInfo,
-                                                                  const TCompactionLimits& limits) noexcept = 0;
+    virtual std::shared_ptr<TColumnEngineChanges> StartCompaction(const TCompactionLimits& limits, const THashSet<TPortionAddress>& busyPortions) noexcept = 0;
     virtual std::shared_ptr<TCleanupColumnEngineChanges> StartCleanup(const TSnapshot& snapshot, THashSet<ui64>& pathsToDrop,
                                                                ui32 maxRecords) noexcept = 0;
-    virtual std::shared_ptr<TTTLColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction, const THashSet<ui64>& busyGranules,
+    virtual std::shared_ptr<TTTLColumnEngineChanges> StartTtl(const THashMap<ui64, TTiering>& pathEviction, const THashSet<TPortionAddress>& busyPortions,
                                                            ui64 maxBytesToEvict = TCompactionLimits::DEFAULT_EVICTION_BYTES) noexcept = 0;
     virtual bool ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
     virtual void UpdateDefaultSchema(const TSnapshot& snapshot, TIndexInfo&& info) = 0;

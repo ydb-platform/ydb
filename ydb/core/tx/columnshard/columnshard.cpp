@@ -204,7 +204,6 @@ void TColumnShard::UpdateIndexCounters() {
     SetCounter(COUNTER_INDEX_TABLES, stats.Tables);
     SetCounter(COUNTER_INDEX_GRANULES, stats.Granules);
     SetCounter(COUNTER_INDEX_EMPTY_GRANULES, stats.EmptyGranules);
-    SetCounter(COUNTER_INDEX_OVERLOADED_GRANULES, stats.OverloadedGranules);
     SetCounter(COUNTER_INDEX_COLUMN_RECORDS, stats.ColumnRecords);
     SetCounter(COUNTER_INDEX_COLUMN_METADATA_BYTES, stats.ColumnMetadataBytes);
     SetCounter(COUNTER_INSERTED_PORTIONS, stats.GetInsertedStats().Portions);
@@ -234,7 +233,7 @@ void TColumnShard::UpdateIndexCounters() {
     SetCounter(COUNTER_EVICTED_RAW_BYTES, stats.GetEvictedStats().RawBytes);
 
     LOG_S_DEBUG("Index: tables " << stats.Tables
-        << " granules " << stats.Granules << " (empty " << stats.EmptyGranules << " overloaded " << stats.OverloadedGranules << ")"
+        << " granules " << stats.Granules << " (empty " << stats.EmptyGranules << ")"
         << " inserted " << stats.GetInsertedStats().DebugString()
         << " compacted " << stats.GetCompactedStats().DebugString()
         << " s-compacted " << stats.GetSplitCompactedStats().DebugString()

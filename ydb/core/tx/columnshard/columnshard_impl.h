@@ -208,7 +208,6 @@ class TColumnShard
 public:
     enum class EOverloadStatus {
         Shard /* "shard" */,
-        Granule /* "granule" */,
         InsertTable /* "insert_table" */,
         Disk /* "disk" */,
         None

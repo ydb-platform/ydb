@@ -6,6 +6,7 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 #include <library/cpp/actors/core/av_bootstrapped.h>
@@ -22,6 +23,15 @@ enum class EInitialEviction {
     None,
     Ttl,
     Tiering
+};
+
+class TDisableCompactionController: public NKikimr::NYDBTest::ICSController {
+protected:
+    virtual bool DoOnStartCompaction(std::shared_ptr<NOlap::TColumnEngineChanges>& changes) {
+        changes = nullptr;
+        return true;
+    }
+public:
 };
 
 namespace {
@@ -200,6 +210,7 @@ static constexpr ui32 PORTION_ROWS = 80 * 1000;
 void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
              const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema = testYdbSchema)
 {
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDisableCompactionController>();
     std::vector<ui64> ts = {1600000000, 1620000000};
 
     ui32 ttlIncSeconds = 1;
@@ -214,6 +225,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
 
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
+    runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime,

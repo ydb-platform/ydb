@@ -23,10 +23,10 @@ protected:
     }
     virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const override;
 public:
-    virtual THashSet<ui64> GetTouchedGranules() const override {
-        THashSet<ui64> result;
+    virtual THashSet<TPortionAddress> GetTouchedPortions() const override {
+        THashSet<TPortionAddress> result;
         for (const auto& portionInfo : PortionsToDrop) {
-            result.emplace(portionInfo.GetGranule());
+            result.emplace(portionInfo.GetAddress());
         }
         return result;
     }

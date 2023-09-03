@@ -254,10 +254,6 @@ struct TEvColumnShard {
             Record.MutableMeta()->SetSchema(arrowSchema);
             Record.SetData(arrowData);
         }
-
-        TActorId GetSource() const {
-            return ActorIdFromProto(Record.GetSource());
-        }
     };
 
     struct TEvWriteResult : public TEventPB<TEvWriteResult, NKikimrTxColumnShard::TEvWriteResult,

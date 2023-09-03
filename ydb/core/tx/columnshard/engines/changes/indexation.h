@@ -37,14 +37,8 @@ public:
         return DataToIndex;
     }
 
-    virtual THashSet<ui64> GetTouchedGranules() const override {
-        THashSet<ui64> result = TBase::GetTouchedGranules();
-        for (auto&& i : PathToGranule) {
-            for (auto&& g : i.second) {
-                result.emplace(g.second);
-            }
-        }
-        return result;
+    virtual THashSet<TPortionAddress> GetTouchedPortions() const override {
+        return TBase::GetTouchedPortions();
     }
 
     virtual THashMap<TUnifiedBlobId, std::vector<TBlobRange>> GetGroupedBlobRanges() const override;

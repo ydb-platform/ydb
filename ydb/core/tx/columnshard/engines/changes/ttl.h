@@ -76,10 +76,13 @@ public:
     virtual bool NeedConstruction() const override {
         return PortionsToEvict.size();
     }
-    virtual THashSet<ui64> GetTouchedGranules() const override {
-        auto result = TBase::GetTouchedGranules();
+    virtual THashSet<TPortionAddress> GetTouchedPortions() const override {
+        THashSet<TPortionAddress> result;
         for (auto&& info : PortionsToEvict) {
-            result.emplace(info.GetPortionInfo().GetGranule());
+            result.emplace(info.GetPortionInfo().GetAddress());
+        }
+        for (auto&& info : PortionsToDrop) {
+            result.emplace(info.GetAddress());
         }
         return result;
     }

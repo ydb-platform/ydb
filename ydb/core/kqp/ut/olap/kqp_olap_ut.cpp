@@ -1344,7 +1344,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
-        auto csController = NYDBTest::TControllers::RegisterCSController<NYDBTest::NColumnShard::TController>();
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         ui32 rowsCount = 0;
         {
             ui32 i = 0;
@@ -1390,7 +1390,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 LIMIT 1000;
         )");
 
-        auto csController = NYDBTest::TControllers::RegisterCSController<NYDBTest::NColumnShard::TController>();
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         auto rows = ExecuteScanQuery(tableClient, selectQuery);
 
         TInstant tsPrev = TInstant::MicroSeconds(1000000);
@@ -1433,7 +1433,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 LIMIT 1000;
         )");
 
-        auto csController = NYDBTest::TControllers::RegisterCSController<NYDBTest::NColumnShard::TController>();
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         auto rows = ExecuteScanQuery(tableClient, selectQuery);
         
         TInstant tsPrev = TInstant::MicroSeconds(2000000);

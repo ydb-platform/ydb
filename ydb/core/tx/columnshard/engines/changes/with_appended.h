@@ -36,7 +36,7 @@ public:
 
     }
 
-    virtual THashSet<ui64> GetTouchedGranules() const override {
+    virtual THashSet<TPortionAddress> GetTouchedPortions() const override {
         return {};
     }
 

@@ -236,9 +236,11 @@ TCompactColumnEngineChanges::~TCompactColumnEngineChanges() {
     Y_VERIFY_DEBUG(!NActors::TlsActivationContext || !NeedGranuleStatusProvide);
 }
 
-THashSet<ui64> TCompactColumnEngineChanges::GetTouchedGranules() const {
-    THashSet<ui64> result = TBase::GetTouchedGranules();
-    result.emplace(GranuleMeta->GetGranuleId());
+THashSet<TPortionAddress> TCompactColumnEngineChanges::GetTouchedPortions() const {
+    THashSet<TPortionAddress> result = TBase::GetTouchedPortions();
+    for (auto&& i : SwitchedPortions) {
+        result.emplace(i.GetAddress());
+    }
     return result;
 }
 

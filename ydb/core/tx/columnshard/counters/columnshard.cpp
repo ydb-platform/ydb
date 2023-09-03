@@ -24,8 +24,6 @@ TCSCounters::TCSCounters()
 
     OverloadInsertTableBytes = TBase::GetDeriviative("OverloadInsertTable/Bytes");
     OverloadInsertTableCount = TBase::GetDeriviative("OverloadInsertTable/Count");
-    OverloadGranuleBytes = TBase::GetDeriviative("OverloadGranule/Bytes");
-    OverloadGranuleCount = TBase::GetDeriviative("OverloadGranule/Count");
     OverloadShardBytes = TBase::GetDeriviative("OverloadShard/Bytes");
     OverloadShardCount = TBase::GetDeriviative("OverloadShard/Count");
 

@@ -148,6 +148,9 @@ struct TProtobufParserOptions
     //! If |true| then required fields not found in protobuf metadata are
     //! silently skipped; otherwise an exception is thrown.
     bool SkipRequiredFields = false;
+
+    // Check if |string| fields contain actual UTF-8 strings.
+    bool CheckUtf8 = false;
 };
 
 //! Parses a byte sequence and translates it into IYsonConsumer calls.

@@ -1013,6 +1013,34 @@ TEST(TYsonToProtobufTest, Entities)
     EXPECT_FALSE(message.has_nested_message1());
 }
 
+TEST(TYsonToProtobufTest, ValidUtf8StringCheck)
+{
+    TProtobufWriterOptions options{
+        .CheckUtf8 = true,
+    };
+
+    TString invalidUtf8 = "\xc3\x28";
+
+    auto check = [&] {
+        TEST_PROLOGUE_WITH_OPTIONS(TMessage, options)
+            .BeginMap()
+                .Item("string_field").Value(invalidUtf8)
+            .EndMap();
+    };
+
+    EXPECT_THROW_WITH_SUBSTRING(check(), "valid UTF-8");
+
+    NProto::TMessage message;
+    message.set_string_field(invalidUtf8);
+    TString newYsonString;
+    TStringOutput newYsonOutputStream(newYsonString);
+    TYsonWriter ysonWriter(&newYsonOutputStream, EYsonFormat::Pretty);
+
+    EXPECT_THROW_WITH_SUBSTRING(
+        WriteProtobufMessage(&ysonWriter, message, TProtobufParserOptions{.CheckUtf8 = true}),
+        "valid UTF-8");
+}
+
 TEST(TYsonToProtobufTest, CustomUnknownFieldsModeResolver)
 {
     {

@@ -41,6 +41,10 @@ public:
         Y_VERIFY(Serializer);
     }
 
+    bool IsHardPacker() const {
+        return Serializer && Serializer->IsHardPacker();
+    }
+
     TString Apply(std::shared_ptr<arrow::Array> data, std::shared_ptr<arrow::Field> field) const {
         auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector{field});
         auto batch = arrow::RecordBatch::Make(schema, data->length(), {data});

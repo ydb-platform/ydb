@@ -3,6 +3,7 @@
 #include "predicate/predicate.h"
 
 #include <ydb/core/tx/columnshard/columnshard_ut_common.h>
+#include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 
 
 namespace NKikimr {

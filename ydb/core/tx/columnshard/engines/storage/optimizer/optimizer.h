@@ -1,11 +1,11 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
-#include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <library/cpp/object_factory/object_factory.h>
 
 namespace NKikimr::NOlap {
 struct TCompactionLimits;
 class TGranuleMeta;
+class TColumnEngineChanges;
 }
 
 namespace NKikimr::NOlap::NStorageOptimizer {
@@ -18,7 +18,10 @@ protected:
     virtual void DoRemovePortion(const std::shared_ptr<TPortionInfo>& info) = 0;
     virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const THashSet<TPortionAddress>& busyPortions) const = 0;
     virtual i64 DoGetUsefulMetric() const = 0;
-
+    virtual std::vector<std::shared_ptr<TPortionInfo>> DoGetPortionsOrderedByPK(const TSnapshot& snapshot) const = 0;
+    virtual TString DoDebugString() const {
+        return "";
+    }
 public:
     using TFactory = NObjectFactory::TObjectFactory<IOptimizerPlanner, TString>;
     IOptimizerPlanner(const ui64 granuleId)
@@ -29,8 +32,12 @@ public:
 
 
     virtual ~IOptimizerPlanner() = default;
-    virtual TString GetDescription() const {
-        return "";
+    TString DebugString() const {
+        return DoDebugString();
+    }
+
+    std::vector<std::shared_ptr<TPortionInfo>> GetPortionsOrderedByPK(const TSnapshot& snapshot) const {
+        return DoGetPortionsOrderedByPK(snapshot);
     }
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& info) {

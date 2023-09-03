@@ -9,7 +9,6 @@
 #include "storage/granule.h"
 #include "storage/storage.h"
 #include "changes/indexation.h"
-#include "changes/compaction.h"
 #include "changes/ttl.h"
 #include "changes/with_appended.h"
 
@@ -48,7 +47,6 @@ public:
     };
 private:
     THashMap<ui64, TTiering> OriginalTierings;
-    std::map<TMonotonic, std::vector<TTieringWithPathId>> NextCheckInstantForTTL;
     std::map<TMonotonic, std::vector<TTieringWithPathId>> NextCheckInstantForTierings;
 
     std::map<TMonotonic, std::vector<TTieringWithPathId>> BuildNextInstantCheckers(THashMap<ui64, TTiering>&& info) {
@@ -289,8 +287,6 @@ private:
     void UpdatePortionStats(TColumnEngineStats& engineStats, const TPortionInfo& portionInfo,
                             EStatsUpdateType updateType,
                             const TPortionInfo* exPortionInfo = nullptr) const;
-
-    bool CanInsert(const TColumnEngineChanges& changes, const TSnapshot& commitSnap) const;
 
     /// Return lists of adjacent empty granules for the path.
     std::vector<std::vector<std::pair<TMark, ui64>>> EmptyGranuleTracks(const ui64 pathId) const;

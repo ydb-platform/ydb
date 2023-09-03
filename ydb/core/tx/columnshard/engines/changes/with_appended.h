@@ -26,6 +26,10 @@ protected:
         const TSnapshot& snapshot, const TGranuleMeta* granuleMeta, TConstructionContext& context) const;
 
 public:
+    const TSplitSettings& GetSplitSettings() const {
+        return SplitSettings;
+    }
+
     TChangesWithAppend(const TSplitSettings& splitSettings)
         : SplitSettings(splitSettings)
     {

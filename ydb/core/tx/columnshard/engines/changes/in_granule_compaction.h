@@ -1,5 +1,6 @@
 #pragma once
 #include "compaction.h"
+#include "mark_granules.h"
 
 namespace NKikimr::NOlap {
 

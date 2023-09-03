@@ -5,6 +5,7 @@
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/tiering/external_data.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/services/metadata/service.h>
 #include <ydb/core/tx/tiering/manager.h>
 

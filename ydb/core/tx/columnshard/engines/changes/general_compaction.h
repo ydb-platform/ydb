@@ -1,7 +1,7 @@
 #pragma once
 #include "compaction.h"
 
-namespace NKikimr::NOlap {
+namespace NKikimr::NOlap::NCompaction {
 
 class TGeneralCompactColumnEngineChanges: public TCompactColumnEngineChanges {
 private:

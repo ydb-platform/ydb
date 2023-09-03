@@ -1,5 +1,6 @@
 #include "columnshard_impl.h"
 #include "blob_cache.h"
+#include "engines/changes/compaction.h"
 
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/conveyor/usage/events.h>

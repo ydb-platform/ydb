@@ -1,4 +1,5 @@
 #include "split_compaction.h"
+#include "mark_granules.h"
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/storage/granule.h>
 

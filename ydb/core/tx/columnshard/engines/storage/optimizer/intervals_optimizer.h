@@ -2,6 +2,7 @@
 #include "optimizer.h"
 #include <ydb/core/formats/arrow/replace_key.h>
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/core/tx/columnshard/splitter/settings.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer {
 
@@ -33,6 +34,10 @@ public:
             ;
     }
 
+    std::shared_ptr<TPortionInfo> GetPortionPtr() const {
+        return Portion;
+    }
+
     const TPortionInfo& GetPortion() const {
         return *Portion;
     }
@@ -57,6 +62,7 @@ public:
 class TIntervalFeatures {
 private:
     YDB_READONLY(i32, PortionsCount, 0);
+    YDB_READONLY(i32, RecordsCount, 0);
     YDB_READONLY(i64, PortionsWeight, 0);
     YDB_READONLY(i64, PortionsRawWeight, 0);
     YDB_READONLY(i32, SmallPortionsWeight, 0);
@@ -71,6 +77,7 @@ public:
         result.InsertValue("p_raw_weight", PortionsRawWeight);
         result.InsertValue("sp_count", SmallPortionsCount);
         result.InsertValue("sp_weight", SmallPortionsWeight);
+        result.InsertValue("r_count", RecordsCount);
         auto& pIds = result.InsertValue("portion_ids", NJson::JSON_ARRAY);
         for (auto&& i : SummaryPortions) {
             pIds.AppendValue(i.first);
@@ -79,7 +86,7 @@ public:
     }
 
     bool Merge(const TIntervalFeatures& features, const i64 sumWeightLimit) {
-        if (PortionsRawWeight + features.PortionsRawWeight > sumWeightLimit) {
+        if (PortionsCount > 1 && PortionsWeight + features.PortionsWeight > sumWeightLimit) {
             return false;
         }
         for (auto&& i : features.SummaryPortions) {
@@ -92,14 +99,14 @@ public:
     }
 
     i64 GetUsefulMetric() const {
-        if (PortionsCount == 1) {
+        if (PortionsCount == 1 || PortionsWeight == 0) {
             return 0;
         }
-        return PortionsCount;
+        return (i64)10000 * PortionsCount / (PortionsWeight * 1e-6);
     }
 
     double GetUsefulKff() const {
-        if (PortionsCount == 0) {
+        if (PortionsCount == 0 || PortionsWeight == 0) {
             return Max<double>();
         }
         Y_VERIFY(PortionsWeight);
@@ -113,6 +120,7 @@ public:
         const i64 portionBytes = info->BlobsBytes();
         PortionsWeight += portionBytes;
         PortionsRawWeight += info->RawBytesSum();
+        RecordsCount += info->NumRows();
         if ((i64)portionBytes < TSplitSettings().GetMinBlobSize()) {
             ++SmallPortionsCount;
             SmallPortionsWeight += portionBytes;
@@ -128,6 +136,8 @@ public:
         Y_VERIFY(PortionsWeight >= 0);
         PortionsRawWeight -= info->RawBytesSum();
         Y_VERIFY(PortionsRawWeight >= 0);
+        RecordsCount -= info->NumRows();
+        Y_VERIFY(RecordsCount >= 0);
         if ((i64)portionBytes < TSplitSettings().GetMinBlobSize()) {
             Y_VERIFY(--SmallPortionsCount >= 0);
             SmallPortionsWeight -= portionBytes;
@@ -149,14 +159,17 @@ public:
         return GetPortionsWeight() > TSplitSettings().GetMinBlobSize();
     }
 
-    bool IsCritical() const {
-        return PortionsCount > 1 || SmallPortionsCount;
-    }
-
 };
+
+class TCounters;
 
 class TIntervalsOptimizerPlanner: public IOptimizerPlanner {
 private:
+    static ui64 LimitSmallBlobsMerge;
+    static ui64 LimitSmallBlobDetect;
+
+    std::shared_ptr<TCounters> Counters;
+
     using TBase = IOptimizerPlanner;
 
     class TPortionIntervalPoint {
@@ -186,6 +199,10 @@ private:
             : Position(position)
         {
 
+        }
+
+        const std::map<TPortionIntervalPoint, TSegmentPosition>& GetPositions() const {
+            return Positions;
         }
 
         NJson::TJsonValue DebugJson() const {
@@ -221,12 +238,8 @@ private:
             Y_VERIFY(Positions.erase(TPortionIntervalPoint(info->GetPortion(), false)));
             return Positions.empty();
         }
-        void AddSummary(const std::shared_ptr<TPortionInfo>& info) {
-            Features.Add(info);
-        }
-        void RemoveSummary(const std::shared_ptr<TPortionInfo>& info) {
-            Features.Remove(info);
-        }
+        void AddSummary(const std::shared_ptr<TPortionInfo>& info);
+        void RemoveSummary(const std::shared_ptr<TPortionInfo>& info);
     };
     std::map<TIntervalFeatures, std::set<const TBorderPositions*>> RangedSegments;
     using TPositions = std::map<NArrow::TReplaceKey, TBorderPositions>;
@@ -234,126 +247,27 @@ private:
     i64 SumSmall = 0;
     std::map<NArrow::TReplaceKey, std::map<ui64, std::shared_ptr<TPortionInfo>>> SmallBlobs;
 
-    void RemoveRanged(const TBorderPositions& data) {
-        if (!!data.GetFeatures()) {
-            auto itFeatures = RangedSegments.find(data.GetFeatures());
-            Y_VERIFY(itFeatures->second.erase(&data));
-            if (itFeatures->second.empty()) {
-                RangedSegments.erase(itFeatures);
-            }
-        }
-    }
+    void RemoveRanged(const TBorderPositions& data);
 
-    void AddRanged(const TBorderPositions& data) {
-        if (!!data.GetFeatures()) {
-            Y_VERIFY(RangedSegments[data.GetFeatures()].emplace(&data).second);
-        }
-    }
+    void AddRanged(const TBorderPositions& data);
 
-    bool RemoveSmallPortion(const std::shared_ptr<TPortionInfo>& info) {
-        if (info->BlobsBytes() < 1024 * 1024) {
-            auto it = SmallBlobs.find(info->IndexKeyStart());
-            Y_VERIFY(it->second.erase(info->GetPortion()));
-            if (it->second.empty()) {
-                SmallBlobs.erase(it);
-            }
-            SumSmall -= info->BlobsBytes();
-            Y_VERIFY(SumSmall >= 0);
-            return true;
-        }
-        return false;
-    }
+    bool RemoveSmallPortion(const std::shared_ptr<TPortionInfo>& info);
 
-    bool AddSmallPortion(const std::shared_ptr<TPortionInfo>& info) {
-        if (info->BlobsBytes() < 1024 * 1024) {
-            Y_VERIFY(SmallBlobs[info->IndexKeyStart()].emplace(info->GetPortion(), info).second);
-            SumSmall += info->BlobsBytes();
-            return true;
-        }
-        return false;
-    }
+    bool AddSmallPortion(const std::shared_ptr<TPortionInfo>& info);
 
     std::shared_ptr<TColumnEngineChanges> GetSmallPortionsMergeTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule) const;
 
 protected:
-    virtual void DoAddPortion(const std::shared_ptr<TPortionInfo>& info) override {
-        AddSmallPortion(info);
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "add_portion")("portion_id", info->GetPortion());
-        auto itStart = Positions.find(info->IndexKeyStart());
-        if (itStart == Positions.end()) {
-            itStart = Positions.emplace(info->IndexKeyStart(), TBorderPositions(info->IndexKeyStart())).first;
-            if (itStart != Positions.begin()) {
-                auto itStartCopy = itStart;
-                --itStartCopy;
-                itStart->second.CopyFrom(itStartCopy->second);
-                AddRanged(itStart->second);
-            }
-        }
-        auto itEnd = Positions.find(info->IndexKeyEnd());
-        if (itEnd == Positions.end()) {
-            itEnd = Positions.emplace(info->IndexKeyEnd(), TBorderPositions(info->IndexKeyEnd())).first;
-            Y_VERIFY(itEnd != Positions.begin());
-            auto itEndCopy = itEnd;
-            --itEndCopy;
-            itEnd->second.CopyFrom(itEndCopy->second);
-            AddRanged(itEnd->second);
-            itStart = Positions.find(info->IndexKeyStart());
-        }
-        Y_VERIFY(itStart != Positions.end());
-        Y_VERIFY(itEnd != Positions.end());
-        itStart->second.AddStart(info);
-        itEnd->second.AddFinish(info);
-        for (auto it = itStart; it != itEnd; ++it) {
-            RemoveRanged(it->second);
-            it->second.AddSummary(info);
-            AddRanged(it->second);
-        }
-    }
-    virtual void DoRemovePortion(const std::shared_ptr<TPortionInfo>& info) override {
-        RemoveSmallPortion(info);
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "remove_portion")("portion_id", info->GetPortion());
-        auto itStart = Positions.find(info->IndexKeyStart());
-        auto itFinish = Positions.find(info->IndexKeyEnd());
-        Y_VERIFY(itStart != Positions.end());
-        Y_VERIFY(itFinish != Positions.end());
-        for (auto it = itStart; it != itFinish; ++it) {
-            RemoveRanged(it->second);
-            it->second.RemoveSummary(info);
-            AddRanged(it->second);
-        }
-        if (itStart->second.RemoveStart(info)) {
-            RemoveRanged(itStart->second);
-            Positions.erase(itStart);
-        }
-        if (itFinish->second.RemoveFinish(info)) {
-            RemoveRanged(itFinish->second);
-            Positions.erase(itFinish);
-        }
-    }
+    virtual void DoAddPortion(const std::shared_ptr<TPortionInfo>& info) override;
+    virtual void DoRemovePortion(const std::shared_ptr<TPortionInfo>& info) override;
     virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const THashSet<TPortionAddress>& busyPortions) const override;
-    virtual i64 DoGetUsefulMetric() const override {
-        if (RangedSegments.empty()) {
-            return 0;
-        }
-        auto& topSegment = **RangedSegments.begin()->second.begin();
-        auto& topFeaturesTask = topSegment.GetFeatures();
-        return topFeaturesTask.GetUsefulMetric();
-    }
+    virtual std::vector<std::shared_ptr<TPortionInfo>> DoGetPortionsOrderedByPK(const TSnapshot& snapshot) const override;
+
+    virtual i64 DoGetUsefulMetric() const override;
+    virtual TString DoDebugString() const override;
+
 public:
-    virtual TString GetDescription() const override {
-        NJson::TJsonValue result = NJson::JSON_MAP;
-        auto& positions = result.InsertValue("positions", NJson::JSON_ARRAY);
-        for (auto&& i : Positions) {
-            positions.AppendValue(i.second.DebugJson());
-        }
-        return result.GetStringRobust();
-    }
-
-    TIntervalsOptimizerPlanner(const ui64 granuleId)
-        : TBase(granuleId)
-    {
-
-    }
+    TIntervalsOptimizerPlanner(const ui64 granuleId);
 };
 
 } // namespace NKikimr::NOlap

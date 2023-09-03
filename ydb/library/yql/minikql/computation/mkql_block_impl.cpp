@@ -18,21 +18,27 @@ namespace {
 
 template<typename T>
 arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& pool) {
+    std::shared_ptr<arrow::DataType> arrowType;
+    MKQL_ENSURE(ConvertArrowType(type, arrowType), "Unsupported type of scalar " << *type);
     if (!value) {
-        std::shared_ptr<arrow::DataType> arrowType;
-        MKQL_ENSURE(ConvertArrowType(type, arrowType), "Unsupported type of scalar");
         return arrow::MakeNullScalar(arrowType);
     }
 
+    bool isOptional = false;
     if (type->IsOptional()) {
         type = AS_TYPE(TOptionalType, type)->GetItemType();
+        isOptional = true;
+    }
+
+    if (type->IsOptional() || (isOptional && type->IsPg())) {
+        // nested optionals
+        std::vector<std::shared_ptr<arrow::Scalar>> arrowValue;
+        arrowValue.emplace_back(DoConvertScalar(type, value.GetOptionalValue(), pool).scalar());
+        return arrow::Datum(std::make_shared<arrow::StructScalar>(arrowValue, arrowType));
     }
 
     if (type->IsTuple()) {
         auto tupleType = AS_TYPE(TTupleType, type);
-        std::shared_ptr<arrow::DataType> arrowType;
-        MKQL_ENSURE(ConvertArrowType(type, arrowType), "Unsupported type of scalar");
-
         std::vector<std::shared_ptr<arrow::Scalar>> arrowValue;
         for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
             arrowValue.emplace_back(DoConvertScalar(tupleType->GetElementType(i), value.GetElement(i), pool).scalar());
@@ -82,7 +88,7 @@ arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& poo
             return arrow::Datum(scalar);
         }
         default:
-            MKQL_ENSURE(false, "Unsupported data slot");
+            MKQL_ENSURE(false, "Unsupported data slot " << slot);
         }
     }
 
@@ -90,7 +96,7 @@ arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& poo
         return NYql::MakePgScalar(AS_TYPE(TPgType, type), value, pool);
     }
 
-    MKQL_ENSURE(false, "Unsupported type");
+    MKQL_ENSURE(false, "Unsupported type " << *type);
 }
 
 } // namespace

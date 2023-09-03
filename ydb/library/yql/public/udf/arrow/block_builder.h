@@ -984,6 +984,7 @@ public:
             return;
         }
 
+        NullBuilder->UnsafeAppend(1);
         Inner->Add(input);
     }
 

@@ -315,18 +315,15 @@ public:
                     continue;
                 }
                 for (TString groupId : poolInfo.Groups) {
-                    ++totalGroups;
                     if (!CheckGroupFilters(groupId, poolName)) {
                         continue;
                     }
-                    ++foundGroups;
 
                     TGroupRow row;
                     row.PoolName = poolName;
                     row.GroupId = groupId;
                     row.Kind = poolInfo.Kind;
 
-                    bool degraded = false;
                     auto ib = BSGroupIndex.find(groupId);
                     if (ib != BSGroupIndex.end()) {
                         row.Erasure = ib->second.GetErasureSpecies();
@@ -334,10 +331,11 @@ public:
                         for (auto iv = vDiskIds.begin(); iv != vDiskIds.end(); ++iv) {
                             const NKikimrBlobStorage::TVDiskID& vDiskId = *iv;
                             auto ie = VDisksIndex.find(vDiskId);
+                            bool degraded = false;
                             if (ie != VDisksIndex.end()) {
                                 ui32 nodeId = ie->second.GetNodeId();
                                 ui32 pDiskId = ie->second.GetPDiskId();
-                                degraded |= ie->second.GetReplicated() || ie->second.GetVDiskState() != NKikimrWhiteboard::EVDiskState::OK;
+                                degraded |= !ie->second.GetReplicated() || ie->second.GetVDiskState() != NKikimrWhiteboard::EVDiskState::OK;
                                 row.Used += ie->second.GetAllocatedSize();
                                 row.Limit += ie->second.GetAllocatedSize() + ie->second.GetAvailableSize();
                                 row.Read += ie->second.GetReadThroughput();
@@ -350,13 +348,13 @@ public:
                                         row.Limit += ip->second.GetAvailableSize();
                                     }
                                 }
-                            }   
+                            }
+                            if (degraded) {
+                                row.Degraded++;
+                            }
                         }
                     }
 
-                    if (degraded) {
-                        row.Degraded++;
-                    }
                     row.Usage = row.Limit == 0 ? 100 : (float)row.Used / row.Limit;
                     if (!UsageBuckets.empty() && !BinarySearch(UsageBuckets.begin(), UsageBuckets.end(), (ui32)(row.Usage * 100) / UsagePace)) {
                         continue;

@@ -23,7 +23,7 @@ ui64 GetDefaultQueryTimeoutMs(NKikimrKqp::EQueryType queryType,
 
         case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT:
             return queryServiceConfig.GetScriptOperationTimeoutDefaultSeconds() 
-                   ? queryServiceConfig.GetScriptOperationTimeoutDefaultSeconds()
+                   ? queryServiceConfig.GetScriptOperationTimeoutDefaultSeconds() * 1000
                    : SCRIPT_TIMEOUT_LIMIT.MilliSeconds();
 
         case NKikimrKqp::QUERY_TYPE_SQL_SCAN:

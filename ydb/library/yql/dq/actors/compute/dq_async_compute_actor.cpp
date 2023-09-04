@@ -574,9 +574,11 @@ private:
         // If the channel has finished, then the data received after drain is no longer needed
         const bool shouldSkipData = Channels->ShouldSkipData(outputChannel.ChannelId);
         if (!shouldSkipData && !Channels->CanSendChannelData(outputChannel.ChannelId)) { // When channel will be connected, they will call resume execution.
+            CA_LOG_D("TrySendAsyncChannelData return false because Channel can't send channel data");
             return false;
         }
         if (!shouldSkipData && !Channels->HasFreeMemoryInChannel(outputChannel.ChannelId)) {
+            CA_LOG_D("TrySendAsyncChannelData return false because No free memory in channel");
             return false;
         }
 

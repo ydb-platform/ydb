@@ -83,7 +83,6 @@ public:
 		/// Updates the Timestamp with the current time.
 
 	bool operator == (const Timestamp& ts) const;
-	bool operator != (const Timestamp& ts) const;
 	bool operator >  (const Timestamp& ts) const;
 	bool operator >= (const Timestamp& ts) const;
 	bool operator <  (const Timestamp& ts) const;
@@ -155,12 +154,6 @@ private:
 inline bool Timestamp::operator == (const Timestamp& ts) const
 {
 	return _ts == ts._ts;
-}
-
-
-inline bool Timestamp::operator != (const Timestamp& ts) const
-{
-	return _ts != ts._ts;
 }
 
 

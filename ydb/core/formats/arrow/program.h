@@ -94,7 +94,7 @@ public:
         : Name(name)
         , Operation(ValidateOperation(op, args.size()))
         , Arguments(std::move(args))
-        , FuncOpts(funcOpts)
+        , FuncOpts(std::move(funcOpts))
     {}
 
     explicit TAssign(const std::string& name, bool value)
@@ -167,8 +167,8 @@ public:
             std::shared_ptr<arrow::compute::FunctionOptions> funcOpts)
         : Name(name)
         , Arguments(std::move(args))
-        , FuncOpts(funcOpts)
-        , KernelFunction(kernelFunction)
+        , FuncOpts(std::move(funcOpts))
+        , KernelFunction(std::move(kernelFunction))
     {}
 
     bool IsConstant() const { return Operation == EOperation::Constant; }

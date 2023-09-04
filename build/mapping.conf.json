@@ -34,11 +34,11 @@
         "4635426988": "http://s3.mds.yandex.net/test-devtools-registry/4635426988",
         "4635449932": "http://s3.mds.yandex.net/test-devtools-registry/4635449932",
         "4635451669": "http://s3.mds.yandex.net/test-devtools-registry/4635451669",
-        "4991298338": "http://s3.mds.yandex.net/test-devtools-registry/4991298338",
-        "4991308971": "http://s3.mds.yandex.net/test-devtools-registry/4991308971",
-        "4991323673": "http://s3.mds.yandex.net/test-devtools-registry/4991323673",
-        "4991310596": "http://s3.mds.yandex.net/test-devtools-registry/4991310596",
-        "4991328977": "http://s3.mds.yandex.net/test-devtools-registry/4991328977"
+        "5017941083": "http://s3.mds.yandex.net/test-devtools-registry/5017941083",
+        "5017941113": "http://s3.mds.yandex.net/test-devtools-registry/5017941113",
+        "5017949665": "http://s3.mds.yandex.net/test-devtools-registry/5017949665",
+        "5017959833": "http://s3.mds.yandex.net/test-devtools-registry/5017959833",
+        "5017955612": "http://s3.mds.yandex.net/test-devtools-registry/5017955612"
     },
     "resources_descriptions": {
         "4748237118": "Clang 14.0.6 for darwin arm64",
@@ -74,18 +74,15 @@
         "4635426988": "ya-tc for darwin-arm64",
         "4635449932": "ya-tc for linux",
         "4635451669": "ya-tc for linux-aarch64",
-        "4991298338": "ymake for darwin",
-        "4991308971": "ymake for darwin-arm64",
-        "4991323673": "ymake for linux",
-        "4991310596": "ymake for linux-aarch64",
-        "4991328977": "ymake.exe for win32-clang-cl"
+        "5017941083": "ymake for darwin",
+        "5017941113": "ymake for darwin-arm64",
+        "5017949665": "ymake for linux",
+        "5017959833": "ymake for linux-aarch64",
+        "5017955612": "ymake.exe for win32-clang-cl"
     },
     "tasks": {
         "1032896450": {
             "darwin-arm64": "2319130389"
-        },
-        "1549947872": {
-            "linux-aarch64": "3864777619"
         },
         "1277485811": {
             "darwin": "2989597929",
@@ -93,6 +90,9 @@
             "linux": "2989598506",
             "linux-ppc64le": "2989596149",
             "win32": "2989597467"
+        },
+        "1549947872": {
+            "linux-aarch64": "3864777619"
         },
         "1539939628": {
             "Darwin-19.6.0-x86_64-i386-64bit": "3833498694"
@@ -115,20 +115,20 @@
         "1797086903": {
             "linux-aarch64": "4635451669"
         },
-        "1901124324": {
-            "darwin": "4991298338"
+        "1908457630": {
+            "darwin": "5017941083"
         },
-        "1901124336": {
-            "darwin-arm64": "4991308971"
+        "1908457639": {
+            "darwin-arm64": "5017941113"
         },
-        "1901124267": {
-            "linux": "4991323673"
+        "1908457617": {
+            "linux": "5017949665"
         },
-        "1901124396": {
-            "linux-aarch64": "4991310596"
+        "1908457650": {
+            "linux-aarch64": "5017959833"
         },
-        "1901124302": {
-            "win32-clang-cl": "4991328977"
+        "1908457621": {
+            "win32-clang-cl": "5017955612"
         }
     }
 }

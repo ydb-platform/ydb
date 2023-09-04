@@ -1,8 +1,10 @@
 #pragma once
 #include "node.h"
 #include "match_recognize.h"
+#include <library/cpp/containers/sorted_vector/sorted_vector.h>
 
 namespace NSQLTranslationV1 {
+    using TColumnsSets = NSorted::TSimpleSet<NSorted::TSimpleSet<TString>>;
 
     class ISource;
     typedef TIntrusivePtr<ISource> TSourcePtr;
@@ -255,7 +257,9 @@ namespace NSQLTranslationV1 {
         bool distinct,
         TVector<TNodePtr>&& without,
         bool selectStream,
-        const TWriteSettings& settings
+        const TWriteSettings& settings,
+        TColumnsSets&& uniqueSets,
+        TColumnsSets&& distinctSets
     );
     TSourcePtr BuildSelect(TPosition pos, TSourcePtr source, TNodePtr skipTake);
 

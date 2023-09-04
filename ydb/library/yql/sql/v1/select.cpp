@@ -1450,7 +1450,9 @@ public:
         bool distinct,
         const TVector<TNodePtr>& without,
         bool selectStream,
-        const TWriteSettings& settings
+        const TWriteSettings& settings,
+        TColumnsSets&& uniqueSets,
+        TColumnsSets&& distinctSets
     )
         : IRealSource(pos)
         , Source(std::move(source))
@@ -1468,6 +1470,8 @@ public:
         , LegacyHoppingWindowSpec(legacyHoppingWindowSpec)
         , SelectStream(selectStream)
         , Settings(settings)
+        , UniqueSets(std::move(uniqueSets))
+        , DistinctSets(std::move(distinctSets))
     {
     }
 
@@ -1825,7 +1829,7 @@ public:
         return new TSelectCore(Pos, Source->CloneSource(), CloneContainer(GroupByExpr),
                 CloneContainer(GroupBy), CompactGroupBy, GroupBySuffix, AssumeSorted, CloneContainer(OrderBy),
                 SafeClone(Having), newSpecs, SafeClone(LegacyHoppingWindowSpec),
-                CloneContainer(Terms), Distinct, Without, SelectStream, Settings);
+                CloneContainer(Terms), Distinct, Without, SelectStream, Settings, TColumnsSets(UniqueSets), TColumnsSets(DistinctSets));
     }
 
 private:
@@ -2139,6 +2143,29 @@ private:
         }
 
         block = L(block, Y("let", "core", Y(ordered ? "OrderedSqlProject" : "SqlProject", "core", Q(sqlProjectArgs))));
+        if (!(UniqueSets.empty() && DistinctSets.empty())) {
+            block = L(block, Y("let", "core", Y("RemoveSystemMembers", "core")));
+            const auto MakeUniqueHint = [this](INode::TPtr& block, const TColumnsSets& sets, bool distinct) {
+                if (!sets.empty()) {
+                    auto assume = Y(distinct ? "AssumeDistinctHint" : "AssumeUniqueHint", "core");
+                    if (!sets.front().empty()) {
+                        for (const auto& columns : sets) {
+                            auto set = Y();
+                            for (const auto& column : columns) {
+                                set = L(set, Q(column));
+                            }
+
+                            assume = L(assume, Q(set));
+                        }
+                    }
+                    block = L(block, Y("let", "core", assume));
+                }
+            };
+
+            MakeUniqueHint(block, DistinctSets, true);
+            MakeUniqueHint(block, UniqueSets, false);
+        }
+
         return Y("block", Q(L(block, Y("return", "core"))));
     }
 
@@ -2167,6 +2194,7 @@ private:
     TLegacyHoppingWindowSpecPtr LegacyHoppingWindowSpec;
     const bool SelectStream;
     const TWriteSettings Settings;
+    const TColumnsSets UniqueSets, DistinctSets;
 };
 
 class TProcessSource: public IRealSource {
@@ -2544,11 +2572,13 @@ TSourcePtr DoBuildSelectCore(
     bool distinct,
     TVector<TNodePtr>&& without,
     bool selectStream,
-    const TWriteSettings& settings
+    const TWriteSettings& settings,
+    TColumnsSets&& uniqueSets,
+    TColumnsSets&& distinctSets
 ) {
     if (groupBy.empty() || !groupBy.front()->ContentListPtr()) {
         return new TSelectCore(pos, std::move(source), groupByExpr, groupBy, compactGroupBy, groupBySuffix, assumeSorted,
-            orderBy, having, winSpecs, legacyHoppingWindowSpec, terms, distinct, without, selectStream, settings);
+            orderBy, having, winSpecs, legacyHoppingWindowSpec, terms, distinct, without, selectStream, settings, std::move(uniqueSets), std::move(distinctSets));
     }
     if (groupBy.size() == 1) {
         /// actualy no big idea to use grouping function in this case (result allways 0)
@@ -2556,7 +2586,7 @@ TSourcePtr DoBuildSelectCore(
         source = new TNestedProxySource(pos, *contentPtr, source);
         return DoBuildSelectCore(ctx, pos, originalSource, source, groupByExpr, *contentPtr, compactGroupBy, groupBySuffix,
             assumeSorted, orderBy, having, std::move(winSpecs),
-            legacyHoppingWindowSpec, std::move(terms), distinct, std::move(without), selectStream, settings);
+            legacyHoppingWindowSpec, std::move(terms), distinct, std::move(without), selectStream, settings, std::move(uniqueSets), std::move(distinctSets));
     }
     /// \todo some smart merge logic, generalize common part of grouping (expr, flatten, etc)?
     TIntrusivePtr<TCompositeSelect> compositeSelect = new TCompositeSelect(pos, std::move(source), originalSource->CloneSource(), settings);
@@ -2583,7 +2613,7 @@ TSourcePtr DoBuildSelectCore(
         totalGroups += contentPtr->size();
         TSelectCore* selectCore = new TSelectCore(pos, std::move(proxySource), CloneContainer(groupByExpr),
             CloneContainer(*contentPtr), compactGroupBy, groupBySuffix, assumeSorted, orderBy, SafeClone(having), winSpecs,
-            legacyHoppingWindowSpec, terms, distinct, without, selectStream, settings);
+            legacyHoppingWindowSpec, terms, distinct, without, selectStream, settings, TColumnsSets(uniqueSets), TColumnsSets(distinctSets));
         subselects.emplace_back(selectCore);
     }
     if (totalGroups > ctx.PragmaGroupByLimit) {
@@ -2613,10 +2643,13 @@ TSourcePtr BuildSelectCore(
     bool distinct,
     TVector<TNodePtr>&& without,
     bool selectStream,
-    const TWriteSettings& settings)
+    const TWriteSettings& settings,
+    TColumnsSets&& uniqueSets,
+    TColumnsSets&& distinctSets
+)
 {
     return DoBuildSelectCore(ctx, pos, source, source, groupByExpr, groupBy, compactGroupBy, groupBySuffix, assumeSorted, orderBy,
-        having, std::move(winSpecs), legacyHoppingWindowSpec, std::move(terms), distinct, std::move(without), selectStream, settings);
+        having, std::move(winSpecs), legacyHoppingWindowSpec, std::move(terms), distinct, std::move(without), selectStream, settings, std::move(uniqueSets), std::move(distinctSets));
 }
 
 class TUnionAll: public IRealSource {

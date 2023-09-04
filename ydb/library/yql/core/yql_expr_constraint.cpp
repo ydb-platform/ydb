@@ -81,8 +81,10 @@ public:
         Functions["UnorderedSubquery"] = &TCallableConstraintTransformer::FromFirst<TPassthroughConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TDistinctConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>;
         Functions["Sort"] = &TCallableConstraintTransformer::SortWrap;
         Functions["AssumeSorted"] = &TCallableConstraintTransformer::SortWrap;
-        Functions["AssumeUnique"] = &TCallableConstraintTransformer::AssumeUniqueWrap<false>;
-        Functions["AssumeDistinct"] = &TCallableConstraintTransformer::AssumeUniqueWrap<true>;
+        Functions["AssumeUnique"] = &TCallableConstraintTransformer::AssumeUniqueWrap<false, true>;
+        Functions["AssumeDistinct"] = &TCallableConstraintTransformer::AssumeUniqueWrap<true, true>;
+        Functions["AssumeUniqueHint"] = &TCallableConstraintTransformer::AssumeUniqueWrap<false, false>;
+        Functions["AssumeDistinctHint"] = &TCallableConstraintTransformer::AssumeUniqueWrap<true, false>;
         Functions["AssumeChopped"] = &TCallableConstraintTransformer::AssumeChoppedWrap;
         Functions["AssumeColumnOrder"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["AssumeAllMembersNullableAtOnce"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
@@ -378,7 +380,7 @@ private:
         return FromFirst<TPassthroughConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TDistinctConstraintNode, TVarIndexConstraintNode>(input, output, ctx);
     }
 
-    template<bool Distinct>
+    template<bool Distinct, bool Strict>
     TStatus AssumeUniqueWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
         typename TUniqueConstraintNodeBase<Distinct>::TContentType content;
         for (auto i = 1U; i < input->ChildrenSize(); ++i) {
@@ -410,9 +412,25 @@ private:
 
         auto constraint = ctx.MakeConstraint<TUniqueConstraintNodeBase<Distinct>>(std::move(content));
         if (!constraint->IsApplicableToType(*input->GetTypeAnn())) {
-            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << *constraint
-                << " is not applicable to " << *input->GetTypeAnn()));
+            if constexpr  (Strict) {
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << *constraint
+                    << " is not applicable to " << *input->GetTypeAnn()));
+            } else {
+                auto issue = TIssue(ctx.GetPosition(input->Pos()),
+                    TStringBuilder() << (Distinct ? "Distinct" : "Unique") << " sql hint contains invalid column: " << Endl
+                                     << *constraint << " is not applicable to " << *input->GetTypeAnn());
+                SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_YQL_HINT_INVALID_PARAMETERS, issue);
+                if (ctx.AddWarning(issue)) {
+                    output = input->HeadPtr();
+                    return IGraphTransformer::TStatus::Repeat;
+                }
+            }
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if constexpr (!Strict) {
+            output = ctx.RenameNode(*input, Distinct ? "AssumeDistinct" : "AssumeUnique");
+            return IGraphTransformer::TStatus::Repeat;
         }
 
         if (const auto old = input->Head().GetConstraint<TUniqueConstraintNodeBase<Distinct>>()) {

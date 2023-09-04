@@ -640,3 +640,7 @@ ids {
   code: YQL_DISABLED_BINDINGS
   severity: S_ERROR
 }
+ids {
+  code: YQL_HINT_INVALID_PARAMETERS
+  severity: S_WARNING
+}

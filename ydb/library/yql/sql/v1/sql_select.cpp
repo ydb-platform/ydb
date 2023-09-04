@@ -932,6 +932,19 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
         selectPos = Ctx.Pos();
     }
 
+    const auto hints = Ctx.PullHintForToken(selectPos);
+    TColumnsSets uniqueSets, distinctSets;
+    for (const auto& hint : hints) {
+        if (const auto& name = to_lower(hint.Name); name == "unique")
+            uniqueSets.insert_unique(NSorted::TSimpleSet<TString>(hint.Values.cbegin(), hint.Values.cend()));
+        else if (name == "distinct") {
+            uniqueSets.insert_unique(NSorted::TSimpleSet<TString>(hint.Values.cbegin(), hint.Values.cend()));
+            distinctSets.insert_unique(NSorted::TSimpleSet<TString>(hint.Values.cbegin(), hint.Values.cend()));
+        } else {
+            Ctx.Warning(hint.Pos, TIssuesIds::YQL_UNUSED_HINT) << "Hint " << hint.Name << " will not be used";
+        }
+    }
+
     const bool distinct = IsDistinctOptSet(node.GetRule_opt_set_quantifier4());
     if (distinct) {
         Ctx.IncrementMonCounter("sql_features", "DistinctInSelect");
@@ -1096,7 +1109,7 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
         return nullptr;
     }
     return BuildSelectCore(Ctx, startPos, std::move(source), groupByExpr, groupBy, compactGroupBy, groupBySuffix, assumeSorted, orderBy, having,
-        std::move(windowSpec), legacyHoppingWindowSpec, std::move(terms), distinct, std::move(without), selectStream, settings);
+        std::move(windowSpec), legacyHoppingWindowSpec, std::move(terms), distinct, std::move(without), selectStream, settings, std::move(uniqueSets), std::move(distinctSets));
 }
 
 bool TSqlSelect::WindowDefinition(const TRule_window_definition& rule, TWinSpecs& winSpecs) {
@@ -1376,7 +1389,7 @@ TSourcePtr TSqlSelect::Build(const TRule& node, TPosition pos, TSelectKindResult
 
         result = BuildSelectCore(Ctx, unionPos, std::move(result), groupByExpr, groupBy, compactGroupBy, groupBySuffix,
             assumeOrderBy, orderBy, having, std::move(winSpecs), legacyHoppingWindowSpec, std::move(terms),
-            distinct, std::move(without), stream, settings);
+            distinct, std::move(without), stream, settings, {}, {});
     } else {
         result = BuildUnionAll(unionPos, std::move(sources), settings);
     }

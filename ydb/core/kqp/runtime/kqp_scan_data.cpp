@@ -435,11 +435,12 @@ ui32 TKqpScanComputeContext::TScanData::TRowBatchReader::FillDataValues(NUdf::TU
     YQL_ENSURE(!RowBatches.empty());
     auto& batch = RowBatches.front();
     const ui32 resultColumnsCount = batch.FillUnboxedCells(result);
+
+    StoredBytes -= batch.BytesForRecordEstimation();
     if (batch.IsFinished()) {
         RowBatches.pop();
     }
 
-    StoredBytes -= batch.BytesForRecordEstimation();
     YQL_ENSURE(RowBatches.empty() == (StoredBytes < 1), "StoredBytes miscalculated!");
     return resultColumnsCount;
 }
@@ -448,9 +449,9 @@ ui32 TKqpScanComputeContext::TScanData::TBlockBatchReader::FillDataValues(NUdf::
     YQL_ENSURE(!BlockBatches.empty());
     auto& batch = BlockBatches.front();
     const ui32 resultColumnsCount = batch.FillBlockValues(result);
-    BlockBatches.pop();
 
     StoredBytes -= batch.BytesForRecordEstimation();
+    BlockBatches.pop();
     YQL_ENSURE(BlockBatches.empty() == (StoredBytes < 1), "StoredBytes miscalculated!");
     return resultColumnsCount;
 }

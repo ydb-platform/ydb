@@ -13,7 +13,9 @@ common:
     to: /reference/ydb-cli/index.md
   - from: /getting_started/sdk.md
     to: /reference/ydb-sdk/index.md
-  - from: /concepts/column-table.md
-    to: /concepts/datamodel/table.md
   - from: /ops/devslice-user-guide-k8s-baremetal-host.md
     to: /ops/devslice-setup-kikimr-slice.md
+
+ru:
+  - from: /concepts/column-table.md
+    to: /concepts/datamodel/table.md

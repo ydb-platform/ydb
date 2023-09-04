@@ -4500,21 +4500,32 @@ TExprNode::TPtr DedupLambdaBody(const TExprNode& lambda, const TDedupMap& dedups
     return ctx.DeepCopyLambda(lambda, std::move(state));
 }
 
-std::vector<ui32> UnusedState(const TExprNode& init, const TExprNode& update, const TExprNode& finish) {
+template<size_t Consumers>
+std::vector<ui32> UnusedState(const TExprNode& init, const TExprNode& update, const std::array<const TExprNode*, Consumers>& consumers) {
     YQL_ENSURE(init.ChildrenSize() == update.ChildrenSize(), "Must be same size.");
 
     const auto size = init.ChildrenSize() - 1U;
     const auto skipU = update.Head().ChildrenSize() - size;
-    const auto skipF = finish.Head().ChildrenSize() - size;
 
     std::vector<ui32> unused;
     unused.reserve(size);
     for (ui32 j = 0U; j < size; ++j) {
-        if (update.Head().Child(j + skipU)->Unique() && finish.Head().Child(j + skipF)->Unique()) {
+        if (std::all_of(consumers.cbegin(), consumers.cend(), [size, j](const TExprNode* lambda) { return lambda->Head().Child(j + lambda->Head().ChildrenSize() - size)->Unique(); }) &&
+            (update.Head().Child(j + skipU)->Unique() || 2U == update.Head().Child(j + skipU)->UseCount() && update.Head().Child(j + skipU) == update.Child(j + 1U))) {
             unused.emplace_back(j);
         }
     }
+    return unused;
+}
 
+std::vector<ui32> UnusedArgs(const TExprNode& lambda) {
+    std::vector<ui32> unused;
+    unused.reserve(lambda.Head().ChildrenSize());
+    for (auto j = 0U; j < lambda.Head().ChildrenSize(); ++j) {
+        if (lambda.Head().Child(j)->Unique()) {
+            unused.emplace_back(j);
+        }
+    }
     return unused;
 }
 
@@ -4522,6 +4533,16 @@ TExprNode::TListType&& DropUnused(TExprNode::TListType&& list, const std::vector
     std::for_each(unused.cbegin(), unused.cend(), [&](const ui32 index) { list[index + skip] = TExprNode::TPtr(); });
     list.erase(std::remove_if(list.begin(), list.end(), std::logical_not<TExprNode::TPtr>()), list.cend());
     return std::move(list);
+}
+
+TExprNode::TPtr DropUnusedArgs(const TExprNode& lambda, const std::vector<ui32>& unused, TExprContext& ctx, ui32 skip = 0U) {
+    const auto& copy = ctx.DeepCopyLambda(lambda);
+    return ctx.ChangeChild(*copy, 0U, ctx.NewArguments(copy->Head().Pos(), DropUnused(copy->Head().ChildrenList(), unused, skip)));
+}
+
+TExprNode::TPtr DropUnusedStateFromUpdate(const TExprNode& lambda, const std::vector<ui32>& unused, TExprContext& ctx) {
+    const auto& copy = ctx.DeepCopyLambda(lambda, DropUnused(GetLambdaBody(lambda), unused));
+    return ctx.ChangeChild(*copy, 0U, ctx.NewArguments(copy->Head().Pos(), DropUnused(copy->Head().ChildrenList(), unused, lambda.Head().ChildrenSize() - lambda.ChildrenSize() + 1U)));
 }
 
 TExprNode::TPtr UnpickleInput(TExprNode::TPtr originalLambda, TListExpandMap& listExpandMap, TExprContext& ctx) {
@@ -4724,7 +4745,7 @@ TExprNode::TPtr OptimizeWideCombiner(const TExprNode::TPtr& node, TExprContext& 
         return ctx.ChangeChildren(*node, std::move(children));
     }
 
-    if (const auto unused = UnusedState(*node->Child(3), *node->Child(4), node->Tail()); !unused.empty()) {
+    if (const auto unused = UnusedState<1U>(*node->Child(3), *node->Child(4), {&node->Tail()}); !unused.empty()) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Unused " << node->Content() << ' ' << unused.size() << " states.";
 
         auto children = node->ChildrenList();
@@ -5530,6 +5551,67 @@ TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx)
     }  else if (input.IsCallable("WithContext")) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << input.Content();
         return ctx.ChangeChild(input, 0U, ctx.ChangeChild(*node, 0U, input.HeadPtr()));
+    } else if (const auto unused = UnusedArgs(node->Tail()); !unused.empty()) {
+        if (input.IsCallable("WideCombiner")) {
+            YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << input.Content() << " with " << unused.size() << " unused fields.";
+            return ctx.Builder(node->Pos())
+                .Callable(node->Content())
+                    .Add(0, ctx.ChangeChild(input, 5U, ctx.DeepCopyLambda(input.Tail(), DropUnused(GetLambdaBody(input.Tail()), unused))))
+                    .Add(1, DropUnusedArgs(node->Tail(), unused, ctx))
+                .Seal().Build();
+        } else if (input.IsCallable("BlockCompress")) {
+            YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << input.Content() << " with " << unused.size() << " unused fields.";
+            const auto width = node->Tail().Head().ChildrenSize() + 1U;
+            const auto index = FromString<ui32>(input.Tail().Content());
+            const auto delta = std::distance(unused.cbegin(), std::find_if(unused.cbegin(), unused.cend(), std::bind(std::less<ui32>(), index, std::placeholders::_1)));
+            return ctx.Builder(node->Pos())
+                .Callable(node->Content())
+                    .Callable(0, input.Content())
+                        .Callable(0, "WideMap")
+                            .Add(0, input.HeadPtr())
+                            .Lambda(1)
+                                .Params("items", width)
+                                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                    for (auto i = 0U, j = 0U; i < width; ++i) {
+                                        if (unused.cend() == std::find(unused.cbegin(), unused.cend(), i))
+                                            parent.Arg(j++, "items", i);
+                                    }
+                                    return parent;
+                                })
+                            .Seal()
+                        .Seal()
+                        .Atom(1, index - delta)
+                    .Seal()
+                    .Add(1, DropUnusedArgs(node->Tail(), unused, ctx))
+                .Seal().Build();
+        } else if (input.IsCallable("WideCondense1")) {
+            if (const auto& unusedState = UnusedState<2U>(*input.Child(1), input.Tail(), {&node->Tail(), input.Child(2)}); !unusedState.empty()) {
+                YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << input.Content() << " with " << unusedState.size() << " unused fields.";
+                return ctx.Builder(node->Pos())
+                    .Callable(node->Content())
+                        .Callable(0, input.Content())
+                            .Add(0, input.HeadPtr())
+                            .Add(1, ctx.DeepCopyLambda(*input.Child(1), DropUnused(GetLambdaBody(*input.Child(1)), unusedState)))
+                            .Add(2, DropUnusedArgs(*input.Child(2), unusedState, ctx, input.Child(1)->Head().ChildrenSize()))
+                            .Add(3, DropUnusedStateFromUpdate(input.Tail(), unusedState, ctx))
+                        .Seal()
+                        .Add(1, DropUnusedArgs(node->Tail(), unusedState, ctx))
+                    .Seal().Build();
+            }
+        } else if (input.IsCallable("WideChain1Map")) {
+            if (const auto& unusedState = UnusedState<1U>(*input.Child(1), input.Tail(), {&node->Tail()}); !unusedState.empty()) {
+                YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << input.Content() << " with " << unusedState.size() << " unused fields.";
+                return ctx.Builder(node->Pos())
+                    .Callable(node->Content())
+                        .Callable(0, input.Content())
+                            .Add(0, input.HeadPtr())
+                            .Add(1, ctx.DeepCopyLambda(*input.Child(1), DropUnused(GetLambdaBody(*input.Child(1)), unusedState)))
+                            .Add(2, DropUnusedStateFromUpdate(input.Tail(), unusedState, ctx))
+                        .Seal()
+                        .Add(1, DropUnusedArgs(node->Tail(), unusedState, ctx))
+                    .Seal().Build();
+            }
+        }
     }
 
     return node;

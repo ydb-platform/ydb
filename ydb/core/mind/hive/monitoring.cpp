@@ -1359,8 +1359,8 @@ public:
         out << "<tr><td>" << "Resource StDev: " << "</td><td id='resourceVariance'>"
             << convert(Self->GetStDevResourceValues(), [](double d) -> TString { return Sprintf("%.9f", d); }) << "</td></tr>";
         THive::THiveStats stats = Self->GetStats();
-        out << "<tr><td>" << "Max usage:" << "<td id='maxUsage'>" << GetColoredValue(stats.MaxUsage, Self->GetMaxNodeUsageToKick()) << "</td></tr>";
-        out << "<tr><td>" << "Scatter:" << "<td id='scatter'>" << GetColoredValue(stats.Scatter, Self->GetMinScatterToBalance()) << "</td></tr>";
+        out << "<tr><td>" << "Max usage:" << "<td id='maxUsage'>" << GetValueWithColoredGlyph(stats.MaxUsage, Self->GetMaxNodeUsageToKick()) << "</td></tr>";
+        out << "<tr><td>" << "Scatter:" << "<td id='scatter'>" << GetValueWithColoredGlyph(stats.Scatter, Self->GetMinScatterToBalance()) << "</td></tr>";
         out << "</table>";
 
         out << "<table id='node_table' class='table simple-table2 table-hover table-condensed'>";
@@ -2063,8 +2063,8 @@ public:
         jsonData["BootQueueSize"] = Self->BootQueue.BootQueue.size();
         jsonData["WaitQueueSize"] = Self->BootQueue.WaitQueue.size();
         jsonData["BalancerProgress"] = GetBalancerProgressText(Self->BalancerProgress, Self->LastBalancerTrigger);
-        jsonData["MaxUsage"] =  GetColoredValue(stats.MaxUsage, Self->GetMaxNodeUsageToKick()) ;
-        jsonData["Scatter"] = GetColoredValue(stats.Scatter, Self->GetMinScatterToBalance());
+        jsonData["MaxUsage"] =  GetValueWithColoredGlyph(stats.MaxUsage, Self->GetMaxNodeUsageToKick()) ;
+        jsonData["Scatter"] = GetValueWithColoredGlyph(stats.Scatter, Self->GetMinScatterToBalance());
         jsonData["RunningTabletsText"] = GetRunningTabletsText(runningTablets, tablets, Self->WarmUp);
 
         TVector<TNodeInfo*> nodeInfos;

@@ -196,18 +196,23 @@ TString GetConditionalRedString(const TString& str, bool condition) {
     }
 }
 
-TString GetColoredValue(double val, double maxVal) {
-    double ratio = val / maxVal;
-    TString color;
-    if (ratio < 0.9) {
-        color = "green";
-    } else if (ratio < 1.0) {
-        color = "yellow";
+TString GetValueWithColoredGlyph(double val, double maxVal) {
+    double ratio;
+    if (maxVal != 0) {
+        ratio = val / maxVal;
     } else {
-        color = "red";
+        ratio = 1.0;
+    }
+    TString glyph;
+    if (ratio < 0.9) {
+        glyph = "<span class='glyphicon glyphicon-ok-sign' style='color:green; margin-left:4px'></span>";
+    } else if (ratio < 1.0) {
+        glyph = "<span class='glyphicon glyphicon-exclamation-sign' style='color:#FFEA00; margin-left:4px'></span>";
+    } else {
+        glyph = "<span class='glyphicon glyphicon-exclamation-sign' style='color:red; margin-left:4px'></span>";
     }
 
-    return Sprintf("<span style='color:%s'>%.2f</span>", color.c_str(), val);
+    return Sprintf("<span>%.2f</span>", val) + glyph;
 }
 
 ui64 GetReadThroughput(const NKikimrTabletBase::TMetrics& values) {

@@ -139,7 +139,7 @@ TString GetTimes(ui64 times, const TString& zero = "0.00%");
 TString GetConditionalGreyString(const TString& str, bool condition);
 TString GetConditionalBoldString(const TString& str, bool condition);
 TString GetConditionalRedString(const TString& str, bool condition);
-TString GetColoredValue(double val, double maxVal);
+TString GetValueWithColoredGlyph(double val, double maxVal);
 TString GetDataCenterName(ui64 dataCenterId);
 TString LongToShortTabletName(const TString& longTabletName);
 TString GetLocationString(const NActors::TNodeLocation& location);

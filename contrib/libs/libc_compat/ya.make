@@ -33,10 +33,12 @@ IF (OS_ANDROID)
         strlcat.c
         strlcpy.c
     )
+
     IF (ANDROID_API < 28)
         SRCS(
             glob.c
         )
+        ENABLE(PROVIDE_GETRANDOM_GETENTROPY)
         ENABLE(PROVIDE_REALLOCARRAY)
     ENDIF()
     IF (ANDROID_API < 24)

@@ -68,19 +68,7 @@ PEERDIR(
     yt/yt/library/named_value
 
     yt/yt_proto/yt/formats
-
-    contrib/libs/apache/arrow
 )
-
-IF (NOT OPENSOURCE)
-    SRCS(
-        arrow_writer_ut.cpp
-    )
-
-    PEERDIR(
-        yt/yt/ytlib
-    )
-ENDIF()
 
 RESOURCE(
     ${ARCADIA_ROOT}/library/cpp/type_info/ut/test-data/good-types.txt /types/good

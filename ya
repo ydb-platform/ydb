@@ -11,42 +11,42 @@ HASH_PREFIX = 10
 
 REGISTRY_ENDPOINT = os.environ.get("YA_REGISTRY_ENDPOINT", "https://s3.mds.yandex.net/devtools-registry")
 
-
+# Please do not change this dict, it is updated automatically
+# Start of mapping
 PLATFORM_MAP = {
     "data": {
         "darwin": {
-            "md5": "1356748b6bb7ce19359bc1c87d81cf5e",
+            "md5": "2acd2fce860fe3cea3384eec9483e655",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/4948880410",
-            ],
+                f"{REGISTRY_ENDPOINT}/4948877004"
+            ]
         },
         "darwin-arm64": {
-            "md5": "2ba999e77660102f78c2584931eef3a2",
+            "md5": "084a3e96c01df8ad5a086d124a7ded28",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/4948879923",
-            ],
+                f"{REGISTRY_ENDPOINT}/4948876606"
+            ]
         },
         "linux-aarch64": {
-            "md5": "731df682969dddc89bd7f3160960ffa1",
+            "md5": "4d017714a552c91c5c72ff925156f90b",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/4948879460",
-            ],
+                f"{REGISTRY_ENDPOINT}/4948875890"
+            ]
         },
         "win32-clang-cl": {
-            "md5": "e2289cac60bf800470d858af48fce490",
+            "md5": "518baa26eca7f2b5fc8fe6cfa3dba5fc",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/4948880870",
-            ],
+                f"{REGISTRY_ENDPOINT}/4948877440"
+            ]
         },
         "linux": {
-            "md5": "c71678ed371ae966d7c0235352a398e3",
+            "md5": "8eb7379c081b853abf9cf61a4870523b",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/4948881174",
-            ],
-        },
+                f"{REGISTRY_ENDPOINT}/4948877787"
+            ]
+        }
     }
-}
-# End of mapping
+} # End of mapping
 
 
 def create_dirs(path):

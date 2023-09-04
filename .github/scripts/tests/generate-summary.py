@@ -9,7 +9,7 @@ from github.PullRequest import PullRequest
 from enum import Enum
 from operator import attrgetter
 from typing import List, Optional
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from junit_utils import get_property_value, iter_xml_files
 
 
@@ -30,6 +30,7 @@ class TestResult:
     name: str
     status: TestStatus
     log_url: Optional[str]
+    elapsed: float
 
     @property
     def status_display(self):
@@ -41,6 +42,15 @@ class TestResult:
             TestStatus.MUTE: "MUTE",
         }[self.status]
 
+    @property
+    def elapsed_display(self):
+        m, s = divmod(self.elapsed, 60)
+        parts = []
+        if m > 0:
+            parts.append(f'{int(m)}m')
+        parts.append(f"{s:.3f}s")
+        return ' '.join(parts)
+
     def __str__(self):
         return f"{self.full_name:<138} {self.status_display}"
 
@@ -51,6 +61,7 @@ class TestResult:
     @classmethod
     def from_junit(cls, testcase):
         classname, name = testcase.get("classname"), testcase.get("name")
+
         if testcase.find("failure") is not None:
             status = TestStatus.FAIL
         elif testcase.find("error") is not None:
@@ -61,9 +72,17 @@ class TestResult:
             status = TestStatus.SKIP
         else:
             status = TestStatus.PASS
-        log_url = get_property_value(testcase, "url:Log")
 
-        return cls(classname, name, status, log_url)
+        log_url = get_property_value(testcase, "url:Log")
+        elapsed = testcase.get("time")
+
+        try:
+            elapsed = float(elapsed)
+        except (TypeError, ValueError):
+            elapsed = 0
+            print(f"Unable to cast elapsed time for {classname}::{name}  value={elapsed!r}")
+
+        return cls(classname, name, status, log_url, elapsed)
 
 
 class TestSummaryLine:
@@ -173,7 +192,7 @@ def render_pm(value, url, diff=None):
 def render_testlist_html(rows, fn):
     TEMPLATES_PATH = os.path.join(os.path.dirname(__file__), "templates")
 
-    env = Environment(loader=FileSystemLoader(TEMPLATES_PATH))
+    env = Environment(loader=FileSystemLoader(TEMPLATES_PATH), undefined=StrictUndefined)
 
     status_test = {}
     has_any_log = set()

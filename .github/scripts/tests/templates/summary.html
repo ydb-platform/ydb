@@ -29,7 +29,8 @@
             color: blue;
         }
         table > tbody > tr > td:nth-child(2),
-        table > tbody > tr > td:nth-child(3) {
+        table > tbody > tr > td:nth-child(3),
+        table > tbody > tr > td:nth-child(4) {
             text-align: center;
         }
     </style>
@@ -41,6 +42,7 @@
     <thead>
     <tr>
         <th>test name</th>
+        <th>elapsed</th>
         <th>status</th>
     {% if status in has_any_log %}
         <th>LOG</th>
@@ -51,6 +53,7 @@
     {% for t in tests[status] %}
     <tr>
         <td>{{ t.full_name }}</td>
+        <td><span title="{{ t.elapsed }}s">{{ t.elapsed_display }}</span></td>
         <td>
             <span class="test_status test_{{ t.status_display }}">{{ t.status_display }}</span>
         </td>

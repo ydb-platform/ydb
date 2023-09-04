@@ -441,7 +441,6 @@ protected:
         auto& pDiskStateInfo = PDiskStateInfo[ev->Get()->Record.GetPDiskId()];
         if (CheckedMerge(pDiskStateInfo, ev->Get()->Record) >= 100) {
             pDiskStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
-            UpdateSystemState(ctx);
         }
     }
 
@@ -452,32 +451,27 @@ protected:
             auto& value = VDiskStateInfo[key];
             value = record;
             value.SetChangeTime(ctx.Now().MilliSeconds());
-            UpdateSystemState(ctx);
         } else if (const auto it = VDiskStateInfo.find(key); it != VDiskStateInfo.end() &&
                 it->second.GetInstanceGuid() == record.GetInstanceGuid()) {
             auto& value = it->second;
 
             if (CheckedMerge(value, record) >= 100) {
                 value.SetChangeTime(ctx.Now().MilliSeconds());
-                UpdateSystemState(ctx);
             }
         }
     }
 
-    void Handle(TEvWhiteboard::TEvVDiskStateDelete::TPtr &ev, const TActorContext &ctx) {
-        if (VDiskStateInfo.erase(VDiskIDFromVDiskID(ev->Get()->Record.GetVDiskId()))) {
-            UpdateSystemState(ctx);
-        }
+    void Handle(TEvWhiteboard::TEvVDiskStateDelete::TPtr &ev, const TActorContext &) {
+        VDiskStateInfo.erase(VDiskIDFromVDiskID(ev->Get()->Record.GetVDiskId()));
     }
 
-    void Handle(TEvWhiteboard::TEvVDiskStateGenerationChange::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvWhiteboard::TEvVDiskStateGenerationChange::TPtr &ev, const TActorContext &) {
         auto *msg = ev->Get();
         if (const auto it = VDiskStateInfo.find(msg->VDiskId); it != VDiskStateInfo.end() &&
                 it->second.GetInstanceGuid() == msg->InstanceGuid) {
             auto node = VDiskStateInfo.extract(it);
             node.key().GroupGeneration = msg->Generation;
             VDiskStateInfo.insert(std::move(node));
-            UpdateSystemState(ctx);
         }
     }
 
@@ -507,7 +501,6 @@ protected:
 
             if (change) {
                 value.SetChangeTime(ctx.Now().MilliSeconds());
-                UpdateSystemState(ctx);
             }
         }
     }
@@ -517,19 +510,16 @@ protected:
         if (CheckedMerge(bSGroupStateInfo, ev->Get()->Record) >= 100) {
             bSGroupStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
         }
-        UpdateSystemState(ctx);
     }
 
-    void Handle(TEvWhiteboard::TEvBSGroupStateDelete::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvWhiteboard::TEvBSGroupStateDelete::TPtr &ev, const TActorContext &) {
         ui32 groupId = ev->Get()->Record.GetGroupID();
         BSGroupStateInfo.erase(groupId);
-        UpdateSystemState(ctx);
     }
 
     void Handle(TEvWhiteboard::TEvSystemStateUpdate::TPtr &ev, const TActorContext &ctx) {
         if (CheckedMerge(SystemStateInfo, ev->Get()->Record)) {
             SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
-            UpdateSystemState(ctx);
         }
     }
 
@@ -538,7 +528,6 @@ protected:
         endpoint.SetName(ev->Get()->Name);
         endpoint.SetAddress(ev->Get()->Address);
         SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
-        UpdateSystemState(ctx);
     }
 
     void Handle(TEvWhiteboard::TEvSystemStateAddRole::TPtr &ev, const TActorContext &ctx) {
@@ -546,7 +535,6 @@ protected:
         if (Find(roles, ev->Get()->Role) == roles.end()) {
             SystemStateInfo.AddRoles(ev->Get()->Role);
             SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
-            UpdateSystemState(ctx);
         }
     }
 
@@ -556,7 +544,6 @@ protected:
             SystemStateInfo.ClearTenants();
             SystemStateInfo.AddTenants(ev->Get()->Tenant);
             SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
-            UpdateSystemState(ctx);
         }
     }
 
@@ -566,7 +553,6 @@ protected:
         if (itTenant != tenants.end()) {
             tenants.erase(itTenant);
             SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
-            UpdateSystemState(ctx);
         }
     }
 
@@ -792,13 +778,12 @@ protected:
         ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
     }
 
-    void Handle(TEvWhiteboard::TEvPDiskStateDelete::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvWhiteboard::TEvPDiskStateDelete::TPtr &ev, const TActorContext &) {
         auto pdiskId = ev->Get()->Record.GetPDiskId();
 
         auto it = PDiskStateInfo.find(pdiskId);
         if (it != PDiskStateInfo.end()) {
             PDiskStateInfo.erase(it);
-            UpdateSystemState(ctx);
         }
     }
 
@@ -945,8 +930,11 @@ protected:
             systemStatsUpdate->Record.SetMemoryLimit(ProcessStats.CGroupMemLim);
         }
         systemStatsUpdate->Record.SetMemoryUsedInAlloc(TAllocState::GetAllocatedMemoryEstimate());
-        ctx.Send(ctx.SelfID, systemStatsUpdate.Release());
-        ctx.Schedule(TDuration::Seconds(30), new TEvPrivate::TEvUpdateRuntimeStats());
+        if (CheckedMerge(SystemStateInfo, systemStatsUpdate->Record)) {
+            SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
+        }
+        UpdateSystemState(ctx);
+        ctx.Schedule(TDuration::Seconds(15), new TEvPrivate::TEvUpdateRuntimeStats());
     }
 
     void Handle(TEvPrivate::TEvCleanupDeadTablets::TPtr &, const TActorContext &ctx) {

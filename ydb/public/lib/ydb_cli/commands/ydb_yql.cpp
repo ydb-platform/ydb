@@ -1,6 +1,7 @@
 #include "ydb_yql.h"
 
 #include <ydb/public/lib/json_value/ydb_json_value.h>
+#include <ydb/public/lib/stat_visualization/flame_graph_builder.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
@@ -26,6 +27,8 @@ void TCommandYql::Config(TConfig& config) {
     AddExamplesOption(config);
     config.Opts->AddLongOption("stats", "Collect statistics mode [none, basic, full]")
         .RequiredArgument("[String]").StoreResult(&CollectStatsMode);
+    config.Opts->AddLongOption("flame-graph", "Path for statistics flame graph image, works only with full stats")
+            .RequiredArgument("[Path]").StoreResult(&FlameGraphFile);
     config.Opts->AddLongOption('s', "script", "Text of script to execute").RequiredArgument("[String]").StoreResult(&Script);
     config.Opts->AddLongOption('f', "file", "Script file").RequiredArgument("PATH").StoreResult(&ScriptFile);
 
@@ -81,12 +84,18 @@ int TCommandYql::Run(TConfig& config) {
     return RunCommand(config, Script);
 }
 
-int TCommandYql::RunCommand(TConfig& config, const TString &script) {
+int TCommandYql::RunCommand(TConfig& config, const TString& script) {
     TDriver driver = CreateDriver(config);
     NScripting::TScriptingClient client(driver);
 
     NScripting::TExecuteYqlRequestSettings settings;
     settings.CollectQueryStats(ParseQueryStatsMode(CollectStatsMode, NTable::ECollectQueryStatsMode::None));
+
+    if (FlameGraphFile && (settings.CollectQueryStats_ != NTable::ECollectQueryStatsMode::Full
+                           && settings.CollectQueryStats_ != NTable::ECollectQueryStatsMode::Profile)) {
+        throw TMisuseException() << "Flame graph is available for full or profile stats. Current: "
+                                    + (CollectStatsMode.Empty() ? "none" : CollectStatsMode) + '.';
+    }
 
     SetInterruptHandlers();
 
@@ -170,6 +179,17 @@ bool TCommandYql::PrintResponse(NScripting::TYqlResultPartIterator& result) {
 
         TQueryPlanPrinter queryPlanPrinter(OutputFormat, /* analyzeMode */ true);
         queryPlanPrinter.Print(*fullStats);
+
+        if (FlameGraphFile) {
+            try {
+                NKikimr::NVisual::GenerateFlameGraphSvg(FlameGraphFile, *fullStats,
+                                                        NKikimr::NVisual::EFlameGraphType::CPU);
+                Cout << "Resource usage flame graph is successfully saved to " << FlameGraphFile << Endl;
+            }
+            catch (const yexception& ex) {
+                Cout << "Can't save resource usage flame graph, error: " << ex.what() << Endl;
+            }
+        }
     }
 
     if (IsInterrupted()) {

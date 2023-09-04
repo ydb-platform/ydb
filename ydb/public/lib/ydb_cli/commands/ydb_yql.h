@@ -26,6 +26,7 @@ private:
     bool PrintResponse(NScripting::TYqlResultPartIterator& result);
 
     TString CollectStatsMode;
+    TString FlameGraphFile;
     TString Script;
     TString ScriptFile;
 };

@@ -5,6 +5,7 @@
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
+#include <ydb/public/lib/stat_visualization/flame_graph_builder.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 #include <library/cpp/json/json_prettifier.h>
@@ -652,6 +653,8 @@ void TCommandExplain::Config(TConfig& config) {
         .RequiredArgument("[String]").DefaultValue("data").StoreResult(&QueryType);
     config.Opts->AddLongOption("analyze", "Run query and collect execution statistics")
         .NoArgument().SetFlag(&Analyze);
+    config.Opts->AddLongOption("flame-graph", "Builds resource usage flame graph, based on analyze info")
+            .RequiredArgument("PATH").StoreResult(&FlameGraphFile);
 
     AddFormats(config, {
             EOutputFormat::Pretty,
@@ -706,7 +709,7 @@ int TCommandExplain::Run(TConfig& config) {
             Cerr << "<INTERRUPTED>" << Endl;
         }
 
-    } else if (QueryType == "data" && Analyze) {
+    } else if (QueryType == "data" && (Analyze || FlameGraphFile)) {
         NTable::TExecDataQuerySettings settings;
         settings.CollectQueryStats(NTable::ECollectQueryStatsMode::Full);
 
@@ -740,6 +743,16 @@ int TCommandExplain::Run(TConfig& config) {
         Cout << "Query Plan:" << Endl;
         TQueryPlanPrinter queryPlanPrinter(OutputFormat, Analyze);
         queryPlanPrinter.Print(planJson);
+
+        if( FlameGraphFile ) {
+            try {
+                NKikimr::NVisual::GenerateFlameGraphSvg(FlameGraphFile, planJson, NKikimr::NVisual::EFlameGraphType::CPU);
+                Cout << "Resource usage flame graph is successfully saved to " << FlameGraphFile << Endl;
+            }
+            catch (const yexception& ex) {
+                Cout << "Can't save resource usage flame graph, error: " << ex.what() << Endl;
+            }
+        }
     }
 
     return EXIT_SUCCESS;

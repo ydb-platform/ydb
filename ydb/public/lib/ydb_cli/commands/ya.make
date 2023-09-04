@@ -41,6 +41,7 @@ PEERDIR(
     ydb/library/backup
     ydb/library/workload
     ydb/public/lib/operation_id
+    ydb/public/lib/stat_visualization
     ydb/public/lib/ydb_cli/common
     ydb/public/lib/ydb_cli/commands/topic_workload
     ydb/public/lib/ydb_cli/commands/transfer_workload

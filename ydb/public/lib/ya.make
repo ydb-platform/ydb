@@ -8,6 +8,7 @@ RECURSE(
     jwt
     operation_id
     scheme_types
+    stat_visualization
     validation
     value
     ydb_cli

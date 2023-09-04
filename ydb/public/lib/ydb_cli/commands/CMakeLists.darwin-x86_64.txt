@@ -27,6 +27,7 @@ target_link_libraries(clicommands PUBLIC
   kikimr_backup
   ydb-library-workload
   public-lib-operation_id
+  public-lib-stat_visualization
   common
   topic_workload
   transfer_workload
@@ -92,6 +93,7 @@ target_link_libraries(clicommands.global PUBLIC
   kikimr_backup
   ydb-library-workload
   public-lib-operation_id
+  public-lib-stat_visualization
   common
   topic_workload
   transfer_workload

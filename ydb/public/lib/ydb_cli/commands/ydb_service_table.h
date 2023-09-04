@@ -129,6 +129,7 @@ private:
     bool PrintAst = false;
     TString QueryType;
     bool Analyze = false;
+    TString FlameGraphFile;
 };
 
 class TCommandReadTable : public TYdbCommand, public TCommandWithPath,

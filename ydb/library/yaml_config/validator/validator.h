@@ -1,5 +1,9 @@
 #pragma once
 
+#include "fwd.h"
+
+#include "validator_checks.h"
+
 #include <library/cpp/yaml/fyamlcpp/fyamlcpp.h>
 
 #include <util/generic/string.h>
@@ -11,47 +15,6 @@
 #include <util/generic/ylimits.h>
 
 namespace NYamlConfig::NValidator {
-
-enum class ENodeType {
-    Generic, Map, Array, Int64, String, Bool
-};
-
-class TValidator;
-class TGenericValidator;
-class TMapValidator;
-class TArrayValidator;
-class TInt64Validator;
-class TStringValidator;
-class TBoolValidator;
-
-class TGenericNodeWrapper;
-class TMapNodeWrapper;
-class TArrayNodeWrapper;
-class TInt64NodeWrapper;
-class TStringNodeWrapper;
-class TBoolNodeWrapper;
-
-class TGenericCheckContext;
-class TMapCheckContext;
-class TArrayCheckContext;
-class TInt64CheckContext;
-class TStringCheckContext;
-class TBoolCheckContext;
-
-class TCheckContext;
-
-class TGenericBuilder;
-
-namespace NDetail {
-
-class TBuilder;
-
-TSimpleSharedPtr<TValidator> CreateValidatorPtr(const TSimpleSharedPtr<NDetail::TBuilder>& builder);
-
-template <typename TThis, typename TContext>
-class TValidatorCommonOps;
-
-}
 
 class TValidationResult {
     friend class TCheckContext;

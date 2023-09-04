@@ -4,6 +4,8 @@
 #include <util/system/types.h>
 
 #include <ydb/library/yaml_config/validator/validator_builder.h>
+#include <ydb/library/yaml_config/validator/validator.h>
+#include <ydb/library/yaml_config/validator/validator_checks.h>
 
 using namespace NYamlConfig::NValidator;
 using TIssue = TValidationResult::TIssue;

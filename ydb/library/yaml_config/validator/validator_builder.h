@@ -1,7 +1,6 @@
 #pragma once
 
-#include "validator.h"
-#include "validator_checks.h"
+#include "fwd.h"
 
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
@@ -18,18 +17,7 @@ namespace NYamlConfig::NValidator {
 
 class BuilderException : public yexception {};
 
-class TGenericBuilder;
-class TMapBuilder;
-class TArrayBuilder;
-class TInt64Builder;
-class TStringBuilder;
-class TBoolBuilder;
-
 namespace NDetail {
-
-class TBuilder;
-
-TSimpleSharedPtr<TValidator> CreateValidatorPtr(const TSimpleSharedPtr<TBuilder>& builder);
 
 class TBuilder {
     friend TSimpleSharedPtr<TValidator> NDetail::CreateValidatorPtr(const TSimpleSharedPtr<TBuilder>& builder);

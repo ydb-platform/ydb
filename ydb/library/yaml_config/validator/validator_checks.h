@@ -1,6 +1,8 @@
 #pragma once
 
-#include "validator.h"
+#include "fwd.h"
+
+#include <library/cpp/yaml/fyamlcpp/fyamlcpp.h>
 
 #include <util/generic/maybe.h>
 
@@ -26,27 +28,7 @@
 // }
 
 namespace NYamlConfig::NValidator {
-
-class TNodeWrapper;
-class TGenericNodeWrapper;
-class TMapNodeWrapper;
-class TArrayNodeWrapper;
-class TInt64NodeWrapper;
-class TStringNodeWrapper;
-class TBoolNodeWrapper;
-
-class TCheckContext;
-class TGenericCheckContext;
-class TMapCheckContext;
-class TArrayCheckContext;
-class TInt64CheckContext;
-class TStringCheckContext;
-class TBoolCheckContext;
-
 namespace NDetail {
-
-template <typename TThis, typename TContext>
-class TValidatorCommonOps;
 
 template <typename TThis>
 class TNodeWrapperCommonOps {
@@ -65,7 +47,7 @@ void TNodeWrapperCommonOps<TThis>::ThrowIfNullNode() {
     }
 }
 
-}
+} // namespace NDetail
 
 class TNodeWrapper : public NDetail::TNodeWrapperCommonOps<TNodeWrapper> {
     template <typename> friend class NDetail::TNodeWrapperCommonOps;

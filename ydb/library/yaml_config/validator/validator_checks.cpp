@@ -1,5 +1,7 @@
 #include "validator_checks.h"
 
+#include "validator.h"
+
 #include <util/string/cast.h>
 
 namespace NYamlConfig::NValidator {

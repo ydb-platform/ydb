@@ -3,6 +3,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/library/yaml_config/validator/validator_builder.h>
+#include <ydb/library/yaml_config/validator/validator.h>
 
 using namespace NYamlConfig::NValidator;
 using TIssue = TValidationResult::TIssue;

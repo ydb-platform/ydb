@@ -10,7 +10,7 @@ static constexpr int ProxyNodeId = 1;
 
 NActors::IActor* CreateKafkaMetadataActor(const TContext::TPtr context,
                                           const ui64 correlationId,
-                                          const TMetadataRequestData* message) {
+                                          const TMessagePtr<TMetadataRequestData>& message) {
     return new TKafkaMetadataActor(context, correlationId, message);
 }
 

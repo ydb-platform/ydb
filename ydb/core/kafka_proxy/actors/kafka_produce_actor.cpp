@@ -237,7 +237,7 @@ size_t TKafkaProduceActor::EnqueueInitialization() {
     bool requireInitialization = false;
 
     for(const auto& e : Requests) {
-        auto* r = e->Get()->Request;
+        auto r = e->Get()->Request;
         for(const auto& topicData : r->TopicData) {
             const auto& topicPath = NormalizePath(Context->DatabasePath, *topicData.Name);
             if (!Topics.contains(topicPath)) {
@@ -316,7 +316,7 @@ THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TProduceRequestData::
     return ev;
 }
 
-size_t PartsCount(const TProduceRequestData* r) {
+size_t PartsCount(const TMessagePtr<TProduceRequestData>& r) {
     size_t result = 0;
     for(const auto& topicData : r->TopicData) {
         result += topicData.PartitionData.size();
@@ -325,7 +325,7 @@ size_t PartsCount(const TProduceRequestData* r) {
 }
 
 void TKafkaProduceActor::ProcessRequest(TPendingRequest::TPtr pendingRequest, const TActorContext& ctx) {
-    auto* r = pendingRequest->Request->Get()->Request;
+    auto r = pendingRequest->Request->Get()->Request;
 
     pendingRequest->Results.resize(PartsCount(r));
     pendingRequest->StartTime = ctx.Now();
@@ -433,7 +433,7 @@ void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr reque
         SendResults(ctx);
     }
 
-    Cookies.erase(it);
+    Cookies.erase(cookie);
 }
 
 EKafkaErrors Convert(TEvPartitionWriter::TEvWriteResponse::EErrors value) {
@@ -461,7 +461,7 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
             return;
         }
 
-        auto* request = pendingRequest->Request->Get()->Request;
+        auto request = pendingRequest->Request->Get()->Request;
         auto correlationId = pendingRequest->Request->Get()->CorrelationId;
         EKafkaErrors metricsErrorCode = EKafkaErrors::NONE_ERROR;
 

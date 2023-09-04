@@ -16,7 +16,7 @@ const TVector<TString> SUPPORTED_SASL_MECHANISMS = {
 };
 
 public:
-    TKafkaSaslHandshakeActor(const TContext::TPtr context, const ui64 correlationId, const TSaslHandshakeRequestData* message)
+    TKafkaSaslHandshakeActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TSaslHandshakeRequestData>& message)
         : Context(context)
         , CorrelationId(correlationId)
         , HandshakeRequestData(message) {
@@ -31,7 +31,7 @@ private:
 private:
     const TContext::TPtr Context;
     const ui64 CorrelationId;
-    const TSaslHandshakeRequestData* HandshakeRequestData;
+    const TMessagePtr<TSaslHandshakeRequestData> HandshakeRequestData;
 };
 
 } // NKafka

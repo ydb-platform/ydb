@@ -4,7 +4,7 @@
 
 namespace NKafka {
 
-NActors::IActor* CreateKafkaApiVersionsActor(const TContext::TPtr context, const ui64 correlationId, const TApiVersionsRequestData* message) {
+NActors::IActor* CreateKafkaApiVersionsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TApiVersionsRequestData>& message) {
     return new TKafkaApiVersionsActor(context, correlationId, message);
 }    
 

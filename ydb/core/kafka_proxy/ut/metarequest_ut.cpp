@@ -7,8 +7,8 @@
 namespace NKafka::NTests {
 
 Y_UNIT_TEST_SUITE(TMetadataActorTests) {
-    THolder<TMetadataRequestData> GetMetadataRequest(const TVector<TString>& topics) {
-        auto res = MakeHolder<TMetadataRequestData>();
+    TMetadataRequestData::TPtr GetMetadataRequest(const TVector<TString>& topics) {
+        auto res = std::make_shared<TMetadataRequestData>();
         for (const auto& t : topics) {
             TMetadataRequestData::TMetadataRequestTopic topic;
             topic.Name = t;
@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(TMetadataActorTests) {
         context->ConnectionId = edgeActor;
         context->UserToken = new NACLib::TUserToken("root@builtin", {});
 
-        auto actorId = runtime->Register(new TKafkaMetadataActor(context, 1, request.Get()));
+        auto actorId = runtime->Register(new TKafkaMetadataActor(context, 1, TMessagePtr<TMetadataRequestData>(std::make_shared<TBuffer>(), request)));
         runtime->EnableScheduleForActor(actorId);
         runtime->DispatchEvents();
         Cerr << "Wait for response for topics: '";

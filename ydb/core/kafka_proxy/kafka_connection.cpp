@@ -31,14 +31,14 @@ public:
 
         size_t Size = 0;
         TKafkaInt32 ExpectedSize = 0;
-        TBuffer Buffer;
+        std::shared_ptr<TBuffer> Buffer = std::make_shared<TBuffer>(HeaderSize);
 
         TKafkaInt16 ApiKey;
         TKafkaVersion ApiVersion;
         TKafkaInt32 CorrelationId;
 
         TRequestHeaderData Header;
-        std::unique_ptr<TApiMessage> Message;
+        TApiMessage::TPtr Message;
 
         TInstant StartTime;
         TString Method;
@@ -131,6 +131,9 @@ protected:
     void Shutdown() {
         KAFKA_LOG_D("Shutdown");
 
+        PendingRequests.clear();
+        PendingRequestsQueue.clear();
+
         if (Socket) {
             Socket->Shutdown();
         }
@@ -213,11 +216,11 @@ protected:
         }
     }
 
-    void HandleMessage(TRequestHeaderData* header, const TApiVersionsRequestData* message) {
+    void HandleMessage(TRequestHeaderData* header, const TMessagePtr<TApiVersionsRequestData>& message) {
         Register(CreateKafkaApiVersionsActor(Context, header->CorrelationId, message));
     }
 
-    void HandleMessage(const TRequestHeaderData* header, const TProduceRequestData* message, const TActorContext& ctx) {
+    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TProduceRequestData>& message, const TActorContext& ctx) {
         if (!ProduceActorId) {
             ProduceActorId = ctx.RegisterWithSameMailbox(CreateKafkaProduceActor(Context));
         }
@@ -225,20 +228,25 @@ protected:
         Send(ProduceActorId, new TEvKafka::TEvProduceRequest(header->CorrelationId, message));
     }
 
-    void HandleMessage(const TRequestHeaderData* header, const TInitProducerIdRequestData* message) {
+    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TInitProducerIdRequestData>& message) {
         Register(CreateKafkaInitProducerIdActor(Context, header->CorrelationId, message));
     }
 
-    void HandleMessage(TRequestHeaderData* header, const TMetadataRequestData* message) {
+    void HandleMessage(TRequestHeaderData* header, const TMessagePtr<TMetadataRequestData>& message) {
         Register(CreateKafkaMetadataActor(Context, header->CorrelationId, message));
     }
 
-    void HandleMessage(const TRequestHeaderData* header, const TSaslAuthenticateRequestData* message) {
+    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TSaslAuthenticateRequestData>& message) {
         Register(CreateKafkaSaslAuthActor(Context, header->CorrelationId, Address, message));
     }
 
-    void HandleMessage(const TRequestHeaderData* header, const TSaslHandshakeRequestData* message) {
+    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TSaslHandshakeRequestData>& message) {
         Register(CreateKafkaSaslHandshakeActor(Context, header->CorrelationId, message));
+    }
+
+    template<class T>
+    TMessagePtr<T> Cast(std::shared_ptr<Msg>& request) {
+        return TMessagePtr<T>(request->Buffer, request->Message);
     }
 
     void ProcessRequest(const TActorContext& ctx) {
@@ -250,37 +258,42 @@ protected:
         PendingRequestsQueue.push_back(Request);
         PendingRequests[Request->Header.CorrelationId] = Request;
 
-        TApiMessage* message = Request->Message.get();
         SendRequestMetrics(ctx);
         switch (Request->Header.RequestApiKey) {
             case PRODUCE:
-                HandleMessage(&Request->Header, dynamic_cast<TProduceRequestData*>(message), ctx);
-                return;
+                HandleMessage(&Request->Header, Cast<TProduceRequestData>(Request), ctx);
+                break;
 
             case API_VERSIONS:
-                HandleMessage(&Request->Header, dynamic_cast<TApiVersionsRequestData*>(message));
-                return;
+                HandleMessage(&Request->Header, Cast<TApiVersionsRequestData>(Request));
+                break;
 
             case INIT_PRODUCER_ID:
-                HandleMessage(&Request->Header, dynamic_cast<TInitProducerIdRequestData*>(message));
-                return;
+                HandleMessage(&Request->Header, Cast<TInitProducerIdRequestData>(Request));
+                break;
 
             case METADATA:
-                HandleMessage(&Request->Header, dynamic_cast<TMetadataRequestData*>(message));
-                return;
+                HandleMessage(&Request->Header, Cast<TMetadataRequestData>(Request));
+                break;
 
             case SASL_HANDSHAKE:
-                HandleMessage(&Request->Header, dynamic_cast<TSaslHandshakeRequestData*>(message));
-                return;
+                HandleMessage(&Request->Header, Cast<TSaslHandshakeRequestData>(Request));
+                break;
 
             case SASL_AUTHENTICATE:
-                HandleMessage(&Request->Header, dynamic_cast<TSaslAuthenticateRequestData*>(message));
-                return;
+                HandleMessage(&Request->Header, Cast<TSaslAuthenticateRequestData>(Request));
+                break;
 
             default:
                 KAFKA_LOG_ERROR("Unsupported message: ApiKey=" << Request->Header.RequestApiKey);
                 PassAway();
         }
+
+        // Now message and buffer are held by message actor
+        Request->Message.reset();
+        Request->Buffer.reset();
+
+        Request.reset();
     }
 
     void Handle(TEvKafka::TEvResponse::TPtr response, const TActorContext& ctx) {
@@ -332,10 +345,9 @@ protected:
             return;
         }
 
-        auto request = it->second;
+        auto& request = it->second;
         request->Response = response;
         request->ResponseErrorCode = errorCode;
-        request->Buffer.Clear();
 
         ProcessReplyQueue(ctx);
 
@@ -413,7 +425,7 @@ protected:
             if (!Demand) {
                 switch (Step) {
                     case SIZE_READ:
-                        Request = std::make_unique<Msg>();
+                        Request = std::make_shared<Msg>();
                         Demand = TReadDemand((char*)&(Request->ExpectedSize), sizeof(Request->ExpectedSize));
                         Step = SIZE_PREPARE;
                         break;
@@ -451,16 +463,16 @@ protected:
                     case HEADER_READ:
                         KAFKA_LOG_T("start read header. ExpectedSize=" << Request->ExpectedSize);
 
-                        Request->Buffer.Resize(HeaderSize);
-                        Demand = TReadDemand(Request->Buffer.Data(), HeaderSize);
+                        Request->Buffer->Resize(HeaderSize);
+                        Demand = TReadDemand(Request->Buffer->Data(), HeaderSize);
 
                         Step = HEADER_PROCESS;
                         break;
                     
                     case HEADER_PROCESS:
-                        Request->ApiKey = *(TKafkaInt16*)Request->Buffer.Data();
-                        Request->ApiVersion = *(TKafkaVersion*)(Request->Buffer.Data() + sizeof(TKafkaInt16));
-                        Request->CorrelationId = *(TKafkaInt32*)(Request->Buffer.Data() + sizeof(TKafkaInt16) + sizeof(TKafkaVersion));
+                        Request->ApiKey = *(TKafkaInt16*)Request->Buffer->Data();
+                        Request->ApiVersion = *(TKafkaVersion*)(Request->Buffer->Data() + sizeof(TKafkaInt16));
+                        Request->CorrelationId = *(TKafkaInt32*)(Request->Buffer->Data() + sizeof(TKafkaInt16) + sizeof(TKafkaVersion));
 
                         NormalizeNumber(Request->ApiKey);
                         NormalizeNumber(Request->ApiVersion);
@@ -480,15 +492,17 @@ protected:
                     case MESSAGE_READ:
                         KAFKA_LOG_T("start read new message. ExpectedSize=" << Request->ExpectedSize);
 
-                        Request->Buffer.Resize(Request->ExpectedSize);
-                        Demand = TReadDemand(Request->Buffer.Data() + HeaderSize, Request->ExpectedSize - HeaderSize);
+                        Request->Buffer->Resize(Request->ExpectedSize);
+                        Demand = TReadDemand(Request->Buffer->Data() + HeaderSize, Request->ExpectedSize - HeaderSize);
 
                         Step = MESSAGE_PROCESS;
                         break;
 
                     case MESSAGE_PROCESS:
                         Request->StartTime = TInstant::Now();
-                        KAFKA_LOG_D("received message. ApiKey=" << Request->ApiKey << ", Version=" << Request->ApiVersion << ", CorrelationId=" << Request->CorrelationId);TKafkaReadable readable(Request->Buffer);
+                        KAFKA_LOG_D("received message. ApiKey=" << Request->ApiKey << ", Version=" << Request->ApiVersion << ", CorrelationId=" << Request->CorrelationId);
+
+                        TKafkaReadable readable(*Request->Buffer);
 
                         try {
                             Request->Message = CreateRequest(Request->ApiKey);

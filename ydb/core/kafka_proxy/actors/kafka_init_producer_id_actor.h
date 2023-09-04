@@ -6,7 +6,7 @@ namespace NKafka {
 
 class TKafkaInitProducerIdActor: public NActors::TActorBootstrapped<TKafkaInitProducerIdActor> {
 public:
-    TKafkaInitProducerIdActor(const TContext::TPtr context, const ui64 correlationId, const TInitProducerIdRequestData* message)
+    TKafkaInitProducerIdActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TInitProducerIdRequestData>& message)
         : Context(context)
         , CorrelationId(correlationId)
         , Message(message) {
@@ -17,7 +17,7 @@ public:
 private:
     const TContext::TPtr Context;
     const ui64 CorrelationId;
-    const TInitProducerIdRequestData* Message;
+    const TMessagePtr<TInitProducerIdRequestData> Message;
 };
 
 } // NKafka

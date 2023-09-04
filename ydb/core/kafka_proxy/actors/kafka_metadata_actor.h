@@ -8,7 +8,7 @@ namespace NKafka {
 
 class TKafkaMetadataActor: public NActors::TActorBootstrapped<TKafkaMetadataActor> {
 public:
-    TKafkaMetadataActor(const TContext::TPtr context, const ui64 correlationId, const TMetadataRequestData* message)
+    TKafkaMetadataActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TMetadataRequestData>& message)
         : Context(context)
         , CorrelationId(correlationId)
         , Message(message)
@@ -38,7 +38,7 @@ private:
 private:
     const TContext::TPtr Context;
     const ui64 CorrelationId;
-    const TMetadataRequestData* Message;
+    const TMessagePtr<TMetadataRequestData> Message;
 
     ui64 PendingResponses = 0;
 

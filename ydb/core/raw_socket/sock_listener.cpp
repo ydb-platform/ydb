@@ -78,7 +78,7 @@ public:
             case EErrorAction::Abort:
                 Cerr << "Failed to set up listener on port " << Settings.Port
                                 << " errno# " << -err << " (" << strerror(-err) << ")" << Endl;
-                exit(1);
+                abort();
                 break;
             
             case EErrorAction::Ignore:

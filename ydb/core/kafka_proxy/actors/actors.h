@@ -42,16 +42,39 @@ struct TContext {
     bool Authenticated() { return AuthenticationStep == SUCCESS; }
 };
 
+template<class T>
+class TMessagePtr {
+public:
+    TMessagePtr(const std::shared_ptr<TBuffer>& buffer, const std::shared_ptr<TApiMessage>& message)
+        : Buffer(buffer)
+        , Message(message)
+        , Ptr(dynamic_cast<T*>(message.get())) {
+    }
+
+    T* operator->() const {
+        return Ptr;
+    }
+
+    operator bool() const {
+        return nullptr != Ptr;
+    }
+
+private:
+    const std::shared_ptr<TBuffer> Buffer;
+    const std::shared_ptr<TApiMessage> Message;
+    T* Ptr;
+};
+
 inline bool RequireAuthentication(EApiKey apiKey) {
     return !(EApiKey::API_VERSIONS == apiKey || EApiKey::SASL_HANDSHAKE == apiKey || EApiKey::SASL_AUTHENTICATE == apiKey);
 }
 
-NActors::IActor* CreateKafkaApiVersionsActor(const TContext::TPtr context, const ui64 correlationId, const TApiVersionsRequestData* message);
-NActors::IActor* CreateKafkaInitProducerIdActor(const TContext::TPtr context, const ui64 correlationId, const TInitProducerIdRequestData* message);
-NActors::IActor* CreateKafkaMetadataActor(const TContext::TPtr context, const ui64 correlationId, const TMetadataRequestData* message);
+NActors::IActor* CreateKafkaApiVersionsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TApiVersionsRequestData>& message);
+NActors::IActor* CreateKafkaInitProducerIdActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TInitProducerIdRequestData>& message);
+NActors::IActor* CreateKafkaMetadataActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TMetadataRequestData>& message);
 NActors::IActor* CreateKafkaProduceActor(const TContext::TPtr context);
-NActors::IActor* CreateKafkaSaslHandshakeActor(const TContext::TPtr context, const ui64 correlationId, const TSaslHandshakeRequestData* message);
-NActors::IActor* CreateKafkaSaslAuthActor(const TContext::TPtr context, const ui64 correlationId, const NKikimr::NRawSocket::TSocketDescriptor::TSocketAddressType address, const TSaslAuthenticateRequestData* message);
+NActors::IActor* CreateKafkaSaslHandshakeActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TSaslHandshakeRequestData>& message);
+NActors::IActor* CreateKafkaSaslAuthActor(const TContext::TPtr context, const ui64 correlationId, const NKikimr::NRawSocket::TSocketDescriptor::TSocketAddressType address, const TMessagePtr<TSaslAuthenticateRequestData>& message);
 
     
 } // namespace NKafka

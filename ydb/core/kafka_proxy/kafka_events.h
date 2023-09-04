@@ -31,13 +31,13 @@ struct TEvKafka {
 
 
     struct TEvProduceRequest : public TEventLocal<TEvProduceRequest, EvProduceRequest> {
-        TEvProduceRequest(const ui64 correlationId, const TProduceRequestData* request)
+        TEvProduceRequest(const ui64 correlationId, const TMessagePtr<TProduceRequestData>& request)
         : CorrelationId(correlationId)
         , Request(request)
         {}
 
         ui64 CorrelationId;
-        const TProduceRequestData* Request;
+        const TMessagePtr<TProduceRequestData> Request;
     };
 
     struct TEvResponse : public TEventLocal<TEvResponse, EvResponse> {

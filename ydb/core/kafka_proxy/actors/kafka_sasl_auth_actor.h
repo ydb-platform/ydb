@@ -43,7 +43,7 @@ struct TAuthData {
 };
 
 public:
-    TKafkaSaslAuthActor(const TContext::TPtr context, const ui64 correlationId, NKikimr::NRawSocket::TSocketDescriptor::TSocketAddressType address, const TSaslAuthenticateRequestData* message)
+    TKafkaSaslAuthActor(const TContext::TPtr context, const ui64 correlationId, NKikimr::NRawSocket::TSocketDescriptor::TSocketAddressType address, const TMessagePtr<TSaslAuthenticateRequestData>& message)
         : Context(context)
         , CorrelationId(correlationId)
         , AuthenticateRequestData(message)
@@ -80,7 +80,7 @@ private:
     const TContext::TPtr Context;
     const ui64 CorrelationId;
 
-    const TSaslAuthenticateRequestData* AuthenticateRequestData;
+    const TMessagePtr<TSaslAuthenticateRequestData> AuthenticateRequestData;
     const NKikimr::NRawSocket::TNetworkConfig::TSocketAddressType Address;
 
     TString DatabasePath;

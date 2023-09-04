@@ -12,7 +12,7 @@ namespace NKafka {
 
 static constexpr char EMPTY_AUTH_BYTES[] = "";
 
-NActors::IActor* CreateKafkaSaslAuthActor(const TContext::TPtr context, const ui64 correlationId, const NKikimr::NRawSocket::TSocketDescriptor::TSocketAddressType address, const TSaslAuthenticateRequestData* message) {
+NActors::IActor* CreateKafkaSaslAuthActor(const TContext::TPtr context, const ui64 correlationId, const NKikimr::NRawSocket::TSocketDescriptor::TSocketAddressType address, const TMessagePtr<TSaslAuthenticateRequestData>& message) {
     return new TKafkaSaslAuthActor(context, correlationId, address, message);
 }    
 

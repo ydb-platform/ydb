@@ -5,7 +5,7 @@
 
 namespace NKafka {
 
-NActors::IActor* CreateKafkaInitProducerIdActor(const TContext::TPtr context, const ui64 correlationId, const TInitProducerIdRequestData* message) {
+NActors::IActor* CreateKafkaInitProducerIdActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TInitProducerIdRequestData>& message) {
     return new TKafkaInitProducerIdActor(context, correlationId, message);
 }    
 

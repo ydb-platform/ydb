@@ -6,7 +6,7 @@ namespace NKafka {
 
 class TKafkaApiVersionsActor: public NActors::TActorBootstrapped<TKafkaApiVersionsActor> {
 public:
-    TKafkaApiVersionsActor(const TContext::TPtr context, const ui64 correlationId, const TApiVersionsRequestData* message)
+    TKafkaApiVersionsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TApiVersionsRequestData>& message)
         : Context(context)
         , CorrelationId(correlationId)
         , Message(message) {
@@ -17,7 +17,7 @@ public:
 private:
     const TContext::TPtr Context;
     const ui64 CorrelationId;
-    const TApiVersionsRequestData* Message;
+    const TMessagePtr<TApiVersionsRequestData> Message;
 };
 
 } // NKafka

@@ -8,7 +8,7 @@
 
 namespace NKafka {
 
-NActors::IActor* CreateKafkaSaslHandshakeActor(const TContext::TPtr context, const ui64 correlationId, const TSaslHandshakeRequestData* message) {
+NActors::IActor* CreateKafkaSaslHandshakeActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TSaslHandshakeRequestData>& message) {
     return new TKafkaSaslHandshakeActor(context, correlationId, message);
 }
 

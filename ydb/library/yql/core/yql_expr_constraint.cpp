@@ -199,6 +199,7 @@ public:
         Functions["JoinDict"] = &TCallableConstraintTransformer::JoinDictWrap;
         Functions["MapJoinCore"] = &TCallableConstraintTransformer::MapJoinCoreWrap;
         Functions["GraceJoinCore"] = &TCallableConstraintTransformer::GraceJoinCoreWrap;
+        Functions["SelfJoinCore"] = &TCallableConstraintTransformer::SelfJoinCoreWrap;
         Functions["CommonJoinCore"] = &TCallableConstraintTransformer::FromFirst<TEmptyConstraintNode>;
         Functions["ToDict"] = &TCallableConstraintTransformer::ToDictWrap;
         Functions["DictItems"] = &TCallableConstraintTransformer::DictItemsWrap;
@@ -2431,10 +2432,31 @@ private:
         return TStatus::Ok;
     }
 
-    TStatus GraceJoinCoreWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
-        const TCoGraceJoinCore core(input);
+    TExprNode::TPtr GraceJoinRightInput(const TCoGraceJoinCore& core) const {
+        return core.RightInput().Ptr();
+    }
+
+    TExprNode::TPtr GraceJoinRightInput(const TCoSelfJoinCore& core) const {
+        return core.Input().Ptr();
+    }
+
+    TExprNode::TPtr GraceJoinLeftInput(const TCoGraceJoinCore& core) const {
+        return core.LeftInput().Ptr();
+    }
+
+    TExprNode::TPtr GraceJoinLeftInput(const TCoSelfJoinCore& core) const {
+        return core.Input().Ptr();
+    }
+
+    template<typename GraceJoinCoreType>
+    TStatus GraceJoinCoreWrapImpl(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
+        Y_UNUSED(output);
+        const GraceJoinCoreType core(input);
         const auto& joinType = core.JoinKind().Ref();
-        if (const auto lEmpty = core.LeftInput().Ref().GetConstraint<TEmptyConstraintNode>(), rEmpty = core.RightInput().Ref().GetConstraint<TEmptyConstraintNode>(); lEmpty && rEmpty) {
+        TExprNode::TPtr leftInput = GraceJoinLeftInput(core);
+        TExprNode::TPtr rightInput = GraceJoinRightInput(core);
+
+        if (const auto lEmpty = leftInput->GetConstraint<TEmptyConstraintNode>(), rEmpty = rightInput->GetConstraint<TEmptyConstraintNode>(); lEmpty && rEmpty) {
             input->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
         } else if (lEmpty && joinType.Content().starts_with("Left")) {
             input->AddConstraint(lEmpty);
@@ -2452,8 +2474,8 @@ private:
                 rigthAny = true;
         });
 
-        const auto lUnique = core.LeftInput().Ref().GetConstraint<TUniqueConstraintNode>();
-        const auto rUnique = core.RightInput().Ref().GetConstraint<TUniqueConstraintNode>();
+        const TUniqueConstraintNode* lUnique = leftInput->GetConstraint<TUniqueConstraintNode>();
+        const TUniqueConstraintNode* rUnique = rightInput->GetConstraint<TUniqueConstraintNode>();
 
         const bool lOneRow = lUnique && (leftAny || lUnique->ContainsCompleteSet(GetKeys(core.LeftKeysColumns().Ref())));
         const bool rOneRow = rUnique && (rigthAny || rUnique->ContainsCompleteSet(GetKeys(core.RightKeysColumns().Ref())));
@@ -2487,8 +2509,8 @@ private:
                     unique = TUniqueConstraintNode::Merge(lUnique->RenameFields(ctx, leftRename), rUnique->RenameFields(ctx, rightRename), ctx);
             }
 
-            const auto lDistinct = core.LeftInput().Ref().GetConstraint<TDistinctConstraintNode>();
-            const auto rDistinct = core.RightInput().Ref().GetConstraint<TDistinctConstraintNode>();
+            const auto lDistinct = leftInput->GetConstraint<TDistinctConstraintNode>();
+            const auto rDistinct = rightInput->GetConstraint<TDistinctConstraintNode>();
 
             if (singleSide) {
                 if (leftSide && lDistinct)
@@ -2516,6 +2538,15 @@ private:
 
         return TStatus::Ok;
     }
+
+    TStatus GraceJoinCoreWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
+        return GraceJoinCoreWrapImpl<TCoGraceJoinCore>(input, output, ctx);
+    }
+
+    TStatus SelfJoinCoreWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
+        return GraceJoinCoreWrapImpl<TCoSelfJoinCore>(input, output, ctx);
+    }
+
     template<bool Distinct>
     static const TUniqueConstraintNodeBase<Distinct>* GetForPayload(const TExprNode& input, TExprContext& ctx) {
         if (const auto constraint = input.GetConstraint<TUniqueConstraintNodeBase<Distinct>>())  {

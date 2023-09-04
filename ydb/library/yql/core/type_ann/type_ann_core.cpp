@@ -11815,6 +11815,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["MapJoinCore"] = &MapJoinCoreWrapper;
         Functions["CommonJoinCore"] = &CommonJoinCoreWrapper;
         Functions["GraceJoinCore"] = &GraceJoinCoreWrapper;
+        Functions["SelfJoinCore"] = &SelfJoinCoreWrapper;
         Functions["CombineCore"] = &CombineCoreWrapper;
         Functions["GroupingCore"] = &GroupingCoreWrapper;
         Functions["HoppingTraits"] = &HoppingTraitsWrapper;

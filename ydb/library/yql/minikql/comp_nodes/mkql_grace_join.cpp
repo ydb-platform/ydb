@@ -897,64 +897,6 @@ EFetchResult TGraceJoinState::FetchValues(TComputationContext& ctx, NUdf::TUnbox
 
 }
 
-IComputationNode* CreateGraceJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx, bool isSelfJoin = false) {
-
-    MKQL_ENSURE(callable.GetInputsCount() == 8, "Expected 8 args");
-
-    const auto leftFlowNode = callable.GetInput(0);
-    const auto rightFlowNode = callable.GetInput(1);
-    const auto leftFlowComponents = GetWideComponents(AS_TYPE(TFlowType, leftFlowNode));
-    const auto rightFlowComponents = GetWideComponents(AS_TYPE(TFlowType, rightFlowNode));
-    const auto joinKindNode = callable.GetInput(2);
-    const auto leftKeyColumnsNode = AS_VALUE(TTupleLiteral, callable.GetInput(3));
-    const auto rightKeyColumnsNode = AS_VALUE(TTupleLiteral, callable.GetInput(4));
-    const auto leftRenamesNode = AS_VALUE(TTupleLiteral, callable.GetInput(5));
-    const auto rightRenamesNode = AS_VALUE(TTupleLiteral, callable.GetInput(6));
-    const ui32 rawJoinKind = AS_VALUE(TDataLiteral, joinKindNode)->AsValue().Get<ui32>();
-
-    const EAnyJoinSettings anyJoinSettings = GetAnyJoinSettings(AS_VALUE(TDataLiteral, callable.GetInput(7))->AsValue().Get<ui32>());
-
-    const auto flowLeft = dynamic_cast<IComputationWideFlowNode*> (LocateNode(ctx.NodeLocator, callable, 0));
-    const auto flowRight = dynamic_cast<IComputationWideFlowNode*> (LocateNode(ctx.NodeLocator, callable, 1));
-
-    const auto outputFlowComponents = GetWideComponents(AS_TYPE(TFlowType, callable.GetType()->GetReturnType()));
-    std::vector<EValueRepresentation> outputRepresentations;
-    outputRepresentations.reserve(outputFlowComponents.size());
-    for (ui32 i = 0U; i < outputFlowComponents.size(); ++i) {
-        outputRepresentations.emplace_back(GetValueRepresentation(outputFlowComponents[i]));
-    }
-
-    std::vector<ui32> leftKeyColumns, leftRenames, rightKeyColumns, rightRenames;
-    std::vector<TType*> leftColumnsTypes(leftFlowComponents.begin(), leftFlowComponents.end());
-    std::vector<TType*> rightColumnsTypes(rightFlowComponents.begin(), rightFlowComponents.end());
-
-    leftKeyColumns.reserve(leftKeyColumnsNode->GetValuesCount());
-    for (ui32 i = 0; i < leftKeyColumnsNode->GetValuesCount(); ++i) {
-        leftKeyColumns.emplace_back(AS_VALUE(TDataLiteral, leftKeyColumnsNode->GetValue(i))->AsValue().Get<ui32>());
-    }
-
-    leftRenames.reserve(leftRenamesNode->GetValuesCount());
-    for (ui32 i = 0; i < leftRenamesNode->GetValuesCount(); ++i) {
-        leftRenames.emplace_back(AS_VALUE(TDataLiteral, leftRenamesNode->GetValue(i))->AsValue().Get<ui32>());
-    }
-
-    rightKeyColumns.reserve(rightKeyColumnsNode->GetValuesCount());
-    for (ui32 i = 0; i < rightKeyColumnsNode->GetValuesCount(); ++i) {
-        rightKeyColumns.emplace_back(AS_VALUE(TDataLiteral, rightKeyColumnsNode->GetValue(i))->AsValue().Get<ui32>());
-    }
-
-    rightRenames.reserve(rightRenamesNode->GetValuesCount());
-    for (ui32 i = 0; i < rightRenamesNode->GetValuesCount(); ++i) {
-        rightRenames.emplace_back(AS_VALUE(TDataLiteral, rightRenamesNode->GetValue(i))->AsValue().Get<ui32>());
-    }
-
-    return new TGraceJoinWrapper(
-        ctx.Mutables, flowLeft, flowRight, GetJoinKind(rawJoinKind), anyJoinSettings,
-        std::move(leftKeyColumns), std::move(rightKeyColumns), std::move(leftRenames), std::move(rightRenames),
-        std::move(leftColumnsTypes), std::move(rightColumnsTypes), std::move(outputRepresentations), isSelfJoin);
-
-}
-
 IComputationNode* WrapGraceJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 8, "Expected 8 args");
 

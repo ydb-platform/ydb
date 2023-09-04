@@ -1537,7 +1537,20 @@
                 {"Index": 7, "Name": "Flags", "Type": "TCoAtomList"}
             ]
         },
-
+        {
+            "Name": "TCoSelfJoinCore",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "SelfJoinCore"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "JoinKind", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "LeftKeysColumns", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "RightKeysColumns", "Type": "TCoAtomList"},
+                {"Index": 4, "Name": "LeftRenames", "Type": "TCoAtomList"},
+                {"Index": 5, "Name": "RightRenames", "Type": "TCoAtomList"},
+                {"Index": 6, "Name": "Flags", "Type": "TCoAtomList"}
+            ]
+        },
         {
             "Name": "TCoJoinDict",
             "Base": "TCallable",
@@ -2382,7 +2395,7 @@
 
         {
             "Name": "TCoPgSelect",
-            "Base": "TCallable", 
+            "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "PgSelect"},
             "Children": [
                 {"Index": 0, "Name": "SelectOptions", "Type": "TCoNameValueTupleList"}
@@ -2390,7 +2403,7 @@
         },
         {
             "Name": "TCoPgSetItem",
-            "Base": "TCallable", 
+            "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "PgSetItem"},
             "Children": [
                 {"Index": 0, "Name": "SetItemOptions", "Type": "TCoNameValueTupleList"}

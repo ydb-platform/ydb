@@ -1584,16 +1584,18 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.MapJoinCore(list, dict, joinKind, leftKeyColumns, leftRenames, rightRenames, returnType);
     });
 
-    AddCallable("GraceJoinCore", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+    AddCallable({"GraceJoinCore", "SelfJoinCore"}, [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        bool selfJoin = node.Content() == "SelfJoinCore";
+        int shift = selfJoin ? 0 : 1;
         const auto flowLeft = MkqlBuildExpr(*node.Child(0), ctx);
-        const auto flowRight = MkqlBuildExpr(*node.Child(1), ctx);
-        const auto joinKind = GetJoinKind(node, node.Child(2)->Content());
+        const auto flowRight = MkqlBuildExpr(*node.Child(shift), ctx);
+        const auto joinKind = GetJoinKind(node, node.Child(shift + 1)->Content());
 
         const auto& outputItemType = GetSeqItemType(*node.GetTypeAnn());
 
         std::vector<ui32> leftKeyColumns, rightKeyColumns, leftRenames, rightRenames;
         const auto& leftItemType = GetSeqItemType(*node.Child(0)->GetTypeAnn());
-        const auto& rightItemType = GetSeqItemType(*node.Child(1)->GetTypeAnn());
+        const auto& rightItemType = GetSeqItemType(*node.Child(shift)->GetTypeAnn());
 
         if (leftItemType.GetKind() != ETypeAnnotationKind::Multi ||
             rightItemType.GetKind() != ETypeAnnotationKind::Multi ) {
@@ -1609,16 +1611,16 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto rightTupleType = rightItemType.Cast<TMultiExprType>();
         const auto outputTupleType = outputItemType.Cast<TMultiExprType>();
 
-        node.Child(3)->ForEachChild([&](TExprNode& child){
+        node.Child(shift + 2)->ForEachChild([&](TExprNode& child){
             leftKeyColumns.emplace_back(*GetFieldPosition(*leftTupleType, child.Content()));
             });
-        node.Child(4)->ForEachChild([&](TExprNode& child){
+        node.Child(shift + 3)->ForEachChild([&](TExprNode& child){
             rightKeyColumns.emplace_back(*GetFieldPosition(*rightTupleType, child.Content())); });
         bool s = false;
-        node.Child(5)->ForEachChild([&](TExprNode& child){
+        node.Child(shift + 4)->ForEachChild([&](TExprNode& child){
             leftRenames.emplace_back(*GetFieldPosition((s = !s) ?  *leftTupleType : *outputTupleType, child.Content())); });
         s = false;
-        node.Child(6)->ForEachChild([&](TExprNode& child){
+        node.Child(shift + 5)->ForEachChild([&](TExprNode& child){
             rightRenames.emplace_back(*GetFieldPosition((s = !s) ?  *rightTupleType : *outputTupleType, child.Content())); });
 
         auto anyJoinSettings = EAnyJoinSettings::None;
@@ -1630,9 +1632,10 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         });
 
         const auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
-        return ctx.ProgramBuilder.GraceJoin(flowLeft, flowRight, joinKind, leftKeyColumns, rightKeyColumns, leftRenames, rightRenames, returnType, anyJoinSettings);
+        return selfJoin
+            ? ctx.ProgramBuilder.SelfJoin(flowLeft, joinKind, leftKeyColumns, rightKeyColumns, leftRenames, rightRenames, returnType, anyJoinSettings)
+            : ctx.ProgramBuilder.GraceJoin(flowLeft, flowRight, joinKind, leftKeyColumns, rightKeyColumns, leftRenames, rightRenames, returnType, anyJoinSettings);
     });
-
 
     AddCallable("CommonJoinCore", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto list = MkqlBuildExpr(node.Head(), ctx);
@@ -2271,7 +2274,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             call.Add(MkqlBuildExpr(*node.Child(1), ctx));
             call.Add(ctx.ProgramBuilder.NewDataLiteral(FromString<bool>(*node.Child(2), NUdf::EDataSlot::Bool)));
             return TRuntimeNode(call.Build(), false);
-        } else { // if we got type + type 
+        } else { // if we got type + type
             bool pretty = FromString<bool>(*node.Child(2), NUdf::EDataSlot::Bool);
             const auto type_left = node.Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
             const auto type_right = node.Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();

@@ -37,13 +37,18 @@ void TKeyValueState::PrepareCollectIfNeeded(const TActorContext &ctx) {
         inflightGenStep = THelpers::TGenerationStep(ExecutorGeneration, step - 1);
     }
     const auto storedGenStep = THelpers::TGenerationStep(StoredState.GetCollectGeneration(), StoredState.GetCollectStep());
-    const auto collectGenStep = Min(inflightGenStep, Max(storedGenStep, THelpers::GenerationStep(maxId)));
+    const auto requiredGenStep = Max(storedGenStep, THelpers::GenerationStep(maxId));
+    const auto collectGenStep = Min(inflightGenStep, requiredGenStep);
     Y_VERIFY(THelpers::TGenerationStep(ExecutorGeneration, 0) <= collectGenStep);
     Y_VERIFY(storedGenStep <= collectGenStep);
 
     // check if it is useful to start any collection
     const TLogoBlobID minTrashId = *Trash.begin();
     if (collectGenStep < THelpers::GenerationStep(minTrashId)) {
+        if (collectGenStep < requiredGenStep && collectGenStep == THelpers::TGenerationStep(ExecutorGeneration, NextLogoBlobStep - 1)) {
+            // collection is blocked by inflight requests in current step -- we have to advance to prevent this loop
+            Step();
+        }
         return; // we do not have the opportunity to collect anything here with this allowed barrier
     }
 

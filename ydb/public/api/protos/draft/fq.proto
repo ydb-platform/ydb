@@ -459,6 +459,7 @@ message YdbDatabase {
 
 message ClickHouseCluster {
     string database_id = 1 [(Ydb.length).le = 1024];
+    string database_name = 8 [(Ydb.length).le = 1024];
     string login = 2 [(Ydb.length).le = 1024, (Ydb.sensitive) = true];
     string password = 3 [(Ydb.length).le = 1024, (Ydb.sensitive) = true];
     IamAuth auth = 4;
@@ -476,6 +477,7 @@ message ObjectStorageConnection {
 
 message PostgreSQLCluster {
     string database_id = 1 [(Ydb.length).le = 1024];
+    string database_name = 8 [(Ydb.length).le = 1024];
     string login = 2 [(Ydb.length).le = 1024, (Ydb.sensitive) = true];
     string password = 3 [(Ydb.length).le = 1024, (Ydb.sensitive) = true];
     IamAuth auth = 4;

@@ -173,33 +173,48 @@ TString MakeCreateExternalDataSourceQuery(
     const TSigner::TPtr& signer) {
     using namespace fmt::literals;
 
-    TString sourceType;
-    TString locationValue;
-    TString locationKey;
+    TString properties;
     switch (connectionContent.setting().connection_case()) {
         case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
         case FederatedQuery::ConnectionSetting::kYdbDatabase:
         break;
         case FederatedQuery::ConnectionSetting::kClickhouseCluster:
-            locationKey = "MDB_CLUSTER_ID";
-            sourceType = "ClickHouse";
-            locationValue = EscapeString(connectionContent.setting().clickhouse_cluster().database_id(), '"');
+            properties = fmt::format(
+                R"(
+                    SOURCE_TYPE="ClickHouse",
+                    MDB_CLUSTER_ID="{mdb_cluster_id}",
+                    DATABASE_NAME="{database_name}",
+                    PROTOCOL="HTTP",
+                    USE_TLS="true"
+                )",
+                "mdb_cluster_id"_a = EscapeString(connectionContent.setting().clickhouse_cluster().database_id(), '"'),
+                "database_name"_a = EscapeString(connectionContent.setting().clickhouse_cluster().database_name(), '"'));
         break;
         case FederatedQuery::ConnectionSetting::kDataStreams:
         break;
         case FederatedQuery::ConnectionSetting::kObjectStorage: {
-            locationKey = "LOCATION";
             auto bucketName = connectionContent.setting().object_storage().bucket();
-            locationValue = objectStorageEndpoint + "/" + EscapeString(bucketName, '"') + "/";
-            sourceType = "ObjectStorage";
+            properties = fmt::format(
+                R"(
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{location}"
+                )",
+                "location"_a = objectStorageEndpoint + "/" + EscapeString(bucketName, '"') + "/");
             break;
         }
         case FederatedQuery::ConnectionSetting::kMonitoring:
         break;
         case FederatedQuery::ConnectionSetting::kPostgresqlCluster:
-            locationKey = "MDB_CLUSTER_ID";
-            locationValue = EscapeString(connectionContent.setting().postgresql_cluster().database_id(), '"');
-            sourceType = "PostgreSQL";
+            properties = fmt::format(
+                R"(
+                    SOURCE_TYPE="PostgreSQL",
+                    MDB_CLUSTER_ID="{mdb_cluster_id}",
+                    DATABASE_NAME="{database_name}",
+                    PROTOCOL="NATIVE",
+                    USE_TLS="true"
+                )",
+                "mdb_cluster_id"_a = EscapeString(connectionContent.setting().clickhouse_cluster().database_id(), '"'),
+                "database_name"_a = EscapeString(connectionContent.setting().clickhouse_cluster().database_name(), '"'));
         break;
     }
 
@@ -207,15 +222,12 @@ TString MakeCreateExternalDataSourceQuery(
     return fmt::format(
         R"(
                 CREATE EXTERNAL DATA SOURCE {external_source} WITH (
-                    SOURCE_TYPE="{source_type}",
-                    {location_key}="{location_value}"
+                    {properties}
                     {auth_params}
                 );
             )",
-        "source_type"_a = sourceType,
         "external_source"_a = EncloseAndEscapeString(sourceName, '`'),
-        "location_key"_a = locationKey,
-        "location_value"_a = locationValue,
+        "properties"_a = properties,
         "auth_params"_a =
             CreateAuthParamsQuery(connectionContent.setting(),
                                   connectionContent.name(),

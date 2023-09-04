@@ -287,7 +287,6 @@ private:
     };
 
     struct TCommitMeta {
-        ui64 MetaShard{};
         THashSet<TWriteId> WriteIds;
 
         void AddWriteId(TWriteId id) {

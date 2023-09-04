@@ -14,10 +14,9 @@ bool TInsertTable::Insert(IDbWrapper& dbTable, TInsertedData&& data) {
     }
 }
 
-TInsertionSummary::TCounters TInsertTable::Commit(IDbWrapper& dbTable, ui64 planStep, ui64 txId, ui64 metaShard,
+TInsertionSummary::TCounters TInsertTable::Commit(IDbWrapper& dbTable, ui64 planStep, ui64 txId,
                                              const THashSet<TWriteId>& writeIds, std::function<bool(ui64)> pathExists) {
     Y_VERIFY(!writeIds.empty());
-    Y_UNUSED(metaShard);
 
     TInsertionSummary::TCounters counters;
     for (auto writeId : writeIds) {
@@ -47,9 +46,8 @@ TInsertionSummary::TCounters TInsertTable::Commit(IDbWrapper& dbTable, ui64 plan
     return counters;
 }
 
-void TInsertTable::Abort(IDbWrapper& dbTable, ui64 metaShard, const THashSet<TWriteId>& writeIds) {
+void TInsertTable::Abort(IDbWrapper& dbTable, const THashSet<TWriteId>& writeIds) {
     Y_VERIFY(!writeIds.empty());
-    Y_UNUSED(metaShard);
 
     for (auto writeId : writeIds) {
         // There could be inconsistency with txs and writes in case of bugs. So we could find no record for writeId.

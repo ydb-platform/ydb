@@ -9,8 +9,8 @@ namespace NKikimr::NOlap {
 class IDbWrapper;
 
 /// Use one table for inserted and committed blobs:
-/// !Commited => {ShardOrPlan, WriteTxId} are {MetaShard, WriteId}
-///  Commited => {ShardOrPlan, WriteTxId} are {PlanStep, TxId}
+/// !Commited => {PlanStep, WriteTxId} are {0, WriteId}
+///  Commited => {PlanStep, WriteTxId} are {PlanStep, TxId}
 
 class TInsertTableAccessor {
 protected:
@@ -54,9 +54,9 @@ public:
     static constexpr const TDuration CleanDelay = TDuration::Minutes(10);
 
     bool Insert(IDbWrapper& dbTable, TInsertedData&& data);
-    TInsertionSummary::TCounters Commit(IDbWrapper& dbTable, ui64 planStep, ui64 txId, ui64 metaShard,
+    TInsertionSummary::TCounters Commit(IDbWrapper& dbTable, ui64 planStep, ui64 txId,
                      const THashSet<TWriteId>& writeIds, std::function<bool(ui64)> pathExists);
-    void Abort(IDbWrapper& dbTable, ui64 metaShard, const THashSet<TWriteId>& writeIds);
+    void Abort(IDbWrapper& dbTable, const THashSet<TWriteId>& writeIds);
     THashSet<TWriteId> OldWritesToAbort(const TInstant& now) const;
     THashSet<TWriteId> DropPath(IDbWrapper& dbTable, ui64 pathId);
     void EraseCommitted(IDbWrapper& dbTable, const TInsertedData& key);

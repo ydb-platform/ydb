@@ -21,16 +21,6 @@ public:
         Y_VERIFY(DeserializeFromProto(proto));
     }
 
-    TInsertedDataMeta(const TInstant dirtyWriteTime, const ui32 numRows, const ui64 rawBytes, std::shared_ptr<arrow::RecordBatch> batch, const std::vector<TString>& columnNames = {})
-        : DirtyWriteTime(dirtyWriteTime)
-        , NumRows(numRows)
-        , RawBytes(rawBytes)
-    {
-        if (batch) {
-            SpecialKeys = NArrow::TFirstLastSpecialKeys(batch, columnNames);
-        }
-    }
-
     std::optional<NArrow::TReplaceKey> GetMin(const std::shared_ptr<arrow::Schema>& schema) const {
         if (SpecialKeys) {
             return SpecialKeys->GetMin(schema);

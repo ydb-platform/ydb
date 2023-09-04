@@ -32,7 +32,7 @@ bool Schema::InsertTable_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsG
 
     while (!rowset.EndOfSet()) {
         EInsertTableIds recType = (EInsertTableIds)rowset.GetValue<InsertTable::Committed>();
-        ui64 shardOrPlan = rowset.GetValue<InsertTable::ShardOrPlan>();
+        ui64 planStep = rowset.GetValue<InsertTable::PlanStep>();
         ui64 writeTxId = rowset.GetValueOrDefault<InsertTable::WriteTxId>();
         ui64 pathId = rowset.GetValue<InsertTable::PathId>();
         TString dedupId = rowset.GetValue<InsertTable::DedupId>();
@@ -52,7 +52,7 @@ bool Schema::InsertTable_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsG
         if (metaStr) {
             Y_VERIFY(meta.ParseFromString(metaStr));
         }
-        TInsertedData data(shardOrPlan, writeTxId, pathId, dedupId, blobId, meta, indexSnapshot);
+        TInsertedData data(planStep, writeTxId, pathId, dedupId, blobId, meta, indexSnapshot);
 
         switch (recType) {
             case EInsertTableIds::Inserted:

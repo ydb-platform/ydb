@@ -117,13 +117,11 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
 
     for (const auto& pr : Self->CommitsInFlight) {
         ui64 txId = pr.first;
-        if (pr.second.MetaShard == 0) {
-            for (TWriteId writeId : pr.second.WriteIds) {
-                Y_VERIFY(Self->LongTxWrites.contains(writeId),
-                    "TTxInit at %" PRIu64 " : Commit %" PRIu64 " references local write %" PRIu64 " that doesn't exist",
-                    Self->TabletID(), txId, writeId);
-                Self->AddLongTxWrite(writeId, txId);
-            }
+        for (TWriteId writeId : pr.second.WriteIds) {
+            Y_VERIFY(Self->LongTxWrites.contains(writeId),
+                "TTxInit at %" PRIu64 " : Commit %" PRIu64 " references local write %" PRIu64 " that doesn't exist",
+                Self->TabletID(), txId, writeId);
+            Self->AddLongTxWrite(writeId, txId);
         }
     }
 
@@ -304,7 +302,6 @@ bool TColumnShard::LoadTx(const ui64 txId, const NKikimrTxColumnShard::ETransact
             Y_VERIFY(body.ParseFromString(txBody));
 
             TColumnShard::TCommitMeta meta;
-            meta.MetaShard = body.GetTxInitiator();
             for (auto& id : body.GetWriteIds()) {
                 meta.AddWriteId(TWriteId{id});
             }

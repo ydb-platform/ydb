@@ -106,17 +106,15 @@ public:
                         return Self->TablesManager.HasTable(pathId);
                     };
 
-                    auto counters = Self->InsertTable->Commit(dbTable, step, txId, meta.MetaShard, meta.WriteIds,
+                    auto counters = Self->InsertTable->Commit(dbTable, step, txId, meta.WriteIds,
                                                               pathExists);
                     Self->IncCounter(COUNTER_BLOBS_COMMITTED, counters.Rows);
                     Self->IncCounter(COUNTER_BYTES_COMMITTED, counters.Bytes);
                     Self->IncCounter(COUNTER_RAW_BYTES_COMMITTED, counters.RawBytes);
 
-                    if (meta.MetaShard == 0) {
-                        NIceDb::TNiceDb db(txc.DB);
-                        for (TWriteId writeId : meta.WriteIds) {
-                            Self->RemoveLongTxWrite(db, writeId, txId);
-                        }
+                    NIceDb::TNiceDb db(txc.DB);
+                    for (TWriteId writeId : meta.WriteIds) {
+                        Self->RemoveLongTxWrite(db, writeId, txId);
                     }
                     Self->CommitsInFlight.erase(txId);
                     Self->UpdateInsertTableCounters();

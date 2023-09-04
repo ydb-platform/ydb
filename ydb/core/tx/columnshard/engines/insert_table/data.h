@@ -15,7 +15,7 @@ public:
         return Meta;
     }
 
-    ui64 ShardOrPlan = 0;
+    ui64 PlanStep = 0;
     ui64 WriteTxId = 0;
     ui64 PathId = 0;
     TString DedupId;
@@ -23,23 +23,10 @@ public:
 
     TInsertedData() = delete; // avoid invalid TInsertedData anywhere
 
-    TInsertedData(ui64 shardOrPlan, ui64 writeTxId, ui64 pathId, TString dedupId, const TUnifiedBlobId& blobId,
-                  const ui32 numRows, const ui64 rawBytes, const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<TString>& columnNames, const TInstant writeTime, const TSnapshot& schemaVersion)
-        : Meta(writeTime, numRows, rawBytes, batch, columnNames)
-        , ShardOrPlan(shardOrPlan)
-        , WriteTxId(writeTxId)
-        , PathId(pathId)
-        , DedupId(dedupId)
-        , BlobId(blobId)
-        , SchemaVersion(schemaVersion)
-    {
-        Y_VERIFY(SchemaVersion.Valid());
-    }
-
-    TInsertedData(ui64 shardOrPlan, ui64 writeTxId, ui64 pathId, TString dedupId, const TUnifiedBlobId& blobId,
+    TInsertedData(ui64 planStep, ui64 writeTxId, ui64 pathId, TString dedupId, const TUnifiedBlobId& blobId,
         const NKikimrTxColumnShard::TLogicalMetadata& proto, const TSnapshot& schemaVersion)
         : Meta(proto)
-        , ShardOrPlan(shardOrPlan)
+        , PlanStep(planStep)
         , WriteTxId(writeTxId)
         , PathId(pathId)
         , DedupId(dedupId)
@@ -48,21 +35,26 @@ public:
         Y_VERIFY(SchemaVersion.Valid());
     }
 
+    TInsertedData(ui64 writeTxId, ui64 pathId, TString dedupId, const TUnifiedBlobId& blobId,
+        const NKikimrTxColumnShard::TLogicalMetadata& proto, const TSnapshot& schemaVersion)
+        : TInsertedData(0, writeTxId, pathId, dedupId, blobId, proto, schemaVersion)
+    {}
+
     bool operator < (const TInsertedData& key) const {
-        if (ShardOrPlan < key.ShardOrPlan) {
+        if (PlanStep < key.PlanStep) {
             return true;
-        } else if (ShardOrPlan > key.ShardOrPlan) {
+        } else if (PlanStep > key.PlanStep) {
             return false;
         }
 
-        // ShardOrPlan == key.ShardOrPlan
+        // PlanStep == key.PlanStep
         if (WriteTxId < key.WriteTxId) {
             return true;
         } else if (WriteTxId > key.WriteTxId) {
             return false;
         }
 
-        // ShardOrPlan == key.ShardOrPlan && WriteTxId == key.WriteTxId
+        // PlanStep == key.PlanStep && WriteTxId == key.WriteTxId
         if (PathId < key.PathId) {
             return true;
         } else if (PathId > key.PathId) {
@@ -73,7 +65,7 @@ public:
     }
 
     bool operator == (const TInsertedData& key) const {
-        return (ShardOrPlan == key.ShardOrPlan) &&
+        return (PlanStep == key.PlanStep) &&
             (WriteTxId == key.WriteTxId) &&
             (PathId == key.PathId) &&
             (DedupId == key.DedupId);
@@ -84,8 +76,8 @@ public:
     /// After commit we use original Initiator:WriteId as DedupId of inserted blob inside {PlanStep, TxId}.
     /// pathId, initiator, {writeId}, {dedupId} -> pathId, planStep, txId, {dedupId}
     void Commit(ui64 planStep, ui64 txId) {
-        DedupId = ToString(ShardOrPlan) + ":" + ToString((ui64)WriteTxId);
-        ShardOrPlan = planStep;
+        DedupId = ToString(PlanStep) + ":" + ToString((ui64)WriteTxId);
+        PlanStep = planStep;
         WriteTxId = txId;
     }
 
@@ -95,13 +87,13 @@ public:
         size_t numTokens = Split(DedupId, ":", tokens);
         Y_VERIFY(numTokens == 2);
 
-        ShardOrPlan = FromString<ui64>(tokens[0]);
+        PlanStep = FromString<ui64>(tokens[0]);
         WriteTxId = FromString<ui64>(tokens[1]);
         DedupId.clear();
     }
 
     TSnapshot GetSnapshot() const {
-        return TSnapshot(ShardOrPlan, WriteTxId);
+        return TSnapshot(PlanStep, WriteTxId);
     }
 
     const TSnapshot& GetSchemaSnapshot() const {

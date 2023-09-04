@@ -28,7 +28,6 @@ std::shared_ptr<NOlap::TSelectInfo> TDataStorageAccessor::Select(const NOlap::TR
 }
 
 std::vector<NOlap::TCommittedBlob> TDataStorageAccessor::GetCommitedBlobs(const NOlap::TReadDescription& readDescription, const std::shared_ptr<arrow::Schema>& pkSchema) const {
-    
     return std::move(InsertTable->Read(readDescription.PathId, readDescription.GetSnapshot(), pkSchema));
 }
 

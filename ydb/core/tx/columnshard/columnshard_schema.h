@@ -197,7 +197,7 @@ struct Schema : NIceDb::Schema {
     // InsertTable - common for all indices
     struct InsertTable : NIceDb::Schema::Table<InsertTableId> {
         struct Committed : Column<1, NScheme::NTypeIds::Byte> {};
-        struct ShardOrPlan : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct PlanStep : Column<2, NScheme::NTypeIds::Uint64> {};
         struct WriteTxId : Column<3, NScheme::NTypeIds::Uint64> {};
         struct PathId : Column<4, NScheme::NTypeIds::Uint64> {};
         struct DedupId : Column<5, NScheme::NTypeIds::String> {};
@@ -206,8 +206,8 @@ struct Schema : NIceDb::Schema {
         struct IndexPlanStep : Column<8, NScheme::NTypeIds::Uint64> {};
         struct IndexTxId : Column<9, NScheme::NTypeIds::Uint64> {};
 
-        using TKey = TableKey<Committed, ShardOrPlan, WriteTxId, PathId, DedupId>;
-        using TColumns = TableColumns<Committed, ShardOrPlan, WriteTxId, PathId, DedupId, BlobId, Meta, IndexPlanStep, IndexTxId>;
+        using TKey = TableKey<Committed, PlanStep, WriteTxId, PathId, DedupId>;
+        using TColumns = TableColumns<Committed, PlanStep, WriteTxId, PathId, DedupId, BlobId, Meta, IndexPlanStep, IndexTxId>;
     };
 
     struct IndexGranules : NIceDb::Schema::Table<GranulesTableId> {
@@ -439,7 +439,7 @@ struct Schema : NIceDb::Schema {
 
     static void InsertTable_Upsert(NIceDb::TNiceDb& db, EInsertTableIds recType, const TInsertedData& data) {
         Y_VERIFY(data.GetSchemaSnapshot().Valid());
-        db.Table<InsertTable>().Key((ui8)recType, data.ShardOrPlan, data.WriteTxId, data.PathId, data.DedupId).Update(
+        db.Table<InsertTable>().Key((ui8)recType, data.PlanStep, data.WriteTxId, data.PathId, data.DedupId).Update(
             NIceDb::TUpdate<InsertTable::BlobId>(data.BlobId.ToStringLegacy()),
             NIceDb::TUpdate<InsertTable::Meta>(data.GetMeta().SerializeToProto().SerializeAsString()),
             NIceDb::TUpdate<InsertTable::IndexPlanStep>(data.GetSchemaSnapshot().GetPlanStep()),
@@ -448,7 +448,7 @@ struct Schema : NIceDb::Schema {
     }
 
     static void InsertTable_Erase(NIceDb::TNiceDb& db, EInsertTableIds recType, const TInsertedData& data) {
-        db.Table<InsertTable>().Key((ui8)recType, data.ShardOrPlan, data.WriteTxId, data.PathId, data.DedupId).Delete();
+        db.Table<InsertTable>().Key((ui8)recType, data.PlanStep, data.WriteTxId, data.PathId, data.DedupId).Delete();
     }
 
     static void InsertTable_Insert(NIceDb::TNiceDb& db, const TInsertedData& data) {

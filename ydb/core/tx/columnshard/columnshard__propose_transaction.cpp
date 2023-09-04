@@ -186,13 +186,10 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
             }
 
             TColumnShard::TCommitMeta meta;
-            meta.MetaShard = body.GetTxInitiator();
             for (ui64 wId : body.GetWriteIds()) {
                 TWriteId writeId{wId};
                 meta.AddWriteId(writeId);
-                if (meta.MetaShard == 0) {
-                    Self->AddLongTxWrite(writeId, txId);
-                }
+                Self->AddLongTxWrite(writeId, txId);
             }
 
             const auto& txInfo = Self->ProgressTxController.RegisterTxWithDeadline(txId, txKind, txBody, Ev->Get()->GetSource(), Ev->Cookie, txc);

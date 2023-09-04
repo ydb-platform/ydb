@@ -358,11 +358,8 @@ struct TTestSchema {
 
     static NMetadata::NFetcher::ISnapshot::TPtr BuildSnapshot(const TTableSpecials& specials);
 
-    static TString CommitTxBody(ui64 metaShard, const std::vector<ui64>& writeIds) {
+    static TString CommitTxBody(ui64, const std::vector<ui64>& writeIds) {
         NKikimrTxColumnShard::TCommitTxBody proto;
-        if (metaShard) {
-            proto.SetTxInitiator(metaShard);
-        }
         for (ui64 id : writeIds) {
             proto.AddWriteIds(id);
         }

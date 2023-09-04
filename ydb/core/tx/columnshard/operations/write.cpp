@@ -38,7 +38,7 @@ namespace NKikimr::NColumnShard {
                 return owner.TablesManager.HasTable(pathId);
             };
 
-            auto counters = owner.InsertTable->Commit(dbTable, snapshot.GetPlanStep(), snapshot.GetTxId(), 0, { gWriteId },
+            auto counters = owner.InsertTable->Commit(dbTable, snapshot.GetPlanStep(), snapshot.GetTxId(), { gWriteId },
                                                         pathExists);
 
             owner.IncCounter(COUNTER_BLOBS_COMMITTED, counters.Rows);
@@ -76,7 +76,7 @@ namespace NKikimr::NColumnShard {
 
         THashSet<TWriteId> writeIds;
         writeIds.insert(GlobalWriteIds.begin(), GlobalWriteIds.end());
-        owner.InsertTable->Abort(dbTable, 0, writeIds);
+        owner.InsertTable->Abort(dbTable, writeIds);
 
         TBlobManagerDb blobManagerDb(txc.DB);
         auto allAborted = owner.InsertTable->GetAborted();

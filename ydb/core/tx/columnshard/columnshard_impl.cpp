@@ -343,17 +343,15 @@ bool TColumnShard::AbortTx(const ui64 txId, const NKikimrTxColumnShard::ETransac
         case NKikimrTxColumnShard::TX_KIND_COMMIT: {
             NIceDb::TNiceDb db(txc.DB);
             if (auto* meta = CommitsInFlight.FindPtr(txId)) {
-                if (meta->MetaShard == 0) {
-                    for (TWriteId writeId : meta->WriteIds) {
-                        // TODO: we probably need to have more complex
-                        // logic in the future, when there are multiple
-                        // inflight commits for the same writeId.
-                        RemoveLongTxWrite(db, writeId, txId);
-                    }
+                for (TWriteId writeId : meta->WriteIds) {
+                    // TODO: we probably need to have more complex
+                    // logic in the future, when there are multiple
+                    // inflight commits for the same writeId.
+                    RemoveLongTxWrite(db, writeId, txId);
                 }
                 TBlobGroupSelector dsGroupSelector(Info());
                 NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
-                InsertTable->Abort(dbTable, meta->MetaShard, meta->WriteIds);
+                InsertTable->Abort(dbTable, meta->WriteIds);
 
                 CommitsInFlight.erase(txId);
             }
@@ -383,7 +381,7 @@ void TColumnShard::TryAbortWrites(NIceDb::TNiceDb& db, NOlap::TDbWrapper& dbTabl
         writesToAbort.erase(writeId);
     }
     if (!writesToAbort.empty()) {
-        InsertTable->Abort(dbTable, {}, writesToAbort);
+        InsertTable->Abort(dbTable, writesToAbort);
     }
 }
 

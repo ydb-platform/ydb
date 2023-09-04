@@ -1967,7 +1967,7 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetEventImpl(size_t& maxByteSize,
         }
 
         TMaybe<typename TAReadSessionEvent<UseMigrationProtocol>::TEvent> event;
-
+        auto frontSession = front.Session;
         if (partitionStream->TopEvent().IsDataEvent()) {
             event = GetDataEventImpl(partitionStream, maxByteSize, accumulator);
         } else {
@@ -1979,7 +1979,7 @@ TReadSessionEventsQueue<UseMigrationProtocol>::GetEventImpl(size_t& maxByteSize,
 
         TParent::RenewWaiterImpl();
 
-        return {partitionStream, front.Session, std::move(*event)};
+        return {partitionStream, std::move(frontSession), std::move(*event)};
     }
 
     Y_ASSERT(TParent::CloseEvent);

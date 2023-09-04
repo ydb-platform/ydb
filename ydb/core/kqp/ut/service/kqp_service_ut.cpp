@@ -67,6 +67,11 @@ Y_UNIT_TEST_SUITE(KqpService) {
 
     Y_UNIT_TEST(CloseSessionsWithLoad) {
         auto kikimr = std::make_shared<TKikimrRunner>();
+        kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
+        kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_DEBUG);
+        kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_ACTOR, NLog::PRI_DEBUG);
+        kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NLog::PRI_DEBUG);
+
         auto db = kikimr->GetTableClient();
 
         const ui32 SessionsCount = 50;
@@ -84,10 +89,12 @@ Y_UNIT_TEST_SUITE(KqpService) {
         NPar::LocalExecutor().ExecRange([kikimr, sessions, WaitDuration](int id) mutable {
             if (id == (i32)sessions.size()) {
                 Sleep(WaitDuration);
-
+                Cerr << "start sessions close....." << Endl;
                 for (ui32 i = 0; i < sessions.size(); ++i) {
                     sessions[i].Close();
                 }
+
+                Cerr << "finished sessions close....." << Endl;
 
                 return;
             }
@@ -120,6 +127,8 @@ Y_UNIT_TEST_SUITE(KqpService) {
 
                 auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx()).GetValueSync();
                 if (!result.IsSuccess()) {
+                    Sleep(TDuration::Seconds(5));
+                    Cerr << "received non-success status for session " << id << Endl;
                     return;
                 }
 

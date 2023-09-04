@@ -13,7 +13,7 @@ namespace NKikimr::NKqp::NPrivateEvents {
 struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCompileRequest> {
     TEvCompileRequest(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TMaybe<TString>& uid,
         TMaybe<TKqpQueryId>&& query, bool keepInCache, TInstant deadline,
-        TKqpDbCountersPtr dbCounters, NLWTrace::TOrbit orbit = {},
+        TKqpDbCountersPtr dbCounters, std::shared_ptr<std::atomic<bool>> intrestedInResult, NLWTrace::TOrbit orbit = {},
         TKqpTempTablesState::TConstPtr tempTablesState = nullptr)
         : UserToken(userToken)
         , Uid(uid)
@@ -22,7 +22,9 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
         , Deadline(deadline)
         , DbCounters(dbCounters)
         , Orbit(std::move(orbit))
-        , TempTablesState(std::move(tempTablesState)) {
+        , TempTablesState(std::move(tempTablesState))
+        , IntrestedInResult(std::move(intrestedInResult))
+    {
         Y_ENSURE(Uid.Defined() != Query.Defined());
     }
 
@@ -38,12 +40,13 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
     NLWTrace::TOrbit Orbit;
 
     TKqpTempTablesState::TConstPtr TempTablesState;
+    std::shared_ptr<std::atomic<bool>> IntrestedInResult;
 };
 
 struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::EvRecompileRequest> {
     TEvRecompileRequest(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TString& uid,
         const TMaybe<TKqpQueryId>& query, TInstant deadline,
-        TKqpDbCountersPtr dbCounters, NLWTrace::TOrbit orbit = {},
+        TKqpDbCountersPtr dbCounters, std::shared_ptr<std::atomic<bool>> intrestedInResult, NLWTrace::TOrbit orbit = {},
         TKqpTempTablesState::TConstPtr tempTablesState = nullptr)
         : UserToken(userToken)
         , Uid(uid)
@@ -51,7 +54,9 @@ struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::
         , Deadline(deadline)
         , DbCounters(dbCounters)
         , Orbit(std::move(orbit))
-        , TempTablesState(std::move(tempTablesState)) {
+        , TempTablesState(std::move(tempTablesState))
+        , IntrestedInResult(std::move(intrestedInResult))
+    {
     }
 
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
@@ -64,6 +69,7 @@ struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::
     NLWTrace::TOrbit Orbit;
 
     TKqpTempTablesState::TConstPtr TempTablesState;
+    std::shared_ptr<std::atomic<bool>> IntrestedInResult;
 };
 
 struct TEvCompileResponse: public TEventLocal<TEvCompileResponse, TKqpEvents::EvCompileResponse> {

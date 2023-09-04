@@ -170,6 +170,7 @@ public:
         RequestCounters->Counters = Counters;
         RequestCounters->DbCounters = Settings.DbCounters;
         RequestCounters->TxProxyMon = MakeIntrusive<NTxProxy::TTxProxyMon>(AppData()->Counters);
+        CompilationCookie = std::make_shared<std::atomic<bool>>(true);
 
         FillSettings.AllResultsBytesLimit = Nothing();
         FillSettings.RowsLimitPerWrite = Config->_ResultRowsLimit.Get().GetRef();
@@ -459,7 +460,7 @@ public:
 
     void CompileQuery() {
         YQL_ENSURE(QueryState);
-        auto ev = QueryState->BuildCompileRequest();
+        auto ev = QueryState->BuildCompileRequest(CompilationCookie);
         LOG_D("Sending CompileQuery request");
         Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId);
         Become(&TKqpSessionActor::CompileState);
@@ -479,7 +480,7 @@ public:
 
         // table versions are not the same. need the query recompilation.
         if (!QueryState->EnsureTableVersions(*response)) {
-            auto ev = QueryState->BuildReCompileRequest();
+            auto ev = QueryState->BuildReCompileRequest(CompilationCookie);
             Send(MakeKqpCompileServiceID(SelfId().NodeId()), ev.release(), 0, QueryState->QueryId);
             return;
         }
@@ -1708,6 +1709,11 @@ public:
             Counters->ReportSessionActorClosedRequest(Settings.DbCounters);
 
         if (isFinal) {
+            // no longer intrested in any compilation responses
+            CompilationCookie->store(false);
+        }
+
+        if (isFinal) {
             Transactions.FinalCleanup();
             Counters->ReportTxAborted(Settings.DbCounters, Transactions.ToBeAbortedSize());
         }
@@ -2151,6 +2157,7 @@ private:
     TKqpTempTablesState TempTablesState;
 
     NKikimrConfig::TMetadataProviderConfig MetadataProviderConfig;
+    std::shared_ptr<std::atomic<bool>> CompilationCookie;
 };
 
 } // namespace

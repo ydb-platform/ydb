@@ -120,7 +120,7 @@ bool TKqpQueryState::SaveAndCheckCompileResult(TEvKqp::TEvCompileResponse* ev) {
     return true;
 }
 
-std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest() {
+std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(std::shared_ptr<std::atomic<bool>> cookie) {
     TMaybe<TKqpQueryId> query;
     TMaybe<TString> uid;
 
@@ -161,10 +161,10 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest()
     }
 
     return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, uid,
-        std::move(query), keepInCache, compileDeadline, DbCounters, std::move(Orbit), TempTablesState);
+        std::move(query), keepInCache, compileDeadline, DbCounters, std::move(cookie), std::move(Orbit), TempTablesState);
 }
 
-std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileRequest() {
+std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileRequest(std::shared_ptr<std::atomic<bool>> cookie) {
     YQL_ENSURE(CompileResult);
     TMaybe<TKqpQueryId> query;
     TMaybe<TString> uid;
@@ -197,7 +197,7 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
     }
 
     return std::make_unique<TEvKqp::TEvRecompileRequest>(UserToken, CompileResult->Uid,
-        CompileResult->Query, compileDeadline, DbCounters, std::move(Orbit), TempTablesState);
+        CompileResult->Query, compileDeadline, DbCounters, std::move(cookie), std::move(Orbit), TempTablesState);
 }
 
 void TKqpQueryState::AddOffsetsToTransaction() {

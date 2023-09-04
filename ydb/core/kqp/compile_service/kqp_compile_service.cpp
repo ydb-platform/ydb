@@ -178,7 +178,8 @@ private:
 struct TKqpCompileRequest {
     TKqpCompileRequest(const TActorId& sender, const TString& uid, TKqpQueryId query, bool keepInCache,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TInstant& deadline, TKqpDbCountersPtr dbCounters,
-        ui64 cookie, NLWTrace::TOrbit orbit = {}, NWilson::TSpan span = {},
+        ui64 cookie, std::shared_ptr<std::atomic<bool>> intrestedInResult,
+        NLWTrace::TOrbit orbit = {}, NWilson::TSpan span = {},
         TKqpTempTablesState::TConstPtr tempTablesState = {})
         : Sender(sender)
         , Query(std::move(query))
@@ -191,6 +192,7 @@ struct TKqpCompileRequest {
         , CompileServiceSpan(std::move(span))
         , Cookie(cookie)
         , TempTablesState(std::move(tempTablesState))
+        , IntrestedInResult(std::move(intrestedInResult))
     {}
 
     TActorId Sender;
@@ -206,6 +208,11 @@ struct TKqpCompileRequest {
     NWilson::TSpan CompileServiceSpan;
     ui64 Cookie;
     TKqpTempTablesState::TConstPtr TempTablesState;
+    std::shared_ptr<std::atomic<bool>> IntrestedInResult;
+
+    bool IsIntrestedInResult() const {
+        return IntrestedInResult->load();
+    }
 };
 
 class TKqpRequestsQueue {
@@ -236,13 +243,26 @@ public:
     }
 
     TMaybe<TKqpCompileRequest> Dequeue() {
-        for (auto it = Queue.begin(); it != Queue.end(); ++it) {
+        auto it = Queue.begin();
+
+        while (it != Queue.end()) {
             auto& request = *it;
+            auto curIt = it++;
+
+            if (!request.IsIntrestedInResult()) {
+                auto result = std::move(request);
+                LOG_DEBUG(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
+                    "Drop compilation request because session is not longer wait for response");
+                QueryIndex[result.Query].erase(curIt);
+                Queue.erase(curIt);
+                continue;
+            }
+
             if (!ActiveRequests.contains(request.Query)) {
                 auto result = std::move(request);
 
-                QueryIndex[result.Query].erase(it);
-                Queue.erase(it);
+                QueryIndex[result.Query].erase(curIt);
+                Queue.erase(curIt);
 
                 return result;
             }
@@ -531,7 +551,7 @@ private:
 
         TKqpCompileRequest compileRequest(ev->Sender, CreateGuidAsString(), std::move(*request.Query),
             request.KeepInCache, request.UserToken, request.Deadline, dbCounters,
-            ev->Cookie,
+            ev->Cookie, std::move(ev->Get()->IntrestedInResult),
             std::move(ev->Get()->Orbit), std::move(CompileServiceSpan), std::move(ev->Get()->TempTablesState));
 
         if (!RequestsQueue.Enqueue(std::move(compileRequest))) {
@@ -581,7 +601,7 @@ private:
 
             TKqpCompileRequest compileRequest(ev->Sender, request.Uid, compileResult ? *compileResult->Query : *request.Query,
                 true, request.UserToken, request.Deadline, dbCounters,
-                ev->Cookie,
+                ev->Cookie, std::move(ev->Get()->IntrestedInResult),
                 ev->Get() ? std::move(ev->Get()->Orbit) : NLWTrace::TOrbit(),
                 std::move(CompileServiceSpan), std::move(ev->Get()->TempTablesState));
 

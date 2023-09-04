@@ -181,7 +181,9 @@ void PushValueToState(TGenericState* typedState, const arrow::Datum& datum, ui64
             stateChanged = true;
         }
     } else {
-        stateItem = converter.MakeItem(*typedState);
+        if (*typedState) {
+            stateItem = converter.MakeItem(*typedState);
+        }
 
         const auto& array = datum.array();
 
@@ -238,7 +240,9 @@ public:
                 stateChanged = true;
             }
         } else {
-            stateItem = Converter_->MakeItem(typedState);
+            if (typedState) {
+                stateItem = Converter_->MakeItem(typedState);
+            }
 
             const auto& array = datum.array();
             auto len = array->length;

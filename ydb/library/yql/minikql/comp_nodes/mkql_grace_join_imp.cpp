@@ -72,19 +72,6 @@ void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * strings
 
     }
 
-/*
-    ui64 nullsBitmapIdx = NumberOfKeyColumns / (sizeof(ui64) * 8);
-    ui64 remBits = (nullsBitmapIdx + 1) * sizeof(ui64) * 8 - NumberOfKeyColumns;
-
-    TempTuple[nullsBitmapIdx] <<= (remBits);
-    TempTuple[nullsBitmapIdx] >>= (remBits);
-
-    nullsBitmapIdx++;
-    while ( nullsBitmapIdx * sizeof(ui64) * 8 <= NumberOfColumns ) {
-        TempTuple[nullsBitmapIdx] = 0;
-        nullsBitmapIdx++;
-    }
-*/
 
     TempTuple[0] &= (0x1); // Setting only nulls in key bit, all other bits are ignored for key hash
     for (ui32 i = 1; i < NullsBitmapSize_; i ++) {

@@ -582,7 +582,7 @@ public:
     ,   IsSelfJoin_(isSelfJoin)
     ,   SelfJoinSameKeys_(isSelfJoin && (leftKeyColumns == rightKeyColumns))
     {
-        if (JoinKind == EJoinKind::Full || JoinKind == EJoinKind::Exclusion ) {
+        if (JoinKind == EJoinKind::Full || JoinKind == EJoinKind::Exclusion || IsSelfJoin_) {
             LeftPacker->BatchSize = std::numeric_limits<ui64>::max();
             RightPacker->BatchSize = std::numeric_limits<ui64>::max();
         }

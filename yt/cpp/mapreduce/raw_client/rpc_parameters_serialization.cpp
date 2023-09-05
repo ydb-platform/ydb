@@ -34,7 +34,13 @@ static void SetOperationIdParam(TNode* node, const TOperationId& operationId)
 
 static void SetPathParam(TNode* node, const TString& pathPrefix, const TYPath& path)
 {
-    (*node)["path"] = AddPathPrefix(path, pathPrefix);
+    TYPath updatedPath = AddPathPrefix(path, pathPrefix);
+    // Translate "//" to "/"
+    // Translate "//some/constom/prefix/from/config/" to "//some/constom/prefix/from/config"
+    if (path.empty() && updatedPath.EndsWith('/')) {
+        updatedPath.pop_back();
+    }
+    (*node)["path"] = std::move(updatedPath);
 }
 
 static TNode SerializeAttributeFilter(const TAttributeFilter& attributeFilter)

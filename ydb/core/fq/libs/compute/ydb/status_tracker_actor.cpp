@@ -7,6 +7,7 @@
 #include <ydb/core/fq/libs/compute/common/utils.h>
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
+#include <ydb/core/util/backoff.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/yql/providers/common/metrics/service_counters.h>
@@ -73,6 +74,7 @@ public:
         , Pinger(pinger)
         , OperationId(operationId)
         , Counters(GetStepCountersSubgroup())
+        , BackoffTimer(20, 1000)
     {}
 
     static constexpr char ActorName[] = "FQ_STATUS_TRACKER";
@@ -119,7 +121,7 @@ public:
         switch (response.ExecStatus) {
             case NYdb::NQuery::EExecStatus::Unspecified:
             case NYdb::NQuery::EExecStatus::Starting:
-                SendGetOperation(TDuration::Seconds(1));
+                SendGetOperation(TDuration::MilliSeconds(BackoffTimer.NextBackoffMs()));
                 break;
             case NYdb::NQuery::EExecStatus::Aborted:
             case NYdb::NQuery::EExecStatus::Canceled:
@@ -185,6 +187,7 @@ private:
     NYdb::EStatus Status = NYdb::EStatus::SUCCESS;
     NYdb::NQuery::EExecStatus ExecStatus = NYdb::NQuery::EExecStatus::Unspecified;
     Ydb::TableStats::QueryStats QueryStats;
+    NKikimr::TBackoffTimer BackoffTimer;
 };
 
 std::unique_ptr<NActors::IActor> CreateStatusTrackerActor(const TRunActorParams& params,

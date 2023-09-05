@@ -54,5 +54,4 @@ target_sources(core-blobstorage-dsproxy PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_status.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_strategy_base.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/group_sessions.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/blobstorage_backoff.cpp
 )

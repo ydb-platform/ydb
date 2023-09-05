@@ -30,6 +30,7 @@ target_link_libraries(ydb-core-util PUBLIC
 )
 target_sources(ydb-core-util PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/util/address_classifier.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/util/backoff.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/cache.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/concurrent_rw_hash.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/util/console.cpp

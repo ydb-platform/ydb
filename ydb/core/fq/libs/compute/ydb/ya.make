@@ -23,6 +23,7 @@ PEERDIR(
     ydb/core/fq/libs/grpc
     ydb/core/fq/libs/quota_manager/proto
     ydb/core/protos
+    ydb/core/util
     ydb/library/db_pool/protos
     ydb/library/yql/core/expr_nodes
     ydb/library/yql/dq/expr_nodes

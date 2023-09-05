@@ -1,10 +1,10 @@
 #include "keyvalue_flat_impl.h"
 
 
-#include <ydb/core/base/counters.h>
-#include <ydb/core/blobstorage/dsproxy/blobstorage_backoff.h>
-#include <ydb/core/util/stlog.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <ydb/core/base/counters.h>
+#include <ydb/core/util/backoff.h>
+#include <ydb/core/util/stlog.h>
 
 namespace NKikimr {
 namespace NKeyValue {

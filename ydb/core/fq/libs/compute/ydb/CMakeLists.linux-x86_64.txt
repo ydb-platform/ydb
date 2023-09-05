@@ -27,6 +27,7 @@ target_link_libraries(libs-compute-ydb PUBLIC
   fq-libs-grpc
   libs-quota_manager-proto
   ydb-core-protos
+  ydb-core-util
   library-db_pool-protos
   yql-core-expr_nodes
   yql-dq-expr_nodes

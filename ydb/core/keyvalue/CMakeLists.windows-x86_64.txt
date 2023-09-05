@@ -17,12 +17,12 @@ target_link_libraries(ydb-core-keyvalue PUBLIC
   cpp-actors-protos
   ydb-core-base
   core-blobstorage-base
-  core-blobstorage-dsproxy
   core-engine-minikql
   core-keyvalue-protos
   ydb-core-protos
   ydb-core-tablet_flat
   ydb-core-tx
+  ydb-core-util
   public-lib-base
 )
 target_sources(ydb-core-keyvalue PRIVATE

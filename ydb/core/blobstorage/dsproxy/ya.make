@@ -55,7 +55,6 @@ SRCS(
     group_sessions.cpp
     group_sessions.h
     log_acc.h
-    blobstorage_backoff.cpp
 )
 
 PEERDIR(

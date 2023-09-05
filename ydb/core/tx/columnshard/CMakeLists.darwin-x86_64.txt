@@ -39,7 +39,6 @@ target_link_libraries(core-tx-columnshard PUBLIC
   cpp-actors-core
   ydb-core-actorlib_impl
   ydb-core-base
-  core-blobstorage-dsproxy
   ydb-core-control
   ydb-core-formats
   ydb-core-kqp

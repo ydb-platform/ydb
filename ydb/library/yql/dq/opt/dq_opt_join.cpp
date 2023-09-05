@@ -1206,6 +1206,15 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
     const auto rightShuffle = buildShuffle(rightIn, rightJoinKeys);
     const auto leftShuffle = buildShuffle(leftIn, leftJoinKeys);
 
+    TString callableName = "GraceJoinCore";
+    int shift = 2;
+    bool selfJoin = false;
+    if (mode == EHashJoinMode::GraceAndSelf && leftIn.Stage().Ptr() == rightIn.Stage().Ptr()) {
+        callableName = "SelfJoinCore";
+        shift = 1;
+        selfJoin = true;
+    }
+
     TCoArgument leftInputArg{ctx.NewArgument(join.LeftInput().Pos(), "_dq_join_left")};
     TCoArgument rightInputArg{ctx.NewArgument(join.RightInput().Pos(), "_dq_join_right")};
 
@@ -1229,13 +1238,19 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
 
     TExprNode::TPtr hashJoin;
     switch (mode) {
+        case EHashJoinMode::GraceAndSelf:
         case EHashJoinMode::Grace:
             hashJoin = ctx.Builder(join.Pos())
-                .Callable("GraceJoinCore")
-                    .Add(0, std::move(leftWideFlow))
-                    .Add(1, std::move(rightWideFlow))
-                    .Add(2, join.JoinType().Ptr())
-                    .List(3)
+                .Callable(callableName)
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        parent.Add(0, std::move(leftWideFlow));
+                        if (selfJoin == false) {
+                            parent.Add(1, std::move(rightWideFlow));
+                        }
+                        return parent;
+                    })
+                    .Add(shift, join.JoinType().Ptr())
+                    .List(shift + 1)
                         .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                             for (ui32 i = 0U; i < leftKeys.size(); ++i) {
                                 parent.Atom(i, ctx.GetIndexAsString(leftKeys[i]), TNodeFlags::Default);
@@ -1243,7 +1258,7 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
                             return parent;
                         })
                     .Seal()
-                    .List(4)
+                    .List(shift + 2)
                         .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                             for (ui32 i = 0U; i < rightKeys.size(); ++i) {
                                 parent.Atom(i, ctx.GetIndexAsString(rightKeys[i]), TNodeFlags::Default);
@@ -1251,7 +1266,7 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
                             return parent;
                         })
                     .Seal()
-                    .List(5)
+                    .List(shift + 3)
                         .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                             for (ui32 i = 0U; i < leftNames.size(); ++i) {
                                 parent.Atom(2*i, ctx.GetIndexAsString(i), TNodeFlags::Default);
@@ -1260,7 +1275,7 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
                             return parent;
                         })
                     .Seal()
-                    .List(6)
+                    .List(shift + 4)
                         .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                             for (ui32 i = 0U; i < rightNames.size(); ++i) {
                                 parent.Atom(2*i, ctx.GetIndexAsString(i), TNodeFlags::Default);
@@ -1269,7 +1284,7 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
                             return parent;
                         })
                     .Seal()
-                    .List(7).Add(std::move(flags)).Seal()
+                    .List(shift + 5).Add(std::move(flags)).Seal()
                 .Seal()
                 .Build();
             break;
@@ -1472,15 +1487,25 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
         .Seal()
         .Build();
 
+    TVector<TExprBase> stageInputs; stageInputs.reserve(2);
+    stageInputs.emplace_back(leftShuffle);
+    if (selfJoin == false) {
+        stageInputs.emplace_back(rightShuffle);
+    }
+    TVector<TCoArgument> inputArgs; inputArgs.reserve(2);
+    inputArgs.emplace_back(leftInputArg);
+    if (selfJoin == false) {
+        inputArgs.emplace_back(rightInputArg);
+    }
+
     return Build<TDqCnUnionAll>(ctx, join.Pos())
         .Output()
             .Stage<TDqStage>()
                 .Inputs()
-                    .Add(leftShuffle)
-                    .Add(rightShuffle)
+                    .Add(stageInputs)
                     .Build()
                 .Program()
-                    .Args({leftInputArg, rightInputArg})
+                    .Args(inputArgs)
                     .Body(std::move(hashJoin))
                     .Build()
                 .Settings(TDqStageSettings().BuildNode(ctx, join.Pos()))

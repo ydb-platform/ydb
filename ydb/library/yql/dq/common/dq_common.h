@@ -86,6 +86,7 @@ enum class EHashJoinMode {
     Map         /* "map" */,
     Dict        /* "dict" */,
     Grace       /* "grace" */,
+    GraceAndSelf /* "graceandself" */,
 };
 
 } // namespace NYql::NDq

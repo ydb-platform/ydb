@@ -411,7 +411,7 @@ void FillOlapProgram(const TCoLambda& process, const NKikimr::NMiniKQL::TType* m
 class TKqpQueryCompiler : public IKqpQueryCompiler {
 public:
     TKqpQueryCompiler(const TString& cluster, const TIntrusivePtr<TKikimrTablesData> tablesData,
-        const NMiniKQL::IFunctionRegistry& funcRegistry, TTypeAnnotationContext& typesCtx)
+        const NMiniKQL::IFunctionRegistry& funcRegistry, TTypeAnnotationContext& typesCtx, NYql::TKikimrConfiguration::TPtr config)
         : Cluster(cluster)
         , TablesData(tablesData)
         , FuncRegistry(funcRegistry)
@@ -420,6 +420,7 @@ public:
         , KqlCtx(cluster, tablesData, TypeEnv, FuncRegistry)
         , KqlCompiler(CreateKqlCompiler(KqlCtx, typesCtx))
         , TypesCtx(typesCtx)
+        , Config(config)
     {
         Alloc.Release();
     }
@@ -928,11 +929,8 @@ private:
             // In runtime, number of tasks with Sources is limited by 2x of node count
             // We prepare a lot of partitions and distribute them between these tasks
             // Constraint of 1 task per partition is NOT valid anymore
-            // We choose 120 as number with a lot of divisors for even final distribution
-            //
-            // TODO: Replace with ydb.MaxTasksPerStage when implemented
-            //
-            dqIntegration->Partition(NYql::TDqSettings(), 120, source.Ref(), partitionParams, &clusterName, ctx, false);
+            auto maxTasksPerStage = Config->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
+            dqIntegration->Partition(NYql::TDqSettings(), maxTasksPerStage, source.Ref(), partitionParams, &clusterName, ctx, false);
             externalSource.SetTaskParamKey(TString(dataSourceCategory));
             for (const TString& partitionParam : partitionParams) {
                 externalSource.AddPartitionedTaskParams(partitionParam);
@@ -1146,6 +1144,7 @@ private:
     TKqlCompileContext KqlCtx;
     TIntrusivePtr<NCommon::IMkqlCallableCompiler> KqlCompiler;
     TTypeAnnotationContext& TypesCtx;
+    TKikimrConfiguration::TPtr Config;
     TSet<TString> SecretNames;
 };
 
@@ -1153,9 +1152,9 @@ private:
 
 TIntrusivePtr<IKqpQueryCompiler> CreateKqpQueryCompiler(const TString& cluster,
     const TIntrusivePtr<TKikimrTablesData> tablesData, const IFunctionRegistry& funcRegistry,
-    TTypeAnnotationContext& typesCtx)
+    TTypeAnnotationContext& typesCtx, NYql::TKikimrConfiguration::TPtr config)
 {
-    return MakeIntrusive<TKqpQueryCompiler>(cluster, tablesData, funcRegistry, typesCtx);
+    return MakeIntrusive<TKqpQueryCompiler>(cluster, tablesData, funcRegistry, typesCtx, config);
 }
 
 } // namespace NKqp

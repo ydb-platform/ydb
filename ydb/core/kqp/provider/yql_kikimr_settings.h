@@ -58,6 +58,8 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> OptUseFinalizeByKey;
     NCommon::TConfSetting<bool, false> OptEnableCostBasedOptimization;
 
+    NCommon::TConfSetting<ui32, false> MaxTasksPerStage;
+
     /* Runtime */
     NCommon::TConfSetting<bool, true> ScanQuery;
 

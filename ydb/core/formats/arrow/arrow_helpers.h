@@ -121,8 +121,6 @@ bool ScalarLess(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<a
 bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y);
 std::shared_ptr<arrow::RecordBatch> ReallocateBatch(std::shared_ptr<arrow::RecordBatch> original);
 
-std::shared_ptr<arrow::RecordBatch> BuildSingleRecordBatch(const std::shared_ptr<arrow::Schema> schema, const std::vector<std::shared_ptr<arrow::Scalar>>& recordData);
-
 inline bool HasNulls(const std::shared_ptr<arrow::Array>& column) {
     return column->null_bitmap_data();
 }

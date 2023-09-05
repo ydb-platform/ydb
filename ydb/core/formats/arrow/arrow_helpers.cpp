@@ -786,19 +786,6 @@ std::partial_ordering ColumnsCompare(const std::vector<std::shared_ptr<arrow::Ar
     return TRawReplaceKey(&x, xRow).CompareNotNull(TRawReplaceKey(&y, yRow));
 }
 
-std::shared_ptr<arrow::RecordBatch> BuildSingleRecordBatch(const std::shared_ptr<arrow::Schema> schema, const std::vector<std::shared_ptr<arrow::Scalar>>& recordData) {
-    std::vector<std::unique_ptr<arrow::ArrayBuilder>> builders = MakeBuilders(schema, 1);
-    Y_VERIFY(builders.size() == recordData.size());
-    for (ui32 i = 0; i < recordData.size(); ++i) {
-        Y_VERIFY(recordData[i]);
-        Y_VERIFY_OK(builders[i]->AppendScalar(*recordData[i]));
-    }
-
-    auto arrays = NArrow::Finish(std::move(builders));
-    Y_VERIFY(arrays.size() == builders.size());
-    return arrow::RecordBatch::Make(schema, 1, arrays);
-}
-
 NJson::TJsonValue DebugJson(std::shared_ptr<arrow::RecordBatch> array, const ui32 position) {
     NJson::TJsonValue result = NJson::JSON_ARRAY;
     for (auto&& i : array->columns()) {

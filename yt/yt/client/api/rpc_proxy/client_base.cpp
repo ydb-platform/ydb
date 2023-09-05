@@ -361,6 +361,7 @@ TFuture<void> TClientBase::MultisetAttributesNode(
     SetTimeoutOptions(*req, options);
 
     req->set_path(path);
+    req->set_force(options.Force);
 
     auto children = attributes->GetChildren();
     std::sort(children.begin(), children.end());

@@ -310,11 +310,11 @@ private:
         const NYson::TYsonString& wholeYson);
     TFuture<NYson::TYsonString> DoListAttribute(const TYPath& path);
 
-    void DoSetAttribute(const TYPath& path, const NYson::TYsonString& newYson);
+    void DoSetAttribute(const TYPath& path, const NYson::TYsonString& newYson, bool force = false);
     void DoRemoveAttribute(const TYPath& path, bool force);
 
     bool GuardedGetBuiltinAttribute(TInternedAttributeKey key, NYson::IYsonConsumer* consumer);
-    bool GuardedSetBuiltinAttribute(TInternedAttributeKey key, const NYson::TYsonString& value);
+    bool GuardedSetBuiltinAttribute(TInternedAttributeKey key, const NYson::TYsonString& value, bool force);
     bool GuardedRemoveBuiltinAttribute(TInternedAttributeKey key);
 
     void ValidateAttributeKey(TStringBuf key) const;

@@ -1341,6 +1341,7 @@ message TReqMultisetAttributesNode
         required bytes value = 2; // YSON
     }
     repeated TSubrequest subrequests = 2;
+    optional bool force = 3;
 
     optional TTransactionalOptions transactional_options = 100;
     optional TPrerequisiteOptions prerequisite_options = 101;

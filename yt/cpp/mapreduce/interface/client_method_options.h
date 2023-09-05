@@ -154,7 +154,13 @@ struct TSetOptions
 ///
 /// @see https://yt.yandex-team.ru/docs/api/commands.html#multiset_attributes
 struct TMultisetAttributesOptions
-{ };
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TMultisetAttributesOptions;
+    /// @endcond
+
+    FLUENT_FIELD_OPTION(bool, Force);
+};
 
 ///
 /// @brief Options for @ref NYT::ICypressClient::List

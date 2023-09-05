@@ -403,7 +403,7 @@ void TSupportsAttributes::TCombinedAttributeDictionary::SetYson(const TString& k
         if (internedKey != InvalidInternedAttribute) {
             const auto& builtinKeys = provider->GetBuiltinAttributeKeys();
             if (builtinKeys.find(internedKey) != builtinKeys.end()) {
-                if (!provider->SetBuiltinAttribute(internedKey, value)) {
+                if (!provider->SetBuiltinAttribute(internedKey, value, false)) {
                     ThrowCannotSetBuiltinAttribute(key);
                 }
                 return;
@@ -805,7 +805,7 @@ void TSupportsAttributes::ExistsAttribute(
     }));
 }
 
-void TSupportsAttributes::DoSetAttribute(const TYPath& path, const TYsonString& newYson)
+void TSupportsAttributes::DoSetAttribute(const TYPath& path, const TYsonString& newYson, bool force)
 {
     TCachingPermissionValidator permissionValidator(this, EPermissionCheckScope::This);
 
@@ -875,7 +875,7 @@ void TSupportsAttributes::DoSetAttribute(const TYPath& path, const TYsonString& 
 
                         permissionValidator.Validate(descriptor.ModifyPermission);
 
-                        if (!GuardedSetBuiltinAttribute(internedKey, newAttributeYson)) {
+                        if (!GuardedSetBuiltinAttribute(internedKey, newAttributeYson, force)) {
                             ThrowCannotSetBuiltinAttribute(key);
                         }
 
@@ -916,7 +916,7 @@ void TSupportsAttributes::DoSetAttribute(const TYPath& path, const TYsonString& 
                 permissionValidator.Validate(descriptor->ModifyPermission);
 
                 if (tokenizer.Advance() == NYPath::ETokenType::EndOfStream) {
-                    if (!GuardedSetBuiltinAttribute(internedKey, newYson)) {
+                    if (!GuardedSetBuiltinAttribute(internedKey, newYson, force)) {
                         ThrowCannotSetBuiltinAttribute(key);
                     }
                 } else {
@@ -929,7 +929,7 @@ void TSupportsAttributes::DoSetAttribute(const TYPath& path, const TYsonString& 
                     SyncYPathSet(oldWholeNode, TYPath(tokenizer.GetInput()), newYson);
                     auto newWholeYson = ConvertToYsonString(oldWholeNode);
 
-                    if (!GuardedSetBuiltinAttribute(internedKey, newWholeYson)) {
+                    if (!GuardedSetBuiltinAttribute(internedKey, newWholeYson, force)) {
                         ThrowCannotSetBuiltinAttribute(key);
                     }
                 }
@@ -981,7 +981,7 @@ void TSupportsAttributes::SetAttribute(
     const auto& safeValue = requestValue.capacity() <= requestValue.length() * 5 / 4
         ? requestValue
         : TString(TStringBuf(requestValue));
-    DoSetAttribute(path, TYsonString(safeValue));
+    DoSetAttribute(path, TYsonString(safeValue), request->force());
     context->Reply();
 }
 
@@ -1093,7 +1093,7 @@ void TSupportsAttributes::DoRemoveAttribute(const TYPath& path, bool force)
                     SyncYPathRemove(builtinNode, TYPath(tokenizer.GetInput()));
                     auto updatedSystemYson = ConvertToYsonString(builtinNode);
 
-                    if (!GuardedSetBuiltinAttribute(internedKey, updatedSystemYson)) {
+                    if (!GuardedSetBuiltinAttribute(internedKey, updatedSystemYson, force)) {
                         ThrowCannotSetBuiltinAttribute(key);
                     }
                 }
@@ -1140,7 +1140,7 @@ void TSupportsAttributes::SetAttributes(
             attributePath = path + "/" + attribute;
         }
 
-        DoSetAttribute(attributePath, TYsonString(value));
+        DoSetAttribute(attributePath, TYsonString(value), request->force());
     }
 }
 
@@ -1172,12 +1172,12 @@ bool TSupportsAttributes::GuardedGetBuiltinAttribute(TInternedAttributeKey key, 
     }
 }
 
-bool TSupportsAttributes::GuardedSetBuiltinAttribute(TInternedAttributeKey key, const TYsonString& yson)
+bool TSupportsAttributes::GuardedSetBuiltinAttribute(TInternedAttributeKey key, const TYsonString& yson, bool force)
 {
     auto* provider = GetBuiltinAttributeProvider();
 
     try {
-        return provider->SetBuiltinAttribute(key, yson);
+        return provider->SetBuiltinAttribute(key, yson, force);
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error setting builtin attribute %Qv",
             ToYPathLiteral(key.Unintern()))

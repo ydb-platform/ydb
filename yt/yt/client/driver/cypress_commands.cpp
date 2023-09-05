@@ -75,6 +75,8 @@ void TSetCommand::DoExecute(ICommandContextPtr context)
 TMultisetAttributesCommand::TMultisetAttributesCommand()
 {
     RegisterParameter("path", Path);
+    RegisterParameter("force", Options.Force)
+        .Optional();
 }
 
 void TMultisetAttributesCommand::DoExecute(ICommandContextPtr context)

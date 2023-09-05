@@ -71,6 +71,7 @@ YT_DEFINE_ERROR_ENUM(
     ((NoSuchSubject)                (907))
     ((SafeModeEnabled)              (906))
     ((AlreadyPresentInGroup)        (908))
+    ((IrreversibleAclModification)  (909))
 );
 
 // NB: Changing this list requires reign promotion.

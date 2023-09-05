@@ -193,6 +193,9 @@ TNode SerializeParamsForMultisetAttributes(
     TNode result;
     SetTransactionIdParam(&result, transactionId);
     SetPathParam(&result, pathPrefix, path);
+    if (options.Force_) {
+        result["force"] = *options.Force_;
+    }
     return result;
 }
 

@@ -122,7 +122,7 @@ struct ISystemAttributeProvider
     /*!
      *  \returns |false| if there is no writable builtin attribute with the given key.
      */
-    virtual bool SetBuiltinAttribute(TInternedAttributeKey key, const NYson::TYsonString& value) = 0;
+    virtual bool SetBuiltinAttribute(TInternedAttributeKey key, const NYson::TYsonString& value, bool force) = 0;
 
     //! Removes the builtin attribute.
     /*!

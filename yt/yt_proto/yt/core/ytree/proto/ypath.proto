@@ -134,6 +134,7 @@ message TReqMultiset
     }
 
     repeated TSubrequest subrequests = 1;
+    optional bool force = 2 [default = false];
 }
 
 message TRspMultiset
@@ -150,6 +151,7 @@ message TReqMultisetAttributes
     }
 
     repeated TSubrequest subrequests = 1;
+    optional bool force = 2 [default = false];
 }
 
 message TRspMultisetAttributes

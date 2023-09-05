@@ -38,7 +38,9 @@ struct TMultisetAttributesNodeOptions
     , public TMutatingOptions
     , public TSuppressableAccessTrackingOptions
     , public TPrerequisiteOptions
-{ };
+{
+    bool Force = false;
+};
 
 struct TRemoveNodeOptions
     : public TTimeoutOptions

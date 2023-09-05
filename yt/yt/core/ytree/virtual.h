@@ -44,7 +44,7 @@ protected:
     const THashSet<TInternedAttributeKey>& GetBuiltinAttributeKeys() override;
     bool GetBuiltinAttribute(TInternedAttributeKey key, NYson::IYsonConsumer* consumer) override;
     TFuture<NYson::TYsonString> GetBuiltinAttributeAsync(TInternedAttributeKey key) override;
-    bool SetBuiltinAttribute(TInternedAttributeKey key, const NYson::TYsonString& value) override;
+    bool SetBuiltinAttribute(TInternedAttributeKey key, const NYson::TYsonString& value, bool force) override;
     bool RemoveBuiltinAttribute(TInternedAttributeKey key) override;
 
 private:
@@ -109,7 +109,7 @@ protected:
     const THashSet<TInternedAttributeKey>& GetBuiltinAttributeKeys() override;
     bool GetBuiltinAttribute(TInternedAttributeKey key, NYson::IYsonConsumer* consumer) override;
     TFuture<NYson::TYsonString> GetBuiltinAttributeAsync(TInternedAttributeKey key) override;
-    bool SetBuiltinAttribute(TInternedAttributeKey key, const NYson::TYsonString& value) override;
+    bool SetBuiltinAttribute(TInternedAttributeKey key, const NYson::TYsonString& value, bool force) override;
     bool RemoveBuiltinAttribute(TInternedAttributeKey key) override;
 
 private:

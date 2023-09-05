@@ -253,7 +253,7 @@ ISystemAttributeProvider* TVirtualMapBase::GetBuiltinAttributeProvider()
     return this;
 }
 
-bool TVirtualMapBase::SetBuiltinAttribute(TInternedAttributeKey /*key*/, const TYsonString& /*value*/)
+bool TVirtualMapBase::SetBuiltinAttribute(TInternedAttributeKey /*key*/, const TYsonString& /*value*/, bool /*force*/)
 {
     return false;
 }
@@ -595,7 +595,7 @@ ISystemAttributeProvider* TVirtualListBase::GetBuiltinAttributeProvider()
     return this;
 }
 
-bool TVirtualListBase::SetBuiltinAttribute(TInternedAttributeKey /*key*/, const TYsonString& /*value*/)
+bool TVirtualListBase::SetBuiltinAttribute(TInternedAttributeKey /*key*/, const TYsonString& /*value*/, bool /*force*/)
 {
     return false;
 }

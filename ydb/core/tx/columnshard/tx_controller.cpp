@@ -146,9 +146,9 @@ std::optional<TTxController::TBasicTxInfo> TTxController::StartPlannedTx() {
         auto node = PlanQueue.extract(PlanQueue.begin());
         auto& item = node.value();
         TPlanQueueItem tx(item.Step, item.TxId);
-        RunningQueue.emplace(std::move(item));
         auto it = BasicTxInfo.find(item.TxId);
         Y_VERIFY(it != BasicTxInfo.end());
+        RunningQueue.emplace(std::move(item));
         return it->second;
     }
     return std::nullopt;

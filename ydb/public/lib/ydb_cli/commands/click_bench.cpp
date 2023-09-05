@@ -439,7 +439,7 @@ int TClickBenchCommandInit::Run(TConfig& config) {
         return session.ExecuteSchemeQuery(createSql).GetValueSync();
     }));
 
-    Cout << "Table created." << Endl;
+    Cout << "Table created. Please, follow instructions https://ydb.tech/en/docs/reference/ydb-cli/workload-click-bench#load to load benchmark data." << Endl;
     driver.Stop(true);
     return 0;
 };

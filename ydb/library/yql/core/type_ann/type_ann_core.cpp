@@ -1768,7 +1768,11 @@ namespace NTypeAnnImpl {
         auto& firstChild = input->Head();
         auto firstChildType = firstChild.GetTypeAnn();
 
-        if (HasError(firstChildType, ctx.Expr) || !firstChildType) {
+        if (HasError(firstChildType, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!firstChildType) {
             YQL_ENSURE(firstChild.Type() == TExprNode::Lambda);
             ctx.Expr.AddError(TIssue(
                 ctx.Expr.GetPosition(firstChild.Pos()),
@@ -1863,7 +1867,11 @@ namespace NTypeAnnImpl {
         auto& firstChild = input->Head();
         auto firstChildType = firstChild.GetTypeAnn();
 
-        if (HasError(firstChildType, ctx.Expr) || !firstChildType) {
+        if (HasError(firstChildType, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!firstChildType) {
             YQL_ENSURE(firstChild.Type() == TExprNode::Lambda);
             ctx.Expr.AddError(TIssue(
                 ctx.Expr.GetPosition(firstChild.Pos()),

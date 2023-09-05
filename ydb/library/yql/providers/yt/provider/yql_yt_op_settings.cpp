@@ -59,7 +59,11 @@ bool ValidateColumnPairSettings(TExprNode& columnsSettings, TExprContext& ctx, T
             }
             columns.emplace_back(child->Child(0)->Content());
         } else {
-            if (HasError(child->GetTypeAnn(), ctx) || !child->IsAtom()) {
+            if (HasError(child->GetTypeAnn(), ctx)) {
+                return false;
+            }
+
+            if (!child->IsAtom()) {
                 ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() << "Expected tuple or atom, but got: " << child->Type()));
                 return false;
             }

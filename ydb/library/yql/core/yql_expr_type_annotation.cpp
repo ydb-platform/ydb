@@ -1976,7 +1976,11 @@ bool EnsureCallableMaxArgsCount(const TPositionHandle& pos, ui32 args, ui32 expe
 }
 
 bool EnsureAtom(const TExprNode& node, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || node.Type() != TExprNode::Atom) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (node.Type() != TExprNode::Atom) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected atom, but got: " << node.Type()));
         return false;
     }
@@ -1985,7 +1989,11 @@ bool EnsureAtom(const TExprNode& node, TExprContext& ctx) {
 }
 
 bool EnsureCallable(const TExprNode& node, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || node.Type() != TExprNode::Callable) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (node.Type() != TExprNode::Callable) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected callable, but got: " << node.Type()));
         return false;
     }
@@ -1994,7 +2002,11 @@ bool EnsureCallable(const TExprNode& node, TExprContext& ctx) {
 }
 
 bool EnsureTuple(TExprNode& node, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || node.Type() != TExprNode::List) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (node.Type() != TExprNode::List) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected tuple, but got: " << node.Type()));
         return false;
     }
@@ -2115,7 +2127,11 @@ TSettingNodeValidator RequireSingleValueSettings(const TSettingNodeValidator& va
 }
 
 bool EnsureTupleSize(TExprNode& node, ui32 expectedSize, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || node.Type() != TExprNode::List) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (node.Type() != TExprNode::List) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected tuple, but got: " << node.Type()));
         return false;
     }
@@ -2131,7 +2147,11 @@ bool EnsureTupleSize(TExprNode& node, ui32 expectedSize, TExprContext& ctx) {
 }
 
 bool EnsureTupleMinSize(TExprNode& node, ui32 minSize, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || node.Type() != TExprNode::List) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (node.Type() != TExprNode::List) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected tuple, but got: " << node.Type()));
         return false;
     }
@@ -2147,7 +2167,11 @@ bool EnsureTupleMinSize(TExprNode& node, ui32 minSize, TExprContext& ctx) {
 }
 
 bool EnsureTupleMaxSize(TExprNode& node, ui32 maxSize, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || node.Type() != TExprNode::List) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (node.Type() != TExprNode::List) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected tuple, but got: " << node.Type()));
         return false;
     }
@@ -2163,7 +2187,11 @@ bool EnsureTupleMaxSize(TExprNode& node, ui32 maxSize, TExprContext& ctx) {
 }
 
 bool EnsureTupleType(const TExprNode& node, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected tuple type, but got lambda"));
         return false;
@@ -2178,7 +2206,11 @@ bool EnsureTupleType(const TExprNode& node, TExprContext& ctx) {
 }
 
 bool EnsureTupleType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
-    if (HasError(&type, ctx) || type.GetKind() != ETypeAnnotationKind::Tuple) {
+    if (HasError(&type, ctx)) {
+        return false;
+    }
+
+    if (type.GetKind() != ETypeAnnotationKind::Tuple) {
         ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected tuple type, but got: " << type));
         return false;
     }
@@ -2187,12 +2219,15 @@ bool EnsureTupleType(TPositionHandle position, const TTypeAnnotationNode& type, 
 }
 
 bool EnsureTupleTypeSize(const TExprNode& node, ui32 expectedSize, TExprContext& ctx) {
-    YQL_ENSURE(node.GetTypeAnn() || node.Type() == TExprNode::Lambda);
     return EnsureTupleTypeSize(node.Pos(), node.GetTypeAnn(), expectedSize, ctx);
 }
 
 bool EnsureTupleTypeSize(TPositionHandle position, const TTypeAnnotationNode* type, ui32 expectedSize, TExprContext& ctx) {
-    if (HasError(type, ctx) || !type) {
+    if (HasError(type, ctx)) {
+        return false;
+    }
+
+    if (!type) {
         ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected tuple type, but got lambda"));
         return false;
     }
@@ -2213,7 +2248,11 @@ bool EnsureTupleTypeSize(TPositionHandle position, const TTypeAnnotationNode* ty
 }
 
 bool EnsureMultiType(const TExprNode& node, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected multi type, but got lambda"));
         return false;
@@ -2228,7 +2267,11 @@ bool EnsureMultiType(const TExprNode& node, TExprContext& ctx) {
 }
 
 bool EnsureMultiType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
-    if (HasError(&type, ctx) || type.GetKind() != ETypeAnnotationKind::Multi) {
+    if (HasError(&type, ctx)) {
+        return false;
+    }
+
+    if (type.GetKind() != ETypeAnnotationKind::Multi) {
         ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected multi type, but got: " << type));
         return false;
     }
@@ -2237,7 +2280,11 @@ bool EnsureMultiType(TPositionHandle position, const TTypeAnnotationNode& type, 
 }
 
 bool EnsureVariantType(const TExprNode& node, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected variant type, but got lambda"));
         return false;
@@ -2247,7 +2294,11 @@ bool EnsureVariantType(const TExprNode& node, TExprContext& ctx) {
 }
 
 bool EnsureVariantType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
-    if (HasError(&type, ctx) || type.GetKind() != ETypeAnnotationKind::Variant) {
+    if (HasError(&type, ctx)) {
+        return false;
+    }
+
+    if (type.GetKind() != ETypeAnnotationKind::Variant) {
         ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected variant type, but got: " << type));
         return false;
     }
@@ -2256,7 +2307,11 @@ bool EnsureVariantType(TPositionHandle position, const TTypeAnnotationNode& type
 }
 
 bool EnsureDataType(const TExprNode& node, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected data type, but got lambda"));
         return false;
@@ -2266,7 +2321,11 @@ bool EnsureDataType(const TExprNode& node, TExprContext& ctx) {
 }
 
 bool EnsureDataType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
-    if (HasError(&type, ctx) || type.GetKind() != ETypeAnnotationKind::Data) {
+    if (HasError(&type, ctx)) {
+        return false;
+    }
+
+    if (type.GetKind() != ETypeAnnotationKind::Data) {
         ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected data type, but got: " << type));
         return false;
     }
@@ -2275,7 +2334,11 @@ bool EnsureDataType(TPositionHandle position, const TTypeAnnotationNode& type, T
 }
 
 bool EnsureLambda(const TExprNode& node, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || node.Type() != TExprNode::Lambda) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (node.Type() != TExprNode::Lambda) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected lambda, but got: " << node.Type()));
         return false;
     }
@@ -2353,7 +2416,11 @@ IGraphTransformer::TStatus ConvertToLambda(TExprNode::TPtr& node, TExprContext& 
         return IGraphTransformer::TStatus::Ok;
     }
 
-    if (!withTypes || HasError(node->GetTypeAnn(), ctx) || node->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Callable) {
+    if (HasError(node->GetTypeAnn(), ctx)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!withTypes || node->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Callable) {
         ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Expected lambda, but got: " << node->Type()));
         return IGraphTransformer::TStatus::Error;
     }
@@ -2381,7 +2448,11 @@ IGraphTransformer::TStatus ConvertToLambda(TExprNode::TPtr& node, TExprContext& 
 }
 
 bool EnsureSpecificDataType(const TExprNode& node, EDataSlot expectedDataSlot, TExprContext& ctx, bool allowOptional) {
-    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected data type, but got lambda"));
         return false;
@@ -2408,7 +2479,11 @@ bool EnsureSpecificDataType(const TExprNode& node, EDataSlot expectedDataSlot, T
 }
 
 bool EnsureSpecificDataType(TPositionHandle position, const TTypeAnnotationNode& type, EDataSlot expectedDataSlot, TExprContext& ctx) {
-    if (HasError(&type, ctx) || type.GetKind() != ETypeAnnotationKind::Data) {
+    if (HasError(&type, ctx)) {
+        return false;
+    }
+
+    if (type.GetKind() != ETypeAnnotationKind::Data) {
         ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected data type, but got: " << type));
         return false;
     }
@@ -2424,7 +2499,11 @@ bool EnsureSpecificDataType(TPositionHandle position, const TTypeAnnotationNode&
 }
 
 bool EnsureStringOrUtf8Type(const TExprNode& node, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected String or Utf8, but got lambda."));
         return false;
@@ -2444,7 +2523,11 @@ bool EnsureStringOrUtf8Type(const TExprNode& node, TExprContext& ctx) {
 }
 
 bool EnsureStringOrUtf8Type(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
-    if (HasError(&type, ctx) || type.GetKind() != ETypeAnnotationKind::Data) {
+    if (HasError(&type, ctx)) {
+        return false;
+    }
+
+    if (type.GetKind() != ETypeAnnotationKind::Data) {
         ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected String or Utf8, but got: " << type));
         return false;
     }
@@ -2458,7 +2541,11 @@ bool EnsureStringOrUtf8Type(TPositionHandle position, const TTypeAnnotationNode&
 }
 
 bool EnsureStructType(const TExprNode& node, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected struct type, but got lambda"));
         return false;
@@ -2473,7 +2560,11 @@ bool EnsureStructType(const TExprNode& node, TExprContext& ctx) {
 }
 
 bool EnsureStructType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
-    if (HasError(&type, ctx) || type.GetKind() != ETypeAnnotationKind::Struct) {
+    if (HasError(&type, ctx)) {
+        return false;
+    }
+
+    if (type.GetKind() != ETypeAnnotationKind::Struct) {
         ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected struct type, but got: " << type));
         return false;
     }
@@ -2482,7 +2573,11 @@ bool EnsureStructType(TPositionHandle position, const TTypeAnnotationNode& type,
 }
 
 bool EnsureStaticContainerType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
-    if (HasError(&type, ctx) || !(type.GetKind() == ETypeAnnotationKind::Struct || type.GetKind() == ETypeAnnotationKind::Tuple || type.GetKind() == ETypeAnnotationKind::Multi)) {
+    if (HasError(&type, ctx)) {
+        return false;
+    }
+
+    if (!(type.GetKind() == ETypeAnnotationKind::Struct || type.GetKind() == ETypeAnnotationKind::Tuple || type.GetKind() == ETypeAnnotationKind::Multi)) {
         ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected struct, tuple or multi type, but got: " << type));
         return false;
     }
@@ -2531,7 +2626,11 @@ bool EnsureComposableType(TPositionHandle position, const TTypeAnnotationNode& t
 }
 
 bool EnsureWorldType(const TExprNode& node, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected world type, but got lambda"));
         return false;
@@ -2546,7 +2645,11 @@ bool EnsureWorldType(const TExprNode& node, TExprContext& ctx) {
 }
 
 bool EnsureDataSource(const TExprNode& node, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected datasource callable, but got lambda"));
         return false;
@@ -2561,7 +2664,11 @@ bool EnsureDataSource(const TExprNode& node, TExprContext& ctx) {
 }
 
 bool EnsureDataSink(const TExprNode& node, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected datasink callable, but got lambda"));
         return false;
@@ -2576,7 +2683,11 @@ bool EnsureDataSink(const TExprNode& node, TExprContext& ctx) {
 }
 
 bool EnsureDataProvider(const TExprNode& node, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected datasource or datasink callable, but got lambda"));
         return false;
@@ -2591,7 +2702,11 @@ bool EnsureDataProvider(const TExprNode& node, TExprContext& ctx) {
 }
 
 bool EnsureSpecificDataSource(const TExprNode& node, TStringBuf expectedCategory, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected datasource callable, but got lambda"));
         return false;
@@ -2613,7 +2728,11 @@ bool EnsureSpecificDataSource(const TExprNode& node, TStringBuf expectedCategory
 }
 
 bool EnsureSpecificDataSink(const TExprNode& node, TStringBuf expectedCategory, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected datasink callable, but got lambda"));
         return false;
@@ -2635,7 +2754,11 @@ bool EnsureSpecificDataSink(const TExprNode& node, TStringBuf expectedCategory, 
 }
 
 bool EnsureListType(const TExprNode& node, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected list type, but got lambda"));
         return false;
@@ -2650,7 +2773,11 @@ bool EnsureListType(const TExprNode& node, TExprContext& ctx) {
 }
 
 bool EnsureListType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
-    if (HasError(&type, ctx) || type.GetKind() != ETypeAnnotationKind::List) {
+    if (HasError(&type, ctx)) {
+        return false;
+    }
+
+    if (type.GetKind() != ETypeAnnotationKind::List) {
         ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected list type, but got: " << type));
         return false;
     }
@@ -2659,7 +2786,11 @@ bool EnsureListType(TPositionHandle position, const TTypeAnnotationNode& type, T
 }
 
 bool EnsureListOrEmptyType(const TExprNode& node, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected (empty) list type, but got lambda"));
         return false;
@@ -2675,7 +2806,11 @@ bool EnsureListOrEmptyType(const TExprNode& node, TExprContext& ctx) {
 }
 
 bool EnsureListOrEmptyType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
-    if (HasError(&type, ctx) || type.GetKind() != ETypeAnnotationKind::List && type.GetKind() != ETypeAnnotationKind::EmptyList) {
+    if (HasError(&type, ctx)) {
+        return false;
+    }
+
+    if (type.GetKind() != ETypeAnnotationKind::List && type.GetKind() != ETypeAnnotationKind::EmptyList) {
         ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected (empty) list type, but got: " << type));
         return false;
     }
@@ -2684,7 +2819,11 @@ bool EnsureListOrEmptyType(TPositionHandle position, const TTypeAnnotationNode& 
 }
 
 bool EnsureListOfVoidType(const TExprNode& node, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected list of void type, but got lambda"));
         return false;
@@ -2710,7 +2849,11 @@ bool EnsureListOfVoidType(TPositionHandle position, const TTypeAnnotationNode& t
 }
 
 bool EnsureStreamType(const TExprNode& node, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected stream type, but got lambda"));
         return false;
@@ -2725,7 +2868,11 @@ bool EnsureStreamType(const TExprNode& node, TExprContext& ctx) {
 }
 
 bool EnsureStreamType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
-    if (HasError(&type, ctx) || type.GetKind() != ETypeAnnotationKind::Stream) {
+    if (HasError(&type, ctx)) {
+        return false;
+    }
+
+    if (type.GetKind() != ETypeAnnotationKind::Stream) {
         ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected stream type, but got: " << type));
         return false;
     }
@@ -2734,7 +2881,11 @@ bool EnsureStreamType(TPositionHandle position, const TTypeAnnotationNode& type,
 }
 
 bool EnsureFlowType(const TExprNode& node, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected flow type, but got lambda"));
         return false;
@@ -2749,7 +2900,11 @@ bool EnsureFlowType(const TExprNode& node, TExprContext& ctx) {
 }
 
 bool EnsureFlowType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
-    if (HasError(&type, ctx) || type.GetKind() != ETypeAnnotationKind::Flow) {
+    if (HasError(&type, ctx)) {
+        return false;
+    }
+
+    if (type.GetKind() != ETypeAnnotationKind::Flow) {
         ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected flow type, but got: " << type));
         return false;
     }
@@ -2758,7 +2913,11 @@ bool EnsureFlowType(TPositionHandle position, const TTypeAnnotationNode& type, T
 }
 
 bool EnsureWideFlowType(const TExprNode& node, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected wide flow type, but got lambda"));
         return false;
@@ -2773,7 +2932,13 @@ bool EnsureWideFlowType(const TExprNode& node, TExprContext& ctx) {
 }
 
 bool EnsureWideFlowType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
-    if (HasError(&type, ctx) || type.GetKind() != ETypeAnnotationKind::Flow || type.Cast<TFlowExprType>()->GetItemType()->GetKind() != ETypeAnnotationKind::Multi) {
+    if (HasError(&type, ctx)) {
+        return false;
+    }
+
+    if (type.GetKind() != ETypeAnnotationKind::Flow ||
+        type.Cast<TFlowExprType>()->GetItemType()->GetKind() !=
+            ETypeAnnotationKind::Multi) {
         ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected wide flow type, but got: " << type));
         return false;
     }
@@ -2782,7 +2947,11 @@ bool EnsureWideFlowType(TPositionHandle position, const TTypeAnnotationNode& typ
 }
 
 bool EnsureWideStreamType(const TExprNode& node, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected wide stream type, but got lambda"));
         return false;
@@ -2797,7 +2966,11 @@ bool EnsureWideStreamType(const TExprNode& node, TExprContext& ctx) {
 }
 
 bool EnsureWideStreamType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
-    if (HasError(&type, ctx) || type.GetKind() != ETypeAnnotationKind::Stream || type.Cast<TStreamExprType>()->GetItemType()->GetKind() != ETypeAnnotationKind::Multi) {
+    if (HasError(&type, ctx)) {
+        return false;
+    }
+
+    if (type.GetKind() != ETypeAnnotationKind::Stream || type.Cast<TStreamExprType>()->GetItemType()->GetKind() != ETypeAnnotationKind::Multi) {
         ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected wide stream type, but got: " << type));
         return false;
     }
@@ -2924,7 +3097,11 @@ bool EnsureOptionalType(const TExprNode& node, TExprContext& ctx) {
 }
 
 bool EnsureOptionalType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
-    if (HasError(&type, ctx) || type.GetKind() != ETypeAnnotationKind::Optional) {
+    if (HasError(&type, ctx)) {
+        return false;
+    }
+
+    if (type.GetKind() != ETypeAnnotationKind::Optional) {
         ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected optional type, but got: " << type));
         return false;
     }
@@ -3018,7 +3195,11 @@ bool EnsureDryType(const TExprNode& node, TExprContext& ctx) {
 }
 
 bool EnsureDictType(const TExprNode& node, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected dict type, but got lambda"));
         return false;
@@ -3033,7 +3214,11 @@ bool EnsureDictType(const TExprNode& node, TExprContext& ctx) {
 }
 
 bool EnsureDictType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
-    if (HasError(&type, ctx) || type.GetKind() != ETypeAnnotationKind::Dict) {
+    if (HasError(&type, ctx)) {
+        return false;
+    }
+
+    if (type.GetKind() != ETypeAnnotationKind::Dict) {
         ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected dict type, but got: " << type));
         return false;
     }
@@ -3042,14 +3227,22 @@ bool EnsureDictType(TPositionHandle position, const TTypeAnnotationNode& type, T
 }
 
 bool IsVoidType(const TExprNode& node, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
         return false;
     }
     return node.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Void;
 }
 
 bool EnsureVoidType(const TExprNode& node, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected void type, but got lambda"));
         return false;
@@ -3064,7 +3257,11 @@ bool EnsureVoidType(const TExprNode& node, TExprContext& ctx) {
 }
 
 bool EnsureVoidLiteral(const TExprNode& node, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected void literal, but got lambda"));
         return false;
@@ -3079,7 +3276,11 @@ bool EnsureVoidLiteral(const TExprNode& node, TExprContext& ctx) {
 }
 
 bool EnsureCallableType(const TExprNode& node, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected callable type, but got lambda"));
         return false;
@@ -3089,7 +3290,11 @@ bool EnsureCallableType(const TExprNode& node, TExprContext& ctx) {
 }
 
 bool EnsureCallableType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
-    if (HasError(&type, ctx) || type.GetKind() != ETypeAnnotationKind::Callable) {
+    if (HasError(&type, ctx)) {
+        return false;
+    }
+
+    if (type.GetKind() != ETypeAnnotationKind::Callable) {
         ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected callable type, but got: " << type));
         return false;
     }
@@ -3098,7 +3303,11 @@ bool EnsureCallableType(TPositionHandle position, const TTypeAnnotationNode& typ
 }
 
 bool EnsureResourceType(const TExprNode& node, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected resource type, but got lambda"));
         return false;
@@ -3113,7 +3322,11 @@ bool EnsureResourceType(const TExprNode& node, TExprContext& ctx) {
 }
 
 bool EnsureTaggedType(const TExprNode& node, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected tagged type, but got lambda"));
         return false;
@@ -3128,7 +3341,11 @@ bool EnsureTaggedType(const TExprNode& node, TExprContext& ctx) {
 }
 
 bool EnsureOneOrTupleOfDataOrOptionalOfData(const TExprNode& node, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() <<
             "Expected either data (optional of data) or non-empty tuple of data (optional of data), but got lambda"));
@@ -5663,7 +5880,11 @@ IGraphTransformer::TStatus TryConvertToPgOp(TStringBuf op, const TExprNode::TPtr
 }
 
 bool EnsureBlockOrScalarType(const TExprNode& node, TExprContext& ctx) {
-    if (HasError(node.GetTypeAnn(), ctx) || !node.GetTypeAnn()) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
         YQL_ENSURE(node.Type() == TExprNode::Lambda);
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected block or scalar type, but got lambda"));
         return false;
@@ -5673,7 +5894,11 @@ bool EnsureBlockOrScalarType(const TExprNode& node, TExprContext& ctx) {
 }
 
 bool EnsureBlockOrScalarType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
-    if (HasError(&type, ctx) || !type.IsBlockOrScalar()) {
+    if (HasError(&type, ctx)) {
+        return false;
+    }
+
+    if (!type.IsBlockOrScalar()) {
         ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected block or scalar type, but got: " << type));
         return false;
     }

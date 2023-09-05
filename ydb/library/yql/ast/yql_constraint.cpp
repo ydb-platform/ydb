@@ -1768,7 +1768,7 @@ void TPassthroughConstraintNode::ToJson(NJson::TJsonWriter& out) const {
 }
 
 void TPassthroughConstraintNode::UniqueMerge(TMapType& output, TMapType&& input) {
-    output.merge(std::move(input));
+    output.merge(input);
     while (!input.empty()) {
         const auto exists = input.extract(input.cbegin());
         auto& target = output[exists.key()];

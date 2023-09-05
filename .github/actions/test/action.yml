@@ -57,6 +57,7 @@ runs:
       echo "testshardfilterfile=$(pwd)/.github/config/muted_shard.txt" >> $GITHUB_OUTPUT
       echo "functestfilterfile=$(pwd)/.github/config/muted_functest.txt" >> $GITHUB_OUTPUT
       echo "pytest-logfilename=${{inputs.log_suffix}}-pytest-stdout.log" >> $GITHUB_OUTPUT
+      echo "PORT_SYNC_PATH=$(mktemp -d -p $(pwd)/tmp port-sync-XXXXXX)" >> $GITHUB_ENV
 
   - name: configure s3cmd
     shell: bash

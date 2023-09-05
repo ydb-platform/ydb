@@ -487,7 +487,13 @@ public:
             auto resolvedLinksFuture = getFolderFuture.Apply([options, this, session] (const TFuture<TBatchFolderResult>& f) {
                 TVector<IYtGateway::TResolveOptions::TItemWithReqAttrs> resolveItems;
                 auto res = f.GetValue();
+                if (res.Items.empty()) {
+                    YQL_CLOG(INFO, ProviderYt) << "Skipping resolve for empty batch folder result";
+                    return res;
+                }
+
                 for (auto&& item : res.Items) {
+                    YQL_CLOG(DEBUG, ProviderYt) << "Adding to batch get command: " << item.Path;
                     IYtGateway::TResolveOptions::TItemWithReqAttrs resolveItem {
                         .Item = item,
                         .AttrKeys = options.Attributes()
@@ -512,6 +518,8 @@ public:
                 res.SetSuccess();
 
                 auto resolveRes = f.GetValue();
+                YQL_CLOG(INFO, ProviderYt) << "Batch get command got: " << resolveRes.Items.size() << " items";
+
                 TVector<TFolderResult::TFolderItem> items;
                 for (auto& batchItem : resolveRes.Items) {
                     TFolderResult::TFolderItem item {

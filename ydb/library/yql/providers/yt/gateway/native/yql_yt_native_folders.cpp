@@ -166,6 +166,7 @@ IYtGateway::TBatchFolderResult ExecGetFolder(const TExecContext<IYtGateway::TBat
     folderResult.SetSuccess();
 
     for (const auto& folder : execCtx->Options_.Folders()) {
+        YQL_CLOG(INFO, ProviderYt) << "Executing list command with prefix: " << folder.Prefix;
         const auto cacheKey = std::accumulate(folder.AttrKeys.begin(), folder.AttrKeys.end(), folder.Prefix,
             [] (TString&& str, const TString& arg) {
             return str + "&" + arg;
@@ -188,7 +189,10 @@ IYtGateway::TBatchFolderResult ExecGetFolder(const TExecContext<IYtGateway::TBat
                     folderItems.reserve(nodeList.size());
                     for (const auto& node : nodeList) {
                         TStringBuilder path;
-                        path << folder.Prefix << "/" << node.AsString();
+                        if (!folder.Prefix.Empty()) {
+                            path << folder.Prefix << "/";
+                        }
+                        path << node.AsString();
                         folderItems.push_back(MakeFolderItem(node, path));
                     }
                     StoreResInCache(entry, std::move(folderItems), cacheKey);

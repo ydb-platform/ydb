@@ -16,6 +16,7 @@
 #include <ydb/library/yql/core/peephole_opt/yql_opt_peephole_physical.h>
 #include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
 #include <ydb/library/yql/core/issue/yql_issue.h>
+#include <ydb/library/yql/utils/log/log.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/threading/future/future.h>
@@ -411,6 +412,7 @@ public:
                 }
 
                 auto items = std::get<TVector<IYtGateway::TFolderResult::TFolderItem>>(res->ItemsOrFileLink);
+                YQL_CLOG(INFO, ProviderYt) << "Got " << items.size() << " items for " << " GetFolder";
                 TVector<TExprBase> listItems;
                 for (auto& item: items) {
                     listItems.push_back(BuildFolderListItemExpr(ctx, node->Pos(), item));

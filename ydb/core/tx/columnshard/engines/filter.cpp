@@ -1,9 +1,10 @@
 #include "filter.h"
 #include "defs.h"
-#include "indexed_read_data.h"
+#include "reader/read_metadata.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/custom_registry.h>
+#include <ydb/core/formats/arrow/program.h>
 
 namespace NKikimr::NOlap {
 
@@ -38,7 +39,7 @@ NArrow::TColumnFilter MakeSnapshotFilter(const std::shared_ptr<arrow::RecordBatc
     Y_VERIFY(snapSchema->num_fields() == 2);
     auto steps = batch->GetColumnByName(snapSchema->fields()[0]->name());
     auto ids = batch->GetColumnByName(snapSchema->fields()[1]->name());
-    NArrow::TColumnFilter result;
+    NArrow::TColumnFilter result = NArrow::TColumnFilter::BuildAllowFilter();
     TSnapshotGetter getter(steps, ids, snapshot);
     result.Reset(steps->length(), std::move(getter));
     return result;

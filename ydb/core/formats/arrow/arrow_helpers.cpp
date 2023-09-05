@@ -908,26 +908,26 @@ std::shared_ptr<arrow::RecordBatch> ReallocateBatch(std::shared_ptr<arrow::Recor
     return DeserializeBatch(SerializeBatch(original, arrow::ipc::IpcWriteOptions::Defaults()), original->schema());
 }
 
-std::shared_ptr<arrow::RecordBatch> MergeColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& rb) {
+std::shared_ptr<arrow::RecordBatch> MergeColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches) {
     std::vector<std::shared_ptr<arrow::Array>> columns;
     std::vector<std::shared_ptr<arrow::Field>> fields;
     std::optional<ui32> recordsCount;
     std::set<std::string> columnNames;
-    for (auto&& i : rb) {
-        if (!i) {
+    for (auto&& batch : batches) {
+        if (!batch) {
             continue;
         }
-        for (auto&& c : i->columns()) {
-            columns.emplace_back(c);
+        for (auto&& column : batch->columns()) {
+            columns.emplace_back(column);
             if (!recordsCount) {
-                recordsCount = c->length();
+                recordsCount = column->length();
             } else {
-                Y_VERIFY(*recordsCount == c->length());
+                Y_VERIFY(*recordsCount == column->length());
             }
         }
-        for (auto&& f : i->schema()->fields()) {
-            Y_VERIFY(columnNames.emplace(f->name()).second);
-            fields.emplace_back(f);
+        for (auto&& field : batch->schema()->fields()) {
+            AFL_VERIFY(columnNames.emplace(field->name()).second)("field_name", field->name());
+            fields.emplace_back(field);
         }
     }
     if (columns.empty()) {

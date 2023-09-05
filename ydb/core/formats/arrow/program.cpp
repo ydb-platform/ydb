@@ -701,7 +701,7 @@ arrow::Status TProgramStep::ApplyFilters(TDatumBatch& batch) const {
         return arrow::Status::OK();
     }
 
-    NArrow::TColumnFilter bits;
+    NArrow::TColumnFilter bits = NArrow::TColumnFilter::BuildAllowFilter();
     auto status = MakeCombinedFilter(batch, bits);
     if (!status.ok()) {
         return status;
@@ -833,7 +833,7 @@ std::set<std::string> TProgramStep::GetColumnsInUsage() const {
 NArrow::TColumnFilter TProgram::MakeEarlyFilter(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
                                             arrow::compute::ExecContext* ctx) const
 {
-    NArrow::TColumnFilter result;
+    NArrow::TColumnFilter result = NArrow::TColumnFilter::BuildAllowFilter();
     try {
         if (Steps.empty()) {
             return result;
@@ -849,7 +849,7 @@ NArrow::TColumnFilter TProgram::MakeEarlyFilter(const std::shared_ptr<arrow::Rec
         if (!step->ApplyAssignes(*rb, ctx).ok()) {
             return result;
         }
-        NArrow::TColumnFilter filter;
+        NArrow::TColumnFilter filter = NArrow::TColumnFilter::BuildAllowFilter();
         if (!step->MakeCombinedFilter(*rb, filter).ok()) {
             return result;
         }
@@ -863,6 +863,9 @@ NArrow::TColumnFilter TProgram::MakeEarlyFilter(const std::shared_ptr<arrow::Rec
 std::set<std::string> TProgram::GetEarlyFilterColumns() const {
     std::set<std::string> result;
     if (Steps.empty()) {
+        return result;
+    }
+    if (Steps[0]->Filters.empty()) {
         return result;
     }
     return Steps[0]->GetColumnsInUsage();

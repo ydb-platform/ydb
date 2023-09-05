@@ -6,7 +6,7 @@
 
 namespace NKikimr::NArrow {
 
-std::shared_ptr<arrow::UInt64Array> MakePermutation(int size, bool reverse) {
+std::shared_ptr<arrow::UInt64Array> MakePermutation(const int size, const bool reverse) {
     if (size < 1) {
         return {};
     }

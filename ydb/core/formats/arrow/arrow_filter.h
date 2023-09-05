@@ -154,8 +154,6 @@ public:
 
     const std::vector<bool>& BuildSimpleFilter(const ui32 expectedSize) const;
 
-    TColumnFilter() = default;
-
     std::shared_ptr<arrow::BooleanArray> BuildArrowFilter(const ui32 expectedSize) const;
 
     bool IsTotalAllowFilter() const;

@@ -65,7 +65,7 @@ public:
 
     NKikimr::NArrow::TColumnFilter BuildFilter(std::shared_ptr<arrow::RecordBatch> data) const {
         if (!Object) {
-            return NArrow::TColumnFilter();
+            return NArrow::TColumnFilter::BuildAllowFilter();
         }
         return NArrow::TColumnFilter::MakePredicateFilter(data, Object->Batch, CompareType);
     }

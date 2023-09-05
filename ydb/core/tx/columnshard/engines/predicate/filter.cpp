@@ -5,7 +5,7 @@ namespace NKikimr::NOlap {
 
 NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(std::shared_ptr<arrow::RecordBatch> data) const {
     if (SortedRanges.empty()) {
-        return NArrow::TColumnFilter();
+        return NArrow::TColumnFilter::BuildAllowFilter();
     }
     NArrow::TColumnFilter result = SortedRanges.front().BuildFilter(data);
     for (ui32 i = 1; i < SortedRanges.size(); ++i) {

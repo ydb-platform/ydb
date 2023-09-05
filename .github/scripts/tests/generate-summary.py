@@ -205,7 +205,7 @@ def render_testlist_html(rows, fn):
     for status in status_test.keys():
         status_test[status].sort(key=attrgetter("full_name"))
 
-    status_order = [TestStatus.FAIL, TestStatus.SKIP, TestStatus.MUTE, TestStatus.PASS]
+    status_order = [TestStatus.ERROR, TestStatus.FAIL, TestStatus.SKIP, TestStatus.MUTE, TestStatus.PASS]
 
     # remove status group without tests
     status_order = [s for s in status_order if s in status_test]

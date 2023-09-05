@@ -372,7 +372,14 @@ public:
             if (hasData && (newOp & KikimrSchemeOps()) ||
                 hasScheme && (newOp & KikimrDataOps()))
             {
-                issues.AddIssue(YqlIssue(pos, TIssuesIds::KIKIMR_MIXED_SCHEME_DATA_TX));
+                TString message = "Cannot mix scheme and data operations inside transaction.";
+
+                if (IsIn({EKikimrQueryType::YqlScript, EKikimrQueryType::YqlScriptStreaming}, queryType)) {
+                    message = TStringBuilder() << message
+                        << " Use COMMIT statement to indicate end of transaction between scheme and data operations.";
+                }
+
+                issues.AddIssue(YqlIssue(pos, TIssuesIds::KIKIMR_MIXED_SCHEME_DATA_TX, message));
                 return {false, issues};
             }
 

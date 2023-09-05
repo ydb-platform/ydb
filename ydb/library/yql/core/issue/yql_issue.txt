@@ -165,7 +165,6 @@ ids {
 ids {
   code: KIKIMR_MIXED_SCHEME_DATA_TX
   severity: S_ERROR
-  format: "Can't mix scheme and data operations in single Kikimr transaction. Use COMMIT statement to indicate end of transaction between scheme and data operations."
 }
 ids {
   code: KIKIMR_MULTIPLE_SCHEME_MODIFICATIONS

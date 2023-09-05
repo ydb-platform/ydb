@@ -41,7 +41,8 @@ target_link_options(ydb-core-kqp-ut-service PRIVATE
 )
 target_sources(ydb-core-kqp-ut-service PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/service/kqp_document_api_ut.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/service/kqp_query_service_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/service/kqp_qs_queries_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/service/kqp_qs_scripts_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kqp/ut/service/kqp_service_ut.cpp
 )
 set_property(

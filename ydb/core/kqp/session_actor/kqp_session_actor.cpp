@@ -149,7 +149,7 @@ public:
     }
 
    TKqpSessionActor(const TActorId& owner, const TString& sessionId, const TKqpSettings::TConstPtr& kqpSettings,
-            const TKqpWorkerSettings& workerSettings, 
+            const TKqpWorkerSettings& workerSettings,
             std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
             NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
             TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
@@ -910,13 +910,34 @@ public:
     }
 
     bool ExecutePhyTx(const TKqpPhyTxHolder::TConstPtr& tx, bool commit) {
-        if (tx && tx->GetType() == NKqpProto::TKqpPhyTx::TYPE_SCHEME) {
-            YQL_ENSURE(QueryState->TxCtx->EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_UNDEFINED);
-            YQL_ENSURE(tx->StagesSize() == 0);
+        if (tx) {
+            switch (tx->GetType()) {
+                case NKqpProto::TKqpPhyTx::TYPE_SCHEME:
+                    YQL_ENSURE(tx->StagesSize() == 0);
 
-            SendToSchemeExecuter(tx);
-            ++QueryState->CurrentTx;
-            return false;
+                    if (QueryState->TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_UNDEFINED) {
+                        ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
+                            "Scheme operations cannot be executed inside transaction");
+                        return true;
+                    }
+
+                    SendToSchemeExecuter(tx);
+                    ++QueryState->CurrentTx;
+                    return false;
+
+                case NKqpProto::TKqpPhyTx::TYPE_DATA:
+                case NKqpProto::TKqpPhyTx::TYPE_GENERIC:
+                    if (QueryState->TxCtx->EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_UNDEFINED) {
+                        ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
+                            "Data operations cannot be executed outside of transaction");
+                        return true;
+                    }
+
+                    break;
+
+                default:
+                    break;
+            }
         }
 
         auto& txCtx = *QueryState->TxCtx;

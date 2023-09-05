@@ -64,7 +64,7 @@ bool TTxExportFinish::Execute(TTransactionContext& txc, const TActorContext&) {
                 .Blob = blobId,
                 .ExternBlob = externId
             };
-            bool present = Self->BlobManager->UpdateOneToOne(std::move(evict), blobManagerDb, dropped);
+            bool present = Self->BlobManager->UpdateOneToOne(evict, blobManagerDb, dropped);
 
             // Delayed erase of evicted blob. Blob could be already deleted.
             if (present && !dropped) {

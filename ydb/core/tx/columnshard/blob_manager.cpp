@@ -585,7 +585,7 @@ bool TBlobManager::DropOneToOne(const TUnifiedBlobId& blobId, IBlobManagerDb& db
     return true;
 }
 
-bool TBlobManager::UpdateOneToOne(TEvictedBlob&& evict, IBlobManagerDb& db, bool& dropped) {
+bool TBlobManager::UpdateOneToOne(TEvictedBlob& evict, IBlobManagerDb& db, bool& dropped) {
     TEvictMetadata meta;
 
     TEvictedBlob old{.Blob = evict.Blob};

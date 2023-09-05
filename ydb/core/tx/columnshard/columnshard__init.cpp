@@ -157,7 +157,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
         }
 
         bool dropped;
-        bool present = Self->BlobManager->UpdateOneToOne(std::move(evict), blobManagerDb, dropped);
+        bool present = Self->BlobManager->UpdateOneToOne(evict, blobManagerDb, dropped);
         if (present) {
             strBlobs += "'" + evict.Blob.ToStringNew() + "' ";
         } else {

@@ -104,7 +104,7 @@ protected:
                 TStringBuf tag(q);
                 Tag_ = TStringBuilder() << tag.NextTok(' ') << " " << tag.NextTok(' ');
                 request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-                request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DDL);
+                request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
             } else {
                 request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
                 request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);

@@ -156,9 +156,6 @@ struct TDqSettings {
         SAVE_SETTING(WatermarksGranularityMs);
         SAVE_SETTING(WatermarksLateArrivalDelayMs);
         SAVE_SETTING(UseAggPhases);
-        SAVE_SETTING(HashJoinMode);
-        SAVE_SETTING(HashShuffleTasksRatio);
-        SAVE_SETTING(HashShuffleMaxTasks);
         SAVE_SETTING(UseWideChannels);
         SAVE_SETTING(UseWideBlockChannels);
         SAVE_SETTING(UseFastPickleTransport);

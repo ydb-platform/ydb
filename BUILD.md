@@ -87,9 +87,8 @@ Run cmake to generate build configuration:
 ```bash
 cd build
 cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_C_FLAGS_RELEASE="-O3 -DNDEBUG" \
-  -DCMAKE_CXX_FLAGS_RELEASE="-O3 -DNDEBUG" \
-  -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain ../ydb
+  -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain \
+  ../ydb
 ```
 
 
@@ -127,14 +126,12 @@ With enabled Ccache, you can finish the compilation of all targets on supported 
     export CONAN_USER_HOME=~/ydbwork/build
     ```
 
-4. Genreate build configuration using `ccache`
+4. Generate build configuration using `ccache`
     ```bash
     cd build
     cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_C_COMPILER_LAUNCHER=/usr/local/bin/ccache -DCMAKE_CXX_COMPILER_LAUNCHER=/usr/local/bin/ccache \
+    -DCCACHE_PATH=/usr/local/bin/ccache \
     -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain \
-    -DCMAKE_C_FLAGS_RELEASE="-O2 -UNDEBUG" \
-    -DCMAKE_CXX_FLAGS_RELEASE="-O2 -UNDEBUG" \
     ../ydb
    
     ```

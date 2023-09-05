@@ -26,10 +26,10 @@ runs:
       export CC=/usr/bin/clang-14
       export CC_FOR_BUILD=$CC
       cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_C_COMPILER_LAUNCHER=/usr/local/bin/ccache -DCMAKE_CXX_COMPILER_LAUNCHER=/usr/local/bin/ccache \
+        -DCCACHE_PATH=/usr/local/bin/ccache \
         -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain \
-        -DCMAKE_CXX_FLAGS="-fsanitize=${{ inputs.sanitizer }} -g -gsplit-dwarf -gz -fno-omit-frame-pointer -UNDEBUG ${{ inputs.extra_compile_flags }}" \
-        -DCMAKE_C_FLAGS="-fsanitize=${{ inputs.sanitizer }} -g -gsplit-dwarf -gz -fno-omit-frame-pointer -UNDEBUG ${{ inputs.extra_compile_flags }}" \
+        -DCMAKE_CXX_FLAGS="-fsanitize=${{ inputs.sanitizer }} -g -gsplit-dwarf -gz -fno-omit-frame-pointer ${{ inputs.extra_compile_flags }}" \
+        -DCMAKE_C_FLAGS="-fsanitize=${{ inputs.sanitizer }} -g -gsplit-dwarf -gz -fno-omit-frame-pointer ${{ inputs.extra_compile_flags }}" \
         ../ydb
   - name: Configure
     shell: bash
@@ -45,12 +45,10 @@ runs:
       # FIXME: set DCMAKE_CXX_FLAGS_RELWITHDEBINFO and DCMAKE_CXX_FLAGS bacause of global_flags.cmake flags override.
 
       cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_C_COMPILER_LAUNCHER=/usr/local/bin/ccache -DCMAKE_CXX_COMPILER_LAUNCHER=/usr/local/bin/ccache \
+        -DCCACHE_PATH=/usr/local/bin/ccache \
         -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain \
-        -DCMAKE_C_FLAGS="-O2 -UNDEBUG ${{ inputs.extra_compile_flags }}" \
-        -DCMAKE_CXX_FLAGS="-O2 -UNDEBUG ${{ inputs.extra_compile_flags }}" \
-        -DCMAKE_C_FLAGS_RELEASE="-O2 -UNDEBUG ${{ inputs.extra_compile_flags }}" \
-        -DCMAKE_CXX_FLAGS_RELEASE="-O2 -UNDEBUG ${{ inputs.extra_compile_flags }}" \
+        -DCMAKE_C_FLAGS="${{ inputs.extra_compile_flags }}" \
+        -DCMAKE_CXX_FLAGS="${{ inputs.extra_compile_flags }}" \
         ../ydb
   - name: Build
     shell: bash

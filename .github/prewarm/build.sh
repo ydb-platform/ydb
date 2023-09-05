@@ -14,10 +14,8 @@ cd /ydbwork/build
 
 echo "::group::cmake"
 cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
--DCMAKE_C_COMPILER_LAUNCHER=/usr/local/bin/ccache -DCMAKE_CXX_COMPILER_LAUNCHER=/usr/local/bin/ccache \
+-DCCACHE_PATH=/usr/local/bin/ccache \
 -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain \
--DCMAKE_C_FLAGS_RELEASE="-O2 -UNDEBUG" \
--DCMAKE_CXX_FLAGS_RELEASE="-O2 -UNDEBUG" \
 ../ydb
 echo "::endgroup::"
 

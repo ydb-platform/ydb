@@ -452,15 +452,13 @@ private:
         }
         ParentId = ev->Sender;
 
-        {
+        try {
             Yql::DqsProto::TTaskMeta taskMeta;
             ev->Get()->Task.GetMeta().UnpackTo(&taskMeta);
             Settings->Dispatch(taskMeta.GetSettings());
             Settings->FreezeDefaults();
             StageId = taskMeta.GetStageId();
-        }
 
-        try {
             NDq::TDqTaskSettings settings(&ev->Get()->Task);
             TaskRunner = Factory->GetOld(settings, TraceId);
         } catch (...) {

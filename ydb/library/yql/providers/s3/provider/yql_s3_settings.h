@@ -58,6 +58,7 @@ struct TS3Configuration : public TS3Settings, public NCommon::TSettingDispatcher
     bool AllowLocalFiles = false;
     bool AllowConcurrentListings = false;
     ui64 GeneratorPathsLimit = 0;
+    bool WriteThroughDqIntegration = false;
 };
 
 } // NYql

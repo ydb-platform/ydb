@@ -103,7 +103,9 @@ public:
     {
 #define HNDL(name) "PhysicalOptimizer-"#name, Hndl(&TS3PhysicalOptProposalTransformer::name)
         AddHandler(0, &TCoLeft::Match, HNDL(TrimReadWorld));
-        AddHandler(0, &TS3WriteObject::Match, HNDL(S3WriteObject));
+        if (!State_->Configuration->WriteThroughDqIntegration) {
+            AddHandler(0, &TS3WriteObject::Match, HNDL(S3WriteObject));
+        }
         AddHandler(0, &TS3Insert::Match, HNDL(S3Insert));
 #undef HNDL
     }

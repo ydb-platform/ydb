@@ -1497,6 +1497,7 @@ private:
         state->Types = TypesCtx.Get();
         state->FunctionRegistry = FuncRegistry;
         state->CredentialsFactory = FederatedQuerySetup->CredentialsFactory;
+        state->Configuration->WriteThroughDqIntegration = true;
 
         state->Configuration->Init(FederatedQuerySetup->S3GatewayConfig, TypesCtx);
 

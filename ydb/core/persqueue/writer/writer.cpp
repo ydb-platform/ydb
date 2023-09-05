@@ -821,7 +821,7 @@ private:
     TMap<ui64, RequestHolder> PendingReserve;
     TMap<ui64, RequestHolder> ReceivedReserve;
     TDeque<ui64> PendingQuota;
-    ui64 PendingQuotaAmount;
+    ui64 PendingQuotaAmount = 0;
     TDeque<ui64> ReceivedQuota;
     TDeque<ui64> PendingWrite;
 

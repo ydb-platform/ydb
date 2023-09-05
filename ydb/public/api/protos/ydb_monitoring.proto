@@ -27,6 +27,7 @@ message SelfCheckRequest {
     bool return_verbose_status = 2; // return detailed info about components checked with their statuses
     StatusFlag.Status minimum_status = 3; // minimum status of issues to return
     uint32 maximum_level = 4; // maximum level of issues to return
+    bool do_not_cache = 5; // by default database health state is taken from metadata cache; this option can be used to force bypassing that cache
 }
 
 message SelfCheckResponse {

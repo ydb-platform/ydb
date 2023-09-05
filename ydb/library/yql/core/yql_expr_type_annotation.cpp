@@ -1777,9 +1777,13 @@ const TTypeAnnotationNode* CommonType(TPositionHandle position, const TTypeAnnot
 }
 
 const TTypeAnnotationNode* CommonTypeForChildren(const TExprNode& node, TExprContext& ctx) {
-    TTypeAnnotationNode::TListType types;
-    types.reserve(node.ChildrenSize());
-    node.ForEachChild([&](const TExprNode& item) { types.emplace_back(item.GetTypeAnn()); });
+    TTypeAnnotationNode::TListType types(node.ChildrenSize());
+    for (auto i = 0U; i < types.size(); ++i) {
+        if (const auto item = node.Child(i); EnsureComputable(*item, ctx))
+            types[i] = item->GetTypeAnn();
+        else
+            return nullptr;
+    }
     return CommonType(node.Pos(), types, ctx);
 }
 

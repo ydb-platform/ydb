@@ -4,9 +4,11 @@
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/tx/scheme_board/subscriber.h>
+#include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
 #include <library/cpp/actors/core/actor.h>
 
 #include "kafka_sasl_auth_actor.h"
+
 
 namespace NKafka {
 
@@ -14,7 +16,7 @@ static constexpr char EMPTY_AUTH_BYTES[] = "";
 
 NActors::IActor* CreateKafkaSaslAuthActor(const TContext::TPtr context, const ui64 correlationId, const NKikimr::NRawSocket::TSocketDescriptor::TSocketAddressType address, const TMessagePtr<TSaslAuthenticateRequestData>& message) {
     return new TKafkaSaslAuthActor(context, correlationId, address, message);
-}    
+}
 
 void TKafkaSaslAuthActor::Bootstrap(const NActors::TActorContext& ctx) {
     if (Context->AuthenticationStep != EAuthSteps::WAIT_AUTH) {
@@ -22,11 +24,11 @@ void TKafkaSaslAuthActor::Bootstrap(const NActors::TActorContext& ctx) {
                              "Request is not valid given the current SASL state.",
                              TStringBuilder() << "Current step: " << static_cast<int>(Context->AuthenticationStep),
                              ctx);
-        return; 
+        return;
     }
     if (Context->SaslMechanism != "PLAIN") {
-        SendResponseAndDie(EKafkaErrors::UNSUPPORTED_SASL_MECHANISM, 
-                             "Does not support the requested SASL mechanism.", 
+        SendResponseAndDie(EKafkaErrors::UNSUPPORTED_SASL_MECHANISM,
+                             "Does not support the requested SASL mechanism.",
                              TStringBuilder() << "Requested mechanism '" << Context->SaslMechanism << "'",
                              ctx);
         return;
@@ -36,13 +38,11 @@ void TKafkaSaslAuthActor::Bootstrap(const NActors::TActorContext& ctx) {
 }
 
 void TKafkaSaslAuthActor::StartPlainAuth(const NActors::TActorContext& ctx) {
-    TAuthData authData;
-    if (!TryParseAuthDataTo(authData, ctx)) {
+    if (!TryParseAuthDataTo(ClientAuthData, ctx)) {
         return;
     }
 
-    DatabasePath = CanonizePath(authData.Database);
-    SendLoginRequest(authData, ctx);
+    DatabasePath = CanonizePath(ClientAuthData.Database);
     SendDescribeRequest(ctx);
 }
 
@@ -52,25 +52,18 @@ void TKafkaSaslAuthActor::Handle(NKikimr::TEvTicketParser::TEvAuthorizeTicketRes
         return;
     }
 
-    Authentificated = true;
     UserToken = ev->Get()->Token;
-    ReplyIfReady(ctx);
+    SendResponseAndDie(EKafkaErrors::NONE_ERROR, "", "", ctx);
 }
 
 void TKafkaSaslAuthActor::Handle(TEvPrivate::TEvTokenReady::TPtr& ev, const NActors::TActorContext& /*ctx*/) {
+    auto entries = NKikimr::NGRpcProxy::V1::GetTicketParserEntries(DatabaseId, FolderId);
     Send(NKikimr::MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
         .Database = ev->Get()->Database,
         .Ticket = ev->Get()->LoginResult.token(),
         .PeerName = TStringBuilder() << Address,
+        .Entries = entries
     }));
-}
-
-void TKafkaSaslAuthActor::ReplyIfReady(const NActors::TActorContext& ctx) {
-    if (!Authentificated || !Described) {
-        return;
-    }
-
-    SendResponseAndDie(EKafkaErrors::NONE_ERROR, "", "", ctx);
 }
 
 void TKafkaSaslAuthActor::SendResponseAndDie(EKafkaErrors errorCode, const TString& errorMessage, const TString& details, const NActors::TActorContext& ctx) {
@@ -100,7 +93,7 @@ void TKafkaSaslAuthActor::SendResponseAndDie(EKafkaErrors errorCode, const TStri
         auto authResult = new TEvKafka::TEvAuthResult(EAuthSteps::SUCCESS, evResponse, UserToken, DatabasePath, DatabaseId, FolderId, CloudId, ServiceAccountId, Coordinator, ResourcePath, errorMessage);
         Send(Context->ConnectionId, authResult);
     }
-   
+
     Die(ctx);
 }
 
@@ -109,7 +102,7 @@ void TKafkaSaslAuthActor::Handle(TEvPrivate::TEvAuthFailed::TPtr& ev, const NAct
 }
 
 bool TKafkaSaslAuthActor::TryParseAuthDataTo(TKafkaSaslAuthActor::TAuthData& authData, const NActors::TActorContext& ctx) {
-    if (!AuthenticateRequestData->AuthBytes.has_value()) { 
+    if (!AuthenticateRequestData->AuthBytes.has_value()) {
         SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "", "AuthBytes is empty.",  ctx);
         return false;
     }
@@ -130,7 +123,7 @@ bool TKafkaSaslAuthActor::TryParseAuthDataTo(TKafkaSaslAuthActor::TAuthData& aut
         SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "Database not provided.", "", ctx);
         return false;
     }
-    
+
     authData.UserName = userAndDatabase.substr(0, atPos);
     authData.Database = userAndDatabase.substr(atPos + 1);
     authData.Password = password;
@@ -190,8 +183,7 @@ void TKafkaSaslAuthActor::Handle(NKikimr::TEvTxProxySchemeCache::TEvNavigateKeyS
         if (attr.first == "serverless_rt_coordination_node_path") Coordinator = attr.second;
         if (attr.first == "serverless_rt_base_resource_ru") ResourcePath = attr.second;
     }
-    Described = true;
-    ReplyIfReady(ctx);
+    SendLoginRequest(ClientAuthData, ctx);
 }
 
 } // NKafka

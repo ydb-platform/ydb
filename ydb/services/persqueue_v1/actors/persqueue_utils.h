@@ -73,8 +73,14 @@ void FillIssue(Ydb::Issue::IssueMessage* issue, const Ydb::PersQueue::ErrorCode:
 
 
 static inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>  GetTicketParserEntries(const TString& dbId, const TString& folderId) {
-    static const TVector<TString> permissions = {"ydb.streams.write", "ydb.databases.list",
-                                                 "ydb.databases.create", "ydb.databases.connect"};
+    static const TVector<TString> permissions = {
+        "ydb.databases.list",
+        "ydb.databases.create",
+        "ydb.databases.connect",
+        "ydb.tables.select",
+        "ydb.schemas.getMetadata",
+        "ydb.streams.write"
+    };
     TVector<std::pair<TString, TString>> attributes;
     if (!dbId.empty()) attributes.push_back({"database_id", dbId});
     if (!folderId.empty()) attributes.push_back({"folder_id", folderId});

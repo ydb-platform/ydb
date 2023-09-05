@@ -13,7 +13,7 @@
 
 namespace NKafka {
 
-using namespace NKikimr;    
+using namespace NKikimr;
 
 class TKafkaSaslAuthActor: public NActors::TActorBootstrapped<TKafkaSaslAuthActor> {
 
@@ -73,8 +73,6 @@ private:
     void SendDescribeRequest(const NActors::TActorContext& ctx);
     bool TryParseAuthDataTo(TKafkaSaslAuthActor::TAuthData& authData, const NActors::TActorContext& ctx);
     void SendResponseAndDie(EKafkaErrors errorCode, const TString& errorMessage, const TString& details, const NActors::TActorContext& ctx);
-    
-    void ReplyIfReady(const NActors::TActorContext& ctx);
 
 private:
     const TContext::TPtr Context;
@@ -82,6 +80,8 @@ private:
 
     const TMessagePtr<TSaslAuthenticateRequestData> AuthenticateRequestData;
     const NKikimr::NRawSocket::TNetworkConfig::TSocketAddressType Address;
+
+    TAuthData ClientAuthData;
 
     TString DatabasePath;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
@@ -91,9 +91,6 @@ private:
     TString Coordinator;
     TString ResourcePath;
     TString CloudId;
-
-    bool Authentificated = false;
-    bool Described = false;
 };
 
 } // NKafka

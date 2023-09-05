@@ -692,8 +692,7 @@ public:
                 if (newShard->HasRanges()) {
                     newShards.push_back(std::move(newShard));
                 }
-            }
-            if (state->HasPoints()) {
+            } else if (state->HasPoints()) {
                 while (pointIndex < points.size()) {
                     int intersection = ComparePointAndRange(
                         points[pointIndex].GetCells(),

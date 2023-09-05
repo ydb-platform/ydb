@@ -124,6 +124,8 @@ struct TDqSettings {
             s->SetValue(ToString(*this->name.Get())); \
         }
 
+        // The below pragmas are intended to be used in actors (like Compute Actor, Executer, Worker Managers ...) and TaskRunner only.
+        // If your pragma is used only in graph transformer don't place it here.
         SAVE_SETTING(AnalyticsHopping);
         SAVE_SETTING(MaxRetries);
         SAVE_SETTING(MaxNetworkRetries);
@@ -149,13 +151,11 @@ struct TDqSettings {
         SAVE_SETTING(EnableFullResultWrite);
         SAVE_SETTING(_FallbackOnRuntimeErrors);
         SAVE_SETTING(WorkerFilter);
-        SAVE_SETTING(UseFinalizeByKey);
         SAVE_SETTING(ComputeActorType);
         SAVE_SETTING(WatermarksMode);
         SAVE_SETTING(WatermarksEnableIdlePartitions);
         SAVE_SETTING(WatermarksGranularityMs);
         SAVE_SETTING(WatermarksLateArrivalDelayMs);
-        SAVE_SETTING(UseAggPhases);
         SAVE_SETTING(UseWideChannels);
         SAVE_SETTING(UseWideBlockChannels);
         SAVE_SETTING(UseFastPickleTransport);

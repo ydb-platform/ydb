@@ -21,9 +21,16 @@ message TCredentials {
 // EDataSourceKind enumerates the external data sources
 // supported in the federated query system
 enum EDataSourceKind {
-    DATA_SOURCE_KIND_RESERVED = 0;
+    DATA_SOURCE_KIND_UNSPECIFIED = 0;
     CLICKHOUSE = 1;
     POSTGRESQL = 2;
+}
+
+// EProtocol generalizes various kinds of network protocols supported by different databases.
+enum EProtocol {
+    PROTOCOL_UNSPECIFIED = 0;
+    NATIVE = 1; // CLICKHOUSE, POSTGRESQL
+    HTTP = 2;   // CLICKHOUSE
 }
 
 // TDataSourceInstance helps to identify the instance of a data source to redirect request to.
@@ -39,4 +46,7 @@ message TDataSourceInstance {
     // If true, Connector server will use secure connections to access remote data sources.
     // Certificates will be obtained from the standard system paths.
     bool use_tls = 5;
+    // Allows to specify network protocol that should be used between 
+    // during the connection between Connector and the remote data source
+    EProtocol protocol = 6;
 }

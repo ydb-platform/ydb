@@ -93,10 +93,10 @@ namespace NYql {
                 const TDqSource source(&node);
                 if (const auto maySettings = source.Settings().Maybe<TGenSourceSettings>()) {
                     const auto settings = maySettings.Cast();
-                    const auto& cluster = source.DataSource().Cast<TGenDataSource>().Cluster().StringValue();
+                    const auto& clusterName = source.DataSource().Cast<TGenDataSource>().Cluster().StringValue();
                     const auto& table = settings.Table().StringValue();
                     const auto& token = settings.Token().Name().StringValue();
-                    const auto& endpoint = State_->Configuration->ClusterNamesToClusterConfigs[cluster].endpoint();
+                    const auto& endpoint = State_->Configuration->ClusterNamesToClusterConfigs[clusterName].endpoint();
 
                     Generic::TSource srcDesc;
                     srcDesc.set_token(token);
@@ -109,24 +109,24 @@ namespace NYql {
 
                     YQL_CLOG(INFO, ProviderGeneric)
                         << "Filling source settings"
-                        << ": cluster: " << cluster
+                        << ": cluster: " << clusterName
                         << ", database: " << db
                         << ", table: " << table
                         << ", endpoint: " << endpoint.ShortDebugString();
 
                     const auto& columns = settings.Columns();
 
-                    // prepare select
-                    auto select = srcDesc.mutable_select();
-                    select->mutable_from()->set_table(TString(dbTable));
-
-                    auto items = select->mutable_what()->mutable_items();
-
-                    auto [tableMeta, issue] = State_->GetTable(cluster, table);
+                    auto [tableMeta, issue] = State_->GetTable(clusterName, table);
                     if (issue.has_value()) {
                         ythrow yexception() << "Get table metadata: " << issue.value();
                     }
 
+                    // prepare select
+                    auto select = srcDesc.mutable_select();
+                    select->mutable_from()->set_table(TString(dbTable));
+                    select->mutable_data_source_instance()->CopyFrom(tableMeta.value()->DataSourceInstance);
+
+                    auto items = select->mutable_what()->mutable_items();
                     for (size_t i = 0; i < columns.Size(); i++) {
                         // assign column name
                         auto column = items->Add()->mutable_column();

@@ -58,9 +58,6 @@ message TSchema {
 
 // TListSplitRequest asks Connector to split the requested data into elementary parts.
 message TListSplitsRequest {
-    // Data source instance to connect
-    TDataSourceInstance data_source_instance = 1;
-
     // YQ engine may want to read data from different tables simultaneously.
     // Perhaps Connector will provide consistency guarantees across the tables some day.
     repeated TSelect selects = 2;
@@ -81,6 +78,8 @@ message TListSplitsRequest {
     // this may exceed the memory available for YQ.
     // In such case, it's better to fail fast. This limit helps to implement it:
     uint64 split_number_limit = 5;
+
+    reserved 1;
 }
 
 // TListSplitResponse returns the list of splits for a particular set of table partitions

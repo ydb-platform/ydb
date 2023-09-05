@@ -168,12 +168,11 @@ func listSplits(
 	req := &api_service_protos.TListSplitsRequest{
 		Selects: []*api_service_protos.TSelect{
 			{
-				DataSourceInstance: nil,
+				DataSourceInstance: dsi,
 				What:               &api_service_protos.TSelect_TWhat{Items: items},
 				From:               &api_service_protos.TSelect_TFrom{Table: tableName},
 			},
 		},
-		DataSourceInstance: dsi,
 	}
 	logger.Debug("ListSplits", log.String("request", req.String()))
 

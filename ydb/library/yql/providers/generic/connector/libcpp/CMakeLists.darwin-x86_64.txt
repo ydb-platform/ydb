@@ -7,6 +7,12 @@
 
 
 add_subdirectory(cli)
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
 
 add_library(generic-connector-libcpp)
 target_link_libraries(generic-connector-libcpp PUBLIC
@@ -22,10 +28,16 @@ target_link_libraries(generic-connector-libcpp PUBLIC
   connector-api-service
   yql-public-issue
   library-yql-utils
+  tools-enum_parser-enum_serialization_runtime
 )
 target_sources(generic-connector-libcpp PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/connector/libcpp/client_grpc.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/connector/libcpp/client_mock.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/connector/libcpp/error.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/connector/libcpp/utils.cpp
+)
+generate_enum_serilization(generic-connector-libcpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/generic/connector/libcpp/external_data_source.h
+  INCLUDE_HEADERS
+  ydb/library/yql/providers/generic/connector/libcpp/external_data_source.h
 )

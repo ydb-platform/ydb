@@ -20,6 +20,8 @@ PEERDIR(
     ydb/library/yql/utils
 )
 
+GENERATE_ENUM_SERIALIZATION(external_data_source.h)
+
 END()
 
 RECURSE(

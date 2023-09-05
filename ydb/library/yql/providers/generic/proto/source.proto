@@ -9,9 +9,11 @@ import "ydb/library/yql/providers/generic/connector/api/common/data_source.proto
 
 message TSource {
     // Token to access database
+    // FIXME: unused field, delete it:
     string token = 1;
     // Prepared Select expression
     NYql.NConnector.NApi.TSelect select = 2;
     // Description of instance to connect
+    // FIXME: DataSourceInstance is already incapsulated into select, delete it:
     NYql.NConnector.NApi.TDataSourceInstance data_source_instance = 3;
 }

@@ -1,3 +1,4 @@
+#include "yql_generic_cluster_config.h"
 #include "yql_generic_dq_integration.h"
 #include "yql_generic_provider_impl.h"
 
@@ -127,6 +128,14 @@ namespace NYql {
 
             IDqIntegration* GetDqIntegration() override {
                 return DqIntegration_.Get();
+            }
+
+            void AddCluster(const TString& clusterName, const THashMap<TString, TString>& properties) override {
+                State_->Configuration->AddCluster(
+                    GenericClusterConfigFromProperties(clusterName, properties),
+                    State_->DatabaseResolver,
+                    State_->DatabaseAuth,
+                    State_->Types->Credentials);
             }
 
         private:

@@ -22,16 +22,13 @@ func ValidateDescribeTableRequest(logger log.Logger, request *api_service_protos
 }
 
 func ValidateListSplitsRequest(logger log.Logger, request *api_service_protos.TListSplitsRequest) error {
-	if err := validateDataSourceInstance(logger, request.GetDataSourceInstance()); err != nil {
-		return fmt.Errorf("validate data source instance: %w", err)
-	}
 
 	if len(request.Selects) == 0 {
 		return fmt.Errorf("empty select list: %w", utils.ErrInvalidRequest)
 	}
 
 	for i, slct := range request.Selects {
-		if err := validateSelect(slct); err != nil {
+		if err := validateSelect(logger, slct); err != nil {
 			return fmt.Errorf("validate select %d: %w", i, err)
 		}
 	}
@@ -47,9 +44,13 @@ func ValidateReadSplitsRequest(logger log.Logger, request *api_service_protos.TR
 	return nil
 }
 
-func validateSelect(slct *api_service_protos.TSelect) error {
+func validateSelect(logger log.Logger, slct *api_service_protos.TSelect) error {
 	if slct == nil {
 		return fmt.Errorf("select is empty: %w", utils.ErrInvalidRequest)
+	}
+
+	if err := validateDataSourceInstance(logger, slct.GetDataSourceInstance()); err != nil {
+		return fmt.Errorf("validate data source instance: %w", err)
 	}
 
 	if len(slct.GetWhat().GetItems()) == 0 {
@@ -60,8 +61,8 @@ func validateSelect(slct *api_service_protos.TSelect) error {
 }
 
 func validateDataSourceInstance(logger log.Logger, dsi *api_common.TDataSourceInstance) error {
-	if dsi.GetKind() == api_common.EDataSourceKind_DATA_SOURCE_KIND_RESERVED {
-		return fmt.Errorf("empty type: %w", utils.ErrInvalidRequest)
+	if dsi.GetKind() == api_common.EDataSourceKind_DATA_SOURCE_KIND_UNSPECIFIED {
+		return fmt.Errorf("empty kind: %w", utils.ErrInvalidRequest)
 	}
 
 	if dsi.Endpoint == nil {
@@ -84,6 +85,10 @@ func validateDataSourceInstance(logger log.Logger, dsi *api_common.TDataSourceIn
 		logger.Info("connector will use secure connection to access data source")
 	} else {
 		logger.Warn("connector will use insecure connection to access data source")
+	}
+
+	if dsi.Protocol == api_common.EProtocol_PROTOCOL_UNSPECIFIED {
+		return fmt.Errorf("protocol field is empty: %w", utils.ErrInvalidRequest)
 	}
 
 	return nil

@@ -572,6 +572,12 @@ message TGenericClusterConfig {
     // to access remote data sources.
     optional bool UseSsl = 12;
 
+    // Name of a particular database within a database cluster
+    optional string DatabaseName = 13;
+
+    // Transport protocol used to establish a network connection with database
+    optional NYql.NConnector.NApi.EProtocol Protocol = 14;
+
     reserved 2, 3, 5;
 }
 

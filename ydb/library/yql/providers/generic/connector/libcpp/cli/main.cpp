@@ -33,12 +33,12 @@ std::shared_ptr<NYql::NConnector::TDescribeTableResult> DescribeTable(NYql::NCon
 std::shared_ptr<NYql::NConnector::TListSplitsResult>
 ListSplits(NYql::NConnector::IClient::TPtr client, const google::protobuf::RepeatedPtrField<Ydb::Column>& columns) {
     NYql::NConnector::NApi::TListSplitsRequest request;
-    SetDatabaseSourceInstance(request.mutable_data_source_instance());
 
     auto select = request.add_selects();
 
     // SELECT *
     std::for_each(columns.begin(), columns.end(), [&](const auto& c) {
+        SetDatabaseSourceInstance(select->mutable_data_source_instance());
         auto item = select->mutable_what()->mutable_items()->Add();
         item->mutable_column()->CopyFrom(c);
     });

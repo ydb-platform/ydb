@@ -40,6 +40,11 @@ func (c *connectionManager) Make(
 		return nil, fmt.Errorf("currently only basic auth is supported")
 	}
 
+	if dsi.Protocol != api_common.EProtocol_HTTP {
+		// FIXME: fix NATIVE protocol in https://st.yandex-team.ru/YQ-2286
+		return nil, fmt.Errorf("can not run ClickHouse connection with protocol '%v'", dsi.Protocol)
+	}
+
 	opts := &clickhouse.Options{
 		Addr: []string{utils.EndpointToString(dsi.GetEndpoint())},
 		Auth: clickhouse.Auth{

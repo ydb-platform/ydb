@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    yql_generic_cluster_config.cpp
     yql_generic_datasink.cpp
     yql_generic_datasink_execution.cpp
     yql_generic_datasink_type_ann.cpp

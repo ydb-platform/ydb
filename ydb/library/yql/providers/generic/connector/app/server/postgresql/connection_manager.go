@@ -47,6 +47,14 @@ func (c *connectionManager) Make(
 	_ log.Logger,
 	dsi *api_common.TDataSourceInstance,
 ) (rdbms.Connection, error) {
+	if dsi.GetCredentials().GetBasic() == nil {
+		return nil, fmt.Errorf("currently only basic auth is supported")
+	}
+
+	if dsi.Protocol != api_common.EProtocol_NATIVE {
+		return nil, fmt.Errorf("can not run PostgreSQL connection with protocol '%v'", dsi.Protocol)
+	}
+
 	connStr := fmt.Sprintf("dbname=%s user=%s password=%s host=%s port=%d",
 		dsi.Database,
 		dsi.Credentials.GetBasic().Username,

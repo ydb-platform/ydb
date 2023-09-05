@@ -112,6 +112,8 @@ namespace NYql {
                 dsi->mutable_endpoint()->CopyFrom(clusterConfig.GetEndpoint());
                 dsi->set_kind(clusterConfig.GetKind());
                 dsi->mutable_credentials()->CopyFrom(clusterConfig.GetCredentials());
+                dsi->set_use_tls(clusterConfig.GetUseSsl());
+                dsi->set_protocol(clusterConfig.GetProtocol());
 
                 const auto& table = item.second;
                 TStringBuf db, dbTable;
@@ -122,8 +124,6 @@ namespace NYql {
 
                 dsi->set_database(TString(db));
                 request.set_table(TString(dbTable));
-
-                dsi->set_use_tls(clusterConfig.GetUseSsl());
 
                 // NOTE: errors will be checked further in DoApplyAsyncChanges
                 Results_.emplace(item, TGenericTableDescription(request.data_source_instance(), State_->GenericClient->DescribeTable(request)));

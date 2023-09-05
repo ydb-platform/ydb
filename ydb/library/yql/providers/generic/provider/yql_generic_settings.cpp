@@ -47,7 +47,12 @@ namespace NYql {
         // The only reason for provider to store these tokens is
         // to keep compatibility with YQL engine.
         // Real credentials are stored in TGenericClusterConfig.
-        Tokens[clusterConfig.GetName()] = " ";
+        Tokens[clusterConfig.GetName()] =
+            TStructuredTokenBuilder()
+                .SetBasicAuth(
+                    clusterConfig.GetCredentials().basic().username(),
+                    clusterConfig.GetCredentials().basic().password())
+                .ToJson();
 
         // preserve cluster config entirely for the further use
         ClusterNamesToClusterConfigs[clusterName] = clusterConfig;

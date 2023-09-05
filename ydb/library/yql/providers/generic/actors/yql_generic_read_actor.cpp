@@ -75,7 +75,6 @@ namespace NYql::NDq {
 
             NConnector::NApi::TListSplitsRequest listSplitsRequest;
             listSplitsRequest.mutable_selects()->Add()->CopyFrom(Select_);
-            listSplitsRequest.mutable_data_source_instance()->CopyFrom(DataSourceInstance_);
 
             auto listSplitsResult = ConnectorClient_->ListSplits(listSplitsRequest);
             if (!NConnector::ErrorIsSuccess(listSplitsResult->Error)) {

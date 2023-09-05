@@ -72,7 +72,7 @@ func (s *Server) DescribeTable(
 }
 
 func (s *Server) ListSplits(request *api_service_protos.TListSplitsRequest, stream api_service.Connector_ListSplitsServer) error {
-	logger := utils.AnnotateLogger(s.logger, "ListSplits", request.DataSourceInstance)
+	logger := utils.AnnotateLogger(s.logger, "ListSplits", nil)
 	logger.Info("request handling started", log.Int("total selects", len(request.Selects)))
 
 	if err := ValidateListSplitsRequest(logger, request); err != nil {
@@ -84,23 +84,36 @@ func (s *Server) ListSplits(request *api_service_protos.TListSplitsRequest, stre
 	totalSplits := 0
 
 	for _, slct := range request.Selects {
-		logger.Debug("responding selects", log.Int("split_id", totalSplits), log.String("select", slct.String()))
-		resp := &api_service_protos.TListSplitsResponse{
-			Error:  utils.NewSuccess(),
-			Splits: []*api_service_protos.TSplit{{Select: slct}},
-		}
-
-		for _, split := range resp.Splits {
-			logger.Debug("responding split", log.Int("split_id", totalSplits), log.String("split", split.Select.String()))
-			totalSplits++
-		}
-
-		if err := s.doListSplitsResponse(logger, stream, resp); err != nil {
+		if err := s.doListSplitsHandleSelect(stream, slct, &totalSplits); err != nil {
+			logger.Error("request handling failed", log.Error(err))
 			return err
 		}
 	}
 
 	logger.Info("request handling finished", log.Int("total_splits", totalSplits))
+	return nil
+}
+
+func (s *Server) doListSplitsHandleSelect(
+	stream api_service.Connector_ListSplitsServer,
+	slct *api_service_protos.TSelect,
+	totalSplits *int,
+) error {
+	logger := utils.AnnotateLogger(s.logger, "ListSplits", slct.DataSourceInstance)
+	logger.Debug("responding selects", log.Int("split_id", *totalSplits), log.String("select", slct.String()))
+	resp := &api_service_protos.TListSplitsResponse{
+		Error:  utils.NewSuccess(),
+		Splits: []*api_service_protos.TSplit{{Select: slct}},
+	}
+
+	for _, split := range resp.Splits {
+		logger.Debug("responding split", log.Int("split_id", *totalSplits), log.String("split", split.Select.String()))
+		*totalSplits++
+	}
+
+	if err := s.doListSplitsResponse(logger, stream, resp); err != nil {
+		return err
+	}
 
 	return nil
 }

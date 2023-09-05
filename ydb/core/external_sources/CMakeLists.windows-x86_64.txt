@@ -15,6 +15,7 @@ target_link_libraries(ydb-core-external_sources PUBLIC
   library-cpp-scheme
   ydb-core-base
   ydb-core-protos
+  generic-connector-libcpp
   providers-s3-path_generator
   cpp-client-ydb_params
   cpp-client-ydb_value

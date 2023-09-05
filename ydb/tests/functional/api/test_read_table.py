@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import logging
 import pytest
+import time
 
 from hamcrest import assert_that, equal_to, less_than_or_equal_to, is_, none
 from concurrent import futures
@@ -290,9 +291,12 @@ class TestReadTableTruncatedResults(AbstractReadTableTest):
 
                 prev_key = row.Key1
 
+        self._kill_tablets()
+        has_success = False
         for _ in range(6):
             stream = self._prepare_stream(method_kind, session, table_name)
             data_chunks, total_rows, iteration = [], 0, 0
+            failed = False
             while True:
                 iteration += 1
 
@@ -302,7 +306,15 @@ class TestReadTableTruncatedResults(AbstractReadTableTest):
                     total_rows += len(data.rows)
                 except StopIteration:
                     break
+                except ydb.Unavailable:
+                    failed = True
+                    break
 
+            if failed:
+                time.sleep(1)
+                continue
+
+            has_success = True
             assert_that(
                 data_chunks[-1].truncated,
                 equal_to(
@@ -316,6 +328,8 @@ class TestReadTableTruncatedResults(AbstractReadTableTest):
                     len(prepared_data)
                 )
             )
+
+        assert has_success, "Unable to iterate over table after multiple iterations"
 
 
 class TestReadTableWithTabletKills(AbstractReadTableTest):

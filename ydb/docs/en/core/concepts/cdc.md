@@ -138,6 +138,8 @@ A [JSON](https://en.wikipedia.org/wiki/JSON) record has the following structure:
 
 {% endnote %}
 
+{% if audience == "tech" %}
+
 ### Amazon DynamoDB-compatible JSON format {#dynamodb-streams-json-record-structure}
 
 For [Amazon DynamoDB](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html)-compatible document tables, {{ ydb-short-name }} can generate change records in the [Amazon DynamoDB Streams](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Streams.html)-compatible format.
@@ -149,6 +151,8 @@ The record structure is the same as for [Amazon DynamoDB Streams](https://docs.a
 * `eventName`: `INSERT`, `MODIFY`, or `REMOVE`. You can only use `INSERT` in the `NEW_AND_OLD_IMAGES` mode.
 * `eventSource`: Includes the `ydb:document-table` string.
 * `eventVersion`: Includes the `1.0` string.
+
+{% endif %}
 
 ## Record retention period {#retention-period}
 

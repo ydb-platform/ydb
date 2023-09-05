@@ -138,6 +138,8 @@ Change Data Capture (CDC) обеспечивает захват изменени
 
 {% endnote %}
 
+{% if audience == "tech" %}
+
 ### JSON-формат, совместимый с Amazon DynamoDB Streams {#dynamodb-streams-json-record-structure}
 
 Для документных таблиц, совместимых с [Amazon DynamoDB](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Introduction.html), {{ ydb-short-name }} может генерировать записи об изменениях в формате, совместимом с [Amazon DynamoDB Streams](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Streams.html).
@@ -149,6 +151,8 @@ Change Data Capture (CDC) обеспечивает захват изменени
 * `eventName` — `INSERT`, `MODIFY` или `REMOVE`. Значение `INSERT` допустимо только в режиме `NEW_AND_OLD_IMAGES`.
 * `eventSource` — содержит строку `ydb:document-table`.
 * `eventVersion` — содержит строку `1.0`.
+
+{% endif %}
 
 ## Время хранения записей {#retention-period}
 

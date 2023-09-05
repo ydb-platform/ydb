@@ -15,7 +15,7 @@ static const ui32 LargeTableKeysPerShard = 1000000;
 
 namespace {
     bool IsRetryable(const EStatus& status) {
-        return status == EStatus::OVERLOADED;    
+        return status == EStatus::OVERLOADED;
     }
 }
 
@@ -201,7 +201,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
             auto result = client.BulkUpsert("/Root/LargeTable", rowsBuilder.Build()).ExtractValueSync();
             if (IsRetryable(result.GetStatus())) {
                 continue;
-            } 
+            }
             if (result.GetStatus() != EStatus::SUCCESS) {
                 result.GetIssues().PrintTo(Cerr);
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAVAILABLE, result.GetIssues().ToString());
@@ -238,7 +238,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
         auto session = client.CreateSession().GetValueSync().GetSession();
 
-        bool failedToInsert = false;
+        bool getOutOfSpace = false;
         ui32 batchIdx = 0;
         ui32 cnt = 0;
 
@@ -268,19 +268,21 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
             )"), TTxControl::BeginTx().CommitTx(), paramsBuilder.Build()).ExtractValueSync();
             if (IsRetryable(result.GetStatus())) {
                 continue;
-            } 
+            }
             if (result.GetStatus() != EStatus::SUCCESS) {
                 result.GetIssues().PrintTo(Cerr);
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAVAILABLE, result.GetIssues().ToString());
-                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "OUT_OF_SPACE");
-                failedToInsert = true;
+                if (result.GetIssues().ToString().Contains("OUT_OF_SPACE")) {
+                    getOutOfSpace = true;
+                } else if (result.GetIssues().ToString().Contains("WRONG_SHARD_STATE")) {
+                    // shards are allowed to split
+                    continue;
+                }
                 break;
             }
             ++batchIdx;
         }
-        if (!failedToInsert) {
-            UNIT_FAIL("Successfully inserted " << rowsPerBatch << " x " << batchCount << " lines, each of size " << dataTextSize << "bytes");
-        }
+        UNIT_ASSERT_C(getOutOfSpace, "Successfully inserted " << rowsPerBatch << " x " << batchCount << " lines, each of size " << dataTextSize << "bytes");
     }
 
     Y_UNIT_TEST(TooBigQuery) {

@@ -28,7 +28,7 @@ void TCommandYql::Config(TConfig& config) {
     config.Opts->AddLongOption("stats", "Collect statistics mode [none, basic, full]")
         .RequiredArgument("[String]").StoreResult(&CollectStatsMode);
     config.Opts->AddLongOption("flame-graph", "Path for statistics flame graph image, works only with full stats")
-            .RequiredArgument("[Path]").StoreResult(&FlameGraphFile);
+            .RequiredArgument("[Path]").StoreResult(&FlameGraphPath);
     config.Opts->AddLongOption('s', "script", "Text of script to execute").RequiredArgument("[String]").StoreResult(&Script);
     config.Opts->AddLongOption('f', "file", "Script file").RequiredArgument("PATH").StoreResult(&ScriptFile);
 
@@ -77,6 +77,10 @@ void TCommandYql::Parse(TConfig& config) {
     if (ScriptFile) {
         Script = ReadFromFile(ScriptFile, "script");
     }
+    if(FlameGraphPath && FlameGraphPath->Empty())
+    {
+        throw TMisuseException() << "FlameGraph path can not be empty.";
+    }
     ParseParameters(config);
 }
 
@@ -91,7 +95,7 @@ int TCommandYql::RunCommand(TConfig& config, const TString& script) {
     NScripting::TExecuteYqlRequestSettings settings;
     settings.CollectQueryStats(ParseQueryStatsMode(CollectStatsMode, NTable::ECollectQueryStatsMode::None));
 
-    if (FlameGraphFile && (settings.CollectQueryStats_ != NTable::ECollectQueryStatsMode::Full
+    if (FlameGraphPath && (settings.CollectQueryStats_ != NTable::ECollectQueryStatsMode::Full
                            && settings.CollectQueryStats_ != NTable::ECollectQueryStatsMode::Profile)) {
         throw TMisuseException() << "Flame graph is available for full or profile stats. Current: "
                                     + (CollectStatsMode.Empty() ? "none" : CollectStatsMode) + '.';
@@ -180,11 +184,11 @@ bool TCommandYql::PrintResponse(NScripting::TYqlResultPartIterator& result) {
         TQueryPlanPrinter queryPlanPrinter(OutputFormat, /* analyzeMode */ true);
         queryPlanPrinter.Print(*fullStats);
 
-        if (FlameGraphFile) {
+        if (FlameGraphPath) {
             try {
-                NKikimr::NVisual::GenerateFlameGraphSvg(FlameGraphFile, *fullStats,
+                NKikimr::NVisual::GenerateFlameGraphSvg(*FlameGraphPath, *fullStats,
                                                         NKikimr::NVisual::EFlameGraphType::CPU);
-                Cout << "Resource usage flame graph is successfully saved to " << FlameGraphFile << Endl;
+                Cout << "Resource usage flame graph is successfully saved to " << *FlameGraphPath << Endl;
             }
             catch (const yexception& ex) {
                 Cout << "Can't save resource usage flame graph, error: " << ex.what() << Endl;
@@ -201,4 +205,3 @@ bool TCommandYql::PrintResponse(NScripting::TYqlResultPartIterator& result) {
 
 }
 }
-

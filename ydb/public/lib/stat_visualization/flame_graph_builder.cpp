@@ -1,4 +1,5 @@
 #include "flame_graph_builder.h"
+#include "flame_graph_entry.h"
 #include "svg_script.h"
 #include "stat_visalization_error.h"
 
@@ -12,197 +13,6 @@
 
 namespace NKikimr::NVisual {
 using namespace NJson;
-namespace {
-constexpr float rectHeight = 15;
-constexpr float minElementWidth = 1;
-
-constexpr float interElementOffset = 3;
-
-// Offsets from image limits
-constexpr float horOffset = 10;
-constexpr float vertOffset = 30;
-
-constexpr float textSideOffset = 3;
-constexpr float textTopOffset = 10.5;
-
-constexpr float viewPortWidth = 1200;
-
-TMap<EFlameGraphType, TString> TypeName = {
-        {CPU,          "CPU"},
-        {TIME,         "TIME_MS"},
-        {BYTES_OUTPUT, "OUT_B"},
-        {TASKS,        "TASKS"}
-};
-
-struct TWeight {
-    explicit TWeight(ui64 self)
-            : Self(self) {};
-    ui64 Self;
-    ui64 Total = 0;
-};
-
-struct TCombinedWeights {
-    TCombinedWeights()
-            : Cpu(0), Bytes(0), Ms(0), Tasks(0) {}
-
-    TCombinedWeights(ui64 cpu, ui64 bytes, ui64 ms, ui64 tasks)
-            : Cpu(cpu), Bytes(bytes), Ms(ms), Tasks(tasks) {}
-
-    void AddSelfToTotal() {
-        Cpu.Self = (Cpu.Total + Cpu.Self) ? Cpu.Self : 1;
-        Bytes.Self = (Bytes.Total + Bytes.Self) ? Bytes.Self : 1;
-        Ms.Self = (Ms.Total + Ms.Self) ? Ms.Self : 1;
-        Tasks.Self = (Tasks.Total + Tasks.Self) ? Tasks.Self : 1;
-
-        Cpu.Total += Cpu.Self;
-        Bytes.Total += Bytes.Self;
-        Ms.Total += Ms.Self;
-        Tasks.Total += Tasks.Self;
-    }
-
-    TCombinedWeights operator+(const TCombinedWeights &rhs) {
-        Cpu.Total += rhs.Cpu.Total;
-        Bytes.Total += rhs.Bytes.Total;
-        Ms.Total += rhs.Ms.Total;
-        Tasks.Total += rhs.Tasks.Total;
-        return *this;
-    }
-
-    TWeight operator[](EFlameGraphType type) const {
-        switch (type) {
-            case CPU:
-                return Cpu;
-            case TIME:
-                return Ms;
-            case BYTES_OUTPUT:
-                return Bytes;
-            case TASKS:
-                return Tasks;
-            case ALL:
-                throw yexception() << "Unsupported value for EFlameGraphType";
-        }
-    }
-
-    // Cpu usage from this step stats
-    TWeight Cpu;
-    // Output bytes of step
-    TWeight Bytes;
-    // Time spent
-    TWeight Ms;
-    // Number of tasks used
-    TWeight Tasks;
-
-};
-}
-
-class TPlanGraphEntry {
-public:
-    TPlanGraphEntry(const TString &name, ui64 weightCpu, ui64 weightBytes, ui64 weightMs, ui64 weightTasks)
-            : Name(name)//
-            , Weights(weightCpu, weightBytes, weightMs, weightTasks) {};
-
-    void AddChild(THolder<TPlanGraphEntry> &&child) {
-        Children.emplace_back(std::move(child));
-    }
-
-
-    /// Builds svg for graph, starting from this node
-    void SerializeToSvg(TOFStream &stream, float viewportHeight, EFlameGraphType type) const {
-        auto baseParentWeight = Weights[type];
-        SerializeToSvgImpl(stream,
-                           horOffset, viewportHeight - vertOffset - rectHeight,
-                           baseParentWeight.Total, type, viewPortWidth - 2 * horOffset);
-    }
-
-    /// Returns current depth of graph
-    ui64 CalculateDepth(ui32 curDepth) {
-        ui64 maxDepth = curDepth + 1;
-        for (auto &child: Children) {
-            maxDepth = Max(child->CalculateDepth(curDepth + 1), maxDepth);
-        }
-
-        return maxDepth;
-    }
-
-    /// After graph is build, we can recalculate weights considering children
-    ///
-    /// Not all plan entries has own statistics, for such entries we recalculate the weight as
-    /// weight of all children
-    TCombinedWeights CalculateWeight() {
-        TCombinedWeights childrenWeights;
-        for (auto &child: Children) {
-            childrenWeights = childrenWeights + child->CalculateWeight();
-        }
-
-        Weights = Weights + childrenWeights;
-        Weights.AddSelfToTotal();
-
-        return Weights;
-    }
-
-    /// Returns Svg element corresponding to current graph and calls itself recursively for children
-    float SerializeToSvgImpl(TOFStream &stream,
-                             float xOffset,
-                             float yOffset,
-                             ui64 parentWeight,
-                             EFlameGraphType type,
-                             float parentWidth) const {
-        float width = parentWidth * (static_cast<float>(Weights[type].Total) / static_cast<float>(parentWeight));
-        auto weight = Weights[type];
-
-        float xChildOffset = xOffset;
-        for (const auto &child: Children) {
-            xChildOffset += child->SerializeToSvgImpl(stream, xChildOffset, yOffset - rectHeight - interElementOffset,
-                                                      weight.Total, type, width);
-        }
-
-        // Full description of step
-        TString stepInfo = Sprintf("%s %s(self: %lu, total: %lu)",
-                                   Name.c_str(), TypeName[type].c_str(), weight.Self, weight.Total);
-
-        // Step name(we have to manually cut it, according to available space
-        // 7 is found empirically
-        auto symbolsAvailable = std::lround((width - 2 * textSideOffset) / 7);
-        TString stepName;
-        if (symbolsAvailable <= 2) {
-            stepName = "";
-        } else if (static_cast<ui64>(symbolsAvailable) < Name.length()) {
-            stepName = Name.substr(0, symbolsAvailable - 2) + "..";
-        } else {
-            stepName = Name;
-        }
-
-        // Color falls more to red, if step takes more cpu, than it's children
-        float selfToChildren = 0;
-        if (weight.Total > weight.Self) {
-            selfToChildren =
-                    1 -
-                    Min(static_cast<float>(weight.Self) / static_cast<float>(weight.Total - weight.Self),
-                        1.f);
-        }
-        TString color = Sprintf("rgb(255, %ld, 0)", std::lround(selfToChildren * 255));
-
-        stream << Sprintf(FG_SVG_GRAPH_ELEMENT.data(),
-                          stepInfo.c_str(), // full text
-                          TypeName[type].c_str(),
-                          xOffset, yOffset, // position
-                          Max(width - interElementOffset, minElementWidth), rectHeight, // width and height
-                          color.c_str(), // element background color
-                          xOffset + textSideOffset, yOffset + textTopOffset, // Text position
-                          stepName.c_str() // short text
-        );
-        return width;
-    }
-
-
-public:
-    TString Name;
-
-
-    TCombinedWeights Weights;
-    TVector<THolder<TPlanGraphEntry>> Children;
-};
-
 
 class TFlameGraphBuilder {
 public:
@@ -252,36 +62,43 @@ public:
         }
     }
 
-    void GenerateSvg(EFlameGraphType type, const THolder<TPlanGraphEntry> &planGraph, TOFStream &resultStream) {
+    static void GenerateSvg(EFlameGraphType type, const THolder<TPlanGraphEntry> &planGraph, TOFStream &resultStream) {
         auto depth = planGraph->CalculateDepth(0);
 
-        auto viewPortHeight = (2 * vertOffset) + (static_cast<float>(depth) * (rectHeight + 2 * interElementOffset));
-        viewPortHeight *= static_cast<float>(TypeName.size());
+        auto viewPortHeight = (2 * VERTICAL_OFFSET) + (static_cast<double>(depth) * (RECT_HEIGHT + 2 * INTER_ELEMENT_OFFSET));
+        viewPortHeight *= static_cast<double>(TPlanGraphEntry::PlanGraphTypeName().size());
 
         // offsets for static elements
-        float detailsElementPos = viewPortHeight - 17;
-        constexpr float searchPos = viewPortWidth - 110;
+        constexpr float detailsElementOffset = 17;
+        constexpr float searchPos = VIEWPORT_WIDTH - 110;
 
-
+        TString tmpTaskElements;
+        TStringOutput tmpTaskStream(tmpTaskElements);
         resultStream
-                << Sprintf(FG_SVG_HEADER.data(), viewPortWidth, viewPortHeight, viewPortWidth, viewPortHeight)
+                << Sprintf(FG_SVG_HEADER.data(), VIEWPORT_WIDTH, viewPortHeight, VIEWPORT_WIDTH, viewPortHeight)
                 << FG_SVG_SCRIPT
-                << Sprintf(FG_SVG_BACKGROUND.data(), viewPortWidth, viewPortHeight)
-                << Sprintf(FG_SVG_INFO_BAR.data(), detailsElementPos)
+                << Sprintf(FG_SVG_BACKGROUND.data(), VIEWPORT_WIDTH, viewPortHeight)
                 << FG_SVG_RESET_ZOOM
                 << Sprintf(FG_SVG_SEARCH.data(), searchPos);
         (void) type;
         float i = 1;
-        for (const auto &it: TypeName) {
+        for (const auto &it: TPlanGraphEntry::PlanGraphTypeName()) {
             resultStream << Sprintf(FG_SVG_TITLE.data(),
-                                    vertOffset + (viewPortHeight * (i - 1) / static_cast<float>(TypeName.size())),
+                                    VERTICAL_OFFSET + (viewPortHeight * (i - 1) /
+                                                       static_cast<double>(TPlanGraphEntry::PlanGraphTypeName().size())),
                                     it.second.c_str());
+            auto typedVertOffset =
+                    viewPortHeight * i / static_cast<double>(TPlanGraphEntry::PlanGraphTypeName().size());
             planGraph->SerializeToSvg(resultStream,
-                                      viewPortHeight * i / static_cast<float>(TypeName.size()),
+                                      tmpTaskStream,
+                                      typedVertOffset,
                                       it.first);
+            resultStream << Sprintf(FG_SVG_INFO_BAR.data(), it.second.c_str(), typedVertOffset - detailsElementOffset);
             i += 1;
         }
 
+        resultStream << FG_SVG_TASK_PROFILE_BACKGROUND;
+        resultStream << tmpTaskElements;
         resultStream << FG_SVG_FOOTER;
     }
 
@@ -349,16 +166,22 @@ private:
             }
             stageDescription += "]";
         }
+
+        auto stageId = plan->GetValueByPath("PlanNodeId", '/');
         auto cpuUsage = plan->GetValueByPath("Stats/TotalCpuTimeUs", '/');
         auto outBytes = plan->GetValueByPath("Stats/TotalOutputBytes", '/');
         auto ms = plan->GetValueByPath("Stats/TotalDurationMs", '/');
         auto tasks = plan->GetValueByPath("Stats/TotalTasks", '/');
 
+        auto taskProfile = parseTasksProfile(plan->GetValueByPath("Stats", '/'));
+
         auto planEntry = MakeHolder<TPlanGraphEntry>(stageDescription,
+                                                     stageId ? stageId->GetUIntegerSafe() : 0,
                                                      cpuUsage ? cpuUsage->GetUIntegerSafe() : 0,
                                                      outBytes ? outBytes->GetUIntegerSafe() : 0,
                                                      ms ? ms->GetUIntegerSafe() : 0,
-                                                     tasks ? ms->GetUIntegerSafe() : 0
+                                                     tasks ? tasks->GetUIntegerSafe() : 0,
+                                                     std::move(taskProfile)
         );
 
         TJsonValue children;
@@ -368,6 +191,45 @@ private:
             }
         }
         return planEntry;
+    }
+
+
+    static TVector<TTaskInfo> parseTasksProfile(TJsonValue *stats) {
+        TJsonValue computeNodes;
+        if (!stats || !stats->GetValue("ComputeNodes", &computeNodes)) {
+            return {};
+        }
+        TVector<TTaskInfo> taskInfo;
+        for (auto &node: computeNodes.GetArray()) {
+            TJsonValue tasks;
+            if (!node.GetValue("Tasks", &tasks)) {
+                continue;
+            }
+            for (auto &task: tasks.GetArray()) {
+                auto taskId = task.GetValueByPath("TaskId");
+                if (!taskId) {
+                    continue;
+                }
+                auto cpu = task.GetValueByPath("ComputeTimeUs");
+                auto bytes = task.GetValueByPath("OutputBytes");
+
+                auto startMs = task.GetValueByPath("FirstRowTimeMs");
+                auto endMs = task.GetValueByPath("FinishTimeMs");
+                ui64 duration = 0;
+                if (startMs && endMs) {
+                    duration = endMs->GetIntegerSafe() - startMs->GetUIntegerSafe();
+                }
+                TMap<EFlameGraphType, double> taskStats = {
+                        {EFlameGraphType::CPU,          cpu ? cpu->GetDoubleRobust() : 0},
+                        {EFlameGraphType::TIME,         duration},
+                        {EFlameGraphType::BYTES_OUTPUT, bytes ? bytes->GetDoubleRobust() : 0}
+                };
+
+
+                taskInfo.push_back({.TaskId =  taskId->GetUIntegerSafe(), .TaskStats = taskStats});
+            }
+        }
+        return taskInfo;
     }
 
 private:

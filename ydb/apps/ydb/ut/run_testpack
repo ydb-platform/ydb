@@ -5,13 +5,13 @@ echo Working dir: $CTX_DIR
 cd "$CTX_DIR"
 
 # Start server
+YDB_FEATURE_FLAGS="enable_topic_service_tx" \
 $source_root/ydb/public/tools/ydb_recipe/start.sh $CTX_DIR
 
 # Run test
 set +e
 ARCADIA_BUILD_ROOT="$build_root" YDB_CLI_BINARY="ydb/apps/ydb/ydb" \
 YDB_ENDPOINT=$(cat $CTX_DIR/ydb_endpoint.txt) YDB_DATABASE=$(cat $CTX_DIR/ydb_database.txt) \
-YDB_FEATURE_FLAGS="enable_topic_service_tx" \
 $build_root/ydb/apps/ydb/ut/ydb-apps-ydb-ut $*
 code=$?
 if [ $code -gt 0 ];then

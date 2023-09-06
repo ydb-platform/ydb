@@ -690,6 +690,9 @@ void BuildUserJobFluently(
 
     fluent
         .Item("file_paths").List(preparer.GetFiles())
+        .DoIf(!preparer.GetLayers().empty(), [&] (TFluentMap fluentMap) {
+            fluentMap.Item("layer_paths").List(preparer.GetLayers());
+        })
         .Item("command").Value(preparer.GetCommand())
         .Item("class_name").Value(preparer.GetClassName())
         .DoIf(!userJobSpec.Environment_.empty(), [&] (TFluentMap fluentMap) {

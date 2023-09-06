@@ -398,6 +398,7 @@ TJobPreparer::TJobPreparer(
     : OperationPreparer_(operationPreparer)
     , Spec_(spec)
     , Options_(options)
+    , Layers_(spec.Layers_)
 {
 
     CreateStorage();
@@ -432,6 +433,11 @@ TVector<TRichYPath> TJobPreparer::GetFiles() const
     TVector<TRichYPath> allFiles = CypressFiles_;
     allFiles.insert(allFiles.end(), CachedFiles_.begin(), CachedFiles_.end());
     return allFiles;
+}
+
+TVector<TYPath> TJobPreparer::GetLayers() const
+{
+    return Layers_;
 }
 
 const TString& TJobPreparer::GetClassName() const

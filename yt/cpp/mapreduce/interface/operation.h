@@ -733,6 +733,9 @@ struct TUserJobSpec
     /// @brief Paths to files in Cypress to use in job.
     FLUENT_VECTOR_FIELD(TRichYPath, File);
 
+    /// @brief Porto layers to use in the job. Layers are listed from top to bottom.
+    FLUENT_VECTOR_FIELD(TYPath, Layer);
+
     ///
     /// @brief MemoryLimit specifies how much memory job process can use.
     ///

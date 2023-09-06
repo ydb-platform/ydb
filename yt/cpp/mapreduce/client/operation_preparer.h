@@ -74,6 +74,7 @@ public:
         const TOperationOptions& options);
 
     TVector<TRichYPath> GetFiles() const;
+    TVector<TYPath> GetLayers() const;
     const TString& GetClassName() const;
     const TString& GetCommand() const;
     const TUserJobSpec& GetSpec() const;
@@ -87,6 +88,8 @@ private:
 
     TVector<TRichYPath> CypressFiles_;
     TVector<TRichYPath> CachedFiles_;
+
+    TVector<TYPath> Layers_;
 
     TString ClassName_;
     TString Command_;

@@ -14,13 +14,10 @@ namespace NMiniKQL {
 
 namespace GraceJoin {
 
-static std::atomic<ui64> GlobalTuplesPacked = 0;
-static std::atomic<ui64> GlobalTuplesDeleted = 0;
 
 void TTable::AddTuple(  ui64 * intColumns, char ** stringColumns, ui32 * stringsSizes, NYql::NUdf::TUnboxedValue * iColumns ) {
 
     TotalPacked++;
-    GlobalTuplesPacked++;
 
     TempTuple.clear();
     TempTuple.insert(TempTuple.end(), intColumns, intColumns + NullsBitmapSize_ + NumberOfKeyIntColumns);
@@ -1174,7 +1171,6 @@ TTable::TTable( ui64 numberOfKeyIntColumns, ui64 numberOfKeyStringColumns,
 }
 
 TTable::~TTable() {
-    GlobalTuplesDeleted += TotalPacked;
 };
 
 }

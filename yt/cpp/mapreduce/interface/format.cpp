@@ -59,6 +59,11 @@ TFormat TFormat::Json()
     return TFormat(TNode("json"));
 }
 
+TFormat TFormat::Dsv()
+{
+    return TFormat(TNode("dsv"));
+}
+
 bool TFormat::IsTextYson() const
 {
     if (!Config.IsString() || Config.AsString() != "yson") {

@@ -73,6 +73,11 @@ public:
     /// @see [the doc](https://yt.yandex-team.ru/docs/description/storage/formats.html#JSON)
     static TFormat Json();
 
+    /// @brief Create DSV (TSKV) format.
+    ///
+    /// @see [the doc](https://yt.yandex-team.ru/docs/description/storage/formats.html#DSV)
+    static TFormat Dsv();
+
     /// @brief Create protobuf format for the message specified in template parameter.
     ///
     /// `T` must be inherited from `Message`.

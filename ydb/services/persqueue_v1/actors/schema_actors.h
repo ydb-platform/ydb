@@ -119,6 +119,7 @@ protected:
         TActorId Pipe;
         ui32 NodeId = 0;
         ui32 RetriesLeft = 3;
+        bool ResultRecived = false;
 
         TTabletInfo() = default;
         TTabletInfo(ui64 tabletId)
@@ -139,16 +140,15 @@ public:
 
     void Handle(TEvPQProxy::TEvRequestTablet::TPtr& ev, const TActorContext& ctx);
 
-    void HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
-
     bool ProcessTablets(const NKikimrSchemeOp::TPersQueueGroupDescription& description, const TActorContext& ctx);
 
     void RequestTablet(TTabletInfo& tablet, const TActorContext& ctx);
     void RequestTablet(ui64 tabletId, const TActorContext& ctx);
     void RestartTablet(ui64 tabletId, const TActorContext& ctx, TActorId pipe = {}, const TDuration& delay = TDuration::Zero());
-    void RequestAdditionalInfo(const TActorContext& ctx);
     void RequestBalancer(const TActorContext& ctx);
-    void RequestPartitionsLocationIfRequired(const TActorContext& ctx);
+    void RequestPartitionStatus(const TTabletInfo& tablet, const TActorContext& ctx);
+    void RequestPartitionsLocation(const TActorContext& ctx);
+    void RequestReadSessionsInfo(const TActorContext& ctx);
     void CheckCloseBalancerPipe(const TActorContext& ctx);
 
     bool StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
@@ -166,11 +166,11 @@ public:
     virtual void Reply(const TActorContext& ctx) = 0;
 
 private:
-
     std::map<ui64, TTabletInfo> Tablets;
     ui32 RequestsInfly = 0;
-    bool PendingLocation = false;
+
     bool GotLocation = false;
+    bool GotReadSessions = false;
 
     TActorId* BalancerPipe = nullptr;
 

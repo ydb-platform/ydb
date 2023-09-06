@@ -17,6 +17,12 @@ ADDINCL(
     contrib/libs/isa-l/include
 )
 
+SRCS(
+    ec_base.c
+    ec_highlevel_func.c
+)
+
+IF (ARCH_X86_64)
 IF (OS_DARWIN)
     SRCS(
         ec_multibinary_darwin.asm
@@ -28,8 +34,6 @@ ELSE()
 ENDIF()
 
 SRCS(
-    ec_base.c
-    ec_highlevel_func.c
     gf_vect_mul_sse.asm
     gf_vect_mul_avx.asm
     gf_vect_dot_prod_sse.asm
@@ -77,5 +81,6 @@ SRCS(
     gf_6vect_mad_avx.asm
     gf_6vect_mad_avx2.asm
 )
+ENDIF()
 
 END()

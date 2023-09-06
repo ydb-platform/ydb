@@ -15,15 +15,6 @@ VERSION(1.19.1)
 
 ORIGINAL_SOURCE(https://github.com/c-ares/c-ares/archive/cares-1_19_1.tar.gz)
 
-OPENSOURCE_EXPORT_REPLACEMENT(
-    CMAKE
-    c-ares
-    CMAKE_TARGET
-    c-ares::c-ares
-    CONAN
-    c-ares/1.19.1
-)
-
 PEERDIR(
     contrib/libs/libc_compat
 )

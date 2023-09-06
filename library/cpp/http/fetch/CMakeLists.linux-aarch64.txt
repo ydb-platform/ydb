@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-find_package(ZLIB REQUIRED)
 get_built_tool_path(
   TOOL_enum_parser_bin
   TOOL_enum_parser_dependency
@@ -19,7 +18,7 @@ target_link_libraries(cpp-http-fetch PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  ZLIB::ZLIB
+  contrib-libs-zlib
   library-cpp-charset
   cpp-digest-md5
   cpp-http-misc

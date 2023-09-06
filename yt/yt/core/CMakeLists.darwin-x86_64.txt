@@ -6,9 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-find_package(OpenSSL REQUIRED)
-find_package(ZLIB REQUIRED)
-find_package(c-ares REQUIRED)
 add_subdirectory(crypto)
 add_subdirectory(http)
 add_subdirectory(https)
@@ -23,15 +20,15 @@ target_link_libraries(yt-yt-core PUBLIC
   contrib-libs-cxxsupp
   yutil
   contrib-libs-snappy
-  ZLIB::ZLIB
+  contrib-libs-zlib
   contrib-libs-zstd
   contrib-libs-lzmasdk
   contrib-libs-libbz2
-  c-ares::c-ares
+  contrib-libs-c-ares
   contrib-libs-farmhash
   contrib-libs-yajl
   contrib-libs-lz4
-  OpenSSL::OpenSSL
+  contrib-libs-openssl
   cpp-openssl-init
   cpp-threading-thread_local
   cpp-streams-brotli
@@ -318,15 +315,15 @@ target_link_libraries(yt-yt-core.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   contrib-libs-snappy
-  ZLIB::ZLIB
+  contrib-libs-zlib
   contrib-libs-zstd
   contrib-libs-lzmasdk
   contrib-libs-libbz2
-  c-ares::c-ares
+  contrib-libs-c-ares
   contrib-libs-farmhash
   contrib-libs-yajl
   contrib-libs-lz4
-  OpenSSL::OpenSSL
+  contrib-libs-openssl
   cpp-openssl-init
   cpp-threading-thread_local
   cpp-streams-brotli

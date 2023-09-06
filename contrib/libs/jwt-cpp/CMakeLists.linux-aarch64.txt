@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-find_package(OpenSSL REQUIRED)
 
 add_library(contrib-libs-jwt-cpp INTERFACE)
 target_include_directories(contrib-libs-jwt-cpp INTERFACE
@@ -14,5 +13,5 @@ target_include_directories(contrib-libs-jwt-cpp INTERFACE
 )
 target_link_libraries(contrib-libs-jwt-cpp INTERFACE
   contrib-libs-linux-headers
-  OpenSSL::OpenSSL
+  contrib-libs-openssl
 )

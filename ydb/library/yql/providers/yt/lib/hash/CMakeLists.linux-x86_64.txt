@@ -6,14 +6,13 @@
 # original buildsystem will not be accepted.
 
 
-find_package(OpenSSL REQUIRED)
 
 add_library(yt-lib-hash)
 target_link_libraries(yt-lib-hash PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  OpenSSL::OpenSSL
+  contrib-libs-openssl
   library-yql-ast
   library-yql-utils
   yql-utils-log

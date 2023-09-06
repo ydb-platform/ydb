@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-find_package(OpenSSL REQUIRED)
 
 add_library(restricted-aws-aws-c-cal)
 target_compile_options(restricted-aws-aws-c-cal PRIVATE
@@ -20,7 +19,7 @@ target_include_directories(restricted-aws-aws-c-cal PUBLIC
 )
 target_link_libraries(restricted-aws-aws-c-cal PUBLIC
   contrib-libs-linux-headers
-  OpenSSL::OpenSSL
+  contrib-libs-openssl
   restricted-aws-aws-c-common
 )
 target_sources(restricted-aws-aws-c-cal PRIVATE

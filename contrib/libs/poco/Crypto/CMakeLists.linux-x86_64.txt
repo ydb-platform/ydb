@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-find_package(OpenSSL REQUIRED)
 
 add_library(libs-poco-Crypto)
 target_compile_options(libs-poco-Crypto PRIVATE
@@ -28,7 +27,7 @@ target_include_directories(libs-poco-Crypto PRIVATE
 target_link_libraries(libs-poco-Crypto PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
-  OpenSSL::OpenSSL
+  contrib-libs-openssl
   libs-poco-Foundation
 )
 target_sources(libs-poco-Crypto PRIVATE

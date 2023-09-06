@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-find_package(OpenSSL REQUIRED)
 
 add_library(restricted-aws-s2n)
 target_compile_options(restricted-aws-s2n PRIVATE
@@ -30,7 +29,7 @@ target_include_directories(restricted-aws-s2n PUBLIC
 )
 target_link_libraries(restricted-aws-s2n PUBLIC
   contrib-libs-linux-headers
-  OpenSSL::OpenSSL
+  contrib-libs-openssl
 )
 target_sources(restricted-aws-s2n PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_basemul_avx2.S

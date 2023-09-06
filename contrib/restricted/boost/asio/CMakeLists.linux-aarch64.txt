@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-find_package(OpenSSL REQUIRED)
 
 add_library(restricted-boost-asio INTERFACE)
 target_include_directories(restricted-boost-asio INTERFACE
@@ -16,7 +15,7 @@ target_link_libraries(restricted-boost-asio INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  OpenSSL::OpenSSL
+  contrib-libs-openssl
   restricted-boost-array
   restricted-boost-assert
   restricted-boost-bind

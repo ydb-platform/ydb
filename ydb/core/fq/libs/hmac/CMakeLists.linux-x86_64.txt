@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-find_package(OpenSSL REQUIRED)
 add_subdirectory(ut)
 
 add_library(fq-libs-hmac)
@@ -14,7 +13,7 @@ target_link_libraries(fq-libs-hmac PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  OpenSSL::OpenSSL
+  contrib-libs-openssl
   cpp-string_utils-base64
 )
 target_sources(fq-libs-hmac PRIVATE

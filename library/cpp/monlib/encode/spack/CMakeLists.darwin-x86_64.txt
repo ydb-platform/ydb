@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-find_package(ZLIB REQUIRED)
 
 add_library(monlib-encode-spack)
 target_link_libraries(monlib-encode-spack PUBLIC
@@ -16,7 +15,7 @@ target_link_libraries(monlib-encode-spack PUBLIC
   cpp-monlib-exception
   contrib-libs-lz4
   contrib-libs-xxhash
-  ZLIB::ZLIB
+  contrib-libs-zlib
   contrib-libs-zstd
 )
 target_sources(monlib-encode-spack PRIVATE

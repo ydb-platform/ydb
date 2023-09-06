@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-find_package(OpenSSL REQUIRED)
 
 add_library(cpp-openssl-io)
 target_link_libraries(cpp-openssl-io PUBLIC
@@ -14,7 +13,7 @@ target_link_libraries(cpp-openssl-io PUBLIC
   contrib-libs-cxxsupp
   yutil
   certs
-  OpenSSL::OpenSSL
+  contrib-libs-openssl
   cpp-openssl-init
   cpp-openssl-method
 )

@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-find_package(OpenSSL REQUIRED)
 add_subdirectory(ut)
 get_built_tool_path(
   TOOL_enum_parser_bin
@@ -27,7 +26,7 @@ target_link_libraries(core-ymq-base PUBLIC
   contrib-libs-cxxsupp
   yutil
   tools-enum_parser-enum_serialization_runtime
-  OpenSSL::OpenSSL
+  contrib-libs-openssl
   library-cpp-cgiparam
   library-cpp-ipmath
   library-cpp-lwtrace

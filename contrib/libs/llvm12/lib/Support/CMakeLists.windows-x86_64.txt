@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-find_package(ZLIB REQUIRED)
 
 add_library(llvm12-lib-Support)
 target_compile_options(llvm12-lib-Support PRIVATE
@@ -19,7 +18,7 @@ target_link_libraries(llvm12-lib-Support PUBLIC
   contrib-libs-cxxsupp
   contrib-libs-llvm12
   llvm12-lib-Demangle
-  ZLIB::ZLIB
+  contrib-libs-zlib
   cpp-sanitizer-include
 )
 target_sources(llvm12-lib-Support PRIVATE

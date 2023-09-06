@@ -6,13 +6,12 @@
 # original buildsystem will not be accepted.
 
 
-find_package(OpenSSL REQUIRED)
 
 add_library(cpp-openssl-big_integer)
 target_link_libraries(cpp-openssl-big_integer PUBLIC
   contrib-libs-cxxsupp
   yutil
-  OpenSSL::OpenSSL
+  contrib-libs-openssl
 )
 target_sources(cpp-openssl-big_integer PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/openssl/big_integer/big_integer.cpp

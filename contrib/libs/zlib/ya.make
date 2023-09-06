@@ -10,15 +10,6 @@ VERSION(1.2.13)
 
 ORIGINAL_SOURCE(https://www.zlib.net/fossils/zlib-1.2.13.tar.gz)
 
-OPENSOURCE_EXPORT_REPLACEMENT(
-    CMAKE
-    ZLIB
-    CMAKE_TARGET
-    ZLIB::ZLIB
-    CONAN
-    zlib/1.2.13
-)
-
 ADDINCL(
     GLOBAL contrib/libs/zlib/include
 )

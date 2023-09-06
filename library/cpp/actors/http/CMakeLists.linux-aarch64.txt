@@ -6,8 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-find_package(OpenSSL REQUIRED)
-find_package(ZLIB REQUIRED)
 add_subdirectory(ut)
 
 add_library(cpp-actors-http)
@@ -15,8 +13,8 @@ target_link_libraries(cpp-actors-http PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  OpenSSL::OpenSSL
-  ZLIB::ZLIB
+  contrib-libs-openssl
+  contrib-libs-zlib
   cpp-actors-core
   cpp-actors-interconnect
   library-cpp-dns

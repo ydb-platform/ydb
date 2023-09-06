@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-find_package(OpenSSL REQUIRED)
 add_subdirectory(mock)
 add_subdirectory(ut)
 add_subdirectory(ut_fat)
@@ -17,7 +16,7 @@ target_link_libraries(cpp-actors-interconnect PUBLIC
   contrib-libs-cxxsupp
   yutil
   contrib-libs-libc_compat
-  OpenSSL::OpenSSL
+  contrib-libs-openssl
   contrib-libs-xxhash
   cpp-actors-core
   cpp-actors-dnscachelib

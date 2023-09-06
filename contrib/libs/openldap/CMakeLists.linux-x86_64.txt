@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-find_package(OpenSSL REQUIRED)
 add_subdirectory(libraries)
 
 add_library(contrib-libs-openldap)
@@ -24,7 +23,7 @@ target_include_directories(contrib-libs-openldap PRIVATE
 target_link_libraries(contrib-libs-openldap PUBLIC
   contrib-libs-linux-headers
   openldap-libraries-liblber
-  OpenSSL::OpenSSL
+  contrib-libs-openssl
   contrib-libs-sasl
 )
 target_sources(contrib-libs-openldap PRIVATE

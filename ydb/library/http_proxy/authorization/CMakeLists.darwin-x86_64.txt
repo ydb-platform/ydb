@@ -6,14 +6,13 @@
 # original buildsystem will not be accepted.
 
 
-find_package(OpenSSL REQUIRED)
 add_subdirectory(ut)
 
 add_library(library-http_proxy-authorization)
 target_link_libraries(library-http_proxy-authorization PUBLIC
   contrib-libs-cxxsupp
   yutil
-  OpenSSL::OpenSSL
+  contrib-libs-openssl
   library-cpp-cgiparam
   cpp-http-io
   cpp-http-misc

@@ -13,13 +13,6 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-OPENSOURCE_EXPORT_REPLACEMENT(
-    CMAKE OpenSSL
-    CMAKE_PACKAGE_COMPONENT Crypto
-    CMAKE_TARGET OpenSSL::Crypto
-    CONAN openssl/1.1.1l
-)
-
 PEERDIR(
     contrib/libs/zlib
     library/cpp/sanitizer/include
@@ -33,8 +26,6 @@ ADDINCL(
     contrib/libs/openssl/crypto/modes
     contrib/libs/openssl/include
 )
-
-IF (NOT EXPORT_CMAKE)
 
 IF (OS_LINUX)
     IF (ARCH_ARM64)
@@ -1373,8 +1364,6 @@ IF (ARCADIA_OPENSSL_DISABLE_ARMV7_TICK)
     CFLAGS(
         -DARCADIA_OPENSSL_DISABLE_ARMV7_TICK
     )
-ENDIF()
-
 ENDIF()
 
 END()

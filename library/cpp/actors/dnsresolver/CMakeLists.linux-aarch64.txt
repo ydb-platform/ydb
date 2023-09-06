@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-find_package(c-ares REQUIRED)
 add_subdirectory(ut)
 
 add_library(cpp-actors-dnsresolver)
@@ -15,7 +14,7 @@ target_link_libraries(cpp-actors-dnsresolver PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-actors-core
-  c-ares::c-ares
+  contrib-libs-c-ares
 )
 target_sources(cpp-actors-dnsresolver PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/dnsresolver/dnsresolver.cpp

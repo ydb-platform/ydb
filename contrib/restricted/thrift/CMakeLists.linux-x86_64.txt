@@ -6,8 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-find_package(OpenSSL REQUIRED)
-find_package(ZLIB REQUIRED)
 
 add_library(contrib-restricted-thrift)
 target_compile_options(contrib-restricted-thrift PRIVATE
@@ -25,8 +23,8 @@ target_link_libraries(contrib-restricted-thrift PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   contrib-libs-libevent
-  OpenSSL::OpenSSL
-  ZLIB::ZLIB
+  contrib-libs-openssl
+  contrib-libs-zlib
   restricted-boost-interprocess
   restricted-boost-locale
   restricted-boost-math

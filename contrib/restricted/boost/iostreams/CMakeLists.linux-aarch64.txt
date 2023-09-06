@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-find_package(ZLIB REQUIRED)
 
 add_library(restricted-boost-iostreams)
 target_compile_options(restricted-boost-iostreams PRIVATE
@@ -25,7 +24,7 @@ target_link_libraries(restricted-boost-iostreams PUBLIC
   contrib-libs-cxxsupp
   contrib-libs-libbz2
   contrib-libs-lzma
-  ZLIB::ZLIB
+  contrib-libs-zlib
   contrib-libs-zstd
   restricted-boost-assert
   restricted-boost-config

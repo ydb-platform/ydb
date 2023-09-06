@@ -6,12 +6,6 @@ VERSION(1.1.1t)
 
 ORIGINAL_SOURCE(https://github.com/openssl/openssl/archive/OpenSSL_1_1_1t.tar.gz)
 
-OPENSOURCE_EXPORT_REPLACEMENT(
-    CMAKE OpenSSL
-    CMAKE_TARGET OpenSSL::OpenSSL
-    CONAN openssl/1.1.1s
-)
-
 LICENSE(
     Apache-2.0 AND
     BSD-2-Clause AND
@@ -33,8 +27,6 @@ ADDINCL(
     GLOBAL contrib/libs/openssl/include
     contrib/libs/openssl
 )
-
-IF (NOT EXPORT_CMAKE)
 
 IF (OS_LINUX)
     IF (ARCH_ARM64)
@@ -338,8 +330,6 @@ IF (OS_ANDROID AND ARCH_ARM64)
         -DKECCAK1600_ASM
         -DVPAES_ASM
     )
-ENDIF()
-
 ENDIF()
 
 END()

@@ -6,9 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-find_package(OpenSSL REQUIRED)
-find_package(ZLIB REQUIRED)
-find_package(c-ares REQUIRED)
 add_subdirectory(src)
 add_subdirectory(third_party)
 
@@ -34,13 +31,13 @@ target_link_libraries(contrib-libs-grpc PUBLIC
   contrib-libs-cxxsupp
   yutil
   certs
-  c-ares::c-ares
+  contrib-libs-c-ares
   grpc-third_party-address_sorting
   grpc-third_party-upb
-  OpenSSL::OpenSSL
+  contrib-libs-openssl
   contrib-libs-re2
   contrib-libs-xxhash
-  ZLIB::ZLIB
+  contrib-libs-zlib
   abseil-cpp-tstring-y_absl-algorithm
   abseil-cpp-tstring-y_absl-base
   abseil-cpp-tstring-y_absl-container

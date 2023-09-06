@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-find_package(ZLIB REQUIRED)
 
 add_library(libs-poco-Foundation)
 target_compile_options(libs-poco-Foundation PRIVATE
@@ -34,7 +33,7 @@ target_link_libraries(libs-poco-Foundation PUBLIC
   contrib-libs-cxxsupp
   contrib-libs-double-conversion
   contrib-libs-pcre
-  ZLIB::ZLIB
+  contrib-libs-zlib
 )
 target_sources(libs-poco-Foundation PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Foundation/src/ASCIIEncoding.cpp

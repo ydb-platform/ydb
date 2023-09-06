@@ -6,14 +6,13 @@
 # original buildsystem will not be accepted.
 
 
-find_package(c-ares REQUIRED)
 
 add_library(cpp-actors-dnscachelib)
 target_link_libraries(cpp-actors-dnscachelib PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  c-ares::c-ares
+  contrib-libs-c-ares
   library-cpp-lwtrace
   cpp-deprecated-atomic
 )

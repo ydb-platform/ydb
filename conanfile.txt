@@ -1,8 +1,5 @@
 [requires]
-c-ares/1.19.1
 libiconv/1.15
-openssl/1.1.1s
-zlib/1.2.13
 
 [tool_requires]
 bison/3.8.2

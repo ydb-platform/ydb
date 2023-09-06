@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-find_package(OpenSSL REQUIRED)
 
 add_library(contrib-libs-sasl)
 target_compile_options(contrib-libs-sasl PRIVATE
@@ -27,7 +26,7 @@ target_include_directories(contrib-libs-sasl PRIVATE
 )
 target_link_libraries(contrib-libs-sasl PUBLIC
   contrib-libs-linux-headers
-  OpenSSL::OpenSSL
+  contrib-libs-openssl
 )
 target_sources(contrib-libs-sasl PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/sasl/common/plugin_common.c

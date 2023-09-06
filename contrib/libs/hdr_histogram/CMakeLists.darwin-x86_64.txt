@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-find_package(ZLIB REQUIRED)
 
 add_library(contrib-libs-hdr_histogram)
 target_compile_options(contrib-libs-hdr_histogram PRIVATE
@@ -17,7 +16,7 @@ target_include_directories(contrib-libs-hdr_histogram PRIVATE
 )
 target_link_libraries(contrib-libs-hdr_histogram PUBLIC
   contrib-libs-cxxsupp
-  ZLIB::ZLIB
+  contrib-libs-zlib
 )
 target_sources(contrib-libs-hdr_histogram PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/hdr_histogram/src/hdr_encoding.c

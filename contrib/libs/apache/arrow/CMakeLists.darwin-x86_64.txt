@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-find_package(ZLIB REQUIRED)
 get_built_tool_path(
   TOOL_flatc_bin
   TOOL_flatc_dependency
@@ -92,7 +91,7 @@ target_link_libraries(libs-apache-arrow PUBLIC
   contrib-libs-snappy
   contrib-libs-utf8proc
   contrib-libs-xxhash
-  ZLIB::ZLIB
+  contrib-libs-zlib
   contrib-libs-zstd
   contrib-restricted-fast_float
   contrib-restricted-thrift

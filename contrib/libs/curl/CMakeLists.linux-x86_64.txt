@@ -6,9 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-find_package(OpenSSL REQUIRED)
-find_package(ZLIB REQUIRED)
-find_package(c-ares REQUIRED)
 
 add_library(contrib-libs-curl)
 target_compile_options(contrib-libs-curl PUBLIC
@@ -30,10 +27,10 @@ target_include_directories(contrib-libs-curl PRIVATE
 target_link_libraries(contrib-libs-curl PUBLIC
   contrib-libs-linux-headers
   contrib-libs-libc_compat
-  OpenSSL::OpenSSL
-  ZLIB::ZLIB
+  contrib-libs-openssl
+  contrib-libs-zlib
   contrib-libs-nghttp2
-  c-ares::c-ares
+  contrib-libs-c-ares
 )
 target_sources(contrib-libs-curl PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/altsvc.c

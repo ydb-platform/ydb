@@ -6,7 +6,6 @@
 # original buildsystem will not be accepted.
 
 
-find_package(OpenSSL REQUIRED)
 add_subdirectory(ut)
 add_subdirectory(yc_search_ut)
 get_built_tool_path(
@@ -42,7 +41,7 @@ target_link_libraries(core-ymq-actor PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  OpenSSL::OpenSSL
+  contrib-libs-openssl
   contrib-libs-protobuf
   cpp-actors-core
   cpp-containers-intrusive_rb_tree

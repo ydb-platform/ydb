@@ -75,11 +75,11 @@ public:
         TBridgeYqlPluginOptions bridgeOptions {
             .MRJobBinary = options.MRJobBinary.data(),
             .UdfDirectory = options.UdfDirectory.data(),
-            .ClusterCount = static_cast<int>(bridgeClusters.size()),
+            .ClusterCount = ssize(bridgeClusters),
             .Clusters = bridgeClusters.data(),
             .DefaultCluster = defaultCluster,
             .OperationAttributes = operationAttributesString.data(),
-            .OperationAttributesLength = static_cast<int>(operationAttributesString.size()),
+            .OperationAttributesLength = ssize(operationAttributesString),
             .YTTokenPath = options.YTTokenPath.data(),
             .LogBackend = &options.LogBackend,
         };

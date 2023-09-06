@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(23.5.9)
+VERSION(23.5.26)
 
-ORIGINAL_SOURCE(https://github.com/google/flatbuffers/archive/v23.5.9.tar.gz)
+ORIGINAL_SOURCE(https://github.com/google/flatbuffers/archive/v23.5.26.tar.gz)
 
 LICENSE(Apache-2.0)
 

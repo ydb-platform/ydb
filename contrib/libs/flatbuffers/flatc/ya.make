@@ -53,7 +53,6 @@ SRCS(
     src/idl_gen_json_schema.cpp
     src/idl_gen_kotlin.cpp
     src/idl_gen_lobster.cpp
-    src/idl_gen_lua.cpp
     src/idl_gen_php.cpp
     src/idl_gen_python.cpp
     src/idl_gen_rust.cpp

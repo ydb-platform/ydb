@@ -10,6 +10,23 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TTableBackupManifest::Register(TRegistrar registrar)
+{
+    registrar.Parameter("source_path", &TThis::SourcePath);
+    registrar.Parameter("destination_path", &TThis::DestinationPath);
+    registrar.Parameter("ordered_mode", &TThis::OrderedMode)
+        .Default(NTabletClient::EOrderedTableBackupMode::Exact);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TBackupManifest::Register(TRegistrar registrar)
+{
+    registrar.Parameter("clusters", &TThis::Clusters);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void Serialize(const TMultiTablePartition& partition, NYson::IYsonConsumer* consumer)
 {
     BuildYsonFluently(consumer)

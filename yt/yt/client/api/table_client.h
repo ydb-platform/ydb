@@ -291,13 +291,7 @@ struct TTableBackupManifest
 
     REGISTER_YSON_STRUCT(TTableBackupManifest);
 
-    static void Register(TRegistrar registrar)
-    {
-        registrar.Parameter("source_path", &TThis::SourcePath);
-        registrar.Parameter("destination_path", &TThis::DestinationPath);
-        registrar.Parameter("ordered_mode", &TThis::OrderedMode)
-            .Default(NTabletClient::EOrderedTableBackupMode::Exact);
-    }
+    static void Register(TRegistrar registrar);
 };
 
 DEFINE_REFCOUNTED_TYPE(TTableBackupManifest)
@@ -309,10 +303,7 @@ struct TBackupManifest
 
     REGISTER_YSON_STRUCT(TBackupManifest);
 
-    static void Register(TRegistrar registrar)
-    {
-        registrar.Parameter("clusters", &TThis::Clusters);
-    }
+    static void Register(TRegistrar registrar);
 };
 
 DEFINE_REFCOUNTED_TYPE(TBackupManifest)

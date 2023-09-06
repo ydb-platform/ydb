@@ -105,6 +105,7 @@ target_sources(yt-yt-client PRIVATE
   ${CMAKE_SOURCE_DIR}/yt/yt/client/chunk_client/public.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/client/chunk_client/read_limit.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/client/chunk_client/ready_event_reader_base.cpp
+  ${CMAKE_SOURCE_DIR}/yt/yt/client/file_client/config.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/client/journal_client/public.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/client/journal_client/config.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/client/cypress_client/public.cpp

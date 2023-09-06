@@ -68,6 +68,8 @@ SRCS(
     chunk_client/read_limit.cpp
     chunk_client/ready_event_reader_base.cpp
 
+    file_client/config.cpp
+
     journal_client/public.cpp
     journal_client/config.cpp
 

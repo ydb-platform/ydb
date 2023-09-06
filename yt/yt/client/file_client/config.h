@@ -4,8 +4,6 @@
 
 #include <yt/yt/client/chunk_client/config.h>
 
-#include <yt/yt/core/ytree/yson_serializable.h>
-
 namespace NYT::NFileClient {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -18,12 +16,7 @@ public:
 
     REGISTER_YSON_STRUCT(TFileChunkWriterConfig);
 
-    static void Register(TRegistrar registrar)
-    {
-        registrar.Parameter("block_size", &TThis::BlockSize)
-            .Default(16_MB)
-            .GreaterThan(0);
-    }
+    static void Register(TRegistrar registrar);
 };
 
 DEFINE_REFCOUNTED_TYPE(TFileChunkWriterConfig)

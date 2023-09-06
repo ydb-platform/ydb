@@ -364,7 +364,11 @@ void TPrivatePageCache::PinTouches(TPinned &pinned, ui32 &touchedPages, ui32 &pi
         // would insert only if first seen
         if (pinnedCollection.insert(std::make_pair(page.Id, Pin(&page))).second) {
             pinnedPages++;
-            pinnedMemory += page.Size;
+            // Note: it seems useless to count sticky pages in tx usage
+            // also we want to read index from Env
+            if (!page.Sticky) {
+                pinnedMemory += page.Size;
+            }
         }
         touchedPages++;
     }
@@ -377,7 +381,11 @@ void TPrivatePageCache::PinToLoad(TPinned &pinned, ui32 &pinnedPages, ui64 &pinn
         // would insert only if first seen
         if (pinnedCollection.insert(std::make_pair(page.Id, Pin(&page))).second) {
             pinnedPages++;
-            pinnedMemory += page.Size;
+            // Note: it seems useless to count sticky pages in tx usage
+            // also we want to read index from Env
+            if (!page.Sticky) {
+                pinnedMemory += page.Size;
+            }
         }
     }
 }

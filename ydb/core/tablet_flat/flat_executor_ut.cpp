@@ -5086,5 +5086,83 @@ Y_UNIT_TEST_SUITE(TFlatTableSnapshotWithCommits) {
 
 } // Y_UNIT_TEST_SUITE(TFlatTableSnapshotWithCommits)
 
+Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
+
+    struct TTxPrechargeAndSeek : public ITransaction {
+        ui32 Attempt = 0;
+        bool Pinned = false;
+
+        bool Execute(TTransactionContext &txc, const TActorContext &) override
+        {
+            UNIT_ASSERT_LE(++Attempt, 10);
+
+            const TVector<TRawTypeValue> key{ { NScheme::TInt64::TInstance(100) } };
+            const TVector<NTable::TTag> tags{ { TRowsModel::ColumnKeyId, TRowsModel::ColumnValueId } };
+
+            // no we should have 2 data pages without index, it's ~20*1024 bytes
+            // (index size is ~ bytes)
+            auto precharged = txc.DB.Precharge(TRowsModel::TableId, key, key, tags, 0, 0, 0);
+            if (!precharged) {
+                return false;
+            }
+
+            NTable::TRowState row;
+            auto ready = txc.DB.Select(TRowsModel::TableId, key, tags, row);
+            if (ready == NTable::EReady::Page) {
+                return false;
+            }
+
+            if (!Pinned) {
+                // needed for legal restart
+                txc.RequestMemory(1);
+                // Postpone will pin all touched data
+                Pinned = true;
+                return false;
+            } else {
+                return true;
+            }
+        }
+
+        void Complete(const TActorContext &ctx) override
+        {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
+    Y_UNIT_TEST(TestPrechargeAndSeek) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        auto &appData = env->GetAppData();
+        appData.ResourceProfiles = new TResourceProfiles;
+        TResourceProfiles::TResourceProfile profile;
+        profile.SetTabletType(NKikimrTabletBase::TTabletTypes::Unknown);
+        profile.SetName("zero");
+        // fits two pages without index:
+        profile.SetInitialTxMemory(0);
+        profile.SetTxMemoryLimit(22*1024);
+
+        appData.ResourceProfiles->AddProfile(profile);
+
+        env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+
+        env.SendSync(rows.MakeRows(512, 10*1024));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        env.SendSync(new NFake::TEvExecute(new NTestSuiteTFlatTableExecutorResourceProfile::TTxSetResourceProfile("zero")));
+        env.SendSync(new NFake::TEvExecute{ new TTxPrechargeAndSeek() });
+
+        // If we didn't crash, then assume the test succeeded
+        env.SendSync(new TEvents::TEvPoison, false, true);
+    }
+
+}
+
 } // namespace NTabletFlatExecutor
 } // namespace NKikimr

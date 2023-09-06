@@ -1,14 +1,52 @@
 #pragma once
-#include "../computation/mkql_computation_node_impl.h"
-
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 namespace NKikimr::NMiniKQL::NMatchRecognize {
 
-using TMatchedRange = std::pair<ui64, ui64>;
+///Range that includes starting and ending points
+///Can not be empty
+struct TMatchedRange {
+    TMatchedRange(ui64 index)
+        : From(index)
+        , To(index)
+    {}
+    TMatchedRange(ui64 from, ui64 to)
+        : From(from)
+        , To(to)
+    {}
+    ui64 From;
+    ui64 To;
+};
 
 using TMatchedVar = std::vector<TMatchedRange>;
 
 using TMatchedVars = std::vector<TMatchedVar>;
 
+inline NUdf::TUnboxedValue ToValue(TComputationContext& ctx, const TMatchedRange& range) {
+    std::array<NUdf::TUnboxedValue, 2> array = {NUdf::TUnboxedValuePod{range.From}, NUdf::TUnboxedValuePod{range.To}};
+    return ctx.HolderFactory.RangeAsArray(cbegin(array), cend(array));
+}
+
+inline NUdf::TUnboxedValue ToValue(TComputationContext& ctx, const TMatchedVar& var) {
+    TUnboxedValueVector data;
+    data.reserve(var.size());
+    for (const auto& r: var) {
+        data.push_back(ToValue(ctx, r));
+    }
+    return ctx.HolderFactory.VectorAsVectorHolder(std::move(data));
+}
+
+inline NUdf::TUnboxedValue ToValue(TComputationContext& ctx, const TMatchedVars& vars) {
+    TUnboxedValueVector data;
+    data.reserve(vars.size());
+    for (const auto& v: vars) {
+        data.push_back(ToValue(ctx, v));
+    }
+    return ctx.HolderFactory.VectorAsVectorHolder(std::move(data));
+}
+
+///Optimized reference based implementation to be used as an argument
+///for strict(based on check performed on an optimization stage) lambdas
 class TMatchedVarsValue : public TComputationValue<TMatchedVarsValue> {
     class TRangeValue: public TComputationValue<TRangeValue> {
     public:
@@ -24,8 +62,8 @@ class TMatchedVarsValue : public TComputationValue<TMatchedVarsValue> {
         NUdf::TUnboxedValue GetElement(ui32 index) const override {
             MKQL_ENSURE(index < 2, "Index out of range");
             switch(index) {
-                case 0: return NUdf::TUnboxedValuePod(Range.first);
-                case 1: return NUdf::TUnboxedValuePod(Range.second);
+                case 0: return NUdf::TUnboxedValuePod(Range.From);
+                case 1: return NUdf::TUnboxedValuePod(Range.To);
             }
             return NUdf::TUnboxedValuePod();
         }

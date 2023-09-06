@@ -5,7 +5,7 @@
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_runtime_version.h>
 #include <ydb/library/yql/core/sql_types/match_recognize.h>
-#include <util/generic/array_ref.h>
+#include <deque>
 
 namespace NKikimr::NMiniKQL {
 
@@ -48,8 +48,7 @@ public:
         , DefineInputDataArg(defineInputDataArg)
         , Defines(defines)
         , Cache(cache)
-        , MatchedVars(Defines.size())
-        , HasMatch(false)
+        , CurMatchedVars(Defines.size())
     {
     }
 
@@ -59,10 +58,10 @@ public:
         return false;
     }
     NUdf::TUnboxedValue GetOutputIfReady(TComputationContext& ctx) override {
-        if (!HasMatch)
+        if (Matches.empty())
             return NUdf::TUnboxedValue{};
-        MatchedVarsArg->SetValue(ctx, ctx.HolderFactory.Create<TMatchedVarsValue>(MatchedVars));
-        HasMatch = false;
+        MatchedVarsArg->SetValue(ctx, ToValue(ctx, Matches.front()));
+        Matches.pop_front();
         NUdf::TUnboxedValue *itemsPtr = nullptr;
         const auto result = Cache.NewArray(ctx, OutputColumnOrder.size(), itemsPtr);
         for (auto const& c: OutputColumnOrder) {
@@ -87,20 +86,25 @@ public:
             for (size_t v = 0; v != Defines.size(); ++v) {
                 const auto &d = Defines[v]->GetValue(ctx);
                 if (d && d.GetOptionalValue().Get<bool>()) {
-                    auto &var = MatchedVars[v];
+                    auto &var = CurMatchedVars[v];
                     if (var.empty()) {
                         var.emplace_back(i, i);
-                    } else if (var.back().second + 1 == i) {
-                        ++var.back().second;
+                    } else if (var.back().From + 1 == i) {
+                        ++var.back().To;
                     } else {
                         var.emplace_back(i, i);
                     }
                 }
             }
+            //for the sake of dummy usage assume non-overlapped matches at every 5th row of any partition
+            if (i % 5 == 0) {
+                TMatchedVars temp;
+                temp.swap(CurMatchedVars);
+                Matches.emplace_back(std::move(temp));
+                CurMatchedVars.resize(Defines.size());
+            }
         }
-        //Assume match at the end of each partition;
-        HasMatch = true;
-        return HasMatch;
+        return not Matches.empty();
     }
 private:
     const NUdf::TUnboxedValue PartitionKey;
@@ -111,9 +115,9 @@ private:
     IComputationExternalNode* const DefineInputDataArg;
     const TComputationNodePtrVector& Defines;
     const TContainerCacheOnContext& Cache;
-    TMatchedVars MatchedVars;
-    bool HasMatch;
     TUnboxedValueVector Rows;
+    TMatchedVars CurMatchedVars;
+    std::deque<TMatchedVars> Matches;
 };
 
 class TStreamingMatchRecognize: public IProcessMatchRecognize {
@@ -150,8 +154,8 @@ public:
                 if (var.empty()) {
                     var.emplace_back(RowCount, RowCount);
                 }
-                else if (var.back().second + 1 == RowCount) {
-                    ++var.back().second;
+                else if (var.back().To + 1 == RowCount) {
+                    ++var.back().To;
                 }
                 else {
                     var.emplace_back(RowCount, RowCount);
@@ -258,7 +262,6 @@ public:
         }
     }
 private:
-
     class TState: public TComputationValue<TState> {
         using TPartitionMap = std::unordered_map<TString, std::unique_ptr<IProcessMatchRecognize>>;
     public:

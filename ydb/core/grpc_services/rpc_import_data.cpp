@@ -228,6 +228,10 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
     void ProcessData() {
         const auto& request = *GetProtoRequest();
 
+        if (request.data().empty()) {
+            return Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Empty data");
+        }
+
         auto ev = MakeHolder<TEvDataShard::TEvUploadRowsRequest>();
         ev->Record.SetTableId(KeyDesc->TableId.PathId.LocalPathId);
 
@@ -349,6 +353,10 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
             auto& row = *request.AddRows();
             row.SetKeyColumns(TSerializedCellVec::Serialize(keys));
             row.SetValueColumns(TSerializedCellVec::Serialize(values));
+        }
+
+        if (!shardId) {
+            Reply(StatusIds::INTERNAL_ERROR, TIssuesIds::DEFAULT_ERROR, "Empty shard id");
         }
 
         return shardId;

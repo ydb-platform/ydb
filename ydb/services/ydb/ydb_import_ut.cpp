@@ -97,4 +97,34 @@ Y_UNIT_TEST_SUITE(YdbImport) {
         Cerr << "count returned " << count << " rows" << Endl;
         UNIT_ASSERT_VALUES_EQUAL(count, BATCH_COUNT * BATCH_SIZE);
     }
+
+    Y_UNIT_TEST(EmptyData) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(TStringBuilder()
+            << "localhost:" << server.GetPort()));
+
+        {
+            NYdb::NTable::TTableClient client(driver);
+            auto session = client.GetSession().ExtractValueSync().GetSession();
+
+            auto builder = NYdb::NTable::TTableBuilder()
+                .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                .AddNullableColumn("Value", EPrimitiveType::String)
+                .SetPrimaryKeyColumn("Key");
+
+            auto result = session.CreateTable("/Root/Table", builder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            NYdb::NImport::TImportClient client(driver);
+            NYdb::NImport::TImportYdbDumpDataSettings settings;
+            settings.AppendColumns("Key");
+            settings.AppendColumns("Value");
+
+            auto result = client.ImportData("/Root/Table", "", settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        }
+    }
+
 }

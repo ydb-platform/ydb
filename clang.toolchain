@@ -7,13 +7,10 @@ set(CMAKE_CXX_STANDARD_LIBRARIES "-lc -lm")
 if (CCACHE_PATH)
     set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_PATH}"  CACHE STRING "C++ compiler launcher")
     set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PATH}" CACHE STRING "C compiler launcher")
-
-    # TODO: change ydb/.github/prewarm/build.sh in order to remove the difference with non-cache builds
-    set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -O2 -UNDEBUG"  CACHE STRING "C++ compiler flags")
-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2 -UNDEBUG" CACHE STRING "C compiler flags")
-else()
-    set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -O3 -UNDEBUG"  CACHE STRING "C++ compiler flags")
-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -UNDEBUG" CACHE STRING "C compiler flags")
 endif()
+
+set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -O3 -UNDEBUG"  CACHE STRING "C++ compiler flags")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -UNDEBUG" CACHE STRING "C compiler flags")
+
 set(ENV{CC} clang-14)
 set(ENV{CXX} clang++-14)

@@ -90,7 +90,7 @@ private:
                 double usedCore = PoolElapsedMicrosec[i]->Val() / 10000.;
                 CpuUsedCorePercents[i]->Set(usedCore);
             }
-            if (PoolCurrentThreadCount[i]) {
+            if (PoolCurrentThreadCount[i] && PoolCurrentThreadCount[i]->Val()) {
                 double limitCore = PoolCurrentThreadCount[i]->Val() * 100;
                 CpuLimitCorePercents[i]->Set(limitCore);
             } else {

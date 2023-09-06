@@ -75,7 +75,7 @@ public:
 
     /// @brief Create DSV (TSKV) format.
     ///
-    /// @see [the doc](https://yt.yandex-team.ru/docs/description/storage/formats.html#DSV)
+    /// @see [the doc](https://ytsaurus.tech/docs/en/user-guide/storage/formats.html#dsv)
     static TFormat Dsv();
 
     /// @brief Create protobuf format for the message specified in template parameter.
@@ -93,7 +93,7 @@ public:
 
     /// @brief Is the format protobuf?
     ///
-    /// @see [the doc](https://ytsaurus.tech/docs/en/api/c++/protobuf.html)
+    /// @see [the doc](https://ytsaurus.tech/docs/en/api/c/protobuf.html)
     bool IsProtobuf() const;
 
     /// @brief Is the format YaMR?

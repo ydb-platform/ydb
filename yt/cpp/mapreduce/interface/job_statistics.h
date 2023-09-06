@@ -4,7 +4,7 @@
 /// @file yt/cpp/mapreduce/interface/job_statistics.h
 ///
 /// Header containing classes and utility functions to work with
-/// [job statistics](https://docs.yandex-team.ru/yt/problems/jobstatistics).
+/// [job statistics](https://ytsaurus.tech/docs/ru/user-guide/problems/jobstatistics).
 
 #include "fwd.h"
 
@@ -71,7 +71,7 @@ public:
     ///
     /// @deprecated Use @ref TJobStatistics::TaskName instead.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/mr/jobs#obshaya-shema
+    /// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/jobs#obshaya-shema
     TJobStatistics JobType(TVector<EJobType> filter) const;
 
     ///
@@ -242,7 +242,7 @@ TJobStatisticsEntry<T> TJobStatistics::GetCustomStatisticsAs(TStringBuf name) co
 ////////////////////////////////////////////////////////////////////
 
 ///
-/// @brief Write [custom statistics](https://yt.yandex-team.ru/docs/description/mr/jobs#user_stats).
+/// @brief Write [custom statistics](https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/jobs#user_stats).
 ///
 /// @param path Slash-separated path (length must not exceed 512 bytes).
 /// @param value Value of the statistic.
@@ -252,7 +252,7 @@ TJobStatisticsEntry<T> TJobStatistics::GetCustomStatisticsAs(TStringBuf name) co
 void WriteCustomStatistics(TStringBuf path, i64 value);
 
 ///
-/// @brief Write several [custom statistics](https://yt.yandex-team.ru/docs/description/mr/jobs#user_stats) at once.
+/// @brief Write several [custom statistics](https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/jobs#user_stats) at once.
 ///
 /// @param statistics A tree of map nodes with leaves of type `i64`.
 ///
@@ -260,7 +260,7 @@ void WriteCustomStatistics(TStringBuf path, i64 value);
 void WriteCustomStatistics(const TNode& statistics);
 
 ///
-/// @brief Flush [custom statistics stream](https://yt.yandex-team.ru/docs/description/mr/jobs#user_stats)
+/// @brief Flush [custom statistics stream](https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/jobs#user_stats)
 ///
 void FlushCustomStatisticsStream();
 ////////////////////////////////////////////////////////////////////

@@ -5,7 +5,7 @@
 ///
 /// Header containing interface to run operations in YT
 /// and retrieve information about them.
-/// @see [the doc](https://yt.yandex-team.ru/docs/description/mr/map_reduce_overview.html).
+/// @see [the doc](https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/map_reduce_overview.html).
 
 #include "client_method_options.h"
 #include "errors.h"
@@ -151,7 +151,7 @@ namespace NDetail {
 ///
 /// @brief Auto merge mode.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/mr/automerge
+/// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/automerge
 enum class EAutoMergeMode
 {
     /// Auto merge is disabled.
@@ -173,7 +173,7 @@ enum class EAutoMergeMode
 ///
 /// @brief Options for auto merge operation stage.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/mr/automerge
+/// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/automerge
 class TAutoMergeSpec
 {
 public:
@@ -211,14 +211,14 @@ public:
 
     /// @brief Options for auto merge operation stage.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/mr/automerge
+    /// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/automerge
     FLUENT_FIELD_OPTION(TAutoMergeSpec, AutoMerge);
 };
 
 ///
 /// @brief Resources controlled by scheduler and used by running operations.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/mr/scheduler/scheduler_and_pools#resursy
+/// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/scheduler/scheduler-and-pools#resources
 class TSchedulerResources
 {
 public:
@@ -508,7 +508,7 @@ struct TOperationIOSpec
 ///
 /// @brief Base spec for all operations.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/mr/operations_options
+/// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/operations_options
 template <class TDerived>
 struct TOperationSpecBase
 {
@@ -715,7 +715,7 @@ struct TJobProfilerSpec
 ///
 /// @brief Spec of user job.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/mr/operations_options#user_script_options
+/// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/operations-options#user_script_options
 struct TUserJobSpec
 {
     /// @cond Doxygen_Suppress
@@ -779,7 +779,7 @@ struct TUserJobSpec
     ///
     /// @brief Fraction of @ref NYT::TUserJobSpec::MemoryLimit that job gets at start.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/mr/operations_options#memory_reserve_factor
+    /// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/operations-options#memory_reserve_factor
     FLUENT_FIELD_OPTION(double, MemoryReserveFactor);
 
     ///
@@ -852,7 +852,7 @@ private:
 ///
 /// @brief Spec of Map operation.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/mr/map
+/// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/map
 template <typename TDerived>
 struct TMapOperationSpecBase
     : public TUserOperationSpecBase<TDerived>
@@ -893,7 +893,7 @@ struct TMapOperationSpecBase
 ///
 /// @brief Spec of Map operation.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/mr/map
+/// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/map
 struct TMapOperationSpec
     : public TMapOperationSpecBase<TMapOperationSpec>
     , public TOperationIOSpec<TMapOperationSpec>
@@ -903,7 +903,7 @@ struct TMapOperationSpec
 ///
 /// @brief Spec of raw Map operation.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/mr/map
+/// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/map
 struct TRawMapOperationSpec
     : public TMapOperationSpecBase<TRawMapOperationSpec>
     , public TSimpleRawOperationIoSpec<TRawMapOperationSpec>
@@ -914,7 +914,7 @@ struct TRawMapOperationSpec
 ///
 /// @brief Spec of Reduce operation.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/mr/reduce
+/// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/reduce
 template <typename TDerived>
 struct TReduceOperationSpecBase
     : public TUserOperationSpecBase<TDerived>
@@ -939,7 +939,7 @@ struct TReduceOperationSpecBase
     ///
     /// @brief Columns to join foreign tables by (must be prefix of `ReduceBy`).
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/mr/reduce#foreign_tables
+    /// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/reduce#foreign_tables
     FLUENT_FIELD_OPTION(TSortColumns, JoinBy);
 
     ///
@@ -964,7 +964,7 @@ struct TReduceOperationSpecBase
 ///
 /// @brief Spec of Reduce operation.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/mr/reduce
+/// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/reduce
 struct TReduceOperationSpec
     : public TReduceOperationSpecBase<TReduceOperationSpec>
     , public TOperationIOSpec<TReduceOperationSpec>
@@ -974,7 +974,7 @@ struct TReduceOperationSpec
 ///
 /// @brief Spec of raw Reduce operation.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/mr/reduce
+/// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/reduce
 struct TRawReduceOperationSpec
     : public TReduceOperationSpecBase<TRawReduceOperationSpec>
     , public TSimpleRawOperationIoSpec<TRawReduceOperationSpec>
@@ -988,7 +988,7 @@ struct TRawReduceOperationSpec
 /// @deprecated Instead the user should run a reduce operation
 /// with @ref NYT::TReduceOperationSpec::EnableKeyGuarantee set to `false`.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/mr/reduce#foreign_tables
+/// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/reduce#foreign_tables
 template <typename TDerived>
 struct TJoinReduceOperationSpecBase
     : public TUserOperationSpecBase<TDerived>
@@ -1004,7 +1004,7 @@ struct TJoinReduceOperationSpecBase
     ///
     /// @brief Columns to join foreign tables by (must be prefix of `ReduceBy`).
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/mr/reduce#foreign_tables
+    /// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/reduce#foreign_tables
     FLUENT_FIELD(TSortColumns, JoinBy);
 
     ///
@@ -1028,7 +1028,7 @@ struct TJoinReduceOperationSpecBase
 /// @deprecated Instead the user should run a reduce operation
 /// with @ref NYT::TReduceOperationSpec::EnableKeyGuarantee set to `false`.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/mr/reduce#foreign_tables
+/// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/reduce#foreign_tables
 struct TJoinReduceOperationSpec
     : public TJoinReduceOperationSpecBase<TJoinReduceOperationSpec>
     , public TOperationIOSpec<TJoinReduceOperationSpec>
@@ -1041,7 +1041,7 @@ struct TJoinReduceOperationSpec
 /// @deprecated Instead the user should run a reduce operation
 /// with @ref NYT::TReduceOperationSpec::EnableKeyGuarantee set to `false`.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/mr/reduce#foreign_tables
+/// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/reduce#foreign_tables
 struct TRawJoinReduceOperationSpec
     : public TJoinReduceOperationSpecBase<TRawJoinReduceOperationSpec>
     , public TSimpleRawOperationIoSpec<TRawJoinReduceOperationSpec>
@@ -1052,7 +1052,7 @@ struct TRawJoinReduceOperationSpec
 ///
 /// @brief Spec of MapReduce operation.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/mr/mapreduce
+/// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/mapreduce
 template <typename TDerived>
 struct TMapReduceOperationSpecBase
     : public TUserOperationSpecBase<TDerived>
@@ -1129,7 +1129,7 @@ struct TMapReduceOperationSpecBase
 ///
 /// @brief Spec of MapReduce operation.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/mr/mapreduce
+/// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/mapreduce
 struct TMapReduceOperationSpec
     : public TMapReduceOperationSpecBase<TMapReduceOperationSpec>
     , public TOperationIOSpec<TMapReduceOperationSpec>
@@ -1155,7 +1155,7 @@ struct TMapReduceOperationSpec
 ///
 /// @brief Spec of raw MapReduce operation.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/mr/mapreduce
+/// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/mapreduce
 struct TRawMapReduceOperationSpec
     : public TMapReduceOperationSpecBase<TRawMapReduceOperationSpec>
     , public TRawMapReduceOperationIoSpec<TRawMapReduceOperationSpec>
@@ -1166,7 +1166,7 @@ struct TRawMapReduceOperationSpec
 ///
 /// @brief Schema inference mode.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/storage/static_schema.html#schema_inference
+/// @see https://ytsaurus.tech/docs/en/user-guide/storage/static_schema.html#schema_inference
 enum class ESchemaInferenceMode : int
 {
     FromInput   /* "from_input" */,
@@ -1177,7 +1177,7 @@ enum class ESchemaInferenceMode : int
 ///
 /// @brief Spec of Sort operation.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/mr/sort
+/// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/sort
 struct TSortOperationSpec
     : TOperationSpecBase<TSortOperationSpec>
 {
@@ -1222,7 +1222,7 @@ struct TSortOperationSpec
     ///
     /// @brief Inference mode for output table schema.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/storage/static_schema.html#schema_inference
+    /// @see https://ytsaurus.tech/docs/en/user-guide/storage/static_schema.html#schema_inference
     FLUENT_FIELD_OPTION(ESchemaInferenceMode, SchemaInferenceMode);
 
     ///
@@ -1247,7 +1247,7 @@ enum EMergeMode : int
 ///
 /// @brief Spec of Merge operation.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/mr/merge
+/// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/merge
 struct TMergeOperationSpec
     : TOperationSpecBase<TMergeOperationSpec>
 {
@@ -1296,14 +1296,14 @@ struct TMergeOperationSpec
     ///
     /// @brief Inference mode for output table schema.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/storage/static_schema.html#schema_inference
+    /// @see https://ytsaurus.tech/docs/en/user-guide/storage/static_schema.html#schema_inference
     FLUENT_FIELD_OPTION(ESchemaInferenceMode, SchemaInferenceMode);
 };
 
 ///
 /// @brief Spec of Erase operation.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/mr/erase
+/// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/erase
 struct TEraseOperationSpec
     : TOperationSpecBase<TEraseOperationSpec>
 {
@@ -1322,14 +1322,14 @@ struct TEraseOperationSpec
     ///
     /// @brief Inference mode for output table schema.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/storage/static_schema.html#schema_inference
+    /// @see https://ytsaurus.tech/docs/en/user-guide/storage/static_schema.html#schema_inference
     FLUENT_FIELD_OPTION(ESchemaInferenceMode, SchemaInferenceMode);
 };
 
 ///
 /// @brief Spec of RemoteCopy operation.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/mr/remote_copy
+/// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/remote_copy
 struct TRemoteCopyOperationSpec
     : TOperationSpecBase<TRemoteCopyOperationSpec>
 {
@@ -1356,7 +1356,7 @@ struct TRemoteCopyOperationSpec
     ///
     /// @brief Inference mode for output table schema.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/storage/static_schema.html#schema_inference
+    /// @see https://ytsaurus.tech/docs/en/user-guide/storage/static_schema.html#schema_inference
     FLUENT_FIELD_OPTION(ESchemaInferenceMode, SchemaInferenceMode);
 
     ///
@@ -1381,7 +1381,7 @@ class IVanillaJobBase;
 ///
 /// @brief Task of Vanilla operation.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/mr/vanilla
+/// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/vanilla
 struct TVanillaTask
     : public TOperationOutputSpecBase
     , public TUserJobOutputFormatHintsBase<TVanillaTask>
@@ -1432,7 +1432,7 @@ struct TVanillaTask
 ///
 /// @brief Spec of Vanilla operation.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/mr/vanilla
+/// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/vanilla
 struct TVanillaOperationSpec
     : TUserOperationSpecBase<TVanillaOperationSpec>
 {
@@ -1516,7 +1516,7 @@ struct TOperationOptions
     /// @brief Put all files required by the job into tmpfs.
     ///
     /// This option can be set globally using @ref NYT::TConfig::MountSandboxInTmpfs.
-    /// @see https://yt.yandex-team.ru/docs/problems/woodpeckers
+    /// @see https://ytsaurus.tech/docs/en/problems/woodpeckers
     FLUENT_FIELD_DEFAULT(bool, MountSandboxInTmpfs, false);
 
     ///
@@ -2181,7 +2181,7 @@ private:
 ///
 /// @brief Base interface for vanilla jobs.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/mr/vanilla
+/// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/vanilla
 class IVanillaJobBase
    : public virtual IStructuredJob
 {
@@ -2399,7 +2399,7 @@ struct TOperationEvent
 ///
 /// A field may be `Nothing()` either if it was not requested (see @ref NYT::TGetOperationOptions::AttributeFilter)
 /// or it is not available (i.e. `FinishTime` for a running operation).
-/// @see https://yt.yandex-team.ru/docs/api/commands#get_operation
+/// @see https://ytsaurus.tech/docs/en/api/commands#get_operation
 struct TOperationAttributes
 {
     ///
@@ -2482,7 +2482,7 @@ enum class ECursorDirection
 ///
 /// @brief Options of @ref NYT::IClient::ListOperations command.
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands.html#list_operations
+/// @see https://ytsaurus.tech/docs/en/api/commands.html#list_operations
 struct TListOperationsOptions
 {
     /// @cond Doxygen_Suppress
@@ -2754,7 +2754,7 @@ enum class EJobSortDirection : int
 ///
 /// @brief Options for @ref NYT::IClient::ListJobs.
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands.html#list_jobs
+/// @see https://ytsaurus.tech/docs/en/api/commands.html#list_jobs
 struct TListJobsOptions
 {
     /// @cond Doxygen_Suppress
@@ -2849,7 +2849,7 @@ struct TCoreInfo
 ///
 /// A field may be `Nothing()` if it is not available (i.e. `FinishTime` for a running job).
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands#get_job
+/// @see https://ytsaurus.tech/docs/en/api/commands#get_job
 struct TJobAttributes
 {
     ///
@@ -3086,7 +3086,7 @@ struct IOperation
     /// Operation will be finished immediately.
     /// All results of completed/running jobs will be lost.
     ///
-    /// @see https://yt.yandex-team.ru/docs/api/commands#abort_op
+    /// @see https://ytsaurus.tech/docs/en/api/commands#abort_op
     virtual void AbortOperation() = 0;
 
     ///
@@ -3096,7 +3096,7 @@ struct IOperation
     /// All results of completed jobs will appear in output tables.
     /// All results of running (not completed) jobs will be lost.
     ///
-    /// @see https://yt.yandex-team.ru/docs/api/commands#complete_op
+    /// @see https://ytsaurus.tech/docs/en/api/commands#complete_op
     virtual void CompleteOperation() = 0;
 
     ///
@@ -3104,35 +3104,35 @@ struct IOperation
     ///
     /// Jobs will not be aborted by default, c.f. @ref NYT::TSuspendOperationOptions.
     ///
-    /// @see https://yt.yandex-team.ru/docs/api/commands#suspend_op
+    /// @see https://ytsaurus.tech/docs/en/api/commands#suspend_op
     virtual void SuspendOperation(
         const TSuspendOperationOptions& options = TSuspendOperationOptions()) = 0;
 
     ///
     /// @brief Resume previously suspended operation.
     ///
-    /// @see https://yt.yandex-team.ru/docs/api/commands#resume_op
+    /// @see https://ytsaurus.tech/docs/en/api/commands#resume_op
     virtual void ResumeOperation(
         const TResumeOperationOptions& options = TResumeOperationOptions()) = 0;
 
     ///
     /// @brief Get operation attributes.
     ///
-    /// @see https://yt.yandex-team.ru/docs/api/commands#get_operation
+    /// @see https://ytsaurus.tech/docs/en/api/commands#get_operation
     virtual TOperationAttributes GetAttributes(
         const TGetOperationOptions& options = TGetOperationOptions()) = 0;
 
     ///
     /// @brief Update operation runtime parameters.
     ///
-    /// @see https://yt.yandex-team.ru/docs/api/commands#update_op_parameters
+    /// @see https://ytsaurus.tech/docs/en/api/commands#update_op_parameters
     virtual void UpdateParameters(
         const TUpdateOperationParametersOptions& options = TUpdateOperationParametersOptions()) = 0;
 
     ///
     /// @brief Get job attributes.
     ///
-    /// @see https://yt.yandex-team.ru/docs/api/commands#get_job
+    /// @see https://ytsaurus.tech/docs/en/api/commands#get_job
     virtual TJobAttributes GetJob(
         const TJobId& jobId,
         const TGetJobOptions& options = TGetJobOptions()) = 0;
@@ -3140,7 +3140,7 @@ struct IOperation
     ///
     /// List jobs satisfying given filters (see @ref NYT::TListJobsOptions).
     ///
-    /// @see https://yt.yandex-team.ru/docs/api/commands#list_jobs
+    /// @see https://ytsaurus.tech/docs/en/api/commands#list_jobs
     virtual TListJobsResult ListJobs(
         const TListJobsOptions& options = TListJobsOptions()) = 0;
 };
@@ -3156,7 +3156,7 @@ struct IOperationClient
     /// @param mapper Instance of a job to run.
     /// @param options Optional parameters.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/mr/map
+    /// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/map
     IOperationPtr Map(
         const TMapOperationSpec& spec,
         ::TIntrusivePtr<IMapperBase> mapper,
@@ -3171,7 +3171,7 @@ struct IOperationClient
     /// @param spec Operation spec.
     /// @param options Optional parameters.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/mr/map
+    /// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/map
     IOperationPtr Map(
         ::TIntrusivePtr<IMapperBase> mapper,
         const TOneOrMany<TStructuredTablePath>& input,
@@ -3186,7 +3186,7 @@ struct IOperationClient
     /// @param rawJob Instance of a raw mapper to run.
     /// @param options Optional parameters.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/mr/map
+    /// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/map
     virtual IOperationPtr RawMap(
         const TRawMapOperationSpec& spec,
         ::TIntrusivePtr<IRawJob> rawJob,
@@ -3199,7 +3199,7 @@ struct IOperationClient
     /// @param reducer Instance of a job to run.
     /// @param options Optional parameters.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/mr/reduce
+    /// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/reduce
     IOperationPtr Reduce(
         const TReduceOperationSpec& spec,
         ::TIntrusivePtr<IReducerBase> reducer,
@@ -3215,7 +3215,7 @@ struct IOperationClient
     /// @param spec Operation spec.
     /// @param options Optional parameters.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/mr/reduce
+    /// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/reduce
     IOperationPtr Reduce(
         ::TIntrusivePtr<IReducerBase> reducer,
         const TOneOrMany<TStructuredTablePath>& input,
@@ -3231,7 +3231,7 @@ struct IOperationClient
     /// @param rawJob Instance of a raw reducer to run.
     /// @param options Optional parameters.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/mr/reduce
+    /// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/reduce
     virtual IOperationPtr RawReduce(
         const TRawReduceOperationSpec& spec,
         ::TIntrusivePtr<IRawJob> rawJob,
@@ -3271,7 +3271,7 @@ struct IOperationClient
     /// @param reducer Instance of a reduce job to run.
     /// @param options Optional parameters.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/mr/mapreduce
+    /// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/mapreduce
     IOperationPtr MapReduce(
         const TMapReduceOperationSpec& spec,
         ::TIntrusivePtr<IMapperBase> mapper,
@@ -3287,7 +3287,7 @@ struct IOperationClient
     /// @param reducer Instance of a reduce job to run.
     /// @param options Optional parameters.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/mr/mapreduce
+    /// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/mapreduce
     IOperationPtr MapReduce(
         const TMapReduceOperationSpec& spec,
         ::TIntrusivePtr<IMapperBase> mapper,
@@ -3306,7 +3306,7 @@ struct IOperationClient
     /// @param spec Operation spec.
     /// @param options Optional parameters.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/mr/mapreduce
+    /// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/mapreduce
     IOperationPtr MapReduce(
         ::TIntrusivePtr<IMapperBase> mapper,
         ::TIntrusivePtr<IReducerBase> reducer,
@@ -3328,7 +3328,7 @@ struct IOperationClient
     /// @param spec Operation spec.
     /// @param options Optional parameters.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/mr/mapreduce
+    /// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/mapreduce
     IOperationPtr MapReduce(
         ::TIntrusivePtr<IMapperBase> mapper,
         ::TIntrusivePtr<IReducerBase> reduceCombiner,
@@ -3348,7 +3348,7 @@ struct IOperationClient
     /// @param mapper Instance of a raw reducer to run.
     /// @param options Optional parameters.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/mr/mapreduce
+    /// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/mapreduce
     virtual IOperationPtr RawMapReduce(
         const TRawMapReduceOperationSpec& spec,
         ::TIntrusivePtr<IRawJob> mapper,
@@ -3362,7 +3362,7 @@ struct IOperationClient
     /// @param spec Operation spec.
     /// @param options Optional parameters.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/mr/sort
+    /// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/sort
     virtual IOperationPtr Sort(
         const TSortOperationSpec& spec,
         const TOperationOptions& options = TOperationOptions()) = 0;
@@ -3376,7 +3376,7 @@ struct IOperationClient
     /// @param spec Operation spec.
     /// @param options Optional parameters.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/mr/sort
+    /// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/sort
     IOperationPtr Sort(
         const TOneOrMany<TRichYPath>& input,
         const TRichYPath& output,
@@ -3390,7 +3390,7 @@ struct IOperationClient
     /// @param spec Operation spec.
     /// @param options Optional parameters.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/mr/merge
+    /// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/merge
     virtual IOperationPtr Merge(
         const TMergeOperationSpec& spec,
         const TOperationOptions& options = TOperationOptions()) = 0;
@@ -3401,7 +3401,7 @@ struct IOperationClient
     /// @param spec Operation spec.
     /// @param options Optional parameters.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/mr/erase
+    /// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/erase
     virtual IOperationPtr Erase(
         const TEraseOperationSpec& spec,
         const TOperationOptions& options = TOperationOptions()) = 0;
@@ -3412,7 +3412,7 @@ struct IOperationClient
     /// @param spec Operation spec.
     /// @param options Optional parameters.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/mr/remote_copy
+    /// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/remote_copy
     virtual IOperationPtr RemoteCopy(
         const TRemoteCopyOperationSpec& spec,
         const TOperationOptions& options = TOperationOptions()) = 0;
@@ -3423,7 +3423,7 @@ struct IOperationClient
     /// @param spec Operation spec.
     /// @param options Optional parameters.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/mr/vanilla
+    /// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/vanilla
     virtual IOperationPtr RunVanilla(
         const TVanillaOperationSpec& spec,
         const TOperationOptions& options = TOperationOptions()) = 0;
@@ -3431,14 +3431,14 @@ struct IOperationClient
     ///
     /// @brief Abort operation.
     ///
-    /// @see https://yt.yandex-team.ru/docs/api/commands#abort_op
+    /// @see https://ytsaurus.tech/docs/en/api/commands#abort_operation
     virtual void AbortOperation(
         const TOperationId& operationId) = 0;
 
     ///
     /// @brief Complete operation.
     ///
-    /// @see https://yt.yandex-team.ru/docs/api/commands#complete_op
+    /// @see https://ytsaurus.tech/docs/en/api/commands#complete_operation
     virtual void CompleteOperation(
         const TOperationId& operationId) = 0;
 

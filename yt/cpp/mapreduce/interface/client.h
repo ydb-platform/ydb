@@ -15,7 +15,7 @@
 ///
 /// This library provides only basic functions for working with dynamic tables.
 /// To access full powers of YT dynamic tables one should use
-/// [yt/client](https://a.yandex-team.ru/arc/trunk/arcadia/yt/19_4/yt/client) library.
+/// [yt/client](https://github.com/ytsaurus/ytsaurus/tree/main/yt/yt/client) library.
 ///
 /// Entry points to this library:
 ///   - @ref NYT::Initialize() initialization function for this library;
@@ -23,7 +23,7 @@
 ///   - @ref NYT::CreateClient() function that creates client for particular cluster;
 ///   - @ref NYT::IOperationClient ancestor of @ref NYT::IClient containing the set of methods to run operations.
 ///
-/// Tutorial on how to use this library can be found [here](https://yt.yandex-team.ru/docs/api/c++/examples).
+/// Tutorial on how to use this library can be found [here](https://ytsaurus.tech/docs/en/api/c/description).
 
 #include "fwd.h"
 
@@ -93,7 +93,7 @@ struct TCheckPermissionResponse
 {
     /// @brief Results for the table columns access permissions.
     ///
-    /// @see [Columnar ACL doc](https://yt.yandex-team.ru/docs/description/common/columnar_acl)
+    /// @see [Columnar ACL doc](https://ytsaurus.tech/docs/en/user-guide/storage/columnar-acl)
     TVector<TCheckPermissionResult> Columns;
 };
 
@@ -101,7 +101,7 @@ struct TCheckPermissionResponse
 
 /// @brief Interface representing a lock obtained from @ref NYT::ITransaction::Lock.
 ///
-/// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#start-tx)
+/// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#start_tx)
 class ILock
     : public TThrRefBase
 {
@@ -142,9 +142,9 @@ class IClientBase
 {
 public:
     ///
-    /// @brief Start a [transaction] (https://yt.yandex-team.ru/docs/description/storage/transactions.html#master_transactions).
+    /// @brief Start a [transaction] (https://ytsaurus.tech/docs/en/user-guide/storage/transactions.html#master_transactions).
     ///
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#start-tx)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#start_tx)
     [[nodiscard]] virtual ITransactionPtr StartTransaction(
         const TStartTransactionOptions& options = TStartTransactionOptions()) = 0;
 
@@ -154,7 +154,7 @@ public:
     /// Allows to:
     ///   - switch table between dynamic/static mode
     ///   - or change table schema
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#alter-table)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#alter_table)
     virtual void AlterTable(
         const TYPath& path,
         const TAlterTableOptions& options = TAlterTableOptions()) = 0;
@@ -162,7 +162,7 @@ public:
     ///
     /// @brief Create batch request object that allows to execute several light requests in parallel.
     ///
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#execute-batch)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#execute_batch)
     virtual TBatchRequestPtr CreateBatchRequest() = 0;
 
     /// @brief Get root client outside of all transactions.
@@ -174,7 +174,7 @@ public:
 
 /// @brief Interface representing a master transaction.
 ///
-/// @see [YT doc](https://yt.yandex-team.ru/docs/description/storage/transactions.html#master_transactions)
+/// @see [YT doc](https://ytsaurus.tech/docs/en/user-guide/storage/transactions.html#master_transactions)
 class ITransaction
     : virtual public IClientBase
 {
@@ -197,7 +197,7 @@ public:
     /// If waitable lock cannot be taken it is created in pending state and client can wait until it actually taken.
     /// Check @ref NYT::TLockOptions::Waitable and @ref NYT::ILock::GetAcquiredFuture for more details.
     ///
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#lock)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#lock)
     virtual ILockPtr Lock(
         const TYPath& path,
         ELockMode mode,
@@ -212,7 +212,7 @@ public:
     /// Command is successful even if the node has no locks.
     /// Only explicit (created by @ref NYT::ITransaction::Lock) locks are removed.
     ///
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#unlock)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#unlock)
     virtual void Unlock(
         const TYPath& path,
         const TUnlockOptions& options = TUnlockOptions()) = 0;
@@ -222,7 +222,7 @@ public:
     ///
     /// All changes that are made by transactions become visible globally or to parent transaction.
     ///
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#commit)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#commit_tx)
     virtual void Commit() = 0;
 
     ///
@@ -230,14 +230,14 @@ public:
     ///
     /// All changes made by current transaction are lost.
     ///
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#abort)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#abort_tx)
     virtual void Abort() = 0;
 
     /// @brief Explicitly ping transaction.
     ///
     /// User usually does not need this method (as transactions are pinged automatically,
     /// see @ref NYT::TStartTransactionOptions::AutoPingable).
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#ping)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#ping_tx)
     virtual void Ping() = 0;
 
     ///
@@ -270,7 +270,7 @@ public:
     ///
     /// @brief Mount dynamic table.
     ///
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#mount-table)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#mount_table)
     virtual void MountTable(
         const TYPath& path,
         const TMountTableOptions& options = TMountTableOptions()) = 0;
@@ -278,7 +278,7 @@ public:
     ///
     /// @brief Unmount dynamic table.
     ///
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#unmount-table)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#unmount_table)
     virtual void UnmountTable(
         const TYPath& path,
         const TUnmountTableOptions& options = TUnmountTableOptions()) = 0;
@@ -286,7 +286,7 @@ public:
     ///
     /// @brief Remount dynamic table.
     ///
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#remount-table)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#remount_table)
     virtual void RemountTable(
         const TYPath& path,
         const TRemountTableOptions& options = TRemountTableOptions()) = 0;
@@ -299,7 +299,7 @@ public:
     /// @note this function launches the process of switching, but doesn't wait until switching is accomplished.
     /// Waiting has to be performed by user.
     ///
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#freeze-table)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#freeze_table)
     virtual void FreezeTable(
         const TYPath& path,
         const TFreezeTableOptions& options = TFreezeTableOptions()) = 0;
@@ -310,7 +310,7 @@ public:
     /// @note this function launches the process of switching, but doesn't wait until switching is accomplished.
     /// Waiting has to be performed by user.
     ///
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#unfreeze-table)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#unfreeze_table)
     virtual void UnfreezeTable(
         const TYPath& path,
         const TUnfreezeTableOptions& options = TUnfreezeTableOptions()) = 0;
@@ -318,7 +318,7 @@ public:
     ///
     /// @brief Reshard dynamic table (break it into tablets) by given pivot keys.
     ///
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#reshard-table)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#reshard_table)
     virtual void ReshardTable(
         const TYPath& path,
         const TVector<TKey>& pivotKeys,
@@ -327,7 +327,7 @@ public:
     ///
     /// @brief Reshard dynamic table, breaking it into given number of tablets.
     ///
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#reshard-table)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#reshard_table)
     virtual void ReshardTable(
         const TYPath& path,
         i64 tabletCount,
@@ -336,7 +336,7 @@ public:
     ///
     /// @brief Insert rows into dynamic table.
     ///
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#insert-rows)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#insert_rows)
     virtual void InsertRows(
         const TYPath& path,
         const TNode::TListType& rows,
@@ -345,7 +345,7 @@ public:
     ///
     /// @brief Delete rows from dynamic table.
     ///
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#delete-rows)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#delete_rows)
     virtual void DeleteRows(
         const TYPath& path,
         const TNode::TListType& keys,
@@ -363,7 +363,7 @@ public:
     /// @param rowCount How many trimmed rows will be in the table after command.
     /// @param options Optional parameters.
     ///
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#trim-rows)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#trim_rows)
     virtual void TrimRows(
         const TYPath& path,
         i64 tabletIndex,
@@ -373,16 +373,16 @@ public:
     ///
     /// @brief Lookup rows with given keys from dynamic table.
     ///
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#lookup-rows)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#lookup-rows)
     virtual TNode::TListType LookupRows(
         const TYPath& path,
         const TNode::TListType& keys,
         const TLookupRowsOptions& options = TLookupRowsOptions()) = 0;
 
     ///
-    /// @brief Select rows from dynamic table, using [SQL dialect](https://yt.yandex-team.ru/docs//description/dynamic_tables/dyn_query_language.html).
+    /// @brief Select rows from dynamic table, using [SQL dialect](https://ytsaurus.tech/docs/en//description/dynamic_tables/dyn_query_language.html).
     ///
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#select-rows)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#select-rows)
     virtual TNode::TListType SelectRows(
         const TString& query,
         const TSelectRowsOptions& options = TSelectRowsOptions()) = 0;
@@ -392,7 +392,7 @@ public:
     ///
     /// Allows to enable/disable replica and/or change its mode.
     ///
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#alter-table-replica)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#alter_table_replica)
     virtual void AlterTableReplica(
         const TReplicaId& replicaId,
         const TAlterTableReplicaOptions& alterTableReplicaOptions) = 0;
@@ -400,7 +400,7 @@ public:
     ///
     /// @brief Generate a monotonously increasing master timestamp.
     ///
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#generate-timestamp)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#generate_timestamp)
     virtual ui64 GenerateTimestamp() = 0;
 
     /// Return YT username of current client.
@@ -409,7 +409,7 @@ public:
     ///
     /// @brief Get operation attributes.
     ///
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#get-operation)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#get_operation)
     virtual TOperationAttributes GetOperation(
         const TOperationId& operationId,
         const TGetOperationOptions& options = TGetOperationOptions()) = 0;
@@ -417,14 +417,14 @@ public:
     ///
     /// @brief List operations satisfying given filters.
     ///
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#list-operations)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#list_operations)
     virtual TListOperationsResult ListOperations(
         const TListOperationsOptions& options = TListOperationsOptions()) = 0;
 
     ///
     /// @brief Update operation runtime parameters.
     ///
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#update-op-parameters)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#update_operation_parameters)
     virtual void UpdateOperationParameters(
         const TOperationId& operationId,
         const TUpdateOperationParametersOptions& options) = 0;
@@ -432,7 +432,7 @@ public:
     ///
     /// @brief Get job attributes.
     ///
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#get-job)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#get_job)
     virtual TJobAttributes GetJob(
         const TOperationId& operationId,
         const TJobId& jobId,
@@ -441,7 +441,7 @@ public:
     ///
     /// List attributes of jobs satisfying given filters.
     ///
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#list-jobs)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#list_jobs)
     virtual TListJobsResult ListJobs(
         const TOperationId& operationId,
         const TListJobsOptions& options = TListJobsOptions()) = 0;
@@ -451,7 +451,7 @@ public:
     ///
     /// @ref NYT::TErrorResponse exception is thrown if job is missing.
     ///
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#get-job-input)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#get_job_input)
     virtual IFileReaderPtr GetJobInput(
         const TJobId& jobId,
         const TGetJobInputOptions& options = TGetJobInputOptions()) = 0;
@@ -461,7 +461,7 @@ public:
     ///
     /// @ref NYT::TErrorResponse exception is thrown if it is missing.
     ///
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#get-job-fail-context)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#get_job_fail_context)
     virtual IFileReaderPtr GetJobFailContext(
         const TOperationId& operationId,
         const TJobId& jobId,
@@ -476,9 +476,9 @@ public:
     ///
     /// @note If job stderr exceeds few megabytes YT will store only head and tail of stderr.
     ///
-    /// @see Description of `max_stderr_size` spec option [here](https://yt.yandex-team.ru/docs//description/mr/operations_options.html).
+    /// @see Description of `max_stderr_size` spec option [here](https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/operations-options).
     ///
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#get-job-stderr)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#get_job_stderr)
     virtual IFileReaderPtr GetJobStderr(
         const TOperationId& operationId,
         const TJobId& jobId,
@@ -503,13 +503,13 @@ public:
     /// @brief Check if `user` has `permission` to access a Cypress node at `path`.
     ///
     /// For tables access to columns specified in `options.Columns_` can be checked
-    /// (@see [the doc](https://yt.yandex-team.ru/docs/description/common/columnar_acl)).
+    /// (@see [the doc](https://ytsaurus.tech/docs/en/user-guide/storage/columnar-acl)).
     ///
     /// If access is denied (the returned result has `.Action == ESecurityAction::Deny`)
     /// because of a `deny` rule, the "denying" object name and id
     /// and "denied" subject name an id may be returned.
     ///
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#check_permission)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#check_permission)
     virtual TCheckPermissionResponse CheckPermission(
         const TString& user,
         EPermission permission,
@@ -528,14 +528,14 @@ public:
     ///
     /// Jobs will be aborted.
     ///
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#suspend_op)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#suspend_operation)
     virtual void SuspendOperation(
         const TOperationId& operationId,
         const TSuspendOperationOptions& options = TSuspendOperationOptions()) = 0;
 
     /// @brief Resume previously suspended operation.
     ///
-    /// @see [YT doc](https://yt.yandex-team.ru/docs/api/commands.html#resume_op)
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#resume_operation)
     virtual void ResumeOperation(
         const TOperationId& operationId,
         const TResumeOperationOptions& options = TResumeOperationOptions()) = 0;

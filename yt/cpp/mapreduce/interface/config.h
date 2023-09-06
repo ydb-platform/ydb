@@ -174,7 +174,7 @@ struct TConfig
     TMaybe<int> SocketPriority;
 
     // Framing settings
-    // (cf. https://yt.yandex-team.ru/docs/description/proxy/http_proxy_reference#framing).
+    // (cf. https://ytsaurus.tech/docs/en/user-guide/proxy/http-reference#framing).
     THashSet<TString> CommandsWithFraming;
 
     static bool GetBool(const char* var, bool defaultValue = false);

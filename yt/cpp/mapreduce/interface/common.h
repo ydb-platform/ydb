@@ -348,7 +348,7 @@ struct TOneOrMany
 /// @brief Type of the value that can occur in YT table.
 ///
 /// @ref NYT::TTableSchema
-/// https://yt.yandex-team.ru/docs/description/storage/data_types
+/// https://ytsaurus.tech/docs/en/user-guide/storage/data-types
 enum EValueType : int
 {
     /// Int64, signed integer of 64 bits.
@@ -593,7 +593,7 @@ NTi::TTypePtr ToTypeV3(EValueType type, bool required);
 ///    columnSchema.Name("my-column").Type(VT_INT64); // set name and type
 /// ```
 ///
-/// @ref https://yt.yandex-team.ru/docs/description/storage/static_schema
+/// @ref https://ytsaurus.tech/docs/en/user-guide/storage/static-schema
 class TColumnSchema
 {
 public:
@@ -648,7 +648,7 @@ public:
     ///
     /// @brief Lock group name
     ///
-    /// @ref https://yt.yandex-team.ru/docs/description/dynamic_tables/sorted_dynamic_tables#blokirovka-stroki
+    /// @ref https://ytsaurus.tech/docs/en/user-guide/dynamic-tables/sorted-dynamic-tables#locking-rows
     FLUENT_FIELD_OPTION_ENCAPSULATED(TString, Lock);
 
     /// Expression defining column value
@@ -660,7 +660,7 @@ public:
     ///
     /// @brief Storage group name
     ///
-    /// @ref https://yt.yandex-team.ru/docs/description/storage/static_schema
+    /// @ref https://ytsaurus.tech/docs/en/user-guide/storage/static-schema
     FLUENT_FIELD_OPTION_ENCAPSULATED(TString, Group);
 
     ///
@@ -690,7 +690,7 @@ bool operator==(const TColumnSchema& lhs, const TColumnSchema& rhs);
 ///
 /// @brief Description of table schema
 ///
-/// @see https://yt.yandex-team.ru/docs/description/storage/static_schema
+/// @see https://ytsaurus.tech/docs/en/user-guide/storage/static-schema
 class TTableSchema
 {
 public:
@@ -805,7 +805,7 @@ TTableSchema CreateTableSchema(NTi::TTypePtr type);
 ///
 /// It is a error to use relation in the limit of wrong kind.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/common/ypath#rich_ypath
+/// @see https://ytsaurus.tech/docs/en/user-guide/storage/ypath#rich_ypath
 enum class ERelation
 {
     ///
@@ -840,7 +840,7 @@ enum class ERelation
 ///
 /// @brief Key with relation specifying interval of keys in lower or upper limit of @ref NYT::TReadRange
 ///
-/// @see https://yt.yandex-team.ru/docs/description/common/ypath#rich_ypath
+/// @see https://ytsaurus.tech/docs/en/user-guide/common/ypath#rich_ypath
 struct TKeyBound
 {
     /// @cond Doxygen_Suppress
@@ -858,7 +858,7 @@ struct TKeyBound
 ///
 /// It is actually a variant and must store exactly one field.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/common/ypath#rich_ypath
+/// @see https://ytsaurus.tech/docs/en/user-guide/common/ypath#rich_ypath
 struct TReadLimit
 {
     /// @cond Doxygen_Suppress
@@ -899,7 +899,7 @@ struct TReadLimit
 ///
 /// @brief Range of a table or a file
 ///
-/// @see https://yt.yandex-team.ru/docs/description/common/ypath#rich_ypath
+/// @see https://ytsaurus.tech/docs/en/user-guide/common/ypath#rich_ypath
 struct TReadRange
 {
     using TSelf = TReadRange;
@@ -941,7 +941,7 @@ struct TReadRange
 ///
 /// Allows to specify additional attributes for path used in some operations.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/common/ypath#rich_ypath
+/// @see https://ytsaurus.tech/docs/en/user-guide/storage/ypath#rich_ypath
 struct TRichYPath
 {
     /// @cond Doxygen_Suppress

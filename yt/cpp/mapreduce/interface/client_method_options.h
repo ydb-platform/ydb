@@ -40,7 +40,7 @@ enum ENodeType : int
 ///
 /// @brief Mode of composite type representation in yson.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/storage/data_types#yson
+/// @see https://ytsaurus.tech/docs/en/user-guide/storage/data-types#yson
 enum class EComplexTypeMode : int
 {
     Named /* "named" */,
@@ -50,7 +50,7 @@ enum class EComplexTypeMode : int
 ///
 /// @brief Options for @ref NYT::ICypressClient::Create
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands.html#create
+/// @see https://ytsaurus.tech/docs/en/api/commands.html#create
 struct TCreateOptions
 {
     /// @cond Doxygen_Suppress
@@ -80,7 +80,7 @@ struct TCreateOptions
 ///
 /// @brief Options for @ref NYT::ICypressClient::Remove
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands.html#remove
+/// @see https://ytsaurus.tech/docs/en/api/commands.html#remove
 struct TRemoveOptions
 {
     /// @cond Doxygen_Suppress
@@ -112,7 +112,7 @@ struct TMasterReadOptions
 ///
 /// @brief Options for @ref NYT::ICypressClient::Exists
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands.html#exists
+/// @see https://ytsaurus.tech/docs/en/api/commands.html#exists
 struct TExistsOptions
     : public TMasterReadOptions<TExistsOptions>
 {
@@ -121,7 +121,7 @@ struct TExistsOptions
 ///
 /// @brief Options for @ref NYT::ICypressClient::Get
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands.html#get
+/// @see https://ytsaurus.tech/docs/en/api/commands.html#get
 struct TGetOptions
     : public TMasterReadOptions<TGetOptions>
 {
@@ -135,7 +135,7 @@ struct TGetOptions
 ///
 /// @brief Options for @ref NYT::ICypressClient::Set
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands.html#set
+/// @see https://ytsaurus.tech/docs/en/api/commands.html#set
 struct TSetOptions
 {
     /// @cond Doxygen_Suppress
@@ -152,7 +152,7 @@ struct TSetOptions
 ///
 /// @brief Options for @ref NYT::ICypressClient::MultisetAttributes
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands.html#multiset_attributes
+/// @see https://ytsaurus.tech/docs/en/api/commands.html#multiset_attributes
 struct TMultisetAttributesOptions
 {
     /// @cond Doxygen_Suppress
@@ -165,7 +165,7 @@ struct TMultisetAttributesOptions
 ///
 /// @brief Options for @ref NYT::ICypressClient::List
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands.html#list
+/// @see https://ytsaurus.tech/docs/en/api/commands.html#list
 struct TListOptions
     : public TMasterReadOptions<TListOptions>
 {
@@ -183,7 +183,7 @@ struct TListOptions
 ///
 /// @brief Options for @ref NYT::ICypressClient::Copy
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands.html#copy
+/// @see https://ytsaurus.tech/docs/en/api/commands.html#copy
 struct TCopyOptions
 {
     /// @cond Doxygen_Suppress
@@ -206,7 +206,7 @@ struct TCopyOptions
 ///
 /// @brief Options for @ref NYT::ICypressClient::Move
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands.html#move
+/// @see https://ytsaurus.tech/docs/en/api/commands.html#move
 struct TMoveOptions
 {
     /// @cond Doxygen_Suppress
@@ -229,7 +229,7 @@ struct TMoveOptions
 ///
 /// @brief Options for @ref NYT::ICypressClient::Link
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands.html#link
+/// @see https://ytsaurus.tech/docs/en/api/commands.html#link
 struct TLinkOptions
 {
     /// @cond Doxygen_Suppress
@@ -252,7 +252,7 @@ struct TLinkOptions
 ///
 /// @brief Options for @ref NYT::ICypressClient::Concatenate
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands.html#concatenate
+/// @see https://ytsaurus.tech/docs/en/api/commands.html#concatenate
 struct TConcatenateOptions
 {
     /// @cond Doxygen_Suppress
@@ -266,7 +266,7 @@ struct TConcatenateOptions
 ///
 /// @brief Options for @ref NYT::IIOClient::CreateBlobTableReader
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands.html#read_blob_table
+/// @see https://ytsaurus.tech/docs/en/api/commands.html#read_blob_table
 struct TBlobTableReaderOptions
 {
     /// @cond Doxygen_Suppress
@@ -293,7 +293,7 @@ struct TBlobTableReaderOptions
 ///
 /// @brief Resource limits for operation (or pool)
 ///
-/// @see https://yt.yandex-team.ru/docs/description/mr/scheduler/scheduler_and_pools#resursy
+/// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/scheduler/scheduler-and-pools#resursy
 /// @see NYT::TUpdateOperationParametersOptions
 struct TResourceLimits
 {
@@ -364,7 +364,7 @@ struct TSchedulingOptionsPerPoolTree
 ///
 /// @brief Options for @ref NYT::IOperation::SuspendOperation
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands.html#suspend_op
+/// @see https://ytsaurus.tech/docs/en/api/commands.html#suspend_operation
 struct TSuspendOperationOptions
 {
     /// @cond Doxygen_Suppress
@@ -383,7 +383,7 @@ struct TSuspendOperationOptions
 ///
 /// @note They are empty for now but options might appear in the future.
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands.html#resume_op
+/// @see https://ytsaurus.tech/docs/en/api/commands.html#resume_operation
 struct TResumeOperationOptions
 {
     /// @cond Doxygen_Suppress
@@ -394,7 +394,7 @@ struct TResumeOperationOptions
 ///
 /// @brief Options for @ref NYT::IOperation::UpdateParameters
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands.html#update_op_parameters
+/// @see https://ytsaurus.tech/docs/en/api/commands.html#update_operation_parameters
 struct TUpdateOperationParametersOptions
 {
     /// @cond Doxygen_Suppress
@@ -602,7 +602,7 @@ public:
     ///
     /// @brief Controls how complex types are represented in TNode or yson-strings.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/storage/data_types#yson
+    /// @see https://ytsaurus.tech/docs/en/user-guide/storage/data-types#yson
     FLUENT_FIELD_OPTION(EComplexTypeMode, ComplexTypeMode);
 
     ///
@@ -696,7 +696,7 @@ struct TTableWriterOptions
 ///
 /// @brief Options for @ref NYT::IClient::StartTransaction
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands.html#start_tx
+/// @see https://ytsaurus.tech/docs/en/api/commands.html#start_tx
 struct TStartTransactionOptions
 {
     /// @cond Doxygen_Suppress
@@ -769,7 +769,7 @@ struct TAttachTransactionOptions
 ///
 /// @brief Type of the lock.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/storage/transactions#locking_mode
+/// @see https://ytsaurus.tech/docs/en/user-guide/storage/transactions#locking_mode
 /// @see NYT::ITransaction::Lock
 enum ELockMode : int
 {
@@ -786,7 +786,7 @@ enum ELockMode : int
 ///
 /// @brief Options for locking cypress node
 ///
-/// @see https://yt.yandex-team.ru/docs/description/storage/transactions#locks
+/// @see https://ytsaurus.tech/docs/en/user-guide/storage/transactions#locks
 /// @see NYT::ITransaction::Lock
 struct TLockOptions
 {
@@ -804,19 +804,19 @@ struct TLockOptions
     /// @note Lock method DOES NOT wait until lock is actually acquired.
     /// Waiting should be done using corresponding methods of ILock.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/storage/transactions#locking_queue
+    /// @see https://ytsaurus.tech/docs/en/user-guide/storage/transactions#locking_queue
     FLUENT_FIELD_DEFAULT(bool, Waitable, false);
 
     ///
     /// @brief Also take attribute_key lock.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/storage/transactions#locks_compatibility
+    /// @see https://ytsaurus.tech/docs/en/user-guide/storage/transactions#locks_compatibility
     FLUENT_FIELD_OPTION(TString, AttributeKey);
 
     ///
     /// @brief Also take child_key lock.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/storage/transactions#locks_compatibility
+    /// @see https://ytsaurus.tech/docs/en/user-guide/storage/transactions#locks_compatibility
     FLUENT_FIELD_OPTION(TString, ChildKey);
 };
 
@@ -825,7 +825,7 @@ struct TLockOptions
 ///
 /// @note They are empty for now but options might appear in the future.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/storage/transactions#locks_compatibility
+/// @see https://ytsaurus.tech/docs/en/user-guide/storage/transactions#locks_compatibility
 struct TUnlockOptions
 {
     /// @cond Doxygen_Suppress
@@ -851,7 +851,7 @@ struct TTabletOptions
 ///
 /// @brief Options for @ref NYT::IClient::MountTable
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands#mount_table
+/// @see https://ytsaurus.tech/docs/en/api/commands#mount_table
 struct TMountTableOptions
     : public TTabletOptions<TMountTableOptions>
 {
@@ -869,7 +869,7 @@ struct TMountTableOptions
 ///
 /// @brief Options for @ref NYT::IClient::UnmountTable
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands#unmount_table
+/// @see https://ytsaurus.tech/docs/en/api/commands#unmount_table
 struct TUnmountTableOptions
     : public TTabletOptions<TUnmountTableOptions>
 {
@@ -884,7 +884,7 @@ struct TUnmountTableOptions
 ///
 /// @brief Options for @ref NYT::IClient::RemountTable
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands#remount_table
+/// @see https://ytsaurus.tech/docs/en/api/commands#remount_table
 struct TRemountTableOptions
     : public TTabletOptions<TRemountTableOptions>
 { };
@@ -892,7 +892,7 @@ struct TRemountTableOptions
 ///
 /// @brief Options for @ref NYT::IClient::ReshardTable
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands#reshard_table
+/// @see https://ytsaurus.tech/docs/en/api/commands#reshard_table
 struct TReshardTableOptions
     : public TTabletOptions<TReshardTableOptions>
 { };
@@ -900,7 +900,7 @@ struct TReshardTableOptions
 ///
 /// @brief Options for @ref NYT::IClient::FreezeTable
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands#freeze_table
+/// @see https://ytsaurus.tech/docs/en/api/commands#freeze_table
 struct TFreezeTableOptions
     : public TTabletOptions<TFreezeTableOptions>
 { };
@@ -908,7 +908,7 @@ struct TFreezeTableOptions
 ///
 /// @brief Options for @ref NYT::IClient::UnfreezeTable
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands#unfreeze_table
+/// @see https://ytsaurus.tech/docs/en/api/commands#unfreeze_table
 struct TUnfreezeTableOptions
     : public TTabletOptions<TUnfreezeTableOptions>
 { };
@@ -916,7 +916,7 @@ struct TUnfreezeTableOptions
 ///
 /// @brief Options for @ref NYT::IClient::AlterTable
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands#alter_table
+/// @see https://ytsaurus.tech/docs/en/api/commands#alter_table
 struct TAlterTableOptions
 {
     /// @cond Doxygen_Suppress
@@ -932,14 +932,14 @@ struct TAlterTableOptions
     ///
     /// @brief Changes id of upstream replica on metacluster.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/dynamic_tables/replicated_dynamic_tables
+    /// @see https://ytsaurus.tech/docs/en/description/dynamic_tables/replicated_dynamic_tables
     FLUENT_FIELD_OPTION(TReplicaId, UpstreamReplicaId);
 };
 
 ///
 /// @brief Options for @ref NYT::IClient::LookupRows
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands#lookup_rows
+/// @see https://ytsaurus.tech/docs/en/api/commands#lookup_rows
 struct TLookupRowsOptions
 {
     /// @cond Doxygen_Suppress
@@ -967,7 +967,7 @@ struct TLookupRowsOptions
 ///
 /// @brief Options for @ref NYT::IClient::SelectRows
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands#select_rows
+/// @see https://ytsaurus.tech/docs/en/api/commands#select_rows
 struct TSelectRowsOptions
 {
     /// @cond Doxygen_Suppress
@@ -980,25 +980,25 @@ struct TSelectRowsOptions
     ///
     /// @brief Limitation for number of rows read by single node.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/dynamic_tables/dyn_query_language#ogranicheniya-na-slozhnost-zaprosa-(opcii)
+    /// @see https://ytsaurus.tech/docs/en/user-guide/dynamic-tables/dyn-query-language#query-complexity-limits-options
     FLUENT_FIELD_OPTION(i64, InputRowLimit);
 
     ///
     /// @brief Limitation for number of output rows on single cluster node.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/dynamic_tables/dyn_query_language#ogranicheniya-na-slozhnost-zaprosa-(opcii)
+    /// @see https://ytsaurus.tech/docs/en/user-guide/dynamic-tables/dyn-query-language#query-complexity-limits-options
     FLUENT_FIELD_OPTION(i64, OutputRowLimit);
 
     ///
     /// @brief Maximum row ranges derived from WHERE clause.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/dynamic_tables/dyn_query_language#ogranicheniya-na-slozhnost-zaprosa-(opcii)
+    /// @see https://ytsaurus.tech/docs/en/user-guide/dynamic-tables/dyn-query-language#query-complexity-limits-options
     FLUENT_FIELD_DEFAULT(ui64, RangeExpansionLimit, 1000);
 
     ///
     /// @brief Whether to fail if InputRowLimit or OutputRowLimit is exceeded.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/dynamic_tables/dyn_query_language#ogranicheniya-na-slozhnost-zaprosa-(opcii)
+    /// @see https://ytsaurus.tech/docs/en/user-guide/dynamic-tables/dyn-query-language#query-complexity-limits-options
     FLUENT_FIELD_DEFAULT(bool, FailOnIncompleteResult, true);
 
     /// @brief Enable verbose logging on server side.
@@ -1076,7 +1076,7 @@ struct TCreateClientOptions
 ///
 /// @brief Options for @ref NYT::IBatchRequest::ExecuteBatch
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands#execute_batch
+/// @see https://ytsaurus.tech/docs/en/api/commands#execute_batch
 struct TExecuteBatchOptions
 {
     /// @cond Doxygen_Suppress
@@ -1102,7 +1102,7 @@ struct TExecuteBatchOptions
 /// @brief Durability mode.
 ///
 /// @see NYT::TTabletTransactionOptions::TDurability
-/// @see https://yt.yandex-team.ru/docs/description/dynamic_tables/sorted_dynamic_tables#sohrannost
+/// @see https://ytsaurus.tech/docs/en/user-guide/dynamic-tables/sorted-dynamic-tables
 enum class EDurability
 {
     /// Sync mode (default).
@@ -1116,7 +1116,7 @@ enum class EDurability
 /// @brief Atomicity mode.
 ///
 /// @see NYT::TTabletTransactionOptions::TDurability
-/// @see https://yt.yandex-team.ru/docs/description/dynamic_tables/sorted_dynamic_tables#sohrannost
+/// @see https://ytsaurus.tech/docs/en/user-guide/dynamic-tables/sorted-dynamic-tables
 enum class EAtomicity
 {
     /// Transactions are non atomic (might reduce latency of write requests).
@@ -1129,7 +1129,7 @@ enum class EAtomicity
 ///
 /// @brief Table replica mode.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/dynamic_tables/replicated_dynamic_tables#atributy
+/// @see https://ytsaurus.tech/docs/en/user-guide/dynamic-tables/replicated-dynamic-tables#attributes
 enum class ETableReplicaMode
 {
     Sync    /* "sync" */,
@@ -1152,7 +1152,7 @@ struct TTabletTransactionOptions
     ///
     /// @note Use with care.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/dynamic_tables/sorted_dynamic_tables#oslablenie-garantij
+    /// @see https://ytsaurus.tech/docs/en/user-guide/dynamic-tables/sorted-dynamic-tables
     FLUENT_FIELD_OPTION(EAtomicity, Atomicity);
 
     ///
@@ -1163,14 +1163,14 @@ struct TTabletTransactionOptions
     ///
     /// @note Use with care.
     ///
-    /// @see https://yt.yandex-team.ru/docs/description/dynamic_tables/sorted_dynamic_tables#oslablenie-garantij
+    /// @see https://ytsaurus.tech/docs/en/user-guide/dynamic-tables/sorted-dynamic-tables
     FLUENT_FIELD_OPTION(EDurability, Durability);
 };
 
 ///
 /// @brief Options for NYT::IClient::InsertRows
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands.html#insert_rows
+/// @see https://ytsaurus.tech/docs/en/api/commands.html#insert_rows
 struct TInsertRowsOptions
     : public TTabletTransactionOptions<TInsertRowsOptions>
 {
@@ -1193,7 +1193,7 @@ struct TInsertRowsOptions
     /// @brief Whether to fail when inserting to table without sync replica.
     ///
     /// Used for insert operation for tables without sync replica.
-    /// https://yt.yandex-team.ru/docs/description/dynamic_tables/replicated_dynamic_tables#write
+    /// https://ytsaurus.tech/docs/en/user-guide/dynamic-tables/replicated-dynamic-tables#write
     /// Default value is 'false'. So insertion into table without sync replicas fails.
     FLUENT_FIELD_OPTION(bool, RequireSyncReplica);
 };
@@ -1201,7 +1201,7 @@ struct TInsertRowsOptions
 ///
 /// @brief Options for NYT::IClient::DeleteRows
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands.html#delete_rows
+/// @see https://ytsaurus.tech/docs/en/api/commands.html#delete_rows
 struct TDeleteRowsOptions
     : public TTabletTransactionOptions<TDeleteRowsOptions>
 {
@@ -1209,7 +1209,7 @@ struct TDeleteRowsOptions
     /// @brief Whether to fail when deleting from table without sync replica.
     ///
     // Used for delete operation for tables without sync replica.
-    // https://yt.yandex-team.ru/docs/description/dynamic_tables/replicated_dynamic_tables#write
+    /// https://ytsaurus.tech/docs/en/user-guide/dynamic-tables/replicated-dynamic-tables#write
     // Default value is 'false'. So deletion into table without sync replicas fails.
     FLUENT_FIELD_OPTION(bool, RequireSyncReplica);
 };
@@ -1217,15 +1217,15 @@ struct TDeleteRowsOptions
 ///
 /// @brief Options for NYT::IClient::TrimRows
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands.html#trim_rows
+/// @see https://ytsaurus.tech/docs/en/api/commands.html#trim_rows
 struct TTrimRowsOptions
     : public TTabletTransactionOptions<TTrimRowsOptions>
 { };
 
 /// @brief Options for NYT::IClient::AlterTableReplica
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands.html#alter_table_replica
-/// @see https://yt.yandex-team.ru/docs/description/dynamic_tables/replicated_dynamic_tables
+/// @see https://ytsaurus.tech/docs/en/api/commands.html#alter_table_replica
+/// https://ytsaurus.tech/docs/en/user-guide/dynamic-tables/replicated-dynamic-tables
 struct TAlterTableReplicaOptions
 {
     /// @cond Doxygen_Suppress
@@ -1250,7 +1250,7 @@ struct TAlterTableReplicaOptions
 ///
 /// @note They are empty for now but options might appear in the future.
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands.html#get_file_from_cache
+/// @see https://ytsaurus.tech/docs/en/api/commands.html#get_file_from_cache
 struct TGetFileFromCacheOptions
 {
     /// @cond Doxygen_Suppress
@@ -1263,7 +1263,7 @@ struct TGetFileFromCacheOptions
 ///
 /// @note They are empty for now but options might appear in the future.
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands.html#put_file_to_cache
+/// @see https://ytsaurus.tech/docs/en/api/commands.html#put_file_to_cache
 struct TPutFileToCacheOptions
 {
     /// @cond Doxygen_Suppress
@@ -1277,7 +1277,7 @@ struct TPutFileToCacheOptions
 ///
 /// Type of permission used in ACL.
 ///
-/// @see https://yt.yandex-team.ru/docs/description/common/access_control
+/// @see https://ytsaurus.tech/docs/en/user-guide/storage/access-control
 enum class EPermission : int
 {
     /// Applies to: all objects.
@@ -1318,7 +1318,7 @@ enum class ESecurityAction : int
 ///
 /// @brief Options for @ref NYT::IClient::CheckPermission
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands.html#check_permission
+/// @see https://ytsaurus.tech/docs/en/api/commands.html#check_permission
 struct TCheckPermissionOptions
 {
     /// @cond Doxygen_Suppress
@@ -1353,7 +1353,7 @@ enum class EColumnarStatisticsFetcherMode
 ///
 /// @brief Options for @ref NYT::IClient::GetTableColumnarStatistics
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands.html#get_table_columnar_statistics
+/// @see https://ytsaurus.tech/docs/en/api/commands.html#get_table_columnar_statistics
 struct TGetTableColumnarStatisticsOptions
 {
     /// @cond Doxygen_Suppress
@@ -1427,7 +1427,7 @@ struct TGetTablePartitionsOptions
 ///
 /// @note They are empty for now but options might appear in the future.
 ///
-/// @see https://yt.yandex-team.ru/docs/api/commands.html#get_tablet_infos
+/// @see https://ytsaurus.tech/docs/en/api/commands.html#get_tablet_infos
 struct TGetTabletInfosOptions
 {
     /// @cond Doxygen_Suppress

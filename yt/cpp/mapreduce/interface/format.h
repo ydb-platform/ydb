@@ -3,7 +3,7 @@
 ///
 /// @file yt/cpp/mapreduce/interface/format.h
 ///
-/// Header containing class to work with raw [YT formats](https://yt.yandex-team.ru/docs/description/storage/formats.html).
+/// Header containing class to work with raw [YT formats](https://ytsaurus.tech/docs/en/user-guide/storage/formats).
 
 #include "node.h"
 
@@ -33,7 +33,7 @@ struct TYamredDsvAttributes
 /// @ref NYT::IIOClient::CreateRawReader and @ref NYT::IIOClient::CreateRawWriter.
 /// Anyway, the static factory methods should be preferred to the constructor.
 ///
-/// @see [YT doc](https://yt.yandex-team.ru/docs/description/storage/formats.html).
+/// @see [YT doc](https://ytsaurus.tech/docs/en/user-guide/storage/formats).
 struct TFormat
 {
 public:
@@ -48,12 +48,12 @@ public:
 
     /// @brief Create text YSON format.
     ///
-    /// @see [the doc](https://yt.yandex-team.ru/docs/description/storage/formats.html#YSON)
+    /// @see [the doc](https://ytsaurus.tech/docs/en/user-guide/storage/formats#yson)
     static TFormat YsonText();
 
     /// @brief Create binary YSON format.
     ///
-    /// @see [the doc](https://yt.yandex-team.ru/docs/description/storage/formats.html#YSON)
+    /// @see [the doc](https://ytsaurus.tech/docs/en/user-guide/storage/formats#yson)
     static TFormat YsonBinary();
 
     /// @brief Create YaMR format.
@@ -63,14 +63,14 @@ public:
 
     /// @brief Create protobuf format from protobuf message descriptors.
     ///
-    /// @see [the doc](https://yt.yandex-team.ru/docs/api/c++/protobuf.html).
+    /// @see [the doc](https://ytsaurus.tech/docs/en/api/c++/protobuf.html).
     static TFormat Protobuf(
         const TVector<const ::google::protobuf::Descriptor*>& descriptors,
         bool withDescriptors = false);
 
     /// @brief Create JSON format.
     ///
-    /// @see [the doc](https://yt.yandex-team.ru/docs/description/storage/formats.html#JSON)
+    /// @see [the doc](https://ytsaurus.tech/docs/en/user-guide/storage/formats#json)
     static TFormat Json();
 
     /// @brief Create DSV (TSKV) format.
@@ -82,18 +82,18 @@ public:
     ///
     /// `T` must be inherited from `Message`.
     ///
-    /// @see [the doc](https://yt.yandex-team.ru/docs/api/c++/protobuf.html).
+    /// @see [the doc](https://ytsaurus.tech/docs/en/api/c++/protobuf.html).
     template<typename T>
     static inline TFormat Protobuf(bool withDescriptors = false);
 
     /// @brief Is the format text YSON?
     ///
-    /// @see [the doc](https://yt.yandex-team.ru/docs/description/storage/formats.html#YSON)
+    /// @see [the doc](https://ytsaurus.tech/docs/en/user-guide/storage/formats#yson)
     bool IsTextYson() const;
 
     /// @brief Is the format protobuf?
     ///
-    /// @see [the doc](https://yt.yandex-team.ru/docs/api/c++/protobuf.html)
+    /// @see [the doc](https://ytsaurus.tech/docs/en/api/c++/protobuf.html)
     bool IsProtobuf() const;
 
     /// @brief Is the format YaMR?

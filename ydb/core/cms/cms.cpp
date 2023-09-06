@@ -142,6 +142,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         if (request.HasDuration())
             scheduled.SetDuration(request.GetDuration());
         scheduled.SetTenantPolicy(request.GetTenantPolicy());
+        scheduled.SetAvailabilityMode(request.GetAvailabilityMode());
     }
 
     LOG_INFO_S(ctx, NKikimrServices::CMS,

@@ -515,3 +515,12 @@ def _add_ts_resources_to_test_record(unit, test_record):
         if tool_resource_value:
             test_record[tool_resource_label] = tool_resource_value
     return test_record
+
+
+@_with_report_configure_error
+def on_ts_files(unit, *files):
+    all_cmds = unit.get("_TS_FILES_COPY_CMD")
+    new_cmds = ['$COPY_CMD ${{input:"{0}"}} ${{output:"{0}"}}'.format(f) for f in files]
+    if all_cmds:
+        new_cmds.insert(0, all_cmds)
+    unit.set(["_TS_FILES_COPY_CMD", " && ".join(new_cmds)])

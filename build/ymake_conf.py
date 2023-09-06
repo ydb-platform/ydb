@@ -773,7 +773,6 @@ class YMake(object):
             print(fin.read())
 
     def print_core_conf(self):
-        emit('YMAKE_YNDEXER_IGNORE_BUILD_ROOT', 'yes')
         print('@import "${CONF_ROOT}/ymake.core.conf"')
 
     def print_settings(self):

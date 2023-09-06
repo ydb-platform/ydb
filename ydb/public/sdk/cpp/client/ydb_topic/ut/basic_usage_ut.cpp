@@ -137,7 +137,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
     Y_UNIT_TEST(WriteRead) {
         auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
         TTopicClient client(setup->GetDriver());
-        
+
         {
             auto writeSettings = TWriteSessionSettings()
                         .Path(setup->GetTestTopic())
@@ -195,7 +195,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .MaxMemoryUsageBytes(1_MB)
             .DecompressionExecutor(decompressor)
             .AppendTopics(topic);
-            
+
         NPersQueue::TWriteSessionSettings writeSettings;
         writeSettings
             .Path(setup->GetTestTopic()).MessageGroupId("src_id")
@@ -592,6 +592,64 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         f.get();
 
         Cerr << ">>> TEST: gracefully closed" << Endl;
+    }
+
+    Y_UNIT_TEST(ReadSessionCorrectClose) {
+
+        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
+
+        NPersQueue::TWriteSessionSettings writeSettings;
+        writeSettings.Path(setup->GetTestTopic()).MessageGroupId("src_id");
+        writeSettings.Codec(NPersQueue::ECodec::RAW);
+        NPersQueue::IExecutor::TPtr executor = new NPersQueue::TSyncExecutor();
+        writeSettings.CompressionExecutor(executor);
+
+        auto& client = setup->GetPersQueueClient();
+        auto session = client.CreateSimpleBlockingWriteSession(writeSettings);
+
+        ui32 count = 7000;
+        std::string message(2'000, 'x');
+        for (ui32 i = 1; i <= count; ++i) {
+            bool res = session->Write(message);
+            UNIT_ASSERT(res);
+        }
+        bool res = session->Close(TDuration::Seconds(10));
+        UNIT_ASSERT(res);
+
+        std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
+
+        // Create topic client.
+        NYdb::NTopic::TTopicClient topicClient(setup->GetDriver());
+
+        // Create read session.
+        NYdb::NTopic::TReadSessionSettings readSettings;
+        readSettings
+            .ConsumerName(setup->GetTestConsumer())
+            .MaxMemoryUsageBytes(1_MB)
+            .Decompress(false)
+            .RetryPolicy(NYdb::NTopic::IRetryPolicy::GetNoRetryPolicy())
+            .AppendTopics(setup->GetTestTopic());
+
+        readSettings.EventHandlers_.SimpleDataHandlers(
+            []
+            (NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& ev) mutable {
+                Cerr << ">>> Got TDataReceivedEvent" << Endl;
+                ev.Commit();
+        });
+
+        Cerr << ">>> TEST: Create session" << Endl;
+
+        ReadSession = topicClient.CreateReadSession(readSettings);
+
+        Sleep(TDuration::MilliSeconds(50));
+
+        ReadSession->Close();
+        ReadSession = nullptr;
+        Cerr << ">>> TEST: Session gracefully closed" << Endl;
+
+        Sleep(TDuration::Seconds(5));
+
+        // UNIT_ASSERT(false);
     }
 
 }

@@ -21,7 +21,7 @@ namespace NPQ {
 class TMirrorer : public TActorBootstrapped<TMirrorer> {
 private:
     const ui64 MAX_READ_FUTURES_STORE = 25;
-    const ui64 MAX_BYTES_IN_FLIGHT = 8_MB;
+    const ui64 MAX_BYTES_IN_FLIGHT = 16_MB;
     const TDuration WRITE_RETRY_TIMEOUT_MAX = TDuration::Seconds(1);
     const TDuration WRITE_RETRY_TIMEOUT_START = TDuration::MilliSeconds(1);
 

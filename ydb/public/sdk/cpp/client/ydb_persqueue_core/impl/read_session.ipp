@@ -258,8 +258,16 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::Reconnect(const TPlain
         ServerMessage = std::make_shared<TServerMessage<UseMigrationProtocol>>();
         ++ConnectionGeneration;
 
+        LOG_LAZY(Log, TLOG_DEBUG,
+                 GetLogPrefix() << "In Reconnect, ReadSizeBudget = " << ReadSizeBudget
+                                << ", ReadSizeServerDelta = " << ReadSizeServerDelta);
+
         ReadSizeBudget += ReadSizeServerDelta;
         ReadSizeServerDelta = 0;
+
+        LOG_LAZY(Log, TLOG_DEBUG,
+                 GetLogPrefix() << "New values: ReadSizeBudget = " << ReadSizeBudget
+                                << ", ReadSizeServerDelta = " << ReadSizeServerDelta);
 
         if (!RetryState) {
             RetryState = Settings.RetryPolicy_->CreateRetryState();
@@ -491,6 +499,10 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ContinueReadingDataImp
         if constexpr (UseMigrationProtocol) {
             req.mutable_read();
         } else {
+            LOG_LAZY(Log, TLOG_DEBUG,
+                     GetLogPrefix() << "In ContinueReadingDataImpl, ReadSizeBudget = " << ReadSizeBudget
+                                    << ", ReadSizeServerDelta = " << ReadSizeServerDelta);
+
             if (ReadSizeBudget <= 0 || ReadSizeServerDelta + ReadSizeBudget <= 0) {
                 return;
             }
@@ -500,6 +512,9 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ContinueReadingDataImp
         }
 
         WriteToProcessorImpl(std::move(req));
+        LOG_LAZY(Log, TLOG_DEBUG,
+                 GetLogPrefix() << "After sending read request: ReadSizeBudget = " << ReadSizeBudget
+                                << ", ReadSizeServerDelta = " << ReadSizeServerDelta);
         WaitingReadResponse = true;
     }
 }
@@ -778,7 +793,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ReadFromProcessorImpl(
         return;
     }
 
-    if (Processor) {
+    if (Processor && !Closing) {
         ServerMessage->Clear();
 
         auto callback = [wire = Tracker->MakeTrackedWire(),
@@ -1163,6 +1178,9 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
 
     i64 serverBytesSize = msg.bytes_size();
     ReadSizeServerDelta -= serverBytesSize;
+    LOG_LAZY(Log, TLOG_DEBUG,
+             GetLogPrefix() << "Got ReadResponse, serverBytesSize = " << serverBytesSize << ", now ReadSizeBudget = "
+                            << ReadSizeBudget << ", ReadSizeServerDelta = " << ReadSizeServerDelta);
 
     UpdateMemoryUsageStatisticsImpl();
     for (TPartitionData<false>& partitionData : *msg.mutable_partition_data()) {
@@ -1437,6 +1455,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDecompressionInfoDes
         DecompressedDataSize -= decompressedSize;
 
         if constexpr (!UseMigrationProtocol) {
+            LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Returning serverBytesSize = " << serverBytesSize << " to budget");
             ReadSizeBudget += serverBytesSize;
         }
 
@@ -1471,6 +1490,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDataDecompressed(i64
             return;
         }
         if constexpr (!UseMigrationProtocol) {
+            LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Returning serverBytesSize = " << serverBytesSize << " to budget");
             ReadSizeBudget += serverBytesSize;
         }
         ContinueReadingDataImpl();
@@ -1545,6 +1565,8 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Close(std::function<vo
                 }
             }
         }
+
+        AbortImpl();
     }
 }
 

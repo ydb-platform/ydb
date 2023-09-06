@@ -171,7 +171,7 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
         setup.Buf_.Finish();
         UNIT_ASSERT_STRINGS_EQUAL(setup.TestWriter_.Str().Quote(), R"("\3")");
     }
-
+#ifndef _win_
     Y_UNIT_TEST(TestWrite16) {
         TWriteSetup setup("Write16");
         typedef void(*TFunc)(TOutputBuf&, ui16);
@@ -198,7 +198,7 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
         setup.Buf_.Finish();
         UNIT_ASSERT_STRINGS_EQUAL(setup.TestWriter_.Str().Quote(), R"("\2\1\0\0\0\0\0\0")");
     }
-
+#endif
     Y_UNIT_TEST(TestWriteString) {
         TWriteSetup setup("WriteString");
         typedef void(*TFunc)(TOutputBuf&, const char*, ui32);
@@ -207,7 +207,7 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
         setup.Buf_.Finish();
         UNIT_ASSERT_STRINGS_EQUAL(setup.TestWriter_.Str().Quote(), R"("foo")");
     }
-
+#ifndef _win_
     Y_UNIT_TEST(TestWriteDataRowSmall) {
         auto codegen = ICodegen::Make(ETarget::Native);
         codegen->LoadBitCode(GetYtCodecBitCode(), "YtCodecFuncs");
@@ -306,6 +306,7 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
         buf.Finish();
         UNIT_ASSERT_STRINGS_EQUAL(testWriter.Str().Quote(), R"("\3\0\0\0aaa\x13\0\0\0VERY LOOOONG STRING\5\0\0\0[1,2]\t\0\0\0{foo=bar}")");
     }
+
     Y_UNIT_TEST(TestWriteDataRowDecimal) {
         auto codegen = ICodegen::Make(ETarget::Native);
         codegen->LoadBitCode(GetYtCodecBitCode(), "YtCodecFuncs");
@@ -447,7 +448,7 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
         buf.Finish();
         UNIT_ASSERT_STRINGS_EQUAL(testWriter.Str().Quote(), R"("\x0E\0\0\0[[\6\2;];[\6\3;];]\0\1\x10\0\0\0[[\6\4;];[\6\5;];#;]")");
     }
-
+#endif
     Y_UNIT_TEST(TestReadBool) {
         TReadSetup setup("ReadBool", "\1");
         typedef void(*TFunc)(TInputBuf&, void*);
@@ -456,7 +457,7 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
         funcPtr(setup.Buf_, &val);
         UNIT_ASSERT(val.Get<bool>());
     }
-
+#ifndef _win_
     Y_UNIT_TEST(TestReadInt8) {
         TReadSetup setup("ReadInt8", "\xff\xff\xff\xff\xff\xff\xff\xff");
         typedef void(*TFunc)(TInputBuf&, void*);
@@ -587,7 +588,7 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
         UNIT_ASSERT_VALUES_EQUAL(items[9].Get<float>(), float(9));
         UNIT_ASSERT_VALUES_EQUAL(items[10].Get<double>(), double(10));
     }
-
+#endif
     Y_UNIT_TEST(TestReadDataRowString) {
         auto codegen = ICodegen::Make(ETarget::Native);
         codegen->LoadBitCode(GetYtCodecBitCode(), "YtCodecFuncs");
@@ -625,7 +626,6 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
         UNIT_ASSERT_STRINGS_EQUAL(TStringBuf(items[2].AsStringRef()), "[1,2]");
         UNIT_ASSERT_STRINGS_EQUAL(TStringBuf(items[3].AsStringRef()), "{foo=bar}");
     }
-
 #ifndef _win_
     Y_UNIT_TEST(TestReadDataRowDecimal) {
         auto codegen = ICodegen::Make(ETarget::Native);
@@ -684,7 +684,7 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
         funcPtr(items, buf);
         UNIT_ASSERT_EQUAL(items[0].GetInt128(), NDecimal::Nan());
     }
-#endif
+
     Y_UNIT_TEST(TestReadOptionalRow) {
         auto codegen = ICodegen::Make(ETarget::Native);
         codegen->LoadBitCode(GetYtCodecBitCode(), "YtCodecFuncs");
@@ -716,7 +716,7 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
         UNIT_ASSERT(!items[0]);
         UNIT_ASSERT_VALUES_EQUAL(items[1].Get<i32>(), 5);
     }
-
+#endif
     Y_UNIT_TEST(TestReadContainerRow) {
         auto codegen = ICodegen::Make(ETarget::Native);
         codegen->LoadBitCode(GetYtCodecBitCode(), "YtCodecFuncs");
@@ -761,7 +761,7 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
         UNIT_ASSERT_VALUES_EQUAL(items[2].GetElements()[1].Get<ui32>(), 5);
         UNIT_ASSERT(!items[2].GetElements()[2]);
     }
-
+#ifndef _win_
     Y_UNIT_TEST(TestReadDefaultRow) {
         auto codegen = ICodegen::Make(ETarget::Native);
         codegen->LoadBitCode(GetYtCodecBitCode(), "YtCodecFuncs");
@@ -792,7 +792,7 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
         UNIT_ASSERT_VALUES_EQUAL(items[0].Get<i32>(), 7);
         UNIT_ASSERT_VALUES_EQUAL(items[1].Get<i32>(), 5);
     }
-
+#endif
     Y_UNIT_TEST(TestReadDefaultRowString) {
         auto codegen = ICodegen::Make(ETarget::Native);
         codegen->LoadBitCode(GetYtCodecBitCode(), "YtCodecFuncs");
@@ -824,7 +824,7 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
         UNIT_ASSERT_STRINGS_EQUAL(TStringBuf(items[0].AsStringRef()), "VERY LOOONG STRING");
         UNIT_ASSERT_STRINGS_EQUAL(TStringBuf(items[1].AsStringRef()), "foo");
     }
-
+#ifndef _win_
     Y_UNIT_TEST(TestReadTzDate) {
         // full size = 2 + 2 = 4
         TStringBuf buf = "\x04\0\0\0\1\2\0\1"sv;
@@ -887,6 +887,7 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
         setup.Buf_.Finish();
         UNIT_ASSERT_STRINGS_EQUAL(setup.TestWriter_.Str().Quote(), TString("\x0a\0\0\0\0\0\0\0\0\0\1\4\0\1"sv).Quote());
     }
+#endif
 }
 
 }

@@ -180,26 +180,21 @@ namespace NTable {
 
             bool ready = true;
 
-            const auto cmp = NPage::TCompare<NPage::TIndex::TRecord>(Scheme.Groups[0].ColsKeyIdx, keyDefaults);
-
             // The first page that may contain splitKey
             auto found = Index.LookupKey(splitKey, Scheme.Groups[0], ESeek::Lower, &keyDefaults);
 
-            // Do we need to load the previous page (e.g. splitKey <= foundKey)
-            bool needPrev = !found || !cmp(*found, splitKey);
+            // Note: as we may have cut index key we may both need prev and next pages
 
-            if (needPrev) {
-                if (auto prev = found; --prev) {
-                    TRowId pageBegin = prev->GetRowId();
-                    TRowId pageEnd = found ? found->GetRowId() : Index.GetEndRowId();
-                    if (pageBegin < endRowId && beginRowId < pageEnd) {
-                        ready &= bool(Env->TryGetPage(Part, prev->GetPageId()));
-                    }
+            if (auto prev = found; --prev) {
+                TRowId pageBegin = prev->GetRowId();
+                TRowId pageEnd = found ? found->GetRowId() : Index.GetEndRowId();
+                if (pageBegin < endRowId && beginRowId < pageEnd) {
+                    ready &= bool(Env->TryGetPage(Part, prev->GetPageId()));
                 }
             }
 
             if (found && found->GetRowId() < endRowId) {
-                bool needNext = !needPrev;
+                bool needNext = true;
                 if (found->GetRowId() < beginRowId) {
                     // iterator may re-seek to the first page that's in range
                     auto adjusted = Index.LookupRow(beginRowId, found);

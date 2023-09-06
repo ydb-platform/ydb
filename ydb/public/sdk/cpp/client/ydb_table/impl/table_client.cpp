@@ -1147,5 +1147,13 @@ TMaybe<TString> TTableClient::TImpl::GetQueryText(const TDataQuery& queryData) {
     return queryData.GetText();
 }
 
+void TTableClient::TImpl::CollectRetryStatAsync(EStatus status) {
+    RetryOperationStatCollector.IncAsyncRetryOperation(status);
 }
+
+void TTableClient::TImpl::CollectRetryStatSync(EStatus status) {
+    RetryOperationStatCollector.IncSyncRetryOperation(status);
 }
+
+} // namespace NTable
+} // namespace NYdb

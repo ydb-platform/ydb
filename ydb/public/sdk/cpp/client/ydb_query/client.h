@@ -5,12 +5,19 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
+#include <ydb/public/sdk/cpp/client/ydb_retry/retry.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/request_settings.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 
 namespace NYdb {
     class TProtoAccessor;
+
+    namespace NRetry {
+        template <typename TClient, typename TStatusType>
+        class TRetryContextAsync;
+    }
 }
 
 namespace NYdb::NQuery {
@@ -21,6 +28,7 @@ struct TCreateSessionSettings : public TSimpleRequestSettings<TCreateSessionSett
 
 class TCreateSessionResult;
 using TAsyncCreateSessionResult = NThreading::TFuture<TCreateSessionResult>;
+using TRetryOperationSettings = NYdb::NRetry::TRetryOperationSettings;
 
 struct TSessionPoolSettings {
     using TSelf = TSessionPoolSettings;
@@ -49,9 +57,16 @@ struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> {
 class TSession;
 class TQueryClient {
     friend class TSession;
+    friend class NRetry::TRetryContextAsync<TQueryClient, TExecuteQueryResult>;
+
 public:
+    using TQueryFunc = std::function<TAsyncExecuteQueryResult(TSession session)>;
+    using TQueryWithoutSessionFunc = std::function<TAsyncExecuteQueryResult(TQueryClient& client)>;
     using TSettings = TClientSettings;
     using TSession = TSession;
+    using TCreateSessionSettings = TCreateSessionSettings;
+    using TAsyncCreateSessionResult = TAsyncCreateSessionResult;
+
 public:
     TQueryClient(const TDriver& driver, const TClientSettings& settings = TClientSettings());
 
@@ -66,6 +81,8 @@ public:
 
     TAsyncExecuteQueryIterator StreamExecuteQuery(const TString& query, const TTxControl& txControl,
         const TParams& params, const TExecuteQuerySettings& settings = TExecuteQuerySettings());
+
+    TAsyncExecuteQueryResult RetryQuery(TQueryFunc&& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
 
     NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const TString& script,
         const TExecuteScriptSettings& settings = TExecuteScriptSettings());

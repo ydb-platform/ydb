@@ -5,10 +5,10 @@
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb/public/sdk/cpp/client/ydb_retry/retry.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/query_stats/stats.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h>
-#include <ydb/public/sdk/cpp/client/ydb_retry/retry.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
@@ -30,14 +30,22 @@ class TableIndex;
 class TableIndexDescription;
 class ValueSinceUnixEpochModeSettings;
 
-}
-}
+} // namespace Table
+} // namespace Ydb
 
 namespace NYdb {
 
+namespace NRetry {
+template <typename TClient, typename TStatusType>
+class TRetryContextAsync;
+
+template <typename>
+class TRetryContextSync;
+} // namespace NRetry
+
 namespace NScheme {
 struct TPermissions;
-}
+} // namespace NScheme
 
 namespace NTable {
 
@@ -960,7 +968,6 @@ struct TStreamExecScanQuerySettings : public TRequestSettings<TStreamExecScanQue
 
 class TSession;
 class TSessionPool;
-struct TRetryState;
 
 enum class EDataFormat {
     ApacheArrow = 1,
@@ -971,7 +978,8 @@ class TTableClient {
     friend class TSession;
     friend class TTransaction;
     friend class TSessionPool;
-    friend class TRetryOperationContext;
+    friend class NRetry::TRetryContextAsync<TTableClient, TStatus>;
+    friend class NRetry::TRetryContextSync<TTableClient>;
 
 public:
     using TOperationFunc = std::function<TAsyncStatus(TSession session)>;
@@ -980,6 +988,8 @@ public:
     using TOperationWithoutSessionSyncFunc = std::function<TStatus(TTableClient& tableClient)>;
     using TSettings = TClientSettings;
     using TSession = TSession;
+    using TCreateSessionSettings = TCreateSessionSettings;
+    using TAsyncCreateSessionResult = TAsyncCreateSessionResult;
 
 public:
     TTableClient(const TDriver& driver, const TClientSettings& settings = TClientSettings());
@@ -1058,10 +1068,6 @@ public:
 
     TAsyncScanQueryPartIterator StreamExecuteScanQuery(const TString& query, const TParams& params,
         const TStreamExecScanQuerySettings& settings = TStreamExecScanQuerySettings());
-
-private:
-    using TOperationWrapperSyncFunc = std::function<TStatus(TRetryState& retryState)>;
-    TStatus RetryOperationSyncHelper(const TOperationWrapperSyncFunc& operationWrapper, const TRetryOperationSettings& settings);
 
 private:
     class TImpl;

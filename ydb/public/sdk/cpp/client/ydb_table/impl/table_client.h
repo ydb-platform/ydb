@@ -144,6 +144,9 @@ public:
     TAsyncScanQueryPartIterator StreamExecuteScanQuery(const TString& query,
         const ::google::protobuf::Map<TString, Ydb::TypedValue>* params,
         const TStreamExecScanQuerySettings& settings);
+    void CollectRetryStatAsync(EStatus status);
+    void CollectRetryStatSync(EStatus status);
+
 public:
     TClientSettings Settings_;
 

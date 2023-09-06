@@ -5,6 +5,8 @@
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/table_helpers/helpers.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/retry/retry.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/retry/retry_async.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/retry/retry_sync.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
@@ -33,6 +35,13 @@ namespace NTable {
 
 using namespace NThreading;
 using namespace NSessionPool;
+
+using TRetryContext = NRetry::TRetryContextAsync<TTableClient, TStatus>;
+using TRetryWithSession = NRetry::TRetryWithSessionAsync<TTableClient, TTableClient::TOperationFunc, TStatus>;
+using TRetryWithoutSession = NRetry::TRetryWithoutSessionAsync<TTableClient, TTableClient::TOperationWithoutSessionFunc, TStatus>;
+
+using TRetryWithSessionSync = NRetry::TRetryWithSessionSync<TTableClient, TTableClient::TOperationSyncFunc>;
+using TRetryWithoutSessionSync = NRetry::TRetryWithoutSessionSync<TTableClient, TTableClient::TOperationWithoutSessionSyncFunc>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1374,307 +1383,26 @@ TTypeBuilder TTableClient::GetTypeBuilder() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TRetryState {
-    using TAsyncFunc = std::function<TAsyncStatus()>;
-    using THandleStatusFunc = std::function<TAsyncStatus(const std::shared_ptr<TRetryState>& state,
-        const TStatus& status, const TAsyncFunc& func, ui32 retryNumber)>;
-
-    TMaybe<TSession> Session;
-    THandleStatusFunc HandleStatusFunc;
-};
-
-class TRetryOperationContext : public TThrRefBase, TNonCopyable {
-public:
-    using TRetryContextPtr = TIntrusivePtr<TRetryOperationContext>;
-
-protected:
-    TRetryOperationSettings Settings;
-    TTableClient TableClient;
-    NThreading::TPromise<TStatus> Promise;
-    ui32 RetryNumber;
-
-public:
-    virtual void Execute() = 0;
-
-    TAsyncStatus GetFuture() {
-        return Promise.GetFuture();
-    }
-
-protected:
-    TRetryOperationContext(const TRetryOperationSettings& settings,
-                           const TTableClient& tableClient)
-        : Settings(settings)
-        , TableClient(tableClient)
-        , Promise(NThreading::NewPromise<TStatus>())
-        , RetryNumber(0)
-    {}
-
-    static void RunOp(TRetryContextPtr self) {
-        self->Execute();
-    }
-
-    virtual void Reset() {}
-
-    static void DoRetry(TRetryContextPtr self, bool fast) {
-        AsyncBackoff(self->TableClient.Impl_,
-            fast ? self->Settings.FastBackoffSettings_ : self->Settings.SlowBackoffSettings_,
-            self->RetryNumber,
-            [self]() {
-                RunOp(self);
-            }
-        );
-    }
-
-    static void HandleStatus(TRetryContextPtr self, const TStatus& status) {
-        if (status.IsSuccess()) {
-            return self->Promise.SetValue(status);
-        }
-
-        if (self->RetryNumber >= self->Settings.MaxRetries_) {
-            return self->Promise.SetValue(status);
-        }
-        if (self->Settings.Verbose_) {
-            Cerr << "Previous query attempt was finished with unsuccessful status: "
-                << status.GetIssues().ToString() << ". Status is " << status.GetStatus() << "."
-                << "Send retry attempt " << self->RetryNumber << " of " << self->Settings.MaxRetries_ << Endl;
-        }
-        self->RetryNumber++;
-        self->TableClient.Impl_->RetryOperationStatCollector.IncAsyncRetryOperation(status.GetStatus());
-
-        switch (status.GetStatus()) {
-            case EStatus::ABORTED:
-                return RunOp(self);
-
-            case EStatus::OVERLOADED:
-            case EStatus::CLIENT_RESOURCE_EXHAUSTED:
-                return DoRetry(self, false);
-
-            case EStatus::UNAVAILABLE:
-                return DoRetry(self, true);
-
-            case EStatus::BAD_SESSION:
-            case EStatus::SESSION_BUSY:
-                self->Reset();
-                return RunOp(self);
-
-            case EStatus::NOT_FOUND:
-                return self->Settings.RetryNotFound_
-                    ? RunOp(self)
-                    : self->Promise.SetValue(status);
-
-            case EStatus::UNDETERMINED:
-                return self->Settings.Idempotent_
-                    ? DoRetry(self, true)
-                    : self->Promise.SetValue(status);
-
-            case EStatus::TRANSPORT_UNAVAILABLE:
-                if (self->Settings.Idempotent_) {
-                    self->Reset();
-                    return DoRetry(self, true);
-                } else {
-                    return self->Promise.SetValue(status);
-                }
-
-            default:
-                return self->Promise.SetValue(status);
-        }
-    }
-
-    static void HandleException(TRetryContextPtr self, std::exception_ptr e) {
-        self->Promise.SetException(e);
-    }
-};
-
-class TRetryOperationWithSession : public TRetryOperationContext {
-    using TFunc = TTableClient::TOperationFunc;
-
-    TFunc Operation;
-    TMaybe<TSession> Session;
-
-public:
-    explicit TRetryOperationWithSession(TFunc&& operation,
-                                        const TRetryOperationSettings& settings,
-                                        const TTableClient& tableClient)
-        : TRetryOperationContext(settings, tableClient)
-        , Operation(operation)
-    {}
-
-    void Execute() override {
-        TRetryContextPtr self(this);
-        if (!Session) {
-            TableClient.GetSession(
-                TCreateSessionSettings().ClientTimeout(Settings.GetSessionClientTimeout_)).Subscribe(
-                [self](const TAsyncCreateSessionResult& resultFuture) {
-                    try {
-                        auto& result = resultFuture.GetValue();
-                        if (!result.IsSuccess()) {
-                            return HandleStatus(self, result);
-                        }
-
-                        auto* myself = dynamic_cast<TRetryOperationWithSession*>(self.Get());
-                        myself->Session = result.GetSession();
-                        myself->DoRunOp(self);
-                    } catch (...) {
-                        return HandleException(self, std::current_exception());
-                    }
-            });
-        } else {
-            DoRunOp(self);
-        }
-    }
-
-private:
-    void Reset() override {
-        Session.Clear();
-    }
-
-    void DoRunOp(TRetryContextPtr self) {
-        Operation(Session.GetRef()).Subscribe([self](const TAsyncStatus& result) {
-            try {
-                return HandleStatus(self, result.GetValue());
-            } catch (...) {
-                return HandleException(self, std::current_exception());
-            }
-        });
-    }
-};
-
 TAsyncStatus TTableClient::RetryOperation(TOperationFunc&& operation, const TRetryOperationSettings& settings) {
-    TRetryOperationContext::TRetryContextPtr ctx(new TRetryOperationWithSession(std::move(operation), settings, *this));
+    TRetryContext::TPtr ctx(new TRetryWithSession(*this, std::move(operation), settings));
     ctx->Execute();
     return ctx->GetFuture();
 }
-
-class TRetryOperationWithoutSession : public TRetryOperationContext {
-    using TFunc = TTableClient::TOperationWithoutSessionFunc;
-
-    TFunc Operation;
-
-public:
-    explicit TRetryOperationWithoutSession(TFunc&& operation,
-                                        const TRetryOperationSettings& settings,
-                                        const TTableClient& tableClient)
-        : TRetryOperationContext(settings, tableClient)
-        , Operation(operation)
-    {}
-
-    void Execute() override {
-        TRetryContextPtr self(this);
-        Operation(TableClient).Subscribe([self](const TAsyncStatus& result) {
-            try {
-                return HandleStatus(self, result.GetValue());
-            } catch (...) {
-                return HandleException(self, std::current_exception());
-            }
-        });
-    }
-};
 
 TAsyncStatus TTableClient::RetryOperation(TOperationWithoutSessionFunc&& operation, const TRetryOperationSettings& settings) {
-    TRetryOperationContext::TRetryContextPtr ctx(new TRetryOperationWithoutSession(std::move(operation), settings, *this));
+    TRetryContext::TPtr ctx(new TRetryWithoutSession(*this, std::move(operation), settings));
     ctx->Execute();
     return ctx->GetFuture();
-}
-
-TStatus TTableClient::RetryOperationSyncHelper(const TOperationWrapperSyncFunc& operationWrapper, const TRetryOperationSettings& settings) {
-    TRetryState retryState;
-    TMaybe<NYdb::TStatus> status;
-
-    for (ui32 retryNumber = 0; retryNumber <= settings.MaxRetries_; ++retryNumber) {
-        status = operationWrapper(retryState);
-
-        if (status->IsSuccess()) {
-            return *status;
-        }
-
-        if (retryNumber == settings.MaxRetries_) {
-            break;
-        }
-
-        switch (status->GetStatus()) {
-            case EStatus::ABORTED:
-                break;
-
-            case EStatus::OVERLOADED:
-            case EStatus::CLIENT_RESOURCE_EXHAUSTED: {
-                Backoff(settings.SlowBackoffSettings_, retryNumber);
-                break;
-            }
-
-            case EStatus::UNAVAILABLE:{
-                Backoff(settings.FastBackoffSettings_, retryNumber);
-                break;
-            }
-
-            case EStatus::BAD_SESSION:
-            case EStatus::SESSION_BUSY:
-                retryState.Session.Clear();
-                break;
-
-            case EStatus::NOT_FOUND:
-                if (!settings.RetryNotFound_) {
-                    return *status;
-                }
-                break;
-
-            case EStatus::UNDETERMINED:
-                if (!settings.Idempotent_) {
-                    return *status;
-                }
-                Backoff(settings.FastBackoffSettings_, retryNumber);
-                break;
-
-            case EStatus::TRANSPORT_UNAVAILABLE:
-                if (!settings.Idempotent_) {
-                    return *status;
-                }
-                retryState.Session.Clear();
-                Backoff(settings.FastBackoffSettings_, retryNumber);
-                break;
-
-            default:
-                return *status;
-        }
-        Impl_->RetryOperationStatCollector.IncSyncRetryOperation(status->GetStatus());
-    }
-
-    return *status;
 }
 
 TStatus TTableClient::RetryOperationSync(const TOperationWithoutSessionSyncFunc& operation, const TRetryOperationSettings& settings) {
-    auto operationWrapper = [this, &operation] (TRetryState&) {
-        return operation(*this);
-    };
-
-    return RetryOperationSyncHelper(operationWrapper, settings);
+    TRetryWithoutSessionSync ctx(*this, operation, settings);
+    return ctx.Execute();
 }
 
 TStatus TTableClient::RetryOperationSync(const TOperationSyncFunc& operation, const TRetryOperationSettings& settings) {
-    TRetryState retryState;
-
-    auto operationWrapper = [this, &operation, &settings] (TRetryState& retryState) {
-        TMaybe<NYdb::TStatus> status;
-
-        if (!retryState.Session) {
-            auto sessionResult = Impl_->GetSession(
-                TCreateSessionSettings().ClientTimeout(settings.GetSessionClientTimeout_)).GetValueSync();
-            if (sessionResult.IsSuccess()) {
-                retryState.Session = sessionResult.GetSession();
-            }
-            status = sessionResult;
-        }
-
-        if (retryState.Session) {
-            status = operation(retryState.Session.GetRef());
-            if (status->IsSuccess()) {
-                return *status;
-            }
-        }
-
-        return *status;
-    };
-
-    return RetryOperationSyncHelper(operationWrapper, settings);
+    TRetryWithSessionSync ctx(*this, operation, settings);
+    return ctx.Execute();
 }
 
 NThreading::TFuture<void> TTableClient::Stop() {

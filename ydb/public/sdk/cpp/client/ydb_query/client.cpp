@@ -3,16 +3,23 @@
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_endpoints/endpoints.h>
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/session_client/session_client.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/retry/retry.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/retry/retry_async.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/retry/retry_sync.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/session_client/session_client.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/session_pool/session_pool.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/lib/operation_id/operation_id.h>
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_query/impl/exec_query.h>
+#include <ydb/public/sdk/cpp/client/ydb_retry/retry.h>
 
 namespace NYdb::NQuery {
+
+using TRetryContext = NRetry::TRetryContextAsync<TQueryClient, TExecuteQueryResult>;
+using TRetryContextWithSession = NRetry::TRetryWithSessionAsync<TQueryClient, TQueryClient::TQueryFunc, TExecuteQueryResult>;
 
 TCreateSessionSettings::TCreateSessionSettings() {
     ClientTimeout_ = TDuration::Seconds(5);
@@ -342,6 +349,14 @@ public:
             ), NSessionPool::PERIODIC_ACTION_INTERVAL);
     }
 
+    void CollectRetryStatAsync(EStatus status) {
+        Y_UNUSED(status);
+    }
+
+    void CollectRetryStatSync(EStatus status) {
+        Y_UNUSED(status);
+    }
+
 private:
     TClientSettings Settings_;
     NSessionPool::TSessionPool SessionPool_;
@@ -405,6 +420,13 @@ i64 TQueryClient::GetActiveSessionsLimit() const {
 
 i64 TQueryClient::GetCurrentPoolSize() const {
     return Impl_->GetCurrentPoolSize();
+}
+
+TAsyncExecuteQueryResult TQueryClient::RetryQuery(TQueryFunc&& queryFunc, TRetryOperationSettings settings)
+{
+    TRetryContext::TPtr ctx(new TRetryContextWithSession(*this, std::move(queryFunc), settings));
+    ctx->Execute();
+    return ctx->GetFuture();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

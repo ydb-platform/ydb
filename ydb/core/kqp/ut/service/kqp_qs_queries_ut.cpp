@@ -154,19 +154,34 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT_VALUES_EQUAL(count, 2);
     }
 
-    Y_UNIT_TEST(ExecuteQuery) {
-        auto kikimr = DefaultKikimrRunner();
-        auto db = kikimr.GetQueryClient();
-
-        auto result = db.ExecuteQuery(R"(
-            SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0 ORDER BY Key;
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+    void CheckQueryResult(TExecuteQueryResult result) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
         CompareYson(R"([
             [[3u];[1]];
             [[4000000003u];[1]]
         ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(ExecuteQuery) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        const TString query = "SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0 ORDER BY Key";
+        auto result = db.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        CheckQueryResult(result);
+    }
+
+    Y_UNIT_TEST(ExecuteRetryQuery) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        const TString query = "SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0 ORDER BY Key";
+        auto queryFunc = [&query](TSession session) -> TAsyncExecuteQueryResult {
+            return session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx());
+        };
+        auto resultRetryFunc = db.RetryQuery(std::move(queryFunc)).GetValueSync();
+        CheckQueryResult(resultRetryFunc);
     }
 
     Y_UNIT_TEST(ExecuteQueryPg) {

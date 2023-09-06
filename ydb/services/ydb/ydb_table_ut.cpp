@@ -2007,7 +2007,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
     {
         size_t retryNumber = 0;
         TVector<TResultSet> resultSets;
-        auto operation = [&retryNumber, &resultSets, &retriableStatuses] (TSession session) {
+        auto operation = [&retryNumber, &resultSets, &retriableStatuses] (TSession session) -> TAsyncStatus {
             // iterate over all providen statuses and return TStatus to emulate error
             if (retryNumber < retriableStatuses.size()) {
                 TStatus status(retriableStatuses[retryNumber++], {});
@@ -2018,12 +2018,12 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             resultSets = queryStatus.GetResultSets();
             return NThreading::MakeFuture<TStatus>(queryStatus);
         };
-        auto operationWithoutSession = [&operation] (TTableClient client) {
+        auto operationWithoutSession = [&operation] (TTableClient client) -> TAsyncStatus {
             auto session = client.CreateSession().GetValueSync().GetSession();
             return operation(session);
         };
 
-        const auto retrySettings = settings.MaxRetries(retriableStatuses.size() + 1).Verbose(true);
+        const auto retrySettings = settings.MaxRetries(retriableStatuses.size()).Verbose(true);
         auto result = client.RetryOperation(operation, retrySettings);
         CheckRetryResult(result.GetValueSync(), resultSets, expectSuccess);
 
@@ -2038,7 +2038,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
     {
         size_t retryNumber = 0;
         TVector<TResultSet> resultSets;
-        auto operation = [&retryNumber, &resultSets, &retriableStatuses] (TSession session) {
+        auto operation = [&retryNumber, &resultSets, &retriableStatuses] (TSession session) -> TStatus {
             // iterate over all providen statuses and return TStatus to emulate error
             if (retryNumber < retriableStatuses.size()) {
                 TStatus status(retriableStatuses[retryNumber++], {});
@@ -2049,12 +2049,12 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             resultSets = queryStatus.GetResultSets();
             return TStatus(queryStatus);
         };
-        auto operationWithoutSession = [&operation] (TTableClient client) {
+        auto operationWithoutSession = [&operation] (TTableClient client) -> TStatus {
             auto session = client.CreateSession().GetValueSync().GetSession();
             return operation(session);
         };
 
-        const auto retrySettings = settings.MaxRetries(retriableStatuses.size() + 1).Verbose(true);
+        const auto retrySettings = settings.MaxRetries(retriableStatuses.size()).Verbose(true);
         auto result = client.RetryOperationSync(operation, retrySettings);
         CheckRetryResult(result, resultSets, expectSuccess);
 
@@ -2078,10 +2078,12 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         NYdb::NTable::TTableClient client(driver);
 
         TestRetryOperationAsync(client, GetRetriableAlwaysStatuses(), true);
-        TestRetryOperationAsync(client, GetRetriableOnOptionStatuses(), false);
         TestRetryOperationAsync(client, {EStatus::NOT_FOUND}, true, TRetryOperationSettings().RetryNotFound(true));
         TestRetryOperationAsync(client, {EStatus::UNDETERMINED}, true, TRetryOperationSettings().Idempotent(true));
         TestRetryOperationAsync(client, {EStatus::TRANSPORT_UNAVAILABLE}, true, TRetryOperationSettings().Idempotent(true));
+        TestRetryOperationAsync(client, {EStatus::NOT_FOUND}, false, TRetryOperationSettings().RetryNotFound(false));
+        TestRetryOperationAsync(client, {EStatus::UNDETERMINED}, false, TRetryOperationSettings().Idempotent(false));
+        TestRetryOperationAsync(client, {EStatus::TRANSPORT_UNAVAILABLE}, false, TRetryOperationSettings().Idempotent(false));
 
         driver.Stop(true);
     }
@@ -2092,10 +2094,12 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         NYdb::NTable::TTableClient client(driver);
 
         TestRetryOperationSync(client, GetRetriableAlwaysStatuses(), true);
-        TestRetryOperationSync(client, GetRetriableOnOptionStatuses(), false);
         TestRetryOperationSync(client, {EStatus::NOT_FOUND}, true, TRetryOperationSettings().RetryNotFound(true));
         TestRetryOperationSync(client, {EStatus::UNDETERMINED}, true, TRetryOperationSettings().Idempotent(true));
         TestRetryOperationSync(client, {EStatus::TRANSPORT_UNAVAILABLE}, true, TRetryOperationSettings().Idempotent(true));
+        TestRetryOperationSync(client, {EStatus::NOT_FOUND}, false, TRetryOperationSettings().RetryNotFound(false));
+        TestRetryOperationSync(client, {EStatus::UNDETERMINED}, false, TRetryOperationSettings().Idempotent(false));
+        TestRetryOperationSync(client, {EStatus::TRANSPORT_UNAVAILABLE}, false, TRetryOperationSettings().Idempotent(false));
 
         driver.Stop(true);
     }

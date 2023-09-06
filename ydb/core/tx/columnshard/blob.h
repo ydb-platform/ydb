@@ -310,6 +310,19 @@ struct TBlobRange {
     }
 };
 
+class IBlobInUseTracker {
+protected:
+    ~IBlobInUseTracker() = default;
+
+public:
+    // Marks the blob as "in use (or no longer in use) by an in-flight request", increments (or decrements)
+    // it's ref count. This will prevent the blob from beeing physically deleted when DeleteBlob() is called
+    // until all the references are released.
+    // NOTE: this ref counts are in-memory only, so the blobs can be deleted if tablet restarts
+    virtual bool SetBlobInUse(const NOlap::TUnifiedBlobId& blobId, bool inUse) = 0;
+    virtual bool BlobInUse(const NOlap::TUnifiedBlobId& blobId) const = 0;
+};
+
 // Expected blob lifecycle: EVICTING -> SELF_CACHED -> EXTERN <-> CACHED
 enum class EEvictState : ui8 {
     UNKNOWN = 0,

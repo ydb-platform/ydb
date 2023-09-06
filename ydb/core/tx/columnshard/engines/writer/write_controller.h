@@ -5,6 +5,7 @@
 
 #include <library/cpp/actors/core/actor.h>
 #include <ydb/core/tx/columnshard/blob_manager.h>
+#include <ydb/core/tx/columnshard/defs.h>
 
 
 namespace NKikimr::NColumnShard {

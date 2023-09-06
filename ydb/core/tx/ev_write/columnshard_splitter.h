@@ -4,6 +4,7 @@
 
 #include <ydb/core/tx/sharding/sharding.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
 

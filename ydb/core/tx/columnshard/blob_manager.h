@@ -4,8 +4,8 @@
 #include "counters/blobs_manager.h"
 
 #include <ydb/core/tablet_flat/flat_executor.h>
-#include <ydb/core/tx/columnshard/inflight_request_tracker.h>
 #include <ydb/core/util/backoff.h>
+#include <ydb/core/protos/tx_columnshard.pb.h>
 
 #include <util/generic/string.h>
 
@@ -140,7 +140,7 @@ struct TBlobManagerCounters {
 };
 
 // The implementation of BlobManager that hides all GC-related details
-class TBlobManager : public IBlobManager, public IBlobExporter, public IBlobInUseTracker {
+class TBlobManager : public IBlobManager, public IBlobExporter, public NOlap::IBlobInUseTracker {
 private:
     static constexpr size_t BLOB_COUNT_TO_TRIGGER_GC_DEFAULT = 1000;
     static constexpr ui64 GC_INTERVAL_SECONDS_DEFAULT = 60;

@@ -11,7 +11,7 @@ namespace {
 template<typename T>
 ui64 ShiftByMaxNegative(T value) {
     static_assert(sizeof(T) <= sizeof(ui64));
-    //static_assert(std::is_integral_v<T>); //TODO fixme, very stange behaviour for floating point types
+    static_assert(std::is_integral_v<T>);
     if constexpr (std::is_signed_v<T>) {
         if (value < 0) {
             return ui64(value + std::numeric_limits<T>::max() + T(1));
@@ -152,7 +152,7 @@ private:
         }
 
         ui64 GetListLength() const final {
-            if (std::is_integral<T>()) {
+            if constexpr (std::is_integral_v<T>) {
                 return GetElementsCount<T, TStep>(Start, End, Step);
             }
 
@@ -296,7 +296,7 @@ public:
 #endif
 private:
     static NUdf::TUnboxedValuePod MakeList(TComputationContext& ctx, T start, T end, TStep step, ui16 timezoneId) {
-        if (timezoneId)
+        if constexpr(TzDate)
             return ctx.HolderFactory.Create<TTzValue>(ctx, start, end, step, timezoneId);
         else
             return ctx.HolderFactory.Create<TValue>(ctx, start, end, step);

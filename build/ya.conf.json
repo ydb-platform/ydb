@@ -108,6 +108,15 @@
                 ]
             },
             "formula": "build/platform/python/ymake_python3/resources.json"
+        },
+        "ytexec": {
+            "executable": {
+                "ytexec": [
+                    "ytexec",
+                    "ytexec"
+                ]
+            },
+            "formula": "build/external_resources/ytexec/resources.json"
         }
     },
     "toolchain": {
@@ -898,6 +907,22 @@
                     "executable": "python3"
                 }
             }
+        },
+        "ytexec": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    }
+                }
+            ],
+            "tools": {
+                "ytexec": {
+                    "bottle": "ytexec",
+                    "executable": "ytexec"
+                }
+            }
         }
     },
     "toolchain_aliases": {
@@ -928,6 +953,9 @@
         "ymake_python3": {
             "description": "Run pseudo-python3",
             "visible": false
+        },
+        "ytexec": {
+            "description": "Run ytexec"
         }
     }
 }

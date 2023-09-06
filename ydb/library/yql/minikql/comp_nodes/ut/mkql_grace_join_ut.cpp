@@ -177,7 +177,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinMemTest) {
 
 
     UNIT_ASSERT(true);
-        
+
     }
 
 }
@@ -194,7 +194,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
                                  (char *)"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
             ui32 bigStrSize[2] = {151, 151};
 
-            
+
             NMemInfo::TMemInfo mi = NMemInfo::GetMemInfo();
             CTEST << "Mem usage before tables tuples added (MB): " << mi.RSS / (1024 * 1024) << Endl;
 
@@ -206,7 +206,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
 
             const ui64 TupleSize = 1024;
 
-            ui64 bigTuple[TupleSize]; 
+            ui64 bigTuple[TupleSize];
 
             for (ui64 i = 0; i < TupleSize; i++) {
                 bigTuple[i] = std::rand() / ( RAND_MAX / 10000 );
@@ -214,13 +214,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
 
             ui64 milliseconds = 0;
 
-            
+
 
             const ui64 BigTableTuples = 600000;
             const ui64 SmallTableTuples = 150000;
             const ui64 BigTupleSize = 40;
 
-            std::chrono::steady_clock::time_point begin03 = std::chrono::steady_clock::now();   
+            std::chrono::steady_clock::time_point begin03 = std::chrono::steady_clock::now();
 
 
             for ( ui64 i = 0; i < BigTableTuples; i++) {
@@ -250,7 +250,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
             bigTable.Clear();
             smallTable.Clear();
 
-            begin03 = std::chrono::steady_clock::now();   
+            begin03 = std::chrono::steady_clock::now();
 
 
             for ( ui64 i = 0; i < BigTableTuples; i++) {
@@ -272,7 +272,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
             CTEST << "Time for hash = " << milliseconds << "[ms]" << Endl;
             CTEST << "Adding tuples speed: " << (BigTupleSize * (BigTableTuples + SmallTableTuples) * 1000) / ( milliseconds * 1024 * 1024) << "MB/sec" << Endl;
             CTEST << Endl;
-           
+
             mi = NMemInfo::GetMemInfo();
             CTEST << "Mem usage after tables tuples added (MB): " << mi.RSS / (1024 * 1024) << Endl;
 
@@ -297,7 +297,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
             ui64 numBigTuples = 0;
             bigTable.ResetIterator();
 
-            std::chrono::steady_clock::time_point begin04 = std::chrono::steady_clock::now();   
+            std::chrono::steady_clock::time_point begin04 = std::chrono::steady_clock::now();
 
             while(bigTable.NextTuple(td1)) { numBigTuples++; }
 
@@ -310,7 +310,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
             numBigTuples = 0;
             bigTable.ResetIterator();
 
-            std::chrono::steady_clock::time_point begin041 = std::chrono::steady_clock::now();   
+            std::chrono::steady_clock::time_point begin041 = std::chrono::steady_clock::now();
 
             while(bigTable.NextTuple(td2)) { numBigTuples++; }
 
@@ -321,7 +321,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
             CTEST << Endl;
 
 
-            std::chrono::steady_clock::time_point begin05 = std::chrono::steady_clock::now();   
+            std::chrono::steady_clock::time_point begin05 = std::chrono::steady_clock::now();
 
             joinTable.Join(smallTable,bigTable);
 
@@ -337,7 +337,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
             ui64 numJoinedTuples = 0;
 
 
-            std::chrono::steady_clock::time_point begin042 = std::chrono::steady_clock::now();   
+            std::chrono::steady_clock::time_point begin042 = std::chrono::steady_clock::now();
 
             while(joinTable.NextJoinedData(td1, td2)) { numJoinedTuples++; }
 
@@ -367,7 +367,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinAnyTest) {
                                  (char *)"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
             ui32 bigStrSize[2] = {151, 151};
 
-            
+
 
             GraceJoin::TTable bigTable  (1,1,1,1,0,0,1, nullptr, true);
             GraceJoin::TTable smallTable(1,1,1,1,0,0,1, nullptr, true);
@@ -377,7 +377,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinAnyTest) {
 
             const ui64 TupleSize = 1024;
 
-            ui64 bigTuple[TupleSize]; 
+            ui64 bigTuple[TupleSize];
 
             for (ui64 i = 0; i < TupleSize; i++) {
                 bigTuple[i] = std::rand() / ( RAND_MAX / 10000 );
@@ -385,13 +385,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinAnyTest) {
 
             ui64 milliseconds = 0;
 
-            
+
 
             const ui64 BigTableTuples = 600000;
             const ui64 SmallTableTuples = 150000;
             const ui64 BigTupleSize = 40;
 
-            std::chrono::steady_clock::time_point begin03 = std::chrono::steady_clock::now();   
+            std::chrono::steady_clock::time_point begin03 = std::chrono::steady_clock::now();
 
 
             for ( ui64 i = 0; i < BigTableTuples; i++) {
@@ -434,7 +434,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinAnyTest) {
             ui64 numBigTuples = 0;
             bigTable.ResetIterator();
 
-            std::chrono::steady_clock::time_point begin04 = std::chrono::steady_clock::now();   
+            std::chrono::steady_clock::time_point begin04 = std::chrono::steady_clock::now();
 
             while(bigTable.NextTuple(td1)) { numBigTuples++; }
 
@@ -447,7 +447,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinAnyTest) {
             numBigTuples = 0;
             bigTable.ResetIterator();
 
-            std::chrono::steady_clock::time_point begin041 = std::chrono::steady_clock::now();   
+            std::chrono::steady_clock::time_point begin041 = std::chrono::steady_clock::now();
 
             while(bigTable.NextTuple(td2)) { numBigTuples++; }
 
@@ -458,7 +458,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinAnyTest) {
             CTEST << Endl;
 
 
-            std::chrono::steady_clock::time_point begin05 = std::chrono::steady_clock::now();   
+            std::chrono::steady_clock::time_point begin05 = std::chrono::steady_clock::now();
 
             joinTable.Join(smallTable,bigTable);
 
@@ -470,7 +470,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinAnyTest) {
             ui64 numJoinedTuples = 0;
 
 
-            std::chrono::steady_clock::time_point begin042 = std::chrono::steady_clock::now();   
+            std::chrono::steady_clock::time_point begin042 = std::chrono::steady_clock::now();
 
             while(joinTable.NextJoinedData(td1, td2)) { numJoinedTuples++; }
 
@@ -500,7 +500,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceSelfJoinTest) {
                                  (char *)"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
             ui32 bigStrSize[2] = {151, 151};
 
-            
+
 
             GraceJoin::TTable bigTable  (1,1,1,1,0,0,1, nullptr, false);
             GraceJoin::TTable smallTable(1,1,1,1,0,0,1, nullptr, false);
@@ -510,7 +510,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceSelfJoinTest) {
 
             const ui64 TupleSize = 1024;
 
-            ui64 bigTuple[TupleSize]; 
+            ui64 bigTuple[TupleSize];
 
             for (ui64 i = 0; i < TupleSize; i++) {
                 bigTuple[i] = std::rand() / ( RAND_MAX / 10000 );
@@ -518,13 +518,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceSelfJoinTest) {
 
             ui64 milliseconds = 0;
 
-            
+
 
             const ui64 BigTableTuples = 600000;
             const ui64 SmallTableTuples = 150000;
             const ui64 BigTupleSize = 40;
 
-            std::chrono::steady_clock::time_point begin03 = std::chrono::steady_clock::now();   
+            std::chrono::steady_clock::time_point begin03 = std::chrono::steady_clock::now();
 
 
             for ( ui64 i = 0; i < BigTableTuples; i++) {
@@ -567,7 +567,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceSelfJoinTest) {
             ui64 numBigTuples = 0;
             bigTable.ResetIterator();
 
-            std::chrono::steady_clock::time_point begin04 = std::chrono::steady_clock::now();   
+            std::chrono::steady_clock::time_point begin04 = std::chrono::steady_clock::now();
 
             while(bigTable.NextTuple(td1)) { numBigTuples++; }
 
@@ -580,7 +580,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceSelfJoinTest) {
             numBigTuples = 0;
             bigTable.ResetIterator();
 
-            std::chrono::steady_clock::time_point begin041 = std::chrono::steady_clock::now();   
+            std::chrono::steady_clock::time_point begin041 = std::chrono::steady_clock::now();
 
             while(bigTable.NextTuple(td2)) { numBigTuples++; }
 
@@ -591,7 +591,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceSelfJoinTest) {
             CTEST << Endl;
 
 
-            std::chrono::steady_clock::time_point begin05 = std::chrono::steady_clock::now();   
+            std::chrono::steady_clock::time_point begin05 = std::chrono::steady_clock::now();
 
             joinTable.Join(bigTable,bigTable);
 
@@ -603,7 +603,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceSelfJoinTest) {
             ui64 numJoinedTuples = 0;
 
 
-            std::chrono::steady_clock::time_point begin042 = std::chrono::steady_clock::now();   
+            std::chrono::steady_clock::time_point begin042 = std::chrono::steady_clock::now();
 
             while(joinTable.NextJoinedData(td1, td2)) { numJoinedTuples++; }
 
@@ -651,7 +651,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSelfJoinTest) {
                 pb.NewTuple({key1, payload1}),
                 pb.NewTuple({key2, payload2}),
                 pb.NewTuple({key3, payload3}),
-                pb.NewTuple({key4, payload4})                
+                pb.NewTuple({key4, payload4})
             });
 
 
@@ -660,7 +660,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSelfJoinTest) {
                 pb.NewDataType(NUdf::TDataType<char*>::Id)
             }));
 
-            const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.SelfJoin(
+            const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceSelfJoin(
                 pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U)}; }),
                 EJoinKind::Inner, {0U}, {0U}, {1U, 0U}, {1U, 1U}, resultType),
                 [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); })
@@ -694,7 +694,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSelfJoinTest) {
 
         }
 
-        
+
     }
 
     Y_UNIT_TEST_LLVM(TestDiffKeys) {
@@ -728,7 +728,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSelfJoinTest) {
                 pb.NewTuple({key1, key11, payload1}),
                 pb.NewTuple({key2, key21, payload2}),
                 pb.NewTuple({key3, key31, payload3}),
-                pb.NewTuple({key4, key41, payload4})                
+                pb.NewTuple({key4, key41, payload4})
             });
 
 
@@ -737,7 +737,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSelfJoinTest) {
                 pb.NewDataType(NUdf::TDataType<char*>::Id)
             }));
 
-            const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.SelfJoin(
+            const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.GraceSelfJoin(
                 pb.ExpandMap(pb.ToFlow(list1), [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
                 EJoinKind::Inner, {0U}, {1U}, {2U, 0U}, {2U, 1U}, resultType),
                 [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); })
@@ -762,7 +762,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSelfJoinTest) {
 
         }
 
-        
+
     }
 
 
@@ -837,7 +837,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
 
         }
 
-        
+
     }
 
     Y_UNIT_TEST_LLVM(TestInnerDoubleCondition1) {
@@ -907,7 +907,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
 
         }
 
-        
+
     }
 
     Y_UNIT_TEST_LLVM(TestInnerStringKey1) {
@@ -976,7 +976,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
 
         }
 
-        
+
     }
 
 
@@ -1920,9 +1920,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
             UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "C");
             UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Y");
             UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "A");            
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "A");
             UNIT_ASSERT(!tuple.GetElement(1));
-            UNIT_ASSERT(iterator.Next(tuple));        
+            UNIT_ASSERT(iterator.Next(tuple));
             UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Z");
             UNIT_ASSERT(!tuple.GetElement(0));
             UNIT_ASSERT(!iterator.Next(tuple));
@@ -1985,9 +1985,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
 
 
             UNIT_ASSERT(iterator.Next(tuple));
-            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "A");            
+            UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(0), "A");
             UNIT_ASSERT(!tuple.GetElement(1));
-            UNIT_ASSERT(iterator.Next(tuple));        
+            UNIT_ASSERT(iterator.Next(tuple));
             UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Z");
             UNIT_ASSERT(!tuple.GetElement(0));
             UNIT_ASSERT(!iterator.Next(tuple));

@@ -1538,9 +1538,9 @@
             ]
         },
         {
-            "Name": "TCoSelfJoinCore",
+            "Name": "TCoGraceSelfJoinCore",
             "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "SelfJoinCore"},
+            "Match": {"Type": "Callable", "Name": "GraceSelfJoinCore"},
             "Children": [
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"},
                 {"Index": 1, "Name": "JoinKind", "Type": "TCoAtom"},

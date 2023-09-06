@@ -1210,7 +1210,7 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
     int shift = 2;
     bool selfJoin = false;
     if (mode == EHashJoinMode::GraceAndSelf && leftIn.Stage().Ptr() == rightIn.Stage().Ptr()) {
-        callableName = "SelfJoinCore";
+        callableName = "GraceSelfJoinCore";
         shift = 1;
         selfJoin = true;
     }

@@ -954,7 +954,7 @@ IComputationNode* WrapGraceJoin(TCallable& callable, const TComputationNodeFacto
 
 }
 
-IComputationNode* WrapSelfJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+IComputationNode* WrapGraceSelfJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 7, "Expected 7 args");
 
     const auto leftFlowNode = callable.GetInput(0);

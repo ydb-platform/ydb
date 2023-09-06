@@ -199,7 +199,7 @@ public:
         Functions["JoinDict"] = &TCallableConstraintTransformer::JoinDictWrap;
         Functions["MapJoinCore"] = &TCallableConstraintTransformer::MapJoinCoreWrap;
         Functions["GraceJoinCore"] = &TCallableConstraintTransformer::GraceJoinCoreWrap;
-        Functions["SelfJoinCore"] = &TCallableConstraintTransformer::SelfJoinCoreWrap;
+        Functions["GraceSelfJoinCore"] = &TCallableConstraintTransformer::GraceSelfJoinCoreWrap;
         Functions["CommonJoinCore"] = &TCallableConstraintTransformer::FromFirst<TEmptyConstraintNode>;
         Functions["ToDict"] = &TCallableConstraintTransformer::ToDictWrap;
         Functions["DictItems"] = &TCallableConstraintTransformer::DictItemsWrap;
@@ -2436,7 +2436,7 @@ private:
         return core.RightInput().Ptr();
     }
 
-    TExprNode::TPtr GraceJoinRightInput(const TCoSelfJoinCore& core) const {
+    TExprNode::TPtr GraceJoinRightInput(const TCoGraceSelfJoinCore& core) const {
         return core.Input().Ptr();
     }
 
@@ -2444,7 +2444,7 @@ private:
         return core.LeftInput().Ptr();
     }
 
-    TExprNode::TPtr GraceJoinLeftInput(const TCoSelfJoinCore& core) const {
+    TExprNode::TPtr GraceJoinLeftInput(const TCoGraceSelfJoinCore& core) const {
         return core.Input().Ptr();
     }
 
@@ -2543,8 +2543,8 @@ private:
         return GraceJoinCoreWrapImpl<TCoGraceJoinCore>(input, output, ctx);
     }
 
-    TStatus SelfJoinCoreWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
-        return GraceJoinCoreWrapImpl<TCoSelfJoinCore>(input, output, ctx);
+    TStatus GraceSelfJoinCoreWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
+        return GraceJoinCoreWrapImpl<TCoGraceSelfJoinCore>(input, output, ctx);
     }
 
     template<bool Distinct>

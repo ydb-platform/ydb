@@ -1584,8 +1584,8 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.MapJoinCore(list, dict, joinKind, leftKeyColumns, leftRenames, rightRenames, returnType);
     });
 
-    AddCallable({"GraceJoinCore", "SelfJoinCore"}, [](const TExprNode& node, TMkqlBuildContext& ctx) {
-        bool selfJoin = node.Content() == "SelfJoinCore";
+    AddCallable({"GraceJoinCore", "GraceSelfJoinCore"}, [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        bool selfJoin = node.Content() == "GraceSelfJoinCore";
         int shift = selfJoin ? 0 : 1;
         const auto flowLeft = MkqlBuildExpr(*node.Child(0), ctx);
         const auto flowRight = MkqlBuildExpr(*node.Child(shift), ctx);
@@ -1633,7 +1633,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
         const auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
         return selfJoin
-            ? ctx.ProgramBuilder.SelfJoin(flowLeft, joinKind, leftKeyColumns, rightKeyColumns, leftRenames, rightRenames, returnType, anyJoinSettings)
+            ? ctx.ProgramBuilder.GraceSelfJoin(flowLeft, joinKind, leftKeyColumns, rightKeyColumns, leftRenames, rightRenames, returnType, anyJoinSettings)
             : ctx.ProgramBuilder.GraceJoin(flowLeft, flowRight, joinKind, leftKeyColumns, rightKeyColumns, leftRenames, rightRenames, returnType, anyJoinSettings);
     });
 

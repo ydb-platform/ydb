@@ -665,7 +665,7 @@ namespace NTypeAnnImpl {
         return GraceJoinCoreWrapperImp(input, *leftItemType->Cast<TMultiExprType>(), *rightItemType->Cast<TMultiExprType>(), ctx, 2);
     }
 
-    IGraphTransformer::TStatus SelfJoinCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus GraceSelfJoinCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureArgsCount(*input, 7, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }

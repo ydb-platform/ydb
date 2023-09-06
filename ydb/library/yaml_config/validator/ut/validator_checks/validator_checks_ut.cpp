@@ -306,4 +306,79 @@ Y_UNIT_TEST_SUITE(Checks) {
             {"/", "Check \"must have even a/b/c if flag is true. Else must have odd c/a/b\" failed: Node \"/c/b/a\" is not presented"},
         }));
     }
+
+    Y_UNIT_TEST(OpaqueMaps) {
+        auto v =
+        TMapBuilder([](auto& b) {
+            b.Opaque()
+            .Int64("depth", [](auto& b) {
+                b.Range(0, 3);
+            });
+        })
+        .AddCheck("field/field/.../field level must equal /depth", [](auto& c) {
+            int remaining_depth = c.Node()["depth"].Int64();
+            int cur_depth = 0;
+            TNodeWrapper node = c.Node();
+            while (remaining_depth > 0) {
+                if (!node.IsMap()) {
+                    c.Expect(false, "field \"field\" on level " + ToString<i64>(cur_depth) + " must be a map");
+                    return;
+                }
+                node = node.Map()["field"];
+                remaining_depth--;
+                cur_depth++;
+            }
+            if (cur_depth == 0) {
+                c.Expect(!node.Map()["field"].Exists(), "If depth == 0, field \"field\" must not be there");
+            } else {
+                c.Expect(node.Exists(), "field \"field\" on level " + ToString<i64>(cur_depth) + " must exist");
+                return;
+                c.Expect(node.IsScalar(), "field \"field\" on level " + ToString<i64>(cur_depth) + " must be a scalar");
+            }
+        })
+        .CreateValidator();
+
+        const char* yaml = 
+        "depth: 0\n"
+        "field: value\n";
+
+        UNIT_ASSERT(HasOnlyThisIssues(v.Validate(yaml), {{
+            "/", "Check \"field/field/.../field level must equal /depth\" failed: If depth == 0, field \"field\" must not be there"
+        }}));
+        
+        yaml = 
+        "depth: 1\n"
+        "field: value\n";
+
+        UNIT_ASSERT(Valid(v.Validate(yaml)));
+
+        yaml = 
+        "depth: 1\n";
+
+        UNIT_ASSERT(HasOnlyThisIssues(v.Validate(yaml), {{
+            "/", "Check \"field/field/.../field level must equal /depth\" failed: field \"field\" on level 1 must exist"
+        }}));
+
+        yaml = 
+        "depth: 2\n"
+        "field:\n"
+        "  field: value\n";
+
+        UNIT_ASSERT(Valid(v.Validate(yaml)));
+
+        yaml = 
+        "depth: 2\n"
+        "field:\n"
+        "  field: []\n";
+
+        UNIT_ASSERT(Valid(v.Validate(yaml)));
+
+        yaml = 
+        "depth: 2\n"
+        "field:\n"
+        "  field:\n"
+        "    field: value\n";
+
+        UNIT_ASSERT(Valid(v.Validate(yaml)));
+    }
 }

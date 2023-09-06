@@ -33,18 +33,40 @@ namespace NDetail {
 template <typename TThis>
 class TNodeWrapperCommonOps {
 public:
+    bool Exists();
+
+protected:
+    // if true, then has no validator, node type and can be anything
+    bool IsOpaqueChild();
     void ThrowIfNullNode();
+
+private:
+    TThis& AsDerived();
 };
 
 template <typename TThis>
 void TNodeWrapperCommonOps<TThis>::ThrowIfNullNode() {
-    auto& This = static_cast<TThis&>(*this);
-    if (!This.Node_) {
+    if (!AsDerived().Node_) {
         throw yexception() <<
             "Node \"" +
-            This.PathFromCheckNode_ +
+            AsDerived().PathFromCheckNode_ +
             "\" is not presented";
     }
+}
+
+template <typename TThis>
+bool TNodeWrapperCommonOps<TThis>::IsOpaqueChild() {
+    return !AsDerived().Validator_;
+}
+
+template <typename TThis>
+bool TNodeWrapperCommonOps<TThis>::Exists() {
+    return AsDerived().Node_ != nullptr;
+}
+
+template <typename TThis>
+TThis& TNodeWrapperCommonOps<TThis>::AsDerived() {
+    return static_cast<TThis&>(*this);
 }
 
 } // namespace NDetail
@@ -67,7 +89,14 @@ public:
     TStringNodeWrapper String();
     TBoolNodeWrapper Bool();
 
-    ENodeType Type();
+    TMaybe<ENodeType> ValidatorType();
+
+    bool IsMap();
+    bool IsArray();
+    bool IsInt64();
+    bool IsString();
+    bool IsBool();
+    bool IsScalar();
 
 protected:
     TCheckContext* Context_;
@@ -87,6 +116,8 @@ public:
         NFyaml::TNodeRef node,
         TGenericValidator* validator,
         const TString& pathFromCheckNode);
+    
+    operator TNodeWrapper();
 
 private:
     TGenericCheckContext* Context_;
@@ -104,6 +135,8 @@ public:
         NFyaml::TNodeRef node,
         TMapValidator* validator,
         const TString& pathFromCheckNode);
+    
+    operator TNodeWrapper();
     
     TNodeWrapper operator[](const TString& field);
     TNodeWrapper At(const TString& field);
@@ -132,6 +165,8 @@ public:
 
     TNodeWrapper operator[](size_t index);
 
+    operator TNodeWrapper();
+
 private:
     TArrayCheckContext* Context_;
     NFyaml::TNodeRef Node_;
@@ -154,6 +189,8 @@ public:
     i64 Value();
     operator i64();
 
+    operator TNodeWrapper();
+
 private:
     TInt64CheckContext* Context_;
     NFyaml::TNodeRef Node_;
@@ -174,6 +211,8 @@ public:
     TString Value();
     operator TString();
 
+    operator TNodeWrapper();
+
 private:
     TStringCheckContext* Context_;
     NFyaml::TNodeRef Node_;
@@ -193,6 +232,8 @@ public:
 
     bool Value();
     operator bool();
+
+    operator TNodeWrapper();
 
 private:
     TBoolCheckContext* Context_;

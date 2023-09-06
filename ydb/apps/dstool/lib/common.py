@@ -293,13 +293,13 @@ def fetch(path, params={}, explicit_host=None, fmt='json', host=None, cache=True
     if connection_params.insecure:
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
-    stream = urllib.request.urlopen(request, timeout=connection_params.http_timeout, context=ctx)
-    if fmt == 'json':
-        return json.load(stream)
-    elif fmt == 'raw':
-        return stream.read()
-    else:
-        assert False, 'ERROR: invalid stream fmt specified: %s' % fmt
+    with urllib.request.urlopen(request, timeout=connection_params.http_timeout, context=ctx) as stream:
+        if fmt == 'json':
+            return json.load(stream)
+        elif fmt == 'raw':
+            return stream.read()
+        else:
+            assert False, 'ERROR: invalid stream fmt specified: %s' % fmt
 
 
 @query_random_host_with_retry(explicit_host_param='explicit_host')

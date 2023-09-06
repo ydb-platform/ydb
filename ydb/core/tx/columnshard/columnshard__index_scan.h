@@ -2,7 +2,8 @@
 
 #include "columnshard__scan.h"
 #include "columnshard_common.h"
-#include <ydb/core/tx/columnshard/engines/indexed_read_data.h>
+#include "engines/reader/read_metadata.h"
+#include "engines/reader/read_context.h"
 
 namespace NKikimr::NColumnShard {
 
@@ -23,7 +24,6 @@ public:
     }
 };
 
-
 using NOlap::TUnifiedBlobId;
 using NOlap::TBlobRange;
 
@@ -40,7 +40,7 @@ public:
             << "records_count:" << RecordsCount << ";"
             ;
         if (Data.size()) {
-            sb << "schema=" << Data.front().GetResultBatch()->schema()->ToString() << ";";
+            sb << "schema=" << Data.front().GetResultBatch().schema()->ToString() << ";";
         }
         return sb;
     }
@@ -50,16 +50,16 @@ public:
 
     }
     NOlap::TPartialReadResult& emplace_back(NOlap::TPartialReadResult&& v) {
-        RecordsCount += v.GetResultBatch()->num_rows();
+        RecordsCount += v.GetResultBatch().num_rows();
         Data.emplace_back(std::move(v));
         return Data.back();
     }
-    NOlap::TPartialReadResult pop_front() {
+    std::optional<NOlap::TPartialReadResult> pop_front() {
         if (Data.empty()) {
-            return NOlap::TPartialReadResult();
+            return {};
         }
         auto result = std::move(Data.front());
-        RecordsCount -= result.GetResultBatch()->num_rows();
+        RecordsCount -= result.GetResultBatch().num_rows();
         Data.pop_front();
         return result;
     }
@@ -104,7 +104,7 @@ public:
         return IndexedData->IsFinished() && ReadyResults.empty();
     }
 
-    NOlap::TPartialReadResult GetBatch() override;
+    std::optional<NOlap::TPartialReadResult> GetBatch() override;
 
     std::optional<NBlobCache::TBlobRange> GetNextBlobToRead() override;
 

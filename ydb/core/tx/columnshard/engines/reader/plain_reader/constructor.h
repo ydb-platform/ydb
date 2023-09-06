@@ -11,13 +11,15 @@ private:
     IDataReader& Reader;
     bool Started = false;
 protected:
-    THashMap<TBlobRange, TColumnRecord> RecordsByBlobRange;
-    THashMap<TBlobRange, TString> Data;
+    THashSet<TBlobRange> WaitingData;
+    THashMap<TBlobRange, TPortionInfo::TAssembleBlobInfo> Data;
     virtual void DoOnDataReady(IDataReader& reader) = 0;
 
     void OnDataReady(IDataReader& reader) {
-        Constructed = true;
-        return DoOnDataReady(reader);
+        if (WaitingData.empty()) {
+            Constructed = true;
+            return DoOnDataReady(reader);
+        }
     }
 public:
     IFetchTaskConstructor(IDataReader& reader)
@@ -28,9 +30,7 @@ public:
 
     void StartDataWaiting() {
         Started = true;
-        if (Data.size() == RecordsByBlobRange.size()) {
-            OnDataReady(Reader);
-        }
+        OnDataReady(Reader);
     }
 
     void Abort() {
@@ -41,17 +41,21 @@ public:
         Y_VERIFY(Constructed);
     }
 
-    void AddChunk(const TColumnRecord& rec) {
+    void AddWaitingRecord(const TColumnRecord& rec) {
         Y_VERIFY(!Started);
-        Y_VERIFY(RecordsByBlobRange.emplace(rec.BlobRange, rec).second);
+        Y_VERIFY(WaitingData.emplace(rec.BlobRange).second);
     }
 
     void AddData(const TBlobRange& range, TString&& data) {
         Y_VERIFY(Started);
+        Y_VERIFY(WaitingData.erase(range));
         Y_VERIFY(Data.emplace(range, std::move(data)).second);
-        if (Data.size() == RecordsByBlobRange.size()) {
-            OnDataReady(Reader);
-        }
+        OnDataReady(Reader);
+    }
+
+    void AddNullData(const TBlobRange& range, const ui32 rowsCount) {
+        Y_VERIFY(!Started);
+        Y_VERIFY(Data.emplace(range, rowsCount).second);
     }
 };
 
@@ -82,31 +86,21 @@ private:
 public:
     TFFColumnsTaskConstructor(const std::set<ui32>& columnIds, const TPortionDataSource& portion, IDataReader& reader)
         : TBase(columnIds, portion, reader)
-        , AppliedFilter(portion.GetEFData().GetAppliedFilter())
+        , AppliedFilter(portion.GetFilterStageData().GetAppliedFilter())
     {
-    }
-};
-
-class TPKColumnsTaskConstructor: public TAssembleColumnsTaskConstructor {
-private:
-    using TBase = TAssembleColumnsTaskConstructor;
-    std::shared_ptr<NArrow::TColumnFilter> AppliedFilter;
-    virtual void DoOnDataReady(IDataReader& reader) override;
-public:
-    TPKColumnsTaskConstructor(const std::set<ui32>& columnIds, const TPortionDataSource& portion, IDataReader& reader)
-        : TBase(columnIds, portion, reader)
-        , AppliedFilter(portion.GetEFData().GetAppliedFilter()) {
     }
 };
 
 class TEFTaskConstructor: public TAssembleColumnsTaskConstructor {
 private:
+    bool UseEarlyFilter = false;
     using TBase = TAssembleColumnsTaskConstructor;
     virtual void DoOnDataReady(IDataReader& reader) override;
 public:
-    TEFTaskConstructor(const std::set<ui32>& columnIds, const TPortionDataSource& portion, IDataReader& reader)
-        : TBase(columnIds, portion, reader) {
-        Y_VERIFY(!portion.HasEFData());
+    TEFTaskConstructor(const std::set<ui32>& columnIds, const TPortionDataSource& portion, IDataReader& reader, const bool useEarlyFilter)
+        : TBase(columnIds, portion, reader)
+        , UseEarlyFilter(useEarlyFilter)
+    {
     }
 };
 

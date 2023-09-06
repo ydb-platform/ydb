@@ -2,7 +2,7 @@
 
 namespace NKikimr::NColumnShard {
 
-NKikimr::NOlap::TPartialReadResult TStatsIterator::GetBatch() {
+std::optional<NOlap::TPartialReadResult> TStatsIterator::GetBatch() {
     // Take next raw batch
     auto batch = FillStatsBatch();
 

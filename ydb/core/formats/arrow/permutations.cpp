@@ -39,7 +39,7 @@ std::shared_ptr<arrow::UInt64Array> MakePermutation(const int size, const bool r
 }
 
 std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                                        const std::shared_ptr<arrow::Schema>& sortingKey) {
+                                                        const std::shared_ptr<arrow::Schema>& sortingKey, const bool andUnique) {
     auto keyBatch = ExtractColumns(batch, sortingKey);
     auto keyColumns = std::make_shared<TArrayVec>(keyBatch->columns());
     std::vector<TRawReplaceKey> points;
@@ -70,8 +70,21 @@ std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::shared_ptr<ar
     arrow::UInt64Builder builder;
     TStatusValidator::Validate(builder.Reserve(points.size()));
 
+    TRawReplaceKey* predKey = nullptr;
     for (auto& point : points) {
+        if (andUnique) {
+            if (predKey) {
+                if (haveNulls) {
+                    if (*predKey == point) {
+                        continue;
+                    }
+                } else if (predKey->CompareNotNull(point) == std::partial_ordering::equivalent) {
+                    continue;
+                }
+            }
+        }
         TStatusValidator::Validate(builder.Append(point.GetPosition()));
+        predKey = &point;
     }
 
     std::shared_ptr<arrow::UInt64Array> out;

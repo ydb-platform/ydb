@@ -29,7 +29,7 @@ const TColumnRecord& TPortionInfo::AppendOneChunkColumn(TColumnRecord&& record) 
 void TPortionInfo::AddMetadata(const ISnapshotSchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch,
                                const TString& tierName) {
     const auto& indexInfo = snapshotSchema.GetIndexInfo();
-
+    Y_VERIFY(batch->num_rows() == NumRows());
     Meta = {};
     Meta.FirstPkColumn = indexInfo.GetPKFirstColumnId();
     Meta.FillBatchInfo(batch, indexInfo);
@@ -89,7 +89,7 @@ ui64 TPortionInfo::GetRawBytes(const std::vector<ui32>& columnIds) const {
         } else {
             for (auto&& r : Records) {
                 if (r.ColumnId == i) {
-                    sum += r.GetMeta().GetRawBytes().value_or(0);
+                    sum += r.GetMeta().GetRawBytesVerified();
                 }
             }
         }
@@ -110,6 +110,8 @@ TString TPortionInfo::DebugString() const {
     sb << "(portion_id:" << Portion << ";" <<
         "granule_id:" << Granule << ";records_count:" << NumRows() << ";"
         "min_snapshot:(" << MinSnapshot.DebugString() << ");" <<
+//        "from:" << IndexKeyStart().DebugString() << ";" <<
+//        "to:" << IndexKeyEnd().DebugString() << ";" <<
         "size:" << BlobsBytes() << ";" <<
         "meta:(" << Meta.DebugString() << ");";
     if (RemoveSnapshot.Valid()) {

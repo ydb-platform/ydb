@@ -5,7 +5,6 @@
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/columnshard__read_base.h>
 #include <ydb/core/tx/columnshard/columnshard__index_scan.h>
-#include <ydb/core/tx/columnshard/engines/indexed_read_data.h>
 
 namespace NKikimr::NColumnShard {
 

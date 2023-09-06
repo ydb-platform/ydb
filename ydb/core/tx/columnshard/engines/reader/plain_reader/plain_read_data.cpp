@@ -4,33 +4,17 @@ namespace NKikimr::NOlap::NPlainReader {
 
 TPlainReadData::TPlainReadData(TReadMetadata::TConstPtr readMetadata, const TReadContext& context)
     : TBase(context, readMetadata)
+    , EFColumns(std::make_shared<TColumnsSet>(GetReadMetadata()->GetEarlyFilterColumnIds(), GetReadMetadata()->GetIndexInfo()))
+    , PKColumns(std::make_shared<TColumnsSet>(GetReadMetadata()->GetPKColumnIds(), GetReadMetadata()->GetIndexInfo()))
+    , FFColumns(std::make_shared<TColumnsSet>(GetReadMetadata()->GetAllColumns(), GetReadMetadata()->GetIndexInfo()))
+    , TrivialEFFlag(EFColumns->ColumnsOnly(GetReadMetadata()->GetIndexInfo().ArrowSchemaSnapshot()->field_names()))
 {
-    EFColumnIds = GetReadMetadata()->GetEarlyFilterColumnIds();
-    PKColumnIds = GetReadMetadata()->GetPKColumnIds();
-    FFColumnIds = GetReadMetadata()->GetUsedColumnIds();
-    for (auto&& i : EFColumnIds) {
-        PKColumnIds.erase(i);
-        FFColumnIds.erase(i);
-    }
-    for (auto&& i : PKColumnIds) {
-        FFColumnIds.erase(i);
-    }
-    if (context.GetIsInternalRead()) {
-        EFColumnIds.insert(PKColumnIds.begin(), PKColumnIds.end());
-        EFColumnIds.insert(FFColumnIds.begin(), FFColumnIds.end());
-        PKColumnIds.clear();
-        FFColumnIds.clear();
-    }
-    for (auto&& i : EFColumnIds) {
-        EFColumnNames.emplace_back(GetReadMetadata()->GetIndexInfo().GetColumnName(i));
-    }
-    for (auto&& i : PKColumnIds) {
-        PKColumnNames.emplace_back(GetReadMetadata()->GetIndexInfo().GetColumnName(i));
-    }
-    for (auto&& i : FFColumnIds) {
-        FFColumnNames.emplace_back(GetReadMetadata()->GetIndexInfo().GetColumnName(i));
-    }
+    PKFFColumns = std::make_shared<TColumnsSet>(*PKColumns + *FFColumns);
+    EFPKColumns = std::make_shared<TColumnsSet>(*EFColumns + *PKColumns);
+    FFMinusEFColumns = std::make_shared<TColumnsSet>(*FFColumns - *EFColumns);
+    FFMinusEFPKColumns = std::make_shared<TColumnsSet>(*FFColumns - *EFColumns - *PKColumns);
 
+    Y_VERIFY(FFColumns->Contains(EFColumns));
     ui32 sourceIdx = 0;
     std::deque<std::shared_ptr<IDataSource>> sources;
     const auto& portionsOrdered = GetReadMetadata()->SelectInfo->GetPortionsOrdered(GetReadMetadata()->IsDescSorted());
@@ -121,6 +105,30 @@ void TPlainReadData::OnIntervalResult(std::shared_ptr<arrow::RecordBatch> batch)
         TPartialReadResult result(std::make_shared<TScanMemoryLimiter::TGuard>(Context.GetMemoryAccessor()), batch);
         ReadyResultsCount += result.GetRecordsCount();
         PartialResults.emplace_back(std::move(result));
+    }
+}
+
+NKikimr::NOlap::NPlainReader::TFetchingPlan TPlainReadData::GetColumnsFetchingPlan(const bool exclusiveSource) const {
+    if (exclusiveSource) {
+        if (Context.GetIsInternalRead()) {
+            return TFetchingPlan(FFColumns, EmptyColumns, true);
+        } else {
+            if (TrivialEFFlag) {
+                return TFetchingPlan(FFColumns, EmptyColumns, true);
+            } else {
+                return TFetchingPlan(EFColumns, FFMinusEFColumns, true);
+            }
+        }
+    } else {
+        if (GetContext().GetIsInternalRead()) {
+            return TFetchingPlan(PKFFColumns, EmptyColumns, false);
+        } else {
+            if (TrivialEFFlag) {
+                return TFetchingPlan(PKFFColumns, EmptyColumns, false);
+            } else {
+                return TFetchingPlan(EFPKColumns, FFMinusEFPKColumns, false);
+            }
+        }
     }
 }
 

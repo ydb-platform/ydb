@@ -3,49 +3,65 @@
 
 namespace NKikimr::NOlap::NPlainReader {
 
+bool TFetchingInterval::IsExclusiveSource() const {
+    return IncludeStart && Sources.size() == 1 && IncludeFinish;
+}
+
 void TFetchingInterval::ConstructResult() {
-    if (Merger && IsSourcesFFReady()) {
+    if (!Merger || !IsSourcesReady()) {
+        return;
+    }
+    if (!IsExclusiveSource()) {
         for (auto&& [_, i] : Sources) {
             if (i->GetStart().Compare(Start) == std::partial_ordering::equivalent && !i->IsMergingStarted()) {
                 auto rb = i->GetBatch();
                 if (rb) {
-                    Merger->AddPoolSource({}, rb, i->GetEFData().GetNotAppliedEarlyFilter());
+                    Merger->AddPoolSource({}, rb, i->GetFilterStageData().GetNotAppliedEarlyFilter());
                 }
                 i->StartMerging();
             }
         }
-        Merger->DrainCurrent(RBBuilder, Finish, IncludeFinish);
+        Merger->DrainCurrentTo(*RBBuilder, Finish, IncludeFinish);
         Scanner.OnIntervalResult(RBBuilder->Finalize(), GetIntervalIdx());
+    } else {
+        Y_VERIFY(Merger->IsEmpty());
+        Sources.begin()->second->StartMerging();
+        auto batch = Sources.begin()->second->GetBatch();
+        if (batch && batch->num_rows()) {
+            if (Scanner.IsReverse()) {
+                auto permutation = NArrow::MakePermutation(batch->num_rows(), true);
+                batch = NArrow::TStatusValidator::GetValid(arrow::compute::Take(batch, permutation)).record_batch();
+            }
+            batch = NArrow::ExtractExistedColumns(batch, RBBuilder->GetFields());
+            AFL_VERIFY((ui32)batch->num_columns() == RBBuilder->GetFields().size())("batch", batch->num_columns())("builder", RBBuilder->GetFields().size())
+                ("batch_columns", JoinSeq(",", batch->schema()->field_names()))("builder_columns", RBBuilder->GetColumnNames());
+        }
+        Scanner.OnIntervalResult(batch, GetIntervalIdx());
     }
 }
 
-void TFetchingInterval::OnSourceEFReady(const ui32 /*sourceIdx*/) {
+void TFetchingInterval::OnSourceFetchStageReady(const ui32 /*sourceIdx*/) {
     ConstructResult();
 }
 
-void TFetchingInterval::OnSourcePKReady(const ui32 /*sourceIdx*/) {
-    ConstructResult();
-}
-
-void TFetchingInterval::OnSourceFFReady(const ui32 /*sourceIdx*/) {
+void TFetchingInterval::OnSourceFilterStageReady(const ui32 /*sourceIdx*/) {
     ConstructResult();
 }
 
 void TFetchingInterval::StartMerge(std::shared_ptr<NIndexedReader::TMergePartialStream> merger) {
+    Y_VERIFY(!Merger);
     Merger = merger;
-//    if (Merger->GetCurrentKeyColumns()) {
-//        AFL_VERIFY(Merger->GetCurrentKeyColumns()->Compare(Start) == std::partial_ordering::less)("current", Merger->GetCurrentKeyColumns()->DebugJson())("start", Start.DebugJson());
-//    }
     ConstructResult();
 }
 
 TFetchingInterval::TFetchingInterval(const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish,
     const ui32 intervalIdx, const std::map<ui32, std::shared_ptr<IDataSource>>& sources, TScanHead& scanner,
-    std::shared_ptr<NIndexedReader::TRecordBatchBuilder> builder, const bool includeFinish)
+    std::shared_ptr<NIndexedReader::TRecordBatchBuilder> builder, const bool includeFinish, const bool includeStart)
     : Scanner(scanner)
     , Start(start)
     , Finish(finish)
     , IncludeFinish(includeFinish)
+    , IncludeStart(includeStart)
     , Sources(sources)
     , IntervalIdx(intervalIdx)
     , RBBuilder(builder)
@@ -54,11 +70,7 @@ TFetchingInterval::TFetchingInterval(const NIndexedReader::TSortableBatchPositio
     for (auto&& [_, i] : Sources) {
         i->RegisterInterval(this);
         Scanner.AddSourceByIdx(i);
-        i->NeedEF();
-        if (Scanner.GetContext().GetIsInternalRead()) {
-            i->NeedPK();
-            i->NeedFF();
-        }
+        i->InitFetchingPlan(Scanner.GetColumnsFetchingPlan(IsExclusiveSource()));
     }
 }
 

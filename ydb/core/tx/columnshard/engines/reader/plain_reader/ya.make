@@ -9,6 +9,7 @@ SRCS(
     plain_read_data.cpp
     filter_assembler.cpp
     column_assembler.cpp
+    columns_set.cpp
 )
 
 PEERDIR(

@@ -16,13 +16,25 @@ public:
     }
 };
 
-class TEarlyFilterData: public TFetchedData {
+class TFilterStageData: public TFetchedData {
 private:
     using TBase = TFetchedData;
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, AppliedFilter);
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, NotAppliedEarlyFilter);
 public:
-    TEarlyFilterData(std::shared_ptr<NArrow::TColumnFilter> appliedFilter, std::shared_ptr<NArrow::TColumnFilter> earlyFilter, std::shared_ptr<arrow::RecordBatch> batch)
+    bool IsEmptyFilter() const {
+        return (AppliedFilter && AppliedFilter->IsTotalDenyFilter()) || (NotAppliedEarlyFilter && NotAppliedEarlyFilter->IsTotalDenyFilter());
+    }
+
+    std::shared_ptr<NArrow::TColumnFilter> GetActualFilter() const {
+        if (NotAppliedEarlyFilter) {
+            return NotAppliedEarlyFilter;
+        } else {
+            return AppliedFilter;
+        }
+    }
+
+    TFilterStageData(std::shared_ptr<NArrow::TColumnFilter> appliedFilter, std::shared_ptr<NArrow::TColumnFilter> earlyFilter, std::shared_ptr<arrow::RecordBatch> batch)
         : TBase(batch)
         , AppliedFilter(appliedFilter)
         , NotAppliedEarlyFilter(earlyFilter)
@@ -31,14 +43,7 @@ public:
     }
 };
 
-class TPrimaryKeyData: public TFetchedData {
-private:
-    using TBase = TFetchedData;
-public:
-    using TBase::TBase;
-};
-
-class TFullData: public TFetchedData {
+class TFetchStageData: public TFetchedData {
 private:
     using TBase = TFetchedData;
 public:

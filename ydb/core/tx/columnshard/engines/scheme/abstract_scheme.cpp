@@ -89,8 +89,8 @@ std::shared_ptr<arrow::RecordBatch> ISnapshotSchema::PrepareForInsert(const TStr
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", status.ToString());
         return nullptr;
     }
-    batch = NArrow::SortBatch(batch, sortingKey);
-    Y_VERIFY_DEBUG(NArrow::IsSorted(batch, sortingKey));
+    batch = NArrow::SortBatch(batch, sortingKey, true);
+    Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(batch, sortingKey));
     return batch;
 }
 

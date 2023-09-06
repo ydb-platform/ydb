@@ -22,10 +22,6 @@ class TScanIteratorBase;
 
 namespace NKikimr::NOlap {
 
-namespace NIndexedReader {
-class IOrderPolicy;
-}
-
 struct TReadStats {
     TInstant BeginTimestamp;
     ui32 SelectedIndex{0};
@@ -138,7 +134,6 @@ private:
     std::shared_ptr<ISnapshotSchema> ResultIndexSchema;
     std::vector<ui32> AllColumns;
     std::vector<ui32> ResultColumnsIds;
-    std::shared_ptr<NIndexedReader::IOrderPolicy> DoBuildSortingPolicy() const;
     mutable std::map<TSnapshot, ISnapshotSchema::TPtr> SchemasByVersionCache;
     mutable ISnapshotSchema::TPtr EmptyVersionSchemaCache;
 public:
@@ -158,8 +153,6 @@ public:
     const TSnapshot& GetSnapshot() const {
         return Snapshot;
     }
-
-    std::shared_ptr<NIndexedReader::IOrderPolicy> BuildSortingPolicy() const;
 
     TReadMetadata(const TVersionedIndex& info, const TSnapshot& snapshot, const ESorting sorting, const TProgramContainer& ssaProgram)
         : TBase(sorting, ssaProgram)
@@ -223,7 +216,6 @@ public:
     }
 
     std::set<ui32> GetEarlyFilterColumnIds() const;
-    std::set<ui32> GetUsedColumnIds() const;
     std::set<ui32> GetPKColumnIds() const;
 
     bool Empty() const {

@@ -12,11 +12,13 @@ private:
     NIndexedReader::TSortableBatchPosition Start;
     NIndexedReader::TSortableBatchPosition Finish;
     const bool IncludeFinish = true;
+    const bool IncludeStart = false;
     std::map<ui32, std::shared_ptr<IDataSource>> Sources;
     YDB_READONLY(ui32, IntervalIdx, 0);
     std::shared_ptr<NIndexedReader::TMergePartialStream> Merger;
     std::shared_ptr<NIndexedReader::TRecordBatchBuilder> RBBuilder;
 
+    bool IsExclusiveSource() const;
     void ConstructResult();
 
     IDataSource& GetSourceVerified(const ui32 idx) {
@@ -25,9 +27,9 @@ private:
         return *it->second;
     }
 
-    bool IsSourcesFFReady() {
+    bool IsSourcesReady() {
         for (auto&& [_, s] : Sources) {
-            if (!s->HasFFData()) {
+            if (!s->IsDataReady()) {
                 return false;
             }
         }
@@ -60,15 +62,14 @@ public:
         return !!Merger;
     }
 
-    void OnSourceEFReady(const ui32 sourceIdx);
-    void OnSourcePKReady(const ui32 sourceIdx);
-    void OnSourceFFReady(const ui32 /*sourceIdx*/);
+    void OnSourceFetchStageReady(const ui32 sourceIdx);
+    void OnSourceFilterStageReady(const ui32 sourceIdx);
 
     void StartMerge(std::shared_ptr<NIndexedReader::TMergePartialStream> merger);
 
     TFetchingInterval(const NIndexedReader::TSortableBatchPosition& start, const NIndexedReader::TSortableBatchPosition& finish,
         const ui32 intervalIdx, const std::map<ui32, std::shared_ptr<IDataSource>>& sources, TScanHead& scanner,
-        std::shared_ptr<NIndexedReader::TRecordBatchBuilder> builder, const bool includeFinish);
+        std::shared_ptr<NIndexedReader::TRecordBatchBuilder> builder, const bool includeFinish, const bool includeStart);
 };
 
 }

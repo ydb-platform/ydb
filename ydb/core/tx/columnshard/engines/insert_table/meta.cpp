@@ -6,7 +6,7 @@ bool TInsertedDataMeta::DeserializeFromProto(const NKikimrTxColumnShard::TLogica
     if (proto.HasDirtyWriteTimeSeconds()) {
         DirtyWriteTime = TInstant::Seconds(proto.GetDirtyWriteTimeSeconds());
     }
-    if (proto.HasRawBytes()) {
+    if (proto.HasSpecialKeysRawData()) {
         SpecialKeys = NArrow::TFirstLastSpecialKeys(proto.GetSpecialKeysRawData());
     }
     NumRows = proto.GetNumRows();

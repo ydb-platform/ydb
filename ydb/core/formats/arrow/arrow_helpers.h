@@ -98,7 +98,7 @@ bool ReserveData(arrow::ArrayBuilder& builder, const size_t size);
 bool MergeBatchColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::shared_ptr<arrow::RecordBatch>& result, const std::vector<std::string>& columnsOrder = {}, const bool orderFieldsAreNecessary = true);
 
 std::shared_ptr<arrow::RecordBatch> SortBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                              const std::shared_ptr<arrow::Schema>& sortingKey);
+                                              const std::shared_ptr<arrow::Schema>& sortingKey, const bool andUnique);
 bool IsSorted(const std::shared_ptr<arrow::RecordBatch>& batch,
               const std::shared_ptr<arrow::Schema>& sortingKey,
               bool desc = false);

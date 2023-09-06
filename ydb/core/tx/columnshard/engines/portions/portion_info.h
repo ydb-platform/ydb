@@ -224,7 +224,7 @@ public:
         std::optional<ui32> columnIdFirst;
         for (auto&& i : Records) {
             if (!columnIdFirst || *columnIdFirst == i.ColumnId) {
-                result += i.GetMeta().GetNumRows().value_or(0);
+                result += i.GetMeta().GetNumRowsVerified();
                 columnIdFirst = i.ColumnId;
             }
         }
@@ -235,7 +235,7 @@ public:
         ui32 result = 0;
         for (auto&& i : Records) {
             if (columnId == i.ColumnId) {
-                result += i.GetMeta().GetNumRows().value_or(0);
+                result += i.GetMeta().GetNumRowsVerified();
             }
         }
         return result;
@@ -246,7 +246,7 @@ public:
     ui64 RawBytesSum() const {
         ui64 result = 0;
         for (auto&& i : Records) {
-            result += i.GetMeta().GetRawBytes().value_or(0);
+            result += i.GetMeta().GetRawBytesVerified();
         }
         return result;
     }

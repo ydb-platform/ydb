@@ -1,5 +1,5 @@
 #include "conveyor_task.h"
-#include <ydb/core/tx/columnshard/engines/indexed_read_data.h>
+#include "read_context.h"
 
 namespace NKikimr::NColumnShard {
 

@@ -97,8 +97,14 @@ public:
         }
     }
 
-    const std::shared_ptr<arrow::RecordBatch>& GetResultBatch() const {
+    const std::shared_ptr<arrow::RecordBatch>& GetResultBatchPtrVerified() const {
+        Y_VERIFY(ResultBatch);
         return ResultBatch;
+    }
+
+    const arrow::RecordBatch& GetResultBatch() const {
+        Y_VERIFY(ResultBatch);
+        return *ResultBatch;
     }
 
     const std::shared_ptr<arrow::RecordBatch>& GetLastReadKey() const {
@@ -107,14 +113,13 @@ public:
 
     std::string ErrorString;
 
-    TPartialReadResult() = default;
-
     explicit TPartialReadResult(
         std::shared_ptr<TScanMemoryLimiter::TGuard> memGuard,
         std::shared_ptr<arrow::RecordBatch> batch)
         : MemoryGuardExternal(memGuard)
         , ResultBatch(batch)
     {
+        Y_VERIFY(ResultBatch);
     }
 
     explicit TPartialReadResult(
@@ -124,6 +129,7 @@ public:
         , ResultBatch(batch)
         , LastReadKey(lastKey)
     {
+        Y_VERIFY(ResultBatch);
     }
 };
 }
@@ -143,7 +149,7 @@ public:
     virtual void AddData(const NBlobCache::TBlobRange& /*blobRange*/, TString /*data*/) {}
     virtual bool HasWaitingTasks() const = 0;
     virtual bool Finished() const = 0;
-    virtual NOlap::TPartialReadResult GetBatch() = 0;
+    virtual std::optional<NOlap::TPartialReadResult> GetBatch() = 0;
     virtual std::optional<NBlobCache::TBlobRange> GetNextBlobToRead() { return {}; }
     virtual TString DebugString() const {
         return "NO_DATA";

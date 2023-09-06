@@ -53,7 +53,7 @@ public:
         return IndexStats.empty();
     }
 
-    NOlap::TPartialReadResult GetBatch() override;
+    std::optional<NOlap::TPartialReadResult> GetBatch() override;
 
 private:
     NOlap::TReadStatsMetadata::TConstPtr ReadMetadata;

@@ -25,15 +25,6 @@ public:
         const ui32 sourceIdx, const std::shared_ptr<NArrow::TColumnFilter>& filter, const NColumnShard::IDataTasksProcessor::TPtr& processor);
 };
 
-class TAssemblePKBatch: public TAssembleBatch {
-private:
-    using TBase = TAssembleBatch;
-protected:
-    virtual bool DoApply(IDataReader& owner) const override;
-public:
-    using TBase::TBase;
-};
-
 class TAssembleFFBatch: public TAssembleBatch {
 private:
     using TBase = TAssembleBatch;

@@ -341,8 +341,8 @@ bool IsNoOp(const arrow::UInt64Array& permutation) {
 }
 
 std::shared_ptr<arrow::RecordBatch> Reorder(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                            const std::shared_ptr<arrow::UInt64Array>& permutation) {
-    Y_VERIFY(permutation->length() == batch->num_rows());
+                                            const std::shared_ptr<arrow::UInt64Array>& permutation, const bool canRemove) {
+    Y_VERIFY(permutation->length() == batch->num_rows() || canRemove);
 
     auto res = IsNoOp(*permutation) ? batch : arrow::compute::Take(batch, permutation);
     Y_VERIFY(res.ok());
@@ -373,7 +373,7 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(const std::shared
         Y_VERIFY_OK(builder.Finish(&permutation));
     }
 
-    auto reorderedBatch = Reorder(batch, permutation);
+    auto reorderedBatch = Reorder(batch, permutation, false);
 
     std::vector<std::shared_ptr<arrow::RecordBatch>> out(numShards);
 
@@ -689,9 +689,9 @@ int ScalarCompare(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr
 }
 
 std::shared_ptr<arrow::RecordBatch> SortBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                              const std::shared_ptr<arrow::Schema>& sortingKey) {
-    auto sortPermutation = MakeSortPermutation(batch, sortingKey);
-    return Reorder(batch, sortPermutation);
+                                              const std::shared_ptr<arrow::Schema>& sortingKey, const bool andUnique) {
+    auto sortPermutation = MakeSortPermutation(batch, sortingKey, andUnique);
+    return Reorder(batch, sortPermutation, andUnique);
 }
 
 std::shared_ptr<arrow::Array> BoolVecToArray(const std::vector<bool>& vec) {

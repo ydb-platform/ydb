@@ -21,16 +21,11 @@ TPortionInfo::TPreparedBatchData TAssembleColumnsTaskConstructor::BuildBatchAsse
 
 void TEFTaskConstructor::DoOnDataReady(IDataReader& reader) {
     reader.GetContext().MutableProcessor().Add(reader, std::make_shared<TAssembleFilter>(BuildBatchAssembler(reader),
-        reader.GetReadMetadata(), SourceIdx, ColumnIds, reader.GetContext().GetProcessor().GetObject(), false));
+        reader.GetReadMetadata(), SourceIdx, ColumnIds, reader.GetContext().GetProcessor().GetObject(), UseEarlyFilter));
 }
 
 void TFFColumnsTaskConstructor::DoOnDataReady(IDataReader& reader) {
     reader.GetContext().MutableProcessor().Add(reader, std::make_shared<TAssembleFFBatch>(BuildBatchAssembler(reader),
-        SourceIdx, AppliedFilter, reader.GetContext().GetProcessor().GetObject()));
-}
-
-void TPKColumnsTaskConstructor::DoOnDataReady(IDataReader& reader) {
-    reader.GetContext().MutableProcessor().Add(reader, std::make_shared<TAssemblePKBatch>(BuildBatchAssembler(reader),
         SourceIdx, AppliedFilter, reader.GetContext().GetProcessor().GetObject()));
 }
 

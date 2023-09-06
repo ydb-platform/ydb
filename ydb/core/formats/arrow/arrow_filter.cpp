@@ -130,6 +130,63 @@ void CompositeCompare(std::shared_ptr<T> some, std::shared_ptr<arrow::RecordBatc
         }
     }
 }
+
+}
+
+bool TColumnFilter::TIterator::Next(const ui32 size) {
+    Y_VERIFY(size);
+    if (CurrentRemainVolume > size) {
+        InternalPosition += size;
+        CurrentRemainVolume -= size;
+        return true;
+    }
+    if (!FilterPointer && CurrentRemainVolume == size) {
+        InternalPosition += size;
+        CurrentRemainVolume -= size;
+        return false;
+    }
+    Y_VERIFY(FilterPointer);
+    ui32 sizeRemain = size;
+    while (Position != FinishPosition) {
+        const ui32 currentVolume = (*FilterPointer)[Position];
+        if (currentVolume > sizeRemain + InternalPosition) {
+            InternalPosition += sizeRemain;
+            CurrentRemainVolume = currentVolume - InternalPosition;
+            return true;
+        } else {
+            sizeRemain -= currentVolume - InternalPosition;
+            InternalPosition = 0;
+            CurrentValue = !CurrentValue;
+            Position += DeltaPosition;
+        }
+    }
+    Y_VERIFY(Position == FinishPosition);
+    CurrentRemainVolume = 0;
+    return false;
+}
+
+TString TColumnFilter::TIterator::DebugString() const {
+    TStringBuilder sb;
+    if (FilterPointer) {
+        sb << "filter_pointer=";
+        ui32 idx = 0;
+        ui64 sum = 0;
+        for (auto&& i : *FilterPointer) {
+            sb << i << ",";
+            sum += i;
+            if (++idx > 100) {
+                break;
+            }
+        }
+        sb << ";sum=" << sum << ";";
+    }
+    sb << "internal_position=" << InternalPosition << ";";
+    sb << "position=" << Position << ";";
+    sb << "current=" << CurrentValue << ";";
+    sb << "finish=" << FinishPosition << ";";
+    sb << "delta=" << DeltaPosition << ";";
+    sb << "remain=" << CurrentRemainVolume << ";";
+    return sb;
 }
 
 std::shared_ptr<arrow::BooleanArray> TColumnFilter::BuildArrowFilter(const ui32 expectedSize) const {
@@ -453,6 +510,15 @@ TColumnFilter TColumnFilter::CombineSequentialAnd(const TColumnFilter& extFilter
         std::swap(curCurrent, result.CurrentValue);
         std::swap(count, result.Count);
         return result;
+    }
+}
+
+TColumnFilter::TIterator TColumnFilter::GetIterator(const bool reverse, const ui32 expectedSize) const {
+    if ((IsTotalAllowFilter() || IsTotalDenyFilter()) && !Filter.size()) {
+        return TIterator(reverse, expectedSize, CurrentValue);
+    } else {
+        Y_VERIFY(expectedSize == Size());
+        return TIterator(reverse, Filter, GetStartValue(reverse));
     }
 }
 

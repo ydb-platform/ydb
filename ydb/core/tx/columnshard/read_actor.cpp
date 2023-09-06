@@ -1,5 +1,4 @@
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
-#include <ydb/core/tx/columnshard/engines/indexed_read_data.h>
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
@@ -19,7 +18,7 @@ private:
             size_t next = 1;
             for (auto it = ready.begin(); it != ready.end(); ++it, ++next) {
                 const bool lastOne = IndexedData->IsFinished() && (next == ready.size());
-                SendResult(ctx, it->GetResultBatch(), lastOne);
+                SendResult(ctx, it->GetResultBatchPtrVerified(), lastOne);
             }
         }
     }

@@ -10,7 +10,6 @@ SRCS(
     column_features.cpp
     db_wrapper.cpp
     index_info.cpp
-    indexed_read_data.cpp
     filter.cpp
     portion_info.cpp
     tier_info.cpp

@@ -21,13 +21,8 @@ bool TAssembleBatch::DoExecuteImpl() {
     return true;
 }
 
-bool TAssemblePKBatch::DoApply(IDataReader& owner) const {
-    owner.GetMeAs<TPlainReadData>().GetSourceByIdxVerified(SourceIdx).InitPK(Result);
-    return true;
-}
-
 bool TAssembleFFBatch::DoApply(IDataReader& owner) const {
-    owner.GetMeAs<TPlainReadData>().GetSourceByIdxVerified(SourceIdx).InitFF(Result);
+    owner.GetMeAs<TPlainReadData>().GetSourceByIdxVerified(SourceIdx).InitFetchStageData(Result);
     return true;
 }
 

@@ -277,7 +277,12 @@ private:
             return false;
         }
 
-        auto result = ScanIterator->GetBatch();
+        auto resultOpt = ScanIterator->GetBatch();
+        if (!resultOpt) {
+            ACFL_DEBUG("stage", "no data is ready yet")("iterator", ScanIterator->DebugString());
+            return false;
+        }
+        auto& result = *resultOpt;
         if (!result.ErrorString.empty()) {
             ACFL_ERROR("stage", "got error")("iterator", ScanIterator->DebugString())("message", result.ErrorString);
             SendAbortExecution(TString(result.ErrorString.data(), result.ErrorString.size()));
@@ -291,12 +296,7 @@ private:
             ResultYqlSchema = ReadMetadataRanges[ReadMetadataIndex]->GetResultYqlSchema();
         }
 
-        if (!result.GetResultBatch()) {
-            ACFL_DEBUG("stage", "no data is ready yet")("iterator", ScanIterator->DebugString());
-            return false;
-        }
-
-        auto& batch = result.GetResultBatch();
+        auto batch = result.GetResultBatchPtrVerified();
         int numRows = batch->num_rows();
         int numColumns = batch->num_columns();
         if (!numRows) {

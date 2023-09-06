@@ -1,12 +1,8 @@
 #include "read_metadata.h"
-#include "order_control/default.h"
-#include "order_control/pk_with_limit.h"
-#include "order_control/not_sorted.h"
 #include "plain_reader/plain_read_data.h"
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/columnshard__index_scan.h>
 #include <ydb/core/tx/columnshard/columnshard__stats_scan.h>
-#include <ydb/core/tx/columnshard/engines/indexed_read_data.h>
 #include <util/string/join.h>
 
 namespace NKikimr::NOlap {
@@ -143,23 +139,6 @@ std::set<ui32> TReadMetadata::GetPKColumnIds() const {
     return result;
 }
 
-std::set<ui32> TReadMetadata::GetUsedColumnIds() const {
-    std::set<ui32> result;
-    auto& indexInfo = ResultIndexSchema->GetIndexInfo();
-    if (Snapshot.GetPlanStep()) {
-        auto snapSchema = TIndexInfo::ArrowSchemaSnapshot();
-        for (auto&& i : snapSchema->fields()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("used_column", i->name());
-            result.emplace(indexInfo.GetColumnId(i->name()));
-        }
-    }
-    result.insert(AllColumns.begin(), AllColumns.end());
-    for (auto&& i : indexInfo.GetPrimaryKey()) {
-        Y_VERIFY(result.contains(indexInfo.GetColumnId(i.first)));
-    }
-    return result;
-}
-
 std::vector<std::pair<TString, NScheme::TTypeInfo>> TReadStatsMetadata::GetResultYqlSchema() const {
     return NOlap::GetColumns(NColumnShard::PrimaryIndexStatsSchema, ResultColumnIds);
 }
@@ -190,39 +169,6 @@ void TReadStats::PrintToLog() {
         ("delta_bytes", PortionsBytes - DataFilterBytes - DataAdditionalBytes)
         ("selected_rows", SelectedRows)
         ;
-}
-
-NIndexedReader::IOrderPolicy::TPtr TReadMetadata::DoBuildSortingPolicy() const {
-    auto& indexInfo = ResultIndexSchema->GetIndexInfo();
-    if (Limit && IsSorted() && indexInfo.IsSorted() &&
-        indexInfo.GetReplaceKey()->Equals(indexInfo.GetIndexKey())) {
-        ui32 idx = 0;
-        for (auto&& i : indexInfo.GetPrimaryKey()) {
-            if (idx >= indexInfo.GetSortingKey()->fields().size()) {
-                break;
-            }
-            if (indexInfo.GetSortingKey()->fields()[idx]->name() != i.first) {
-                return std::make_shared<NIndexedReader::TAnySorting>(this->shared_from_this());
-            }
-            ++idx;
-        }
-
-        if (!idx || !GetProgram().HasEarlyFilterOnly()) {
-            return std::make_shared<NIndexedReader::TAnySorting>(this->shared_from_this());
-        }
-        return std::make_shared<NIndexedReader::TPKSortingWithLimit>(this->shared_from_this());
-    } else if (IsSorted()) {
-        return std::make_shared<NIndexedReader::TAnySorting>(this->shared_from_this());
-    } else {
-        return std::make_shared<NIndexedReader::TNonSorting>(this->shared_from_this());
-    }
-}
-
-std::shared_ptr<NIndexedReader::IOrderPolicy> TReadMetadata::BuildSortingPolicy() const {
-    auto result = DoBuildSortingPolicy();
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "sorting_policy_constructed")("info", result->DebugString());
-    NYDBTest::TControllers::GetColumnShardController()->OnSortingPolicy(result);
-    return result;
 }
 
 std::shared_ptr<NKikimr::NOlap::IDataReader> TReadMetadata::BuildReader(const NOlap::TReadContext& context, const TConstPtr& self) const {

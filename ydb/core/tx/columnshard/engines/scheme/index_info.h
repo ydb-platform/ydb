@@ -99,6 +99,7 @@ public:
     }
 
     std::shared_ptr<arrow::Schema> GetColumnSchema(const ui32 columnId) const;
+    std::shared_ptr<arrow::Schema> GetColumnsSchema(const std::set<ui32>& columnIds) const;
     TColumnSaver GetColumnSaver(const ui32 columnId, const TSaverContext& context) const;
     std::shared_ptr<TColumnLoader> GetColumnLoader(const ui32 columnId) const;
 

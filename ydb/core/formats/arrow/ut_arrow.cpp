@@ -648,7 +648,7 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1000);
         UNIT_ASSERT(!CheckSorted1000(batch));
 
-        auto sortPermutation = NArrow::MakeSortPermutation(batch, table->schema());
+        auto sortPermutation = NArrow::MakeSortPermutation(batch, table->schema(), false);
 
         auto res = arrow::compute::Take(batch, sortPermutation);
         UNIT_ASSERT(res.ok());

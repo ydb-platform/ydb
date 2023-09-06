@@ -37,6 +37,11 @@ private:
     void DrainSources();
 
 public:
+
+    TFetchingPlan GetColumnsFetchingPlan(const bool exclusiveSource) const;
+
+    bool IsReverse() const;
+
     void Abort() {
         for (auto&& i : FetchingIntervals) {
             i.Abort();
@@ -62,7 +67,7 @@ public:
 
     TReadContext& GetContext();
 
-    void OnIntervalResult(std::shared_ptr<arrow::RecordBatch> batch, const ui32 intervalIdx);
+    void OnIntervalResult(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 intervalIdx);
     std::shared_ptr<IDataSource> GetSourceVerified(const ui32 idx) const {
         auto it = SourceByIdx.find(idx);
         Y_VERIFY(it != SourceByIdx.end());

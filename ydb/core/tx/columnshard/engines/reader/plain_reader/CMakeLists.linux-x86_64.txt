@@ -23,4 +23,5 @@ target_sources(engines-reader-plain_reader PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/plain_reader/plain_read_data.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/plain_reader/filter_assembler.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/plain_reader/column_assembler.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/plain_reader/columns_set.cpp
 )

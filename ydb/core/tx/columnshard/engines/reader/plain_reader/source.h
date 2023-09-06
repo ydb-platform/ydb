@@ -1,5 +1,6 @@
 #pragma once
 #include "fetched_data.h"
+#include "columns_set.h"
 #include <ydb/core/tx/columnshard/engines/reader/read_filter_merger.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
@@ -16,6 +17,25 @@ class TFetchingInterval;
 class TPlainReadData;
 class IFetchTaskConstructor;
 
+class TFetchingPlan {
+private:
+    YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, FilterStage);
+    YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, FetchingStage);
+    bool CanUseEarlyFilterImmediatelyFlag = false;
+public:
+    TFetchingPlan(const std::shared_ptr<TColumnsSet>& filterStage, const std::shared_ptr<TColumnsSet>& fetchingStage, const bool canUseEarlyFilterImmediately)
+        : FilterStage(filterStage)
+        , FetchingStage(fetchingStage)
+        , CanUseEarlyFilterImmediatelyFlag(canUseEarlyFilterImmediately)
+    {
+
+    }
+
+    bool CanUseEarlyFilterImmediately() const {
+        return CanUseEarlyFilterImmediatelyFlag;
+    }
+};
+
 class IDataSource {
 private:
     YDB_READONLY(ui32, SourceIdx, 0);
@@ -27,18 +47,15 @@ protected:
     TPlainReadData& ReadData;
     std::deque<TFetchingInterval*> Intervals;
 
-    // EF (EarlyFilter)->PK (PrimaryKey)->FF (FullyFetched)
-    std::shared_ptr<TEarlyFilterData> EFData;
-    std::shared_ptr<TPrimaryKeyData> PKData;
-    std::shared_ptr<TFullData> FFData;
+    std::shared_ptr<TFilterStageData> FilterStageData;
+    std::shared_ptr<TFetchStageData> FetchStageData;
 
-    bool NeedEFFlag = false;
-    bool NeedPKFlag = false;
-    bool NeedFFFlag = false;
+    std::optional<TFetchingPlan> FetchingPlan;
 
-    virtual void DoFetchEF() = 0;
-    virtual void DoFetchPK() = 0;
-    virtual void DoFetchFF() = 0;
+    bool FilterStageFlag = false;
+
+    virtual void DoStartFilterStage() = 0;
+    virtual void DoStartFetchStage() = 0;
     virtual void DoAbort() = 0;
 
 public:
@@ -55,10 +72,6 @@ public:
         DoAbort();
     }
 
-    bool IsScannersFinished() const {
-        return Intervals.empty();
-    }
-
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("source_idx", SourceIdx);
@@ -71,41 +84,25 @@ public:
     bool OnIntervalFinished(const ui32 intervalIdx);
 
     std::shared_ptr<arrow::RecordBatch> GetBatch() const {
-        if (!EFData || !PKData || !FFData) {
+        if (!FilterStageData || !FetchStageData) {
             return nullptr;
         }
-        return NArrow::MergeColumns({EFData->GetBatch(), PKData->GetBatch(), FFData->GetBatch()});
+        return NArrow::MergeColumns({FilterStageData->GetBatch(), FetchStageData->GetBatch()});
     }
 
-    bool HasFFData() const {
-        return HasPKData() && !!FFData;
+    bool IsDataReady() const {
+        return !!FilterStageData && !!FetchStageData;
     }
 
-    bool HasPKData() const {
-        return HasEFData() && !!PKData;
+    const TFilterStageData& GetFilterStageData() const {
+        Y_VERIFY(FilterStageData);
+        return *FilterStageData;
     }
 
-    bool HasEFData() const {
-        return !!EFData;
-    }
+    void InitFetchingPlan(const TFetchingPlan& fetchingPlan);
 
-    const TEarlyFilterData& GetEFData() const {
-        Y_VERIFY(EFData);
-        return *EFData;
-    }
-
-    const TPrimaryKeyData& GetPKData() const {
-        Y_VERIFY(PKData);
-        return *PKData;
-    }
-
-    void NeedEF();
-    void NeedPK();
-    void NeedFF();
-
-    void InitEF(const std::shared_ptr<NArrow::TColumnFilter>& appliedFilter, const std::shared_ptr<NArrow::TColumnFilter>& earlyFilter, const std::shared_ptr<arrow::RecordBatch>& batch);
-    void InitFF(const std::shared_ptr<arrow::RecordBatch>& batch);
-    void InitPK(const std::shared_ptr<arrow::RecordBatch>& batch);
+    void InitFilterStageData(const std::shared_ptr<NArrow::TColumnFilter>& appliedFilter, const std::shared_ptr<NArrow::TColumnFilter>& earlyFilter, const std::shared_ptr<arrow::RecordBatch>& batch);
+    void InitFetchStageData(const std::shared_ptr<arrow::RecordBatch>& batch);
 
     void RegisterInterval(TFetchingInterval* interval) {
         Intervals.emplace_back(interval);
@@ -123,7 +120,9 @@ public:
         Y_VERIFY(Start.Compare(Finish) != std::partial_ordering::greater);
     }
 
-    virtual ~IDataSource() = default;
+    virtual ~IDataSource() {
+        Y_VERIFY(Intervals.empty());
+    }
     virtual void AddData(const TBlobRange& range, TString&& data) = 0;
 };
 
@@ -133,11 +132,10 @@ private:
     std::shared_ptr<TPortionInfo> Portion;
     THashMap<TBlobRange, std::shared_ptr<IFetchTaskConstructor>> BlobsWaiting;
 
-    void NeedFetchColumns(const std::set<ui32>& columnIds, std::shared_ptr<IFetchTaskConstructor> constructor);
+    void NeedFetchColumns(const std::set<ui32>& columnIds, std::shared_ptr<IFetchTaskConstructor> constructor, const std::shared_ptr<NArrow::TColumnFilter>& filter);
 
-    virtual void DoFetchEF() override;
-    virtual void DoFetchPK() override;
-    virtual void DoFetchFF() override;
+    virtual void DoStartFilterStage() override;
+    virtual void DoStartFetchStage() override;
     virtual NJson::TJsonValue DoDebugJson() const override {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("type", "portion");
@@ -177,15 +175,11 @@ private:
 
     }
 
-    virtual void DoFetchEF() override {
+    virtual void DoStartFilterStage() override {
         DoFetch();
     }
 
-    virtual void DoFetchPK() override {
-        DoFetch();
-    }
-
-    virtual void DoFetchFF() override {
+    virtual void DoStartFetchStage() override {
         DoFetch();
     }
     virtual NJson::TJsonValue DoDebugJson() const override {

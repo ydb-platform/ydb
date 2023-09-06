@@ -100,10 +100,6 @@ public:
         return ColumnId == item.ColumnId && Chunk == item.Chunk;
     }
 
-    std::optional<ui32> GetChunkRowsCount() const {
-        return Meta.GetNumRows();
-    }
-
     bool Valid() const {
         return ColumnId && ValidBlob();
     }

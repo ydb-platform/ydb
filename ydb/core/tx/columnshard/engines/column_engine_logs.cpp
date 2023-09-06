@@ -1,6 +1,5 @@
 #include "column_engine_logs.h"
 #include "filter.h"
-#include "indexed_read_data.h"
 
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/formats/arrow/one_batch_input_stream.h>

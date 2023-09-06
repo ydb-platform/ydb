@@ -51,7 +51,7 @@ bool TAssembleFilter::DoExecuteImpl() {
 }
 
 bool TAssembleFilter::DoApply(IDataReader& owner) const {
-    owner.GetMeAs<TPlainReadData>().GetSourceByIdxVerified(SourceIdx).InitEF(AppliedFilter, EarlyFilter, FilteredBatch);
+    owner.GetMeAs<TPlainReadData>().GetSourceByIdxVerified(SourceIdx).InitFilterStageData(AppliedFilter, EarlyFilter, FilteredBatch);
     return true;
 }
 

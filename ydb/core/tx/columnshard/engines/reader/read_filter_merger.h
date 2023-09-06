@@ -63,8 +63,8 @@ protected:
     YDB_READONLY(i64, Position, 0);
     i64 RecordsCount = 0;
     bool ReverseSort = false;
-    TSortableScanData Sorting;
-    TSortableScanData Data;
+    std::shared_ptr<TSortableScanData> Sorting;
+    std::shared_ptr<TSortableScanData> Data;
     std::shared_ptr<arrow::RecordBatch> Batch;
     static std::optional<ui64> FindPosition(std::shared_ptr<arrow::RecordBatch> batch, const TSortableBatchPosition& forFound, const bool needGreater, const bool include);
 
@@ -72,7 +72,7 @@ public:
     TSortableBatchPosition() = default;
 
     const TSortableScanData& GetData() const {
-        return Data;
+        return *Data;
     }
 
     bool IsReverseSort() const {
@@ -81,11 +81,11 @@ public:
     NJson::TJsonValue DebugJson() const;
 
     TSortableBatchPosition BuildSame(std::shared_ptr<arrow::RecordBatch> batch, const ui32 position) const {
-        return TSortableBatchPosition(batch, position, Sorting.GetFieldNames(), Data.GetFieldNames(), ReverseSort);
+        return TSortableBatchPosition(batch, position, Sorting->GetFieldNames(), Data->GetFieldNames(), ReverseSort);
     }
 
     bool IsSameSortingSchema(const std::shared_ptr<arrow::Schema>& schema) {
-        return Sorting.IsSameSchema(schema);
+        return Sorting->IsSameSchema(schema);
     }
 
     static std::shared_ptr<arrow::RecordBatch> SelectInterval(std::shared_ptr<arrow::RecordBatch> batch, const TSortableBatchPosition& from, const TSortableBatchPosition& to, const bool includeFrom, const bool includeTo) {
@@ -105,19 +105,21 @@ public:
         : Position(position)
         , RecordsCount(batch->num_rows())
         , ReverseSort(reverseSort)
-        , Sorting(batch, sortingColumns)
-        , Data(batch, dataColumns)
+        , Sorting(std::make_shared<TSortableScanData>(batch, sortingColumns))
         , Batch(batch)
     {
+        if (dataColumns.size()) {
+            Data = std::make_shared<TSortableScanData>(batch, dataColumns);
+        }
         Y_VERIFY(batch->num_rows());
         Y_VERIFY_DEBUG(batch->ValidateFull().ok());
-        Y_VERIFY(Sorting.GetColumns().size());
+        Y_VERIFY(Sorting->GetColumns().size());
     }
 
     std::partial_ordering Compare(const TSortableBatchPosition& item) const {
         Y_VERIFY(item.ReverseSort == ReverseSort);
-        Y_VERIFY(item.Sorting.GetColumns().size() == Sorting.GetColumns().size());
-        const auto directResult = NArrow::ColumnsCompare(Sorting.GetColumns(), Position, item.Sorting.GetColumns(), item.Position);
+        Y_VERIFY(item.Sorting->GetColumns().size() == Sorting->GetColumns().size());
+        const auto directResult = NArrow::ColumnsCompare(Sorting->GetColumns(), Position, item.Sorting->GetColumns(), item.Position);
         if (ReverseSort) {
             if (directResult == std::partial_ordering::less) {
                 return std::partial_ordering::greater;
@@ -161,7 +163,9 @@ public:
 
 class TMergePartialStream {
 private:
+#ifndef NDEBUG
     std::optional<TSortableBatchPosition> CurrentKeyColumns;
+#endif
     class TBatchIterator {
     private:
         bool ControlPointFlag;
@@ -193,6 +197,10 @@ private:
             return KeyColumns;
         }
 
+        const TSortableBatchPosition& GetVersionColumns() const {
+            return VersionColumns;
+        }
+
         TBatchIterator(const TSortableBatchPosition& keyColumns)
             : ControlPointFlag(true)
             , KeyColumns(keyColumns)
@@ -213,50 +221,13 @@ private:
             Y_VERIFY(KeyColumns.InitPosition(GetFirstPosition()));
             Y_VERIFY(VersionColumns.InitPosition(GetFirstPosition()));
             if (Filter) {
-                FilterIterator = std::make_shared<NArrow::TColumnFilter::TIterator>(Filter->GetIterator(reverseSort));
-                Y_VERIFY(Filter->Size() == RecordsCount);
+                FilterIterator = std::make_shared<NArrow::TColumnFilter::TIterator>(Filter->GetIterator(reverseSort, RecordsCount));
             }
         }
 
         bool CheckNextBatch(const TBatchIterator& nextIterator) {
             return KeyColumns.Compare(nextIterator.KeyColumns) == std::partial_ordering::less;
         }
-
-        class TPosition {
-        private:
-            TSortableBatchPosition KeyColumns;
-            TSortableBatchPosition VersionColumns;
-            bool DeletedFlag;
-            bool ControlPointFlag;
-        public:
-            const TSortableBatchPosition& GetKeyColumns() const {
-                return KeyColumns;
-            }
-
-            bool IsControlPoint() const {
-                return ControlPointFlag;
-            }
-
-            bool IsDeleted() const {
-                return DeletedFlag;
-            }
-
-            void TakeIfMoreActual(const TBatchIterator& anotherIterator) {
-                Y_VERIFY_DEBUG(KeyColumns.Compare(anotherIterator.KeyColumns) == std::partial_ordering::equivalent);
-                if (VersionColumns.Compare(anotherIterator.VersionColumns) == std::partial_ordering::less) {
-                    DeletedFlag = anotherIterator.IsDeleted();
-                    ControlPointFlag = anotherIterator.IsControlPoint();
-                }
-            }
-
-            TPosition(const TBatchIterator& owner)
-                : KeyColumns(owner.KeyColumns)
-                , VersionColumns(owner.VersionColumns)
-                , DeletedFlag(owner.IsDeleted())
-                , ControlPointFlag(owner.IsControlPoint())
-            {
-            }
-        };
 
         bool IsDeleted() const {
             if (!FilterIterator) {
@@ -307,9 +278,11 @@ private:
 
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
+#ifndef NDEBUG
         if (CurrentKeyColumns) {
             result["current"] = CurrentKeyColumns->DebugJson();
         }
+#endif
         for (auto&& i : SortHeap) {
             result["heap"].AppendValue(i.DebugJson());
         }
@@ -352,25 +325,10 @@ private:
     const bool Reverse;
     ui32 ControlPoints = 0;
 
-    TBatchIterator::TPosition DrainCurrentPosition() {
-        Y_VERIFY(SortHeap.size());
-        auto position = TBatchIterator::TPosition(SortHeap.front());
-        if (SortHeap.front().IsControlPoint()) {
-            return position;
-        }
-        bool isFirst = true;
-        while (SortHeap.size() && (isFirst || position.GetKeyColumns().Compare(SortHeap.front().GetKeyColumns()) == std::partial_ordering::equivalent)) {
-            if (!isFirst) {
-                position.TakeIfMoreActual(SortHeap.front());
-            }
-            Y_VERIFY(!SortHeap.front().IsControlPoint());
-            NextInHeap(true);
-            isFirst = false;
-        }
-        return position;
-    }
+    std::optional<TSortableBatchPosition> DrainCurrentPosition();
 
     void AddNewToHeap(const std::optional<ui32> poolId, std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NArrow::TColumnFilter> filter, const bool restoreHeap);
+    void CheckSequenceInDebug(const TSortableBatchPosition& nextKeyColumnsPosition);
 public:
     TMergePartialStream(std::shared_ptr<arrow::Schema> sortSchema, std::shared_ptr<arrow::Schema> dataSchema, const bool reverse)
         : SortSchema(sortSchema)
@@ -393,10 +351,6 @@ public:
         return it->second.size();
     }
 
-    const std::optional<TSortableBatchPosition>& GetCurrentKeyColumns() const {
-        return CurrentKeyColumns;
-    }
-
     void PutControlPoint(std::shared_ptr<TSortableBatchPosition> point);
 
     void RemoveControlPoint();
@@ -411,13 +365,14 @@ public:
         return SortHeap.empty();
     }
 
-    bool DrainCurrent(std::shared_ptr<TRecordBatchBuilder> builder = nullptr, const std::optional<TSortableBatchPosition>& readTo = {}, const bool includeFinish = false);
+    bool DrainAll(TRecordBatchBuilder& builder);
+    bool DrainCurrentTo(TRecordBatchBuilder& builder, const TSortableBatchPosition& readTo, const bool includeFinish);
 };
 
 class TRecordBatchBuilder {
 private:
     std::vector<std::unique_ptr<arrow::ArrayBuilder>> Builders;
-    std::vector<std::shared_ptr<arrow::Field>> Fields;
+    YDB_READONLY_DEF(std::vector<std::shared_ptr<arrow::Field>>, Fields);
     YDB_READONLY(ui32, RecordsCount, 0);
 
     bool IsSameFieldsSequence(const std::vector<std::shared_ptr<arrow::Field>>& f1, const std::vector<std::shared_ptr<arrow::Field>>& f2) {
@@ -433,6 +388,18 @@ private:
     }
 
 public:
+    ui32 GetBuildersCount() const {
+        return Builders.size();
+    }
+
+    TString GetColumnNames() const {
+        TStringBuilder result;
+        for (auto&& f : Fields) {
+            result << f->name() << ",";
+        }
+        return result;
+    }
+
     TRecordBatchBuilder(const std::vector<std::shared_ptr<arrow::Field>>& fields)
         : Fields(fields) {
         Y_VERIFY(Fields.size());

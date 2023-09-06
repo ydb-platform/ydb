@@ -328,15 +328,25 @@ std::shared_ptr<TColumnLoader> TIndexInfo::GetColumnLoader(const ui32 columnId) 
     return features.GetLoader(*this);
 }
 
-std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnSchema(const ui32 columnId) const {
-    std::shared_ptr<arrow::Schema> schema = Schema;
-    if (IsSpecialColumn(columnId)) {
-        schema = ArrowSchemaSnapshot();
+std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnsSchema(const std::set<ui32>& columnIds) const {
+    Y_VERIFY(columnIds.size());
+    std::vector<std::shared_ptr<arrow::Field>> fields;
+    for (auto&& i : columnIds) {
+        std::shared_ptr<arrow::Schema> schema;
+        if (IsSpecialColumn(i)) {
+            schema = ArrowSchemaSnapshot();
+        } else {
+            schema = Schema;
+        }
+        auto field = schema->GetFieldByName(GetColumnName(i));
+        Y_VERIFY(field);
+        fields.emplace_back(field);
     }
-    auto field = schema->GetFieldByName(GetColumnName(columnId));
-    Y_VERIFY(field);
-    std::vector<std::shared_ptr<arrow::Field>> fields = { field };
     return std::make_shared<arrow::Schema>(fields);
+}
+
+std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnSchema(const ui32 columnId) const {
+    return GetColumnsSchema({columnId});
 }
 
 bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema) {

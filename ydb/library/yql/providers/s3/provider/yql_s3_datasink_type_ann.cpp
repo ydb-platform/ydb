@@ -124,13 +124,19 @@ private:
             }
         }
 
+        const auto format = tgt.Format();
+        const bool isSingleRowPerFileFormat = IsIn({TStringBuf("raw"), TStringBuf("json_list")}, format);
+
+        const TTypeAnnotationNode* listItemType = ctx.MakeType<TDataExprType>(EDataSlot::String);
+        if (!isSingleRowPerFileFormat) {
+            listItemType = ctx.MakeType<TOptionalExprType>(listItemType);
+        }
+
         input->SetTypeAnn(
             ctx.MakeType<TTupleExprType>(
                 TTypeAnnotationNode::TListType{
                     ctx.MakeType<TListExprType>(
-                        ctx.MakeType<TOptionalExprType>(
-                            ctx.MakeType<TDataExprType>(EDataSlot::String)
-                        )
+                        listItemType
                     )
                 }
             )

@@ -1052,7 +1052,10 @@ message ReadTableRequest {
     uint64 row_limit = 6;
     // Use a server-side snapshot
     Ydb.FeatureFlag.Status use_snapshot = 7;
-    // Per-batch limits
+    // Server-side best-effort policy. Can be used as a hint to limit the size
+    // of batches sent from a server. If both are specified, the server chooses
+    // the smaller one. The limits are not strict, so batch size can be slightly
+    // greater than any of the limits
     uint64 batch_limit_bytes = 8;
     uint64 batch_limit_rows = 9;
 }

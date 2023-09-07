@@ -92,7 +92,7 @@ public:
 };
 
 class TSessionContext {
-    TMaybe<TString> SessionId;
+    TString SessionId;
 public:
     using TPtr = std::shared_ptr<TSessionContext>;
 
@@ -100,7 +100,7 @@ public:
         SessionId = sessionId;
     }
 
-    TMaybe<TString> GetSessionId() const {
+    TString GetSessionId() const {
         return SessionId;
     }
 };
@@ -166,7 +166,7 @@ public:
     }
 
     virtual void OnRequestFailed(const TString& errorMessage) override {
-        ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "cannot close session with id: " << *SessionContext->GetSessionId() << ", reason: " << errorMessage;
+        ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "cannot close session with id: " << SessionContext->GetSessionId() << ", reason: " << errorMessage;
     }
 };
 
@@ -181,7 +181,7 @@ private:
         auto sessionId = SessionContext->GetSessionId();
         if (sessionId) {
             auto deleteRequest = NMetadata::NRequest::TDialogDeleteSession::TRequest();
-            deleteRequest.set_session_id(*sessionId);
+            deleteRequest.set_session_id(sessionId);
 
             auto sessionDeleteResponseController = std::make_shared<NMetadata::NRequest::TSessionDeleteResponseController>(SessionContext);
             TYDBOneRequestSender<NMetadata::NRequest::TDialogDeleteSession> request(deleteRequest, UserToken, sessionDeleteResponseController);

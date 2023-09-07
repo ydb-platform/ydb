@@ -22,11 +22,11 @@ namespace NActors {
 
     TIOExecutorPool::~TIOExecutorPool() {
         Threads.Destroy();
-        while (ThreadQueue.Pop(0))
+        while (ThreadQueue.Pop())
             ;
     }
 
-    ui32 TIOExecutorPool::GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) {
+    ui32 TIOExecutorPool::GetReadyActivation(TWorkerContext& wctx, ui64 /*revolvingCounter*/) {
         i16 workerId = wctx.WorkerId;
         Y_VERIFY_DEBUG(workerId < PoolThreads);
 
@@ -38,7 +38,7 @@ namespace NActors {
         const TAtomic x = AtomicDecrement(Semaphore);
         if (x < 0) {
             TThreadCtx& threadCtx = Threads[workerId];
-            ThreadQueue.Push(workerId + 1, revolvingCounter);
+            ThreadQueue.Push(workerId + 1);
             hpnow = GetCycleCountFast();
             elapsed += hpnow - hpstart;
             if (threadCtx.Pad.Park())
@@ -48,7 +48,7 @@ namespace NActors {
         }
 
         while (!RelaxedLoad(&StopFlag)) {
-            if (const ui32 activation = Activations.Pop(++revolvingCounter)) {
+            if (const ui32 activation = Activations.Pop()) {
                 hpnow = GetCycleCountFast();
                 elapsed += hpnow - hpstart;
                 wctx.AddElapsedCycles(ActorSystemIndex, elapsed);
@@ -86,12 +86,12 @@ namespace NActors {
         ScheduleQueue->Writer.Push(deadline.MicroSeconds(), ev.Release(), cookie);
     }
 
-    void TIOExecutorPool::ScheduleActivationEx(ui32 activation, ui64 revolvingWriteCounter) {
-        Activations.Push(activation, revolvingWriteCounter);
+    void TIOExecutorPool::ScheduleActivationEx(ui32 activation, ui64 /*revolvingWriteCounter*/) {
+        Activations.Push(activation);
         const TAtomic x = AtomicIncrement(Semaphore);
         if (x <= 0) {
-            for (;; ++revolvingWriteCounter) {
-                if (const ui32 x = ThreadQueue.Pop(revolvingWriteCounter)) {
+            for (;;) {
+                if (const ui32 x = ThreadQueue.Pop()) {
                     const ui32 threadIdx = x - 1;
                     Threads[threadIdx].Pad.Unpark();
                     return;

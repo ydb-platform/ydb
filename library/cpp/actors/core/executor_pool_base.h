@@ -3,6 +3,7 @@
 #include "executor_pool.h"
 #include "executor_thread.h"
 #include "scheduler_queue.h"
+#include "perfect_activation_queue.h"
 #include <library/cpp/actors/util/affinity.h>
 #include <library/cpp/actors/util/unordered_cache.h>
 #include <library/cpp/actors/util/threadparkpad.h>
@@ -45,8 +46,7 @@ namespace NActors {
         const i16 PoolThreads;
         TIntrusivePtr<TAffinity> ThreadsAffinity;
         TAtomic Semaphore = 0;
-        TUnorderedCache<ui32, 512, 4> Activations;
-        TAtomic ActivationsRevolvingCounter = 0;
+        TPerfectActivationQueue Activations;
         volatile bool StopFlag = false;
     public:
         TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity);

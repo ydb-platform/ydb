@@ -33,7 +33,7 @@ namespace NActors {
         TAtomic Waiters = 0; // Number of idle cpus, waiting for activations in this pool
         char Padding[64 - sizeof(TAtomic)];
 
-        TUnorderedCache<ui32, 512, 4> Activations; // MPMC-queue for mailbox activations
+        TPerfectActivationQueue Activations; // MPMC-queue for mailbox activations
         TAtomic Active = 0; // Number of mailboxes ready for execution or currently executing
         TAtomic Tokens = 0; // Pending tokens (token is required for worker to start execution, guarantees concurrency limit and activation availability)
         volatile bool StopFlag = false;
@@ -51,7 +51,7 @@ namespace NActors {
         TStackVec<TCpu*, 15> WakeOrderCpus;
 
         ~TPool() {
-            while (Activations.Pop(0)) {}
+            while (Activations.Pop()) {}
         }
 
         void Stop() {
@@ -63,8 +63,8 @@ namespace NActors {
         }
 
         // Add activation of newly scheduled mailbox. Returns generated token (unless concurrency is exceeded)
-        bool PushActivation(ui32 activation, ui64 revolvingCounter) {
-            Activations.Push(activation, revolvingCounter);
+        bool PushActivation(ui32 activation, ui64 /*revolvingCounter*/) {
+            Activations.Push(activation);
             TAtomicBase active = AtomicIncrement(Active);
             if (active <= Concurrency) { // token generated
                 AtomicIncrement(Tokens);
@@ -103,9 +103,9 @@ namespace NActors {
         }
 
         // Get activation. Requires acquired token.
-        void BeginExecution(ui32& activation, ui64 revolvingCounter) {
+        void BeginExecution(ui32& activation, ui64 /*revolvingCounter*/) {
             while (!RelaxedLoad(&StopFlag)) {
-                if (activation = Activations.Pop(++revolvingCounter)) {
+                if (activation = Activations.Pop()) {
                     return;
                 }
                 SpinLockPause();

@@ -230,7 +230,7 @@ namespace NActors {
         } while (true);
     }
 
-    ui32 TBasicExecutorPool::GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) {
+    ui32 TBasicExecutorPool::GetReadyActivation(TWorkerContext& wctx, ui64 /*revolvingCounter*/) {
         TWorkerId workerId = wctx.WorkerId;
         Y_VERIFY_DEBUG(workerId < PoolThreads);
 
@@ -264,7 +264,7 @@ namespace NActors {
                     }
                 }
             } else {
-                if (const ui32 activation = Activations.Pop(++revolvingCounter)) {
+                if (const ui32 activation = Activations.Pop()) {
                     if (workerId >= 0) {
                         AtomicSet(Threads[workerId].WaitingFlag, TThreadCtx::WS_RUNNING);
                     }
@@ -320,8 +320,8 @@ namespace NActors {
         }
     }
 
-    void TBasicExecutorPool::ScheduleActivationEx(ui32 activation, ui64 revolvingCounter) {
-        Activations.Push(activation, revolvingCounter);
+    void TBasicExecutorPool::ScheduleActivationEx(ui32 activation, ui64 /*revolvingCounter*/) {
+        Activations.Push(activation);
         bool needToWakeUp = false;
 
         TAtomic x = AtomicGet(Semaphore);

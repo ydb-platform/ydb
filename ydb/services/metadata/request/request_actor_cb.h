@@ -91,12 +91,27 @@ public:
     }
 };
 
+class TSessionContext {
+    TMaybe<TString> SessionId;
+public:
+    using TPtr = std::shared_ptr<TSessionContext>;
+
+    void SetSessionId(const TString& sessionId) {
+        SessionId = sessionId;
+    }
+
+    TMaybe<TString> GetSessionId() const {
+        return SessionId;
+    }
+};
+
 template <class TDialogPolicy>
 class TSessionedChainController: public IChainController<TDialogCreateSession, IExternalController<TDialogPolicy>> {
 private:
     using TRequest = typename TDialogPolicy::TRequest;
     using TBase = IChainController<TDialogCreateSession, IExternalController<TDialogPolicy>>;
     TRequest ProtoRequest;
+    TSessionContext::TPtr SessionContext;
 protected:
     virtual TConclusion<typename TDialogPolicy::TRequest> DoBuildNextRequest(TDialogCreateSession::TResponse&& response) const override {
         auto result = ProtoRequest;
@@ -108,13 +123,15 @@ protected:
             return TConclusionStatus::Fail("cannot build session for request");
         }
         result.set_session_id(sessionId);
+        SessionContext->SetSessionId(sessionId);
         return result;
     }
 public:
-    TSessionedChainController(const TRequest& request, const NACLib::TUserToken& uToken, typename IExternalController<TDialogPolicy>::TPtr externalController)
+    TSessionedChainController(const TRequest& request, const NACLib::TUserToken& uToken, typename IExternalController<TDialogPolicy>::TPtr externalController, TSessionContext::TPtr sessionContext)
         : TBase(uToken, externalController)
-        , ProtoRequest(request) {
-
+        , ProtoRequest(request)
+        , SessionContext(sessionContext) {
+        Y_VERIFY(SessionContext);
     }
 };
 
@@ -137,6 +154,59 @@ public:
     }
 };
 
+class TSessionDeleteResponseController: public IExternalController<NMetadata::NRequest::TDialogDeleteSession> {
+private:
+    TSessionContext::TPtr SessionContext;
+public:
+    TSessionDeleteResponseController(TSessionContext::TPtr sessionContext)
+        : SessionContext(sessionContext) {
+    }
+
+    virtual void OnRequestResult(typename TDialogPolicy::TResponse&&) override {
+    }
+
+    virtual void OnRequestFailed(const TString& errorMessage) override {
+        ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "cannot close session with id: " << *SessionContext->GetSessionId() << ", reason: " << errorMessage;
+    }
+};
+
+template <class TDialogPolicy>
+class TSessionDeleteController: public IExternalController<TDialogPolicy> {
+private:
+    TSessionContext::TPtr SessionContext;
+    typename IExternalController<TDialogPolicy>::TPtr ExternalController;
+    const NACLib::TUserToken UserToken;
+
+    void CloseSession() const {
+        auto sessionId = SessionContext->GetSessionId();
+        if (sessionId) {
+            auto deleteRequest = NMetadata::NRequest::TDialogDeleteSession::TRequest();
+            deleteRequest.set_session_id(*sessionId);
+
+            auto sessionDeleteResponseController = std::make_shared<NMetadata::NRequest::TSessionDeleteResponseController>(SessionContext);
+            TYDBOneRequestSender<NMetadata::NRequest::TDialogDeleteSession> request(deleteRequest, UserToken, sessionDeleteResponseController);
+            request.Start();
+        }
+    }
+
+public:
+    TSessionDeleteController(TSessionContext::TPtr sessionContext, const NACLib::TUserToken& userToken, typename IExternalController<TDialogPolicy>::TPtr externalController)
+        : SessionContext(sessionContext)
+        , ExternalController(externalController)
+        , UserToken(userToken) {
+    }
+
+    virtual void OnRequestResult(typename TDialogPolicy::TResponse&& result) override {
+        ExternalController->OnRequestResult(std::move(result));
+        CloseSession();
+    }
+
+    virtual void OnRequestFailed(const TString& errorMessage) override {
+        ExternalController->OnRequestFailed(errorMessage);
+        CloseSession();
+    }
+};
+
 class TYQLRequestExecutor {
 private:
     static TDialogYQLRequest::TRequest BuildRequest(const TString& request, const bool readOnly) {
@@ -152,8 +222,10 @@ private:
     }
 public:
     static void Execute(TDialogYQLRequest::TRequest&& request, const NACLib::TUserToken& uToken, IExternalController<TDialogYQLRequest>::TPtr controller) {
+        auto sessionContext = std::make_shared<TSessionContext>();
+        auto sessionDeleteController = std::make_shared<NMetadata::NRequest::TSessionDeleteController<NMetadata::NRequest::TDialogYQLRequest>>(sessionContext, uToken, controller);
         auto sessionController = std::make_shared<NMetadata::NRequest::TSessionedChainController<NMetadata::NRequest::TDialogYQLRequest>>
-            (std::move(request), uToken, controller);
+            (std::move(request), uToken, sessionDeleteController, sessionContext);
         NMetadata::NRequest::TYDBOneRequestSender<NMetadata::NRequest::TDialogCreateSession> ydbReq(NMetadata::NRequest::TDialogCreateSession::TRequest(),
             uToken, sessionController);
         ydbReq.Start();

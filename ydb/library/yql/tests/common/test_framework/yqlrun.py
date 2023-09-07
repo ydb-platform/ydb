@@ -28,13 +28,13 @@ class YQLRun(object):
 
     def __init__(self, udfs_dir=None, prov='yt', use_sql2yql=False, keep_temp=True, binary=None, gateway_config=None, fs_config=None, extra_args=[], cfg_dir=None):
         if binary is None:
-            self.yqlrun_binary = yql_utils.yql_binary_path('ydb/library/yql/tools/yqlrun/yqlrun')
+            self.yqlrun_binary = yql_utils.yql_binary_path(os.getenv('YQL_YQLRUN_PATH') or 'ydb/library/yql/tools/yqlrun/yqlrun')
         else:
             self.yqlrun_binary = binary
         self.extra_args = extra_args
 
         try:
-            self.sql2yql_binary = yql_utils.yql_binary_path('ydb/library/yql/tools/sql2yql/sql2yql')
+            self.sql2yql_binary = yql_utils.yql_binary_path(os.getenv('YQL_SQL2YQL_PATH') or 'ydb/library/yql/tools/sql2yql/sql2yql')
         except BaseException:
             self.sql2yql_binary = None
 

@@ -672,8 +672,7 @@ namespace NYql::NDqs {
 
             if (!request->GetPort()
                 || request->GetRole().empty()
-                || request->GetAddress().empty()
-                || request->GetRevision().empty())
+                || request->GetAddress().empty())
             {
                 ctx->ReplyError(grpc::INVALID_ARGUMENT, "Invalid argument");
                 return;

@@ -10,6 +10,26 @@
 
 namespace NFq {
 
+namespace {
+
+void PrepareSensitiveFields(::FederatedQuery::Connection& connection, bool extractSensitiveFields) {
+    if (extractSensitiveFields) {
+        return;
+    }
+
+    auto& setting = *connection.mutable_content()->mutable_setting();
+    if (setting.has_clickhouse_cluster()) {
+        auto& ch = *setting.mutable_clickhouse_cluster();
+        ch.set_password("");
+    }
+    if (setting.has_postgresql_cluster()) {
+        auto& pg = *setting.mutable_postgresql_cluster();
+        pg.set_password("");
+    }
+}
+
+}
+
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConnectionRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
@@ -159,6 +179,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
     requestCounters.IncInFly();
     requestCounters.Common->RequestBytes->Add(event.GetByteSize());
     const FederatedQuery::ListConnectionsRequest& request = event.Request;
+    bool extractSensitiveFields = event.ExtractSensitiveFields;
 
     const TString user = event.User;
     const TString pageToken = request.page_token();
@@ -243,7 +264,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
     const auto query = queryBuilder.Build();
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
-    auto prepare = [resultSets=resultSets, limit] {
+    auto prepare = [resultSets=resultSets, limit, extractSensitiveFields] {
         if (resultSets->size() != 1) {
             ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
         }
@@ -255,15 +276,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
             if (!connection.ParseFromString(*parser.ColumnParser(CONNECTION_COLUMN_NAME).GetOptionalString())) {
                 ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for connection. Please contact internal support";
             }
-            auto& setting = *connection.mutable_content()->mutable_setting();
-            if (setting.has_clickhouse_cluster()) {
-                auto& ch = *setting.mutable_clickhouse_cluster();
-                ch.set_password("");
-            }
-            if (setting.has_postgresql_cluster()) {
-                auto& pg = *setting.mutable_postgresql_cluster();
-                pg.set_password("");
-            }
+            PrepareSensitiveFields(connection, extractSensitiveFields);
         }
 
         if (result.connection_size() == limit + 1) {
@@ -303,6 +316,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeCon
     const TString user = event.User;
     const TString connectionId = request.connection_id();
     const TString token = event.Token;
+    const bool extractSensitiveFields = event.ExtractSensitiveFields;
     TPermissions permissions = Config->Proto.GetEnablePermissions()
                     ? event.Permissions
                     : TPermissions{TPermissions::VIEW_PUBLIC};
@@ -360,16 +374,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeCon
         if (!hasViewAccess) {
             ythrow TCodeLineException(TIssuesIds::ACCESS_DENIED) << "Connection does not exist or permission denied. Please check the id connection or your access rights";
         }
-
-        auto& setting = *result.mutable_connection()->mutable_content()->mutable_setting();
-        if (setting.has_clickhouse_cluster()) {
-            auto& ch = *setting.mutable_clickhouse_cluster();
-            ch.set_password("");
-        }
-        if (setting.has_postgresql_cluster()) {
-            auto& pg = *setting.mutable_postgresql_cluster();
-            pg.set_password("");
-        }
+        
+        PrepareSensitiveFields(*result.mutable_connection(), extractSensitiveFields);
         return result;
     };
 

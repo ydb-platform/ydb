@@ -450,6 +450,7 @@ private:
                 Scope, request, "internal@user", "internal@token", {}, 
                 permissions, {}, {}, {}
             }};
+        event->ExtractSensitiveFields = true;
         Send(ControlPlaneStorageServiceActorId(), event.release());
     }
 
@@ -461,6 +462,7 @@ private:
                 Scope, request, "internal@user", "internal@token", {}, 
                 permissions, {}, {}, {}
             }};
+        event->ExtractSensitiveFields = true;
         Send(ControlPlaneStorageServiceActorId(), event.release());
     }
 
@@ -485,6 +487,7 @@ private:
                 Scope, request, "internal@user", "internal@token", {}, 
                 permissions, {}, {}, {}
             }};
+        event->ExtractSensitiveFields = true;
         Send(ControlPlaneStorageServiceActorId(), event.release());
     }
 

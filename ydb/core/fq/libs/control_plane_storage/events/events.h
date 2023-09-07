@@ -217,6 +217,7 @@ struct TEvControlPlaneStorage {
         TMaybe<TQuotaMap> Quotas;
         TTenantInfo::TPtr TenantInfo;
         FederatedQuery::Internal::ComputeDatabaseInternal ComputeDatabase;
+        bool ExtractSensitiveFields = false;
     };
 
     template<typename TProtoMessage, ui32 EventType>

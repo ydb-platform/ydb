@@ -1,8 +1,7 @@
 #pragma once
 
 #include "blob.h"
-#include "engines/reader/read_metadata.h"
-#include "engines/column_engine.h"
+#include <ydb/core/tx/columnshard/engines/reader/read_metadata.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -59,8 +58,8 @@ public:
             }
 
             for (const auto& committedBlob : readMeta->CommittedBlobs) {
-                if (blobTracker.SetBlobInUse(committedBlob.GetBlobId(), false)) {
-                    freedBlobs.emplace(committedBlob.GetBlobId());
+                if (blobTracker.SetBlobInUse(committedBlob.GetBlobRange().GetBlobId(), false)) {
+                    freedBlobs.emplace(committedBlob.GetBlobRange().GetBlobId());
                 }
             }
         }
@@ -103,7 +102,7 @@ private:
         }
 
         for (const auto& committedBlob : readMeta->CommittedBlobs) {
-            blobTracker.SetBlobInUse(committedBlob.GetBlobId(), true);
+            blobTracker.SetBlobInUse(committedBlob.GetBlobRange().GetBlobId(), true);
         }
     }
 

@@ -1,11 +1,10 @@
 #pragma once
 #include "defs.h"
-#include "blob_manager.h"
+#include "blob.h"
 
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/tx/message_seqno.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
-#include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/ev_write/write_data.h>
 
 #include <ydb/core/tx/long_tx_service/public/types.h>
@@ -16,7 +15,6 @@
 namespace NKikimr {
 
 namespace NColumnShard {
-class TBlobGroupSelector;
 
 inline Ydb::StatusIds::StatusCode ConvertToYdbStatus(NKikimrTxColumnShard::EResultStatus columnShardStatus) {
     switch (columnShardStatus) {
@@ -211,7 +209,7 @@ struct TEvColumnShard {
             BlobRanges.reserve(Record.BlobRangesSize());
 
             for (const auto& range : Record.GetBlobRanges()) {
-                auto blobId = NColumnShard::TUnifiedBlobId::ParseFromString(range.GetBlobId(), dsGroupSelector,
+                auto blobId = NOlap::TUnifiedBlobId::ParseFromString(range.GetBlobId(), dsGroupSelector,
                                                                             errString);
                 if (!errString.empty()) {
                     return;

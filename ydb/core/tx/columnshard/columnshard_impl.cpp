@@ -693,7 +693,6 @@ void TColumnShard::SetupIndexation() {
         << " at tablet " << TabletID());
 
     std::vector<NOlap::TInsertedData> data;
-    THashMap<TUnifiedBlobId, std::shared_ptr<arrow::RecordBatch>> cachedBlobs;
     data.reserve(dataToIndex.size());
     for (auto& ptr : dataToIndex) {
         data.push_back(*ptr);
@@ -709,7 +708,7 @@ void TColumnShard::SetupIndexation() {
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
     indexChanges->Start(*this);
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges,
-        Settings.CacheDataAfterIndexing, std::move(cachedBlobs));
+        Settings.CacheDataAfterIndexing);
 
     ActorContext().Send(IndexingActor, std::make_unique<TEvPrivate::TEvIndexing>(std::move(ev)));
 }

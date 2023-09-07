@@ -44,8 +44,8 @@ bool TTxWrite::InsertOneBlob(TTransactionContext& txc, const TEvPrivate::TEvWrit
 
     const NKikimrTxColumnShard::TLogicalMetadata& meta = blobData.GetLogicalMeta();
 
-    const auto& logoBlobId = blobData.GetBlobId();
-    Y_VERIFY(logoBlobId.IsValid());
+    const auto& blobRange = blobData.GetBlobRange();
+    Y_VERIFY(blobRange.GetBlobId().IsValid());
 
     ui64 writeUnixTime = meta.GetDirtyWriteTimeSeconds();
     TInstant time = TInstant::Seconds(writeUnixTime);
@@ -58,7 +58,7 @@ bool TTxWrite::InsertOneBlob(TTransactionContext& txc, const TEvPrivate::TEvWrit
 
     auto tableSchema = Self->TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetSchemaUnsafe(PutBlobResult->Get()->GetSchemaVersion());
 
-    NOlap::TInsertedData insertData((ui64)writeId, writeMeta.GetTableId(), writeMeta.GetDedupId(), logoBlobId, meta, tableSchema->GetSnapshot());
+    NOlap::TInsertedData insertData((ui64)writeId, writeMeta.GetTableId(), writeMeta.GetDedupId(), blobRange, meta, tableSchema->GetSnapshot());
     bool ok = Self->InsertTable->Insert(dbTable, std::move(insertData));
     if (ok) {
         THashSet<TWriteId> writesToAbort = Self->InsertTable->OldWritesToAbort(time);
@@ -71,24 +71,15 @@ bool TTxWrite::InsertOneBlob(TTransactionContext& txc, const TEvPrivate::TEvWrit
         auto allAborted = Self->InsertTable->GetAborted(); // copy (src is modified in cycle)
         for (auto& [abortedWriteId, abortedData] : allAborted) {
             Self->InsertTable->EraseAborted(dbTable, abortedData);
-            Self->BlobManager->DeleteBlob(abortedData.BlobId, blobManagerDb);
+            Y_VERIFY(blobRange.IsFullBlob());
+            Self->BlobManager->DeleteBlob(abortedData.GetBlobRange().GetBlobId(), blobManagerDb);
         }
 
         // Put new data into blob cache
-        Y_VERIFY(logoBlobId.BlobSize() == data.size());
-        NBlobCache::AddRangeToCache(NBlobCache::TBlobRange(logoBlobId, 0, data.size()), data);
+        Y_VERIFY(blobRange.IsFullBlob());
+        NBlobCache::AddRangeToCache(blobRange, blobData.GetBlobData());
 
         Self->UpdateInsertTableCounters();
-
-        const auto& blobBatch(PutBlobResult->Get()->GetPutResult().GetBlobBatch());
-        ui64 blobsWritten = blobBatch.GetBlobCount();
-        ui64 bytesWritten = blobBatch.GetTotalSize();
-        Self->IncCounter(COUNTER_UPSERT_BLOBS_WRITTEN, blobsWritten);
-        Self->IncCounter(COUNTER_UPSERT_BYTES_WRITTEN, bytesWritten);
-        Self->IncCounter(COUNTER_RAW_BYTES_UPSERTED, meta.GetRawBytes());
-        Self->IncCounter(COUNTER_WRITE_SUCCESS);
-
-        Self->BlobManager->SaveBlobBatch((std::move(PutBlobResult->Get()->GetPutResultPtr()->ReleaseBlobBatch())), blobManagerDb);
         return true;
     }
     return false;
@@ -112,6 +103,7 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
     }
 
     TVector<TWriteId> writeIds;
+    ui64 insertedBytes = 0;
     for (auto blobData : PutBlobResult->Get()->GetBlobData()) {
         auto writeId = TWriteId(writeMeta.GetWriteId());
         if (operation) {
@@ -121,11 +113,26 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
             writeId = Self->GetLongTxWrite(db, writeMeta.GetLongTxIdUnsafe(), writeMeta.GetWritePartId());
         }
 
-        if (!InsertOneBlob(txc, blobData, writeId)) {
+        if (InsertOneBlob(txc, blobData, writeId)) {
+            insertedBytes += blobData.GetLogicalMeta().GetRawBytes();
+        } else {
             LOG_S_DEBUG(TxPrefix() << "duplicate writeId " << (ui64)writeId << TxSuffix());
             Self->IncCounter(COUNTER_WRITE_DUPLICATE);
         }
         writeIds.push_back(writeId);
+    }
+
+    if (insertedBytes > 0) {
+        TBlobManagerDb blobManagerDb(txc.DB);
+        const auto& blobBatch(PutBlobResult->Get()->GetPutResult().GetBlobBatch());
+        ui64 blobsWritten = blobBatch.GetBlobCount();
+        ui64 bytesWritten = blobBatch.GetTotalSize();
+        Self->IncCounter(COUNTER_UPSERT_BLOBS_WRITTEN, blobsWritten);
+        Self->IncCounter(COUNTER_UPSERT_BYTES_WRITTEN, bytesWritten);
+        Self->IncCounter(COUNTER_RAW_BYTES_UPSERTED, insertedBytes);
+        Self->IncCounter(COUNTER_WRITE_SUCCESS);
+
+        Self->BlobManager->SaveBlobBatch((std::move(PutBlobResult->Get()->GetPutResultPtr()->ReleaseBlobBatch())), blobManagerDb);
     }
 
     if (operation) {

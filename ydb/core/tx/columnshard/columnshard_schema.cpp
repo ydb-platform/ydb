@@ -52,7 +52,7 @@ bool Schema::InsertTable_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsG
         if (metaStr) {
             Y_VERIFY(meta.ParseFromString(metaStr));
         }
-        TInsertedData data(planStep, writeTxId, pathId, dedupId, blobId, meta, indexSnapshot);
+        TInsertedData data(planStep, writeTxId, pathId, dedupId, NOlap::TBlobRange(blobId, 0, blobId.BlobSize()), meta, indexSnapshot);
 
         switch (recType) {
             case EInsertTableIds::Inserted:

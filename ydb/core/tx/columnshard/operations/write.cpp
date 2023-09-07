@@ -82,7 +82,7 @@ namespace NKikimr::NColumnShard {
         auto allAborted = owner.InsertTable->GetAborted();
         for (auto& [abortedWriteId, abortedData] : allAborted) {
             owner.InsertTable->EraseAborted(dbTable, abortedData);
-            owner.BlobManager->DeleteBlob(abortedData.BlobId, blobManagerDb);
+            owner.BlobManager->DeleteBlob(abortedData.GetBlobRange().GetBlobId(), blobManagerDb);
         }
     }
 

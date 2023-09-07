@@ -121,7 +121,7 @@ void TCommittedDataSource::DoFetch() {
     if (!ReadStarted) {
         Y_VERIFY(!ResultReady);
         ReadStarted = true;
-        ReadData.AddBlobForFetch(GetSourceIdx(), TBlobRange(CommittedBlob.GetBlobId(), 0, CommittedBlob.GetBlobId().BlobSize()));
+        ReadData.AddBlobForFetch(GetSourceIdx(), CommittedBlob.GetBlobRange());
     }
 }
 

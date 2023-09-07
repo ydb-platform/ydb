@@ -32,7 +32,6 @@ public:
         Y_VERIFY(TxEvent);
         auto indexChanges = dynamic_pointer_cast<NOlap::TInsertColumnEngineChanges>(TxEvent->IndexChanges);
         Y_VERIFY(indexChanges);
-        indexChanges->CachedBlobs = std::move(TxEvent->CachedBlobs);
 
         for (auto& [blobId, ranges] : event.GroupedBlobRanges) {
             Y_VERIFY(ranges.size() == 1);

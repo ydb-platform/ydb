@@ -7,16 +7,12 @@
 
 namespace NKikimr::NOlap {
 
-THashMap<NKikimr::NOlap::TUnifiedBlobId, std::vector<NKikimr::NOlap::TBlobRange>> TInsertColumnEngineChanges::GetGroupedBlobRanges() const {
+THashMap<TUnifiedBlobId, std::vector<TBlobRange>> TInsertColumnEngineChanges::GetGroupedBlobRanges() const {
     THashMap<TUnifiedBlobId, std::vector<TBlobRange>> result;
     for (size_t i = 0; i < DataToIndex.size(); ++i) {
-        auto& blobId = DataToIndex[i].BlobId;
-        if (CachedBlobs.contains(blobId)) {
-            continue;
-        }
-        Y_VERIFY(!result.contains(blobId));
-        std::vector<TBlobRange> blobsVector = { NBlobCache::TBlobRange(blobId, 0, blobId.BlobSize()) };
-        result.emplace(blobId, std::move(blobsVector));
+        const auto& indsertedData = DataToIndex[i];
+        Y_VERIFY(indsertedData.GetBlobRange().IsFullBlob());
+        Y_VERIFY(result.emplace(indsertedData.GetBlobRange().GetBlobId(), TVector<TBlobRange>{ indsertedData.GetBlobRange() }).second);
     }
     return result;
 }
@@ -30,9 +26,10 @@ bool TInsertColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TApp
 
 void TInsertColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context) {
     TBase::DoWriteIndex(self, context);
-    for (const auto& cmtd : DataToIndex) {
-        self.InsertTable->EraseCommitted(context.DBWrapper, cmtd);
-        self.BlobManager->DeleteBlob(cmtd.BlobId, *context.BlobManagerDb);
+    for (const auto& indsertedData : DataToIndex) {
+        self.InsertTable->EraseCommitted(context.DBWrapper, indsertedData);
+        Y_VERIFY(indsertedData.GetBlobRange().IsFullBlob());
+        self.BlobManager->DeleteBlob(indsertedData.GetBlobRange().GetBlobId(), *context.BlobManagerDb);
     }
     if (!DataToIndex.empty()) {
         self.UpdateInsertTableCounters();
@@ -87,16 +84,14 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
 
     THashMap<ui64, std::vector<std::shared_ptr<arrow::RecordBatch>>> pathBatches;
     for (auto& inserted : DataToIndex) {
-        TBlobRange blobRange(inserted.BlobId, 0, inserted.BlobId.BlobSize());
+        const TBlobRange& blobRange = inserted.GetBlobRange();
 
         auto blobSchema = context.SchemaVersions.GetSchema(inserted.GetSchemaSnapshot());
         auto& indexInfo = blobSchema->GetIndexInfo();
         Y_VERIFY(indexInfo.IsSorted());
 
         std::shared_ptr<arrow::RecordBatch> batch;
-        if (auto it = CachedBlobs.find(inserted.BlobId); it != CachedBlobs.end()) {
-            batch = it->second;
-        } else if (auto* blobData = Blobs.FindPtr(blobRange)) {
+        if (auto* blobData = Blobs.FindPtr(blobRange)) {
             Y_VERIFY(!blobData->empty(), "Blob data not present");
             // Prepare batch
             batch = NArrow::DeserializeBatch(*blobData, indexInfo.ArrowSchema());

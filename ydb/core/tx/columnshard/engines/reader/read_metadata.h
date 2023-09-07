@@ -147,7 +147,6 @@ public:
     }
     std::shared_ptr<TSelectInfo> SelectInfo;
     std::vector<TCommittedBlob> CommittedBlobs;
-    THashMap<TUnifiedBlobId, std::shared_ptr<arrow::RecordBatch>> CommittedBatches;
     std::shared_ptr<TReadStats> ReadStats;
 
     const TSnapshot& GetSnapshot() const {
@@ -175,7 +174,7 @@ public:
         }
         return IndexVersions.GetSchema(version);
     }
-    
+
     ISnapshotSchema::TPtr GetLoadSchema(const std::optional<TSnapshot>& version = {}) const {
         if (!version) {
             if (!EmptyVersionSchemaCache) {

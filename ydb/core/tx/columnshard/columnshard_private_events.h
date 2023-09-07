@@ -32,7 +32,6 @@ struct TEvPrivate {
     struct TEvWriteIndex : public TEventLocal<TEvWriteIndex, EvWriteIndex> {
         NOlap::TVersionedIndex IndexInfo;
         std::shared_ptr<NOlap::TColumnEngineChanges> IndexChanges;
-        THashMap<TUnifiedBlobId, std::shared_ptr<arrow::RecordBatch>> CachedBlobs;
         bool GranuleCompaction{false};
         TBlobBatch BlobBatch;
         TUsage ResourceUsage;
@@ -42,11 +41,9 @@ struct TEvPrivate {
 
         TEvWriteIndex(NOlap::TVersionedIndex&& indexInfo,
             std::shared_ptr<NOlap::TColumnEngineChanges> indexChanges,
-            bool cacheData,
-            THashMap<TUnifiedBlobId, std::shared_ptr<arrow::RecordBatch>>&& cachedBlobs = {})
+            bool cacheData)
             : IndexInfo(std::move(indexInfo))
             , IndexChanges(indexChanges)
-            , CachedBlobs(std::move(cachedBlobs))
             , CacheData(cacheData)
         {
             PutResult = std::make_shared<TBlobPutResult>(NKikimrProto::UNKNOWN);
@@ -252,7 +249,7 @@ struct TEvPrivate {
     class TEvWriteBlobsResult : public TEventLocal<TEvWriteBlobsResult, EvWriteBlobsResult> {
     public:
         class TPutBlobData {
-            YDB_READONLY_DEF(TUnifiedBlobId, BlobId);
+            YDB_READONLY_DEF(TBlobRange, BlobRange);
             YDB_READONLY_DEF(TString, BlobData);
             YDB_READONLY_DEF(NKikimrTxColumnShard::TLogicalMetadata, LogicalMeta);
             YDB_ACCESSOR(ui64, RowsCount, 0);
@@ -260,8 +257,8 @@ struct TEvPrivate {
         public:
             TPutBlobData() = default;
 
-            TPutBlobData(const TUnifiedBlobId& blobId, const TString& data, const NArrow::TFirstLastSpecialKeys& specialKeys, ui64 rowsCount, ui64 rawBytes, const TInstant dirtyTime)
-                : BlobId(blobId)
+            TPutBlobData(const TBlobRange& blobRange, const TString& data, const NArrow::TFirstLastSpecialKeys& specialKeys, ui64 rowsCount, ui64 rawBytes, const TInstant dirtyTime)
+                : BlobRange(blobRange)
                 , BlobData(data)
                 , RowsCount(rowsCount)
                 , RawBytes(rawBytes)

@@ -292,6 +292,11 @@ TCompactionLimits TestLimits() {
 
 bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap,
             std::vector<TInsertedData>&& dataToIndex, THashMap<TBlobRange, TString>& blobs, ui32& step) {
+
+    for (ui32 i = 0; i < dataToIndex.size(); ++i) {
+        // Commited data always has nonzero planstep (for WriteLoadRead tests)
+        dataToIndex[i].PlanStep = i + 1;
+    };
     std::shared_ptr<TInsertColumnEngineChanges> changes = engine.StartInsert(std::move(dataToIndex));
     if (!changes) {
         return false;
@@ -419,8 +424,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         engine.Load(db, lostBlobs);
 
         std::vector<TInsertedData> dataToIndex = {
-            TInsertedData(1, 2, paths[0], "", blobRanges[0].BlobId, {}, indexSnaphot),
-            TInsertedData(2, 1, paths[0], "", blobRanges[1].BlobId, {}, indexSnaphot)
+            TInsertedData(2, paths[0], "", blobRanges[0].BlobId, {}, indexSnaphot),
+            TInsertedData(1, paths[0], "", blobRanges[1].BlobId, {}, indexSnaphot)
         };
 
         // write
@@ -430,7 +435,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         blobs[blobRanges[0]] = testBlob;
         blobs[blobRanges[1]] = testBlob;
         Insert(engine, db, TSnapshot(1, 2), std::move(dataToIndex), blobs, step);
-       
+
         // selects
 
         auto lastSchema = engine.GetVersionedIndex().GetLastSchema();
@@ -515,7 +520,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
             std::vector<TInsertedData> dataToIndex;
             dataToIndex.push_back(
-                TInsertedData{planStep, txId, pathId, "", blobRange.BlobId, {}, indexSnapshot});
+                TInsertedData{txId, pathId, "", blobRange.BlobId, {}, indexSnapshot});
 
             bool ok = Insert(engine, db, TSnapshot(planStep, txId), std::move(dataToIndex), blobs, step);
             UNIT_ASSERT(ok);
@@ -611,7 +616,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
             std::vector<TInsertedData> dataToIndex;
             dataToIndex.push_back(
-                TInsertedData{planStep, txId, pathId, "", blobRange.BlobId, {}, indexSnapshot});
+                TInsertedData{txId, pathId, "", blobRange.BlobId, {}, indexSnapshot});
 
             bool ok = Insert(engine, db, TSnapshot(planStep, txId), std::move(dataToIndex), blobs, step);
             UNIT_ASSERT(ok);
@@ -640,7 +645,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
             std::vector<TInsertedData> dataToIndex;
             dataToIndex.push_back(
-                TInsertedData(planStep, txId, pathId, "", blobRange.BlobId, {}, indexSnapshot));
+                TInsertedData(txId, pathId, "", blobRange.BlobId, {}, indexSnapshot));
 
             bool ok = Insert(engine, db, TSnapshot(planStep, txId), std::move(dataToIndex), blobs, step);
             UNIT_ASSERT(ok);
@@ -680,7 +685,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
             std::vector<TInsertedData> dataToIndex;
             dataToIndex.push_back(
-                TInsertedData(planStep, txId, pathId, "", blobRange.BlobId, {}, indexSnapshot));
+                TInsertedData(txId, pathId, "", blobRange.BlobId, {}, indexSnapshot));
 
             bool ok = Insert(engine, db, TSnapshot(planStep, txId), std::move(dataToIndex), blobs, step);
             UNIT_ASSERT(ok);

@@ -9,8 +9,9 @@ namespace NKikimr::NOlap {
 struct TInsertedData {
 private:
     TInsertedDataMeta Meta;
-public:
+    YDB_READONLY_DEF(TBlobRange, BlobRange);
 
+public:
     const TInsertedDataMeta& GetMeta() const {
         return Meta;
     }
@@ -19,26 +20,32 @@ public:
     ui64 WriteTxId = 0;
     ui64 PathId = 0;
     TString DedupId;
-    TUnifiedBlobId BlobId;
 
     TInsertedData() = delete; // avoid invalid TInsertedData anywhere
 
-    TInsertedData(ui64 planStep, ui64 writeTxId, ui64 pathId, TString dedupId, const TUnifiedBlobId& blobId,
+    TInsertedData(ui64 planStep, ui64 writeTxId, ui64 pathId, TString dedupId, const TBlobRange& blobRange,
         const NKikimrTxColumnShard::TLogicalMetadata& proto, const TSnapshot& schemaVersion)
         : Meta(proto)
+        , BlobRange(blobRange)
         , PlanStep(planStep)
         , WriteTxId(writeTxId)
         , PathId(pathId)
         , DedupId(dedupId)
-        , BlobId(blobId)
         , SchemaVersion(schemaVersion) {
         Y_VERIFY(SchemaVersion.Valid());
     }
 
+    TInsertedData(ui64 writeTxId, ui64 pathId, TString dedupId, const TBlobRange& blobRange,
+        const NKikimrTxColumnShard::TLogicalMetadata& proto, const TSnapshot& schemaVersion)
+        : TInsertedData(0, writeTxId, pathId, dedupId, blobRange, proto, schemaVersion)
+    {}
+
+
     TInsertedData(ui64 writeTxId, ui64 pathId, TString dedupId, const TUnifiedBlobId& blobId,
         const NKikimrTxColumnShard::TLogicalMetadata& proto, const TSnapshot& schemaVersion)
-        : TInsertedData(0, writeTxId, pathId, dedupId, blobId, proto, schemaVersion)
-    {}
+        : TInsertedData(0, writeTxId, pathId, dedupId, TBlobRange(blobId, 0, blobId.BlobSize()), proto, schemaVersion)
+    {
+    }
 
     bool operator < (const TInsertedData& key) const {
         if (PlanStep < key.PlanStep) {
@@ -100,7 +107,7 @@ public:
         return SchemaVersion;
     }
 
-    ui32 BlobSize() const { return BlobId.BlobSize(); }
+    ui32 BlobSize() const { return BlobRange.GetBlobSize(); }
 
 private:
     TSnapshot SchemaVersion = TSnapshot::Zero();
@@ -108,7 +115,7 @@ private:
 
 class TCommittedBlob {
 private:
-    TUnifiedBlobId BlobId;
+    TBlobRange BlobRange;
     TSnapshot CommitSnapshot;
     TSnapshot SchemaSnapshot;
     YDB_READONLY_DEF(std::optional<NArrow::TReplaceKey>, First);
@@ -124,8 +131,8 @@ public:
         return *Last;
     }
 
-    TCommittedBlob(const TUnifiedBlobId& blobId, const TSnapshot& snapshot, const TSnapshot& schemaSnapshot, const std::optional<NArrow::TReplaceKey>& first, const std::optional<NArrow::TReplaceKey>& last)
-        : BlobId(blobId)
+    TCommittedBlob(const TBlobRange& blobRange, const TSnapshot& snapshot, const TSnapshot& schemaSnapshot, const std::optional<NArrow::TReplaceKey>& first, const std::optional<NArrow::TReplaceKey>& last)
+        : BlobRange(blobRange)
         , CommitSnapshot(snapshot)
         , SchemaSnapshot(schemaSnapshot)
         , First(first)
@@ -134,10 +141,10 @@ public:
 
     /// It uses trick then we place key wtih planStep:txId in container and find them later by BlobId only.
     /// So hash() and equality should depend on BlobId only.
-    bool operator == (const TCommittedBlob& key) const { return BlobId == key.BlobId; }
-    ui64 Hash() const noexcept { return BlobId.Hash(); }
+    bool operator == (const TCommittedBlob& key) const { return BlobRange == key.BlobRange; }
+    ui64 Hash() const noexcept { return BlobRange.Hash(); }
     TString DebugString() const {
-        return TStringBuilder() << BlobId << ";ps=" << CommitSnapshot.GetPlanStep() << ";ti=" << CommitSnapshot.GetTxId();
+        return TStringBuilder() << BlobRange << ";ps=" << CommitSnapshot.GetPlanStep() << ";ti=" << CommitSnapshot.GetTxId();
     }
 
     const TSnapshot& GetSnapshot() const {
@@ -148,8 +155,8 @@ public:
         return SchemaSnapshot;
     }
 
-    const TUnifiedBlobId& GetBlobId() const {
-        return BlobId;
+    const TBlobRange& GetBlobRange() const {
+        return BlobRange;
     }
 };
 

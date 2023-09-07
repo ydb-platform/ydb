@@ -284,11 +284,28 @@ struct TBlobRange {
     ui32 Offset;
     ui32 Size;
 
+    const TUnifiedBlobId& GetBlobId() const {
+        return BlobId;
+    }
+
+    ui32 GetBlobSize() const {
+        return Size;
+    }
+
+    bool IsFullBlob() const {
+        return Size == BlobId.BlobSize();
+    }
+
     explicit TBlobRange(const TUnifiedBlobId& blobId = TUnifiedBlobId(), ui32 offset = 0, ui32 size = 0)
         : BlobId(blobId)
         , Offset(offset)
         , Size(size)
-    {}
+    {
+        if (Size > 0) {
+            Y_VERIFY(Offset < BlobId.BlobSize());
+            Y_VERIFY(Offset + Size <= BlobId.BlobSize());
+        }
+    }
 
     bool operator == (const TBlobRange& other) const {
         return

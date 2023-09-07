@@ -78,7 +78,7 @@ namespace NPage {
         }
 
         bool Final = true;
-        bool CutIndexKeys = false;
+        bool CutIndexKeys = true;
         ui32 MaxLargeBlob = 8 * 1024 * 1024 - 8; /* Maximum large blob size */
         ui32 LargeEdge = Max<ui32>();   /* External blob edge size      */
         ui32 SmallEdge = Max<ui32>();   /* Outer blobs edge bytes limit */

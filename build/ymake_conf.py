@@ -1199,6 +1199,7 @@ class GnuToolchain(Toolchain):
             ])
 
         if self.tc.is_clang:
+            self.c_flags_platform.append('-isystem{}/share/include'.format(self.tc.name_marker))
             target_triple = self.tc.triplet_opt.get(target.arch, None)
             if not target_triple:
                 target_triple = select(default=None, selectors=[

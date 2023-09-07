@@ -5096,18 +5096,18 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
         {
             UNIT_ASSERT_LE(++Attempt, 10);
 
-            const TVector<TRawTypeValue> key{ { NScheme::TInt64::TInstance(100) } };
+            const auto key = NScheme::TInt64::TInstance(100);
             const TVector<NTable::TTag> tags{ { TRowsModel::ColumnKeyId, TRowsModel::ColumnValueId } };
 
             // no we should have 2 data pages without index, it's ~20*1024 bytes
             // (index size is ~ bytes)
-            auto precharged = txc.DB.Precharge(TRowsModel::TableId, key, key, tags, 0, 0, 0);
+            auto precharged = txc.DB.Precharge(TRowsModel::TableId, { key }, { key }, tags, 0, 0, 0);
             if (!precharged) {
                 return false;
             }
 
             NTable::TRowState row;
-            auto ready = txc.DB.Select(TRowsModel::TableId, key, tags, row);
+            auto ready = txc.DB.Select(TRowsModel::TableId, { key }, tags, row);
             if (ready == NTable::EReady::Page) {
                 return false;
             }

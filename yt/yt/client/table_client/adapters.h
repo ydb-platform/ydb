@@ -5,7 +5,7 @@
 
 #include <yt/yt/client/api/table_reader.h>
 
-#include <yt/yt/client/formats/format.h>
+#include <yt/yt/library/formats/format.h>
 
 #include <yt/yt/core/concurrency/async_stream.h>
 

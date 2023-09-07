@@ -14,7 +14,7 @@ INCLUDE(${ARCADIA_ROOT}/yt/opensource_tests.inc)
 
 PEERDIR(
     yt/yt/client
-    yt/yt/client/formats
+    yt/yt/library/formats
     yt/yt/client/table_client/unittests/helpers
     yt/yt/client/unittests/mock
     yt/yt/core/test_framework

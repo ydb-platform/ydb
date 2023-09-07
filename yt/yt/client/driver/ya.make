@@ -25,7 +25,7 @@ SRCS(
 
 PEERDIR(
     yt/yt/client
-    yt/yt/client/formats
+    yt/yt/library/formats
 )
 
 END()

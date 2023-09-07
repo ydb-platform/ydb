@@ -1,4 +1,4 @@
-#include "logical_type_shortcuts.h"
+#include <yt/yt/library/logical_type_shortcuts/logical_type_shortcuts.h>
 #include "yt/yt/client/table_client/logical_type.h"
 
 #include <yt/yt/core/test_framework/framework.h>

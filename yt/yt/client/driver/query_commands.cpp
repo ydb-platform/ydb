@@ -4,6 +4,8 @@
 
 #include <yt/yt/client/formats/config.h>
 
+#include <yt/yt/library/formats/format.h>
+
 #include <yt/yt/core/ytree/fluent.h>
 #include <yt/yt/core/ytree/convert.h>
 

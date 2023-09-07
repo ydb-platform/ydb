@@ -3,6 +3,8 @@
 
 #include <yt/yt/client/api/config.h>
 
+#include <yt/yt/library/formats/format.h>
+
 namespace NYT::NDriver {
 
 using namespace NConcurrency;

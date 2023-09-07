@@ -1,11 +1,11 @@
 #include "driver.h"
 
 #include "authentication_commands.h"
+#include "admin_commands.h"
 #include "chaos_commands.h"
 #include "command.h"
 #include "config.h"
 #include "cypress_commands.h"
-#include "admin_commands.h"
 #include "etc_commands.h"
 #include "file_commands.h"
 #include "journal_commands.h"
@@ -17,10 +17,10 @@
 #include "proxy_discovery_cache.h"
 #include "query_commands.h"
 
-#include <yt/yt/client/api/transaction.h>
+#include <yt/yt/client/api/client_cache.h>
 #include <yt/yt/client/api/connection.h>
 #include <yt/yt/client/api/sticky_transaction_pool.h>
-#include <yt/yt/client/api/client_cache.h>
+#include <yt/yt/client/api/transaction.h>
 
 #include <yt/yt/client/api/rpc_proxy/connection_impl.h>
 
@@ -30,7 +30,10 @@
 
 #include <yt/yt/core/tracing/trace_context.h>
 
+#include <yt/yt/library/formats/format.h>
+
 #include <yt/yt/library/tvm/tvm_base.h>
+
 
 namespace NYT::NDriver {
 

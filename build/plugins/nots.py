@@ -524,3 +524,16 @@ def on_ts_files(unit, *files):
     if all_cmds:
         new_cmds.insert(0, all_cmds)
     unit.set(["_TS_FILES_COPY_CMD", " && ".join(new_cmds)])
+
+
+@_with_report_configure_error
+def on_set_copy_node_modules_bundle_cmd(unit):
+    pm = _create_pm(unit)
+    pj = pm.load_package_json_from_dir(pm.sources_path)
+    if pj.has_dependencies():
+        unit.set(
+            [
+                "_COPY_NODE_MODULES_BUNDLE_CMD",
+                '$COPY_CMD ${input:"node_modules.tar"} ${output:"workspace_node_modules.tar"}',
+            ]
+        )

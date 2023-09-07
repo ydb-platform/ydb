@@ -65,7 +65,6 @@ public:
     virtual void ToJson(NJson::TJsonWriter& out) const = 0;
 
     virtual bool IsApplicableToType(const TTypeAnnotationNode&) const { return true; }
-    virtual const TConstraintNode* OnlySimpleColumns(TExprContext&) const { return this; }
 
     template <typename T>
     const T* Cast() const {
@@ -102,8 +101,6 @@ public:
 
     using TPathFilter = std::function<bool(const TPathType&)>;
     using TPathReduce = std::function<std::vector<TPathType>(const TPathType&)>;
-
-    virtual const TConstraintNode* OnlySimpleColumns(TExprContext&) const { return this; }
 
     static const TTypeAnnotationNode* GetSubTypeByPath(const TPathType& path, const TTypeAnnotationNode& type);
 protected:
@@ -265,7 +262,6 @@ public:
     const TSortedConstraintNode* MakeCommon(const TSortedConstraintNode* other, TExprContext& ctx) const;
 
     bool IsApplicableToType(const TTypeAnnotationNode& type) const override;
-    const TConstraintNode* OnlySimpleColumns(TExprContext& ctx) const override;
 private:
     const TConstraintWithFieldsNode* DoFilterFields(TExprContext& ctx, const TPathFilter& predicate) const final;
     const TConstraintWithFieldsNode* DoRenameFields(TExprContext& ctx, const TPathReduce& reduce) const final;
@@ -305,7 +301,6 @@ public:
     const TChoppedConstraintNode* MakeCommon(const TChoppedConstraintNode* other, TExprContext& ctx) const;
 
     bool IsApplicableToType(const TTypeAnnotationNode& type) const override;
-    const TConstraintNode* OnlySimpleColumns(TExprContext& ctx) const override;
 private:
     const TConstraintWithFieldsNode* DoFilterFields(TExprContext& ctx, const TPathFilter& predicate) const final;
     const TConstraintWithFieldsNode* DoRenameFields(TExprContext& ctx, const TPathReduce& reduce) const final;
@@ -353,7 +348,6 @@ public:
     static const TUniqueConstraintNodeBase* Merge(const TUniqueConstraintNodeBase* one, const TUniqueConstraintNodeBase* two, TExprContext& ctx);
 
     bool IsApplicableToType(const TTypeAnnotationNode& type) const override;
-    const TConstraintNode* OnlySimpleColumns(TExprContext& ctx) const override;
 private:
     const TConstraintWithFieldsNode* DoFilterFields(TExprContext& ctx, const TPartOfConstraintBase::TPathFilter& predicate) const final;
     const TConstraintWithFieldsNode* DoRenameFields(TExprContext& ctx, const TPartOfConstraintBase::TPathReduce& reduce) const final;
@@ -564,7 +558,6 @@ public:
     const TMultiConstraintNode* FilterConstraints(TExprContext& ctx, const TConstraintSet::TPredicate& predicate) const;
 
     bool FilteredIncludes(const TConstraintNode& node, const THashSet<TString>& blacklist) const;
-    const TConstraintNode* OnlySimpleColumns(TExprContext& ctx) const override;
 private:
     TMapType Items_;
 };

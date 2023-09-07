@@ -469,9 +469,6 @@ bool TSortedConstraintNode::IsApplicableToType(const TTypeAnnotationNode& type) 
     });
 }
 
-const TConstraintNode* TSortedConstraintNode::OnlySimpleColumns(TExprContext& ctx) const {
-    return DoFilterFields(ctx, std::bind(std::equal_to<TPathType::size_type>(), std::bind(&TPathType::size, std::placeholders::_1), 1ULL));
-}
 
 const TConstraintWithFieldsNode*
 TSortedConstraintNode::DoGetComplicatedForType(const TTypeAnnotationNode& type, TExprContext& ctx) const {
@@ -770,10 +767,6 @@ bool TChoppedConstraintNode::IsApplicableToType(const TTypeAnnotationNode& type)
     return std::all_of(Sets_.cbegin(), Sets_.cend(), [&itemType](const TSetType& set) {
         return std::all_of(set.cbegin(), set.cend(), std::bind(&GetSubTypeByPath, std::placeholders::_1, std::cref(itemType)));
     });
-}
-
-const TConstraintNode* TChoppedConstraintNode::OnlySimpleColumns(TExprContext& ctx) const {
-    return DoFilterFields(ctx, std::bind(std::equal_to<typename TPathType::size_type>(), std::bind(&TPathType::size, std::placeholders::_1), 1ULL));
 }
 
 const TConstraintWithFieldsNode*
@@ -1258,11 +1251,6 @@ bool TUniqueConstraintNodeBase<Distinct>::IsApplicableToType(const TTypeAnnotati
             return std::all_of(set.cbegin(), set.cend(), std::bind(&TConstraintWithFieldsNode::GetSubTypeByPath, std::placeholders::_1, std::cref(itemType)));
         });
     });
-}
-
-template<bool Distinct>
-const TConstraintNode* TUniqueConstraintNodeBase<Distinct>::OnlySimpleColumns(TExprContext& ctx) const {
-    return DoFilterFields(ctx, std::bind(std::equal_to<typename TConstraintWithFieldsNode::TPathType::size_type>(), std::bind(&TConstraintWithFieldsNode::TPathType::size, std::placeholders::_1), 1ULL));
 }
 
 template class TUniqueConstraintNodeBase<false>;
@@ -2362,18 +2350,6 @@ const TMultiConstraintNode* TMultiConstraintNode::FilterConstraints(TExprContext
     }
 
     return hasContent ? hasChanges ? ctx.MakeConstraint<TMultiConstraintNode>(std::move(items)) : this : nullptr;
-}
-
-const TConstraintNode* TMultiConstraintNode::OnlySimpleColumns(TExprContext& ctx) const {
-    auto items = Items_;
-    for (auto& item : items) {
-        TConstraintSet newSet;
-        for (const auto& constraint : item.second.GetAllConstraints())
-            if (const auto filtered = constraint->OnlySimpleColumns(ctx))
-                newSet.AddConstraint(filtered);
-        item.second = std::move(newSet);
-    }
-    return ctx.MakeConstraint<TMultiConstraintNode>(std::move(items));
 }
 
 } // namespace NYql

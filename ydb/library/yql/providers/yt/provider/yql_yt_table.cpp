@@ -936,7 +936,7 @@ TYtOutTableInfo& TYtOutTableInfo::SetUnique(const TDistinctConstraintNode* disti
         }
         if (const auto columns = NYql::GetSettingAsColumnList(Settings.Ref(), EYtSettingType::UniqueBy)) {
             YQL_ENSURE(distinct->ContainsCompleteSet(std::vector<std::string_view>(columns.cbegin(), columns.cend())));
-        } else if (const auto simple = static_cast<const TDistinctConstraintNode*>(distinct->OnlySimpleColumns(ctx))) {
+        } else if (const auto simple = distinct->FilterFields(ctx, [](const TPartOfConstraintBase::TPathType& path) { return 1U == path.size(); })) {
             auto content = simple->GetContent();
             if (1U < content.size()) {
                 std::unordered_set<std::string_view> sorted(RowSpec->SortMembers.cbegin(), RowSpec->SortMembers.cend());

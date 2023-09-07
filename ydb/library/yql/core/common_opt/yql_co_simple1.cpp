@@ -2686,7 +2686,7 @@ TExprNode::TPtr OptimizeReorder(const TExprNode::TPtr& node, TExprContext& ctx) 
 
 void FixSortness(const TExprNode& origNode, TExprNode::TPtr& node, TExprContext& ctx) {
     if (const auto sorted = origNode.GetConstraint<TSortedConstraintNode>()) {
-        if (const auto simple = static_cast<const TSortedConstraintNode*>(sorted->OnlySimpleColumns(ctx))) {
+        if (const auto simple = sorted->FilterFields(ctx, [](const TPartOfConstraintBase::TPathType& path) { return 1U == path.size(); })) {
             const auto& content = simple->GetContent();
             node = ctx.Builder(origNode.Pos())
                 .Callable("Sort")

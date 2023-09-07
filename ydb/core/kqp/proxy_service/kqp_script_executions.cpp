@@ -359,6 +359,7 @@ struct TCreateScriptExecutionActor : public TActorBootstrapped<TCreateScriptExec
             Send(RunScriptActorId, new NActors::TEvents::TEvPoison());
             Send(Event->Sender, new TEvKqp::TEvScriptResponse(ev->Get()->Status, std::move(ev->Get()->Issues)));
         }
+        PassAway();
     }
 
     STRICT_STFUNC(StateFunc,

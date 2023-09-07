@@ -11,13 +11,13 @@ namespace NYql::NMatchRecognize {
 constexpr size_t MaxPatternNesting = 20; //Limit recursion for patterns
 
 //Mixin columns for calculating measures
-enum class MeasureInputDataSpecialColumns {
+enum class EMeasureInputDataSpecialColumns {
     Classifier = 0,
     MatchNumber = 1,
     Last
 };
 
-inline TString MeasureInputDataSpecialColumnName(MeasureInputDataSpecialColumns c) {
+inline TString MeasureInputDataSpecialColumnName(EMeasureInputDataSpecialColumns c) {
     return TString("_yql_") + ToString(c);
 }
 

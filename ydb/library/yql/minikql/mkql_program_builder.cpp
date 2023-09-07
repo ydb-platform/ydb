@@ -5850,30 +5850,30 @@ TRuntimeNode TProgramBuilder::MatchRecognizeCore(
     if (getMeasures.empty()) {
         measureInputDataArg = Arg(Env.GetTypeOfVoid());
     } else {
-        using NYql::NMatchRecognize::MeasureInputDataSpecialColumns;
+        using NYql::NMatchRecognize::EMeasureInputDataSpecialColumns;
         measures.reserve(getMeasures.size());
         measureTypes.reserve(getMeasures.size());
-        specialColumnIndexesInMeasureInputDataRow.resize(static_cast<size_t>(NYql::NMatchRecognize::MeasureInputDataSpecialColumns::Last));
+        specialColumnIndexesInMeasureInputDataRow.resize(static_cast<size_t>(NYql::NMatchRecognize::EMeasureInputDataSpecialColumns::Last));
         TStructTypeBuilder measureInputDataRowTypeBuilder(Env);
         for (ui32 i = 0; i != inputRowType->GetMembersCount(); ++i) {
             measureInputDataRowTypeBuilder.Add(inputRowType->GetMemberName(i), inputRowType->GetMemberType(i));
         }
         measureInputDataRowTypeBuilder.Add(
-                MeasureInputDataSpecialColumnName(MeasureInputDataSpecialColumns::Classifier),
+                MeasureInputDataSpecialColumnName(EMeasureInputDataSpecialColumns::Classifier),
                 TDataType::Create(NUdf::TDataType<NYql::NUdf::TUtf8>::Id, Env)
         );
         measureInputDataRowTypeBuilder.Add(
-                MeasureInputDataSpecialColumnName(MeasureInputDataSpecialColumns::MatchNumber),
+                MeasureInputDataSpecialColumnName(EMeasureInputDataSpecialColumns::MatchNumber),
                 TDataType::Create(NUdf::TDataType<ui64>::Id, Env)
         );
         const auto measureInputDataRowType = measureInputDataRowTypeBuilder.Build();
 
         for (ui32 i = 0; i != measureInputDataRowType->GetMembersCount(); ++i) {
             //assume a few, if grows, it's better to use a lookup table here
-            static_assert(static_cast<size_t>(MeasureInputDataSpecialColumns::Last) < 5);
-            for (size_t j = 0; j != static_cast<size_t>(MeasureInputDataSpecialColumns::Last); ++j) {
+            static_assert(static_cast<size_t>(EMeasureInputDataSpecialColumns::Last) < 5);
+            for (size_t j = 0; j != static_cast<size_t>(EMeasureInputDataSpecialColumns::Last); ++j) {
                 if (measureInputDataRowType->GetMemberName(i) ==
-                        NYql::NMatchRecognize::MeasureInputDataSpecialColumnName(static_cast<MeasureInputDataSpecialColumns>(j)))
+                        NYql::NMatchRecognize::MeasureInputDataSpecialColumnName(static_cast<EMeasureInputDataSpecialColumns>(j)))
                     specialColumnIndexesInMeasureInputDataRow[j] = NewDataLiteral<ui32>(i);
             }
         }

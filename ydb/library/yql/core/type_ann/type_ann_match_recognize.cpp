@@ -92,12 +92,12 @@ MatchRecognizeMeasuresWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& out
 
     auto lambdaInputRowColumns = inputRowType->GetTypeAnn()
             ->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>()->GetItems();
-    using NYql::NMatchRecognize::MeasureInputDataSpecialColumns;
+    using NYql::NMatchRecognize::EMeasureInputDataSpecialColumns;
     lambdaInputRowColumns.push_back(ctx.Expr.MakeType<TItemExprType>(
-            MeasureInputDataSpecialColumnName(MeasureInputDataSpecialColumns::Classifier),
+            MeasureInputDataSpecialColumnName(EMeasureInputDataSpecialColumns::Classifier),
             ctx.Expr.MakeType<TDataExprType>(EDataSlot::Utf8)));
     lambdaInputRowColumns.push_back(ctx.Expr.MakeType<TItemExprType>(
-            MeasureInputDataSpecialColumnName(MeasureInputDataSpecialColumns::MatchNumber),
+            MeasureInputDataSpecialColumnName(EMeasureInputDataSpecialColumns::MatchNumber),
             ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64)));
     auto lambdaInputRowType = ctx.Expr.MakeType<TStructExprType>(lambdaInputRowColumns);
     const auto& matchedRowsRanges = GetMatchedRowsRangesType(pattern, ctx);

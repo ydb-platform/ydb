@@ -1,3 +1,5 @@
+#include <ydb/library/yql/parser/pg_wrapper/pg_compat.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/hook/hook.h>
 
@@ -18,12 +20,9 @@ extern "C" {
 #undef SIZEOF_SIZE_T
 
 extern "C" {
-#include "postgres.h"
 #include "optimizer/paths.h"
 }
 
-#undef Min
-#undef Max
 #undef TypeName
 #undef SortBy
 

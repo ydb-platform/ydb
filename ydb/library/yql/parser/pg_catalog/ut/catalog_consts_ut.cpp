@@ -1,17 +1,9 @@
+#include <ydb/library/yql/parser/pg_wrapper/pg_compat.h>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 
-// see pg_attribute_printf macro in c.h
-// should expand to nothing
-#undef __GNUC__
-#undef __IBMC__
-
 extern "C" {
-#include "postgres.h"
 #include "catalog/pg_collation_d.h"
 #include "access/stratnum.h"
-
-#undef Min
-#undef Max
 }
 
 #include <library/cpp/testing/unittest/registar.h>

@@ -2640,7 +2640,7 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
                 TMailboxType::HTSwap, appData->UserPoolId)
         );
 
-        IActor* metricsActor = CreateKafkaMetricsActor(NKafka::TKafkaMetricsSettings{appData->Counters->GetSubgroup("counters", "datastreams")}); // FIXME savnik: change to kafka_proxy
+        IActor* metricsActor = CreateKafkaMetricsActor(NKafka::TKafkaMetricsSettings{appData->Counters});
         setup->LocalServices.emplace_back(
             NKafka::MakeKafkaMetricsServiceID(),
             TActorSetupCmd(metricsActor,

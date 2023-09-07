@@ -99,7 +99,7 @@ void TKafkaSaslAuthActor::SendResponseAndDie(EKafkaErrors errorCode, const TStri
         responseToClient->ErrorMessage = "";
 
         auto evResponse = std::make_shared<TEvKafka::TEvResponse>(CorrelationId, responseToClient, errorCode);
-        auto authResult = new TEvKafka::TEvAuthResult(EAuthSteps::SUCCESS, evResponse, UserToken, DatabasePath, DatabaseId, FolderId, CloudId, ServiceAccountId, Coordinator, ResourcePath, errorMessage);
+        auto authResult = new TEvKafka::TEvAuthResult(EAuthSteps::SUCCESS, evResponse, UserToken, DatabasePath, DatabaseId, FolderId, CloudId, ServiceAccountId, Coordinator, ResourcePath, IsServerless, errorMessage);
         Send(Context->ConnectionId, authResult);
     }
 
@@ -192,6 +192,7 @@ void TKafkaSaslAuthActor::Handle(NKikimr::TEvTxProxySchemeCache::TEvNavigateKeyS
         return;
     }
     Y_VERIFY(navigate->ResultSet.size() == 1);
+    IsServerless = navigate->ResultSet.front().DomainInfo->IsServerless();
     for (const auto& attr : navigate->ResultSet.front().Attributes) {
         if (attr.first == "folder_id") FolderId = attr.second;
         if (attr.first == "cloud_id") CloudId = attr.second;

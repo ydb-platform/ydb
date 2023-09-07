@@ -4,9 +4,10 @@
 namespace NKafka {
 
 TVector<std::pair<TString, TString>> BuildLabels(const NKafka::TContext::TPtr context, const TString& method, const TString& topic, const TString& name, const TString& errorCode) {
-    return {{"database", context->DatabasePath}, {"method", method}, {"cloud_id", context->CloudId},
+    return {{"counters", context->IsServerless ? "datastreams_serverless" : "datastreams"},
+            {"database", context->DatabasePath}, {"method", method}, {"cloud_id", context->CloudId},
             {"folder_id", context->FolderId}, {"database_id", context->DatabaseId},
-            {"topic", topic}, {"errorCode", errorCode}, {"name", name}};
+            {"topic", topic}, {"error_code", errorCode}, {"name", name}};
 }
 
 TActorId MakeKafkaMetricsServiceID() {

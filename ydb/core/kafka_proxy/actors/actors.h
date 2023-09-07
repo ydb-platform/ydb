@@ -36,6 +36,7 @@ struct TContext {
     TString DatabaseId;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TString ClientDC;
+    bool IsServerless;
 
     NKikimr::NPQ::TRlContext RlContext;
 
@@ -76,5 +77,4 @@ NActors::IActor* CreateKafkaProduceActor(const TContext::TPtr context);
 NActors::IActor* CreateKafkaSaslHandshakeActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TSaslHandshakeRequestData>& message);
 NActors::IActor* CreateKafkaSaslAuthActor(const TContext::TPtr context, const ui64 correlationId, const NKikimr::NRawSocket::TSocketDescriptor::TSocketAddressType address, const TMessagePtr<TSaslAuthenticateRequestData>& message);
 
-    
 } // namespace NKafka

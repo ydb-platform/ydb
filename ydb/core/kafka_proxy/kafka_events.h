@@ -61,7 +61,7 @@ struct TEvKafka {
         }
 
         TEvAuthResult(EAuthSteps authStep, std::shared_ptr<TEvKafka::TEvResponse> clientResponse, TIntrusiveConstPtr<NACLib::TUserToken> token, TString databasePath, TString databaseId,
-                      TString folderId, TString cloudId, TString serviceAccountId, TString coordinator, TString resourcePath, TString error = "")
+                      TString folderId, TString cloudId, TString serviceAccountId, TString coordinator, TString resourcePath, bool isServerless, TString error = "")
             : AuthStep(authStep)
             , UserToken(token)
             , DatabasePath(databasePath)
@@ -71,6 +71,7 @@ struct TEvKafka {
             , DatabaseId(databaseId)
             , Coordinator(coordinator)
             , ResourcePath(resourcePath)
+            , IsServerless(isServerless)
             , Error(error)
             , ClientResponse(std::move(clientResponse)) {
         }
@@ -84,6 +85,7 @@ struct TEvKafka {
         TString DatabaseId;
         TString Coordinator;
         TString ResourcePath;
+        bool IsServerless;
 
         TString Error;
         TString SaslMechanism;
@@ -97,7 +99,7 @@ struct TEvKafka {
           SaslMechanism(saslMechanism),
           ClientResponse(std::move(clientResponse))
         {}
-        
+
         EAuthSteps AuthStep;
         TString Error;
         TString SaslMechanism;

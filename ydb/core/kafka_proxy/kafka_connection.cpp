@@ -319,6 +319,7 @@ protected:
         Context->DatabaseId = event->DatabaseId;
         Context->CloudId = event->CloudId;
         Context->FolderId = event->FolderId;
+        Context->IsServerless = event->IsServerless;
 
         KAFKA_LOG_D("Authentificated successful. SID=" << Context->UserToken->GetUserSID());
     }
@@ -468,7 +469,7 @@ protected:
 
                         Step = HEADER_PROCESS;
                         break;
-                    
+
                     case HEADER_PROCESS:
                         Request->ApiKey = *(TKafkaInt16*)Request->Buffer->Data();
                         Request->ApiVersion = *(TKafkaVersion*)(Request->Buffer->Data() + sizeof(TKafkaInt16));

@@ -92,6 +92,7 @@ private:
     TString Coordinator;
     TString ResourcePath;
     TString CloudId;
+    bool IsServerless;
 };
 
 } // NKafka

@@ -1173,6 +1173,15 @@ protected:
 
 protected:
     void PassAway() override {
+        for (auto channelPair: ResultChannelProxies) {
+            LOG_D("terminate result channel " << channelPair.first << " proxy at " << channelPair.second->SelfId());
+
+            TAutoPtr<IEventHandle> ev = new IEventHandle(
+                channelPair.second->SelfId(), SelfId(), new TEvents::TEvPoison
+            );
+            channelPair.second->Receive(ev);
+        }
+
         LOG_D("terminate execution.");
         if (KqpShardsResolverId) {
             this->Send(KqpShardsResolverId, new TEvents::TEvPoison);

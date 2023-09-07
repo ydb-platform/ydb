@@ -687,15 +687,6 @@ private:
     }
 
     void PassAway() override {
-        for (auto channelPair: GetResultChannelProxies()) {
-            LOG_D("terminate result channel " << channelPair.first << " proxy at " << channelPair.second->SelfId());
-
-            TAutoPtr<IEventHandle> ev = new IEventHandle(
-                channelPair.second->SelfId(), SelfId(), new TEvents::TEvPoison
-            );
-            channelPair.second->Receive(ev);
-        }
-
         auto totalTime = TInstant::Now() - StartTime;
         Counters->Counters->ScanTxTotalTimeHistogram->Collect(totalTime.MilliSeconds());
 

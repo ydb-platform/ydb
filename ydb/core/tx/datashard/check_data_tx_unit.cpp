@@ -188,7 +188,7 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
                     {
                         if (col.ImmediateUpdateSize > NLimits::MaxWriteValueSize) {
                             TString err = TStringBuilder()
-                                << "Transaction write value of " << col.ImmediateUpdateSize
+                                << "Transaction write column value of " << col.ImmediateUpdateSize
                                 << " bytes is larger than the allowed threshold";
 
                             BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR)->AddError(NKikimrTxDataShard::TError::BAD_ARGUMENT, err);

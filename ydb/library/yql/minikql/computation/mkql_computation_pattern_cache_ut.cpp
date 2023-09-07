@@ -616,7 +616,7 @@ Y_UNIT_TEST_SUITE(ComputationPatternCache) {
 
             auto graph = entry->Pattern->Clone(opts.ToComputationOptions(*randomProvider, *timeProvider, &graphAlloc.Ref()));
             auto value = graph->GetValue();
-            UNIT_ASSERT_EQUAL(value.AsStringRef(), NYql::NUdf::TStringRef("qwerty"));
+            UNIT_ASSERT_EQUAL(NYql::NUdf::TStringRef("qwerty"), value.AsStringRef());
         }
     }
 

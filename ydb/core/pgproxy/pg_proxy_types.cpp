@@ -1,6 +1,7 @@
 #include "pg_proxy_types.h"
 #include "pg_stream.h"
 #include <library/cpp/string_utils/base64/base64.h>
+#include <ydb/core/base/path.h>
 
 namespace NPG {
 
@@ -47,11 +48,14 @@ std::unordered_map<TString, TString> TPGInitial::GetClientParams() const {
     uint32_t protocol = 0;
     stream >> protocol;
     while (!stream.Empty()) {
-        TStringBuf key;
-        TStringBuf value;
+        TString key;
+        TString value;
         stream >> key >> value;
         if (key.empty()) {
             break;
+        }
+        if (key == "database") {
+            value = NKikimr::CanonizePath(value);
         }
         params[TString(key)] = value;
     }

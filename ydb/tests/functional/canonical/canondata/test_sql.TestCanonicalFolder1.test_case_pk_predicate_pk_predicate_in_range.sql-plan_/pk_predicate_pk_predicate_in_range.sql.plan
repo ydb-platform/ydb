@@ -14,7 +14,14 @@
                         "Group",
                         "Name"
                     ],
-                    "type": "Lookup"
+                    "limit": "1001",
+                    "scan_by": [
+                        "Group [1, 1]",
+                        "Group [3, 5)",
+                        "Group [6, 6]",
+                        "Group [15, 15]"
+                    ],
+                    "type": "Scan"
                 }
             ]
         }

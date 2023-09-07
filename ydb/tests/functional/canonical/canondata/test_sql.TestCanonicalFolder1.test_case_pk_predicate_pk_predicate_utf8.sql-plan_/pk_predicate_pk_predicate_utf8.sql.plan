@@ -13,7 +13,12 @@
                         "Type",
                         "Value"
                     ],
-                    "type": "Lookup"
+                    "limit": "1001",
+                    "scan_by": [
+                        "Name [Anna, Anna]",
+                        "Name [Dmitry, Dmitry]"
+                    ],
+                    "type": "Scan"
                 }
             ]
         }

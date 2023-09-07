@@ -387,10 +387,7 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
                         .Done();
                 }
             }
-        } else if (buildResult.PointPrefixLen == buildResult.UsedPrefixLen &&
-            // readranges is better in case of one range because supports limits and lookupjoin
-            !(buildResult.ExpectedMaxRanges == TMaybe<size_t>(1) && buildResult.PointPrefixLen < tableDesc.Metadata->KeyColumnNames.size()))
-        {
+        } else if (buildResult.PointPrefixLen == tableDesc.Metadata->KeyColumnNames.size()) {
             YQL_ENSURE(prefixPointsExpr);
             residualLambda = pointsExtractionResult.PrunedLambda;
             buildLookup(prefixPointsExpr, input);

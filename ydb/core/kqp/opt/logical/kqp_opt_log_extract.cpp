@@ -120,6 +120,7 @@ TExprBase KqpApplyExtractMembersToReadTableRanges(TExprBase node, TExprContext& 
             .Settings(read.Settings())
             .ExplainPrompt(read.ExplainPrompt())
             .Index(index.Index().Cast())
+            .PrefixPointsExpr(index.PrefixPointsExpr())
             .Done();
     }
 

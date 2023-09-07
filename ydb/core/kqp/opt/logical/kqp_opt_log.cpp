@@ -57,8 +57,8 @@ public:
         AddHandler(1, &TKqlReadTableIndex::Match, HNDL(RewriteIndexRead));
         AddHandler(1, &TKqlLookupIndex::Match, HNDL(RewriteLookupIndex));
         AddHandler(1, &TKqlStreamLookupIndex::Match, HNDL(RewriteStreamLookupIndex));
+        AddHandler(1, &TKqlReadTableIndexRanges::Match, HNDL(RewriteIndexRead));
 
-        AddHandler(2, &TKqlReadTableIndexRanges::Match, HNDL(RewriteIndexRead));
         AddHandler(2, &TKqlLookupTable::Match, HNDL(RewriteLookupTable));
 
         AddHandler(3, &TKqlReadTableBase::Match, HNDL(ApplyExtractMembersToReadTable<true>));

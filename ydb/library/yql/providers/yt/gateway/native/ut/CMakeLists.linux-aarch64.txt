@@ -15,8 +15,7 @@ target_link_libraries(ydb-library-yql-providers-yt-gateway-native-ut PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-testing-gtest
-  cpp-testing-gtest_main
+  cpp-testing-unittest_main
   yt-gateway-native
   yt-gateway-file
   yql-core-ut_common
@@ -39,20 +38,33 @@ target_link_options(ydb-library-yql-providers-yt-gateway-native-ut PRIVATE
 target_sources(ydb-library-yql-providers-yt-gateway-native-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/native/ut/yql_yt_native_folders_ut.cpp
 )
-add_test(
+set_property(
+  TARGET
+  ydb-library-yql-providers-yt-gateway-native-ut
+  PROPERTY
+  SPLIT_FACTOR
+  1
+)
+add_yunittest(
   NAME
   ydb-library-yql-providers-yt-gateway-native-ut
-  COMMAND
+  TEST_TARGET
   ydb-library-yql-providers-yt-gateway-native-ut
+  TEST_ARG
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
 )
-set_property(
+set_yunittest_property(
   TEST
   ydb-library-yql-providers-yt-gateway-native-ut
   PROPERTY
   LABELS
   SMALL
 )
-set_property(
+set_yunittest_property(
   TEST
   ydb-library-yql-providers-yt-gateway-native-ut
   PROPERTY

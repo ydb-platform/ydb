@@ -1,8 +1,8 @@
+#include "library/cpp/testing/unittest/registar.h"
 #include <library/cpp/yson/node/node_io.h>
 #include <ydb/library/yql/core/ut_common/yql_ut_common.h>
 #include <library/cpp/testing/common/network.h>
 #include <library/cpp/testing/mock_server/server.h>
-#include <library/cpp/testing/gtest/gtest.h>
 #include <ydb/library/yql/providers/yt/gateway/native/yql_yt_native.h>
 #include <ydb/library/yql/core/file_storage/proto/file_storage.pb.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
@@ -103,7 +103,7 @@ private:
         for (const auto& attribute : attributes.AsList()) {
             attributesSet.insert(attribute.AsString());
         }
-        EXPECT_EQ(requiredAttributes[path], attributesSet);
+        UNIT_ASSERT_VALUES_EQUAL(requiredAttributes[path], attributesSet);
     }
 
     THttpResponse HandleListCommand(const NYT::TNode& path, const NYT::TNode& attributes) {
@@ -155,7 +155,9 @@ private:
     THashMap<TString, THashSet<TString>> requiredAttributes;
 };
 
-TEST(YtNativeGateway, GetFolder) {
+Y_UNIT_TEST_SUITE(YtNativeGateway) {
+
+Y_UNIT_TEST(GetFolder) {
     const auto port = NTesting::GetFreePort();
     THashMap<TString, THashSet<TString>> requiredAttributes {
         {"//test/a", {"type", "broken", "target_path", "user_attributes"}},
@@ -185,10 +187,11 @@ TEST(YtNativeGateway, GetFolder) {
     folderFuture.Wait();
     ytState->Gateway->CloseSession({ytState->SessionId});
     auto folderRes = folderFuture.GetValue();
-    ASSERT_EQ(folderRes.Success(), true) << folderRes.Issues().ToString();
-    ASSERT_EQ(
+    UNIT_ASSERT_EQUAL_C(folderRes.Success(), true, folderRes.Issues().ToString());
+    UNIT_ASSERT_EQUAL(
         folderRes.ItemsOrFileLink, 
         (std::variant<TVector<IYtGateway::TFolderResult::TFolderItem>, TFileLinkPtr>(EXPECTED_ITEMS)));
+}
 }
 
 } // namespace

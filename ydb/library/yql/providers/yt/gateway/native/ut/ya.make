@@ -1,4 +1,4 @@
-GTEST()
+UNITTEST()
 
 SRCS(
     yql_yt_native_folders_ut.cpp

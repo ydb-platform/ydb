@@ -23,7 +23,7 @@ struct TCondenseInputResult {
 
 TMaybe<TCondenseInputResult> CondenseInput(const NYql::NNodes::TExprBase& input, NYql::TExprContext& ctx);
 
-TMaybe<TCondenseInputResult> CondenseAndDeduplicateInput(const NYql::NNodes::TExprBase& input,
+TCondenseInputResult DeduplicateInput(const TCondenseInputResult& input,
     const NYql::TKikimrTableDescription& table, NYql::TExprContext& ctx);
 
 TMaybe<TCondenseInputResult> CondenseInputToDictByPk(const NYql::NNodes::TExprBase& input,

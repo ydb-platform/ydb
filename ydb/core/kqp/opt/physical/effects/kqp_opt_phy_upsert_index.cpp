@@ -1,5 +1,6 @@
 #include "kqp_opt_phy_effects_rules.h"
 #include "kqp_opt_phy_effects_impl.h"
+#include "kqp_opt_phy_uniq_helper.h"
 
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 
@@ -300,6 +301,100 @@ TExprBase MakeUpsertIndexRows(TKqpPhyUpsertIndexMode mode, const TDqPhyPrecomput
         .Done();
 }
 
+TMaybe<TCondenseInputResult> CheckUniqueConstraint(const TExprBase& inputRows, const TKikimrTableDescription& table, TPositionHandle pos, TExprContext& ctx)
+{
+    auto condenseResult = CondenseInput(inputRows, ctx);
+    if (!condenseResult) {
+        return {};
+    }
+
+    TUniqBuildHelper helper(table, pos, ctx, true);
+    if (helper.GetChecksNum() == 0) {
+        return condenseResult;
+    }
+
+    auto computeKeysStage = helper.CreateComputeKeysStage(condenseResult.GetRef(), pos, ctx);
+    auto inputPrecompute = helper.CreateInputPrecompute(computeKeysStage, pos, ctx);
+    auto uniquePrecomputes = helper.CreateUniquePrecompute(computeKeysStage, pos, ctx);
+
+    auto _true = MakeBool(pos, true, ctx);
+
+    auto aggrStage = helper.CreateLookupExistStage(computeKeysStage, table, _true, pos, ctx);
+
+    // Returns <bool>: <true> - no existing keys, <false> - at least one key exists
+    auto noExistingKeysPrecompute = Build<TDqPhyPrecompute>(ctx, pos)
+        .Connection<TDqCnValue>()
+            .Output()
+                .Stage(aggrStage)
+                .Index().Build("0")
+                .Build()
+            .Build()
+        .Done();
+
+    TCoArgument inputRowList(ctx.NewArgument(pos, "rows_list"));
+    TCoArgument noExistingKeysArg(ctx.NewArgument(pos, "no_existing_keys"));
+
+    struct TUniqueCheckNodes {
+        TUniqueCheckNodes(size_t sz) {
+            Bodies.reserve(sz);
+            Args.reserve(sz);
+        }
+        TVector<TExprNode::TPtr> Bodies;
+        TVector<TCoArgument> Args;
+    } uniqueCheckNodes(helper.GetChecksNum());
+
+    for (size_t i = 0; i < helper.GetChecksNum(); i++) {
+        uniqueCheckNodes.Args.emplace_back(ctx.NewArgument(pos, "are_keys_unique"));
+        uniqueCheckNodes.Bodies.emplace_back(Build<TKqpEnsure>(ctx, pos)
+            .Value(_true)
+            .Predicate(uniqueCheckNodes.Args.back())
+            .IssueCode().Build(ToString((ui32) TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION))
+            .Message(MakeMessage("Duplicated keys found.", pos, ctx))
+            .Done().Ptr()
+        );
+    }
+
+    auto noExistingKeysCheck = Build<TKqpEnsure>(ctx, pos)
+        .Value(_true)
+        .Predicate(noExistingKeysArg)
+        .IssueCode().Build(ToString((ui32) TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION))
+        .Message(MakeMessage("Conflict with existing key.", pos, ctx))
+        .Done();
+
+    auto body  = Build<TCoToStream>(ctx, pos)
+        .Input<TCoJust>()
+            .Input<TCoIfStrict>()
+                .Predicate<TCoAnd>()
+                    .Add(uniqueCheckNodes.Bodies)
+                    .Add(noExistingKeysCheck)
+                    .Build()
+                .ThenValue(inputRowList)
+                .ElseValue<TCoList>()
+                    .ListType(ExpandType(pos, *inputRows.Ref().GetTypeAnn(), ctx))
+                    .Build()
+                .Build()
+            .Build()
+        .Done();
+
+    TVector<NYql::NNodes::TCoArgument> stageArgs;
+    stageArgs.reserve(uniqueCheckNodes.Args.size() + 2);
+    stageArgs.emplace_back(inputRowList);
+    stageArgs.insert(stageArgs.end(), uniqueCheckNodes.Args.begin(), uniqueCheckNodes.Args.end());
+    stageArgs.emplace_back(noExistingKeysArg);
+
+    TVector<TExprBase> stageInputs;
+    stageInputs.reserve(uniquePrecomputes.size() + 2);
+    stageInputs.emplace_back(inputPrecompute);
+    stageInputs.insert(stageInputs.end(), uniquePrecomputes.begin(), uniquePrecomputes.end());
+    stageInputs.emplace_back(noExistingKeysPrecompute);
+
+    return TCondenseInputResult {
+        .Stream = body,
+        .StageInputs = std::move(stageInputs),
+        .StageArgs = std::move(stageArgs)
+    };
+}
+
 } // namespace
 
 TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, const TExprBase& inputRows,
@@ -316,12 +411,14 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
 
     const auto& pk = table.Metadata->KeyColumnNames;
 
-    auto condenseInputResult = CondenseAndDeduplicateInput(inputRows, table, ctx);
-    if (!condenseInputResult) {
+    auto checkedInput = CheckUniqueConstraint(inputRows, table, pos, ctx);
+    if (!checkedInput) {
         return {};
     }
 
-    auto inputRowsAndKeys = PrecomputeRowsAndKeys(*condenseInputResult, table, pos, ctx);
+    auto condenseInputResult = DeduplicateInput(checkedInput.GetRef(), table, ctx);
+
+    auto inputRowsAndKeys = PrecomputeRowsAndKeys(condenseInputResult, table, pos, ctx);
 
     THashSet<TStringBuf> inputColumnsSet;
     for (const auto& column : inputColumns) {

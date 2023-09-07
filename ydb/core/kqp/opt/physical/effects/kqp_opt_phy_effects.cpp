@@ -109,30 +109,26 @@ TMaybe<TCondenseInputResult> CondenseInput(const TExprBase& input, TExprContext&
     };
 }
 
-TMaybe<TCondenseInputResult> CondenseAndDeduplicateInput(const TExprBase& input, const TKikimrTableDescription& table,
+TCondenseInputResult DeduplicateInput(const TCondenseInputResult& condenseResult, const TKikimrTableDescription& table,
     TExprContext& ctx)
 {
-    auto condenseResult = CondenseInput(input, ctx);
-    if (!condenseResult) {
-        return {};
-    }
+    auto pos = condenseResult.Stream.Pos();
+    auto listArg = TCoArgument(ctx.NewArgument(pos, "list_arg"));
 
-    auto listArg = TCoArgument(ctx.NewArgument(input.Pos(), "list_arg"));
-
-    auto deduplicated = Build<TCoFlatMap>(ctx, input.Pos())
-        .Input(condenseResult->Stream)
+    auto deduplicated = Build<TCoFlatMap>(ctx, pos)
+        .Input(condenseResult.Stream)
         .Lambda()
             .Args({listArg})
             .Body<TCoJust>()
-                .Input(RemoveDuplicateKeyFromInput(listArg, table, input.Pos(), ctx))
+                .Input(RemoveDuplicateKeyFromInput(listArg, table, pos, ctx))
                 .Build()
             .Build()
         .Done();
 
     return TCondenseInputResult {
         .Stream = deduplicated,
-        .StageInputs = condenseResult->StageInputs,
-        .StageArgs = condenseResult->StageArgs
+        .StageInputs = condenseResult.StageInputs,
+        .StageArgs = condenseResult.StageArgs
     };
 }
 

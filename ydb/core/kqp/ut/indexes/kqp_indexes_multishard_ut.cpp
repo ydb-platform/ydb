@@ -25,13 +25,14 @@ const NKikimrSchemeOp::EIndexType IG_UNIQUE = NKikimrSchemeOp::EIndexType::EInde
 NYdb::NTable::TDataQueryResult ExecuteDataQuery(TSession& session, const TString& query) {
     const auto txSettings = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
     return session.ExecuteDataQuery(query, txSettings,
-        TExecDataQuerySettings().KeepInQueryCache(true)).ExtractValueSync();
+        TExecDataQuerySettings().KeepInQueryCache(true).CollectQueryStats(ECollectQueryStatsMode::Basic)).ExtractValueSync();
 }
 
 NYdb::NTable::TDataQueryResult ExecuteDataQuery(TSession& session, const TString& query, TParams& params) {
     const auto txSettings = TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx();
+
     return session.ExecuteDataQuery(query, txSettings, params,
-        TExecDataQuerySettings().KeepInQueryCache(true)).ExtractValueSync();
+        TExecDataQuerySettings().KeepInQueryCache(true).CollectQueryStats(ECollectQueryStatsMode::Basic)).ExtractValueSync();
 }
 
 void CreateTableWithMultishardIndex(Tests::TClient& client, NKikimrSchemeOp::EIndexType type) {
@@ -186,6 +187,68 @@ Y_UNIT_TEST_SUITE(KqpUniqueIndex) {
         }
     }
 
+    Y_UNIT_TEST(ReplaceFkAlreadyExist) {
+        TKikimrRunner kikimr(SyntaxV1Settings());
+        CreateTableWithMultishardIndex(kikimr.GetTestClient(), IG_UNIQUE);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        FillTable(session);
+
+        {
+            const TString query(Q_(R"(
+                REPLACE INTO `/Root/MultiShardIndexed` (key, fk, value) VALUES
+                (2, 1000000000, "v1");
+            )"));
+
+            auto result = ExecuteDataQuery(session, query);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query(Q_(R"(
+                REPLACE INTO `/Root/MultiShardIndexed` (key, fk, value) VALUES
+                (2, 1000000000, "v1"),
+                (2, 1000000001, "v1");
+            )"));
+
+            auto result = ExecuteDataQuery(session, query);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(UpdateOnFkAlreadyExist) {
+        TKikimrRunner kikimr(SyntaxV1Settings());
+        CreateTableWithMultishardIndex(kikimr.GetTestClient(), IG_UNIQUE);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        FillTable(session);
+
+        {
+            const TString query(Q_(R"(
+                UPDATE `/Root/MultiShardIndexed` ON (key, fk, value) VALUES
+                (2, 1000000000, "v1");
+            )"));
+
+            auto result = ExecuteDataQuery(session, query);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query(Q_(R"(
+                UPDATE `/Root/MultiShardIndexed` ON (key, fk, value) VALUES
+                (2, 1000000000, "v1"),
+                (2, 1000000001, "v1");
+            )"));
+
+            auto result = ExecuteDataQuery(session, query);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(InsertFkPkOverlap) {
         TKikimrRunner kikimr(SyntaxV1Settings());
         CreateTableWithMultishardIndexComplexFkPk(kikimr.GetTestClient(), IG_UNIQUE);
@@ -203,7 +266,6 @@ Y_UNIT_TEST_SUITE(KqpUniqueIndex) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
-
 
     Y_UNIT_TEST(InsertNullInPk) {
         TKikimrRunner kikimr(SyntaxV1Settings());
@@ -419,6 +481,65 @@ Y_UNIT_TEST_SUITE(KqpUniqueIndex) {
             UNIT_ASSERT_VALUES_EQUAL(yson, expected);
         }
 
+    }
+
+    Y_UNIT_TEST(ReplaceFkDuplicate) {
+        TKikimrRunner kikimr(SyntaxV1Settings());
+        CreateTableWithMultishardIndex(kikimr.GetTestClient(), IG_UNIQUE);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        FillTable(session);
+
+        {
+            const TString query(Q_(R"(
+                REPLACE INTO `/Root/MultiShardIndexed` (key, fk, value) VALUES
+                (1173915, 1230000001, "v1"),
+                (1173916, 1230000001, "v1");
+            )"));
+
+            auto result = ExecuteDataQuery(session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query(Q_(R"(
+                REPLACE INTO `/Root/MultiShardIndexed` (key, fk, value) VALUES
+                (1173915, 1230000001, "v1"),
+                (1173916, 1230000002, "v1"),
+                (1173915, 1230000001, "v1");
+            )"));
+
+            auto result = ExecuteDataQuery(session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query(Q_(R"(
+                REPLACE INTO `/Root/MultiShardIndexed` (key, fk, value) VALUES
+                (1173915, NULL, "v1"),
+                (1173916, NULL, "v1");
+            )"));
+
+            auto result = ExecuteDataQuery(session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query(Q_(R"(
+                REPLACE INTO `/Root/MultiShardIndexed` (key, fk, value) VALUES
+                (1173917, NULL, "v1"),
+                (1173917, NULL, "v1");
+            )"));
+
+            auto result = ExecuteDataQuery(session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const auto yson = ReadTableToYson(session, "/Root/MultiShardIndexed/index/indexImplTable");
+            const TString expected = R"([[#;[1173915u]];[#;[1173916u]];[#;[1173917u]];[[1000000000u];[1u]];[[2000000000u];[2u]];[[3000000000u];[3u]];[[4294967295u];[4u]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
     }
 }
 

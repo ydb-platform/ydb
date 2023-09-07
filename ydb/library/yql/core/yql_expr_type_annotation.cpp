@@ -6015,7 +6015,7 @@ bool GetSumResultType(const TPositionHandle& pos, const TTypeAnnotationNode& inp
         } else {
             ctx.AddError(TIssue(ctx.GetPosition(pos),
                 TStringBuilder() << "Unsupported column type: " << lambdaTypeSlot));
-            return IGraphTransformer::TStatus::Error;
+            return false;
         }
 
         if (isOptional) {

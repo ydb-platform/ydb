@@ -113,10 +113,11 @@ struct TInputArgsAccessor {
     std::array<const ui32*, TArgsPolicy::IsFixedArg.size()> StringOffsetsArrays;
     std::array<const ui8*, TArgsPolicy::IsFixedArg.size()> StringDataArrays;
 
-    void Bind(const std::vector<arrow::Datum>& values, size_t skipArgs = 0) {
+    void Bind(const std::vector<arrow::Datum>& values, size_t skipArgs = 0, TMaybe<size_t> realArgsCount = {}) {
         if constexpr (!TArgsPolicy::VarArgs) {
-            Y_ENSURE(TArgsPolicy::IsFixedArg.size() == values.size() + skipArgs);
-            for (size_t j = skipArgs; j < TArgsPolicy::IsFixedArg.size(); ++j) {
+            const size_t argCount = realArgsCount.GetOrElse(TArgsPolicy::IsFixedArg.size());
+            Y_ENSURE(argCount == values.size() + skipArgs);
+            for (size_t j = skipArgs; j < argCount; ++j) {
                 IsScalar[j] = values[j - skipArgs].is_scalar();
                 if (IsScalar[j]) {
                     const auto& scalar = *values[j - skipArgs].scalar();
@@ -1023,7 +1024,7 @@ SkipCall:;
             Values_.clear();
             Values_.push_back(NKikimr::NMiniKQL::TArrowBlock::From(columns[StateColumn_]).GetDatum());
             if constexpr (HasDeserialize) {
-                DeserializeAccessor_.Bind(Values_, 0);
+                DeserializeAccessor_.Bind(Values_, 0, 1);
             } else {
                 CombineAccessor_.Bind(Values_, 1);
             }

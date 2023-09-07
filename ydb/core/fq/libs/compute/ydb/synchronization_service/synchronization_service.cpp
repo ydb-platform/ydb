@@ -308,6 +308,17 @@ private:
                 LOG_I("Exclude connection by visibility: scope = " << Scope << " , id = " << meta.id() << ", visibility = " << FederatedQuery::Acl::Visibility_Name(content.acl().visibility()));
                 excludeIds.push_back(meta.id());
             }
+
+            const auto authCase = GetAuth(connection).identity_case();
+            switch (authCase) {
+                case FederatedQuery::IamAuth::kNone:
+                case FederatedQuery::IamAuth::kServiceAccount:
+                break;
+                case FederatedQuery::IamAuth::kCurrentIam:
+                case FederatedQuery::IamAuth::IDENTITY_NOT_SET:
+                LOG_I("Exclude connection by auth: scope = " << Scope << " , id = " << meta.id() << ", auth = " << static_cast<int>(authCase));
+                excludeIds.push_back(meta.id());
+            }
         }
         for (const auto& excludeId: excludeIds) {
             Connections.erase(excludeId);
@@ -320,6 +331,13 @@ private:
             const auto& meta = binding.meta();
             const auto& content = binding.content();
             const auto& setting = content.setting();
+            const auto& connectionId = content.connection_id();
+            if (!Connections.contains(connectionId)) {
+                LOG_I("Exclude binding because connection is filtered out: scope = " << Scope << " , id = " << meta.id() << ", connection id = " << connectionId);
+                excludeIds.push_back(meta.id());
+                continue;
+            }
+
             switch (setting.binding_case()) {
             case FederatedQuery::BindingSetting::kObjectStorage:
             break;

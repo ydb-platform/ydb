@@ -2,39 +2,46 @@
 
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/retry/retry.h>
 
-namespace NYdb::NRetry {
+#include <util/generic/function.h>
 
-template <typename TClient, typename TStatusType>
-class TRetryContextAsync : public TThrRefBase, public TRetryContextBase<TClient> {
+namespace NYdb::NRetry::Async {
+
+template <typename TClient, typename TAsyncStatusType>
+class TRetryContext : public TThrRefBase, public TRetryContextBase {
 public:
-    using TPtr = TIntrusivePtr<NYdb::NRetry::TRetryContextAsync<TClient, TStatusType>>;
-    using TAsyncStatusType = typename NThreading::TFuture<TStatusType>;
+    using TStatusType = typename TAsyncStatusType::value_type;
+    using TPtr = TIntrusivePtr<Async::TRetryContext<TClient, TAsyncStatusType>>;
 
 protected:
+    TClient Client;
     NThreading::TPromise<TStatusType> Promise;
 
 public:
-    TAsyncStatusType GetFuture() {
+    TAsyncStatusType Execute() {
+        this->Retry();
         return this->Promise.GetFuture();
     }
 
-    virtual void Execute() = 0;
-
 protected:
-    explicit TRetryContextAsync(const TClient& client, const TRetryOperationSettings& settings)
-        : TRetryContextBase<TClient>(client, settings)
+    explicit TRetryContext(const TClient& client, const TRetryOperationSettings& settings)
+        : TRetryContextBase(settings)
+        , Client(client)
         , Promise(NThreading::NewPromise<TStatusType>())
     {}
 
-    static void DoExecute(TPtr self) {
-        self->Execute();
+    virtual void Retry() = 0;
+
+    virtual TAsyncStatusType RunOperation() = 0;
+
+    static void DoRetry(TPtr self) {
+        self->Retry();
     }
 
     static void DoBackoff(TPtr self, bool fast) {
         auto backoffSettings = fast ? self->Settings.FastBackoffSettings_
                                     : self->Settings.SlowBackoffSettings_;
         AsyncBackoff(self->Client.Impl_, backoffSettings, self->RetryNumber,
-            [self]() {DoExecute(self);});
+            [self]() {DoRetry(self);});
     }
 
     static void HandleExceptionAsync(TPtr self, std::exception_ptr e) {
@@ -50,7 +57,7 @@ protected:
         }
         switch (nextStep) {
             case NextStep::RetryImmediately:
-                return DoExecute(self);
+                return DoRetry(self);
             case NextStep::RetryFastBackoff:
                 return DoBackoff(self, true);
             case NextStep::RetrySlowBackoff:
@@ -71,42 +78,39 @@ protected:
             }
         );
     }
-
-    virtual TAsyncStatusType RunOperation() = 0;
 };
 
-template <typename TClient, typename TOperation, typename TStatusType>
-class TRetryWithoutSessionAsync : public TRetryContextAsync<TClient, TStatusType> {
-    using TRetryContextAsync = TRetryContextAsync<TClient, TStatusType>;
-    using TPtr = typename TRetryContextAsync::TPtr;
-    using TAsyncStatusType = typename TRetryContextAsync::TAsyncStatusType;
+template <typename TClient, typename TOperation, typename TAsyncStatusType = TFunctionResult<TOperation>>
+class TRetryWithoutSession : public TRetryContext<TClient, TAsyncStatusType> {
+    using TRetryContext = TRetryContext<TClient, TAsyncStatusType>;
+    using TPtr = typename TRetryContext::TPtr;
 
 private:
     TOperation Operation;
 
 public:
-    explicit TRetryWithoutSessionAsync(const TClient& client, TOperation&& operation,
+    explicit TRetryWithoutSession(const TClient& client, TOperation&& operation,
                                        const TRetryOperationSettings& settings)
-        : TRetryContextAsync(client, settings)
+        : TRetryContext(client, settings)
         , Operation(operation)
     {}
 
-    void Execute() override {
+    void Retry() override {
         TPtr self(this);
-        TRetryContextAsync::DoRunOperation(self);
+        TRetryContext::DoRunOperation(self);
     }
 
-private:
+protected:
     TAsyncStatusType RunOperation() override {
         return Operation(this->Client);
     }
 };
 
-template <typename TClient, typename TOperation, typename TStatusType = typename std::result_of<TOperation>::type>
-class TRetryWithSessionAsync : public TRetryContextAsync<TClient, TStatusType> {
-    using TRetryContextAsync = TRetryContextAsync<TClient, TStatusType>;
+template <typename TClient, typename TOperation, typename TAsyncStatusType = TFunctionResult<TOperation>>
+class TRetryWithSession : public TRetryContext<TClient, TAsyncStatusType> {
+    using TRetryContextAsync = TRetryContext<TClient, TAsyncStatusType>;
     using TPtr = typename TRetryContextAsync::TPtr;
-    using TAsyncStatusType = typename TRetryContextAsync::TAsyncStatusType;
+    using TStatusType = typename TRetryContextAsync::TStatusType;
     using TSession = typename TClient::TSession;
     using TCreateSessionSettings = typename TClient::TCreateSessionSettings;
     using TAsyncCreateSessionResult = typename TClient::TAsyncCreateSessionResult;
@@ -116,13 +120,13 @@ private:
     TMaybe<TSession> Session;
 
 public:
-    explicit TRetryWithSessionAsync(const TClient& client, TOperation&& operation,
+    explicit TRetryWithSession(const TClient& client, TOperation&& operation,
                                     const TRetryOperationSettings& settings)
         : TRetryContextAsync(client, settings)
         , Operation(operation)
     {}
 
-    void Execute() override {
+    void Retry() override {
         TPtr self(this);
         if (!Session) {
             auto settings = TCreateSessionSettings().ClientTimeout(this->Settings.GetSessionClientTimeout_);
@@ -134,7 +138,7 @@ public:
                             return TRetryContextAsync::HandleStatusAsync(self, TStatusType(TStatus(result)));
                         }
 
-                        auto* myself = dynamic_cast<TRetryWithSessionAsync*>(self.Get());
+                        auto* myself = dynamic_cast<TRetryWithSession*>(self.Get());
                         myself->Session = result.GetSession();
                         myself->DoRunOperation(self);
                     } catch (...) {
@@ -157,4 +161,4 @@ private:
     }
 };
 
-} // namespace NYdb::NRetry
+} // namespace NYdb::NRetry::Async

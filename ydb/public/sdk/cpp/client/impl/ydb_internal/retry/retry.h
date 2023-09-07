@@ -31,17 +31,14 @@ enum class NextStep {
     Finish,
 };
 
-template <typename TClient>
 class TRetryContextBase : TNonCopyable {
 protected:
-    TClient Client;
     TRetryOperationSettings Settings;
     ui32 RetryNumber;
 
 protected:
-    TRetryContextBase(const TClient& client, const TRetryOperationSettings& settings)
-        : Client(client)
-        , Settings(settings)
+    TRetryContextBase(const TRetryOperationSettings& settings)
+        : Settings(settings)
         , RetryNumber(0)
     {}
 

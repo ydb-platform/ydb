@@ -14,9 +14,9 @@
 namespace NYdb {
     class TProtoAccessor;
 
-    namespace NRetry {
-        template <typename TClient, typename TStatusType>
-        class TRetryContextAsync;
+    namespace NRetry::Async {
+        template <typename TClient, typename TAsyncStatusType>
+        class TRetryContext;
     }
 }
 
@@ -57,7 +57,7 @@ struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> {
 class TSession;
 class TQueryClient {
     friend class TSession;
-    friend class NRetry::TRetryContextAsync<TQueryClient, TExecuteQueryResult>;
+    friend class NRetry::Async::TRetryContext<TQueryClient, TAsyncExecuteQueryResult>;
 
 public:
     using TQueryFunc = std::function<TAsyncExecuteQueryResult(TSession session)>;

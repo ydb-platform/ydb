@@ -6,17 +6,16 @@
 
 #include <util/generic/maybe.h>
 
-namespace NYdb::NRetry {
+namespace NYdb::NRetry::Sync {
 
-template <typename TClient>
-class TRetryContextSync : public TRetryContextBase<TClient> {
+template <typename TClient, typename TStatusType>
+class TRetryContext : public TRetryContextBase {
+protected:
+    TClient Client;
+
 public:
-    TRetryContextSync(TClient& client, const TRetryOperationSettings& settings)
-        : TRetryContextBase<TClient>(client, settings)
-    {}
-
-    TStatus Execute() {
-        TStatus status = RunOperation(); // first attempt
+    TStatusType Execute() {
+        TStatusType status = Retry(); // first attempt
         for (this->RetryNumber = 0; this->RetryNumber <= this->Settings.MaxRetries_;) {
             auto nextStep = this->GetNextStep(status);
             switch (nextStep) {
@@ -35,40 +34,51 @@ public:
             this->RetryNumber++;
             this->LogRetry(status);
             this->Client.Impl_->CollectRetryStatSync(status.GetStatus());
-            status = RunOperation();
+            status = Retry();
         }
         return status;
     }
 
 protected:
+    TRetryContext(TClient& client, const TRetryOperationSettings& settings)
+        : TRetryContextBase(settings)
+        , Client(client)
+    {}
+
+    virtual TStatusType Retry() = 0;
+
+    virtual TStatusType RunOperation() = 0;
+
     void DoBackoff(bool fast) {
         const auto &settings = fast ? this->Settings.FastBackoffSettings_
                                     : this->Settings.SlowBackoffSettings_;
         Backoff(settings, this->RetryNumber);
     }
-
-    virtual TStatus RunOperation() = 0;
 };
 
-template<typename TClient, typename TOperation>
-class TRetryWithoutSessionSync : public TRetryContextSync<TClient> {
+template<typename TClient, typename TOperation, typename TStatusType = TFunctionResult<TOperation>>
+class TRetryWithoutSession : public TRetryContext<TClient, TStatusType> {
 private:
     const TOperation& Operation;
 
 public:
-    TRetryWithoutSessionSync(TClient& client, const TOperation& operation, const TRetryOperationSettings& settings)
-        : TRetryContextSync<TClient>(client, settings)
+    TRetryWithoutSession(TClient& client, const TOperation& operation, const TRetryOperationSettings& settings)
+        : TRetryContext<TClient, TStatusType>(client, settings)
         , Operation(operation)
     {}
 
 protected:
-    TStatus RunOperation() override {
+    TStatusType Retry() override {
+        return RunOperation();
+    }
+
+    TStatusType RunOperation() override {
         return Operation(this->Client);
     }
 };
 
-template<typename TClient, typename TOperation>
-class TRetryWithSessionSync : public TRetryContextSync<TClient> {
+template<typename TClient, typename TOperation, typename TStatusType = TFunctionResult<TOperation>>
+class TRetryWithSession : public TRetryContext<TClient, TStatusType> {
     using TSession = typename TClient::TSession;
     using TCreateSessionSettings = typename TClient::TCreateSessionSettings;
 
@@ -77,14 +87,14 @@ private:
     TMaybe<TSession> Session;
 
 public:
-    TRetryWithSessionSync(TClient& client, const TOperation& operation, const TRetryOperationSettings& settings)
-        : TRetryContextSync<TClient>(client, settings)
+    TRetryWithSession(TClient& client, const TOperation& operation, const TRetryOperationSettings& settings)
+        : TRetryContext<TClient, TStatusType>(client, settings)
         , Operation(operation)
     {}
 
 protected:
-    TStatus RunOperation() override {
-        TMaybe<NYdb::TStatus> status;
+    TStatusType Retry() override {
+        TMaybe<TStatusType> status;
 
         if (!Session) {
             auto settings = TCreateSessionSettings().ClientTimeout(this->Settings.GetSessionClientTimeout_);
@@ -92,14 +102,18 @@ protected:
             if (sessionResult.IsSuccess()) {
                 Session = sessionResult.GetSession();
             }
-            status = sessionResult;
+            status = TStatusType(TStatus(sessionResult));
         }
 
         if (Session) {
-            status = Operation(Session.GetRef());
+            status = RunOperation();
         }
 
         return *status;
+    }
+
+    TStatusType RunOperation() override {
+        return Operation(this->Session.GetRef());
     }
 
     void Reset() override {
@@ -107,4 +121,4 @@ protected:
     }
 };
 
-} // namespace NYdb::NRetry
+} // namespace NYdb::NRetry::Sync

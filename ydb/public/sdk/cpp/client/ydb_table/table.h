@@ -35,13 +35,15 @@ class ValueSinceUnixEpochModeSettings;
 
 namespace NYdb {
 
-namespace NRetry {
+namespace NRetry::Async {
 template <typename TClient, typename TStatusType>
-class TRetryContextAsync;
+class TRetryContext;
+} // namespace NRetry::Async
 
-template <typename>
-class TRetryContextSync;
-} // namespace NRetry
+namespace NRetry::Sync {
+template <typename TClient, typename TStatusType>
+class TRetryContext;
+} // namespace NRetry::Sync
 
 namespace NScheme {
 struct TPermissions;
@@ -978,8 +980,8 @@ class TTableClient {
     friend class TSession;
     friend class TTransaction;
     friend class TSessionPool;
-    friend class NRetry::TRetryContextAsync<TTableClient, TStatus>;
-    friend class NRetry::TRetryContextSync<TTableClient>;
+    friend class NRetry::Sync::TRetryContext<TTableClient, TStatus>;
+    friend class NRetry::Async::TRetryContext<TTableClient, TAsyncStatus>;
 
 public:
     using TOperationFunc = std::function<TAsyncStatus(TSession session)>;

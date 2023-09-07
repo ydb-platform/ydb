@@ -36,12 +36,7 @@ namespace NTable {
 using namespace NThreading;
 using namespace NSessionPool;
 
-using TRetryContext = NRetry::TRetryContextAsync<TTableClient, TStatus>;
-using TRetryWithSession = NRetry::TRetryWithSessionAsync<TTableClient, TTableClient::TOperationFunc, TStatus>;
-using TRetryWithoutSession = NRetry::TRetryWithoutSessionAsync<TTableClient, TTableClient::TOperationWithoutSessionFunc, TStatus>;
-
-using TRetryWithSessionSync = NRetry::TRetryWithSessionSync<TTableClient, TTableClient::TOperationSyncFunc>;
-using TRetryWithoutSessionSync = NRetry::TRetryWithoutSessionSync<TTableClient, TTableClient::TOperationWithoutSessionSyncFunc>;
+using TRetryContextAsync = NRetry::Async::TRetryContext<TTableClient, TAsyncStatus>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1384,24 +1379,22 @@ TTypeBuilder TTableClient::GetTypeBuilder() {
 ////////////////////////////////////////////////////////////////////////////////
 
 TAsyncStatus TTableClient::RetryOperation(TOperationFunc&& operation, const TRetryOperationSettings& settings) {
-    TRetryContext::TPtr ctx(new TRetryWithSession(*this, std::move(operation), settings));
-    ctx->Execute();
-    return ctx->GetFuture();
+    TRetryContextAsync::TPtr ctx(new NRetry::Async::TRetryWithSession(*this, std::move(operation), settings));
+    return ctx->Execute();
 }
 
 TAsyncStatus TTableClient::RetryOperation(TOperationWithoutSessionFunc&& operation, const TRetryOperationSettings& settings) {
-    TRetryContext::TPtr ctx(new TRetryWithoutSession(*this, std::move(operation), settings));
-    ctx->Execute();
-    return ctx->GetFuture();
+    TRetryContextAsync::TPtr ctx(new NRetry::Async::TRetryWithoutSession(*this, std::move(operation), settings));
+    return ctx->Execute();
 }
 
 TStatus TTableClient::RetryOperationSync(const TOperationWithoutSessionSyncFunc& operation, const TRetryOperationSettings& settings) {
-    TRetryWithoutSessionSync ctx(*this, operation, settings);
+    NRetry::Sync::TRetryWithoutSession ctx(*this, operation, settings);
     return ctx.Execute();
 }
 
 TStatus TTableClient::RetryOperationSync(const TOperationSyncFunc& operation, const TRetryOperationSettings& settings) {
-    TRetryWithSessionSync ctx(*this, operation, settings);
+    NRetry::Sync::TRetryWithSession ctx(*this, operation, settings);
     return ctx.Execute();
 }
 

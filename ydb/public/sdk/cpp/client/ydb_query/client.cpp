@@ -18,8 +18,7 @@
 
 namespace NYdb::NQuery {
 
-using TRetryContext = NRetry::TRetryContextAsync<TQueryClient, TExecuteQueryResult>;
-using TRetryContextWithSession = NRetry::TRetryWithSessionAsync<TQueryClient, TQueryClient::TQueryFunc, TExecuteQueryResult>;
+using TRetryContextAsync = NRetry::Async::TRetryContext<TQueryClient, TAsyncExecuteQueryResult>;
 
 TCreateSessionSettings::TCreateSessionSettings() {
     ClientTimeout_ = TDuration::Seconds(5);
@@ -380,7 +379,6 @@ TAsyncExecuteQueryResult TQueryClient::ExecuteQuery(const TString& query, const 
     return Impl_->ExecuteQuery(query, txControl, params, settings);
 }
 
-
 TAsyncExecuteQueryIterator TQueryClient::StreamExecuteQuery(const TString& query, const TTxControl& txControl,
     const TExecuteQuerySettings& settings)
 {
@@ -424,9 +422,8 @@ i64 TQueryClient::GetCurrentPoolSize() const {
 
 TAsyncExecuteQueryResult TQueryClient::RetryQuery(TQueryFunc&& queryFunc, TRetryOperationSettings settings)
 {
-    TRetryContext::TPtr ctx(new TRetryContextWithSession(*this, std::move(queryFunc), settings));
-    ctx->Execute();
-    return ctx->GetFuture();
+    TRetryContextAsync::TPtr ctx(new NRetry::Async::TRetryWithSession(*this, std::move(queryFunc), settings));
+    return ctx->Execute();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

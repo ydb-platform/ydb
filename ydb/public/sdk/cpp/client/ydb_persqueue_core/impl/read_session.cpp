@@ -178,7 +178,7 @@ void TReadSession::ProceedWithoutClusterDiscovery() {
         clusterSessionInfo.Topics = Settings.Topics_;
         CreateClusterSessionsImpl(deferred);
     }
-    ScheduleDumpCountersToLog();
+    // ScheduleDumpCountersToLog();
 }
 
 void TReadSession::CreateClusterSessionsImpl(TDeferredActions<true>& deferred) {
@@ -320,7 +320,7 @@ void TReadSession::OnClusterDiscovery(const TStatus& status, const Ydb::PersQueu
 
         CreateClusterSessionsImpl(deferred);
     }
-    ScheduleDumpCountersToLog();
+    // ScheduleDumpCountersToLog();
 }
 
 void TReadSession::RestartClusterDiscoveryImpl(TDuration delay, TDeferredActions<true>& deferred) {
@@ -604,7 +604,7 @@ void TReadSession::DumpCountersToLog(size_t timeNumber) {
 
 #undef C
 
-    ScheduleDumpCountersToLog(timeNumber + 1);
+    // ScheduleDumpCountersToLog(timeNumber + 1);
 }
 
 void TReadSession::ScheduleDumpCountersToLog(size_t timeNumber) {

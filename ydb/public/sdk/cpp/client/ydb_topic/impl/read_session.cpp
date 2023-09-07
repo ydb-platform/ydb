@@ -60,7 +60,7 @@ void TReadSession::Start() {
         Topics = Settings.Topics_;
         CreateClusterSessionsImpl(deferred);
     }
-    ScheduleDumpCountersToLog();
+    // ScheduleDumpCountersToLog();
 }
 
 void TReadSession::CreateClusterSessionsImpl(NPersQueue::TDeferredActions<false>& deferred) {
@@ -390,7 +390,7 @@ void TReadSession::DumpCountersToLog(size_t timeNumber) {
 
 #undef C
 
-    ScheduleDumpCountersToLog(timeNumber + 1);
+    // ScheduleDumpCountersToLog(timeNumber + 1);
 }
 
 void TReadSession::ScheduleDumpCountersToLog(size_t timeNumber) {
@@ -400,11 +400,9 @@ void TReadSession::ScheduleDumpCountersToLog(size_t timeNumber) {
         }
         DumpCountersContext = Connections->CreateContext();
         if (DumpCountersContext) {
-            auto callback = [self = weak_from_this(), timeNumber](bool ok) {
+            auto callback = [self = shared_from_this(), timeNumber](bool ok) {
                 if (ok) {
-                    if (auto sharedSelf = self.lock()) {
-                        sharedSelf->DumpCountersToLog(timeNumber);
-                    }
+                    self->DumpCountersToLog(timeNumber);
                 }
             };
             Connections->ScheduleCallback(TDuration::Seconds(1),

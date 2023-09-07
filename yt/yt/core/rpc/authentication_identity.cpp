@@ -16,18 +16,6 @@ TAuthenticationIdentity::TAuthenticationIdentity(TString user, TString userTag)
     , UserTag(std::move(userTag))
 { }
 
-bool TAuthenticationIdentity::operator==(const TAuthenticationIdentity& other) const
-{
-    return
-        User == other.User &&
-        UserTag == other.UserTag;
-}
-
-bool TAuthenticationIdentity::operator!=(const TAuthenticationIdentity& other) const
-{
-    return !(*this == other);
-}
-
 void Serialize(const TAuthenticationIdentity& identity, IYsonConsumer* consumer)
 {
     BuildYsonFluently(consumer)

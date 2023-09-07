@@ -15,8 +15,7 @@ struct TAuthenticationIdentity
     TAuthenticationIdentity() = default;
     explicit TAuthenticationIdentity(TString user, TString userTag = {});
 
-    bool operator==(const TAuthenticationIdentity& other) const;
-    bool operator!=(const TAuthenticationIdentity& other) const;
+    bool operator==(const TAuthenticationIdentity& other) const = default;
 
     TString User;
     TString UserTag;

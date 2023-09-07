@@ -25,6 +25,7 @@ extern "C" {
 #include "utils/memutils.h"
 #include "utils/memdebug.h"
 #include "utils/resowner.h"
+#include "utils/timestamp.h"
 #include "port/pg_bitutils.h"
 #include "port/pg_crc32c.h"
 #include "postmaster/postmaster.h"
@@ -239,7 +240,10 @@ extern "C" void setup_pg_thread_cleanup() {
     CurTransactionResourceOwner = owner;
     CurrentResourceOwner = owner;
 
-    InitProcessGlobals();
+    MyProcPid = getpid();
+    MyStartTimestamp = GetCurrentTimestamp();
+    MyStartTime = timestamptz_to_time_t(MyStartTimestamp);
+
     InitializeLatchSupport();
     MyLatch = &LocalLatchData;
     InitLatch(MyLatch);

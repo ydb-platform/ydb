@@ -11,6 +11,7 @@ IF (OPENSOURCE)
         PEERDIRS
         arc/api/public
         build/external_resources/antlr3
+        build/external_resources/flake8_py3
         build/platform
         certs
         contrib

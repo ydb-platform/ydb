@@ -35,7 +35,7 @@ RUN --mount=type=secret,id=ccache_remote_storage \
     && export CCACHE_SLOPPINESS=locale \
     && export CCACHE_REMOTE_STORAGE="$(cat /run/secrets/ccache_remote_storage)" \
     && cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_C_COMPILER_LAUNCHER=/usr/local/bin/ccache -DCMAKE_CXX_COMPILER_LAUNCHER=/usr/local/bin/ccache \
+        -DCCACHE_PATH=/usr/local/bin/ccache \
         -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain \
         ../ydb \
     && ninja ydb/apps/ydbd/ydbd ydb/apps/ydb/all \

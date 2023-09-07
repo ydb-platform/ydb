@@ -1,4 +1,4 @@
-#include "node_warden_distconf.h"
+#include "distconf.h"
 
 namespace NKikimr::NStorage {
 
@@ -71,7 +71,7 @@ namespace NKikimr::NStorage {
 
                 if (const auto [it, inserted] = SubscribedSessions.try_emplace(Binding->NodeId); it->second) {
                     Binding->SessionId = it->second;
-                    SendEvent(*Binding, std::make_unique<TEvNodeConfigPush>(AllBoundNodes));
+                    SendEvent(*Binding, std::make_unique<TEvNodeConfigPush>(AllBoundNodes, StorageConfig));
                 } else if (inserted) {
                     TActivationContext::Send(new IEventHandle(TEvInterconnect::EvConnectNode, 0,
                         TActivationContext::InterconnectProxy(Binding->NodeId), SelfId(), nullptr,
@@ -104,7 +104,7 @@ namespace NKikimr::NStorage {
         if (Binding && Binding->NodeId == nodeId) {
             STLOG(PRI_DEBUG, BS_NODE, NWDC09, "Continuing bind", (Binding, Binding));
             Binding->SessionId = ev->Sender;
-            SendEvent(*Binding, std::make_unique<TEvNodeConfigPush>(AllBoundNodes));
+            SendEvent(*Binding, std::make_unique<TEvNodeConfigPush>(AllBoundNodes, StorageConfig));
         }
 
         // in case of obsolete subscriptions
@@ -165,7 +165,7 @@ namespace NKikimr::NStorage {
             IssueNextBindRequest();
 
             for (const auto& [nodeId, info] : DirectBoundNodes) {
-                SendEvent(nodeId, info, std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId()));
+                SendEvent(nodeId, info, std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(), nullptr));
             }
 
             UnsubscribeInterconnect(binding.NodeId);
@@ -195,15 +195,21 @@ namespace NKikimr::NStorage {
         // check if this binding was accepted and if it is acceptable from our point of view
         if (record.GetRejected()) {
             AbortBinding("binding rejected by peer", false);
-        } else if (const ui32 prevRootNodeId = std::exchange(Binding->RootNodeId, record.GetRootNodeId()); prevRootNodeId != Binding->RootNodeId) {
+        } else {
+            const ui32 prevRootNodeId = std::exchange(Binding->RootNodeId, record.GetRootNodeId());
             if (Binding->RootNodeId == SelfId().NodeId()) {
                 AbortBinding("binding cycle");
-            } else {
+            } else if (prevRootNodeId != GetRootNodeId()) {
                 STLOG(PRI_DEBUG, BS_NODE, NWDC13, "Binding updated", (Binding, Binding), (PrevRootNodeId, prevRootNodeId));
             }
-            if (prevRootNodeId != GetRootNodeId()) {
+            bool updateConfig = false;
+            if (record.HasStorageConfig()) {
+                updateConfig = UpdateConfig(record.GetStorageConfig());
+            }
+            if (prevRootNodeId != GetRootNodeId() || updateConfig) {
                 for (const auto& [nodeId, info] : DirectBoundNodes) {
-                    SendEvent(nodeId, info, std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId()));
+                    SendEvent(nodeId, info, std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(),
+                        updateConfig ? &StorageConfig : nullptr));
                 }
             }
         }
@@ -282,7 +288,9 @@ namespace NKikimr::NStorage {
         const auto [it, inserted] = DirectBoundNodes.try_emplace(senderNodeId, ev->Cookie, ev->InterconnectSession);
         TBoundNode& info = it->second;
         if (inserted) {
-            SendEvent(senderNodeId, info, std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId()));
+            const bool sendConfig = record.GetStorageConfig().GetGeneration() < StorageConfig.GetGeneration();
+            SendEvent(senderNodeId, info, std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(),
+                sendConfig ? &StorageConfig : nullptr));
             AddBound(senderNodeId, getPushEv());
             for (auto& [cookie, task] : ScatterTasks) {
                 IssueScatterTaskForNode(senderNodeId, info, cookie, task);
@@ -325,6 +333,18 @@ namespace NKikimr::NStorage {
                     (Record, record),
                     (NodeId, nodeId));
                 Y_VERIFY_DEBUG(false);
+            }
+        }
+
+        // update configuration (if any)
+        if (record.HasStorageConfig() && UpdateConfig(record.GetStorageConfig())) {
+            if (auto *ev = getPushEv()) {
+                ev->Record.MutableStorageConfig()->CopyFrom(StorageConfig);
+            }
+            for (const auto& [nodeId, info] : DirectBoundNodes) {
+                if (nodeId != senderNodeId) {
+                    SendEvent(nodeId, info, std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(), &StorageConfig));
+                }
             }
         }
 
@@ -385,6 +405,24 @@ namespace NKikimr::NStorage {
 
     ui32 TDistributedConfigKeeper::GetRootNodeId() const {
         return Binding && Binding->RootNodeId ? Binding->RootNodeId : SelfId().NodeId();
+    }
+
+    bool TDistributedConfigKeeper::UpdateConfig(const NKikimrBlobStorage::TStorageConfig& config) {
+        if (StorageConfig.GetGeneration() < config.GetGeneration()) {
+            STLOG(PRI_INFO, BS_NODE, NWDC34, "UpdateConfig", (CurrentGeneration, StorageConfig.GetGeneration()),
+                (CurrentFingerprint, EscapeC(StorageConfig.GetFingerprint())),
+                (NewGeneration, config.GetGeneration()),
+                (NewFingerprint, EscapeC(config.GetFingerprint())));
+            StorageConfig.CopyFrom(config);
+            if (ProposedStorageConfig && ProposedStorageConfig->GetGeneration() == config.GetGeneration() &&
+                    ProposedStorageConfig->GetFingerprint() == config.GetFingerprint()) {
+                ProposedStorageConfig.reset();
+            }
+            PersistConfig({});
+            return true;
+        } else {
+            return false;
+        }
     }
 
 } // NKikimr::NStorage

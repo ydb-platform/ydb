@@ -843,6 +843,7 @@ struct TEvBlobStorage {
         EvProxyConfigurationRequest, // DEPRECATED
         EvUpdateGroupInfo,
         EvNotifyVDiskGenerationChange, // DEPRECATED
+        EvUpdateServiceSet,
 
         // node controller internal messages
         EvRegisterNodeRetry = EvPut + 14 * 512,

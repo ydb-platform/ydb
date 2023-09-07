@@ -83,6 +83,10 @@ void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSe
     }
 }
 
+void TNodeWarden::Handle(TEvUpdateServiceSet::TPtr ev) {
+    ApplyServiceSet(ev->Get()->ServiceSet, true, false, true);
+}
+
 void TNodeWarden::HandleIncrHugeInit(NIncrHuge::TEvIncrHugeInit::TPtr ev) {
     const TActorId keeperId = ev->GetForwardOnNondeliveryRecipient();
     const ui32 pdiskId = NIncrHuge::PDiskIdFromIncrHugeKeeperId(keeperId);

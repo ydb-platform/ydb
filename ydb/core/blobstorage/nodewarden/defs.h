@@ -31,6 +31,8 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_drivemodel_db.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_factory.h>
+#include <ydb/core/mind/bscontroller/group_mapper.h>
+#include <ydb/core/mind/bscontroller/group_geometry_info.h>
 #include <ydb/core/util/log_priority_mute_checker.h>
 #include <ydb/core/util/stlog.h>
 #include <ydb/library/pdisk_io/sector_map.h>

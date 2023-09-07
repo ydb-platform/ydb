@@ -1,4 +1,4 @@
-#include "node_warden_distconf.h"
+#include "distconf.h"
 
 namespace NKikimr::NStorage {
 
@@ -31,8 +31,8 @@ namespace NKikimr::NStorage {
                         boundNodeIds.AppendValue(boundNodeId);
                     }
                     NJson::TJsonValue scatterTasks(NJson::JSON_ARRAY);
-                    for (const ui64 scatterTask : info.ScatterTasks) {
-                        scatterTasks.AppendValue(scatterTask);
+                    for (const ui64 cookie : info.ScatterTasks) {
+                        scatterTasks.AppendValue(cookie);
                     }
                     res.AppendValue(NJson::TJsonMap{
                         {"node_id", nodeId},
@@ -48,7 +48,8 @@ namespace NKikimr::NStorage {
             NJson::TJsonValue root = NJson::TJsonMap{
                 {"binding", getBinding()},
                 {"direct_bound_nodes", getDirectBoundNodes()},
-                {"root_state", TString(TStringBuilder() << RootState)}
+                {"root_state", TString(TStringBuilder() << RootState)},
+                {"has_quorum", HasQuorum()},
             };
 
             NJson::WriteJson(&out, &root);

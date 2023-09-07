@@ -1,35 +1,48 @@
-#include "node_warden_distconf.h"
+#include "distconf.h"
 
 namespace NKikimr::NStorage {
 
-    void TDistributedConfigKeeper::IssueScatterTask(bool locallyGenerated, NKikimrBlobStorage::TEvNodeConfigScatter&& task) {
+    void TDistributedConfigKeeper::IssueScatterTask(bool locallyGenerated, TEvScatter&& request) {
         const ui64 cookie = NextScatterCookie++;
-        STLOG(PRI_DEBUG, BS_NODE, NWDC21, "IssueScatterTask", (Task, task), (Cookie, cookie));
+        STLOG(PRI_DEBUG, BS_NODE, NWDC21, "IssueScatterTask", (Request, request), (Cookie, cookie));
         Y_VERIFY(locallyGenerated || Binding);
         const auto [it, inserted] = ScatterTasks.try_emplace(cookie, locallyGenerated ? std::nullopt : Binding,
-            std::move(task));
+            std::move(request));
         Y_VERIFY(inserted);
-        TScatterTask& scatterTask = it->second;
+        TScatterTask& task = it->second;
+        PrepareScatterTask(cookie, task);
         for (auto& [nodeId, info] : DirectBoundNodes) {
-            IssueScatterTaskForNode(nodeId, info, cookie, scatterTask);
+            IssueScatterTaskForNode(nodeId, info, cookie, task);
         }
-        if (scatterTask.PendingNodes.empty()) {
-            CompleteScatterTask(scatterTask);
+        if (task.PendingNodes.empty() && !task.AsyncOperationsPending) {
+            CompleteScatterTask(task);
             ScatterTasks.erase(it);
         }
     }
 
-    void TDistributedConfigKeeper::IssueScatterTaskForNode(ui32 nodeId, TBoundNode& info, ui64 cookie, TScatterTask& scatterTask) {
+    void TDistributedConfigKeeper::FinishAsyncOperation(ui64 cookie) {
+        if (const auto it = ScatterTasks.find(cookie); it != ScatterTasks.end()) {
+            TScatterTask& task = it->second;
+            Y_VERIFY(task.AsyncOperationsPending);
+            task.AsyncOperationsPending = false;
+            if (task.PendingNodes.empty()) {
+                CompleteScatterTask(task);
+                ScatterTasks.erase(it);
+            }
+        }
+    }
+
+    void TDistributedConfigKeeper::IssueScatterTaskForNode(ui32 nodeId, TBoundNode& info, ui64 cookie, TScatterTask& task) {
         auto ev = std::make_unique<TEvNodeConfigScatter>();
-        ev->Record.CopyFrom(scatterTask.Task);
+        ev->Record.CopyFrom(task.Request);
         ev->Record.SetCookie(cookie);
         SendEvent(nodeId, info, std::move(ev));
         info.ScatterTasks.insert(cookie);
-        scatterTask.PendingNodes.insert(nodeId);
+        task.PendingNodes.insert(nodeId);
     }
 
     void TDistributedConfigKeeper::CompleteScatterTask(TScatterTask& task) {
-        STLOG(PRI_DEBUG, BS_NODE, NWDC22, "CompleteScatterTask", (Task, task.Task));
+        STLOG(PRI_DEBUG, BS_NODE, NWDC22, "CompleteScatterTask", (Request, task.Request));
 
         // some state checks
         if (task.Origin) {
@@ -37,67 +50,14 @@ namespace NKikimr::NStorage {
             Y_VERIFY(Binding == task.Origin); // binding must not change
         }
 
-        NKikimrBlobStorage::TEvNodeConfigGather res;
-        if (task.Task.HasCookie()) {
-            res.SetCookie(task.Task.GetCookie());
-        }
-
-        switch (task.Task.GetRequestCase()) {
-            case NKikimrBlobStorage::TEvNodeConfigScatter::kCollectConfigs:
-                GenerateCollectConfigs(res.MutableCollectConfigs(), task);
-                break;
-
-            case NKikimrBlobStorage::TEvNodeConfigScatter::kProposeStorageConfig:
-                break;
-
-            case NKikimrBlobStorage::TEvNodeConfigScatter::kCommitStorageConfig:
-                break;
-
-            case NKikimrBlobStorage::TEvNodeConfigScatter::REQUEST_NOT_SET:
-                // unexpected case
-                break;
-        }
+        PerformScatterTask(task);
 
         if (task.Origin) {
             auto reply = std::make_unique<TEvNodeConfigGather>();
-            res.Swap(&reply->Record);
+            task.Response.Swap(&reply->Record);
             SendEvent(*Binding, std::move(reply));
         } else {
-            ProcessGather(&res);
-        }
-    }
-
-    void TDistributedConfigKeeper::GenerateCollectConfigs(NKikimrBlobStorage::TEvNodeConfigGather::TCollectConfigs *response, TScatterTask& task) {
-        THashMap<std::tuple<ui64, TString>, NKikimrBlobStorage::TEvNodeConfigGather::TCollectConfigs::TItem*> configs;
-
-        auto addConfig = [&](const NKikimrBlobStorage::TEvNodeConfigGather::TCollectConfigs::TItem& item) {
-            const auto& config = item.GetConfig();
-            const auto key = std::make_tuple(config.GetGeneration(), config.GetFingerprint());
-            auto& ptr = configs[key];
-            if (!ptr) {
-                ptr = response->AddItems();
-                ptr->MutableConfig()->CopyFrom(config);
-            }
-            for (const auto& node : item.GetNodes()) {
-                ptr->AddNodes()->CopyFrom(node);
-            }
-        };
-
-        NKikimrBlobStorage::TEvNodeConfigGather::TCollectConfigs::TItem s;
-        auto *node = s.AddNodes();
-        node->SetHost(SelfHost);
-        node->SetPort(SelfPort);
-        node->SetNodeId(SelfId().NodeId());
-        auto *cfg = s.MutableConfig();
-        cfg->CopyFrom(StorageConfig);
-        addConfig(s);
-
-        for (const auto& reply : task.CollectedReplies) {
-            if (reply.HasCollectConfigs()) {
-                for (const auto& item : reply.GetCollectConfigs().GetItems()) {
-                    addConfig(item);
-                }
-            }
+            ProcessGather(&task.Response);
         }
     }
 
@@ -110,7 +70,7 @@ namespace NKikimr::NStorage {
 
         const size_t n = task.PendingNodes.erase(nodeId);
         Y_VERIFY(n == 1);
-        if (task.PendingNodes.empty()) {
+        if (task.PendingNodes.empty() && !task.AsyncOperationsPending) {
             CompleteScatterTask(task);
             ScatterTasks.erase(it);
         }
@@ -155,10 +115,10 @@ namespace NKikimr::NStorage {
                 Y_VERIFY(n == 1);
 
                 TScatterTask& task = jt->second;
-                record.Swap(&task.CollectedReplies.emplace_back());
+                record.Swap(&task.CollectedResponses.emplace_back());
                 const size_t m = task.PendingNodes.erase(senderNodeId);
                 Y_VERIFY(m == 1);
-                if (task.PendingNodes.empty()) {
+                if (task.PendingNodes.empty() && !task.AsyncOperationsPending) {
                     CompleteScatterTask(task);
                     ScatterTasks.erase(jt);
                 }

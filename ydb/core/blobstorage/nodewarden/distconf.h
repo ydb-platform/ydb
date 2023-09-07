@@ -8,6 +8,9 @@
 namespace NKikimr::NStorage {
 
     class TDistributedConfigKeeper : public TActorBootstrapped<TDistributedConfigKeeper> {
+        using TEvGather = NKikimrBlobStorage::TEvNodeConfigGather;
+        using TEvScatter = NKikimrBlobStorage::TEvNodeConfigScatter;
+
         struct TEvPrivate {
             enum {
                EvProcessPendingEvent = EventSpaceBegin(TEvents::ES_PRIVATE),
@@ -18,7 +21,7 @@ namespace NKikimr::NStorage {
 
             struct TEvStorageConfigLoaded : TEventLocal<TEvStorageConfigLoaded, EvStorageConfigLoaded> {
                 bool Success = false;
-                NKikimrBlobStorage::TStorageConfig StorageConfig;
+                NKikimrBlobStorage::TPDiskMetadataRecord Record;
             };
 
             struct TEvStorageConfigStored : TEventLocal<TEvStorageConfigStored, EvStorageConfigStored> {
@@ -56,7 +59,7 @@ namespace NKikimr::NStorage {
             }
 
             friend bool operator ==(const TBinding& x, const TBinding& y) {
-                return x.NodeId == y.NodeId && x.RootNodeId == y.RootNodeId && x.Cookie == y.Cookie && x.SessionId == y.SessionId;
+                return x.NodeId == y.NodeId && x.Cookie == y.Cookie && x.SessionId == y.SessionId;
             }
 
             friend bool operator !=(const TBinding& x, const TBinding& y) {
@@ -84,20 +87,37 @@ namespace NKikimr::NStorage {
         struct TScatterTask {
             std::optional<TBinding> Origin;
             THashSet<ui32> PendingNodes;
-            NKikimrBlobStorage::TEvNodeConfigScatter Task;
-            std::vector<NKikimrBlobStorage::TEvNodeConfigGather> CollectedReplies;
+            bool AsyncOperationsPending = false;
+            TEvScatter Request;
+            TEvGather Response;
+            std::vector<TEvGather> CollectedResponses; // from bound nodes
 
-            TScatterTask(const std::optional<TBinding>& origin, NKikimrBlobStorage::TEvNodeConfigScatter&& task)
+            TScatterTask(const std::optional<TBinding>& origin, TEvScatter&& request)
                 : Origin(origin)
             {
-                Task.Swap(&task);
+                Request.Swap(&request);
+                if (Request.HasCookie()) {
+                    Response.SetCookie(Request.GetCookie());
+                }
             }
         };
 
         TIntrusivePtr<TNodeWardenConfig> Cfg;
+        TString State; // configuration state
 
         // current most relevant storage config
         NKikimrBlobStorage::TStorageConfig StorageConfig;
+
+        // most relevant proposed config
+        std::optional<NKikimrBlobStorage::TStorageConfig> ProposedStorageConfig;
+        std::optional<ui64> ProposedStorageConfigCookie;
+        using TPersistCallback = std::function<void(TEvPrivate::TEvStorageConfigStored&)>;
+        struct TPersistQueueItem {
+            THPTimer Timer;
+            NKikimrBlobStorage::TPDiskMetadataRecord Record; // what we are going to write
+            TPersistCallback Callback; // what will be called upon completion
+        };
+        std::deque<TPersistQueueItem> PersistQ;
 
         // initialization state
         bool NodeListObtained = false;
@@ -129,9 +149,11 @@ namespace NKikimr::NStorage {
             QUORUM_CHECK_TIMEOUT,
             COLLECT_CONFIG,
             PROPOSE_NEW_STORAGE_CONFIG,
+            COMMIT_CONFIG,
         };
-        static constexpr TDuration QuorumCheckTimeout = TDuration::Seconds(1); // time to wait after obtaining quorum
+        static constexpr TDuration QuorumCheckTimeout = TDuration::Seconds(3); // time to wait after obtaining quorum
         ERootState RootState = ERootState::INITIAL;
+        NKikimrBlobStorage::TStorageConfig CurrentProposedStorageConfig;
 
         // subscribed IC sessions
         THashMap<ui32, TActorId> SubscribedSessions;
@@ -151,16 +173,24 @@ namespace NKikimr::NStorage {
         using TPerDriveCallback = std::function<void(const TString&)>;
         static void InvokeForAllDrives(TActorId selfId, const TIntrusivePtr<TNodeWardenConfig>& cfg, const TPerDriveCallback& callback);
 
-        static void ReadConfig(TActorSystem *actorSystem, TActorId selfId, const TIntrusivePtr<TNodeWardenConfig>& cfg);
-        static void ReadConfigFromPDisk(TEvPrivate::TEvStorageConfigLoaded& msg, const TString& path, const NPDisk::TMainKey& key);
+        static void ReadConfig(TActorSystem *actorSystem, TActorId selfId, const TIntrusivePtr<TNodeWardenConfig>& cfg,
+            const TString& state);
+        static void ReadConfigFromPDisk(TEvPrivate::TEvStorageConfigLoaded& msg, const TString& path, const NPDisk::TMainKey& key,
+            const TString& state);
+        static void MergeMetadataRecord(NKikimrBlobStorage::TPDiskMetadataRecord *to, NKikimrBlobStorage::TPDiskMetadataRecord *from);
 
-        static void WriteConfig(TActorSystem *actorSystem, TActorId selfId, const TIntrusivePtr<TNodeWardenConfig>& cfg, const NKikimrBlobStorage::TStorageConfig& config);
-        static void WriteConfigToPDisk(TEvPrivate::TEvStorageConfigStored& msg, const NKikimrBlobStorage::TStorageConfig& config, const TString& path, const NPDisk::TMainKey& key);
+        static void WriteConfig(TActorSystem *actorSystem, TActorId selfId, const TIntrusivePtr<TNodeWardenConfig>& cfg,
+            const NKikimrBlobStorage::TPDiskMetadataRecord& record);
+        static void WriteConfigToPDisk(TEvPrivate::TEvStorageConfigStored& msg,
+            const NKikimrBlobStorage::TPDiskMetadataRecord& record, const TString& path, const NPDisk::TMainKey& key);
 
-        void Handle(TEvPrivate::TEvStorageConfigLoaded::TPtr ev);
+        void PersistConfig(TPersistCallback callback);
         void Handle(TEvPrivate::TEvStorageConfigStored::TPtr ev);
 
+        void Handle(TEvPrivate::TEvStorageConfigLoaded::TPtr ev);
+
         static TString CalculateFingerprint(const NKikimrBlobStorage::TStorageConfig& config);
+        static bool CheckFingerprint(const NKikimrBlobStorage::TStorageConfig& config);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Node handling
@@ -178,6 +208,7 @@ namespace NKikimr::NStorage {
         void AbortBinding(const char *reason, bool sendUnbindMessage = true);
         void HandleWakeup();
         void Handle(TEvNodeConfigReversePush::TPtr ev);
+        bool UpdateConfig(const NKikimrBlobStorage::TStorageConfig& config);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Binding requests from peer nodes
@@ -194,17 +225,26 @@ namespace NKikimr::NStorage {
 
         void CheckRootNodeStatus();
         void HandleQuorumCheckTimeout();
-        void ProcessGather(NKikimrBlobStorage::TEvNodeConfigGather *res);
+        void ProcessGather(TEvGather *res);
         bool HasQuorum() const;
-        void ProcessCollectConfigs(NKikimrBlobStorage::TEvNodeConfigGather::TCollectConfigs *res);
+        void ProcessCollectConfigs(TEvGather::TCollectConfigs *res);
+        void ProcessProposeStorageConig(TEvGather::TProposeStorageConfig *res);
+        bool EnrichBlobStorageConfig(NKikimrConfig::TBlobStorageConfig *bsConfig,
+            const NKikimrBlobStorage::TStorageConfig& config);
+
+        void PrepareScatterTask(ui64 cookie, TScatterTask& task);
+
+        void PerformScatterTask(TScatterTask& task);
+        void Perform(TEvGather::TCollectConfigs *response, const TEvScatter::TCollectConfigs& request, TScatterTask& task);
+        void Perform(TEvGather::TProposeStorageConfig *response, const TEvScatter::TProposeStorageConfig& request, TScatterTask& task);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Scatter/gather logic
 
-        void IssueScatterTask(bool locallyGenerated, NKikimrBlobStorage::TEvNodeConfigScatter&& task);
-        void IssueScatterTaskForNode(ui32 nodeId, TBoundNode& info, ui64 cookie, TScatterTask& scatterTask);
+        void IssueScatterTask(bool locallyGenerated, TEvScatter&& request);
+        void FinishAsyncOperation(ui64 cookie);
+        void IssueScatterTaskForNode(ui32 nodeId, TBoundNode& info, ui64 cookie, TScatterTask& task);
         void CompleteScatterTask(TScatterTask& task);
-        void GenerateCollectConfigs(NKikimrBlobStorage::TEvNodeConfigGather::TCollectConfigs *response, TScatterTask& task);
         void AbortScatterTask(ui64 cookie, ui32 nodeId);
         void AbortAllScatterTasks(const TBinding& binding);
         void Handle(TEvNodeConfigScatter::TPtr ev);

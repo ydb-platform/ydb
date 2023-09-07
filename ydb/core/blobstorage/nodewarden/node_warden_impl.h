@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "node_warden.h"
+#include "node_warden_events.h"
 
 #include <ydb/core/blobstorage/dsproxy/group_sessions.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
@@ -162,6 +163,8 @@ namespace NKikimr::NStorage {
 
         void ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet &serviceSet,
             bool isStatic, bool comprehensive, bool updateCache);
+
+        void Handle(TEvUpdateServiceSet::TPtr ev);
 
         void ConfigureLocalProxy(TIntrusivePtr<TBlobStorageGroupInfo> bsInfo);
         TActorId StartEjectedProxy(ui32 groupId);
@@ -533,6 +536,7 @@ namespace NKikimr::NStorage {
 
                 hFunc(TEvBlobStorage::TEvControllerNodeServiceSetUpdate, Handle);
                 hFunc(TEvBlobStorage::TEvUpdateGroupInfo, Handle);
+                hFunc(TEvUpdateServiceSet, Handle);
                 hFunc(TEvBlobStorage::TEvControllerUpdateDiskStatus, Handle);
                 hFunc(TEvBlobStorage::TEvControllerGroupMetricsExchange, Handle);
                 hFunc(TEvPrivate::TEvSendDiskMetrics, Handle);

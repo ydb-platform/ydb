@@ -233,7 +233,9 @@ namespace NKikimr::NStorage {
 
     void TNodeWarden::RequestGroupConfig(ui32 groupId, TGroupRecord& group) {
         STLOG(PRI_DEBUG, BS_NODE, NW98, "RequestGroupConfig", (GroupId, groupId));
-        if (group.GetGroupRequestPending) {
+        if (TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Static) {
+            // do nothing, configs arrive through distributed configuration
+        } else if (group.GetGroupRequestPending) {
             Y_VERIFY(group.GroupResolver);
         } else {
             Y_VERIFY(!group.GroupResolver);

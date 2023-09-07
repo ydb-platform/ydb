@@ -4,15 +4,15 @@ SRCS(
     defs.h
     group_stat_aggregator.cpp
     group_stat_aggregator.h
+    distconf.cpp
+    distconf.h
+    distconf_binding.cpp
+    distconf_fsm.cpp
+    distconf_mon.cpp
+    distconf_persistent_storage.cpp
+    distconf_scatter_gather.cpp
     node_warden.h
     node_warden_cache.cpp
-    node_warden_distconf.cpp
-    node_warden_distconf.h
-    node_warden_distconf_binding.cpp
-    node_warden_distconf_fsm.cpp
-    node_warden_distconf_mon.cpp
-    node_warden_distconf_persistent_storage.cpp
-    node_warden_distconf_scatter_gather.cpp
     node_warden_events.h
     node_warden_group.cpp
     node_warden_group_resolver.cpp

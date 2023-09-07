@@ -1,16 +1,38 @@
-#include "node_warden_distconf.h"
+#include "distconf.h"
 #include "node_warden_impl.h"
 
 namespace NKikimr::NStorage {
 
     TDistributedConfigKeeper::TDistributedConfigKeeper(TIntrusivePtr<TNodeWardenConfig> cfg)
         : Cfg(std::move(cfg))
-    {}
+    {
+        StorageConfig.MutableBlobStorageConfig()->CopyFrom(Cfg->BlobStorageConfig);
+        for (const auto& node : Cfg->NameserviceConfig.GetNode()) {
+            auto *r = StorageConfig.AddAllNodes();
+            r->SetHost(node.GetInterconnectHost());
+            r->SetPort(node.GetPort());
+            r->SetNodeId(node.GetNodeId());
+            if (node.HasLocation()) {
+                r->MutableLocation()->CopyFrom(node.GetLocation());
+            } else if (node.HasWalleLocation()) {
+                r->MutableLocation()->CopyFrom(node.GetWalleLocation());
+            }
+        }
+        StorageConfig.SetClusterUUID(Cfg->NameserviceConfig.GetClusterUUID());
+        StorageConfig.SetFingerprint(CalculateFingerprint(StorageConfig));
+
+        std::vector<TString> paths;
+        InvokeForAllDrives(SelfId(), Cfg, [&paths](const TString& path) { paths.push_back(path); });
+        std::sort(paths.begin(), paths.end());
+        TStringStream s;
+        ::Save(&s, paths);
+        State = s.Str();
+    }
 
     void TDistributedConfigKeeper::Bootstrap() {
         STLOG(PRI_DEBUG, BS_NODE, NWDC00, "Bootstrap");
         Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes(true));
-        auto query = std::bind(&TThis::ReadConfig, TActivationContext::ActorSystem(), SelfId(), Cfg);
+        auto query = std::bind(&TThis::ReadConfig, TActivationContext::ActorSystem(), SelfId(), Cfg, State);
         Send(MakeIoDispatcherActorId(), new TEvInvokeQuery(std::move(query)));
         Become(&TThis::StateWaitForInit);
     }
@@ -129,9 +151,7 @@ namespace NKikimr::NStorage {
                 break;
 
             case TEvPrivate::EvStorageConfigLoaded:
-                if (auto *msg = ev->Get<TEvPrivate::TEvStorageConfigLoaded>(); msg->Success) {
-                    StorageConfig.Swap(&msg->StorageConfig);
-                }
+                Handle(reinterpret_cast<TEvPrivate::TEvStorageConfigLoaded::TPtr&>(ev));
                 StorageConfigLoaded = true;
                 if (NodeListObtained) {
                     processPendingEvent();
@@ -170,6 +190,7 @@ namespace NKikimr::NStorage {
     }
 
     void TNodeWarden::StartDistributedConfigKeeper() {
+        return;
         DistributedConfigKeeperId = Register(new TDistributedConfigKeeper(Cfg));
     }
 
@@ -188,6 +209,7 @@ void Out<NKikimr::NStorage::TDistributedConfigKeeper::ERootState>(IOutputStream&
         case E::QUORUM_CHECK_TIMEOUT:       s << "QUORUM_CHECK_TIMEOUT";       return;
         case E::COLLECT_CONFIG:             s << "COLLECT_CONFIG";             return;
         case E::PROPOSE_NEW_STORAGE_CONFIG: s << "PROPOSE_NEW_STORAGE_CONFIG"; return;
+        case E::COMMIT_CONFIG:              s << "COMMIT_CONFIG";              return;
     }
     Y_FAIL();
 }

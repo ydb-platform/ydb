@@ -43,6 +43,15 @@ void TKafkaSaslAuthActor::StartPlainAuth(const NActors::TActorContext& ctx) {
     }
 
     DatabasePath = CanonizePath(ClientAuthData.Database);
+
+    if (ClientAuthData.UserName.Empty()) {
+        // ApiKey IAM authentification
+        SendApiKeyRequest();
+    } else {
+        // Login/Password authentification
+        SendLoginRequest(ClientAuthData, ctx);
+    }
+
     SendDescribeRequest(ctx);
 }
 
@@ -60,7 +69,7 @@ void TKafkaSaslAuthActor::Handle(TEvPrivate::TEvTokenReady::TPtr& ev, const NAct
     auto entries = NKikimr::NGRpcProxy::V1::GetTicketParserEntries(DatabaseId, FolderId);
     Send(NKikimr::MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
         .Database = ev->Get()->Database,
-        .Ticket = ev->Get()->LoginResult.token(),
+        .Ticket = "Login " + ev->Get()->LoginResult.token(),
         .PeerName = TStringBuilder() << Address,
         .Entries = entries
     }));
@@ -156,6 +165,14 @@ void TKafkaSaslAuthActor::SendLoginRequest(TKafkaSaslAuthActor::TAuthData authDa
             actorSystem->Send(selfId, authFailedEvent.release());
         }
     });
+}
+
+void TKafkaSaslAuthActor::SendApiKeyRequest() {
+    Send(NKikimr::MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
+        .Database = DatabasePath,
+        .Ticket = "ApiKey " + ClientAuthData.Password,
+        .PeerName = TStringBuilder() << Address,
+    }));
 }
 
 void TKafkaSaslAuthActor::SendDescribeRequest(const TActorContext& ctx) {

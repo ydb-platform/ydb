@@ -5,6 +5,8 @@
 #include <ydb/services/ydb/ydb_common_ut.h>
 #include <ydb/services/ydb/ydb_keys_ut.h>
 
+#include <ydb/library/testlib/service_mocks/access_service_mock.h>
+
 #include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
@@ -62,9 +64,18 @@ public:
         TPortManager portManager;
         Port = portManager.GetTcpPort();
 
+        ui16 accessServicePort = portManager.GetPort(4284);
+        TString accessServiceEndpoint = "localhost:" + ToString(accessServicePort);
+
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableAuthConfig()->SetUseLoginProvider(true);
         appConfig.MutableAuthConfig()->SetUseBlackBox(false);
+        appConfig.MutableAuthConfig()->SetUseBlackBox(false);
+        appConfig.MutableAuthConfig()->SetUseAccessService(true);
+        appConfig.MutableAuthConfig()->SetUseAccessServiceApiKey(true);
+        appConfig.MutableAuthConfig()->SetUseAccessServiceTLS(false);
+        appConfig.MutableAuthConfig()->SetAccessServiceEndpoint(accessServiceEndpoint);
+
         appConfig.MutablePQConfig()->SetTopicsAreFirstClassCitizen(true);
         appConfig.MutablePQConfig()->SetEnabled(true);
         // NOTE(shmel1k@): KIKIMR-14221
@@ -115,6 +126,9 @@ public:
         }
         KikimrServer = std::unique_ptr<TKikimr>(new TKikimr(std::move(appConfig), {}, {}, false, nullptr, nullptr, 0));
         KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::KAFKA_PROXY, NActors::NLog::PRI_TRACE);
+        KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
+        KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
+        KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, NLog::PRI_TRACE);
 
         ui16 grpc = KikimrServer->GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
@@ -163,12 +177,22 @@ public:
             Cerr << result.GetIssues().ToString() << "\n";
             UNIT_ASSERT(result.IsSuccess());
         }
+
+        {
+            // Access Server Mock
+            grpc::ServerBuilder builder;
+            builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
+            AccessServer = builder.BuildAndStart();
+        }
     }
 
 public:
     std::unique_ptr<TKikimr> KikimrServer;
     std::unique_ptr<TDriver> Driver;
     THolder<TTempFileHandle> MeteringFile;
+
+    TTicketParserAccessServiceMock accessServiceMock;
+    std::unique_ptr<grpc::Server> AccessServer;
 };
 
 using TInsecureTestServer = TTestServer<TKikimrWithGrpcAndRootSchema, false>;
@@ -590,4 +614,53 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             client.UnknownApiKey();
         }
     } // Y_UNIT_TEST(ProduceScenario)
+
+    Y_UNIT_TEST(LoginWithApiKey) {
+        TInsecureTestServer testServer;
+
+        TString topicName = "/Root/topic-0-test";
+
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        {
+            auto result =
+                pqClient
+                    .CreateTopic(topicName,
+                                 NYdb::NTopic::TCreateTopicSettings()
+                                    .PartitioningSettings(10, 100)
+                                    .BeginAddConsumer("consumer-0").EndAddConsumer())
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        auto settings = NTopic::TReadSessionSettings()
+                            .AppendTopics(NTopic::TTopicReadSettings(topicName))
+                            .ConsumerName("consumer-0");
+        auto topicReader = pqClient.CreateReadSession(settings);
+
+        TTestClient client(testServer.Port);
+
+        {
+            auto msg = client.ApiVersions();
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 6u);
+        }
+
+        {
+            auto msg = client.SaslHandshake();
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+            UNIT_ASSERT_VALUES_EQUAL(msg->Mechanisms.size(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(*msg->Mechanisms[0], "PLAIN");
+        }
+
+        {
+            auto msg = client.SaslAuthenticate("@/Root", "ApiKey-value-valid");
+
+            UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+
+        Sleep(TDuration::Seconds(1));
+    }
 } // Y_UNIT_TEST_SUITE(KafkaProtocol)

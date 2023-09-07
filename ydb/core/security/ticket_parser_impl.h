@@ -161,29 +161,44 @@ class TTicketParserImpl : public TActorBootstrapped<TDerived> {
         return LifeTime;
     }
 
+    template <typename TRequest, typename TTokenRecord>
+    static THolder<TRequest> CreateAccessServiceRequest(const TString& key, const TTokenRecord& record) {
+        auto request = MakeHolder<TRequest>(key);
+
+        if (record.Signature.AccessKeyId) {
+            const auto& sign = record.Signature;
+            auto& signature = *request->Request.mutable_signature();
+            signature.set_access_key_id(sign.AccessKeyId);
+            signature.set_string_to_sign(sign.StringToSign);
+            signature.set_signature(sign.Signature);
+
+            auto& v4params = *signature.mutable_v4_parameters();
+            v4params.set_service(sign.Service);
+            v4params.set_region(sign.Region);
+
+            v4params.mutable_signed_at()->set_seconds(sign.SignedAt.Seconds());
+            v4params.mutable_signed_at()->set_nanos(sign.SignedAt.NanoSeconds() % 1000000000ull);
+        } else {
+            if (record.TokenType == TDerived::ETokenType::ApiKey) {
+                // we use the ApiKey only if this type is explicitly specified in the token
+                request->Request.set_api_key(record.Ticket);
+            } else {
+                request->Request.set_iam_token(record.Ticket);
+            }
+        }
+
+        return request;
+    }
+
     template <typename TTokenRecord>
     void RequestAccessServiceAuthorization(const TString& key, TTokenRecord& record) const {
         for (const auto& [perm, permRecord] : record.Permissions) {
             const TString& permission(perm);
             BLOG_TRACE("Ticket " << MaskTicket(record.Ticket)
                         << " asking for AccessServiceAuthorization(" << permission << ")");
-            THolder<TEvAccessServiceAuthorizeRequest> request = MakeHolder<TEvAccessServiceAuthorizeRequest>(key);
-            if (record.Signature.AccessKeyId) {
-                const auto& sign = record.Signature;
-                auto& signature = *request->Request.mutable_signature();
-                signature.set_access_key_id(sign.AccessKeyId);
-                signature.set_string_to_sign(sign.StringToSign);
-                signature.set_signature(sign.Signature);
 
-                auto& v4params = *signature.mutable_v4_parameters();
-                v4params.set_service(sign.Service);
-                v4params.set_region(sign.Region);
+            auto request = CreateAccessServiceRequest<TEvAccessServiceAuthorizeRequest>(key, record);
 
-                v4params.mutable_signed_at()->set_seconds(sign.SignedAt.Seconds());
-                v4params.mutable_signed_at()->set_nanos(sign.SignedAt.NanoSeconds() % 1000000000ull);
-            } else {
-                request->Request.set_iam_token(record.Ticket);
-            }
             request->Request.set_permission(permission);
 
             if (const auto databaseId = record.GetAttributeValue(permission, "database_id"); databaseId) {
@@ -217,23 +232,9 @@ class TTicketParserImpl : public TActorBootstrapped<TDerived> {
     void RequestAccessServiceAuthentication(const TString& key, TTokenRecord& record) const {
         BLOG_TRACE("Ticket " << MaskTicket(record.Ticket)
                     << " asking for AccessServiceAuthentication");
-        THolder<TEvAccessServiceAuthenticateRequest> request = MakeHolder<TEvAccessServiceAuthenticateRequest>(key);
-        if (record.Signature.AccessKeyId) {
-            const auto& sign = record.Signature;
-            auto& signature = *request->Request.mutable_signature();
-            signature.set_access_key_id(sign.AccessKeyId);
-            signature.set_string_to_sign(sign.StringToSign);
-            signature.set_signature(sign.Signature);
 
-            auto& v4params = *signature.mutable_v4_parameters();
-            v4params.set_service(sign.Service);
-            v4params.set_region(sign.Region);
+        auto request = CreateAccessServiceRequest<TEvAccessServiceAuthenticateRequest>(key, record);
 
-            v4params.mutable_signed_at()->set_seconds(sign.SignedAt.Seconds());
-            v4params.mutable_signed_at()->set_nanos(sign.SignedAt.NanoSeconds() % 1000000000ull);
-        } else {
-            request->Request.set_iam_token(record.Ticket);
-        }
         record.ResponsesLeft++;
         Send(AccessServiceValidator, request.Release());
     }
@@ -483,7 +484,7 @@ class TTicketParserImpl : public TActorBootstrapped<TDerived> {
                     SetError(key, record, {"Unknown subject type", false});
                     break;
                 }
-                record.TokenType = TDerived::ETokenType::AccessService;
+                record.TokenType = request->Request.has_api_key() ? TDerived::ETokenType::ApiKey : TDerived::ETokenType::AccessService;
                 if (!record.Subject.empty()) {
                     switch (response->Response.subject().type_case()) {
                     case yandex::cloud::priv::servicecontrol::v1::Subject::TypeCase::kUserAccount:
@@ -520,8 +521,8 @@ class TTicketParserImpl : public TActorBootstrapped<TDerived> {
                     }));
                 }
             } else {
-                if (record.ResponsesLeft == 0 && (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::AccessService)) {
-                    bool retryable = IsRetryableGrpcError(response->Status);
+                if (record.ResponsesLeft == 0 && (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::AccessService || record.TokenType == TDerived::ETokenType::ApiKey)) {
+                bool retryable = IsRetryableGrpcError(response->Status);
                     SetError(key, record, {response->Status.Msg, retryable});
                 }
             }
@@ -668,7 +669,7 @@ class TTicketParserImpl : public TActorBootstrapped<TDerived> {
                     }
                 }
                 if (permissionsOk > 0 && retryableErrors == 0 && !requiredPermissionFailed) {
-                    record.TokenType = TDerived::ETokenType::AccessService;
+                    record.TokenType = request->Request.has_api_key() ? TDerived::ETokenType::ApiKey : TDerived::ETokenType::AccessService;
                     switch (subjectType) {
                     case yandex::cloud::priv::servicecontrol::v1::Subject::TypeCase::kUserAccount:
                         if (UserAccountService) {
@@ -698,7 +699,7 @@ class TTicketParserImpl : public TActorBootstrapped<TDerived> {
                         break;
                     }
                     SetToken(request->Key, record, new NACLib::TUserToken(record.Ticket, subject, {}));
-                } else if (record.ResponsesLeft == 0 && (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::AccessService)) {
+                } else if (record.ResponsesLeft == 0 && (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::AccessService || record.TokenType == TDerived::ETokenType::ApiKey)) {
                     SetError(request->Key, record, error);
                 }
             }
@@ -893,9 +894,16 @@ protected:
                 return TDerived::ETokenType::Unsupported;
             }
         }
+
         if (tokenType == "Bearer" || tokenType == "IAM") {
             if (AccessServiceValidator) {
                 return TDerived::ETokenType::AccessService;
+            } else {
+                return TDerived::ETokenType::Unsupported;
+            }
+        } else if (tokenType == "ApiKey") {
+            if (AccessServiceValidator && Config.GetUseAccessServiceApiKey()) {
+                return TDerived::ETokenType::ApiKey;
             } else {
                 return TDerived::ETokenType::Unsupported;
             }
@@ -996,6 +1004,8 @@ protected:
                     return "Login";
                 case TDerived::ETokenType::AccessService:
                     return "AccessService";
+                case TDerived::ETokenType::ApiKey:
+                    return "ApiKey";
             }
         }
 
@@ -1075,7 +1085,15 @@ protected:
 
     template <typename TTokenRecord>
     bool CanInitAccessServiceToken(const TTokenRecord& record) {
-        return record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::AccessService;
+        switch(record.TokenType) {
+            case TDerived::ETokenType::Unknown:
+            case TDerived::ETokenType::AccessService:
+                return true;
+            case TDerived::ETokenType::ApiKey:
+                return Config.GetUseAccessServiceApiKey();
+            default:
+                return false;
+        }
     }
 
     template <typename TTokenRecord>
@@ -1216,7 +1234,7 @@ protected:
         if (!AccessServiceValidator) {
             return false;
         }
-        if (record.TokenType == TDerived::ETokenType::AccessService) {
+        if (record.TokenType == TDerived::ETokenType::AccessService || record.TokenType == TDerived::ETokenType::ApiKey) {
             return (record.Error && record.Error.Retryable) || !record.Signature.AccessKeyId;
         }
         return record.TokenType == TDerived::ETokenType::Unknown;

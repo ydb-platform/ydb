@@ -76,6 +76,10 @@ public:
     THashSet<TString> AllowedUserTokens = {"user1"};
     THashMap<TString, TString> AllowedServiceTokens = {{"service1", "root1/folder1"}};
 
+    THashSet<TString> InvalidApiKeys = {"ApiKey-value-invalid"};
+    THashSet<TString> UnavailableApiKeys;
+    THashSet<TString> AllowedUserApiKeys = {"ApiKey-value-valid"};
+
     bool ShouldGenerateRetryableError = false;
     bool ShouldGenerateOneRetryableError = false;
 
@@ -112,11 +116,24 @@ public:
                 response->mutable_subject()->mutable_service_account()->set_folder_id(AllowedServiceTokens[token]);
                 return grpc::Status::OK;
             }
+
+            TString apiKey = request->api_key();
+            if (InvalidApiKeys.count(apiKey) > 0) {
+                return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "Invalid ApiKey");
+            }
+            if (UnavailableApiKeys.count(apiKey) > 0) {
+                return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Service Unavailable");
+            }
+            if (AllowedUserApiKeys.count(apiKey) > 0) {
+                response->mutable_subject()->mutable_user_account()->set_id(apiKey);
+                return grpc::Status::OK;
+            }
+
             return grpc::Status(grpc::StatusCode::UNAUTHENTICATED, "Access Denied");
         }
     }
 
-    THashSet<TString> AllowedUserPermissions = {"user1-something.read"};
+    THashSet<TString> AllowedUserPermissions = {"user1-something.read", "ApiKey-value-valid-something.read"};
     THashMap<TString, TString> AllowedServicePermissions = {{"service1-something.write", "root1/folder1"}};
     THashSet<TString> AllowedResourceIds = {};
     THashSet<TString> UnavailableUserPermissions;
@@ -137,7 +154,7 @@ public:
             response->mutable_subject()->mutable_user_account()->set_id("user1");
             return grpc::Status::OK;
         } else {
-            TString token = request->iam_token();
+            TString token = request->has_iam_token() ? request->iam_token() : request->api_key();
             if (UnavailableUserPermissions.count(token + '-' + request->permission()) > 0) {
                 return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Service Unavailable");
             }

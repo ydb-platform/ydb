@@ -70,6 +70,7 @@ private:
 
     void StartPlainAuth(const NActors::TActorContext& ctx);
     void SendLoginRequest(TKafkaSaslAuthActor::TAuthData authData, const NActors::TActorContext& ctx);
+    void SendApiKeyRequest();
     void SendDescribeRequest(const NActors::TActorContext& ctx);
     bool TryParseAuthDataTo(TKafkaSaslAuthActor::TAuthData& authData, const NActors::TActorContext& ctx);
     void SendResponseAndDie(EKafkaErrors errorCode, const TString& errorMessage, const TString& details, const NActors::TActorContext& ctx);

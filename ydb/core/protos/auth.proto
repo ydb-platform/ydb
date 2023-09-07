@@ -46,6 +46,7 @@ message TAuthConfig {
     optional TTokenAccessorConfig TokenAccessorConfig = 73;
     optional TLdapAuthentication LdapAuthentication = 74;
     optional string LdapAuthenticationDomain = 75 [default = "ldap"];
+    optional bool UseAccessServiceApiKey = 76 [default = false]; // Use IAM ApiKey
 }
 
 message TUserRegistryConfig {

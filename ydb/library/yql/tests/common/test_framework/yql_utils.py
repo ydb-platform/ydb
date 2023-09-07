@@ -629,6 +629,7 @@ def yson_to_csv(yson_content, columns=None, with_header=True, strict=False):
 def get_udfs_path(extra_paths=None):
     udfs_build_path = yatest.common.build_path('yql/udfs')
     ydb_udfs_build_path = yatest.common.build_path('ydb/library/yql/udfs')
+    contrib_ydb_udfs_build_path = yatest.common.build_path('contrib/ydb/library/yql/udfs')
     rthub_udfs_build_path = yatest.common.build_path('robot/rthub/yql/udfs')
     kwyt_udfs_build_path = yatest.common.build_path('robot/kwyt/yql/udfs')
 
@@ -646,7 +647,7 @@ def get_udfs_path(extra_paths=None):
     if not os.path.isdir(merged_udfs_path):
         os.mkdir(merged_udfs_path)
 
-    udfs_paths = [udfs_project_path, udfs_bin_path, udfs_build_path, ydb_udfs_build_path, rthub_udfs_build_path, kwyt_udfs_build_path]
+    udfs_paths = [udfs_project_path, udfs_bin_path, udfs_build_path, ydb_udfs_build_path, contrib_ydb_udfs_build_path, rthub_udfs_build_path, kwyt_udfs_build_path]
     if extra_paths is not None:
         udfs_paths += extra_paths
 

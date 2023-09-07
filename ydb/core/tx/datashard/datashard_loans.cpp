@@ -181,6 +181,7 @@ public:
 
         Self->State = TShardState::Offline;
         Self->PersistSys(db, TDataShard::Schema::Sys_State, Self->State);
+        Self->NotifyAllOverloadSubscribers();
 
         return true;
     }

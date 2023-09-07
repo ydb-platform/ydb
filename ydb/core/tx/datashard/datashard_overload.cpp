@@ -73,6 +73,30 @@ void TDataShard::NotifyOverloadSubscribers(ERejectReason reason) {
     PipeServersWithOverloadSubscribers.Append(left);
 }
 
+void TDataShard::NotifyAllOverloadSubscribers() {
+    bool clearedSubscribers = false;
+    while (!PipeServersWithOverloadSubscribers.Empty()) {
+        TPipeServerInfo* pipeServer = PipeServersWithOverloadSubscribers.PopFront();
+        for (auto it = pipeServer->OverloadSubscribers.begin(); it != pipeServer->OverloadSubscribers.end(); ++it) {
+            const TActorId& actorId = it->first;
+            TOverloadSubscriber& entry = it->second;
+            SendViaSession(
+                pipeServer->InterconnectSession,
+                actorId,
+                SelfId(),
+                new TEvDataShard::TEvOverloadReady(TabletID(), entry.SeqNo));
+        }
+        pipeServer->OverloadSubscribers.clear();
+        clearedSubscribers = true;
+    }
+
+    if (clearedSubscribers) {
+        for (int i = 0; i < RejectReasonCount; ++i) {
+            OverloadSubscribersByReason[i] = 0;
+        }
+    }
+}
+
 void TDataShard::DiscardOverloadSubscribers(TPipeServerInfo& pipeServer) {
     for (auto it = pipeServer.OverloadSubscribers.begin(); it != pipeServer.OverloadSubscribers.end(); ++it) {
         TOverloadSubscriber& entry = it->second;

@@ -45,6 +45,7 @@ public:
 
             Self->State = TShardState::SplitSrcWaitForNoTxInFlight;
             Self->PersistSys(db, Schema::Sys_State, Self->State);
+            Self->NotifyAllOverloadSubscribers();
 
             // Wake up immediate ops, so they abort as soon as possible
             for (const auto& kv : Self->Pipeline.GetImmediateOps()) {

@@ -91,6 +91,7 @@ EExecutionStatus TDropTableUnit::Execute(TOperation::TPtr op,
 
     txc.DB.NoMoreReadsForTx();
     DataShard.SetPersistState(TShardState::PreOffline, txc);
+    DataShard.NotifyAllOverloadSubscribers();
 
     BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
     op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());

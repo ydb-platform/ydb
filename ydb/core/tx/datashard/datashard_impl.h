@@ -1675,6 +1675,7 @@ public:
     bool HasPipeServer(const TActorId& pipeServerId);
     bool AddOverloadSubscriber(const TActorId& pipeServerId, const TActorId& actorId, ui64 seqNo, ERejectReasons reasons);
     void NotifyOverloadSubscribers(ERejectReason reason);
+    void NotifyAllOverloadSubscribers();
 
     bool HasSharedBlobs() const;
     void CheckInitiateBorrowedPartsReturn(const TActorContext& ctx);

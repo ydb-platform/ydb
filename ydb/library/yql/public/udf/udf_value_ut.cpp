@@ -114,7 +114,7 @@ Y_UNIT_TEST_SUITE(TUdfValue) {
     }
 
     Y_UNIT_TEST(LockMethodsTable) {
-#define METHOD_INDEX(name) GetMethodPtrIndex(TBoxedValueAccessor::GetMethodPtr(TBoxedValueAccessor::EMethod::name))
+#define METHOD_INDEX(name) NYql::GetMethodPtrIndex(TBoxedValueAccessor::GetMethodPtr(TBoxedValueAccessor::EMethod::name))
         UNIT_ASSERT_VALUES_EQUAL(2, METHOD_INDEX(HasFastListLength));
         UNIT_ASSERT_VALUES_EQUAL(3, METHOD_INDEX(GetListLength));
         UNIT_ASSERT_VALUES_EQUAL(4, METHOD_INDEX(GetEstimatedListLength));

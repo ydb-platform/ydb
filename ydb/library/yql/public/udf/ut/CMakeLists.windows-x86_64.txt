@@ -20,6 +20,7 @@ target_link_libraries(ydb-library-yql-public-udf-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   yql-public-udf
+  library-yql-utils
   udf-service-exception_policy
   yql-sql-pg_dummy
 )

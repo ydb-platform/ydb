@@ -4,11 +4,16 @@
 #include "mkql_custom_list.h"
 
 #include <ydb/library/yql/minikql/codegen/codegen.h>
+#include <ydb/library/yql/utils/method_index.h>
 #include <type_traits>
 
 #ifdef MKQL_DISABLE_CODEGEN
 namespace NKikimr {
 namespace NMiniKQL {
+
+using NYql::GetMethodPtr;
+using NYql::GetMethodPtrIndex;
+using NYql::GetMethodIndex;
 
 using TUnboxedImmutableCodegeneratorNode = TUnboxedImmutableComputationNode;
 using TUnboxedImmutableRunCodegeneratorNode = TUnboxedImmutableComputationNode;
@@ -79,6 +84,10 @@ using TWideFlowSourceCodegeneratorNode = TWideFlowSourceComputationNode<TDerived
 
 namespace NKikimr {
 namespace NMiniKQL {
+
+using NYql::GetMethodPtr;
+using NYql::GetMethodPtrIndex;
+using NYql::GetMethodIndex;
 
 using namespace llvm;
 
@@ -158,22 +167,6 @@ public:
     virtual ~ICodegeneratorRunNode() {}
     virtual void CreateRun(const TCodegenContext& ctx, BasicBlock*& block, Value* result, Value* args) const = 0;
 };
-
-size_t GetMethodPtrIndex(uintptr_t ptr);
-
-template<typename Method>
-inline size_t GetMethodIndex(Method method) {
-    uintptr_t ptr;
-    std::memcpy(&ptr, &method, sizeof(uintptr_t));
-    return GetMethodPtrIndex(ptr);
-}
-
-template<typename Method>
-inline uintptr_t GetMethodPtr(Method method) {
-    uintptr_t ptr;
-    std::memcpy(&ptr, &method, sizeof(uintptr_t));
-    return ptr;
-}
 
 Value* WrapArgumentForWindows(Value* arg, const TCodegenContext& ctx, BasicBlock* block);
 

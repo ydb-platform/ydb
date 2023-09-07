@@ -12,6 +12,8 @@ SRCS(
     hash.cpp
     md5_stream.cpp
     md5_stream.h
+    method_index.cpp
+    method_index.h
     multi_resource_lock.cpp
     multi_resource_lock.h
     parse_double.cpp

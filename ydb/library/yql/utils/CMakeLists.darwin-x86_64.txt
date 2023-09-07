@@ -36,6 +36,7 @@ target_sources(library-yql-utils PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/future_action.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/hash.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/md5_stream.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/method_index.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/multi_resource_lock.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/parse_double.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/proc_alive.cpp

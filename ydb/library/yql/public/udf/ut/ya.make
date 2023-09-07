@@ -9,6 +9,7 @@ SRCS(
 YQL_LAST_ABI_VERSION()
 
 PEERDIR(
+    ydb/library/yql/utils
     ydb/library/yql/public/udf/service/exception_policy
     ydb/library/yql/sql/pg_dummy
 )

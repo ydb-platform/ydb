@@ -22,27 +22,6 @@ namespace NMiniKQL {
 
 constexpr bool EnableStaticRefcount = true;
 
-size_t GetMethodPtrIndex(uintptr_t ptr)
-{
-#ifdef _win_
-    Y_ENSURE(memcmp((void*)ptr, "\x48\x8B\x01\xFF", 4) == 0);
-    size_t offset;
-    if (*(ui8*)(ptr + 4) == 0x60) {
-        offset = *(ui8*)(ptr + 5);
-    }
-    else if (*(ui8*)(ptr + 4) == 0xa0) {
-        offset = *(ui32*)(ptr + 5);
-    }
-    else {
-        ythrow yexception() << "Unsupported code";
-    }
-
-    return offset / 8;
-#else
-    return ptr >> 3;
-#endif
-}
-
 using namespace llvm;
 
 Type* GetCompContextType(LLVMContext &context) {

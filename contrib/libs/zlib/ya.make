@@ -8,7 +8,7 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 VERSION(1.3)
 
-ORIGINAL_SOURCE(https://www.zlib.net/fossils/zlib-1.3.tar.gz)
+ORIGINAL_SOURCE(https://github.com/madler/zlib/archive/v1.3.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/zlib/include

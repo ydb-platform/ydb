@@ -16,13 +16,6 @@ void TCompactColumnEngineChanges::DoDebugString(TStringOutput& out) const {
         }
         out << "); ";
     }
-    if (ui32 moved = PortionsToMove.size()) {
-        out << "move " << moved << " portions:(";
-        for (auto& [portionInfo, granule] : PortionsToMove) {
-            out << portionInfo << " (to " << granule << ")";
-        }
-        out << "); ";
-    }
 }
 
 THashMap<NKikimr::NOlap::TUnifiedBlobId, std::vector<NKikimr::NOlap::TBlobRange>> TCompactColumnEngineChanges::GetGroupedBlobRanges() const {
@@ -31,26 +24,10 @@ THashMap<NKikimr::NOlap::TUnifiedBlobId, std::vector<NKikimr::NOlap::TBlobRange>
 
 void TCompactColumnEngineChanges::DoCompile(TFinalizationContext& context) {
     TBase::DoCompile(context);
-    auto granuleRemap = TmpToNewGranules(context, NewGranules);
-    for (auto& [_, id] : PortionsToMove) {
-        Y_VERIFY(granuleRemap.contains(id));
-        id = granuleRemap[id];
-    }
 
     const TPortionMeta::EProduced producedClassResultCompaction = GetResultProducedClass();
     for (auto& portionInfo : AppendedPortions) {
-        if (granuleRemap.size()) {
-            auto it = granuleRemap.find(portionInfo.GetPortionInfo().GetGranule());
-            Y_VERIFY(it != granuleRemap.end());
-            portionInfo.GetPortionInfo().SetGranule(it->second);
-        }
-
-        TPortionMeta::EProduced produced = TPortionMeta::EProduced::INSERTED;
-        // If it's a split compaction with moves appended portions are INSERTED (could have overlaps with others)
-        if (PortionsToMove.empty()) {
-            produced = producedClassResultCompaction;
-        }
-        portionInfo.GetPortionInfo().UpdateRecordsMeta(produced);
+        portionInfo.GetPortionInfo().UpdateRecordsMeta(producedClassResultCompaction);
     }
     for (auto& portionInfo : SwitchedPortions) {
         Y_VERIFY(portionInfo.IsActive());
@@ -77,32 +54,6 @@ bool TCompactColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TAp
 
         for (auto& record : portionInfo.Records) {
             self.ColumnsTable->Write(context.DB, portionInfo, record);
-        }
-    }
-
-    for (auto& [info, dstGranule] : PortionsToMove) {
-        const auto& portionInfo = info;
-
-        const ui64 granule = portionInfo.GetGranule();
-        const ui64 portion = portionInfo.GetPortion();
-        if (!self.IsPortionExists(granule, portion)) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot move unknown portion")("portion", portionInfo.DebugString());
-            return false;
-        }
-
-        // In case of race with eviction portion could become evicted
-        const TPortionInfo oldInfo = self.GetGranuleVerified(granule).GetPortionVerified(portion);
-
-        Y_VERIFY(self.ErasePortion(portionInfo, false));
-
-        TPortionInfo moved = portionInfo;
-        moved.SetGranule(dstGranule);
-        self.UpsertPortion(moved, &oldInfo);
-        for (auto& record : portionInfo.Records) {
-            self.ColumnsTable->Erase(context.DB, portionInfo, record);
-        }
-        for (auto& record : moved.Records) {
-            self.ColumnsTable->Write(context.DB, moved, record);
         }
     }
 
@@ -137,39 +88,11 @@ void TCompactColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self,
     }
 }
 
-THashMap<ui64, ui64> TCompactColumnEngineChanges::TmpToNewGranules(TFinalizationContext& context, THashMap<ui64, std::pair<ui64, TMark>>& newGranules) const {
-    Y_VERIFY(SrcGranule || TmpGranuleIds.empty());
-    THashMap<ui64, ui64> granuleRemap;
-    for (const auto& [mark, counter] : TmpGranuleIds) {
-        if (mark == SrcGranule->Mark) {
-            Y_VERIFY(!counter);
-            granuleRemap[counter] = GranuleMeta->GetGranuleId();
-        } else {
-            Y_VERIFY(counter);
-            auto it = granuleRemap.find(counter);
-            if (it == granuleRemap.end()) {
-                it = granuleRemap.emplace(counter, context.NextGranuleId()).first;
-            }
-            newGranules.emplace(it->second, std::make_pair(GranuleMeta->GetPathId(), mark));
-        }
-    }
-    return granuleRemap;
-}
-
-bool TCompactColumnEngineChanges::IsMovedPortion(const TPortionInfo& info) {
-    for (auto&& i : PortionsToMove) {
-        if (i.first.GetAddress() == info.GetAddress()) {
-            return true;
-        }
-    }
-    return false;
-}
-
 void TCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     TBase::DoStart(self);
-    self.BackgroundController.StartCompaction(NKikimr::NOlap::TPlanCompactionInfo(GranuleMeta->GetPathId(), !IsSplit()), *this);
+    self.BackgroundController.StartCompaction(NKikimr::NOlap::TPlanCompactionInfo(GranuleMeta->GetPathId()), *this);
     NeedGranuleStatusProvide = true;
-    GranuleMeta->OnCompactionStarted(!IsSplit());
+    GranuleMeta->OnCompactionStarted();
 }
 
 void TCompactColumnEngineChanges::DoWriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) {
@@ -178,8 +101,7 @@ void TCompactColumnEngineChanges::DoWriteIndexComplete(NColumnShard::TColumnShar
 }
 
 void TCompactColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
-    self.BackgroundController.FinishCompaction(TPlanCompactionInfo(GranuleMeta->GetPathId(), !IsSplit()));
-    GranuleMeta->AllowedInsertion();
+    self.BackgroundController.FinishCompaction(TPlanCompactionInfo(GranuleMeta->GetPathId()));
     Y_VERIFY(NeedGranuleStatusProvide);
     if (context.FinishedSuccessfully) {
         GranuleMeta->OnCompactionFinished();
@@ -187,15 +109,6 @@ void TCompactColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, T
         GranuleMeta->OnCompactionFailed(context.ErrorMessage);
     }
     NeedGranuleStatusProvide = false;
-}
-
-ui64 TCompactColumnEngineChanges::SetTmpGranule(ui64 pathId, const TMark& mark) {
-    Y_VERIFY(pathId == GranuleMeta->GetPathId());
-    if (!TmpGranuleIds.contains(mark)) {
-        TmpGranuleIds[mark] = FirstGranuleId;
-        ++FirstGranuleId;
-    }
-    return TmpGranuleIds[mark];
 }
 
 TCompactColumnEngineChanges::TCompactColumnEngineChanges(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const TCompactionSrcGranule& srcGranule)

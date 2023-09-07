@@ -14,7 +14,6 @@ namespace {
 class TCompactionActor: public TActorBootstrapped<TCompactionActor> {
 private:
     const TIndexationCounters InternalCounters = TIndexationCounters("InternalCompaction");
-    const TIndexationCounters SplitCounters = TIndexationCounters("SplitCompaction");
 public:
     TCompactionActor(ui64 tabletId, const TActorId& parent)
         : TabletId(tabletId)
@@ -30,7 +29,6 @@ public:
         TxEvent = std::move(event.TxEvent);
         auto compactChanges = dynamic_pointer_cast<NOlap::TCompactColumnEngineChanges>(TxEvent->IndexChanges);
         Y_VERIFY(compactChanges);
-        IsSplitCurrently = compactChanges->IsSplit();
 
         auto& indexChanges = TxEvent->IndexChanges;
         Y_VERIFY(indexChanges);
@@ -105,7 +103,6 @@ public:
     }
 
 private:
-    bool IsSplitCurrently = false;
     ui64 TabletId;
     TActorId Parent;
     TActorId BlobCacheActorId;
@@ -121,11 +118,7 @@ private:
     }
 
     const TIndexationCounters& GetCurrentCounters() const {
-        if (IsSplitCurrently) {
-            return SplitCounters;
-        } else {
-            return InternalCounters;
-        }
+        return InternalCounters;
     }
 
     class TConveyorTask: public NConveyor::ITask {

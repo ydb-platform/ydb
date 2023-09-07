@@ -112,26 +112,22 @@ void TGranuleMeta::OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> por
 
 void TGranuleMeta::OnCompactionFinished() {
     AllowInsertionFlag = false;
-    Y_VERIFY(Activity.erase(EActivity::InternalCompaction) || Activity.erase(EActivity::SplitCompaction));
+    Y_VERIFY(Activity.erase(EActivity::GeneralCompaction));
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnCompactionFinished")("info", DebugString());
     Owner->UpdateGranuleInfo(*this);
 }
 
 void TGranuleMeta::OnCompactionFailed(const TString& reason) {
     AllowInsertionFlag = false;
-    Y_VERIFY(Activity.erase(EActivity::InternalCompaction) || Activity.erase(EActivity::SplitCompaction));
+    Y_VERIFY(Activity.erase(EActivity::GeneralCompaction));
     AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "OnCompactionFailed")("reason", reason)("info", DebugString());
     Owner->UpdateGranuleInfo(*this);
 }
 
-void TGranuleMeta::OnCompactionStarted(const bool inGranule) {
+void TGranuleMeta::OnCompactionStarted() {
     AllowInsertionFlag = false;
     Y_VERIFY(Activity.empty());
-    if (inGranule) {
-        Activity.emplace(EActivity::InternalCompaction);
-    } else {
-        Activity.emplace(EActivity::SplitCompaction);
-    }
+    Activity.emplace(EActivity::GeneralCompaction);
 }
 
 void TGranuleMeta::RebuildAdditiveMetrics() const {
@@ -164,6 +160,10 @@ TGranuleMeta::TGranuleMeta(const TGranuleRecord& rec, std::shared_ptr<TGranulesS
     Y_VERIFY(Owner);
     OptimizerPlanner = std::make_shared<NStorageOptimizer::TIntervalsOptimizerPlanner>(rec.Granule);
 
+}
+
+bool TGranuleMeta::InCompaction() const {
+    return Activity.contains(EActivity::GeneralCompaction);
 }
 
 } // namespace NKikimr::NOlap

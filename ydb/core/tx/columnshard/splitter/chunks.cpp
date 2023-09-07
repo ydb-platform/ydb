@@ -8,6 +8,11 @@ std::vector<NKikimr::NOlap::IPortionColumnChunk::TPtr> IPortionColumnChunk::Inte
         sumSize += i;
     }
     Y_VERIFY(sumSize <= GetPackedSize());
+    if (sumSize < GetPackedSize()) {
+        Y_VERIFY(GetRecordsCount() >= splitSizes.size() + 1);
+    } else {
+        Y_VERIFY(GetRecordsCount() >= splitSizes.size());
+    }
     auto result = DoInternalSplit(saver, counters, splitSizes);
     if (sumSize == GetPackedSize()) {
         Y_VERIFY(result.size() == splitSizes.size());

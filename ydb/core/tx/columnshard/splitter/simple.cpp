@@ -1,5 +1,6 @@
 #include "simple.h"
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <util/string/join.h>
 
 namespace NKikimr::NOlap {
 
@@ -16,13 +17,13 @@ TString TSplittedColumnChunk::DoDebugString() const {
     return TStringBuilder() << "records_count=" << GetRecordsCount() << ";data=" << NArrow::DebugJson(Data.GetSlicedBatch(), 3, 3) << ";";
 }
 
-std::vector<TSaverSplittedChunk> TSimpleSplitter::Split(std::shared_ptr<arrow::Array> data, std::shared_ptr<arrow::Field> field, const ui32 maxBlobSize) const {
+std::vector<TSaverSplittedChunk> TSimpleSplitter::Split(const std::shared_ptr<arrow::Array>& data, std::shared_ptr<arrow::Field> field, const ui32 maxBlobSize) const {
     auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector{field});
     auto batch = arrow::RecordBatch::Make(schema, data->length(), {data});
     return Split(batch, maxBlobSize);
 }
 
-std::vector<TSaverSplittedChunk> TSimpleSplitter::Split(std::shared_ptr<arrow::RecordBatch> data, const ui32 maxBlobSize) const {
+std::vector<TSaverSplittedChunk> TSimpleSplitter::Split(const std::shared_ptr<arrow::RecordBatch>& data, const ui32 maxBlobSize) const {
     Y_VERIFY(data->num_columns() == 1);
     ui64 splitFactor = Stats ? Stats->PredictOptimalSplitFactor(data->num_rows(), maxBlobSize).value_or(1) : 1;
     while (true) {
@@ -85,17 +86,19 @@ std::vector<TSaverSplittedChunk> TSimpleSplitter::SplitBySizes(std::shared_ptr<a
             splitPartSizesLocal.emplace_back(dataSerialization.size() - sumSizes);
         }
     }
-    Y_VERIFY(splitPartSizesLocal.size() <= (ui64)data->num_rows());
     std::vector<ui64> recordsCount;
     i64 remainedRecordsCount = data->num_rows();
     const double rowsPerByte = 1.0 * data->num_rows() / dataSerialization.size();
+    i32 remainedParts = splitPartSizesLocal.size();
     for (ui32 idx = 0; idx < splitPartSizesLocal.size(); ++idx) {
+        AFL_VERIFY(remainedRecordsCount >= remainedParts)("remained_records_count", remainedRecordsCount)
+            ("remained_parts", remainedParts)("idx", idx)("size", splitPartSizesLocal.size())("sizes", JoinSeq(",", splitPartSizesLocal))("data_size", dataSerialization.size());
+        --remainedParts;
         i64 expectedRecordsCount = rowsPerByte * splitPartSizesLocal[idx];
         if (expectedRecordsCount < 1) {
             expectedRecordsCount = 1;
-        } else if (remainedRecordsCount < expectedRecordsCount + (i64)splitPartSizesLocal.size()) {
-            expectedRecordsCount = remainedRecordsCount - splitPartSizesLocal.size();
-            Y_VERIFY(expectedRecordsCount >= 0);
+        } else if (remainedRecordsCount < expectedRecordsCount + remainedParts) {
+            expectedRecordsCount = remainedRecordsCount - remainedParts;
         }
         if (idx + 1 == splitPartSizesLocal.size()) {
             expectedRecordsCount = remainedRecordsCount;

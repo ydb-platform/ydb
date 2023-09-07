@@ -102,14 +102,6 @@ public:
     bool IsTtlActive() const {
         return !TtlPortions.empty();
     }
-
-    bool HasSplitCompaction(const ui64 pathId) const {
-        auto it = ActiveCompactionInfo.find(pathId);
-        if (it == ActiveCompactionInfo.end()) {
-            return false;
-        }
-        return !it->second.IsInternal();
-    }
 };
 
 }

@@ -714,7 +714,7 @@ std::unique_ptr<TCompactionInfo> TColumnEngineForLogs::Compact(const TCompaction
     std::shared_ptr<TGranuleMeta> compactGranule = GetGranulePtrVerified(*gCompaction);
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "take_granule")("granule", compactGranule->DebugString());
-    return std::make_unique<TCompactionInfo>(compactGranule, false);
+    return std::make_unique<TCompactionInfo>(compactGranule);
 }
 
 void TColumnEngineForLogs::OnTieringModified(std::shared_ptr<NColumnShard::TTiersManager> manager, const NColumnShard::TTtl& ttl) {

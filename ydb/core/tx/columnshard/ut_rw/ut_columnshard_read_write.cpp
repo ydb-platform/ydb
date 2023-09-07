@@ -2852,17 +2852,10 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     Cerr << "Compaction old portions:";
                     ui64 srcGranule{0};
                     for (const auto& portionInfo : compact->SwitchedPortions) {
-                        const bool moved = compact->IsMovedPortion(portionInfo);
                         ui64 granule = portionInfo.GetGranule();
                         UNIT_ASSERT(!srcGranule || srcGranule == granule);
                         srcGranule = granule;
-                        ui64 portionId = portionInfo.GetPortion();
-                        if (moved) {
-                            Cerr << " MOVED: " << portionId;
-                        } else {
-                            Cerr << " " << portionId;
-                            oldPortions.insert(portionId);
-                        }
+                        oldPortions.insert(portionInfo.GetPortion());
                     }
                     Cerr << Endl;
                 }

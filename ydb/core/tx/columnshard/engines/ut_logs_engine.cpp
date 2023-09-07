@@ -332,7 +332,6 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, T
              const TExpected& /*expected*/, THashMap<TBlobRange, TString>* blobsPool = nullptr) {
     std::shared_ptr<TCompactColumnEngineChanges> changes = dynamic_pointer_cast<TCompactColumnEngineChanges>(engine.StartCompaction(TestLimits(), {}));
     UNIT_ASSERT(changes);
-    UNIT_ASSERT(!changes->IsSplit());
     //    UNIT_ASSERT_VALUES_EQUAL(changes->SwitchedPortions.size(), expected.SrcPortions);
     changes->SetBlobs(std::move(blobs));
     changes->StartEmergency();

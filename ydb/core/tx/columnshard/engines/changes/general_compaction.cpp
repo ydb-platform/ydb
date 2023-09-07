@@ -142,7 +142,23 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
         auto b = batchResult->Slice(recordIdx, slice.GetRecordsCount());
         AppendedPortions.emplace_back(TPortionInfoWithBlobs::BuildByBlobs(chunksByBlobs, nullptr, GranuleMeta->GetGranuleId(), *maxSnapshot));
         AppendedPortions.back().GetPortionInfo().AddMetadata(*resultSchema, b, saverContext.GetTierName());
+        recordIdx += slice.GetRecordsCount();
     }
+    if (IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD)) {
+        TStringBuilder sbSwitched;
+        sbSwitched << "";
+        for (auto&& p : SwitchedPortions) {
+            sbSwitched << p.DebugString() << ";";
+        }
+        sbSwitched << "";
+
+        TStringBuilder sbAppended;
+        for (auto&& p : AppendedPortions) {
+            sbAppended << p.GetPortionInfo().DebugString() << ";";
+        }
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "blobs_created_diff")("appended", sbAppended)("switched", sbSwitched);
+    }
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "blobs_created")("appended", AppendedPortions.size())("switched", SwitchedPortions.size());
 
     return TConclusionStatus::Success();
 }

@@ -15,9 +15,6 @@ protected:
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
     virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const override;
 public:
-    virtual bool IsSplit() const override {
-        return false;
-    }
     using TBase::TBase;
 
     virtual TString TypeString() const override {

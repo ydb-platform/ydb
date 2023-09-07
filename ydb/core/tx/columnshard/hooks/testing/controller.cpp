@@ -14,11 +14,7 @@ bool TController::DoOnAfterFilterAssembling(const std::shared_ptr<arrow::RecordB
 
 bool TController::DoOnStartCompaction(std::shared_ptr<NOlap::TColumnEngineChanges>& changes) {
     if (auto compaction = dynamic_pointer_cast<NOlap::TCompactColumnEngineChanges>(changes)) {
-        if (compaction->IsSplit()) {
-            SplitCompactions.Inc();
-        } else {
-            InternalCompactions.Inc();
-        }
+        Compactions.Inc();
     }
     return true;
 }

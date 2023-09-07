@@ -104,7 +104,7 @@ std::shared_ptr<TColumnEngineChanges> TIntervalsOptimizerPlanner::DoGetOptimizat
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "no_ranged_segments");
         return nullptr;
     }
-    auto& topSegment = **RangedSegments.begin()->second.begin();
+    auto& topSegment = **RangedSegments.rbegin()->second.begin();
     auto& topFeaturesTask = topSegment.GetFeatures();
     TIntervalFeatures features;
     if (topFeaturesTask.IsEnoughWeight()) {
@@ -119,8 +119,10 @@ std::shared_ptr<TColumnEngineChanges> TIntervalsOptimizerPlanner::DoGetOptimizat
 
         for (auto&& s : sortedPortions) {
             for (auto&& p : s.second) {
-                if (features.GetPortionsCount() > 3 || (features.GetPortionsWeight() + p->BlobsBytes() > 512 * 1024 * 1024 && features.GetPortionsCount() > 1) || s.first < 1024 * 1024) {
-                    break;
+                if (features.GetPortionsCount() > 1 && s.first > 128 * 1024) {
+                    if (features.GetPortionsWeight() + p->BlobsBytes() > 512 * 1024 * 1024 && features.GetPortionsCount() > 1) {
+                        break;
+                    }
                 }
                 features.Add(p);
             }
@@ -298,7 +300,7 @@ i64 TIntervalsOptimizerPlanner::DoGetUsefulMetric() const {
     if (RangedSegments.empty()) {
         return 0;
     }
-    auto& topSegment = **RangedSegments.begin()->second.begin();
+    auto& topSegment = **RangedSegments.rbegin()->second.begin();
     auto& topFeaturesTask = topSegment.GetFeatures();
     return std::max<i64>(topFeaturesTask.GetUsefulMetric(), std::max<ui64>(SumSmall ? 1 : 0, SumSmall / LimitSmallBlobsMerge));
 }

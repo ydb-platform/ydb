@@ -175,8 +175,7 @@ public:
 class TGranuleMeta: TNonCopyable {
 public:
     enum class EActivity {
-        SplitCompaction,
-        InternalCompaction,
+        GeneralCompaction
     };
 
 private:
@@ -238,25 +237,13 @@ public:
         return GetCompactionType(limits) != TGranuleAdditiveSummary::ECompactionClass::NoCompaction;
     }
 
-    bool InCompaction() const {
-        return Activity.contains(EActivity::SplitCompaction) || Activity.contains(EActivity::InternalCompaction);
-    }
-
-    void AllowedInsertion() const {
-        if (InCompaction()) {
-            AllowInsertionFlag = true;
-        }
-    }
-
-    bool IsInsertAllowed() const {
-        return AllowInsertionFlag || !Activity.contains(EActivity::SplitCompaction);
-    }
+    bool InCompaction() const;
 
     bool IsErasable() const {
         return Activity.empty();
     }
 
-    void OnCompactionStarted(const bool inGranule);
+    void OnCompactionStarted();
 
     void OnCompactionFailed(const TString& reason);
     void OnCompactionFinished();

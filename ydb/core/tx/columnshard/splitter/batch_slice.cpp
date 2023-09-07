@@ -105,6 +105,7 @@ TGeneralSerializedSlice::TGeneralSerializedSlice(const std::map<ui32, std::vecto
         } else {
             Y_VERIFY(*recordsCount == column.GetRecordsCount());
         }
+        Size += column.GetSize();
         Columns.emplace_back(std::move(column));
     }
     Y_VERIFY(recordsCount);

@@ -12,42 +12,30 @@ class TGranuleMeta;
 class TPlanCompactionInfo {
 private:
     ui64 PathId = 0;
-    bool InternalFlag = false;
     const TMonotonic StartTime = TMonotonic::Now();
 public:
     TMonotonic GetStartTime() const {
         return StartTime;
     }
 
-    TPlanCompactionInfo(const ui64 pathId, const bool internalFlag)
-        : PathId(pathId)
-        , InternalFlag(internalFlag) {
+    TPlanCompactionInfo(const ui64 pathId)
+        : PathId(pathId) {
 
     }
 
     ui64 GetPathId() const {
         return PathId;
     }
-
-    bool IsInternal() const {
-        return InternalFlag;
-    }
 };
 
 struct TCompactionInfo {
 private:
     std::shared_ptr<TGranuleMeta> GranuleMeta;
-    const bool InGranuleFlag = false;
 public:
-    TCompactionInfo(std::shared_ptr<TGranuleMeta> granule, const bool inGranule)
+    TCompactionInfo(std::shared_ptr<TGranuleMeta> granule)
         : GranuleMeta(granule)
-        , InGranuleFlag(inGranule)
     {
         Y_VERIFY(granule);
-    }
-
-    bool InGranule() const {
-        return InGranuleFlag;
     }
 
     std::shared_ptr<TGranuleMeta> GetGranule() const {

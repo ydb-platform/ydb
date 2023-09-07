@@ -150,7 +150,7 @@ public:
     }
 
     bool operator<(const TIntervalFeatures& item) const {
-        return GetUsefulMetric() > item.GetUsefulMetric();
+        return GetUsefulMetric() < item.GetUsefulMetric();
     }
     const std::map<ui64, std::shared_ptr<TPortionInfo>>& GetSummaryPortions() const {
         return SummaryPortions;

@@ -1421,7 +1421,7 @@ const TTupleExprType* CommonType(TPositionHandle pos, const TTupleExprType* one,
     }
 
     for (auto i = 0U; i < itemsTwo.size(); ++i) {
-        if (const auto join = CommonType<Strict>(pos,
+        if (const auto join = CommonType<Strict, Silent>(pos,
             itemsOne[i] ? itemsOne[i] : Relaxed ? itemsTwo[i] : ctx.MakeType<TNullExprType>(),
             itemsTwo[i] ? itemsTwo[i] : Relaxed ? itemsOne[i] : ctx.MakeType<TNullExprType>(),
             ctx))
@@ -1455,14 +1455,14 @@ const TVariantExprType* CommonType(TPositionHandle pos, const TVariantExprType* 
     return nullptr;
 }
 
-template<bool Strict>
+template<bool Strict, bool Silent>
 const TTaggedExprType* CommonType(TPositionHandle pos, const TTaggedExprType* one, const TTaggedExprType* two, TExprContext& ctx) {
     const auto& tag = one->GetTag();
     if (two->GetTag() != tag) {
         ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Different tags '" << tag << "' and '" << two->GetTag() << "'."));
         return nullptr;
     }
-    if (const auto join = CommonType<Strict>(pos, one->GetBaseType(), two->GetBaseType(), ctx))
+    if (const auto join = CommonType<Strict, Silent>(pos, one->GetBaseType(), two->GetBaseType(), ctx))
         return ctx.MakeType<TTaggedExprType>(join, tag);
     return nullptr;
 }
@@ -1727,12 +1727,12 @@ const TTypeAnnotationNode* CommonType(TPositionHandle pos, const TTypeAnnotation
             } else if (ETypeAnnotationKind::Optional == kindOne) {
                 if (ETypeAnnotationKind::Null  == kindTwo)
                     return one;
-                else if (const auto itemType = CommonType<Strict>(pos, one->Cast<TOptionalExprType>()->GetItemType(), two, ctx))
+                else if (const auto itemType = CommonType<Strict, Silent>(pos, one->Cast<TOptionalExprType>()->GetItemType(), two, ctx))
                     return ctx.MakeType<TOptionalExprType>(itemType);
             } else if (ETypeAnnotationKind::Optional == kindTwo) {
                 if (ETypeAnnotationKind::Null  == kindOne)
                     return two;
-                else if (const auto itemType = CommonType<Strict>(pos, one, two->Cast<TOptionalExprType>()->GetItemType(), ctx))
+                else if (const auto itemType = CommonType<Strict, Silent>(pos, one, two->Cast<TOptionalExprType>()->GetItemType(), ctx))
                     return ctx.MakeType<TOptionalExprType>(itemType);
             } else if (ETypeAnnotationKind::Null == kindOne) {
                 return ctx.MakeType<TOptionalExprType>(two);

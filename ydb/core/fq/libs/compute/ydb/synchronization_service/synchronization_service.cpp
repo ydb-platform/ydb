@@ -551,6 +551,52 @@ class TSynchronizatinServiceActor : public NActors::TActorBootstrapped<TSynchron
         TVector<TEvYdbCompute::TEvSynchronizeRequest::TPtr> Requests;
     };
 
+    struct TSynchtonizationCounters {
+        struct TCounters : public virtual TThrRefBase  {
+            TCounters(const ::NMonitoring::TDynamicCounterPtr& counters) 
+                : SynchronizationOk(counters->GetCounter("Ok", true))
+                , SynchronizationFailed(counters->GetCounter("Failed", true))
+            {}
+            ::NMonitoring::TDynamicCounters::TCounterPtr SynchronizationOk;
+            ::NMonitoring::TDynamicCounters::TCounterPtr SynchronizationFailed;
+        };
+
+        using TCountersPtr  = TIntrusivePtr<TCounters>;
+        
+
+        TSynchtonizationCounters(const ::NMonitoring::TDynamicCounterPtr& counters)
+            : Counters(counters)
+            , SubgroupCounters(Counters->GetSubgroup("step", "Synchronization"))
+            , CommonCounters(counters)
+        {}
+
+        void IncOk(const TString& scope) {
+            CommonCounters.SynchronizationOk->Inc();
+            GetScopeCounters(scope)->SynchronizationOk->Inc();
+        }
+
+        void IncFailed(const TString& scope) {
+            CommonCounters.SynchronizationFailed->Inc();
+            GetScopeCounters(scope)->SynchronizationFailed->Inc();
+        }
+
+
+        TCountersPtr GetScopeCounters(const TString& scope) {
+            auto it = CountersByScope.find(scope);
+            if (it != CountersByScope.end()) {
+                return it->second;
+            }
+            return CountersByScope[scope] = MakeIntrusive<TCounters>(SubgroupCounters->GetSubgroup("scope", scope));
+        }
+
+    public:
+        ::NMonitoring::TDynamicCounterPtr Counters;
+    private:
+        ::NMonitoring::TDynamicCounterPtr SubgroupCounters;
+        TCounters CommonCounters;
+        TMap<TString, TCountersPtr> CountersByScope;
+    };
+
 public:
     TSynchronizatinServiceActor(const NConfig::TCommonConfig& commonConfig,
                                 const NConfig::TComputeConfig& computeConfig,
@@ -591,7 +637,7 @@ public:
             auto& item = Cache[scope];
             item.Status = EScopeStatus::IN_PROGRESS;
             item.Requests.push_back(ev);
-            Register(new TSynchronizeScopeActor{SelfId(), cloudId, scope, CommonConfig, ComputeConfig, connectionConfig, Signer, YqSharedResources, CredentialsProviderFactory,  Counters});
+            Register(new TSynchronizeScopeActor{SelfId(), cloudId, scope, CommonConfig, ComputeConfig, connectionConfig, Signer, YqSharedResources, CredentialsProviderFactory,  Counters.Counters});
             return;
         }
 
@@ -621,8 +667,11 @@ public:
         it->second.Requests.clear();
 
         if (ev->Get()->Status == NYdb::EStatus::SUCCESS) {
+            Counters.IncOk(ev->Get()->Scope);
             it->second.Status = EScopeStatus::SYNCHRONIZED;
         } else {
+            LOG_E("Synchronization failed for " << ev->Get()->Scope << " with issues " << ev->Get()->Issues.ToOneLineString());
+            Counters.IncFailed(ev->Get()->Scope);
             Cache.erase(it);
         }
     }
@@ -634,7 +683,7 @@ private:
     TSigner::TPtr Signer;
     TYqSharedResources::TPtr YqSharedResources;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
-    ::NMonitoring::TDynamicCounterPtr Counters;
+    TSynchtonizationCounters Counters;
 };
 
 std::unique_ptr<NActors::IActor> CreateSynchronizationServiceActor(const NConfig::TCommonConfig& commonConfig,

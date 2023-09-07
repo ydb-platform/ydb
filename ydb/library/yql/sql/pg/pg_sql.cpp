@@ -216,7 +216,8 @@ public:
             int8,
             numeric,
             text,
-            unknown
+            unknown,
+            nil,
         };
 
         static TString ToString(const TPgConst::Type& type) {
@@ -230,6 +231,8 @@ public:
                 case TPgConst::Type::text:
                     return "text";
                 case TPgConst::Type::unknown:
+                    return "unknown";
+                case TPgConst::Type::nil:
                     return "unknown";
                 }
         }
@@ -456,11 +459,13 @@ public:
             size_t col = i % cols;
             auto& columnType = maybeColumnTypes[col];
             
-            if (!columnType || columnType.GetRef() == TPgConst::Type::unknown) {
+            if (!columnType || columnType.GetRef() == TPgConst::Type::unknown || columnType.GetRef() == TPgConst::Type::nil) {
                 columnType = value.type;
+                continue;
             }
 
-            if (columnType.GetRef() != value.type && value.type != TPgConst::Type::unknown) {
+            // should we allow compatible types here?
+            if (columnType.GetRef() != value.type && columnType.GetRef() != TPgConst::Type::unknown && columnType.GetRef() != TPgConst::Type::nil) {
                 YQL_CLOG(INFO, Default) 
                     << "Failed to auto parametrize: different types: " 
                     << TPgConst::ToString(columnType.GetRef()) << " and " << TPgConst::ToString(value.type)
@@ -485,9 +490,7 @@ public:
         for (auto&& pgConst : values) {
             Ydb::Value literal;
 
-            // Assuming context of VALUES(...), 
-            // otherwise we have to PgCast (Null) to unknown!
-            if (pgConst.type == TPgConst::Type::unknown) {
+            if (pgConst.type == TPgConst::Type::nil) {
                 literal.set_null_flag_value(NProtoBuf::NULL_VALUE);
             } else {
                 literal.set_text_value(std::move(pgConst.value));
@@ -2605,11 +2608,11 @@ public:
             }
             case T_String: {
                 pgConst.value = ToString(StrVal(val));
-                pgConst.type = TPgConst::Type::text;
+                pgConst.type = TPgConst::Type::unknown;
                 return pgConst;
             }
             case T_Null: {
-                pgConst.type = TPgConst::Type::unknown;
+                pgConst.type = TPgConst::Type::nil;
                 return pgConst;
             }
             default: {

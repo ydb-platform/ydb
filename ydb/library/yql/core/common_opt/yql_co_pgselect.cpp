@@ -3263,9 +3263,20 @@ TExprNode::TPtr ExpandPgLike(const TExprNode::TPtr& node, TExprContext& ctx, TOp
     const bool insensitive = node->IsCallable("PgILike");
     if (!insensitive) {
         auto pattern = node->Child(1);
+        bool isCasted = false;
+
+        if (pattern->IsCallable("PgCast") &&
+            pattern->Head().IsCallable("PgConst") &&
+            pattern->Tail().IsCallable("PgType") &&
+            pattern->Tail().Head().Content() == "text")
+        {
+            pattern = pattern->Child(0);
+            isCasted = true;
+        }
+
         if (pattern->IsCallable("PgConst") &&
             pattern->Tail().IsCallable("PgType") &&
-            pattern->Tail().Head().Content() == "text") {
+            (pattern->Tail().Head().Content() == "text" || isCasted)) {
             auto str = pattern->Head().Content();
             auto hasUnderscore = AnyOf(str, [](char c) { return c == '_'; });
             size_t countOfPercents = 0;

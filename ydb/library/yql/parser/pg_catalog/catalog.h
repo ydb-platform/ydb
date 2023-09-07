@@ -3,8 +3,13 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/stream/output.h>
+#include <variant>
 
 namespace NYql::NPg {
+
+constexpr ui32 UnknownOid = 705;
+constexpr ui32 AnyOid = 2276;
+constexpr ui32 AnyArrayOid = 2277;
 
 // copied from pg_class.h
 enum class ERelPersistence : char
@@ -64,13 +69,16 @@ enum class ETypType : char {
     Range = 'r',
 };
 
+constexpr char InvalidCategory = '\0';
+
 struct TTypeDesc {
     ui32 TypeId = 0;
     ui32 ArrayTypeId = 0;
     TString Name;
     ui32 ElementTypeId = 0;
     bool PassByValue = false;
-    char Category = '\0';
+    char Category = InvalidCategory;
+    bool IsPreferred = false;
     char TypeAlign = '\0';
     char TypeDelim = ',';
 
@@ -190,12 +198,15 @@ enum class EHashAmProcNum {
 const TProcDesc& LookupProc(const TString& name, const TVector<ui32>& argTypeIds);
 const TProcDesc& LookupProc(ui32 procId, const TVector<ui32>& argTypeIds);
 const TProcDesc& LookupProc(ui32 procId);
+std::variant<const TProcDesc*, const TTypeDesc*> LookupProcWithCasts(const TString& name, const TVector<ui32>& argTypeIds);
 bool HasReturnSetProc(const TString& name);
 void EnumProc(std::function<void(ui32, const TProcDesc&)> f);
 
 bool HasType(const TString& name);
 const TTypeDesc& LookupType(const TString& name);
 const TTypeDesc& LookupType(ui32 typeId);
+const TTypeDesc& LookupCommonType(const TVector<ui32>& typeIds);
+const TTypeDesc& LookupCommonType(const TVector<ui32>& typeIds, bool& castsNeeded);
 void EnumTypes(std::function<void(ui32, const TTypeDesc&)> f);
 
 bool HasCast(ui32 sourceId, ui32 targetId);

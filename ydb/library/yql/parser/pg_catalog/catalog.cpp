@@ -9,9 +9,9 @@
 namespace NYql::NPg {
 
 constexpr ui32 InvalidOid = 0;
-constexpr ui32 UnknownOid = 705;
-constexpr ui32 AnyOid = 2276;
-constexpr ui32 AnyArrayOid = 2277;
+constexpr ui32 Int2VectorOid = 22;
+constexpr ui32 OidVectorOid = 30;
+constexpr ui32 RecordOid = 2249;
 //constexpr ui32 AnyElementOid = 2283;
 //constexpr ui32 AnyNonArrayOid = 2776;
 //constexpr ui32 AnyCompatibleOid = 5077;
@@ -38,25 +38,31 @@ using TAmOps = THashMap<std::tuple<ui32, ui32, ui32, ui32>, TAmOpDesc>;
 
 using TAmProcs = THashMap<std::tuple<ui32, ui32, ui32, ui32>, TAmProcDesc>;
 
-bool IsCompatibleTo(ui32 actualType, ui32 expectedType, const TTypes& types) {
-    if (!actualType) {
+bool IsCompatibleTo(ui32 actualTypeId, ui32 expectedTypeId, const TTypes& types) {
+    if (actualTypeId == expectedTypeId) {
         return true;
     }
 
-    if (actualType == expectedType) {
+    if (actualTypeId == InvalidOid) {
         return true;
     }
 
-    if (actualType == UnknownOid) {
+    if (actualTypeId == UnknownOid) {
         return true;
     }
 
-    if (expectedType == AnyOid) {
+    if (expectedTypeId == AnyOid) {
         return true;
     }
 
-    if (expectedType == AnyArrayOid) {
-        const auto& actualDescPtr = types.FindPtr(actualType);
+    // TODO: add checks for polymorphic types
+
+    if (expectedTypeId == UnknownOid) {
+        return true;
+    }
+
+    if (expectedTypeId == AnyArrayOid) {
+        const auto& actualDescPtr = types.FindPtr(actualTypeId);
         Y_ENSURE(actualDescPtr);
         return actualDescPtr->ArrayTypeId == actualDescPtr->TypeId;
     }
@@ -430,6 +436,8 @@ public:
             } else {
                 ythrow yexception() << "Unknown typbyval value: " << value;
             }
+        } else if (key == "typispreferred") {
+            LastType.IsPreferred = (value == "t");
         }
     }
 
@@ -1426,25 +1434,711 @@ const TCastDesc& LookupCast(ui32 sourceId, ui32 targetId) {
     return *castPtr;
 }
 
+namespace NPrivate {
+
+constexpr ui64 NoFitScore = 0;
+
+bool CanUseCoercionType(ECoercionCode requiredCoercionLevel, ECoercionCode actualCoercionLevel) {
+    switch (requiredCoercionLevel) {
+        case NYql::NPg::ECoercionCode::Implicit:
+           return actualCoercionLevel == ECoercionCode::Implicit;
+
+        case NYql::NPg::ECoercionCode::Assignment:
+           return (actualCoercionLevel == ECoercionCode::Implicit) || (actualCoercionLevel == ECoercionCode::Assignment);
+
+        case NYql::NPg::ECoercionCode::Explicit:
+           return (actualCoercionLevel != ECoercionCode::Unknown);
+
+        case NYql::NPg::ECoercionCode::Unknown:
+            return false;
+    }
+}
+
+enum class ECoercionSearchResult
+{
+	None,
+	Func,
+	BinaryCompatible,
+	ArrayCoerce,
+	IOCoerce,
+};
+
+ECoercionSearchResult FindCoercionPath(ui32 fromTypeId, ui32 toTypeId, ECoercionCode coercionType, const TCatalog& catalog) {
+    if (fromTypeId == toTypeId) {
+        return ECoercionSearchResult::BinaryCompatible;
+    }
+
+    const auto* castId = catalog.CastsByDir.FindPtr(std::make_pair(fromTypeId, toTypeId));
+    if (castId != nullptr) {
+        const auto* castPtr = catalog.Casts.FindPtr(*castId);
+        Y_ENSURE(castPtr);
+
+        if (!CanUseCoercionType(coercionType, castPtr->CoercionCode)) {
+            return ECoercionSearchResult::None;
+        }
+        switch (castPtr->Method) {
+            case ECastMethod::Function:
+                return ECoercionSearchResult::Func;
+
+            case ECastMethod::Binary:
+                return ECoercionSearchResult::BinaryCompatible;
+
+            case ECastMethod::InOut:
+                return ECoercionSearchResult::IOCoerce;
+        }
+    }
+
+    if (toTypeId != OidVectorOid && toTypeId != Int2VectorOid) {
+        const auto* toTypePtr = catalog.Types.FindPtr(toTypeId);
+        Y_ENSURE(toTypePtr);
+
+        const auto* fromTypePtr = catalog.Types.FindPtr(fromTypeId);
+        Y_ENSURE(fromTypePtr);
+
+        if (IsArrayType(*toTypePtr) && IsArrayType(*fromTypePtr)) {
+            if (FindCoercionPath(fromTypePtr->ElementTypeId, toTypePtr->ElementTypeId, coercionType, catalog) != ECoercionSearchResult::None) {
+                return ECoercionSearchResult::ArrayCoerce;
+            }
+        }
+    }
+
+    if (coercionType == ECoercionCode::Assignment || coercionType == ECoercionCode::Explicit) {
+        const auto* toTypePtr = catalog.Types.FindPtr(toTypeId);
+        Y_ENSURE(toTypePtr);
+
+        if (toTypePtr->Category == 'S') {
+            return ECoercionSearchResult::IOCoerce;
+        }
+
+        if (coercionType == ECoercionCode::Explicit) {
+            const auto* fromTypePtr = catalog.Types.FindPtr(fromTypeId);
+            Y_ENSURE(fromTypePtr);
+
+            if (fromTypePtr->Category == 'S') {
+                return ECoercionSearchResult::IOCoerce;
+            }
+        }
+    }
+
+    return ECoercionSearchResult::None;
+}
+
+bool IsCoercible(ui32 fromTypeId, ui32 toTypeId, ECoercionCode coercionType, const TCatalog& catalog) {
+    if (fromTypeId == toTypeId) {
+        return true;
+    }
+    if (toTypeId == AnyOid) {
+        return true;
+    }
+
+    //TODO: support polymorphic types
+
+    if (fromTypeId == UnknownOid) {
+        return true;
+    }
+
+    if (FindCoercionPath(fromTypeId, toTypeId, coercionType, catalog) != ECoercionSearchResult::None ) {
+        return true;
+    }
+
+    // TODO: support record & complex types
+
+    // TODO: support record array
+
+    // TODO: support inheritance
+
+    if (toTypeId == AnyArrayOid) {
+        const auto& actualDescPtr = catalog.Types.FindPtr(fromTypeId);
+        Y_ENSURE(actualDescPtr);
+        return actualDescPtr->ArrayTypeId == actualDescPtr->TypeId;
+    }
+
+    return false;
+}
+
+bool IsPreferredType(char categoryId, const TTypeDesc& type) {
+    Y_ENSURE(type.Category != InvalidCategory);
+
+    return (categoryId == type.Category) ? type.IsPreferred : false;
+}
+
+constexpr ui32 CoercibleMatchShift = 16;
+constexpr ui64 ArgExactTypeMatch = 1ULL << 2*CoercibleMatchShift;
+constexpr ui64 ArgPreferredTypeMatch = 1ULL << CoercibleMatchShift;
+constexpr ui64 ArgCoercibleTypeMatch = 1ULL;
+constexpr ui64 ArgTypeMismatch = 0;
+
+ui64 CalcArgumentMatchScore(ui32 operArgTypeId, ui32 argTypeId, const TCatalog& catalog) {
+    Y_ENSURE(operArgTypeId != UnknownOid);
+
+    // https://www.postgresql.org/docs/14/typeconv-oper.html, step 2
+    if (argTypeId == operArgTypeId) {
+        return ArgExactTypeMatch;
+    }
+    if (argTypeId == UnknownOid) {
+        return ArgCoercibleTypeMatch;
+    }
+    // https://www.postgresql.org/docs/14/typeconv-oper.html, step 3.c
+    if (IsCoercible(argTypeId, operArgTypeId, ECoercionCode::Implicit, catalog)) {
+        // https://www.postgresql.org/docs/14/typeconv-oper.html, step 3.d
+        const auto& argType = catalog.Types.FindPtr(argTypeId);
+        Y_ENSURE(argType);
+        const auto& operArgType = catalog.Types.FindPtr(operArgTypeId);
+        Y_ENSURE(operArgType);
+
+        return IsPreferredType(argType->Category, *operArgType)
+                   ? ArgPreferredTypeMatch
+                   : ArgCoercibleTypeMatch;
+    }
+
+    // https://www.postgresql.org/docs/14/typeconv-oper.html, step 3.a
+    return ArgTypeMismatch;
+}
+
+ui64 CalcBinaryOperatorScore(const TOperDesc& oper, ui32 leftArgTypeId, ui32 rightArgTypeId, const TCatalog& catalog) {
+    // https://www.postgresql.org/docs/14/typeconv-oper.html, step 2.a
+    if (leftArgTypeId == UnknownOid && rightArgTypeId != InvalidOid) {
+        if (oper.LeftType == rightArgTypeId && oper.RightType == rightArgTypeId) {
+            return ArgExactTypeMatch + ArgExactTypeMatch;
+        }
+    }
+    else if (rightArgTypeId == UnknownOid && leftArgTypeId != InvalidOid) {
+        if (oper.LeftType == leftArgTypeId && oper.RightType == leftArgTypeId) {
+            return ArgExactTypeMatch + ArgExactTypeMatch;
+        }
+    }
+
+    // https://www.postgresql.org/docs/14/typeconv-oper.html, steps 3.a, 3.c, 3.d
+    auto lscore = CalcArgumentMatchScore(oper.LeftType, leftArgTypeId, catalog);
+    auto rscore = CalcArgumentMatchScore(oper.RightType, rightArgTypeId, catalog);
+
+    if (lscore == ArgTypeMismatch || rscore == ArgTypeMismatch) {
+        return ArgTypeMismatch;
+    }
+
+    return lscore + rscore;
+}
+
+ui64 CalcUnaryOperatorScore(const TOperDesc& oper, ui32 argTypeId, const TCatalog& catalog) {
+    return CalcArgumentMatchScore(oper.RightType, argTypeId, catalog);
+}
+
+ui64 CalcProcScore(const TVector<ui32>& procArgTypes, const TVector<ui32>& argTypeIds, const TCatalog& catalog) {
+    ui64 result = 0UL;
+
+    if (argTypeIds.size() != procArgTypes.size()) {
+        return ArgTypeMismatch;
+    }
+
+    for (size_t i = 0; i < argTypeIds.size(); ++i) {
+        auto score = CalcArgumentMatchScore(procArgTypes[i], argTypeIds[i], catalog);
+
+        if (score == ArgTypeMismatch) {
+            return ArgTypeMismatch;
+        }
+        result += score;
+    }
+    return result;
+}
+
+[[noreturn]] void ThrowOperatorNotFound(const TString& name, const TVector<ui32>& argTypeIds) {
+    throw yexception() << "Unable to find an overload for operator " << name << " with given argument type(s): "
+        << ArgTypesList(argTypeIds);
+}
+
+[[noreturn]] void ThrowOperatorAmbiguity(const TString& name, const TVector<ui32>& argTypeIds) {
+    throw yexception() << "Ambiguity for operator " << name << " with given argument type(s): "
+        << ArgTypesList(argTypeIds);
+}
+
+[[noreturn]] void ThrowProcNotFound(const TString& name, const TVector<ui32>& argTypeIds) {
+    throw yexception() << "Unable to find an overload for proc " << name << " with given argument types: "
+        << ArgTypesList(argTypeIds);
+}
+
+[[noreturn]] void ThrowProcAmbiguity(const TString& name, const TVector<ui32>& argTypeIds) {
+    throw yexception() << "Ambiguity for proc " << name << " with given argument type(s): "
+        << ArgTypesList(argTypeIds);
+}
+
+[[noreturn]] void ThrowAggregateNotFound(const TString& name, const TVector<ui32>& argTypeIds) {
+    throw yexception() << "Unable to find an overload for aggregate " << name << " with given argument types: "
+        << ArgTypesList(argTypeIds);
+}
+
+[[noreturn]] void ThrowAggregateAmbiguity(const TString& name, const TVector<ui32>& argTypeIds) {
+    throw yexception() << "Ambiguity for aggregate " << name << " with given argument type(s): "
+        << ArgTypesList(argTypeIds);
+}
+
+struct TCommonCategoryDesc {
+    size_t Position;
+    char Category = InvalidCategory;
+    bool IsPreferred = false;
+
+    TCommonCategoryDesc(size_t position, char category, bool isPreferred)
+    : Position(position), Category(category), IsPreferred(isPreferred) {}
+};
+
+template <class C>
+char FindCommonCategory(const TVector<const C*> &candidates, std::function<ui32(const C*)> getTypeId, const TCatalog &catalog, bool &isPreferred) {
+    char category = InvalidCategory;
+    auto isConflict = false;
+    isPreferred = false;
+
+    for (const auto* candidate : candidates) {
+        const auto argTypeId = getTypeId(candidate); 
+        const auto& argTypePtr = catalog.Types.FindPtr(argTypeId);
+        Y_ENSURE(argTypePtr);
+
+        if (InvalidCategory == category) {
+            category = argTypePtr->Category;
+            isPreferred = argTypePtr->IsPreferred;
+        } else if (category == argTypePtr->Category) {
+            isPreferred |= argTypePtr->IsPreferred;
+        } else {
+            if (argTypePtr->Category == 'S') {
+                category = argTypePtr->Category;
+                isPreferred = argTypePtr->IsPreferred;
+            } else {
+                isConflict = true;
+            }
+        }
+    }
+    if (isConflict && category != 'S') {
+        isPreferred = false;
+        return InvalidCategory;
+    }
+    return category;
+}
+
+template <class C>
+TVector<const C*> TryResolveUnknownsByCategory(const TVector<const C*>& candidates, const TVector<ui32>& argTypeIds, const TCatalog& catalog) {
+    TVector<NPrivate::TCommonCategoryDesc> argCommonCategory;
+
+    size_t unknownsCnt = 0;
+
+    for (size_t i = 0; i < argTypeIds.size(); ++i) {
+        if (argTypeIds[i] != UnknownOid) {
+            continue;
+        }
+        ++unknownsCnt;
+
+        char category = InvalidCategory;
+        bool isPreferred = false;
+
+        std::function<ui32(const C *)> typeGetter = [i] (const auto* candidate) {
+            return candidate->ArgTypes[i];
+        };
+
+        if (InvalidCategory != (category = NPrivate::FindCommonCategory<C>(candidates, typeGetter, catalog, isPreferred))) {
+            argCommonCategory.emplace_back(i, category, isPreferred);
+        }
+    }
+    if (argCommonCategory.size() < unknownsCnt) {
+        return candidates;
+    }
+    
+    TVector<const C*> filteredCandidates;
+
+    for (const auto* candidate : candidates) {
+        auto keepIt = true;
+
+        for (const auto& category : argCommonCategory) {
+            const auto argTypeId = candidate->ArgTypes[category.Position];
+
+            const auto& argTypePtr = catalog.Types.FindPtr(argTypeId);
+            Y_ENSURE(argTypePtr);
+
+            if (argTypePtr->Category != category.Category) {
+                keepIt = false;
+                break;
+            }
+            if (category.IsPreferred && !argTypePtr->IsPreferred) {
+                keepIt = false;
+                break;
+            }
+        }
+        if (keepIt) {
+            filteredCandidates.push_back(candidate);
+        }
+    }
+
+    return filteredCandidates.empty() ? candidates : filteredCandidates;
+}
+
+template <>
+TVector<const TOperDesc*> TryResolveUnknownsByCategory<TOperDesc>(const TVector<const TOperDesc*>& candidates, const TVector<ui32>& argTypeIds, const TCatalog& catalog) {
+    TVector<NPrivate::TCommonCategoryDesc> argCommonCategory;
+
+    size_t unknownsCnt = 0;
+
+    for (size_t i = 0; i < argTypeIds.size(); ++i) {
+        if (argTypeIds[i] != UnknownOid) {
+            continue;
+        }
+        ++unknownsCnt;
+
+        char category = InvalidCategory;
+        bool isPreferred = false;
+
+        std::function <ui32(const TOperDesc*)> typeGetter;
+        if (i == 1) {
+            typeGetter = [] (const auto* candidate) {
+                return candidate->RightType;
+            };
+        } else {
+            typeGetter = [] (const auto* candidate) {
+                return (candidate->Kind == EOperKind::Binary)
+                    ? candidate->LeftType
+                    : candidate->RightType;
+            };
+        }
+
+        if (InvalidCategory != (category = NPrivate::FindCommonCategory<TOperDesc>(candidates, typeGetter, catalog, isPreferred))) {
+            argCommonCategory.emplace_back(i, category, isPreferred);
+        }
+    }
+    if (argCommonCategory.size() < unknownsCnt) {
+        return candidates;
+    }
+    
+    TVector<const TOperDesc*> filteredCandidates;
+
+    for (const auto* candidate : candidates) {
+        auto keepIt = true;
+
+        for (const auto& category : argCommonCategory) {
+            const auto argTypeId = (category.Position == 1)
+                ? candidate->RightType
+                : (candidate->Kind == EOperKind::Binary) ? candidate->LeftType : candidate->RightType;
+
+            const auto& argTypePtr = catalog.Types.FindPtr(argTypeId);
+            Y_ENSURE(argTypePtr);
+
+            if (argTypePtr->Category != category.Category) {
+                keepIt = false;
+                break;
+            }
+            if (category.IsPreferred && !argTypePtr->IsPreferred) {
+                keepIt = false;
+                break;
+            }
+        }
+        if (keepIt) {
+            filteredCandidates.push_back(candidate);
+        }
+    }
+
+    return filteredCandidates.empty() ? candidates : filteredCandidates;
+}
+
+bool CanCastImplicitly(ui32 fromTypeId, ui32 toTypeId, const TCatalog& catalog) {
+    const auto* castId = catalog.CastsByDir.FindPtr(std::make_pair(fromTypeId, toTypeId));
+    if (!castId) {
+        return false;
+    }
+    const auto* castPtr = catalog.Casts.FindPtr(*castId);
+    Y_ENSURE(castPtr);
+
+    return (castPtr->CoercionCode == ECoercionCode::Implicit);
+}
+
+}  // NPrivate
+
+std::variant<const TProcDesc*, const TTypeDesc*> LookupProcWithCasts(const TString& name, const TVector<ui32>& argTypeIds) {
+    const auto& catalog = TCatalog::Instance();
+    auto procIdPtr = catalog.ProcByName.FindPtr(to_lower(name));
+    if (!procIdPtr) {
+        throw yexception() << "No such proc: " << name;
+    }
+
+    auto bestScore = NPrivate::NoFitScore;
+    TVector<const TProcDesc*> candidates;
+
+    for (const auto& id : *procIdPtr) {
+        const auto& d = catalog.Procs.FindPtr(id);
+        Y_ENSURE(d);
+
+        if (argTypeIds == d->ArgTypes) {
+            // At most one exact match is possible, so look no further
+            // https://www.postgresql.org/docs/14/typeconv-func.html, step 2
+            return d;
+        }
+
+        // https://www.postgresql.org/docs/14/typeconv-func.html, steps 4.a, 4.c, 4.d
+        auto score = NPrivate::CalcProcScore(d->ArgTypes, argTypeIds, catalog);
+
+        if (bestScore < score) {
+            bestScore = score;
+
+            candidates.clear();
+            candidates.push_back(d);
+        } else if (bestScore == score && NPrivate::NoFitScore < score) {
+            candidates.push_back(d);
+        }
+    }
+
+    // check, if it's a form of typecast
+    // https://www.postgresql.org/docs/14/typeconv-func.html, step 3
+    if (argTypeIds.size() == 1) {
+        const auto typeIdPtr = catalog.TypeByName.FindPtr(to_lower(name));
+
+        if (typeIdPtr) {
+            const auto typePtr = catalog.Types.FindPtr(*typeIdPtr);
+            Y_ENSURE(typePtr);
+
+            const auto fromTypeId = argTypeIds[0];
+
+            if (fromTypeId == UnknownOid) {
+                return typePtr;
+            }
+
+            const auto coercionType = NPrivate::FindCoercionPath(fromTypeId, typePtr->TypeId,
+                ECoercionCode::Explicit, catalog);
+
+            switch (coercionType) {
+                case NPrivate::ECoercionSearchResult::BinaryCompatible:
+                    return typePtr;
+
+                case NPrivate::ECoercionSearchResult::IOCoerce:
+                    if (!(fromTypeId == RecordOid /* || TODO: IsComplex */ && typePtr->Category == 'S')) {
+                        return typePtr;
+                    }
+                default:
+                    break;
+            }
+        }
+    }
+
+    switch (candidates.size()) {
+        case 1:
+            // https://www.postgresql.org/docs/14/typeconv-func.html, end of steps 4.a, 4.c or 4.d
+            return candidates[0];
+
+        case 0:
+            NPrivate::ThrowProcNotFound(name, argTypeIds);
+    }
+
+    // https://www.postgresql.org/docs/14/typeconv-func.html, step 4.e
+    const size_t unknownsCount = std::count(argTypeIds.cbegin(), argTypeIds.cend(), UnknownOid);
+    if (0 == unknownsCount) {
+        NPrivate::ThrowProcNotFound(name, argTypeIds);
+    }
+
+    // https://www.postgresql.org/docs/14/typeconv-funcr.html, step 4.e
+    candidates = NPrivate::TryResolveUnknownsByCategory<TProcDesc>(candidates, argTypeIds, catalog);
+
+    if (1 == candidates.size()) {
+        // https://www.postgresql.org/docs/14/typeconv-func.html, end of step 4.e
+        return candidates[0];
+    }
+
+    // https://www.postgresql.org/docs/14/typeconv-func.html, step 4.f
+    if (unknownsCount < argTypeIds.size()) {
+        ui32 commonType = UnknownOid;
+
+        for (const auto argType: argTypeIds) {
+            if (argType == UnknownOid) {
+                continue;
+            }
+            if (commonType == UnknownOid) {
+                commonType = argType;
+                continue;
+            }
+            if (argType != commonType) {
+                commonType = UnknownOid;
+                break;
+            }
+        }
+
+        if (commonType != UnknownOid) {
+            const TProcDesc* finalCandidate = nullptr;
+
+            for (const auto* candidate : candidates) {
+                for (size_t i = 0; i < argTypeIds.size(); ++i) {
+                    if (NPrivate::IsCoercible(commonType, candidate->ArgTypes[i], ECoercionCode::Implicit, catalog)) {
+                        if (finalCandidate) {
+                            NPrivate::ThrowProcAmbiguity(name, argTypeIds);
+                        }
+                        finalCandidate = candidate;
+                    }
+                }
+            }
+
+            if (finalCandidate) {
+                return finalCandidate;
+            }
+        }
+    }
+    NPrivate::ThrowProcNotFound(name, argTypeIds);
+}
+
+const TTypeDesc& LookupCommonType(const TVector<ui32>& typeIds, bool& castsNeeded) {
+    if (0 == typeIds.size()) {
+        throw yexception() << "Cannot infer common type for empty list of types";
+    }
+    const auto& catalog = TCatalog::Instance();
+
+    const TTypeDesc* commonType = &LookupType(typeIds[0]);
+    char commonCategory = commonType->Category;
+    size_t unknownsCnt = (commonType->TypeId == UnknownOid) ? 1 : 0;
+    castsNeeded = false;
+    for (auto typeId = typeIds.cbegin() + 1; typeId != typeIds.cend(); ++typeId) {
+        if (*typeId == UnknownOid || *typeId == InvalidOid) {
+            ++unknownsCnt;
+            castsNeeded = true;
+            continue;
+        }
+        if (Y_LIKELY(*typeId == commonType->TypeId)) {
+            continue;
+        }
+        const TTypeDesc& otherType = LookupType(*typeId);
+        if (commonType->TypeId == UnknownOid) {
+            commonType = &otherType;
+            commonCategory = otherType.Category;
+            continue;
+        }
+        if (otherType.Category != commonCategory) {
+            // https://www.postgresql.org/docs/14/typeconv-union-case.html, step 4
+            throw yexception() << "Cannot infer common type for types "
+                << commonType->TypeId << " and " << otherType.TypeId;
+        }
+        castsNeeded = true;
+        if (NPrivate::CanCastImplicitly(otherType.TypeId, commonType->TypeId, catalog)) {
+            continue;
+        }
+        if (commonType->IsPreferred || !NPrivate::CanCastImplicitly(commonType->TypeId, otherType.TypeId, catalog)) {
+            throw yexception() << "Cannot infer common type for types "
+                << commonType->TypeId << " and " << otherType.TypeId;
+        }
+        commonType = &otherType;
+    }
+    // https://www.postgresql.org/docs/14/typeconv-union-case.html, step 3
+    if (unknownsCnt == typeIds.size()) {
+        return LookupType("text");
+    }
+    return *commonType;
+}
+
+const TTypeDesc& LookupCommonType(const TVector<ui32>& typeIds) {
+    bool _;
+    return LookupCommonType(typeIds, _);
+}
+
+
 const TOperDesc& LookupOper(const TString& name, const TVector<ui32>& argTypeIds) {
     const auto& catalog = TCatalog::Instance();
+
     auto operIdPtr = catalog.OperatorsByName.FindPtr(to_lower(name));
     if (!operIdPtr) {
         throw yexception() << "No such operator: " << name;
     }
 
-    for (const auto& id : *operIdPtr) {
-        const auto& d = catalog.Operators.FindPtr(id);
-        Y_ENSURE(d);
-        if (!ValidateOperArgs(*d, argTypeIds, catalog.Types)) {
+    EOperKind expectedOpKind;
+    std::function<ui64(const TOperDesc*)> calcScore;
+
+    switch (argTypeIds.size()) {
+        case 2:
+            expectedOpKind = EOperKind::Binary;
+            calcScore = [&] (const auto* d) {
+                 return NPrivate::CalcBinaryOperatorScore(*d, argTypeIds[0], argTypeIds[1], catalog);
+                 };
+            break;
+
+        case 1:
+            expectedOpKind = EOperKind::LeftUnary;
+            calcScore = [&] (const auto* d) {
+                return NPrivate::CalcUnaryOperatorScore(*d, argTypeIds[0], catalog);
+                };
+            break;
+
+        default:
+            throw yexception() << "Operator's number of arguments should be 1 or 2, got: " << argTypeIds.size();
+    }
+
+    auto bestScore = NPrivate::NoFitScore;
+    TVector<const TOperDesc*> candidates;
+    const ui64 maxPossibleScore = NPrivate::ArgExactTypeMatch * argTypeIds.size();
+
+    for (const auto& operId : *operIdPtr) {
+        const auto& oper = catalog.Operators.FindPtr(operId);
+        Y_ENSURE(oper);
+
+        if (expectedOpKind != oper->Kind) {
             continue;
         }
 
-        return *d;
+        auto score = calcScore(oper);
+
+        if (maxPossibleScore == score) {
+            // The only exact match is possible, so look no further
+            // https://www.postgresql.org/docs/14/typeconv-oper.html, step 2
+            return *oper;
+        }
+
+        // https://www.postgresql.org/docs/14/typeconv-oper.html, steps 3.a, 3.c, 3.d
+        if (bestScore < score) {
+            bestScore = score;
+
+            candidates.clear();
+            candidates.push_back(oper);
+        } else if (bestScore == score && NPrivate::NoFitScore < score) {
+            candidates.push_back(oper);
+        }
     }
 
-    throw yexception() << "Unable to find an overload for operator " << name << " with given argument types: "
-        << ArgTypesList(argTypeIds);
+    switch (candidates.size()) {
+        case 1:
+            // https://www.postgresql.org/docs/14/typeconv-oper.html, end of steps 3.a, 3.c or 3.d
+            return *candidates[0];
+
+        case 0:
+            NPrivate::ThrowOperatorNotFound(name, argTypeIds);
+    }
+
+    if (!(argTypeIds[0] == UnknownOid || (2 == argTypeIds.size() && argTypeIds[1] == UnknownOid))) {
+        NPrivate::ThrowOperatorNotFound(name, argTypeIds);
+    }
+
+    // https://www.postgresql.org/docs/14/typeconv-oper.html, step 3.e
+    candidates = NPrivate::TryResolveUnknownsByCategory<TOperDesc>(candidates, argTypeIds, catalog);
+
+    if (1 == candidates.size()) {
+        // https://www.postgresql.org/docs/14/typeconv-oper.html, end of step 3.e
+        return *candidates[0];
+    }
+
+    // https://www.postgresql.org/docs/14/typeconv-oper.html, step 3.f
+    if (EOperKind::LeftUnary == expectedOpKind) {
+        NPrivate::ThrowOperatorNotFound(name, argTypeIds);
+    }
+
+    auto TryResolveUnknownsBySpreadingType = [&] (ui32 argTypeId, std::function<ui32(const TOperDesc*)> getArgType) {
+        const TOperDesc* finalCandidate = nullptr;
+
+        for (const auto* candidate : candidates) {
+            if (NPrivate::IsCoercible(argTypeId, getArgType(candidate), ECoercionCode::Implicit, catalog)) {
+                if (finalCandidate) {
+                    NPrivate::ThrowOperatorAmbiguity(name, argTypeIds);
+                }
+                finalCandidate = candidate;
+            }
+        }
+        return finalCandidate;
+    };
+
+    const TOperDesc* finalCandidate = nullptr;
+    if (argTypeIds[0] == UnknownOid) {
+        finalCandidate = TryResolveUnknownsBySpreadingType(argTypeIds[1], [&] (const auto* oper) { return oper->LeftType; });
+    } else if (argTypeIds[1] == UnknownOid) {
+        finalCandidate = TryResolveUnknownsBySpreadingType(argTypeIds[0], [&] (const auto* oper) { return oper->RightType; });
+    }
+
+    if (finalCandidate) {
+        return *finalCandidate;
+    }
+    NPrivate::ThrowOperatorNotFound(name, argTypeIds);
 }
 
 const TOperDesc& LookupOper(ui32 operId, const TVector<ui32>& argTypeIds) {
@@ -1502,18 +2196,93 @@ const TAggregateDesc& LookupAggregation(const TString& name, const TVector<ui32>
         throw yexception() << "No such aggregate: " << name;
     }
 
+    auto bestScore = NPrivate::NoFitScore;
+    TVector<const TAggregateDesc*> candidates;
+
     for (const auto& id : *aggIdPtr) {
         const auto& d = catalog.Aggregations.FindPtr(id);
         Y_ENSURE(d);
-        if (!ValidateAggregateArgs(*d, argTypeIds)) {
-            continue;
+
+        if (argTypeIds == d->ArgTypes) {
+            // At most one exact match is possible, so look no further
+            // https://www.postgresql.org/docs/14/typeconv-func.html, step 2
+            return *d;
         }
 
-        return *d;
+        // https://www.postgresql.org/docs/14/typeconv-func.html, steps 4.a, 4.c, 4.d
+        auto score = NPrivate::CalcProcScore(d->ArgTypes, argTypeIds, catalog);
+
+        if (bestScore < score) {
+            bestScore = score;
+
+            candidates.clear();
+            candidates.push_back(d);
+        } else if (bestScore == score && NPrivate::NoFitScore < score) {
+            candidates.push_back(d);
+        }
     }
 
-    throw yexception() << "Unable to find an overload for aggregate " << name << " with given argument types: "
-        << ArgTypesList(argTypeIds);
+    switch (candidates.size()) {
+        case 1:
+            // https://www.postgresql.org/docs/14/typeconv-func.html, end of steps 4.a, 4.c or 4.d
+            return *candidates[0];
+
+        case 0:
+            NPrivate::ThrowAggregateNotFound(name, argTypeIds);
+    }
+
+    // https://www.postgresql.org/docs/14/typeconv-func.html, step 4.e
+    const size_t unknownsCount = std::count(argTypeIds.cbegin(), argTypeIds.cend(), UnknownOid);
+    if (0 == unknownsCount) {
+        NPrivate::ThrowAggregateNotFound(name, argTypeIds);
+    }
+
+    // https://www.postgresql.org/docs/14/typeconv-funcr.html, step 4.e
+    candidates = NPrivate::TryResolveUnknownsByCategory<TAggregateDesc>(candidates, argTypeIds, catalog);
+
+    if (1 == candidates.size()) {
+        // https://www.postgresql.org/docs/14/typeconv-func.html, end of step 4.e
+        return *candidates[0];
+    }
+
+    // https://www.postgresql.org/docs/14/typeconv-func.html, step 4.f
+    if (unknownsCount < argTypeIds.size()) {
+        ui32 commonType = UnknownOid;
+
+        for (const auto argType: argTypeIds) {
+            if (argType == UnknownOid) {
+                continue;
+            }
+            if (commonType == UnknownOid) {
+                commonType = argType;
+                continue;
+            }
+            if (argType != commonType) {
+                commonType = UnknownOid;
+                break;
+            }
+        }
+
+        if (commonType != UnknownOid) {
+            const TAggregateDesc* finalCandidate = nullptr;
+
+            for (const auto* candidate : candidates) {
+                for (size_t i = 0; i < argTypeIds.size(); ++i) {
+                    if (NPrivate::IsCoercible(commonType, candidate->ArgTypes[i], ECoercionCode::Implicit, catalog)) {
+                        if (finalCandidate) {
+                            NPrivate::ThrowAggregateAmbiguity(name, argTypeIds);
+                        }
+                        finalCandidate = candidate;
+                    }
+                }
+            }
+
+            if (finalCandidate) {
+                return *finalCandidate;
+            }
+        }
+    }
+    NPrivate::ThrowAggregateNotFound(name, argTypeIds);
 }
 
 const TAggregateDesc& LookupAggregation(const TString& name, ui32 stateType, ui32 resultType) {

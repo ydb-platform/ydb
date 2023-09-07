@@ -358,10 +358,10 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
                     '('set_items '((PgSetItem
                         '('('emit_pg_star)
                         '('result '((PgResultItem '"" (Void) (lambda '() (PgStar)))
-                            (PgResultItem '"kind" (Void) (lambda '() (PgConst '"test" (PgType 'text))))))
+                            (PgResultItem '"kind" (Void) (lambda '() (PgConst '"test" (PgType 'unknown))))))
                         '('from '('((Right! read0) '"input" '())))
                         '('join_ops '('()))
-                        '('where (PgWhere (Void) (lambda '() (PgOp '"=" (PgColumnRef '"kind") (PgConst '"testtest" (PgType 'text))))))))))
+                        '('where (PgWhere (Void) (lambda '() (PgOp '"=" (PgColumnRef '"kind") (PgConst '"testtest" (PgType 'unknown))))))))))
                         '('set_ops '('push)))
                     )
                 )

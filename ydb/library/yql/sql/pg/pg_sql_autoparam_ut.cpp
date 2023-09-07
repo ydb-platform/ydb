@@ -121,7 +121,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
     Y_UNIT_TEST(AutoParamStmt_Int4Text) {
         TString query = R"(insert into plato.Output values (1,'2'), (3,'4'))";
         TString expectedParamJson = R"(
-            {"type":{"list_type":{"item":{"tuple_type":{"elements":[{"pg_type":{"oid":23}},{"pg_type":{"oid":25}}]}}}},
+            {"type":{"list_type":{"item":{"tuple_type":{"elements":[{"pg_type":{"oid":23}},{"pg_type":{"oid":705}}]}}}},
             "value":{"items":[{"items":[{"text_value":"1"},{"text_value":"2"}]},{"items":[{"text_value":"3"},{"text_value":"4"}]}]}}
         )";
         TestAutoParam(query, {{"a0", expectedParamJson}});
@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
             insert into plato.Output1 values (1.23);
         )";
         TString expectedParamJson0 = R"(
-            {"type":{"list_type":{"item":{"tuple_type":{"elements":[{"pg_type":{"oid":23}},{"pg_type":{"oid":25}}]}}}},
+            {"type":{"list_type":{"item":{"tuple_type":{"elements":[{"pg_type":{"oid":23}},{"pg_type":{"oid":705}}]}}}},
             "value":{"items":[{"items":[{"text_value":"1"},{"text_value":"2"}]},{"items":[{"text_value":"3"},{"text_value":"4"}]}]}}
         )";
         TString expectedParamJson1 = R"(
@@ -148,7 +148,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
            insert into plato.Output values (null, '2'), (3, '4')
         )";
         TString expectedParamJson = R"(
-            {"type":{"list_type":{"item":{"tuple_type":{"elements":[{"pg_type":{"oid":23}},{"pg_type":{"oid":25}}]}}}},
+            {"type":{"list_type":{"item":{"tuple_type":{"elements":[{"pg_type":{"oid":23}},{"pg_type":{"oid":705}}]}}}},
             "value":{"items":[{"items":[{"null_flag_value":"NULL_VALUE"},{"text_value":"2"}]},{"items":[{"text_value":"3"},{"text_value":"4"}]}]}}
         )";
         TestAutoParam(query, {{"a0", expectedParamJson}});

@@ -5823,9 +5823,6 @@ bool ExtractPgType(const TTypeAnnotationNode* type, ui32& pgType, bool& convertT
         return false;
     } else {
         pgType = type->Cast<TPgExprType>()->GetId();
-        if (NPg::LookupType(pgType).Name == "unknown") {
-            pgType = 0;
-        }
 
         return true;
     }

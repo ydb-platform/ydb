@@ -3215,7 +3215,9 @@ ui32 TPgExprType::GetFlags(ui32 typeId) {
     }
 
     if (!desc.EqualProcId || !desc.CompareProcId) {
-        ret |= TypeNonEquatable;
+        if (desc.TypeId != NPg::UnknownOid) {
+            ret |= TypeNonEquatable;
+        }
     }
 
     if (!desc.HashProcId) {

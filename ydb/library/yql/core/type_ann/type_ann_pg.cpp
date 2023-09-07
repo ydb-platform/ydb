@@ -17,6 +17,16 @@ namespace NYql {
 
 namespace NTypeAnnImpl {
 
+bool IsCastRequired(ui32 fromTypeId, ui32 toTypeId) {
+    if (toTypeId == fromTypeId) {
+        return false;
+    }
+    if (toTypeId == NPg::AnyOid || toTypeId == NPg::AnyArrayOid) {
+        return false;
+    }
+    return true;
+}
+
 bool AdjustUnknownType(TVector<const TItemExprType*>& outputItems, TExprContext& ctx) {
     bool replaced = false;
     for (auto& item : outputItems) {
@@ -53,6 +63,17 @@ bool ValidateInputTypes(TExprNode& node, TExprContext& ctx) {
 
     return true;
 }
+
+TExprNodePtr WrapWithPgCast(TExprNodePtr&& node, ui32 targetTypeId, TContext& ctx) {
+    return ctx.Expr.Builder(node->Pos())
+        .Callable("PgCast")
+            .Add(0, std::move(node))
+            .Callable(1, "PgType")
+                .Atom(0, NPg::LookupType(targetTypeId).Name)
+                .Seal()
+        .Seal()
+        .Build();
+};
 
 IGraphTransformer::TStatus PgStarWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     Y_UNUSED(output);
@@ -154,11 +175,24 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
         return IGraphTransformer::TStatus::Ok;
     } else {
         try {
-            const auto& proc = NPg::LookupProc(TString(name), argTypes);
+            const auto procOrType = NPg::LookupProcWithCasts(TString(name), argTypes);
             auto children = input->ChildrenList();
-            auto idNode = ctx.Expr.NewAtom(input->Pos(), ToString(proc.ProcId));
-            children.insert(children.begin() + 1, idNode);
-            output = ctx.Expr.NewCallable(input->Pos(), "PgResolvedCall", std::move(children));
+            if (const auto* procPtr = std::get_if<const NPg::TProcDesc*>(&procOrType)) {
+                auto idNode = ctx.Expr.NewAtom(input->Pos(), ToString((*procPtr)->ProcId));
+                children.insert(children.begin() + 1, idNode);
+
+                const auto& fargTypes = (*procPtr)->ArgTypes;
+                for (size_t i = 0; i < argTypes.size(); ++i) {
+                    if (IsCastRequired(argTypes[i], fargTypes[i])) {
+                        children[i+3] = WrapWithPgCast(std::move(children[i+3]), fargTypes[i], ctx);
+                    }
+                }
+                output = ctx.Expr.NewCallable(input->Pos(), "PgResolvedCall", std::move(children));
+            } else if (const auto* typePtr = std::get_if<const NPg::TTypeDesc*>(&procOrType)) {
+                output = WrapWithPgCast(std::move(children[2]), (*typePtr)->TypeId, ctx);
+            } else {
+                Y_UNREACHABLE();
+            }
             return IGraphTransformer::TStatus::Repeat;
         } catch (const yexception& e) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), e.what()));
@@ -388,6 +422,28 @@ IGraphTransformer::TStatus PgOpWrapper(const TExprNode::TPtr& input, TExprNode::
         try {
             const auto& oper = NPg::LookupOper(TString(name), argTypes);
             auto children = input->ChildrenList();
+
+            switch(oper.Kind) {
+                case NPg::EOperKind::LeftUnary:
+                    if (IsCastRequired(argTypes[0], oper.RightType)) {
+                        children[1] = WrapWithPgCast(std::move(children[1]), oper.RightType, ctx);
+                    }
+                    break;
+
+                case NYql::NPg::EOperKind::Binary:
+                    if (IsCastRequired(argTypes[0], oper.LeftType)) {
+                        children[1] = WrapWithPgCast(std::move(children[1]), oper.LeftType, ctx);
+                    }
+                    if (IsCastRequired(argTypes[1], oper.RightType)) {
+                        children[2] = WrapWithPgCast(std::move(children[2]), oper.RightType, ctx);
+                    }
+                    break;
+
+                default:
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                        TStringBuilder() << "Right unary operator " << oper.OperId << " is not supported"));
+                    return IGraphTransformer::TStatus::Error;
+            }
             auto idNode = ctx.Expr.NewAtom(input->Pos(), ToString(oper.OperId));
             children.insert(children.begin() + 1, idNode);
             output = ctx.Expr.NewCallable(input->Pos(), "PgResolvedOp", std::move(children));
@@ -592,7 +648,6 @@ IGraphTransformer::TStatus PgColumnRefWrapper(const TExprNode::TPtr& input, TExp
 }
 
 IGraphTransformer::TStatus PgResultItemWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-    Y_UNUSED(output);
     if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -633,6 +688,23 @@ IGraphTransformer::TStatus PgResultItemWrapper(const TExprNode::TPtr& input, TEx
     }
 
     if (!lambda->GetTypeAnn()) {
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    if (lambda->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg &&
+        lambda->GetTypeAnn()->Cast<TPgExprType>()->GetId() == NPg::UnknownOid)
+    {
+        output = ctx.Expr.ChangeChild(*input, 2U,
+            ctx.Expr.NewLambda(lambda->Pos(), std::move(lambda->Child(0U)),
+                ctx.Expr.Builder(lambda->Pos())
+                    .Callable("PgCast")
+                        .Add(0, lambda->ChildPtr(1U))
+                        .Callable(1, "PgType")
+                            .Atom(0, "text")
+                            .Seal()
+                    .Seal()
+                    .Build()));
+
         return IGraphTransformer::TStatus::Repeat;
     }
 
@@ -1028,7 +1100,7 @@ IGraphTransformer::TStatus PgCastWrapper(const TExprNode::TPtr& input, TExprNode
         bool fail = false;
         const auto& rawInputDesc = NPg::LookupType(inputTypeId);
         const NPg::TTypeDesc* inputDescPtr = &rawInputDesc;
-        if (rawInputDesc.Name == "unknown") {
+        if (rawInputDesc.TypeId == NPg::UnknownOid) {
             inputDescPtr = &NPg::LookupType("text");
         }
 
@@ -1152,6 +1224,12 @@ IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& inp
     }
 
     const NPg::TAggregateDesc& aggDesc = *aggDescPtr;
+    for (size_t i = 0; i < argTypes.size(); ++i) {
+        if (IsCastRequired(argTypes[i], aggDesc.ArgTypes[i])) {
+            auto& argNode = lambda->ChildRef(i+1);
+            argNode = WrapWithPgCast(std::move(argNode), aggDesc.ArgTypes[i], ctx);
+        }
+    }
     output = ExpandPgAggregationTraits(input->Pos(), aggDesc, onWindow, lambda, argTypes, itemType, ctx.Expr);
     return IGraphTransformer::TStatus::Repeat;
 }
@@ -4208,26 +4286,29 @@ IGraphTransformer::TStatus PgArrayWrapper(const TExprNode::TPtr& input, TExprNod
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    auto elemType = argTypes.front();
-    for (ui32 i = 1; i < argTypes.size(); ++i) {
-        if (elemType == 0) {
-            elemType = argTypes[i];
-        } else if (argTypes[i] != 0 && argTypes[i] != elemType) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                TStringBuilder() << "Mismatch of array type elements: " <<
-                    NPg::LookupType(elemType).Name << " and " << NPg::LookupType(argTypes[i]).Name));
-            return IGraphTransformer::TStatus::Error;
-        }
-    }
-
-    if (!elemType) {
-        elemType = NPg::LookupType("text").TypeId;
-    }
+    bool castsNeeded = false;
+    auto elemTypeDesc = NPg::LookupCommonType(argTypes, castsNeeded);
+    auto elemType = elemTypeDesc.TypeId;
 
     const auto& typeInfo = NPg::LookupType(elemType);
     auto result = ctx.Expr.MakeType<TPgExprType>(typeInfo.ArrayTypeId);
+
     input->SetTypeAnn(result);
-    return IGraphTransformer::TStatus::Ok;
+    if (!castsNeeded) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    TExprNode::TListType castArrayElems;
+    for (ui32 i = 0; i < argTypes.size(); ++i) {
+        auto child = input->ChildPtr(i);
+        if (argTypes[i] == elemType) {
+            castArrayElems.push_back(child);
+        } else {
+            castArrayElems.push_back(WrapWithPgCast(std::move(child), elemType, ctx));
+        }
+    }
+    output = ctx.Expr.NewCallable(input->Pos(), "PgArray", std::move(castArrayElems));
+    return IGraphTransformer::TStatus::Repeat;
 }
 
 IGraphTransformer::TStatus PgTypeModWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -4330,12 +4411,18 @@ IGraphTransformer::TStatus PgLikeWrapper(const TExprNode::TPtr& input, TExprNode
         return IGraphTransformer::TStatus::Repeat;
     }
 
+    const auto textTypeId = NPg::LookupType("text").TypeId;
     for (ui32 i = 0; i < argTypes.size(); ++i) {
         if (!argTypes[i]) {
             continue;
         }
 
-        if (argTypes[i] != NPg::LookupType("text").TypeId) {
+        if (argTypes[i] != textTypeId) {
+            if (argTypes[i] == NPg::UnknownOid) {
+                auto& argNode = input->ChildRef(i);
+                argNode = WrapWithPgCast(std::move(argNode), textTypeId, ctx);
+                return IGraphTransformer::TStatus::Repeat;
+            }
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
                 TStringBuilder() << "Expected pg text, but got " << NPg::LookupType(argTypes[i]).Name));
             return IGraphTransformer::TStatus::Error;
@@ -4400,6 +4487,33 @@ IGraphTransformer::TStatus PgInWrapper(const TExprNode::TPtr& input, TExprNode::
     }
 
     if (itemTypePg && inputTypePg && itemTypePg != inputTypePg) {
+        if (inputTypePg == NPg::UnknownOid) {
+
+            input->ChildRef(0) = WrapWithPgCast(std::move(input->Child(0)), itemTypePg, ctx);
+            return IGraphTransformer::TStatus::Repeat;
+        }
+        if (itemTypePg == NPg::UnknownOid) {
+            output = ctx.Expr.Builder(input->Pos())
+                .Callable("PgIn")
+                    .Add(0, input->ChildPtr(0))
+                    .Callable(1, "Map")
+                        .Add(0, input->ChildPtr(1))
+                        .Lambda(1)
+                            .Param("x")
+                            .Callable("PgCast")
+                                .Arg(0, "x")
+                                .Callable(1, "PgType")
+                                    .Atom(0, NPg::LookupType(inputTypePg).Name)
+                                .Seal()
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Build();
+
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
             TStringBuilder() << "Mismatch of types in IN expressions: " <<
             NPg::LookupType(inputTypePg).Name << " is not equal to " << NPg::LookupType(itemTypePg).Name));
@@ -4464,7 +4578,7 @@ IGraphTransformer::TStatus PgBetweenWrapper(const TExprNode::TPtr& input, TExprN
         if (elemType == 0) {
             elemType = argTypes[i];
             elemTypeAnn = input->Child(i)->GetTypeAnn();
-        } else if (argTypes[i] != 0 && argTypes[i] != elemType) {
+        } else if (argTypes[i] != 0 && argTypes[i] != NPg::UnknownOid && argTypes[i] != elemType) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
                 TStringBuilder() << "Mismatch of type of between elements: " <<
                 NPg::LookupType(elemType).Name << " and " << NPg::LookupType(argTypes[i]).Name));
@@ -4472,20 +4586,23 @@ IGraphTransformer::TStatus PgBetweenWrapper(const TExprNode::TPtr& input, TExprN
         }
     }
 
-    if (elemType && !elemTypeAnn->IsComparable()) {
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-            TStringBuilder() << "Cannot compare items of type: " << NPg::LookupType(elemType).Name));
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    if (!elemType) {
-        output = ctx.Expr.Builder(input->Pos())
-            .Callable("Nothing")
-                .Callable(0, "PgType")
-                    .Atom(0, "bool")
+    switch (elemType) {
+        case 0:
+        case NPg::UnknownOid:
+            output = ctx.Expr.Builder(input->Pos())
+                .Callable("Nothing")
+                    .Callable(0, "PgType")
+                        .Atom(0, "bool")
+                    .Seal()
                 .Seal()
-            .Seal()
-            .Build();
+                .Build();
+            break;
+        default:
+            if (!elemTypeAnn->IsComparable()) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                      TStringBuilder() << "Cannot compare items of type: " << NPg::LookupType(elemType).Name));
+                return IGraphTransformer::TStatus::Error;
+            }
     }
 
     auto result = ctx.Expr.MakeType<TPgExprType>(NPg::LookupType("bool").TypeId);

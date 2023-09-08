@@ -154,8 +154,8 @@ TString CreateAuthParamsQuery(const FederatedQuery::ConnectionSetting& setting,
             return fmt::format(
                 R"(,
                         AUTH_METHOD="{auth_method}",
-                        SERVICE_ACCOUNT_ID="{service_account_id}",
-                        SERVICE_ACCOUNT_SECRET_NAME="{sa_secret_name}",
+                        SERVICE_ACCOUNT_ID={service_account_id},
+                        SERVICE_ACCOUNT_SECRET_NAME={sa_secret_name},
                         LOGIN={login},
                         PASSWORD_SECRET_NAME={password_secret_name}
                     )",
@@ -182,13 +182,13 @@ TString MakeCreateExternalDataSourceQuery(
             properties = fmt::format(
                 R"(
                     SOURCE_TYPE="ClickHouse",
-                    MDB_CLUSTER_ID="{mdb_cluster_id}",
-                    DATABASE_NAME="{database_name}",
+                    MDB_CLUSTER_ID={mdb_cluster_id},
+                    DATABASE_NAME={database_name},
                     PROTOCOL="HTTP",
                     USE_TLS="true"
                 )",
-                "mdb_cluster_id"_a = EscapeString(connectionContent.setting().clickhouse_cluster().database_id(), '"'),
-                "database_name"_a = EscapeString(connectionContent.setting().clickhouse_cluster().database_name(), '"'));
+                "mdb_cluster_id"_a = EncloseAndEscapeString(connectionContent.setting().clickhouse_cluster().database_id(), '"'),
+                "database_name"_a = EncloseAndEscapeString(connectionContent.setting().clickhouse_cluster().database_name(), '"'));
         break;
         case FederatedQuery::ConnectionSetting::kDataStreams:
         break;
@@ -208,13 +208,13 @@ TString MakeCreateExternalDataSourceQuery(
             properties = fmt::format(
                 R"(
                     SOURCE_TYPE="PostgreSQL",
-                    MDB_CLUSTER_ID="{mdb_cluster_id}",
-                    DATABASE_NAME="{database_name}",
+                    MDB_CLUSTER_ID={mdb_cluster_id},
+                    DATABASE_NAME={database_name},
                     PROTOCOL="NATIVE",
                     USE_TLS="true"
                 )",
-                "mdb_cluster_id"_a = EscapeString(connectionContent.setting().clickhouse_cluster().database_id(), '"'),
-                "database_name"_a = EscapeString(connectionContent.setting().clickhouse_cluster().database_name(), '"'));
+                "mdb_cluster_id"_a = EncloseAndEscapeString(connectionContent.setting().clickhouse_cluster().database_id(), '"'),
+                "database_name"_a = EncloseAndEscapeString(connectionContent.setting().clickhouse_cluster().database_name(), '"'));
         break;
     }
 

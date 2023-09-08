@@ -85,6 +85,66 @@ TString ArgTypesList(const TVector<ui32>& ids) {
     return str;
 }
 
+TStringBuf GetCanonicalTypeName(TStringBuf name) {
+    if (name == "boolean") {
+        return "bool";
+    }
+
+    if (name == "character") {
+        return "bpchar";
+    }
+
+    if (name == "charactervarying") {
+        return "varchar";
+    }
+
+    if (name == "bitvarying") {
+        return "varbit";
+    }
+
+    if (name == "real") {
+        return "float4";
+    }
+
+    if (name == "doubleprecision") {
+        return "float8";
+    }
+
+    if (name == "smallint") {
+        return "int2";
+    }
+
+    if (name == "integer" || name == "int") {
+        return "int4";
+    }
+
+    if (name == "bigint") {
+        return "int8";
+    }
+
+    if (name == "timewithouttimezone") {
+        return "time";
+    }
+
+    if (name == "timewithtimezone") {
+        return "timetz";
+    }
+
+    if (name == "timestampwithouttimezone") {
+        return "timestamp";
+    }
+
+    if (name == "timestampwithtimezone") {
+        return "timestamptz";
+    }
+
+    if (name == "decimal") {
+        return "numeric";
+    }
+
+    return name;
+}
+
 class TParser {
 public:
     virtual ~TParser() = default;
@@ -1385,12 +1445,12 @@ bool HasReturnSetProc(const TString& name) {
 
 bool HasType(const TString& name) {
     const auto& catalog = TCatalog::Instance();
-    return catalog.TypeByName.contains(to_lower(name));
+    return catalog.TypeByName.contains(GetCanonicalTypeName(to_lower(name)));
 }
 
 const TTypeDesc& LookupType(const TString& name) {
     const auto& catalog = TCatalog::Instance();
-    const auto typeIdPtr = catalog.TypeByName.FindPtr(to_lower(name));
+    const auto typeIdPtr = catalog.TypeByName.FindPtr(GetCanonicalTypeName(to_lower(name)));
     if (!typeIdPtr) {
         throw yexception() << "No such type: " << name;
     }

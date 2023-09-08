@@ -5930,12 +5930,12 @@ TRuntimeNode TProgramBuilder::MatchRecognizeCore(
     std::vector<TRuntimeNode> defineNames(patternVarLookup.size());
     std::vector<TRuntimeNode> defineNodes(patternVarLookup.size());
 
-    const auto& defineInputDataArg = Arg(TListType::Create(inputRowType, Env));
+    const auto& inputDataArg = Arg(TListType::Create(inputRowType, Env));
     const auto& currentRowIndexArg = Arg(TDataType::Create(NUdf::TDataType<ui64>::Id, Env));
     for (const auto& [v, i]: patternVarLookup) {
         defineNames[i] = NewDataLiteral<NUdf::EDataSlot::String>(v);
         if (const auto it = defineLookup.find(v); it != defineLookup.end()) {
-            defineNodes[i] = getDefines[it->second].second(defineInputDataArg, matchedVarsArg, currentRowIndexArg);
+            defineNodes[i] = getDefines[it->second].second(inputDataArg, matchedVarsArg, currentRowIndexArg);
         }
         else { //no predicate for var
             if ("$" == v || "^" == v) {
@@ -5970,7 +5970,7 @@ TRuntimeNode TProgramBuilder::MatchRecognizeCore(
     callableBuilder.Add(PatternToRuntimeNode(pattern, *this));
 
     callableBuilder.Add(currentRowIndexArg);
-    callableBuilder.Add(defineInputDataArg);
+    callableBuilder.Add(inputDataArg);
     const auto stringType = NewDataType(NUdf::EDataSlot::String);
     callableBuilder.Add(TRuntimeNode(TListLiteral::Create(defineNames.begin(), defineNames.size(), TListType::Create(stringType, Env), Env), true));
     for (const auto& d: defineNodes) {

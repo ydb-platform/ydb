@@ -96,6 +96,7 @@ message TDqConfig {
         optional TICSettings ICSettings = 23; // can be filled by yqlworker
         optional string EnablePorto = 25;
         repeated string PortoLayer = 28;
+        repeated string OperationLayer = 37;
         optional TPortoSettings PortoSettings = 31;
         optional bool ContainerCpuLimit = 26; // for testing only
         optional TSolomon Solomon = 30;

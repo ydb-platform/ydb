@@ -136,7 +136,11 @@ namespace NActors {
             Threads[i].Thread->Join();
     }
 
-    void TIOExecutorPool::GetCurrentStats(TExecutorPoolStats& /*poolStats*/, TVector<TExecutorThreadStats>& statsCopy) const {
+    void TIOExecutorPool::GetCurrentStats(TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const {
+        poolStats.CurrentThreadCount = PoolThreads;
+        poolStats.DefaultThreadCount = PoolThreads;
+        poolStats.MaxThreadCount = PoolThreads;
+        poolStats.PotentialMaxThreadCount = PoolThreads;
         statsCopy.resize(PoolThreads + 1);
         // Save counters from the pool object
         statsCopy[0] = TExecutorThreadStats();

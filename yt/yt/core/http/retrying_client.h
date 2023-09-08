@@ -14,6 +14,7 @@ struct IResponseChecker
     : public virtual TRefCounted
 {
     virtual TError CheckError(const IResponsePtr& response) = 0;
+    virtual bool IsRetriableError(const TError& error) = 0;
     virtual NYTree::INodePtr GetFormattedResponse() const = 0;
 };
 
@@ -22,10 +23,12 @@ DEFINE_REFCOUNTED_TYPE(IResponseChecker)
 ////////////////////////////////////////////////////////////////////////////////
 
 using TJsonErrorChecker = TCallback<TError(const IResponsePtr&, const NYTree::INodePtr&)>;
+using TRetryChecker = TCallback<bool(const TError&)>;
 
 IResponseCheckerPtr CreateJsonResponseChecker(
+    const NJson::TJsonFormatConfigPtr& jsonFormatConfig,
     TJsonErrorChecker errorChecker,
-    const NJson::TJsonFormatConfigPtr& jsonFormatConfig);
+    TRetryChecker retryChecker = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 

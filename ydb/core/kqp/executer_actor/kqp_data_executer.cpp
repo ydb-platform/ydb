@@ -343,6 +343,7 @@ private:
                 hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
                 hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleStartKqpTasksResponse);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
+                IgnoreFunc(NActors::TEvents::TEvWakeup);
                 default: {
                     CancelProposal(0);
                     UnexpectedEvent("PrepareState", ev->GetTypeRewrite());
@@ -932,6 +933,7 @@ private:
                 hFunc(TEvDqCompute::TEvChannelData, HandleExecute);
                 hFunc(TEvKqp::TEvAbortExecution, HandleExecute);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
+                IgnoreFunc(NActors::TEvents::TEvWakeup);
                 default:
                     UnexpectedEvent("ExecuteState", ev->GetTypeRewrite());
             }
@@ -1920,6 +1922,7 @@ private:
             switch (ev->GetTypeRewrite()) {
                 hFunc(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult, Handle);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
+                IgnoreFunc(NActors::TEvents::TEvWakeup);
                 default:
                     UnexpectedEvent("WaitSnapshotState", ev->GetTypeRewrite());
             }

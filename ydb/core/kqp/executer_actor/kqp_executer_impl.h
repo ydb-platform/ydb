@@ -387,11 +387,16 @@ protected:
         YQL_ENSURE(NMetadata::NProvider::TServiceOperator::IsEnabled(), "metadata service is not active");
         SecretNames = std::move(secretNames);
 
+        SubscribedOnSecrets = true;
         this->Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvSubscribeExternal(GetSecretsSnapshotParser()));
         this->Schedule(MaximalSecretsSnapshotWaitTime, new NActors::TEvents::TEvWakeup());
     }
 
     void HandleRefreshSubscriberData(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
+        if (!SubscribedOnSecrets) {
+            return;
+        }
+
         Secrets = ev->Get()->GetSnapshotPtrAs<NMetadata::NSecret::TSnapshot>();
     
         TString secretValue;
@@ -403,16 +408,24 @@ protected:
         }
 
         UnsubscribeFromSecrets();
+        OnSecretsFetched();
     }
 
     void HandleSecretsWaitingTimeout(NActors::TEvents::TEvWakeup::TPtr&) {
+        if (!SubscribedOnSecrets) {
+            return;
+        }
+
         YQL_ENSURE(Secrets != nullptr, "secrets snapshot fetching timeout");
         UnsubscribeFromSecrets();
+        OnSecretsFetched();
     }
 
     void UnsubscribeFromSecrets() {
-        this->Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvUnsubscribeExternal(GetSecretsSnapshotParser()));
-        OnSecretsFetched();
+        if (SubscribedOnSecrets) {
+            SubscribedOnSecrets = false;
+            this->Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvUnsubscribeExternal(GetSecretsSnapshotParser()));
+        }
     }
 
     virtual void OnSecretsFetched() {}
@@ -1173,6 +1186,8 @@ protected:
 
 protected:
     void PassAway() override {
+        UnsubscribeFromSecrets();
+
         for (auto channelPair: ResultChannelProxies) {
             LOG_D("terminate result channel " << channelPair.first << " proxy at " << channelPair.second->SelfId());
 
@@ -1279,6 +1294,7 @@ protected:
     std::shared_ptr<NMetadata::NSecret::TSnapshot> Secrets;
     TVector<TString> SecretNames;
     TDuration MaximalSecretsSnapshotWaitTime;
+    bool SubscribedOnSecrets = false;
 
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);

@@ -118,7 +118,7 @@ namespace NProtobufJson {
     }
 
     template <bool InMapContext>
-    void TProto2JsonPrinter::PrintStringValue(const FieldDescriptor& field,
+    Y_NO_INLINE void TProto2JsonPrinter::PrintStringValue(const FieldDescriptor& field,
                                               const TStringBuf& key, const TString& value,
                                               IJsonOutput& json) {
         if (!GetConfig().StringTransforms.empty()) {

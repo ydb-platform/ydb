@@ -59,3 +59,14 @@ inline void VisitAstNodes(const NYql::TAstNode& root, const TAstNodeVisitFunc& v
         VisitAstNodes(*root.GetChild(childIdx), visitFunc);
     }
 }
+
+    
+inline TMaybe<const NYql::TAstNode*> MaybeGetQuotedValue(const NYql::TAstNode& node) {
+    const bool isQuotedList =
+        node.IsListOfSize(2) && node.GetChild(0)->IsAtom() 
+        && node.GetChild(0)->GetContent() == "quote";
+    if (isQuotedList) {
+        return node.GetChild(1);
+    }
+    return {};
+}

@@ -107,6 +107,7 @@ namespace NSQLTranslation {
 
         TVector<ui32> PgParameterTypeOids;
         bool AutoParametrizeEnabled = false;
+        THashSet<TString> AutoParametrizeEnabledScopes = {};
     };
 
     bool ParseTranslationSettings(const TString& query, NSQLTranslation::TTranslationSettings& settings, NYql::TIssues& issues);

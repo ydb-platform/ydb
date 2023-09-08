@@ -210,7 +210,7 @@ public:
     };
     
     struct TPgConst {
-        TString value;
+        TMaybe<TString> value;
         enum class Type {
             int4,
             int8,
@@ -485,6 +485,13 @@ public:
         return columnTypes;
     }
     
+    using TAutoParamName = TString;
+    TAutoParamName AddAutoParam(Ydb::TypedValue&& val) {
+        auto nextName = TString(AUTO_PARAM_PREFIX) + ToString(AutoParamValues.size());
+        AutoParamValues.emplace(nextName, std::move(val));
+        return nextName;
+    }
+    
     TAstNode* MakeValuesStmtAutoParam(TVector<TPgConst>&& values, TVector<TPgConst::Type>&& columnTypes) {
         TVector<Ydb::Value> ydbValues;
         for (auto&& pgConst : values) {
@@ -493,7 +500,7 @@ public:
             if (pgConst.type == TPgConst::Type::nil) {
                 literal.set_null_flag_value(NProtoBuf::NULL_VALUE);
             } else {
-                literal.set_text_value(std::move(pgConst.value));
+                literal.set_text_value(std::move(pgConst.value.GetRef()));
             }
             ydbValues.push_back(literal);
         }
@@ -501,11 +508,14 @@ public:
         TVector<TAstNode*> autoParamTupleType;
         autoParamTupleType.reserve(columnTypes.size());
         autoParamTupleType.push_back(A("TupleType"));
+        for (const auto& type : columnTypes) {
+            auto pgType = L(A("PgType"), QA(TPgConst::ToString(type)));
+            autoParamTupleType.push_back(pgType);
+        }
+        const auto paramType = L(A("ListType"), VL(autoParamTupleType));
 
-        const auto paramName = TString(AUTO_PARAM_PREFIX) + ToString(AutoParamValues.size());
-        AutoParamValues[paramName] = MakeYdbListTupleParamValue(std::move(ydbValues), std::move(columnTypes));
-        
-        Statements.push_back(L(A("declare"), A(paramName), L(A("ListType"), VL(autoParamTupleType))));
+        const auto paramName = AddAutoParam(MakeYdbListTupleParamValue(std::move(ydbValues), std::move(columnTypes)));
+        Statements.push_back(L(A("declare"), A(paramName), paramType));
 
         YQL_CLOG(INFO, Default) << "Successfully autoparametrized VALUES at" << Positions.back();
 
@@ -2542,7 +2552,7 @@ public:
     TAstNode* ParseExpr(const Node* node, const TExprSettings& settings) {
         switch (NodeTag(node)) {
         case T_A_Const: {
-            return ParseAConst(CAST_NODE(A_Const, node));
+            return ParseAConst(CAST_NODE(A_Const, node), settings);
         }
         case T_A_Expr: {
             return ParseAExpr(CAST_NODE(A_Expr, node), settings);
@@ -2608,7 +2618,7 @@ public:
             }
             case T_String: {
                 pgConst.value = ToString(StrVal(val));
-                pgConst.type = TPgConst::Type::unknown;
+                pgConst.type = TPgConst::Type::unknown; // to support implicit casts
                 return pgConst;
             }
             case T_Null: {
@@ -2621,26 +2631,58 @@ public:
             }
         }
     }
+    
+    TAstNode* AutoParametrizeConst(TPgConst&& valueNType, TAstNode* pgType) {
+        Ydb::TypedValue typedValue;
 
-    TAstNode* ParseAConst(const A_Const* value) {
+        auto oid = NPg::LookupType(TPgConst::ToString(valueNType.type)).TypeId;
+        typedValue.mutable_type()->mutable_pg_type()->set_oid(oid);
+
+        auto* value = typedValue.mutable_value();
+        if (valueNType.value) {
+            value->set_text_value(std::move(valueNType.value.GetRef()));
+        } else {
+            Y_VERIFY(valueNType.type == TPgConst::Type::unknown, "NULL is allowed to only be of unknown type");
+            value->set_null_flag_value(NProtoBuf::NULL_VALUE);
+        }
+
+        const auto& paramName = AddAutoParam(std::move(typedValue));
+        Statements.push_back(L(A("declare"), A(paramName), pgType));
+
+        YQL_CLOG(INFO, Default) << "Autoparametrized " << paramName << " at " << Positions.back();
+
+        return A(paramName);
+    }
+
+    TAstNode* ParseAConst(const A_Const* value, const TExprSettings& settings) {
         AT_LOCATION(value);
         const auto& val = value->val;
         auto valueNType = GetValueNType(value);
         if (!valueNType) {
             return nullptr;
         }
+
+        TAstNode* pgTypeNode = NodeTag(val) != T_Null 
+            ? L(A("PgType"), QA(TPgConst::ToString(valueNType->type)))
+            : L(A("PgType"), QA("unknown"));
+
+        if (Settings.AutoParametrizeEnabled && 
+            Settings.AutoParametrizeEnabledScopes.contains(settings.Scope)) {
+            return AutoParametrizeConst(std::move(valueNType.GetRef()), pgTypeNode);
+        }
+
         switch (NodeTag(val)) {
             case T_Integer: {
-                return L(A("PgConst"), QA(valueNType->value), L(A("PgType"), QA(TPgConst::ToString(valueNType->type))));
+                return L(A("PgConst"), QA(valueNType->value.GetRef()), pgTypeNode);
             }
             case T_Float: {
-                return L(A("PgConst"), QA(valueNType->value), L(A("PgType"), QA(TPgConst::ToString(valueNType->type))));
+                return L(A("PgConst"), QA(valueNType->value.GetRef()), pgTypeNode);
             }
             case T_String: {
-                return L(A("PgConst"), QAX(valueNType->value), L(A("PgType"), QA(TPgConst::ToString(valueNType->type))));
+                return L(A("PgConst"), QAX(valueNType->value.GetRef()), pgTypeNode);
             }
             case T_Null: {
-                return L(A("PgCast"), L(A("Null")), L(A("PgType"), QA("unknown")));
+                return L(A("PgCast"), L(A("Null")), pgTypeNode);
             }
             default: {
                 ValueNotImplemented(value, val);

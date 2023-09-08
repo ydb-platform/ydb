@@ -8,17 +8,17 @@
 using namespace NSQLTranslation;
 
 Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
-    Y_UNIT_TEST(AutoParamStmt_DisabledByDefault) {
+    Y_UNIT_TEST(AutoParamValues_DisabledByDefault) {
         auto res = PgSqlToYql("insert into plato.Output values (1,2,3), (1,2,3)");
         UNIT_ASSERT_C(res.Issues.Empty(), "Failed to parse statement, issues: " + res.Issues.ToString());
         UNIT_ASSERT_C(res.PgAutoParamValues.Empty(), "Expected no auto parametrization");
     }
     
-    Y_UNIT_TEST(AutoParamStmt_DifferentTypes) {
+    Y_UNIT_TEST(AutoParamValues_DifferentTypes) {
         TTranslationSettings settings;
         settings.AutoParametrizeEnabled = true;
         auto res = SqlToYqlWithMode(
-            R"(insert into plato.Output values (1,2,3), (1,'2',3))",
+            R"(insert into plato.Output values (1,2,3), (1,2.0,3))",
             NSQLTranslation::ESqlMode::QUERY,
             10,
             {},
@@ -30,9 +30,46 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
         UNIT_ASSERT_C(res.PgAutoParamValues.Empty(), "Expected no auto parametrization");
     }
 
-    void TestAutoParam(const TString& query, const THashMap<TString, TString>& expectedParamNameToJsonYdbVal) {
+    using TUsedParamsGetter = std::function<void(TSet<TString>&, const NYql::TAstNode& node)>;
+    
+    void GetUsedParamsInValues(TSet<TString>& usedParams, const NYql::TAstNode& node) {
+        const bool isPgSetItem = 
+            node.IsListOfSize(2) && node.GetChild(0)->IsAtom() 
+            && node.GetChild(0)->GetContent() == "PgSetItem";
+        if (!isPgSetItem) {
+            return;
+        }
+        const auto pgSetItemOptions = node.GetChild(1)->GetChild(1);
+
+        for (const auto* pgOption : pgSetItemOptions->GetChildren()) {
+            const bool isQuotedList =
+                pgOption->IsListOfSize(2) && pgOption->GetChild(0)->IsAtom() 
+                && pgOption->GetChild(0)->GetContent() == "quote";
+            if (!isQuotedList) {
+                return;
+            }
+
+            const auto* option = pgOption->GetChild(1);
+            const auto* optionName = option->GetChild(0);
+
+            const bool isValuesNode = 
+                optionName->IsListOfSize(2) && optionName->GetChild(0)->IsAtom()
+                && optionName->GetChild(0)->GetContent() == "quote"
+                && optionName->GetChild(1)->GetContent() == "values";
+            if (!isValuesNode) {
+                return;
+            }
+            const auto values = option->GetChild(2);
+            if (values->IsAtom()) {
+                usedParams.insert(TString(values->GetContent()));
+            }
+        }
+    }
+
+    void TestAutoParam(const TString& query, const THashMap<TString, TString>& expectedParamNameToJsonYdbVal, const TMap<TString, TString>& expectedParamTypes, TUsedParamsGetter usedParamsGetter, THashSet<TString> enabledParametrizeScopes = {}) {
         TTranslationSettings settings;
         settings.AutoParametrizeEnabled = true;
+        settings.AutoParametrizeEnabledScopes = enabledParametrizeScopes;
         auto res = SqlToYqlWithMode(
             query,
             NSQLTranslation::ESqlMode::QUERY,
@@ -45,51 +82,23 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
         UNIT_ASSERT_C(res.PgAutoParamValues && !res.PgAutoParamValues->empty(), "Expected auto param values");
 
         TSet<TString> declaredParams;
-        VisitAstNodes(*res.Root, [&declaredParams] (const NYql::TAstNode& node) {
+        TMap<TString, TString> actualParamTypes;
+        VisitAstNodes(*res.Root, [&declaredParams, &actualParamTypes] (const NYql::TAstNode& node) {
             const bool isDeclareNode = 
                 node.IsList() && node.GetChildrenCount() > 0 
                 && node.GetChild(0)->IsAtom() 
                 && node.GetChild(0)->GetContent() == "declare";
             if (isDeclareNode) {
                 UNIT_ASSERT_VALUES_EQUAL(node.GetChildrenCount(), 3);
-                declaredParams.insert(TString(node.GetChild(1)->GetContent()));
+                const auto name = TString(node.GetChild(1)->GetContent());
+                declaredParams.insert(name);
+                actualParamTypes[name] = node.GetChild(2)->ToString();
             }
         });
+        UNIT_ASSERT_VALUES_EQUAL(expectedParamTypes, actualParamTypes);
 
         TSet<TString> usedParams;
-        VisitAstNodes(*res.Root, [&usedParams] (const NYql::TAstNode& node) {
-            const bool isPgSetItem = 
-                node.IsListOfSize(2) && node.GetChild(0)->IsAtom() 
-                && node.GetChild(0)->GetContent() == "PgSetItem";
-            if (!isPgSetItem) {
-                return;
-            }
-            const auto pgSetItemOptions = node.GetChild(1)->GetChild(1);
-
-            for (const auto* pgOption : pgSetItemOptions->GetChildren()) {
-                const bool isQuotedList = 
-                    pgOption->IsListOfSize(2) && pgOption->GetChild(0)->IsAtom() 
-                    && pgOption->GetChild(0)->GetContent() == "quote";
-                if (!isQuotedList) {
-                    return;
-                }
-
-                const auto* option = pgOption->GetChild(1);
-                const auto& optionName = option->GetChild(0);
-
-                const bool isValuesNode = 
-                    optionName->IsListOfSize(2) && optionName->GetChild(0)->IsAtom()
-                    && optionName->GetChild(0)->GetContent() == "quote"
-                    && optionName->GetChild(1)->GetContent() == "values";
-                if (!isValuesNode) {
-                    return;
-                }
-                const auto values = option->GetChild(2);
-                if (values->IsAtom()) {
-                    usedParams.insert(TString(values->GetContent()));
-                }
-            }
-        });
+        VisitAstNodes(*res.Root, [&usedParams, &usedParamsGetter] (const auto& node) { return usedParamsGetter(usedParams, node); });
         UNIT_ASSERT_VALUES_EQUAL(declaredParams, usedParams);
 
         TMap<TString, Ydb::TypedValue> expectedParams;
@@ -109,25 +118,27 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
         UNIT_ASSERT_VALUES_EQUAL(declaredParams.size(), expectedParams.size());
     }
 
-    Y_UNIT_TEST(AutoParamStmt_Int4) {
+    Y_UNIT_TEST(AutoParamValues_Int4) {
         TString query = R"(insert into plato.Output values (1,2), (3,4), (4,5))";
         TString expectedParamJson = R"(
             {"type":{"list_type":{"item":{"tuple_type":{"elements":[{"pg_type":{"oid":23}},{"pg_type":{"oid":23}}]}}}},
             "value":{"items":[{"items":[{"text_value":"1"},{"text_value":"2"}]},{"items":[{"text_value":"3"},{"text_value":"4"}]},{"items":[{"text_value":"4"},{"text_value":"5"}]}]}}
         )";
-        TestAutoParam(query, {{"a0", expectedParamJson}});
+        TString type = "(ListType (TupleType (PgType 'int4) (PgType 'int4)))";
+        TestAutoParam(query, {{"a0", expectedParamJson}}, {{"a0", type}}, GetUsedParamsInValues);
     }
 
-    Y_UNIT_TEST(AutoParamStmt_Int4Text) {
+    Y_UNIT_TEST(AutoParamValues_Int4Text) {
         TString query = R"(insert into plato.Output values (1,'2'), (3,'4'))";
         TString expectedParamJson = R"(
             {"type":{"list_type":{"item":{"tuple_type":{"elements":[{"pg_type":{"oid":23}},{"pg_type":{"oid":705}}]}}}},
             "value":{"items":[{"items":[{"text_value":"1"},{"text_value":"2"}]},{"items":[{"text_value":"3"},{"text_value":"4"}]}]}}
         )";
-        TestAutoParam(query, {{"a0", expectedParamJson}});
+        TString type = "(ListType (TupleType (PgType 'int4) (PgType 'unknown)))";
+        TestAutoParam(query, {{"a0", expectedParamJson}}, {{"a0", type}}, GetUsedParamsInValues);
     }
 
-    Y_UNIT_TEST(AutoParamStmt_MultipleStmts) {
+    Y_UNIT_TEST(AutoParamValues_MultipleStmts) {
         TString query = R"(
             insert into plato.Output values (1,'2'), (3,'4');
             insert into plato.Output1 values (1.23);
@@ -140,10 +151,14 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
             {"type":{"list_type":{"item":{"tuple_type":{"elements":[{"pg_type":{"oid":1700}}]}}}},
             "value":{"items":[{"items":[{"text_value":"1.23"}]}]}}
         )";
-        TestAutoParam(query, {{"a0", expectedParamJson0}, {"a1", expectedParamJson1}});
+        TMap<TString, TString> expectedParamTypes {
+            {"a0", "(ListType (TupleType (PgType 'int4) (PgType 'unknown)))"},
+            {"a1", "(ListType (TupleType (PgType 'numeric)))"}
+        };
+        TestAutoParam(query, {{"a0", expectedParamJson0}, {"a1", expectedParamJson1}}, expectedParamTypes, GetUsedParamsInValues);
     }
 
-    Y_UNIT_TEST(AutoParamStmt_WithNull) {
+    Y_UNIT_TEST(AutoParamValues_WithNull) {
         TString query = R"(
            insert into plato.Output values (null, '2'), (3, '4')
         )";
@@ -151,10 +166,11 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
             {"type":{"list_type":{"item":{"tuple_type":{"elements":[{"pg_type":{"oid":23}},{"pg_type":{"oid":705}}]}}}},
             "value":{"items":[{"items":[{"null_flag_value":"NULL_VALUE"},{"text_value":"2"}]},{"items":[{"text_value":"3"},{"text_value":"4"}]}]}}
         )";
-        TestAutoParam(query, {{"a0", expectedParamJson}});
+        TString type = "(ListType (TupleType (PgType 'int4) (PgType 'unknown)))";
+        TestAutoParam(query, {{"a0", expectedParamJson}}, {{"a0", type}}, GetUsedParamsInValues);
     }
 
-    Y_UNIT_TEST(AutoParamStmt_NullCol) {
+    Y_UNIT_TEST(AutoParamValues_NullCol) {
         TString query = R"(
             insert into plato.Output values (null,1), (null,1)
         )";
@@ -162,6 +178,72 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
             {"type":{"list_type":{"item":{"tuple_type":{"elements":[{"pg_type":{"oid":705}},{"pg_type":{"oid":23}}]}}}},
             "value":{"items":[{"items":[{"null_flag_value":"NULL_VALUE"},{"text_value":"1"}]},{"items":[{"null_flag_value":"NULL_VALUE"},{"text_value":"1"}]}]}}
         )";
-        TestAutoParam(query, {{"a0", expectedParamJson}});
+        TString type = "(ListType (TupleType (PgType 'unknown) (PgType 'int4)))";
+        TestAutoParam(query, {{"a0", expectedParamJson}}, {{"a0", type}}, GetUsedParamsInValues);
     }
+    
+    Y_UNIT_TEST(AutoParamConsts_Where) {
+        TString query = R"(
+            select * from plato.Output where key > 1
+        )";
+        TString expectedParamJson = R"(
+            {"type":{"pg_type": {"oid": 23}},
+            "value":{"text_value": "1"}}
+        )";
+        THashSet<TString> enabledScopes {"WHERE"};
+
+        // We expect: (PgOp '">" (PgColumnRef '"key") a0)
+        const TUsedParamsGetter usedInWhereComp = [] (TSet<TString>& usedParams, const NYql::TAstNode& node) {
+            const auto maybeQuote = MaybeGetQuotedValue(node);
+            if (!maybeQuote) {
+                return;
+            }
+            const auto quotedVal = maybeQuote.GetRef();
+            const bool isWhere = 
+                quotedVal->IsListOfSize(2) && quotedVal->GetChild(1)->IsListOfSize(3) 
+                && quotedVal->GetChild(1)->IsListOfSize(3)
+                && quotedVal->GetChild(1)->GetChild(0)->IsAtom()
+                && quotedVal->GetChild(1)->GetChild(0)->GetContent() == "PgWhere";
+
+            if (!isWhere) {
+                return;
+            }
+            const auto* whereCallable = quotedVal->GetChild(1);
+
+            const auto* whereLambda = whereCallable->GetChild(2);
+            const auto* pgOp = whereLambda->GetChild(2);
+            const bool isBinaryOp = pgOp->IsListOfSize(4);
+            if (!isBinaryOp) {
+                return;
+            }
+            const auto* pgBinOpSecondArg = pgOp->GetChild(3);
+            usedParams.insert(TString(pgBinOpSecondArg->GetContent()));
+        };
+        TString type = "(PgType 'int4)";
+        TestAutoParam(query, {{"a0", expectedParamJson}}, {{"a0", type}}, usedInWhereComp, enabledScopes);
+    }
+    
+    Y_UNIT_TEST(AutoParamConsts_Select) {
+        TString query = R"(
+            select 1, 'test'
+        )";
+        TString expectedParamJsonInt4 = R"(
+            {"type":{"pg_type": {"oid": 23}},
+            "value":{"text_value": "1"}}
+        )";
+        TString expectedParamJsonText = R"(
+            {"type":{"pg_type": {"oid": 705}},
+            "value":{"text_value": "test"}}
+        )";
+        THashSet<TString> enabledScopes {"SELECT"};
+        const TUsedParamsGetter dummyGetter = [] (TSet<TString>& usedParams, const NYql::TAstNode&) {
+            usedParams = {"a0", "a1"};
+        };
+        TMap<TString, TString> expectedParamTypes {
+            {"a0", "(PgType 'int4)"},
+            {"a1", "(PgType 'unknown)"},
+        };
+        TestAutoParam(query, {{"a0", expectedParamJsonInt4}, {"a1", expectedParamJsonText}}, expectedParamTypes, dummyGetter, enabledScopes);
+    }
+
 }

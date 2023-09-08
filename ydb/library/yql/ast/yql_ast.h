@@ -154,7 +154,7 @@ struct TAstNode {
         if (childrenCount) {
             if (childrenCount > SmallListCount) {
                 poolChildren = pool.AllocateArray<TAstNode*>(childrenCount);
-                memcpy(poolChildren, children, sizeof(TAstNode*) * childrenCount);
+                memcpy(poolChildren, children, sizeof(void*) * childrenCount);
             } else {
                 poolChildren = children;
             }

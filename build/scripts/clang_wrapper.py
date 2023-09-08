@@ -3,6 +3,9 @@ import sys
 
 
 def fix(s):
+    if s.startswith('-isystem') and s.endswith('/share/include'):
+        return None
+
     if s == '/Z7' or s == '/Od' or s == '/Ob0' or s == '/D_DEBUG':
         return None
 

@@ -11,6 +11,7 @@ Options:
   --help-ex                Print usage with examples
   --timeout ms             Operation timeout. Operation should be executed on server within this timeout. There could also be a delay up to 200ms to receive timeout error from server.
   --stats [String]         Collect statistics mode [none, basic, full]
+  --flame-graph [Path]     Path for statistics flame graph image, works only with full stats
   {-s|--script} [String]   Text of script to execute
   {-f|--file} PATH         [Required] Script file
   --explain                Explain query (default: 0)

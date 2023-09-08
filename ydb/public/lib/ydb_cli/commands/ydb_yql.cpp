@@ -186,8 +186,7 @@ bool TCommandYql::PrintResponse(NScripting::TYqlResultPartIterator& result) {
 
         if (FlameGraphPath) {
             try {
-                NKikimr::NVisual::GenerateFlameGraphSvg(*FlameGraphPath, *fullStats,
-                                                        NKikimr::NVisual::EFlameGraphType::CPU);
+                NKikimr::NVisual::GenerateFlameGraphSvg(*FlameGraphPath, *fullStats);
                 Cout << "Resource usage flame graph is successfully saved to " << *FlameGraphPath << Endl;
             }
             catch (const yexception& ex) {

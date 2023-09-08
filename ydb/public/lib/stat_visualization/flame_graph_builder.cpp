@@ -53,16 +53,16 @@ public:
 
     }
 
-    void GenerateSvg(EFlameGraphType type) {
+    void GenerateSvg() {
         bool multipleQueries = PlanGraphs.size() > 1;
         ui16 queryIndex = 0;
         for (auto &planGraph: PlanGraphs) {
             auto resultStream = OpenResultStream(ResultFile, multipleQueries, queryIndex++);
-            GenerateSvg(type, planGraph, resultStream);
+            GenerateSvg(planGraph, resultStream);
         }
     }
 
-    static void GenerateSvg(EFlameGraphType type, const THolder<TPlanGraphEntry> &planGraph, TOFStream &resultStream) {
+    static void GenerateSvg(const THolder<TPlanGraphEntry> &planGraph, TOFStream &resultStream) {
         auto depth = planGraph->CalculateDepth(0);
 
         auto viewPortHeight = (2 * VERTICAL_OFFSET) + (static_cast<double>(depth) * (RECT_HEIGHT + 2 * INTER_ELEMENT_OFFSET));
@@ -80,7 +80,6 @@ public:
                 << Sprintf(FG_SVG_BACKGROUND.data(), VIEWPORT_WIDTH, viewPortHeight)
                 << FG_SVG_RESET_ZOOM
                 << Sprintf(FG_SVG_SEARCH.data(), searchPos);
-        (void) type;
         float i = 1;
         for (const auto &it: TPlanGraphEntry::PlanGraphTypeName()) {
             resultStream << Sprintf(FG_SVG_TITLE.data(),
@@ -239,10 +238,10 @@ private:
 };
 
 
-void GenerateFlameGraphSvg(const TString &resultFile, const TString &statReportJson, EFlameGraphType type) {
+void GenerateFlameGraphSvg(const TString &resultFile, const TString &statReportJson) {
     TFlameGraphBuilder impl(resultFile);
     impl.ParsePlanJson(statReportJson);
-    impl.GenerateSvg(type);
+    impl.GenerateSvg();
 }
 
 }

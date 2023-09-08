@@ -351,6 +351,8 @@ void TCommandExecuteQuery::Config(TConfig& config) {
         .RequiredArgument("[String]").DefaultValue("data").StoreResult(&QueryType);
     config.Opts->AddLongOption("stats", "Collect statistics mode (for data & scan queries) [none, basic, full]")
         .RequiredArgument("[String]").StoreResult(&CollectStatsMode);
+    config.Opts->AddLongOption("flame-graph", "Builds resource usage flame graph, based on statistics info")
+            .RequiredArgument("PATH").StoreResult(&FlameGraphPath);
     config.Opts->AddCharOption('s', "Collect statistics in basic mode").StoreTrue(&BasicStats);
     config.Opts->AddLongOption("tx-mode", "Transaction mode (for data queries only) [serializable-rw, online-ro, stale-ro]")
         .RequiredArgument("[String]").DefaultValue("serializable-rw").StoreResult(&TxMode);
@@ -510,6 +512,11 @@ void TCommandExecuteQuery::PrintDataQueryResponse(NTable::TDataQueryResult& resu
     const TMaybe<NTable::TQueryStats>& stats = result.GetStats();
     if (stats.Defined()) {
         Cout << Endl << "Statistics:" << Endl << stats->ToString();
+        PrintFlameGraph(stats->GetPlan());
+    }
+    if( FlameGraphPath && !stats.Defined())
+    {
+        Cout << Endl << "Flame graph is available for full or profile stats only" << Endl;
     }
 }
 
@@ -621,12 +628,37 @@ bool TCommandExecuteQuery::PrintScanQueryResponse(NTable::TScanQueryPartIterator
         queryPlanPrinter.Print(*fullStats);
     }
 
+    PrintFlameGraph(fullStats);
+
     if (IsInterrupted()) {
         Cerr << "<INTERRUPTED>" << Endl;
         return false;
     }
     return true;
 }
+
+void TCommandExecuteQuery::PrintFlameGraph(const TMaybe<TString>& plan)
+{
+    if (!FlameGraphPath) {
+        return;
+    }
+    if (FlameGraphPath->Empty()) {
+        Cout << Endl << "FlameGraph path can not be empty." << Endl;
+        return;
+    }
+    if (!plan) {
+        Cout << Endl << "Flame graph is available for full or profile stats only" << Endl;
+        return;
+    }
+    try {
+        NKikimr::NVisual::GenerateFlameGraphSvg(FlameGraphPath.GetRef(), *plan);
+        Cout << Endl << "Resource usage flame graph is successfully saved to " << FlameGraphPath << Endl;
+    }
+    catch (const yexception &ex) {
+        Cout << Endl << "Can't save resource usage flame graph, error: " << ex.what() << Endl;
+    }
+}
+
 
 TCommandExplain::TCommandExplain()
     : TTableCommand("explain", {}, "Explain query")
@@ -654,7 +686,7 @@ void TCommandExplain::Config(TConfig& config) {
     config.Opts->AddLongOption("analyze", "Run query and collect execution statistics")
         .NoArgument().SetFlag(&Analyze);
     config.Opts->AddLongOption("flame-graph", "Builds resource usage flame graph, based on analyze info")
-            .RequiredArgument("PATH").StoreResult(&FlameGraphFile);
+            .RequiredArgument("PATH").StoreResult(&FlameGraphPath);
 
     AddFormats(config, {
             EOutputFormat::Pretty,
@@ -709,7 +741,7 @@ int TCommandExplain::Run(TConfig& config) {
             Cerr << "<INTERRUPTED>" << Endl;
         }
 
-    } else if (QueryType == "data" && (Analyze || FlameGraphFile)) {
+    } else if (QueryType == "data" && (Analyze || FlameGraphPath)) {
         NTable::TExecDataQuerySettings settings;
         settings.CollectQueryStats(NTable::ECollectQueryStatsMode::Full);
 
@@ -744,14 +776,17 @@ int TCommandExplain::Run(TConfig& config) {
         TQueryPlanPrinter queryPlanPrinter(OutputFormat, Analyze);
         queryPlanPrinter.Print(planJson);
 
-        if( FlameGraphFile ) {
+        if( FlameGraphPath && !FlameGraphPath->Empty() ) {
             try {
-                NKikimr::NVisual::GenerateFlameGraphSvg(FlameGraphFile, planJson, NKikimr::NVisual::EFlameGraphType::CPU);
-                Cout << "Resource usage flame graph is successfully saved to " << FlameGraphFile << Endl;
+                NKikimr::NVisual::GenerateFlameGraphSvg(FlameGraphPath.GetRef(), planJson);
+                Cout << Endl << "Resource usage flame graph is successfully saved to " << FlameGraphPath.GetRef() << Endl;
             }
             catch (const yexception& ex) {
-                Cout << "Can't save resource usage flame graph, error: " << ex.what() << Endl;
+                Cout << Endl << "Can't save resource usage flame graph, error: " << ex.what() << Endl;
             }
+        }
+        else if( FlameGraphPath && FlameGraphPath->Empty() ) {
+            Cout << Endl << "FlameGraph path can not be empty." << Endl;
         }
     }
 

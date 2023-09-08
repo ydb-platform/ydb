@@ -108,8 +108,11 @@ public:
     int ExecuteScanQuery(TConfig& config);
     bool PrintScanQueryResponse(NTable::TScanQueryPartIterator& result);
 
+    void PrintFlameGraph(const TMaybe<TString>& plan);
+
 private:
     TString CollectStatsMode;
+    TMaybe<TString> FlameGraphPath;
     TString TxMode;
     TString QueryType;
     bool BasicStats = false;
@@ -129,7 +132,7 @@ private:
     bool PrintAst = false;
     TString QueryType;
     bool Analyze = false;
-    TString FlameGraphFile;
+    TMaybe<TString> FlameGraphPath;
 };
 
 class TCommandReadTable : public TYdbCommand, public TCommandWithPath,

@@ -12,5 +12,5 @@ namespace NKikimr::NVisual {
         ALL
     };
     /// Generates svg file with flame graph for current usage report
-    void GenerateFlameGraphSvg(const TString& statReportJson, const TString& resultFile, EFlameGraphType type);
+    void GenerateFlameGraphSvg(const TString& statReportJson, const TString& resultFile);
 }

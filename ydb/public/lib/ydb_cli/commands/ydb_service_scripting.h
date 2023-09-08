@@ -28,6 +28,7 @@ public:
 
 private:
     TString CollectStatsMode;
+    TMaybe<TString> FlameGraphPath;
     TString Script;
     TString ScriptFile;
     bool Explain = false;

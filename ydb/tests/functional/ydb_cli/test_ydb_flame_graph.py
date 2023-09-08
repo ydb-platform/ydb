@@ -107,11 +107,13 @@ class TestExecuteWithFlameGraph(BaseTestFlameGraphServiceWithDatabase):
         assert output.find(expected_str) != -1, f"Expected string {expected_str} not found"
 
     def check_svg(self, svg_file):
+        svg_found = False
         with open(svg_file) as f:
             if '<title>Query TASKS' in f.read():
-                return
+                svg_found = True
 
-        assert False, 'Expected pattern is not found in ' + svg_file
+        pathlib.Path(svg_file).unlink()
+        assert svg_found, 'Expected pattern is not found in ' + svg_file
 
     def yql_command(self, stats_mode: str, flame_graph_path: str, expected_str: str):
         script = "SELECT * FROM `{path}` WHERE key < 4;".format(path=self.table_path)
@@ -119,11 +121,31 @@ class TestExecuteWithFlameGraph(BaseTestFlameGraphServiceWithDatabase):
                                                        "--stats", stats_mode, "--flame-graph", flame_graph_path])
         self.check_output(output, expected_str)
 
-        # YqlScript
+    def scripting_yql_command(self, stats_mode: str, flame_graph_path: str, expected_str: str):
+        script = "SELECT * FROM `{path}` WHERE key < 4;".format(path=self.table_path)
+        output = self.execute_ydb_cli_command_with_db(["scripting", "yql", "-s", script,
+                                                       "--stats", stats_mode, "--flame-graph", flame_graph_path])
+        self.check_output(output, expected_str)
+
+    def table_execute_command(self, stats_mode: str, flame_graph_path: str, expected_str: str):
+        script = "SELECT * FROM `{path}` WHERE key < 4;".format(path=self.table_path)
+        output = self.execute_ydb_cli_command_with_db(["scripting yql", "-s", script,
+                                                       "--stats", stats_mode, "--flame-graph", flame_graph_path])
+        self.check_output(output, expected_str)
+
+    def table_explain(self, stats_mode: str, flame_graph_path: str, expected_str: str):
+        script = "SELECT * FROM `{path}` WHERE key < 4;".format(path=self.table_path)
+        output = self.execute_ydb_cli_command_with_db(["scripting yql", "-s", script,
+                                                       "--stats", stats_mode, "--flame-graph", flame_graph_path])
+        self.check_output(output, expected_str)
 
     def test_fg_with_full_stats(self):
         self.yql_command('full', 'test_fg.svg',
                          'Resource usage flame graph is successfully saved to test_fg.svg')
+        self.check_svg('test_fg.svg')
+
+        self.scripting_yql_command('full', 'test_fg.svg',
+                                   'Resource usage flame graph is successfully saved to test_fg.svg')
         self.check_svg('test_fg.svg')
 
     def test_fg_with_profile_stats(self):
@@ -131,11 +153,21 @@ class TestExecuteWithFlameGraph(BaseTestFlameGraphServiceWithDatabase):
                          'Resource usage flame graph is successfully saved to test_fg.svg')
         self.check_svg('test_fg.svg')
 
+        self.scripting_yql_command('profile', 'test_fg.svg',
+                                   'Resource usage flame graph is successfully saved to test_fg.svg')
+        self.check_svg('test_fg.svg')
+
     def test_fg_with_basic_stats(self):
         self.yql_command('basic', 'test_fg.svg',
                          'Flame graph is available for full or profile stats. Current: basic.')
 
+        self.scripting_yql_command('basic', 'test_fg.svg',
+                                   'Flame graph is available for full or profile stats. Current: basic.')
+
     def test_fg_to_dir(self):
         pathlib.Path('aaa').mkdir()
         self.yql_command('full', 'aaa',
-                         "Can't save resource usage flame graph, error: aaa is a directory")
+                         'Can\'t save resource usage flame graph, error: aaa is a directory')
+
+        self.scripting_yql_command('full', 'aaa',
+                                   'Can\'t save resource usage flame graph, error: aaa is a directory')

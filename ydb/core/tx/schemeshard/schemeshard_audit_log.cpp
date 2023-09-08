@@ -118,4 +118,50 @@ void AuditLogModifySchemeTransaction(const NKikimrScheme::TEvModifySchemeTransac
     }
 }
 
+//NOTE: Resurrected a way to log audit records into the common log.
+// This should be dropped again as soon as auditlog consumers will switch to a proper way.
+void AuditLogModifySchemeTransactionDeprecated(const NKikimrScheme::TEvModifySchemeTransaction& request, const NKikimrScheme::TEvModifySchemeTransactionResult& response, TSchemeShard* SS, const TString& userSID) {
+    // Each TEvModifySchemeTransaction.Transaction is a self sufficient operation and should be logged independently
+    // (even if it was packed into a single TxProxy transaction with some other operations).
+    for (const auto& operation : request.GetTransaction()) {
+        auto logEntry = MakeAuditLogFragment(operation);
+
+        TPath databasePath = DatabasePathFromWorkingDir(SS, operation.GetWorkingDir());
+        auto peerName = request.GetPeerName();
+
+        auto entry = TStringBuilder();
+
+        entry << "txId: " << std::to_string(request.GetTxId());
+        if (!databasePath.IsEmpty()) {
+            entry << ", database: " << databasePath.GetDomainPathString();
+        }
+        entry << ", subject: " << userSID;
+        entry << ", status: " << NKikimrScheme::EStatus_Name(response.GetStatus());
+        if (response.HasReason()) {
+            entry << ", reason: " << response.GetReason();
+        }
+        entry << ", operation: " << logEntry.Operation;
+        if (logEntry.Paths.size() > 1) {
+            for (const auto& i : logEntry.Paths) {
+                entry << ", dst path: " << i;
+            }
+        } else if (logEntry.Paths.size() == 1) {
+            entry << ", path: " << logEntry.Paths.front();
+        } else {
+            entry << ", no path";
+        }
+        if (!logEntry.NewOwner.empty()) {
+            entry << ", set owner:" << logEntry.NewOwner;
+        }
+        for (const auto& i : logEntry.ACLAdd) {
+            entry << ", add access: " << i;
+        }
+        for (const auto& i : logEntry.ACLRemove) {
+            entry << ", add access: " << i;
+        }
+
+        LOG_NOTICE_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD, "AUDIT: " <<  entry);
+    }
+}
+
 }

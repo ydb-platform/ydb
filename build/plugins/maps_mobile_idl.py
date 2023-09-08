@@ -5,7 +5,7 @@ from collections import namedtuple
 from _common import sort_by_keywords
 
 Framework = namedtuple(
-    'Framework', ['cpp_namespace_tokens', 'java_class_path', 'objc_framework_name', 'objc_framework_prefix']
+    'Framework', ['cpp_namespace_tokens', 'java_class_path', 'objc_framework_name', 'objc_framework_prefix', 'dart_namespace']
 )
 
 
@@ -30,9 +30,11 @@ def _load_framework_file_list(unit):
     return frameworks
 
 
-def _require_framework_entry(entry, framework):
+def _require_framework_entry(unit, entry, framework):
     if entry not in framework:
-        raise Exception('No {} entry in {} framework'.format(entry, framework))
+        error_string = 'No {} entry in {} framework'.format(entry, framework)
+        unit.message(['error', error_string])
+        raise Exception(error_string)
 
 
 def _read_framework(unit, framework_file):
@@ -47,15 +49,17 @@ def _read_framework(unit, framework_file):
                 raise Exception('Malformed idl framework file {} line {}'.format(framework_file, lineId))
             result[tokens[0].strip()] = tokens[1].strip()
 
-    _require_framework_entry('CPP_NAMESPACE', result)
-    _require_framework_entry('JAVA_PACKAGE', result)
-    _require_framework_entry('OBJC_FRAMEWORK', result)
-    _require_framework_entry('OBJC_FRAMEWORK_PREFIX', result)
+    _require_framework_entry(unit, 'CPP_NAMESPACE', result)
+    _require_framework_entry(unit, 'JAVA_PACKAGE', result)
+    _require_framework_entry(unit, 'OBJC_FRAMEWORK', result)
+    _require_framework_entry(unit, 'OBJC_FRAMEWORK_PREFIX', result)
+    _require_framework_entry(unit, 'DART_NAMESPACE', result)
     return Framework(
         result['CPP_NAMESPACE'].split('.'),
         result['JAVA_PACKAGE'],
         result['OBJC_FRAMEWORK'],
         result['OBJC_FRAMEWORK_PREFIX'],
+        result['DART_NAMESPACE'].split('.')
     )
 
 
@@ -151,6 +155,7 @@ class OutputNameGenerator:
         framework_name = path_tokens[0]
         self._framework = frameworks[framework_name]
         self._cpp_namespace_tokens = self._framework.cpp_namespace_tokens + path_tokens[1:-1]
+        self._dart_namespace = self._framework.dart_namespace + path_tokens[1:-1]
         file_name = path_tokens[-1]
         self._cpp_name = file_name.split('.')[0]
 
@@ -179,10 +184,11 @@ class OutputNameGenerator:
         return os.path.join(*path_tokens)
 
     def _dart_public_file_name(self, extension):
-        return self._cpp_file_name(extension)
+        path_tokens = ['src'] + self._dart_namespace + [self._cpp_name + '_export' + extension]
+        return os.path.join(*path_tokens)
 
     def _dart_private_file_name(self, extension):
-        path_tokens = ['src'] + self._cpp_namespace_tokens + [self._cpp_name + '_private' + extension]
+        path_tokens = ['src'] + self._dart_namespace + [self._cpp_name + extension]
         return os.path.join(*path_tokens)
 
     def _objc_file_name(self, extension, additional_tokens=[]):

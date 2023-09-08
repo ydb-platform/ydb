@@ -10,6 +10,7 @@
 #include <ydb/core/util/backoff.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/providers/common/metrics/service_counters.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
@@ -126,7 +127,18 @@ public:
             case NYdb::NQuery::EExecStatus::Aborted:
             case NYdb::NQuery::EExecStatus::Canceled:
             case NYdb::NQuery::EExecStatus::Failed:
-                Issues = response.Issues;
+                if (response.ExecStatus == NYdb::NQuery::EExecStatus::Failed) {
+                    TStringBuilder builder;
+                    builder << "Query failed with code " << NYql::NDqProto::StatusIds_StatusCode_Name(
+                        NYql::NDq::YdbStatusToDqStatus(response.StatusCode));
+                    auto issue = NYql::TIssue(builder);
+                    for (auto& subIssue : response.Issues) {
+                        issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(subIssue));
+                    }
+                    Issues.AddIssue(issue);
+                } else {
+                    Issues = response.Issues;
+                }
                 Status = response.Status;
                 ExecStatus = response.ExecStatus;
                 QueryStats = response.QueryStats;

@@ -16,18 +16,17 @@ using namespace NYdb::NQuery;
 Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
     NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(const NYdb::TOperation::TOperationId& operationId, const NYdb::TDriver& ydbDriver, i32 tries = -1) {
         NYdb::NOperation::TOperationClient client(ydbDriver);
-        NThreading::TFuture<NYdb::NQuery::TScriptExecutionOperation> op;
-        do {
-            if (!op.Initialized()) {
-                Sleep(TDuration::MilliSeconds(10));
+        while(1) {
+            auto op = client.Get<NYdb::NQuery::TScriptExecutionOperation>(operationId).GetValueSync();
+            if (op.Ready() || tries == 0) {
+                return op;
             }
+            UNIT_ASSERT_C(op.Status().IsSuccess(), op.Status().GetStatus() << ":" << op.Status().GetIssues().ToString());
             if (tries > 0) {
                 --tries;
             }
-            op = client.Get<NYdb::NQuery::TScriptExecutionOperation>(operationId);
-            UNIT_ASSERT_C(op.GetValueSync().Status().IsSuccess(), op.GetValueSync().Status().GetStatus() << ":" << op.GetValueSync().Status().GetIssues().ToString());
-        } while (!op.GetValueSync().Ready() && tries != 0);
-        return op.GetValueSync();
+            Sleep(TDuration::MilliSeconds(10));
+        }
     }
 
     Y_UNIT_TEST(ExecuteScript) {
@@ -434,7 +433,6 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         }
 
         auto op = opClient.Get<NYdb::NQuery::TScriptExecutionOperation>(scriptExecutionOperation.Id()).ExtractValueSync();
-        UNIT_ASSERT_C(op.Status().IsSuccess(), op.Status().GetIssues().ToString());
         UNIT_ASSERT_C(op.Ready(), op.Status().GetIssues().ToString());
         UNIT_ASSERT_C(op.Metadata().ExecStatus == EExecStatus::Completed || op.Metadata().ExecStatus == EExecStatus::Canceled, op.Status().GetIssues().ToString());
         UNIT_ASSERT_EQUAL(op.Metadata().ExecutionId, scriptExecutionOperation.Metadata().ExecutionId);
@@ -459,7 +457,6 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
 
     void ExpectExecStatus(EExecStatus status, const TScriptExecutionOperation op, const NYdb::TDriver& ydbDriver) {
         auto readyOp = WaitScriptExecutionOperation(op.Id(), ydbDriver);
-        UNIT_ASSERT_C(readyOp.Status().IsSuccess(), readyOp.Status().GetIssues().ToString());
         UNIT_ASSERT_C(readyOp.Ready(), readyOp.Status().GetIssues().ToString());
         UNIT_ASSERT(readyOp.Metadata().ExecStatus == status);
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecutionId, op.Metadata().ExecutionId);

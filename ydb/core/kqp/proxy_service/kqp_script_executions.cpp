@@ -1118,7 +1118,7 @@ public:
 
         const TMaybe<i32> operationStatus = result.ColumnParser("operation_status").GetOptionalInt32();
         if (operationStatus) {
-            Ready = true;
+            OperationStatus = static_cast<Ydb::StatusIds::StatusCode>(*operationStatus);
         }
 
         Metadata.set_execution_id(*ScriptExecutionIdFromOperation(OperationId));
@@ -1185,7 +1185,7 @@ public:
             ScriptExecutionRunnerActorIdFromString(*runScriptActorIdString, RunScriptActorId);
         }
 
-        if (!operationStatus) {
+        if (!OperationStatus) {
             // Check lease deadline
             NYdb::TResultSetParser deadlineResult(ResultSets[1]);
             if (deadlineResult.RowsCount() == 0) {
@@ -1227,7 +1227,7 @@ public:
     }
 
     void OnFinishOperation() {
-        Ready = true;
+        OperationStatus = Ydb::StatusIds::ABORTED;
         Issues = LeaseExpiredIssues();
         Metadata.set_exec_status(Ydb::Query::EXEC_STATUS_ABORTED);
 
@@ -1235,11 +1235,10 @@ public:
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        if (status == Ydb::StatusIds::SUCCESS || status == Ydb::StatusIds::ABORTED && LeaseExpired) {
+        if (OperationStatus) {
             TMaybe<google::protobuf::Any> metadata;
             metadata.ConstructInPlace().PackFrom(Metadata);
-
-            Send(Owner, new TEvGetScriptExecutionOperationResponse(Ready, LeaseExpired, RunScriptActorId, Ydb::StatusIds::SUCCESS, std::move(Issues), std::move(metadata)));
+            Send(Owner, new TEvGetScriptExecutionOperationResponse(true, LeaseExpired, RunScriptActorId, *OperationStatus, std::move(Issues), std::move(metadata)));
         } else {
             Send(Owner, new TEvGetScriptExecutionOperationResponse(false, LeaseExpired, RunScriptActorId, status, std::move(issues), Nothing()));
         }
@@ -1251,7 +1250,7 @@ private:
     bool FinishIfLeaseExpired;
     TInstant StartActorTime;
     TString ExecutionId;
-    bool Ready = false;
+    TMaybe<Ydb::StatusIds::StatusCode> OperationStatus;
     bool LeaseExpired = false;
     TActorId RunScriptActorId;
     NYql::TIssues Issues;

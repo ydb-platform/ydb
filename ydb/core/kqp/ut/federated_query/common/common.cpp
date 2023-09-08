@@ -6,15 +6,14 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
 
     NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(const NYdb::TOperation::TOperationId& operationId, const NYdb::TDriver& ydbDriver) {
         NYdb::NOperation::TOperationClient client(ydbDriver);
-        NThreading::TFuture<NYdb::NQuery::TScriptExecutionOperation> op;
-        do {
-            if (op.Initialized()) {
-                Sleep(TDuration::MilliSeconds(10));
+        while (1) {
+            auto op = client.Get<NYdb::NQuery::TScriptExecutionOperation>(operationId).GetValueSync();
+            if (op.Ready()) {
+                return op;
             }
-            op = client.Get<NYdb::NQuery::TScriptExecutionOperation>(operationId);
-            UNIT_ASSERT_C(op.GetValueSync().Status().IsSuccess(), TStringBuilder() << op.GetValueSync().Status().GetStatus() << ":" << op.GetValueSync().Status().GetIssues().ToString());
-        } while (!op.GetValueSync().Ready());
-        return op.GetValueSync();
+            UNIT_ASSERT_C(op.Status().IsSuccess(), TStringBuilder() << op.Status().GetStatus() << ":" << op.Status().GetIssues().ToString());
+            Sleep(TDuration::MilliSeconds(10));
+        } 
     }
 
     std::shared_ptr<TKikimrRunner> MakeKikimrRunner(

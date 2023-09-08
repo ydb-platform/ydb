@@ -72,8 +72,8 @@ public:
             .Apply([actorSystem = NActors::TActivationContext::ActorSystem(), recipient = ev->Sender, cookie = ev->Cookie](auto future) {
                 try {
                     auto response = future.ExtractValueSync();
-                    if (response.Status().IsSuccess()) {
-                        actorSystem->Send(recipient, new TEvYdbCompute::TEvGetOperationResponse(response.Metadata().ExecStatus, response.Metadata().ResultSetsMeta, response.Metadata().ExecStats, response.Status().GetIssues()), 0, cookie);
+                    if (response.Id().GetKind() != Ydb::TOperationId::UNUSED) {
+                        actorSystem->Send(recipient, new TEvYdbCompute::TEvGetOperationResponse(response.Metadata().ExecStatus, static_cast<Ydb::StatusIds::StatusCode>(response.Status().GetStatus()), response.Metadata().ResultSetsMeta, response.Metadata().ExecStats, response.Status().GetIssues()), 0, cookie);
                     } else {
                         actorSystem->Send(recipient, new TEvYdbCompute::TEvGetOperationResponse(response.Status().GetIssues(), response.Status().GetStatus()), 0, cookie);
                     }

@@ -38,6 +38,7 @@ NYql::NDqProto::StatusIds::StatusCode YdbStatusToDqStatus(Ydb::StatusIds::Status
     case Ydb::StatusIds::SUCCESS:
         return NYql::NDqProto::StatusIds::SUCCESS;
     case Ydb::StatusIds::BAD_REQUEST:
+        return NYql::NDqProto::StatusIds::BAD_REQUEST;
     case Ydb::StatusIds::UNAUTHORIZED:
     case Ydb::StatusIds::INTERNAL_ERROR:
         return NYql::NDqProto::StatusIds::INTERNAL_ERROR;

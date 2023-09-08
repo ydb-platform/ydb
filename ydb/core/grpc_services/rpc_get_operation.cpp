@@ -243,9 +243,7 @@ private:
     void Handle(NKqp::TEvGetScriptExecutionOperationResponse::TPtr& ev, const TActorContext& ctx) {
         TEvGetOperationRequest::TResponse resp;
         auto deferred = resp.mutable_operation();
-        if (ev->Get()->Ready) {
-            deferred->set_id(GetProtoRequest()->id());
-        }
+        deferred->set_id(GetProtoRequest()->id());
         deferred->set_ready(ev->Get()->Ready);
         deferred->set_status(ev->Get()->Status);
         if (ev->Get()->Issues) {

@@ -101,8 +101,9 @@ struct TEvYdbCompute {
             , Status(status)
         {}
 
-        TEvGetOperationResponse(NYdb::NQuery::EExecStatus execStatus, const TVector<Ydb::Query::ResultSetMeta>& resultSetsMeta, const Ydb::TableStats::QueryStats& queryStats, NYql::TIssues issues)
+        TEvGetOperationResponse(NYdb::NQuery::EExecStatus execStatus, Ydb::StatusIds::StatusCode statusCode, const TVector<Ydb::Query::ResultSetMeta>& resultSetsMeta, const Ydb::TableStats::QueryStats& queryStats, NYql::TIssues issues)
             : ExecStatus(execStatus)
+            , StatusCode(statusCode)
             , ResultSetsMeta(resultSetsMeta)
             , QueryStats(queryStats)
             , Issues(std::move(issues))
@@ -110,6 +111,7 @@ struct TEvYdbCompute {
         {}
 
         NYdb::NQuery::EExecStatus ExecStatus = NYdb::NQuery::EExecStatus::Unspecified;
+        Ydb::StatusIds::StatusCode StatusCode = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
         TVector<Ydb::Query::ResultSetMeta> ResultSetsMeta;
         Ydb::TableStats::QueryStats QueryStats;
         NYql::TIssues Issues;

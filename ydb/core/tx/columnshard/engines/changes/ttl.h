@@ -77,19 +77,16 @@ public:
         return PortionsToEvict.size();
     }
     virtual THashSet<TPortionAddress> GetTouchedPortions() const override {
-        THashSet<TPortionAddress> result;
+        THashSet<TPortionAddress> result = TBase::GetTouchedPortions();
         for (auto&& info : PortionsToEvict) {
             result.emplace(info.GetPortionInfo().GetAddress());
-        }
-        for (auto&& info : PortionsToDrop) {
-            result.emplace(info.GetAddress());
         }
         return result;
     }
 
     std::vector<TColumnRecord> EvictedRecords;
     THashMap<ui64, NOlap::TTiering> Tiering;
-    virtual THashMap<TUnifiedBlobId, std::vector<TBlobRange>> GetGroupedBlobRanges() const override;
+    virtual THashSet<TBlobRange> GetReadBlobRanges() const override;
 
     void AddPortionToEvict(const TPortionInfo& info, TPortionEvictionFeatures&& features) {
         Y_VERIFY(!info.Empty());

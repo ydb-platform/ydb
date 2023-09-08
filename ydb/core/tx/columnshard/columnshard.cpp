@@ -1,4 +1,5 @@
 #include "columnshard_impl.h"
+#include "blobs_reader/actor.h"
 
 namespace NKikimr {
 
@@ -12,9 +13,7 @@ namespace NKikimr::NColumnShard {
 
 void TColumnShard::CleanupActors(const TActorContext& ctx)
 {
-    ctx.Send(IndexingActor, new TEvents::TEvPoisonPill);
-    ctx.Send(CompactionActor, new TEvents::TEvPoisonPill);
-    ctx.Send(EvictionActor, new TEvents::TEvPoisonPill);
+    ctx.Send(BlobsReadActor, new TEvents::TEvPoisonPill);
     if (Tiers) {
         Tiers->Stop();
     }
@@ -31,9 +30,7 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
     Become(&TThis::StateWork);
     LOG_S_INFO("Switched to work at " << TabletID() << " actor " << ctx.SelfID);
 
-    IndexingActor = ctx.Register(CreateIndexingActor(TabletID(), ctx.SelfID, IndexationCounters));
-    CompactionActor = ctx.Register(CreateCompactionActor(TabletID(), ctx.SelfID, TSettings::MAX_ACTIVE_COMPACTIONS));
-    EvictionActor = ctx.Register(CreateEvictionActor(TabletID(), ctx.SelfID, EvictionCounters));
+    BlobsReadActor = ctx.Register(new NOlap::NBlobOperations::NRead::TActor(TabletID(), SelfId()));
     for (auto&& i : TablesManager.GetTables()) {
         ActivateTiering(i.first, i.second.GetTieringUsage());
     }

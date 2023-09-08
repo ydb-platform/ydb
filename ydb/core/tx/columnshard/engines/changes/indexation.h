@@ -40,7 +40,7 @@ public:
         return TBase::GetTouchedPortions();
     }
 
-    virtual THashMap<TUnifiedBlobId, std::vector<TBlobRange>> GetGroupedBlobRanges() const override;
+    virtual THashSet<TBlobRange> GetReadBlobRanges() const override;
     virtual TString TypeString() const override {
         return "INSERT";
     }

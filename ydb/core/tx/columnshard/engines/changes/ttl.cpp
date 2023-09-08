@@ -18,16 +18,18 @@ void TTTLColumnEngineChanges::DoDebugString(TStringOutput& out) const {
     }
 }
 
-THashMap<NKikimr::NOlap::TUnifiedBlobId, std::vector<NKikimr::NOlap::TBlobRange>> TTTLColumnEngineChanges::GetGroupedBlobRanges() const {
+THashSet<TBlobRange> TTTLColumnEngineChanges::GetReadBlobRanges() const {
     Y_VERIFY(PortionsToEvict.size());
 
-    THashMap<TUnifiedBlobId, std::vector<TBlobRange>> sameBlobRanges;
-    for (auto&& p : PortionsToEvict) {
+    THashSet<TBlobRange> result;
+    for (const auto& p : PortionsToEvict) {
+        Y_VERIFY(!p.GetPortionInfo().Empty());
+
         for (const auto& rec : p.GetPortionInfo().Records) {
-            sameBlobRanges[rec.BlobRange.BlobId].push_back(rec.BlobRange);
+            Y_VERIFY(result.emplace(rec.BlobRange).second);
         }
     }
-    return sameBlobRanges;
+    return result;
 }
 
 bool TTTLColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context) {

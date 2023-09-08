@@ -35,7 +35,7 @@ private:
 };
 
 
-bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContext& ctx) {
+bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) {
     Y_VERIFY(Ev);
     LOG_S_DEBUG(TxPrefix() << "execute" << TxSuffix());
 
@@ -257,12 +257,7 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
             }
 
             if (statusMessage.empty()) {
-                if (auto event = Self->SetupTtl(pathTtls, true)) {
-                    if (event->NeedDataReadWrite()) {
-                        ctx.Send(Self->EvictionActor, event.release());
-                    } else {
-                        ctx.Send(Self->SelfId(), event->TxEvent.release());
-                    }
+                if (Self->SetupTtl(pathTtls, true)) {
                     status = NKikimrTxColumnShard::EResultStatus::SUCCESS;
                 } else {
                     statusMessage = "TTL not started";

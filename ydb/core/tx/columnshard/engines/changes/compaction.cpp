@@ -18,8 +18,18 @@ void TCompactColumnEngineChanges::DoDebugString(TStringOutput& out) const {
     }
 }
 
-THashMap<NKikimr::NOlap::TUnifiedBlobId, std::vector<NKikimr::NOlap::TBlobRange>> TCompactColumnEngineChanges::GetGroupedBlobRanges() const {
-    return GroupedBlobRanges(SwitchedPortions);
+THashSet<TBlobRange> TCompactColumnEngineChanges::GetReadBlobRanges() const {
+    Y_VERIFY(SwitchedPortions.size());
+
+    THashSet<TBlobRange> result;
+    for (const auto& portionInfo : SwitchedPortions) {
+        Y_VERIFY(!portionInfo.Empty());
+
+        for (const auto& rec : portionInfo.Records) {
+            Y_VERIFY(result.emplace(rec.BlobRange).second);
+        }
+    }
+    return result;
 }
 
 void TCompactColumnEngineChanges::DoCompile(TFinalizationContext& context) {
@@ -45,7 +55,7 @@ bool TCompactColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TAp
         const ui64 granule = portionInfo.GetGranule();
         const ui64 portion = portionInfo.GetPortion();
 
-        const TPortionInfo& oldInfo = self.GetGranulePtrVerified(granule)->GetPortionVerified(portion);
+        const TPortionInfo& oldInfo = self.GetGranuleVerified(granule).GetPortionVerified(portion);
 
         auto& granuleStart = self.Granules[granule]->Record.Mark;
 

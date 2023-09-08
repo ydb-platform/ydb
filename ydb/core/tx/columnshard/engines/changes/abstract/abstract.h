@@ -202,7 +202,7 @@ protected:
 
     virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const = 0;
 public:
-    TConclusionStatus ConstructBlobs(TConstructionContext& context);
+    TConclusionStatus ConstructBlobs(TConstructionContext& context) noexcept;
     virtual ~TColumnEngineChanges();
 
     bool IsAborted() const {
@@ -234,7 +234,7 @@ public:
 
     THashMap<TBlobRange, TString> Blobs;
 
-    virtual THashMap<TUnifiedBlobId, std::vector<TBlobRange>> GetGroupedBlobRanges() const = 0;
+    virtual THashSet<TBlobRange> GetReadBlobRanges() const = 0;
     virtual TString TypeString() const = 0;
     TString DebugString() const;
 
@@ -246,20 +246,6 @@ public:
         return size;
     }
 
-    /// Returns blob-ranges grouped by blob-id.
-    static THashMap<TUnifiedBlobId, std::vector<TBlobRange>> GroupedBlobRanges(const std::vector<TPortionInfo>& portions) {
-        Y_VERIFY(portions.size());
-
-        THashMap<TUnifiedBlobId, std::vector<TBlobRange>> sameBlobRanges;
-        for (const auto& portionInfo : portions) {
-            Y_VERIFY(!portionInfo.Empty());
-
-            for (const auto& rec : portionInfo.Records) {
-                sameBlobRanges[rec.BlobRange.BlobId].push_back(rec.BlobRange);
-            }
-        }
-        return sameBlobRanges;
-    }
 };
 
 }

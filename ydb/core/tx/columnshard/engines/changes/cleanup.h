@@ -34,7 +34,7 @@ public:
     std::vector<TPortionInfo> PortionsToDrop;
     bool NeedRepeat = false;
 
-    virtual THashMap<TUnifiedBlobId, std::vector<TBlobRange>> GetGroupedBlobRanges() const override {
+    virtual THashSet<TBlobRange> GetReadBlobRanges() const override {
         return {};
     }
 

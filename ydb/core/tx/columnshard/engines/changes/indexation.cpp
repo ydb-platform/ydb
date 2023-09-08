@@ -7,12 +7,12 @@
 
 namespace NKikimr::NOlap {
 
-THashMap<TUnifiedBlobId, std::vector<TBlobRange>> TInsertColumnEngineChanges::GetGroupedBlobRanges() const {
-    THashMap<TUnifiedBlobId, std::vector<TBlobRange>> result;
+THashSet<TBlobRange> TInsertColumnEngineChanges::GetReadBlobRanges() const {
+    THashSet<TBlobRange> result;
     for (size_t i = 0; i < DataToIndex.size(); ++i) {
-        const auto& indsertedData = DataToIndex[i];
-        Y_VERIFY(indsertedData.GetBlobRange().IsFullBlob());
-        Y_VERIFY(result.emplace(indsertedData.GetBlobRange().GetBlobId(), TVector<TBlobRange>{ indsertedData.GetBlobRange() }).second);
+        const auto& insertedData = DataToIndex[i];
+        Y_VERIFY(insertedData.GetBlobRange().IsFullBlob());
+        Y_VERIFY(result.emplace(insertedData.GetBlobRange()).second);
     }
     return result;
 }

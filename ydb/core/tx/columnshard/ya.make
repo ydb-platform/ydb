@@ -29,11 +29,8 @@ SRCS(
     columnshard_private_events.cpp
     columnshard_schema.cpp
     counters.cpp
-    compaction_actor.cpp
     defs.cpp
-    eviction_actor.cpp
     export_actor.cpp
-    indexing_actor.cpp
     read_actor.cpp
     write_actor.cpp
     tables_manager.cpp
@@ -59,6 +56,7 @@ PEERDIR(
     ydb/core/tx/columnshard/common
     ydb/core/tx/columnshard/splitter
     ydb/core/tx/columnshard/operations
+    ydb/core/tx/columnshard/blobs_reader
     ydb/core/tx/tiering
     ydb/core/tx/conveyor/usage
     ydb/core/tx/long_tx_service/public

@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(blobs_reader)
 add_subdirectory(common)
 add_subdirectory(counters)
 add_subdirectory(engines)
@@ -51,6 +52,7 @@ target_link_libraries(core-tx-columnshard PUBLIC
   tx-columnshard-common
   tx-columnshard-splitter
   tx-columnshard-operations
+  tx-columnshard-blobs_reader
   core-tx-tiering
   tx-conveyor-usage
   tx-long_tx_service-public
@@ -88,11 +90,8 @@ target_sources(core-tx-columnshard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_private_events.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_schema.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/counters.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/compaction_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/defs.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/eviction_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/export_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/indexing_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/read_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/write_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/tables_manager.cpp

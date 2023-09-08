@@ -14,7 +14,7 @@ TString TColumnEngineChanges::DebugString() const {
     return sb.Str();
 }
 
-TConclusionStatus TColumnEngineChanges::ConstructBlobs(TConstructionContext& context) {
+TConclusionStatus TColumnEngineChanges::ConstructBlobs(TConstructionContext& context) noexcept {
     Y_VERIFY(Stage == EStage::Started);
 
     {

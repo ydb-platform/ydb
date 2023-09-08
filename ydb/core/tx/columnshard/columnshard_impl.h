@@ -43,9 +43,6 @@ class TOperationsManager;
 
 extern bool gAllowLogBatchingDefaultValue;
 
-IActor* CreateIndexingActor(ui64 tabletId, const TActorId& parent, const TIndexationCounters& counters);
-IActor* CreateCompactionActor(ui64 tabletId, const TActorId& parent, const ui64 workers);
-IActor* CreateEvictionActor(ui64 tabletId, const TActorId& parent, const TIndexationCounters& counters);
 IActor* CreateWriteActor(ui64 tabletId, IWriteController::TPtr writeController, TBlobBatch&& blobBatch, const TInstant& deadline, const ui64 maxSmallBlobSize);
 IActor* CreateReadActor(ui64 tabletId,
                         const TActorId& dstActor,
@@ -389,9 +386,7 @@ private:
     TInstant LastAccessTime;
     TInstant LastStatsReport;
 
-    TActorId IndexingActor;     // It's logically bounded to 1: we move each portion of data to multiple indices.
-    TActorId CompactionActor;   // It's memory bounded to 1: we have no memory for parallel compaction.
-    TActorId EvictionActor;
+    TActorId BlobsReadActor;
     TActorId StatsReportPipe;
 
     std::shared_ptr<TTiersManager> Tiers;
@@ -401,6 +396,7 @@ private:
     std::unique_ptr<NOlap::TInsertTable> InsertTable;
     const TScanCounters ReadCounters;
     const TScanCounters ScanCounters;
+    const TIndexationCounters CompactionCounters = TIndexationCounters("GeneralCompaction");
     const TIndexationCounters IndexationCounters = TIndexationCounters("Indexation");
     const TIndexationCounters EvictionCounters = TIndexationCounters("Eviction");
 
@@ -473,8 +469,7 @@ private:
 
     void SetupIndexation();
     void SetupCompaction();
-    std::unique_ptr<TEvPrivate::TEvEviction> SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls = {},
-                                                      bool force = false);
+    bool SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls = {}, const bool force = false);
     std::unique_ptr<TEvPrivate::TEvWriteIndex> SetupCleanup();
 
     void UpdateBlobMangerCounters();

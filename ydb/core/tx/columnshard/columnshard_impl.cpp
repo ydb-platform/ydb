@@ -1,5 +1,7 @@
 #include "columnshard_impl.h"
 #include "columnshard_schema.h"
+#include "blobs_reader/task.h"
+#include "blobs_reader/events.h"
 #include "engines/changes/ttl.h"
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
@@ -8,6 +10,7 @@
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/services/metadata/service.h>
 #include <ydb/core/tx/tiering/manager.h>
+#include <ydb/core/tx/conveyor/usage/service.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -632,15 +635,75 @@ void TColumnShard::EnqueueBackgroundActivities(bool periodic, TBackgroundActivit
     }
 
     if (activity.HasTtl()) {
-        if (auto event = SetupTtl()) {
-            if (event->NeedDataReadWrite()) {
-                ctx.Send(EvictionActor, event.release());
-            } else {
-                ctx.Send(SelfId(), event->TxEvent.release());
-            }
-        }
+        SetupTtl();
     }
 }
+
+class TChangesTask: public NConveyor::ITask {
+private:
+    std::unique_ptr<TEvPrivate::TEvWriteIndex> TxEvent;
+    const TIndexationCounters Counters;
+    const ui64 TabletId;
+    const TActorId ParentActorId;
+protected:
+    virtual bool DoExecute() override {
+        NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent_id", ParentActorId));
+        auto guard = TxEvent->PutResult->StartCpuGuard();
+
+        NOlap::TConstructionContext context(TxEvent->IndexInfo, Counters);
+        Y_VERIFY(TxEvent->IndexChanges->ConstructBlobs(context).Ok());
+        if (!TxEvent->IndexChanges->GetWritePortionsCount()) {
+            TxEvent->SetPutStatus(NKikimrProto::OK);
+        }
+        TActorContext::AsActorContext().Send(ParentActorId, std::move(TxEvent));
+        return true;
+    }
+public:
+    virtual TString GetTaskClassIdentifier() const override {
+        Y_VERIFY(TxEvent);
+        Y_VERIFY(TxEvent->IndexChanges);
+        return "Changes::ConstructBlobs::" + TxEvent->IndexChanges->TypeString();
+    }
+
+    TChangesTask(std::unique_ptr<TEvPrivate::TEvWriteIndex>&& txEvent, const TIndexationCounters& counters, const ui64 tabletId, const TActorId parentActorId)
+        : TxEvent(std::move(txEvent))
+        , Counters(counters)
+        , TabletId(tabletId)
+        , ParentActorId(parentActorId)
+    {
+        Y_VERIFY(TxEvent);
+        Y_VERIFY(TxEvent->IndexChanges);
+    }
+};
+
+class TChangesReadTask: public NOlap::NBlobOperations::NRead::ITask {
+private:
+    using TBase = NOlap::NBlobOperations::NRead::ITask;
+    const TActorId ParentActorId;
+    const ui64 TabletId;
+    std::unique_ptr<TEvPrivate::TEvWriteIndex> TxEvent;
+    TIndexationCounters Counters;
+protected:
+    virtual void DoOnDataReady() override {
+        TxEvent->IndexChanges->Blobs = std::move(ExtractBlobsData());
+        std::shared_ptr<NConveyor::ITask> task = std::make_shared<TChangesTask>(std::move(TxEvent), Counters, TabletId, ParentActorId);
+        NConveyor::TCompServiceOperator::SendTaskToExecute(task);
+    }
+    virtual bool DoOnError(const TBlobRange& /*range*/) override {
+        TxEvent->SetPutStatus(NKikimrProto::ERROR);
+        TActorContext::AsActorContext().Send(ParentActorId, std::move(TxEvent));
+        return false;
+    }
+public:
+    TChangesReadTask(std::unique_ptr<TEvPrivate::TEvWriteIndex>&& event, const TActorId parentActorId, const ui64 tabletId, const TIndexationCounters& counters)
+        : TBase(event->IndexChanges->GetReadBlobRanges())
+        , ParentActorId(parentActorId)
+        , TabletId(tabletId)
+        , TxEvent(std::move(event))
+        , Counters(counters)
+    {
+    }
+};
 
 void TColumnShard::SetupIndexation() {
     if (BackgroundController.IsIndexingActive()) {
@@ -710,7 +773,7 @@ void TColumnShard::SetupIndexation() {
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges,
         Settings.CacheDataAfterIndexing);
 
-    ActorContext().Send(IndexingActor, std::make_unique<TEvPrivate::TEvIndexing>(std::move(ev)));
+    ActorContext().Send(BlobsReadActor, std::make_unique<NOlap::NBlobOperations::NRead::TEvStartReadTask>(std::make_unique<TChangesReadTask>(std::move(ev), SelfId(), TabletID(), IndexationCounters)));
 }
 
 void TColumnShard::SetupCompaction() {
@@ -731,22 +794,21 @@ void TColumnShard::SetupCompaction() {
 
         auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
         auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges, Settings.CacheDataAfterCompaction);
-        ActorContext().Send(CompactionActor, std::make_unique<TEvPrivate::TEvCompaction>(std::move(ev), *BlobManager));
+        ActorContext().Send(BlobsReadActor, std::make_unique<NOlap::NBlobOperations::NRead::TEvStartReadTask>(std::make_unique<TChangesReadTask>(std::move(ev), SelfId(), TabletID(), CompactionCounters)));
     }
 
     LOG_S_DEBUG("ActiveCompactions: " << BackgroundController.GetCompactionsCount() << " at tablet " << TabletID());
 }
 
-std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls,
-                                                                bool force) {
+bool TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls, const bool force) {
     CSCounters.OnSetupTtl();
     if (BackgroundController.IsTtlActive()) {
         LOG_S_DEBUG("TTL already in progress at tablet " << TabletID());
-        return {};
+        return false;
     }
     if (ActiveEvictions) {
         LOG_S_DEBUG("Do not start TTL while eviction is in progress at tablet " << TabletID());
-        return {};
+        return false;
     }
     if (force) {
         TablesManager.MutablePrimaryIndex().OnTieringModified(Tiers, TablesManager.GetTtl());
@@ -762,7 +824,7 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
 
     if (!indexChanges) {
         LOG_S_INFO("Cannot prepare TTL at tablet " << TabletID());
-        return {};
+        return false;
     }
 
     const bool needWrites = indexChanges->NeedConstruction();
@@ -770,7 +832,14 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
 
     indexChanges->Start(*this);
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges, false);
-    return std::make_unique<TEvPrivate::TEvEviction>(std::move(ev), *BlobManager, needWrites);
+
+    if (needWrites) {
+        ActorContext().Send(BlobsReadActor, std::make_unique<NOlap::NBlobOperations::NRead::TEvStartReadTask>(std::make_unique<TChangesReadTask>(std::move(ev), SelfId(), TabletID(), CompactionCounters)));
+    } else {
+        ev->SetPutStatus(NKikimrProto::OK);
+        ActorContext().Send(SelfId(), std::move(ev));
+    }
+    return true;
 }
 
 std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {

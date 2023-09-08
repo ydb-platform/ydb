@@ -23,6 +23,7 @@ struct TEvPrivate {
         EvForget,
         EvGetExported,
         EvWriteBlobsResult,
+        EvStartReadTask,
         EvEnd
     };
 
@@ -62,73 +63,6 @@ struct TEvPrivate {
         void SetPutStatus(const NKikimrProto::EReplyStatus& status) {
             Y_VERIFY(PutResult);
             PutResult->SetPutStatus(status);
-        }
-    };
-
-    struct TEvIndexing : public TEventLocal<TEvIndexing, EvIndexing> {
-        std::unique_ptr<TEvPrivate::TEvWriteIndex> TxEvent;
-        THashMap<TUnifiedBlobId, std::vector<TBlobRange>> GroupedBlobRanges;
-
-        explicit TEvIndexing(std::unique_ptr<TEvPrivate::TEvWriteIndex> txEvent)
-            : TxEvent(std::move(txEvent))
-        {
-            GroupedBlobRanges = TxEvent->IndexChanges->GetGroupedBlobRanges();
-        }
-    };
-
-    struct TEvCompaction : public TEventLocal<TEvCompaction, EvIndexing> {
-        std::unique_ptr<TEvPrivate::TEvWriteIndex> TxEvent;
-        THashMap<TUnifiedBlobId, std::vector<TBlobRange>> GroupedBlobRanges;
-        THashSet<TUnifiedBlobId> Externals;
-
-        explicit TEvCompaction(std::unique_ptr<TEvPrivate::TEvWriteIndex> txEvent, IBlobExporter& blobManager)
-            : TxEvent(std::move(txEvent))
-        {
-            TxEvent->GranuleCompaction = true;
-            Y_VERIFY(TxEvent->IndexChanges);
-
-            GroupedBlobRanges = TxEvent->IndexChanges->GetGroupedBlobRanges();
-
-            if (blobManager.HasExternBlobs()) {
-                for (const auto& [blobId, _] : GroupedBlobRanges) {
-                    TEvictMetadata meta;
-                    if (blobManager.GetEvicted(blobId, meta).IsExternal()) {
-                        Externals.insert(blobId);
-                    }
-                }
-            }
-        }
-    };
-
-    struct TEvEviction : public TEventLocal<TEvEviction, EvEviction> {
-        std::unique_ptr<TEvPrivate::TEvWriteIndex> TxEvent;
-        THashMap<TUnifiedBlobId, std::vector<TBlobRange>> GroupedBlobRanges;
-        THashSet<TUnifiedBlobId> Externals;
-
-        explicit TEvEviction(std::unique_ptr<TEvPrivate::TEvWriteIndex> txEvent, IBlobExporter& blobManager,
-                             bool needWrites)
-            : TxEvent(std::move(txEvent))
-        {
-            Y_VERIFY(TxEvent->IndexChanges);
-
-            if (needWrites) {
-                GroupedBlobRanges = TxEvent->IndexChanges->GetGroupedBlobRanges();
-
-                if (blobManager.HasExternBlobs()) {
-                    for (auto& [blobId, _] : GroupedBlobRanges) {
-                        TEvictMetadata meta;
-                        if (blobManager.GetEvicted(blobId, meta).IsExternal()) {
-                            Externals.insert(blobId);
-                        }
-                    }
-                }
-            } else {
-                TxEvent->SetPutStatus(NKikimrProto::OK);
-            }
-        }
-
-        bool NeedDataReadWrite() const {
-            return (TxEvent->GetPutStatus() != NKikimrProto::OK);
         }
     };
 

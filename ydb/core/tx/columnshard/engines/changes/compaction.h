@@ -29,7 +29,7 @@ protected:
         NeedGranuleStatusProvide = false;
     }
 public:
-    virtual THashMap<TUnifiedBlobId, std::vector<TBlobRange>> GetGroupedBlobRanges() const override;
+    virtual THashSet<TBlobRange> GetReadBlobRanges() const override;
 
     std::vector<TPortionInfo> SwitchedPortions; // Portions that would be replaced by new ones
 

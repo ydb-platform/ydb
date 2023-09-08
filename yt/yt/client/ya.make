@@ -207,9 +207,3 @@ RECURSE_FOR_TESTS(
     table_client/unittests
     unittests
 )
-
-IF (NOT OPENSOURCE)
-    RECURSE(
-        table_client/benchmark
-    )
-ENDIF()

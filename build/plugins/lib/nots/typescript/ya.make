@@ -5,6 +5,7 @@ OWNER(g:frontend-build-platform)
 PY_SRCS(
     __init__.py
     ts_errors.py
+    ts_glob.py
     ts_config.py
 )
 

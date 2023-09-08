@@ -1,9 +1,9 @@
 import copy
-import os
 import json
+import os
 
 from .ts_errors import TsError, TsValidationError
-
+from .ts_glob import ts_glob, TsGlobConfig
 from ..package_manager.base import utils
 
 DEFAULT_TS_CONFIG_FILE = "tsconfig.json"
@@ -249,3 +249,22 @@ class TsConfig(object):
 
         with open(path, "w") as f:
             json.dump(self.data, f, indent=indent)
+
+    def filter_files(self, all_files):
+        # type: (list[str]) -> list[str]
+        """
+        Filters all the files by the rules from this tsconig.json. The result will be used as input entries in `ya make`.
+
+        Known limits:
+
+        - `files` nots supported, use `include` (see `self.validate()`)
+        - `exclude` not implemented, because `tsc` still uses "excluded" files as declaration files (for typing and referencing)
+        """
+
+        ts_glob_config = TsGlobConfig(
+            root_dir=self.compiler_option("rootDir"),
+            out_dir=self.compiler_option("outDir"),
+            include=self.data.get("include"),
+        )
+
+        return ts_glob(ts_glob_config, all_files)

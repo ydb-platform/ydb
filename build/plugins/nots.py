@@ -200,6 +200,29 @@ def on_ts_configure(unit, tsconfig_path):
     unit.set(["TS_CONFIG_PRESERVE_JSX", to_yesno(tsconfig.compiler_option("jsx") == "preserve")])
 
     _setup_eslint(unit)
+    _filter_inputs_by_rules_from_tsconfig(unit, tsconfig)
+
+
+def __strip_prefix(prefix, line):
+    # type: (str, str) -> str
+    if line.startswith(prefix):
+        prefix_len = len(prefix)
+        return line[prefix_len:]
+
+    return line
+
+
+def _filter_inputs_by_rules_from_tsconfig(unit, tsconfig):
+    """
+    Reduce file list from the TS_GLOB_FILES variable following tsconfig.json rules
+    """
+    mod_dir = unit.get("MODDIR")
+    target_path = "${ARCADIA_ROOT}/" + mod_dir + "/"
+
+    all_files = [__strip_prefix(target_path, f) for f in unit.get("TS_GLOB_FILES").split(" ")]
+    filtered_files = tsconfig.filter_files(all_files)
+
+    unit.set(["TS_GLOB_FILES", ' '.join([target_path + f for f in filtered_files])])
 
 
 def _get_ts_test_data_dirs(unit):

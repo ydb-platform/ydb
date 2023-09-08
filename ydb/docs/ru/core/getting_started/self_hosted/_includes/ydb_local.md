@@ -15,7 +15,7 @@
 Создайте рабочую директорию. Запустите в ней скрипт скачивания архива с исполняемым файлом `ydbd` и необходимыми для работы {{ ydb-short-name }} библиотеками, а также набора скриптов и вспомогательных файлов для запуска и остановки сервера:
 
 ```bash
-curl {{ ydb-binaries-url }}/local_scripts/install.sh | bash
+curl {{ ydbd-install-url }} | bash
 ```
 
 {% include [wget_auth_overlay.md](wget_auth_overlay.md) %}

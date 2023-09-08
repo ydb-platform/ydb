@@ -9,7 +9,7 @@
     Чтобы установить {{ ydb-short-name }} CLI, выполните команду:
 
     ```bash
-    curl -sSL https://storage.yandexcloud.net/yandexcloud-ydb/install.sh | bash
+    curl -sSL {{ ydb-cli-install-url }} | bash
     ```
 
     Скрипт установит {{ ydb-short-name }} CLI и добавит путь к исполняемому файлу в переменную окружения `PATH`.
@@ -27,7 +27,7 @@
     Чтобы установить {{ ydb-short-name }} CLI, выполните команду:
 
     ```bash
-    curl -sSL https://storage.yandexcloud.net/yandexcloud-ydb/install.sh | bash
+    curl -sSL {{ ydb-cli-install-url }} | bash
     ```
 
     Скрипт установит {{ ydb-short-name }} CLI и добавит путь до исполняемого файла в переменную окружения `PATH`.

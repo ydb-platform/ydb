@@ -17,6 +17,8 @@ items:
       href: ../administration/monitoring.md
     - name: Дашборды Grafana
       href: ../administration/grafana-dashboards.md
+    - name: Справочник метрик
+      href: ../troubleshooting/monitoring.md
 - name: Обновление
   href: ../administration/upgrade.md
 # - name: Роллинг рестарт

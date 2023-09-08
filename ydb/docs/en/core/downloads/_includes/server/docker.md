@@ -1,5 +1,7 @@
 | Version | Release date | Download | Changelog |
 :--- | :--- | :--- | :---
+**v23.2**
+v.23.2.12 | 14/08/2023 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:23.2.12` | [See the changelog](../../../changelog-server.md#23-2)
 **v23.1**
 v.23.1.26 | 05/05/2023 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:23.1.26` | [See the changelog](../../../changelog-server.md#23-1)
 **v22.5**

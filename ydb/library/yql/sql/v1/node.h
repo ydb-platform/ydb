@@ -504,6 +504,7 @@ namespace NSQLTranslationV1 {
         TNodePtr Build() const;
         TString GetRepr() const;
         bool Empty() const;
+        bool HasNode() const;
 
     private:
         TMaybe<TString> Explicit;

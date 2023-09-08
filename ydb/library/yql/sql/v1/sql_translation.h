@@ -221,8 +221,8 @@ protected:
 
     bool AddObjectFeature(std::map<TString, TDeferredAtom>& result, const TRule_object_feature& feature);
     bool BindParameterClause(const TRule_bind_parameter& node, TDeferredAtom& result);
-    bool ObjectFeatureValueClause(const TRule_object_feature_value & node, TDeferredAtom & result);
-    bool ParseObjectFeatures(std::map<TString, TDeferredAtom> & result, const TRule_object_features & features);
+    bool ObjectFeatureValueClause(const TRule_object_feature_value& node, TDeferredAtom& result);
+    bool ParseObjectFeatures(std::map<TString, TDeferredAtom>& result, const TRule_object_features& features);
     bool ParseExternalDataSourceSettings(std::map<TString, TDeferredAtom> & result, const TRule_with_table_settings & settings);
     bool RoleNameClause(const TRule_role_name& node, TDeferredAtom& result, bool allowSystemRoles);
     bool RoleParameters(const TRule_create_user_option& node, TRoleParameters& result);

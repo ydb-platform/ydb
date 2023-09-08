@@ -639,6 +639,21 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["SECRET"]);
     }
 
+    Y_UNIT_TEST(CreateObjectWithFeaturesStrings) {
+        NYql::TAstParseResult res = SqlToYql("USE plato; CREATE OBJECT secretId (TYPE SECRET) WITH (Key1=\"Value1\", K2='V2', K3=V3, K4='', K5=`aaa`, K6='a\\'aa');");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'('\"K2\" '\"V2\") '('\"K3\" '\"V3\") '('\"K4\" '\"\") '('\"K5\" '\"aaa\") '('\"K6\" '\"a'aa\") '('\"Key1\" '\"Value1\")"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("createObject"));
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("Write"), 0}, {TString("SECRET"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+    }
+
     Y_UNIT_TEST(UpsertObjectWithFeatures) {
         NYql::TAstParseResult res = SqlToYql("USE plato; UPSERT OBJECT secretId (TYPE SECRET) WITH (Key1=Value1, K2=V2);");
         UNIT_ASSERT(res.Root);

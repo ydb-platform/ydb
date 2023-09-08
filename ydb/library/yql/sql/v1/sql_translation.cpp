@@ -4134,7 +4134,7 @@ bool TSqlTranslation::ObjectFeatureValueClause(const TRule_object_feature_value&
     switch (node.Alt_case()) {
         case TRule_object_feature_value::kAltObjectFeatureValue1:
         {
-            TString name = Id(node.GetAlt_object_feature_value1().GetRule_an_id_or_type1(), *this);
+            TString name = Id(node.GetAlt_object_feature_value1().GetRule_id_or_type1(), *this);
             result = TDeferredAtom(Ctx.Pos(), name);
             break;
         }
@@ -4143,6 +4143,16 @@ bool TSqlTranslation::ObjectFeatureValueClause(const TRule_object_feature_value&
             if (!BindParameterClause(node.GetAlt_object_feature_value2().GetRule_bind_parameter1(), result)) {
                 return false;
             }
+            break;
+        }
+        case TRule_object_feature_value::kAltObjectFeatureValue3:
+        {
+            auto strValue = StringContent(Ctx, Ctx.Pos(), Ctx.Token(node.GetAlt_object_feature_value3().GetToken1()));
+            if (!strValue) {
+                Error() << "Cannot parse string correctly: " << Ctx.Token(node.GetAlt_object_feature_value3().GetToken1());
+                return false;
+            }
+            result = TDeferredAtom(Ctx.Pos(), strValue->Content);
             break;
         }
         case TRule_object_feature_value::ALT_NOT_SET:

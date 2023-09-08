@@ -1817,6 +1817,10 @@ bool TDeferredAtom::Empty() const {
     return !Node || Repr.empty();
 }
 
+bool TDeferredAtom::HasNode() const {
+    return !!Node;
+}
+
 TTupleNode::TTupleNode(TPosition pos, const TVector<TNodePtr>& exprs)
     : TAstListNode(pos)
     , Exprs(exprs)

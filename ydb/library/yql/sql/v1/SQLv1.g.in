@@ -594,7 +594,7 @@ drop_object_stmt: DROP OBJECT object_ref
 ;
 drop_object_features: WITH object_features;
 
-object_feature_value: an_id_or_type | bind_parameter;
+object_feature_value: id_or_type | bind_parameter | STRING_VALUE;
 object_feature_kv: an_id_or_type EQUALS object_feature_value;
 object_feature_flag: an_id_or_type;
 object_feature: object_feature_kv | object_feature_flag;

@@ -368,6 +368,7 @@ class DefaultRule(BaseRule):
             result.add(self.context.runtime_include('bindings/flutter/helper.h'))
             result.add(self.context.runtime_include('bindings/flutter/meta_type.h'))
             result.add(self.context.runtime_include('bindings/flutter/native.h'))
+            result.add(self.context.runtime_include('bindings/flutter/async.h'))
 
         result.add('yandex/maps/export.h')
         result.add(self.context.runtime_include('assert.h'))
@@ -716,6 +717,11 @@ class IdlFileProcessor:
                 self._context.runtime_include('bindings/ios/point_to_native.h'),
                 self._context.runtime_include('bindings/ios/point_to_platform.h'),
                 'UIKit/UIKit.h',
+            },
+            dart_output_includes={
+                self._context.runtime_include('bindings/flutter/point_meta_type.h'),
+                self._context.runtime_include('bindings/flutter/point_to_native.h'),
+                self._context.runtime_include('bindings/flutter/point_to_platform.h'),
             },
         )
 

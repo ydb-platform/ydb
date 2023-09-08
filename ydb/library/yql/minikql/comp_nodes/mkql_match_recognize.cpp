@@ -28,33 +28,29 @@ struct IProcessMatchRecognize {
     virtual ~IProcessMatchRecognize(){}
 };
 
+struct TMatchRecognizeProcessorParameters {
+    IComputationExternalNode* InputDataArg;
+    IComputationExternalNode* MatchedVarsArg;
+    IComputationExternalNode* CurrentRowIndexArg;
+    TComputationNodePtrVector Defines;
+    IComputationExternalNode* MeasureInputDataArg;
+    TMeasureInputColumnOrder  MeasureInputColumnOrder;
+    TUnboxedValueVector       VarNames;
+    TComputationNodePtrVector Measures;
+    TOutputColumnOrder        OutputColumnOrder;
+};
+
 class TBackTrackingMatchRecognize: public IProcessMatchRecognize {
 public:
     TBackTrackingMatchRecognize(
         NUdf::TUnboxedValue&& partitionKey,
-        IComputationExternalNode* matchedVarsArg,
-        const TUnboxedValueVector& varNames,
-        IComputationExternalNode* measureInputDataArg,
-        const TMeasureInputColumnOrder& measureInputColumnOrder,
-        const TComputationNodePtrVector& measures,
-        const TOutputColumnOrder& outputColumnOrder,
-        IComputationExternalNode* currentRowIndexArg,
-        IComputationExternalNode* inputDataArg,
-        const TComputationNodePtrVector& defines,
+        const TMatchRecognizeProcessorParameters& parameters,
         const TContainerCacheOnContext& cache
     )
         : PartitionKey(std::move(partitionKey))
-        , MatchedVarsArg(matchedVarsArg)
-        , VarNames(varNames)
-        , MeasureInputDataArg(measureInputDataArg)
-        , MeasureInputColumnOrder(measureInputColumnOrder)
-        , Measures(measures)
-        , OutputColumnOrder(outputColumnOrder)
-        , CurrentRowIndexArg(currentRowIndexArg)
-        , InputDataArg(inputDataArg)
-        , Defines(defines)
+        , Parameters(parameters)
         , Cache(cache)
-        , CurMatchedVars(Defines.size())
+        , CurMatchedVars(parameters.Defines.size())
         , MatchNumber(0)
     {
     }
@@ -67,21 +63,21 @@ public:
     NUdf::TUnboxedValue GetOutputIfReady(TComputationContext& ctx) override {
         if (Matches.empty())
             return NUdf::TUnboxedValue{};
-        MatchedVarsArg->SetValue(ctx, ToValue(ctx, std::move(Matches.front())));
+        Parameters.MatchedVarsArg->SetValue(ctx, ToValue(ctx, std::move(Matches.front())));
         Matches.pop_front();
-        MeasureInputDataArg->SetValue(ctx, ctx.HolderFactory.Create<TMeasureInputDataValue>(
-                InputDataArg->GetValue(ctx),
-                MeasureInputColumnOrder,
-                MatchedVarsArg->GetValue(ctx),
-                VarNames,
+        Parameters.MeasureInputDataArg->SetValue(ctx, ctx.HolderFactory.Create<TMeasureInputDataValue>(
+                Parameters.InputDataArg->GetValue(ctx),
+                Parameters.MeasureInputColumnOrder,
+                Parameters.MatchedVarsArg->GetValue(ctx),
+                Parameters.VarNames,
                 ++MatchNumber
         ));
         NUdf::TUnboxedValue *itemsPtr = nullptr;
-        const auto result = Cache.NewArray(ctx, OutputColumnOrder.size(), itemsPtr);
-        for (auto const& c: OutputColumnOrder) {
+        const auto result = Cache.NewArray(ctx, Parameters.OutputColumnOrder.size(), itemsPtr);
+        for (auto const& c: Parameters.OutputColumnOrder) {
             switch(c.first) {
                 case EOutputColumnSource::Measure:
-                    *itemsPtr++ = Measures[c.second]->GetValue(ctx);
+                    *itemsPtr++ = Parameters.Measures[c.second]->GetValue(ctx);
                     break;
                 case EOutputColumnSource::PartitionKey:
                     *itemsPtr++ = PartitionKey.GetElement(c.second);
@@ -94,11 +90,11 @@ public:
         //Assume, that data moved to IComputationExternalNode node, will not be modified or released
         //till the end of the current function
         auto rowsSize = Rows.size();
-        InputDataArg->SetValue(ctx, ctx.HolderFactory.VectorAsVectorHolder(std::move(Rows)));
+        Parameters.InputDataArg->SetValue(ctx, ctx.HolderFactory.VectorAsVectorHolder(std::move(Rows)));
         for (size_t i = 0; i != rowsSize; ++i) {
-            CurrentRowIndexArg->SetValue(ctx, NUdf::TUnboxedValuePod(static_cast<ui64>(i)));
-            for (size_t v = 0; v != Defines.size(); ++v) {
-                const auto &d = Defines[v]->GetValue(ctx);
+            Parameters.CurrentRowIndexArg->SetValue(ctx, NUdf::TUnboxedValuePod(static_cast<ui64>(i)));
+            for (size_t v = 0; v != Parameters.Defines.size(); ++v) {
+                const auto &d = Parameters.Defines[v]->GetValue(ctx);
                 if (d && d.GetOptionalValue().Get<bool>()) {
                     auto &var = CurMatchedVars[v];
                     if (var.empty()) {
@@ -115,22 +111,14 @@ public:
                 TMatchedVars temp;
                 temp.swap(CurMatchedVars);
                 Matches.emplace_back(std::move(temp));
-                CurMatchedVars.resize(Defines.size());
+                CurMatchedVars.resize(Parameters.Defines.size());
             }
         }
         return not Matches.empty();
     }
 private:
     const NUdf::TUnboxedValue PartitionKey;
-    IComputationExternalNode* const MatchedVarsArg;
-    const TUnboxedValueVector& VarNames;
-    IComputationExternalNode* const MeasureInputDataArg;
-    const TMeasureInputColumnOrder& MeasureInputColumnOrder;
-    const TComputationNodePtrVector& Measures;
-    const TOutputColumnOrder& OutputColumnOrder;
-    IComputationExternalNode* const CurrentRowIndexArg;
-    IComputationExternalNode* const InputDataArg;
-    const TComputationNodePtrVector& Defines;
+    const TMatchRecognizeProcessorParameters& Parameters;
     const TContainerCacheOnContext& Cache;
     TUnboxedValueVector Rows;
     TMatchedVars CurMatchedVars;
@@ -142,21 +130,13 @@ class TStreamingMatchRecognize: public IProcessMatchRecognize {
 public:
     TStreamingMatchRecognize(
             NUdf::TUnboxedValue&& partitionKey,
-            IComputationExternalNode* matchedVarsArg,
-            const TComputationNodePtrVector& measures,
-            const TOutputColumnOrder& outputColumnOrder,
-            IComputationExternalNode* currentRowIndexArg,
-            const TComputationNodePtrVector& defines,
+            const TMatchRecognizeProcessorParameters& parameters,
             const TContainerCacheOnContext& cache
     )
         : PartitionKey(std::move(partitionKey))
-        , MatchedVarsArg(matchedVarsArg)
-        , Measures(measures)
-        , OutputColumnOrder(outputColumnOrder)
-        , CurrentRowIndexArg(currentRowIndexArg)
-        , Defines(defines)
+        , Parameters(parameters)
         , Cache(cache)
-        , MatchedVars(Defines.size())
+        , MatchedVars(parameters.Defines.size())
         , HasMatch(false)
         , RowCount(0)
     {
@@ -164,9 +144,9 @@ public:
 
     bool ProcessInputRow(NUdf::TUnboxedValue&& row, TComputationContext& ctx) override{
         Y_UNUSED(row);
-        CurrentRowIndexArg->SetValue(ctx, NUdf::TUnboxedValuePod(RowCount));
-        for (size_t i = 0; i != Defines.size(); ++i) {
-            const auto& d = Defines[i]->GetValue(ctx);
+        Parameters.CurrentRowIndexArg->SetValue(ctx, NUdf::TUnboxedValuePod(RowCount));
+        for (size_t i = 0; i != Parameters.Defines.size(); ++i) {
+            const auto& d = Parameters.Defines[i]->GetValue(ctx);
             if (d && d.GetOptionalValue().Get<bool>()) {
                 auto& var = MatchedVars[i];
                 if (var.empty()) {
@@ -186,14 +166,14 @@ public:
     NUdf::TUnboxedValue GetOutputIfReady(TComputationContext& ctx) override {
         if (!HasMatch)
             return NUdf::TUnboxedValue{};
-        MatchedVarsArg->SetValue(ctx, ToValue(ctx, MatchedVars));
+        Parameters.MatchedVarsArg->SetValue(ctx, ToValue(ctx, MatchedVars));
         HasMatch = false;
         NUdf::TUnboxedValue *itemsPtr = nullptr;
-        const auto result = Cache.NewArray(ctx, OutputColumnOrder.size(), itemsPtr);
-        for (auto const& c: OutputColumnOrder) {
+        const auto result = Cache.NewArray(ctx, Parameters.OutputColumnOrder.size(), itemsPtr);
+        for (auto const& c: Parameters.OutputColumnOrder) {
             switch(c.first) {
                 case EOutputColumnSource::Measure:
-                    *itemsPtr++ = Measures[c.second]->GetValue(ctx);
+                    *itemsPtr++ = Parameters.Measures[c.second]->GetValue(ctx);
                     break;
                 case EOutputColumnSource::PartitionKey:
                     *itemsPtr++ = PartitionKey.GetElement(c.second);
@@ -209,11 +189,7 @@ public:
     }
 private:
     const NUdf::TUnboxedValue PartitionKey;
-    IComputationExternalNode* const MatchedVarsArg;
-    const TComputationNodePtrVector& Measures;
-    const TOutputColumnOrder& OutputColumnOrder;
-    IComputationExternalNode* const CurrentRowIndexArg;
-    const TComputationNodePtrVector& Defines;
+    const TMatchRecognizeProcessorParameters& Parameters;
     const TContainerCacheOnContext& Cache;
     TMatchedVars MatchedVars;
     bool HasMatch;
@@ -228,30 +204,14 @@ public:
                            IComputationExternalNode *inputRowArg,
                            IComputationNode *partitionKey,
                            TType* partitionKeyType,
-                           IComputationExternalNode* matchedVarsArg,
-                           const TUnboxedValueVector& varNames,
-                           IComputationExternalNode* measureInputDataArg,
-                           const TMeasureInputColumnOrder& measureInputColumnOrder,
-                           const TComputationNodePtrVector& measures,
-                           TOutputColumnOrder&& outputColumnOrder,
-                           IComputationExternalNode* currentRowIndexArg,
-                           IComputationExternalNode* inputDataArg,
-                           const TComputationNodePtrVector& defines
+                           const TMatchRecognizeProcessorParameters& parameters
     )
     :TBaseComputation(mutables, inputFlow, kind, EValueRepresentation::Embedded)
     , InputFlow(inputFlow)
     , InputRowArg(inputRowArg)
     , PartitionKey(partitionKey)
     , PartitionKeyType(partitionKeyType)
-    , MatchedVarsArg(matchedVarsArg)
-    , VarNames(varNames)
-    , MeasureInputDataArg(measureInputDataArg)
-    , MeasureInputColumnOrder(measureInputColumnOrder)
-    , Measures(measures)
-    , OutputColumnOrder(outputColumnOrder)
-    , CurrentRowIndexArg(currentRowIndexArg)
-    , inputDataArg(inputDataArg)
-    , Defines(defines)
+    , Parameters(parameters)
     , Cache(mutables)
     {}
 
@@ -261,15 +221,7 @@ public:
                     InputRowArg,
                     PartitionKey,
                     PartitionKeyType,
-                    MatchedVarsArg,
-                    VarNames,
-                    MeasureInputDataArg,
-                    MeasureInputColumnOrder,
-                    Measures,
-                    OutputColumnOrder,
-                    CurrentRowIndexArg,
-                    inputDataArg,
-                    Defines,
+                    Parameters,
                     Cache
             );
         }
@@ -297,30 +249,14 @@ private:
             IComputationExternalNode* inputRowArg,
             IComputationNode* partitionKey,
             TType* partitionKeyType,
-            IComputationExternalNode* matchedVarsArg,
-            const TUnboxedValueVector& varNames,
-            IComputationExternalNode* measureInputDataArg,
-            const TMeasureInputColumnOrder& measureInputColumnOrder,
-            const TComputationNodePtrVector& measures,
-            const TOutputColumnOrder& outputColumnOrder,
-            IComputationExternalNode* currentRowIndexArg,
-            IComputationExternalNode* inputDataArg,
-            const TComputationNodePtrVector& defines,
+            const TMatchRecognizeProcessorParameters& parameters,
             const TContainerCacheOnContext& cache
         )
             : TComputationValue<TState>(memInfo)
             , InputRowArg(inputRowArg)
             , PartitionKey(partitionKey)
             , PartitionKeyPacker(true, partitionKeyType)
-            , MatchedVarsArg(matchedVarsArg)
-            , VarNames(varNames)
-            , MeasureInputDataArg(measureInputDataArg)
-            , MeasureInputColumnOrder(measureInputColumnOrder)
-            , Measures(measures)
-            , OutputColumnOrder(outputColumnOrder)
-            , CurrentRowIndexArg(currentRowIndexArg)
-            , InputDataArg(inputDataArg)
-            , Defines(defines)
+            , Parameters(parameters)
             , Cache(cache)
         {
         }
@@ -366,22 +302,13 @@ private:
             } else {
                 return Partitions.emplace_hint(it, TString(packedKey), std::make_unique<TBackTrackingMatchRecognize>(
                         std::move(partitionKey),
-                        MatchedVarsArg,
-                        VarNames,
-                        MeasureInputDataArg,
-                        MeasureInputColumnOrder,
-                        Measures,
-                        OutputColumnOrder,
-                        CurrentRowIndexArg,
-                        InputDataArg,
-                        Defines,
+                        Parameters,
                         Cache
                 ));
             }
         }
 
     private:
-        //for this class
         TPartitionMap Partitions;
         std::stack<TPartitionMap::iterator> HasReadyOutput;
         bool Terminating = false;
@@ -390,17 +317,7 @@ private:
         IComputationNode* PartitionKey;
         //TODO switch to tuple compare
         TValuePackerGeneric<false> PartitionKeyPacker;
-
-        //to be passed to partitions
-        IComputationExternalNode* const MatchedVarsArg;
-        const TUnboxedValueVector& VarNames;
-        IComputationExternalNode* MeasureInputDataArg;
-        const TMeasureInputColumnOrder& MeasureInputColumnOrder;
-        TComputationNodePtrVector Measures;
-        const TOutputColumnOrder& OutputColumnOrder;
-        IComputationExternalNode* const CurrentRowIndexArg;
-        IComputationExternalNode* const InputDataArg;
-        const TComputationNodePtrVector& Defines;
+        const TMatchRecognizeProcessorParameters& Parameters;
         const TContainerCacheOnContext& Cache;
     };
 
@@ -408,15 +325,15 @@ private:
     void RegisterDependencies() const final {
         if (const auto flow = FlowDependsOn(InputFlow)) {
             Own(flow, InputRowArg);
-            Own(flow, MatchedVarsArg);
-            Own(flow, MeasureInputDataArg);
-            Own(flow, CurrentRowIndexArg);
-            Own(flow, inputDataArg);
+            Own(flow, Parameters.InputDataArg);
+            Own(flow, Parameters.MatchedVarsArg);
+            Own(flow, Parameters.CurrentRowIndexArg);
+            Own(flow, Parameters.MeasureInputDataArg);
             DependsOn(flow, PartitionKey);
-            for (auto& m: Measures) {
+            for (auto& m: Parameters.Measures) {
                 DependsOn(flow, m);
             }
-            for (auto& d: Defines) {
+            for (auto& d: Parameters.Defines) {
                 DependsOn(flow, d);
             }
         }
@@ -426,15 +343,7 @@ private:
     IComputationExternalNode* const InputRowArg;
     IComputationNode* const PartitionKey;
     TType* const PartitionKeyType;
-    IComputationExternalNode* const MatchedVarsArg;
-    const TUnboxedValueVector VarNames;
-    IComputationExternalNode* const MeasureInputDataArg;
-    const TMeasureInputColumnOrder MeasureInputColumnOrder;
-    const TComputationNodePtrVector Measures;
-    const TOutputColumnOrder OutputColumnOrder;
-    IComputationExternalNode* const CurrentRowIndexArg;
-    IComputationExternalNode* const inputDataArg;
-    const TComputationNodePtrVector Defines;
+    const TMatchRecognizeProcessorParameters Parameters;
     const TContainerCacheOnContext Cache;
 };
 
@@ -571,18 +480,20 @@ IComputationNode* WrapMatchRecognizeCore(TCallable& callable, const TComputation
         , static_cast<IComputationExternalNode*>(LocateNode(ctx.NodeLocator, *inputRowArg.GetNode()))
         , LocateNode(ctx.NodeLocator, *partitionKeySelector.GetNode())
         , partitionKeySelector.GetStaticType()
-        , static_cast<IComputationExternalNode*>(LocateNode(ctx.NodeLocator, *matchedVarsArg.GetNode()))
-        , ConvertListOfStrings(varNames)
-        , static_cast<IComputationExternalNode*>(LocateNode(ctx.NodeLocator, *measureInputDataArg.GetNode()))
-        , GetMeasureColumnOrder(
-                *AS_VALUE(TListLiteral, measureSpecialColumnIndexes),
-                AS_VALUE(TDataLiteral, inputRowColumnCount)->AsValue().Get<ui32>()
-          )
-        , ConvertVectorOfCallables(measures, ctx)
-        , GetOutputColumnOrder(partitionColumnIndexes, measureColumnIndexes)
-        , static_cast<IComputationExternalNode*>(LocateNode(ctx.NodeLocator, *currentRowIndexArg.GetNode()))
-        , static_cast<IComputationExternalNode*>(LocateNode(ctx.NodeLocator, *inputDataArg.GetNode()))
-        , ConvertVectorOfCallables(defines, ctx)
+        , TMatchRecognizeProcessorParameters{
+              static_cast<IComputationExternalNode*>(LocateNode(ctx.NodeLocator, *inputDataArg.GetNode()))
+            , static_cast<IComputationExternalNode *>(LocateNode(ctx.NodeLocator, *matchedVarsArg.GetNode()))
+            , static_cast<IComputationExternalNode*>(LocateNode(ctx.NodeLocator, *currentRowIndexArg.GetNode()))
+            , ConvertVectorOfCallables(defines, ctx)
+            , static_cast<IComputationExternalNode*>(LocateNode(ctx.NodeLocator, *measureInputDataArg.GetNode()))
+            , GetMeasureColumnOrder(
+                    *AS_VALUE(TListLiteral, measureSpecialColumnIndexes),
+                    AS_VALUE(TDataLiteral, inputRowColumnCount)->AsValue().Get<ui32>()
+            )
+            , ConvertListOfStrings(varNames)
+            , ConvertVectorOfCallables(measures, ctx)
+            , GetOutputColumnOrder(partitionColumnIndexes, measureColumnIndexes)
+            }
     );
 }
 

@@ -176,17 +176,19 @@ void TYtTableDescription::ToYson(NYson::TYsonWriter& writer, const TString& clus
 
         // views
         writer.OnKeyedItem("Views");
-        writer.OnBeginList();
-
+        TVector<TString> views;
         for (const auto& attr : Meta->Attrs) {
             if (!attr.first.StartsWith(YqlViewPrefixAttribute) || attr.first.size() == YqlViewPrefixAttribute.size()) {
                 continue;
             }
-
-            writer.OnListItem();
-            writer.OnStringScalar(attr.first.substr(YqlViewPrefixAttribute.size()));
+            views.push_back(attr.first.substr(YqlViewPrefixAttribute.size()));
         }
-
+        std::sort(begin(views), end(views));
+        writer.OnBeginList();
+        for (const auto& v: views) {
+            writer.OnListItem();
+            writer.OnStringScalar(v);
+        }
         writer.OnEndList();
     }
 

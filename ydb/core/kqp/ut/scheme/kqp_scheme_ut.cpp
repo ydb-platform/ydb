@@ -5851,6 +5851,39 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         }
         testHelper.ReadData("SELECT timestamp < timestamp_max FROM `/Root/ColumnTableTest` WHERE id=1", "[[\%false]]");
     }
+
+    Y_UNIT_TEST(AttributeNegative) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.AlterTable("/Root", TAlterTableSettings()
+                .BeginAlterAttributes()
+                    .Add("key", "value")
+                .EndAlterAttributes()
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.AlterTable("/Root", TAlterTableSettings()
+                .BeginAlterAttributes()
+                    .Alter("key", "value")
+                .EndAlterAttributes()
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.AlterTable("/Root", TAlterTableSettings()
+                .BeginAlterAttributes()
+                    .Drop("key")
+                .EndAlterAttributes()
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+        }
+    }
 }
 
 

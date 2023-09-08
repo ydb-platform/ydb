@@ -1244,6 +1244,9 @@ def on_add_linter_check(unit, *args):
     if no_lint_value in ("none", "none_internal"):
         return
 
+    if unit.get("OPENSOURCE") == "yes":
+        return
+
     keywords = {
         "DEPENDS": unlimited,
         "FILES": unlimited,

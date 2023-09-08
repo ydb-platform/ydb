@@ -1,5 +1,46 @@
 # {{ ydb-short-name }} Server changelog
 
+## Version 23.2 {#23-2}
+
+Release date: August 14, 2023.
+
+**Functionality:**
+
+* **_(Experimental)_** Implemented visibility of own changes. With this feature enabled you can read changed values from the current transaction, which has not been committed yet. This functionality also allows multiple modifying operations in one transaction on a table with secondary indexes. To enable this feature add `enable_kqp_immediate_effects: true` under `table_service_config` section into [configuration file](deploy/configuration/config.md).
+* **_(Experimental)_** Implemented read iterators. This feature allows to separate reads and computations. Read iterators allow datashards to increase read queries throughput. To enable this feature add `enable_kqp_data_query_source_read: true` under `table_service_config` section into [configuration file](deploy/configuration/config.md).
+
+**Embedded UI:**
+
+* Navigation improvements:
+  * Diagnostics and Development mode switches are moved to the left panel.
+  * Every page has breadcrumbs.
+  * Storage groups and nodes info are moved from left buttons to tabs on the database page.
+* Query history and saved queries are moved to tabs over the text editor area in query editor.
+* Info tab for scheme objects displays parameters using terms from `CREATE` or `ALTER` statements.
+* Added [column tables](concepts/datamodel/table.md#column-tables) support.
+
+**Performance:**
+
+* For scan queries, you can now effectively search for individual rows using a primary key or secondary indexes. This can bring you a substantial performance gain in many cases. Similarly to regular queries, you need to explicitly specify its name in the query text using the `VIEW` keyword to use a secondary index.
+
+* **_(Experimental)_** Added an option to give control of the system tablets of the database (SchemeShard, Coordinators, Mediators, SysViewProcessor) to its own Hive instead of the root Hive, and do so immediately upon creating a new database. Without this flag, the system tablets of the new database are created in the root Hive, which can negatively impact its load. Enabling this flag makes databases completely isolated in terms of load, that may be particularly relevant for installations, consisting from a roughly hundred or more databases. To enable this feature add `alter_database_create_hive_first: true` under `feature_flags` section into [configuration file](deploy/configuration/config.md).
+
+**Bug fixes:**
+
+* Fixed a bug in the autoconfiguration of the actor system, resulting in all the load being placed on the system pool.
+* Fixed a bug that caused full scanning when searching by prefix of the primary key using `LIKE`.
+* Fixed bugs when interacting with datashard followers.
+* Fixed bugs when working with memory in column tables.
+* Fixed a bug in processing conditions for immediate transactions.
+* Fixed a bug in the operation of iterator-based reads on datasharrd followers.
+* Fixed a bug that caused cascading reinstallation of data delivery sessions to asynchronous indexes.
+* Fixed bugs in the optimizer for scanning queries.
+* Fixed a bug in the incorrect calculation of storage consumption by Hive after expanding the database.
+* Fixed a bug that caused operations to hang on non-existent iterators.
+* Fixed bugs when reading a range on a `NOT NULL` column.
+* Fixed a bug in the replication of VDisks.
+* Fixed a bug in the work of the `run_interval` option in TTL.
+
 ## Version 23.1 {#23-1}
 
 Release date: May 5, 2023. To update to version 23.1, select the [Downloads](downloads/index.md#ydb-server) section.

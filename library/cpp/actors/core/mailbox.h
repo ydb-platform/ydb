@@ -5,7 +5,6 @@
 #include "executor_pool.h"
 #include "mailbox_queue_simple.h"
 #include "mailbox_queue_revolving.h"
-#include "perfect_activation_queue.h"
 #include <library/cpp/actors/util/unordered_cache.h>
 #include <library/cpp/threading/queue/mpsc_htswap.h>
 #include <library/cpp/threading/queue/mpsc_read_as_filled.h>
@@ -301,7 +300,7 @@ namespace NActors {
         TAtomic LastAllocatedLine;
         TAtomic AllocatedMailboxCount;
 
-        using TMailboxCache = TPerfectActivationQueue;
+        typedef TUnorderedCache<ui32, 512, 4> TMailboxCache;
         TMailboxCache MailboxCacheSimple;
         TAtomic CachedSimpleMailboxes;
         TMailboxCache MailboxCacheRevolving;

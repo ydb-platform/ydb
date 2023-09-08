@@ -18,7 +18,7 @@ namespace NActors {
         };
 
         TArrayHolder<TThreadCtx> Threads;
-        TPerfectActivationQueue ThreadQueue;
+        TUnorderedCache<ui32, 512, 4> ThreadQueue;
 
         THolder<NSchedulerQueue::TQueueType> ScheduleQueue;
         TTicketLock ScheduleLock;

@@ -71,7 +71,7 @@ namespace NActors {
     {}
 
     TExecutorPoolBase::~TExecutorPoolBase() {
-        while (Activations.Pop())
+        while (Activations.Pop(0))
             ;
     }
 
@@ -105,7 +105,7 @@ namespace NActors {
     }
 
     void TExecutorPoolBase::ScheduleActivation(ui32 activation) {
-        ScheduleActivationEx(activation, 0);
+        ScheduleActivationEx(activation, AtomicIncrement(ActivationsRevolvingCounter));
     }
 
     Y_FORCE_INLINE bool IsAllowedToCapture(IExecutorPool *self) {
@@ -121,7 +121,7 @@ namespace NActors {
             TlsThreadContext->CapturedType = TlsThreadContext->SendingType;
         }
         if (activation) {
-            ScheduleActivationEx(activation, 0);
+            ScheduleActivationEx(activation, AtomicIncrement(ActivationsRevolvingCounter));
         }
     }
 

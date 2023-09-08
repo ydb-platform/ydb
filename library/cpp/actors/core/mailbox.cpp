@@ -93,15 +93,15 @@ namespace NActors {
             }
         }
 
-        while (MailboxCacheSimple.Pop())
+        while (MailboxCacheSimple.Pop(0))
             ;
-        while (MailboxCacheRevolving.Pop())
+        while (MailboxCacheRevolving.Pop(0))
             ;
-        while (MailboxCacheHTSwap.Pop())
+        while (MailboxCacheHTSwap.Pop(0))
             ;
-        while (MailboxCacheReadAsFilled.Pop())
+        while (MailboxCacheReadAsFilled.Pop(0))
             ;
-        while (MailboxCacheTinyReadAsFilled.Pop())
+        while (MailboxCacheTinyReadAsFilled.Pop(0))
             ;
     }
 
@@ -276,11 +276,11 @@ namespace NActors {
         return x;
     }
 
-    ui32 TMailboxTable::TryAllocateMailbox(TMailboxType::EType type, ui64 /*revolvingCounter*/) {
+    ui32 TMailboxTable::TryAllocateMailbox(TMailboxType::EType type, ui64 revolvingCounter) {
         switch (type) {
             case TMailboxType::Simple:
                 do {
-                    if (ui32 ret = MailboxCacheSimple.Pop()) {
+                    if (ui32 ret = MailboxCacheSimple.Pop(revolvingCounter)) {
                         AtomicDecrement(CachedSimpleMailboxes);
                         return ret;
                     }
@@ -288,7 +288,7 @@ namespace NActors {
                 return 0;
             case TMailboxType::Revolving:
                 do {
-                    if (ui32 ret = MailboxCacheRevolving.Pop()) {
+                    if (ui32 ret = MailboxCacheRevolving.Pop(revolvingCounter)) {
                         AtomicDecrement(CachedRevolvingMailboxes);
                         return ret;
                     }
@@ -296,7 +296,7 @@ namespace NActors {
                 return 0;
             case TMailboxType::HTSwap:
                 do {
-                    if (ui32 ret = MailboxCacheHTSwap.Pop()) {
+                    if (ui32 ret = MailboxCacheHTSwap.Pop(revolvingCounter)) {
                         AtomicDecrement(CachedHTSwapMailboxes);
                         return ret;
                     }
@@ -304,7 +304,7 @@ namespace NActors {
                 return 0;
             case TMailboxType::ReadAsFilled:
                 do {
-                    if (ui32 ret = MailboxCacheReadAsFilled.Pop()) {
+                    if (ui32 ret = MailboxCacheReadAsFilled.Pop(revolvingCounter)) {
                         AtomicDecrement(CachedReadAsFilledMailboxes);
                         return ret;
                     }
@@ -312,7 +312,7 @@ namespace NActors {
                 return 0;
             case TMailboxType::TinyReadAsFilled:
                 do {
-                    if (ui32 ret = MailboxCacheTinyReadAsFilled.Pop()) {
+                    if (ui32 ret = MailboxCacheTinyReadAsFilled.Pop(revolvingCounter)) {
                         AtomicDecrement(CachedTinyReadAsFilledMailboxes);
                         return ret;
                     }
@@ -329,27 +329,27 @@ namespace NActors {
     template
     bool TMailboxTable::GenericSendTo<&IExecutorPool::SpecificScheduleActivation>(TAutoPtr<IEventHandle>& ev, IExecutorPool* executorPool);
 
-    void TMailboxTable::ReclaimMailbox(TMailboxType::EType type, ui32 hint, ui64 /*revolvingCounter*/) {
+    void TMailboxTable::ReclaimMailbox(TMailboxType::EType type, ui32 hint, ui64 revolvingCounter) {
         if (hint != 0) {
             switch (type) {
                 case TMailboxType::Simple:
-                    MailboxCacheSimple.Push(hint);
+                    MailboxCacheSimple.Push(hint, revolvingCounter);
                     AtomicIncrement(CachedSimpleMailboxes);
                     break;
                 case TMailboxType::Revolving:
-                    MailboxCacheRevolving.Push(hint);
+                    MailboxCacheRevolving.Push(hint, revolvingCounter);
                     AtomicIncrement(CachedRevolvingMailboxes);
                     break;
                 case TMailboxType::HTSwap:
-                    MailboxCacheHTSwap.Push(hint);
+                    MailboxCacheHTSwap.Push(hint, revolvingCounter);
                     AtomicIncrement(CachedHTSwapMailboxes);
                     break;
                 case TMailboxType::ReadAsFilled:
-                    MailboxCacheReadAsFilled.Push(hint);
+                    MailboxCacheReadAsFilled.Push(hint, revolvingCounter);
                     AtomicIncrement(CachedReadAsFilledMailboxes);
                     break;
                 case TMailboxType::TinyReadAsFilled:
-                    MailboxCacheTinyReadAsFilled.Push(hint);
+                    MailboxCacheTinyReadAsFilled.Push(hint, revolvingCounter);
                     AtomicIncrement(CachedTinyReadAsFilledMailboxes);
                     break;
                 default:
@@ -571,7 +571,7 @@ namespace NActors {
             ui32 bufIndex;
             for (bufIndex = 0; index != endIndex && bufIndex != bufSize; ++bufIndex, ++index)
                 buf[bufIndex] = lineIndexMask | index;
-            cache->PushBulk(buf, bufIndex);
+            cache->PushBulk(buf, bufIndex, index);
             AtomicAdd(*counter, bufIndex);
         }
 

@@ -303,11 +303,11 @@ protected:
 
     void Handle(TEvKafka::TEvAuthResult::TPtr ev, const TActorContext& ctx) {
         auto event = ev->Get();
-        Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, event->ClientResponse->ErrorCode, ctx);
 
         auto authStep = event->AuthStep;
         if (authStep == EAuthSteps::FAILED) {
             KAFKA_LOG_ERROR(event->Error);
+            Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, event->ClientResponse->ErrorCode, ctx, true);
             PassAway();
             return;
         }
@@ -322,6 +322,7 @@ protected:
         Context->IsServerless = event->IsServerless;
 
         KAFKA_LOG_D("Authentificated successful. SID=" << Context->UserToken->GetUserSID());
+        Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, event->ClientResponse->ErrorCode, ctx);
     }
 
     void Handle(TEvKafka::TEvHandshakeResult::TPtr ev, const TActorContext& ctx) {
@@ -339,7 +340,7 @@ protected:
         Context->AuthenticationStep = authStep;
     }
 
-    void Reply(const ui64 correlationId, TApiMessage::TPtr response, EKafkaErrors errorCode, const TActorContext& ctx) {
+    void Reply(const ui64 correlationId, TApiMessage::TPtr response, EKafkaErrors errorCode, const TActorContext& ctx, bool lastMessage = false) {
         auto it = PendingRequests.find(correlationId);
         if (it == PendingRequests.end()) {
             KAFKA_LOG_ERROR("Unexpected correlationId " << correlationId);
@@ -352,7 +353,9 @@ protected:
 
         ProcessReplyQueue(ctx);
 
-        DoRead(ctx);
+        if (!lastMessage) {
+            DoRead(ctx);
+        }
     }
 
     void ProcessReplyQueue(const TActorContext& ctx) {

@@ -204,7 +204,8 @@ public:
                            IComputationExternalNode *inputRowArg,
                            IComputationNode *partitionKey,
                            TType* partitionKeyType,
-                           const TMatchRecognizeProcessorParameters& parameters
+                           const TMatchRecognizeProcessorParameters& parameters,
+                           bool streamingMode
     )
     :TBaseComputation(mutables, inputFlow, kind, EValueRepresentation::Embedded)
     , InputFlow(inputFlow)
@@ -212,6 +213,7 @@ public:
     , PartitionKey(partitionKey)
     , PartitionKeyType(partitionKeyType)
     , Parameters(parameters)
+    , StreamingMode(streamingMode)
     , Cache(mutables)
     {}
 
@@ -222,6 +224,7 @@ public:
                     PartitionKey,
                     PartitionKeyType,
                     Parameters,
+                    StreamingMode,
                     Cache
             );
         }
@@ -250,6 +253,7 @@ private:
             IComputationNode* partitionKey,
             TType* partitionKeyType,
             const TMatchRecognizeProcessorParameters& parameters,
+            bool streamingMode,
             const TContainerCacheOnContext& cache
         )
             : TComputationValue<TState>(memInfo)
@@ -257,6 +261,7 @@ private:
             , PartitionKey(partitionKey)
             , PartitionKeyPacker(true, partitionKeyType)
             , Parameters(parameters)
+            , StreamingMode(streamingMode)
             , Cache(cache)
         {
         }
@@ -300,11 +305,13 @@ private:
             if (const auto it = Partitions.find(TString(packedKey)); it != Partitions.end()) {
                 return it;
             } else {
-                return Partitions.emplace_hint(it, TString(packedKey), std::make_unique<TBackTrackingMatchRecognize>(
-                        std::move(partitionKey),
-                        Parameters,
-                        Cache
-                ));
+                std::unique_ptr<IProcessMatchRecognize> handler;
+                if (StreamingMode) {
+                    handler = std::make_unique<TStreamingMatchRecognize>(std::move(partitionKey), Parameters, Cache);
+                } else {
+                    handler = std::make_unique<TBackTrackingMatchRecognize>(std::move(partitionKey), Parameters, Cache);
+                }
+                return Partitions.emplace_hint(it, TString(packedKey), std::move(handler));
             }
         }
 
@@ -318,6 +325,7 @@ private:
         //TODO switch to tuple compare
         TValuePackerGeneric<false> PartitionKeyPacker;
         const TMatchRecognizeProcessorParameters& Parameters;
+        const bool StreamingMode;
         const TContainerCacheOnContext& Cache;
     };
 
@@ -344,6 +352,7 @@ private:
     IComputationNode* const PartitionKey;
     TType* const PartitionKeyType;
     const TMatchRecognizeProcessorParameters Parameters;
+    const bool StreamingMode;
     const TContainerCacheOnContext Cache;
 };
 
@@ -467,6 +476,7 @@ IComputationNode* WrapMatchRecognizeCore(TCallable& callable, const TComputation
     for (size_t i = 0; i != AS_VALUE(TListLiteral, varNames)->GetItemsCount(); ++i) {
         defines.push_back(callable.GetInput(inputIndex++));
     }
+    const auto& streamingMode = callable.GetInput(inputIndex++);
     MKQL_ENSURE(callable.GetInputsCount() == inputIndex, "Wrong input count");
 
     Y_UNUSED(measureInputDataArg);
@@ -494,6 +504,7 @@ IComputationNode* WrapMatchRecognizeCore(TCallable& callable, const TComputation
             , ConvertVectorOfCallables(measures, ctx)
             , GetOutputColumnOrder(partitionColumnIndexes, measureColumnIndexes)
             }
+        , AS_VALUE(TDataLiteral, streamingMode)->AsValue().Get<bool>()
     );
 }
 

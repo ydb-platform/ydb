@@ -859,6 +859,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto& partitionKeySelector = node.Child(1);
         const auto& partitionColumns = node.Child(2);
         const auto& params = node.Child(3);
+        const auto& settings = node.Child(4);
 
         //explore params
         const auto& measures = params->ChildRef(0);
@@ -904,13 +905,16 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             };
         }
 
+        const auto streamingMode = FromString<bool>(settings->Child(0)->Child(1)->Content());
+
         return ctx.ProgramBuilder.MatchRecognizeCore(
                 MkqlBuildExpr(*inputStream, ctx),
                 getPartitionKeySelector,
                 partitionColumnNames,
                 getMeasures,
                 NYql::NMatchRecognize::ConvertPattern(pattern, ctx.ExprCtx),
-                getDefines
+                getDefines,
+                streamingMode
                 );
     });
 

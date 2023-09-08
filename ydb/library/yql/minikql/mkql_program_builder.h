@@ -702,7 +702,8 @@ public:
         const TArrayRef<TStringBuf>& partitionColumns,
         const TArrayRef<std::pair<TStringBuf, TBinaryLambda>>& getMeasures,
         const NYql::NMatchRecognize::TRowPattern& pattern,
-        const TArrayRef<std::pair<TStringBuf, TTernaryLambda>>& getDefines
+        const TArrayRef<std::pair<TStringBuf, TTernaryLambda>>& getDefines,
+        bool streamingMode
     );
 
 protected:

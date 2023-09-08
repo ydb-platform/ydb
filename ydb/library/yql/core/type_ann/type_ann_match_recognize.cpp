@@ -189,6 +189,38 @@ MatchRecognizeDefinesWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& outp
     return IGraphTransformer::TStatus::Ok;
 }
 
+namespace {
+
+bool ValidateSettings(const TExprNode::TPtr& settings, TExprContext& ctx) {
+    if (!EnsureTuple(*settings, ctx)) {
+        return false;
+    }
+
+    if (!EnsureArgsCount(*settings, 1, ctx)) {
+        return false;
+    }
+
+    const auto streamingMode = settings->ChildRef(0);
+    if (!EnsureTupleOfAtoms(*streamingMode, ctx)) {
+        return false;
+    }
+    if (!EnsureArgsCount(*streamingMode, 2, ctx)) {
+        return false;
+    }
+    if (streamingMode->ChildRef(0)->Content() != "Streaming") {
+        ctx.AddError(TIssue(ctx.GetPosition(settings->Pos()), "Expected Streaming setting"));
+        return false;
+    }
+    const auto mode = streamingMode->ChildRef(1)->Content();
+    if (mode != "0" and mode != "1") {
+        ctx.AddError(TIssue(ctx.GetPosition(settings->Pos()), TStringBuilder() << "Expected 0 or 1, but got: " << mode));
+        return false;
+    }
+    return true;
+}
+
+} //namespace
+
 IGraphTransformer::TStatus
 MatchRecognizeCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
@@ -196,16 +228,21 @@ MatchRecognizeCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output,
         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "MATCH_RECOGNIZE is disabled"));
         return IGraphTransformer::TStatus::Error;
     }
-    if (!EnsureArgsCount(*input, 4, ctx.Expr)) {
+    if (!EnsureArgsCount(*input, 5, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
     const auto& source = input->ChildRef(0);
     auto& partitionKeySelector = input->ChildRef(1);
     const auto& partitionColumns = input->ChildRef(2);
     const auto& params = input->ChildRef(3);
+    const auto& settings = input->ChildRef(4);
     if (not params->IsCallable("MatchRecognizeParams")) {
         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(params->Pos()), "Expected MatchRecognizeParams"));
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (not ValidateSettings(settings, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;;
     }
 
     if (!EnsureFlowType(*source, ctx.Expr)) {

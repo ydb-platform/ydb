@@ -1,11 +1,25 @@
 #include "yql_opt_match_recognize.h"
 #include "yql_opt_utils.h"
-
+#include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/utils/log/log.h>
 
 namespace NYql {
 
 using namespace NNodes;
+
+namespace {
+bool IsStreaming(const TExprNode::TPtr& input) {
+    bool hasPq = false;
+    NYql::VisitExpr(input, [&hasPq](const TExprNode::TPtr& node){
+        if (node->IsCallable("DataSource")) {
+            YQL_ENSURE(node->ChildrenSize() > 0 and node->ChildRef(0)->IsAtom());
+            hasPq = node->ChildRef(0)->Content() == "pq";
+        }
+        return !hasPq;
+    });
+    return hasPq;
+}
+} //namespace
 
 TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& ctx) {
     YQL_ENSURE(node->IsCallable({"MatchRecognize"}));
@@ -14,8 +28,10 @@ TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& 
     const auto& partitionColumns = node->ChildRef(2);
     const auto& sortTraits = node->ChildRef(3);
     const auto& params = node->ChildRef(4);
-
     const auto pos = node->Pos();
+
+    TExprNode::TPtr settings = AddSetting(*ctx.NewList(pos, {}), pos,
+          "Streaming", ctx.NewAtom(pos, ToString(IsStreaming(input))), ctx);
 
     const auto matchRecognize = ctx.Builder(pos)
         .Lambda()
@@ -28,6 +44,7 @@ TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& 
                     .Add(1, partitionKeySelector)
                     .Add(2, partitionColumns)
                     .Add(3, params)
+                    .Add(4, settings)
                 .Seal()
             .Seal()
         .Seal()

@@ -571,21 +571,47 @@ TVector<TExprBase> BuildUpdateTableWithIndex(const TKiUpdateTable& update, const
 {
     auto rowsToUpdate = BuildRowsToUpdate(tableData, withSystemColumns, update.Filter(), update.Pos(), ctx, kqpCtx);
 
-    auto indexes = BuildSecondaryIndexVector(tableData, update.Pos(), ctx, nullptr,
-        [] (const TKikimrTableMetadata& meta, TPositionHandle pos, TExprContext& ctx) -> TExprBase {
-            return BuildTableMeta(meta, pos, ctx);
-        });
-    YQL_ENSURE(indexes);
+    TVector<TExprBase> effects;
 
-    const auto& pk = tableData.Metadata->KeyColumnNames;
     auto updateColumns = GetUpdateColumns(tableData, update.Update());
 
     auto updatedRows = BuildUpdatedRows(rowsToUpdate, update.Update(), updateColumns, update.Pos(), ctx);
 
     TVector<TCoAtom> updateColumnsList;
+
     for (const auto& column : updateColumns) {
         updateColumnsList.push_back(TCoAtom(ctx.NewAtom(update.Pos(), column)));
     }
+
+    auto indexes = BuildSecondaryIndexVector(tableData, update.Pos(), ctx, nullptr,
+        [] (const TKikimrTableMetadata& meta, TPositionHandle pos, TExprContext& ctx) -> TExprBase {
+            return BuildTableMeta(meta, pos, ctx);
+        });
+
+    auto is_uniq = [](std::pair<TExprNode::TPtr, const TIndexDescription*>& x) {
+        return x.second->Type == TIndexDescription::EType::GlobalSyncUnique;
+    };
+
+    bool hasUniqIndex = std::find_if(indexes.begin(), indexes.end(), is_uniq) != indexes.end();
+
+    // For uniq index rewrite UPDATE in to UPDATE ON
+    if (hasUniqIndex) {
+        auto effect = Build<TKqlUpdateRowsIndex>(ctx, update.Pos())
+            .Table(BuildTableMeta(tableData, update.Pos(), ctx))
+            .Input<TKqpWriteConstraint>()
+                .Input(updatedRows)
+                .Columns(GetPgNotNullColumns(tableData, update.Pos(), ctx))
+            .Build()
+            .Columns<TCoAtomList>()
+                .Add(updateColumnsList)
+                .Build()
+            .Done();
+
+        effects.emplace_back(effect);
+        return effects;
+    }
+
+    const auto& pk = tableData.Metadata->KeyColumnNames;
 
     auto tableUpsert = Build<TKqlUpsertRows>(ctx, update.Pos())
         .Table(BuildTableMeta(tableData, update.Pos(), ctx))
@@ -598,7 +624,6 @@ TVector<TExprBase> BuildUpdateTableWithIndex(const TKiUpdateTable& update, const
             .Build()
         .Done();
 
-    TVector<TExprBase> effects;
     effects.push_back(tableUpsert);
 
     for (const auto& [indexMeta, indexDesc] : indexes) {

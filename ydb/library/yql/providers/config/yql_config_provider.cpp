@@ -511,12 +511,7 @@ namespace {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
                     return false;
                 }
-                if (!Types.UseBlocks) {
-                    Types.OptLLVM = args.empty() ? TString() : TString(args[0]);
-                } else {
-                    ctx.AddError(TIssue(pos, TStringBuilder() << "UseBlocks isn't compatible with LLVM"));
-                    return false;
-                }
+                Types.OptLLVM = args.empty() ? TString() : TString(args[0]);
             }
             else if (name == "NodesAllocationLimit") {
                 if (args.size() != 1) {
@@ -803,9 +798,6 @@ namespace {
                 }
 
                 Types.UseBlocks = (name == "UseBlocks");
-                if (Types.UseBlocks) {
-                    Types.OptLLVM = "OFF";
-                }
             }
             else if (name == "PgEmitAggApply" || name == "DisablePgEmitAggApply") {
                 if (args.size() != 0) {

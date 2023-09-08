@@ -33,7 +33,7 @@ void TCommandWorkloadTransferTopicToTableRun::Config(TConfig& config)
     config.SetFreeArgsNum(0);
 
     config.Opts->AddLongOption('s', "seconds", "Seconds to run workload.")
-        .DefaultValue(10)
+        .DefaultValue(60)
         .StoreResult(&Scenario.TotalSec);
     config.Opts->AddLongOption('w', "window", "Output window duration in seconds.")
         .DefaultValue(1)
@@ -46,7 +46,7 @@ void TCommandWorkloadTransferTopicToTableRun::Config(TConfig& config)
         .DefaultValue(50)
         .StoreResult(&Scenario.Percentile);
     config.Opts->AddLongOption("warmup", "Warm-up time in seconds.")
-        .DefaultValue(1)
+        .DefaultValue(5)
         .StoreResult(&Scenario.WarmupSec);
     config.Opts->AddLongOption("topic", "Topic name.")
         .DefaultValue(NWorkloadTransfer::TOPIC)
@@ -81,7 +81,7 @@ void TCommandWorkloadTransferTopicToTableRun::Config(TConfig& config)
         .DefaultValue((TStringBuilder() << NTopic::ECodec::RAW))
         .StoreMappedResultT<TString>(&Scenario.Codec, &TCommandWorkloadTopicParams::StrToCodec);
     config.Opts->AddLongOption("commit-period", "Waiting time between commit.")
-        .DefaultValue(1)
+        .DefaultValue(10)
         .StoreResult(&Scenario.CommitPeriod);
     config.Opts->AddLongOption("use-topic-commit", "Use TopicAPI commit.")
         .DefaultValue(false)

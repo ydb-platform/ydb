@@ -28,6 +28,16 @@ struct TBuildMasterSnapshotsOptions
     bool Retry = true;
 };
 
+struct TExitReadOnlyOptions
+    : public TTimeoutOptions
+{ };
+
+struct TMasterExitReadOnlyOptions
+    : public TTimeoutOptions
+{
+    bool Retry = true;
+};
+
 struct TSwitchLeaderOptions
     : public TTimeoutOptions
 { };
@@ -183,6 +193,13 @@ struct IAdminClient
 
     virtual TFuture<TCellIdToSnapshotIdMap> BuildMasterSnapshots(
         const TBuildMasterSnapshotsOptions& options = {}) = 0;
+
+    virtual TFuture<void> ExitReadOnly(
+        NHydra::TCellId cellId,
+        const TExitReadOnlyOptions& options = {}) = 0;
+
+    virtual TFuture<void> MasterExitReadOnly(
+        const TMasterExitReadOnlyOptions& options = {}) = 0;
 
     virtual TFuture<void> SwitchLeader(
         NHydra::TCellId cellId,

@@ -323,6 +323,13 @@ public:
     TFuture<TCellIdToSnapshotIdMap> BuildMasterSnapshots(
         const TBuildMasterSnapshotsOptions& options) override;
 
+    TFuture<void> ExitReadOnly(
+        NHydra::TCellId cellId,
+        const TExitReadOnlyOptions& options) override;
+
+    TFuture<void> MasterExitReadOnly(
+        const TMasterExitReadOnlyOptions& options) override;
+
     TFuture<void> SwitchLeader(
         NHydra::TCellId cellId,
         const TString& newLeaderAddress,

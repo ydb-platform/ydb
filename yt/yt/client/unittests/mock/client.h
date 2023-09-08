@@ -196,6 +196,13 @@ public:
     MOCK_METHOD(TFuture<TCellIdToSnapshotIdMap>, BuildMasterSnapshots, (
         const TBuildMasterSnapshotsOptions& options), (override));
 
+    MOCK_METHOD(TFuture<void>, ExitReadOnly, (
+        NHydra::TCellId cellId,
+        const TExitReadOnlyOptions& options), (override));
+
+    MOCK_METHOD(TFuture<void>, MasterExitReadOnly, (
+        const TMasterExitReadOnlyOptions& options), (override));
+
     MOCK_METHOD(TFuture<void>, SwitchLeader, (
         NHydra::TCellId cellId,
         const TString& newLeaderAddress,

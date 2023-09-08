@@ -30,6 +30,32 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TExitReadOnlyCommand
+    : public TTypedCommand<NApi::TExitReadOnlyOptions>
+{
+public:
+    TExitReadOnlyCommand();
+
+private:
+    NHydra::TCellId CellId_;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TMasterExitReadOnlyCommand
+    : public TTypedCommand<NApi::TMasterExitReadOnlyOptions>
+{
+public:
+    TMasterExitReadOnlyCommand();
+
+private:
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TSwitchLeaderCommand
     : public TTypedCommand<NApi::TSwitchLeaderOptions>
 {

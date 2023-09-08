@@ -731,6 +731,19 @@ TFuture<TCellIdToSnapshotIdMap> TDelegatingClient::BuildMasterSnapshots(
     return Underlying_->BuildMasterSnapshots(options);
 }
 
+TFuture<void> TDelegatingClient::ExitReadOnly(
+    NHydra::TCellId cellId,
+    const TExitReadOnlyOptions& options)
+{
+    return Underlying_->ExitReadOnly(cellId, options);
+}
+
+TFuture<void> TDelegatingClient::MasterExitReadOnly(
+    const TMasterExitReadOnlyOptions& options)
+{
+    return Underlying_->MasterExitReadOnly(options);
+}
+
 TFuture<void> TDelegatingClient::SwitchLeader(
     NHydra::TCellId cellId,
     const TString& newLeaderAddress,

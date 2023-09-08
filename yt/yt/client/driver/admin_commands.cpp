@@ -69,6 +69,37 @@ void TBuildMasterSnapshotsCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TExitReadOnlyCommand::TExitReadOnlyCommand()
+{
+    RegisterParameter("cell_id", CellId_);
+}
+
+void TExitReadOnlyCommand::DoExecute(ICommandContextPtr context)
+{
+    WaitFor(context->GetClient()->ExitReadOnly(CellId_, Options))
+        .ThrowOnError();
+
+    ProduceEmptyOutput(context);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TMasterExitReadOnlyCommand::TMasterExitReadOnlyCommand()
+{
+    RegisterParameter("retry", Options.Retry)
+        .Optional();
+}
+
+void TMasterExitReadOnlyCommand::DoExecute(ICommandContextPtr context)
+{
+    WaitFor(context->GetClient()->MasterExitReadOnly(Options))
+        .ThrowOnError();
+
+    ProduceEmptyOutput(context);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TSwitchLeaderCommand::TSwitchLeaderCommand()
 {
     RegisterParameter("cell_id", CellId_);

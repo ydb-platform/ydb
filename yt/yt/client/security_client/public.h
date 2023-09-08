@@ -90,6 +90,8 @@ DEFINE_ENUM(EAccessControlObject,
     (ResurrectChunkLocations)
     (BuildSnapshot)
     (BuildMasterSnapshot)
+    (ExitReadOnly)
+    (MasterExitReadOnly)
     (SwitchLeader)
     (RequestReboot)
 );

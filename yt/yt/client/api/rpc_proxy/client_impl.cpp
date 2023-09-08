@@ -1616,6 +1616,28 @@ TFuture<TCellIdToSnapshotIdMap> TClient::BuildMasterSnapshots(const TBuildMaster
     ThrowUnimplemented("BuildMasterSnapshots");
 }
 
+TFuture<void> TClient::ExitReadOnly(
+    NHydra::TCellId cellId,
+    const TExitReadOnlyOptions& /*options*/)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.ExitReadOnly();
+    ToProto(req->mutable_cell_id(), cellId);
+
+    return req->Invoke().As<void>();
+}
+
+TFuture<void> TClient::MasterExitReadOnly(const TMasterExitReadOnlyOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.MasterExitReadOnly();
+    req->set_retry(options.Retry);
+
+    return req->Invoke().As<void>();
+}
+
 TFuture<void> TClient::SwitchLeader(
     NHydra::TCellId /*cellId*/,
     const TString& /*newLeaderAddress*/,

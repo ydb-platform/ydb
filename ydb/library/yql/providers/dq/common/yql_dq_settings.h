@@ -113,6 +113,7 @@ struct TDqSettings {
     NCommon::TConfSetting<bool, false> EnableChannelStats;
     NCommon::TConfSetting<bool, false> ExportStats;
     NCommon::TConfSetting<ETaskRunnerStats, false> TaskRunnerStats;
+    NCommon::TConfSetting<bool, false> _SkipRevisionCheck;
 
     // This options will be passed to executor_actor and worker_actor
     template <typename TProtoConfig>

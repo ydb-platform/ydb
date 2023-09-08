@@ -364,23 +364,25 @@ private:
         TTypeEnvironment& typeEnv,
         TUserDataTable& files) const
     {
-        if (State->VanillaJobPath.empty()) {
-            auto f = IDqGateway::TFileResource();
-            f.SetName("dq_vanilla_job.lite");
-            f.SetObjectId(GetProgramCommitId());
-            f.SetObjectType(IDqGateway::TFileResource::EEXE_FILE);
-            uploadList->emplace(f);
-        } else {
-            auto f = IDqGateway::TFileResource();
-            f.SetName("dq_vanilla_job.lite");
-            TString path = State->VanillaJobPath;
-            TString objectId = GetProgramCommitId();
-            std::tie(path, objectId) = GetPathAndObjectId(path, objectId, State->VanillaJobMd5);
-            f.SetObjectId(objectId);
-            f.SetLocalPath(path);
-            f.SetObjectType(IDqGateway::TFileResource::EEXE_FILE);
-            f.SetSize(TFile(path, OpenExisting | RdOnly).GetLength());
-            uploadList->emplace(f);
+        if (!State->Settings->_SkipRevisionCheck.Get().GetOrElse(false)) {
+            if (State->VanillaJobPath.empty()) {
+                auto f = IDqGateway::TFileResource();
+                f.SetName("dq_vanilla_job.lite");
+                f.SetObjectId(GetProgramCommitId());
+                f.SetObjectType(IDqGateway::TFileResource::EEXE_FILE);
+                uploadList->emplace(f);
+            } else {
+                auto f = IDqGateway::TFileResource();
+                f.SetName("dq_vanilla_job.lite");
+                TString path = State->VanillaJobPath;
+                TString objectId = GetProgramCommitId();
+                std::tie(path, objectId) = GetPathAndObjectId(path, objectId, State->VanillaJobMd5);
+                f.SetObjectId(objectId);
+                f.SetLocalPath(path);
+                f.SetObjectType(IDqGateway::TFileResource::EEXE_FILE);
+                f.SetSize(TFile(path, OpenExisting | RdOnly).GetLength());
+                uploadList->emplace(f);
+            }
         }
         bool fallbackFlag = false;
         for (TNode* node : explorer.GetNodes()) {

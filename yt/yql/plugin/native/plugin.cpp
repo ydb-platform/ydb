@@ -86,6 +86,11 @@ public:
                 ytConfig->SetExecuteUdfLocallyIfPossible(true);
             }
 
+            auto pattern = ytConfig->AddRemoteFilePatterns();
+            pattern->SetPattern("yt://([a-zA-Z0-9\\-_]+)/([^&@?]+)$");
+            pattern->SetCluster("$1");
+            pattern->SetPath("$2");
+
             ytConfig->SetYtLogLevel(NYql::EYtLogLevel::YL_DEBUG);
             ytConfig->SetMrJobBin(options.MRJobBinary);
             ytConfig->SetMrJobBinMd5(MD5::File(options.MRJobBinary));
@@ -109,7 +114,9 @@ public:
             DefaultCluster_ = options.DefaultCluster;
 
             NYql::TFileStorageConfig fileStorageConfig;
-            fileStorageConfig.SetMaxSizeMb(1 << 14);
+            fileStorageConfig.SetMaxSizeMb(options.MaxFilesSizeMb);
+            fileStorageConfig.SetMaxFiles(options.MaxFileCount);
+            fileStorageConfig.SetRetryCount(options.DownloadFileRetryCount);
             FileStorage_ = WithAsync(CreateFileStorage(fileStorageConfig, {MakeYtDownloader(fileStorageConfig)}));
 
             FuncRegistry_ = NKikimr::NMiniKQL::CreateFunctionRegistry(
@@ -181,7 +188,7 @@ public:
         YQL_LOG(INFO) << "YQL plugin initialized";
     }
 
-    TQueryResult GuardedRun(TQueryId queryId, TString impersonationUser, TString queryText, TYsonString settings)
+    TQueryResult GuardedRun(TQueryId queryId, TString impersonationUser, TString queryText, TYsonString settings, std::vector<TQueryFile> files)
     {
         auto credentials = MakeIntrusive<NYql::TCredentials>();
         if (YTTokenPath_) {
@@ -196,6 +203,9 @@ public:
 
         auto program = ProgramFactory_->Create("-memory-", queryText);
         program->SetOperationAttrsYson(PatchQueryAttributes(OperationAttributes_, settings));
+
+        auto userDataTable = FilesToUserTable(files);
+        program->AddUserDataTable(userDataTable);
 
         auto maybeToOptional = [] (const TMaybe<TString>& maybeStr) -> std::optional<TString> {
             if (!maybeStr) {
@@ -267,10 +277,10 @@ public:
         };
     }
 
-    TQueryResult Run(TQueryId queryId, TString impersonationUser, TString queryText, TYsonString settings) noexcept override
+    TQueryResult Run(TQueryId queryId, TString impersonationUser, TString queryText, TYsonString settings, std::vector<TQueryFile> files) noexcept override
     {
         try {
-            return GuardedRun(queryId, impersonationUser, queryText, settings);
+            return GuardedRun(queryId, impersonationUser, queryText, settings, files);
         } catch (const std::exception& ex) {
             {
                 auto guard = WriterGuard(ProgressSpinLock);
@@ -314,6 +324,7 @@ private:
     TYsonString OperationAttributes_;
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, ProgressSpinLock);
     THashMap<TQueryId, TActiveQuery> ActiveQueriesProgress_;
+    TVector<NYql::TDataProviderInitializer> DataProvidersInit_;
 
     TString PatchQueryAttributes(TYsonString configAttributes, TYsonString querySettings)
     {
@@ -325,6 +336,32 @@ private:
         }
 
         return NodeToYsonString(resultAttributesMap);
+    }
+
+    NYql::TUserDataTable FilesToUserTable(const std::vector<TQueryFile>& files)
+    {
+        NYql::TUserDataTable table;
+
+        for (const auto& file : files) {
+            NYql::TUserDataBlock& block = table[NYql::TUserDataKey::File(NYql::GetDefaultFilePrefix() + file.Name)];
+
+            block.Data = file.Content;
+            switch (file.Type) {
+                case EQueryFileContentType::RawInlineData: {
+                    block.Type = NYql::EUserDataType::RAW_INLINE_DATA;
+                    break;
+                }
+                case EQueryFileContentType::Url: {
+                    block.Type = NYql::EUserDataType::URL;
+                    break;
+                }
+                default: {
+                    ythrow yexception() << "Unexpected file content type";
+                }
+            }
+        }
+
+        return table;
     }
 };
 

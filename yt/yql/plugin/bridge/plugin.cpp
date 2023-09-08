@@ -79,7 +79,10 @@ public:
             .Clusters = bridgeClusters.data(),
             .DefaultCluster = defaultCluster,
             .OperationAttributes = operationAttributesString.data(),
-            .OperationAttributesLength = ssize(operationAttributesString),
+            .OperationAttributesLength = static_cast<int>(operationAttributesString.size()),
+            .MaxFilesSizeMb = options.MaxFilesSizeMb,
+            .MaxFileCount = options.MaxFileCount,
+            .DownloadFileRetryCount = options.DownloadFileRetryCount,
             .YTTokenPath = options.YTTokenPath.data(),
             .LogBackend = &options.LogBackend,
         };
@@ -87,11 +90,24 @@ public:
         BridgePlugin_ = BridgeCreateYqlPlugin(&bridgeOptions);
     }
 
-    TQueryResult Run(TQueryId queryId, TString impersonationUser, TString queryText, NYson::TYsonString settings) noexcept override
+    TQueryResult Run(TQueryId queryId, TString impersonationUser, TString queryText, NYson::TYsonString settings, std::vector<TQueryFile> files) noexcept override
     {
         auto settingsString = settings ? settings.ToString() : "{}";
         auto queryIdStr = ToString(queryId);
-        auto* bridgeQueryResult = BridgeRun(BridgePlugin_, queryIdStr.data(), impersonationUser.data(), queryText.data(), settingsString.data());
+
+        std::vector<TBridgeQueryFile> filesData;
+        filesData.reserve(files.size());
+        for (const auto& file : files) {
+            filesData.push_back(TBridgeQueryFile {
+                .Name = file.Name.data(),
+                .NameLength = file.Name.size(),
+                .Content = file.Content.data(),
+                .ContentLength = file.Content.size(),
+                .Type = file.Type,
+            });
+        }
+
+        auto* bridgeQueryResult = BridgeRun(BridgePlugin_, queryIdStr.data(), impersonationUser.data(), queryText.data(), settingsString.data(), filesData.data(), filesData.size());
         TQueryResult queryResult = {
             .YsonResult = ToString(bridgeQueryResult->YsonResult, bridgeQueryResult->YsonResultLength),
             .Plan = ToString(bridgeQueryResult->Plan, bridgeQueryResult->PlanLength),

@@ -23,6 +23,8 @@ TStartQueryCommand::TStartQueryCommand()
 {
     RegisterParameter("engine", Engine);
     RegisterParameter("query", Query);
+    RegisterParameter("files", Options.Files)
+        .Optional();
     RegisterParameter("stage", Options.QueryTrackerStage)
         .Optional();
     RegisterParameter("settings", Options.Settings)

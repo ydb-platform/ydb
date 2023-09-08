@@ -26,6 +26,10 @@ struct TBridgeYqlPluginOptions
     const char* OperationAttributes;
     ssize_t OperationAttributesLength = 0;
 
+    ssize_t MaxFilesSizeMb;
+    ssize_t MaxFileCount;
+    ssize_t DownloadFileRetryCount;
+
     const char* YTTokenPath;
 
     // TODO(max42): passing C++ objects across shared libraries is incredibly
@@ -63,8 +67,24 @@ struct TBridgeQueryResult
     ssize_t YsonErrorLength = 0;
 };
 
+enum EQueryFileContentType {
+    RawInlineData,
+    Url,
+};
+
+struct TBridgeQueryFile
+{
+    const char* Name;
+    size_t NameLength = 0;
+
+    const char* Content;
+    size_t ContentLength = 0;
+
+    EQueryFileContentType Type;
+};
+
 using TFuncBridgeFreeQueryResult = void(TBridgeQueryResult* result);
-using TFuncBridgeRun = TBridgeQueryResult*(TBridgeYqlPlugin* plugin, const char* queryId, const char* impersonationUser, const char* queryText, const char* settings);
+using TFuncBridgeRun = TBridgeQueryResult*(TBridgeYqlPlugin* plugin, const char* queryId, const char* impersonationUser, const char* queryText, const char* settings, const TBridgeQueryFile* files, int fileCount);
 using TFuncBridgeGetProgress = TBridgeQueryResult*(TBridgeYqlPlugin* plugin, const char* queryId);
 
 ////////////////////////////////////////////////////////////////////////////////

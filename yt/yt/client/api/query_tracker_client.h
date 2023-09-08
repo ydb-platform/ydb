@@ -15,6 +15,31 @@ struct TQueryTrackerOptions
     TString QueryTrackerStage = "production";
 };
 
+DEFINE_ENUM(ContentType,
+    ((RawInlineData)   (0))
+    ((Url)   (1))
+);
+
+struct TQueryFile
+    : public NYTree::TYsonStruct
+{
+    TString Name;
+    TString Content;
+    ContentType Type;
+
+    REGISTER_YSON_STRUCT(TQueryFile);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("name", &TThis::Name)
+            .NonEmpty();
+        registrar.Parameter("content", &TThis::Content);
+        registrar.Parameter("type", &TThis::Type);
+    }
+};
+
+DEFINE_REFCOUNTED_TYPE(TQueryFile)
+
 struct TStartQueryOptions
     : public TTimeoutOptions
     , public TQueryTrackerOptions
@@ -22,6 +47,7 @@ struct TStartQueryOptions
     NYTree::INodePtr Settings;
     bool Draft = false;
     NYTree::IMapNodePtr Annotations;
+    std::vector<TQueryFilePtr> Files;
 };
 
 struct TAbortQueryOptions
@@ -76,6 +102,7 @@ struct TQuery
     NQueryTrackerClient::TQueryId Id;
     std::optional<NQueryTrackerClient::EQueryEngine> Engine;
     std::optional<TString> Query;
+    NYson::TYsonString Files;
     std::optional<TInstant> StartTime;
     std::optional<TInstant> FinishTime;
     NYson::TYsonString Settings;

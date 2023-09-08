@@ -28,6 +28,9 @@ TBridgeYqlPlugin* BridgeCreateYqlPlugin(const TBridgeYqlPluginOptions* bridgeOpt
         .Clusters = std::move(clusters),
         .DefaultCluster = std::optional<TString>(bridgeOptions->DefaultCluster),
         .OperationAttributes = operationAttributes,
+        .MaxFilesSizeMb = static_cast<int>(bridgeOptions->MaxFilesSizeMb),
+        .MaxFileCount = static_cast<int>(bridgeOptions->MaxFileCount),
+        .DownloadFileRetryCount = static_cast<int>(bridgeOptions->DownloadFileRetryCount),
         .YTTokenPath = TString(bridgeOptions->YTTokenPath),
         .LogBackend = std::move(*reinterpret_cast<THolder<TLogBackend>*>(bridgeOptions->LogBackend)),
     };
@@ -64,14 +67,29 @@ void FillString(const char*& str, ssize_t& strLength, const std::optional<TStrin
     strLength = original->size();
 }
 
-TBridgeQueryResult* BridgeRun(TBridgeYqlPlugin* plugin, const char* queryId, const char* impersonationUser, const char* queryText, const char* settings)
+TBridgeQueryResult* BridgeRun(TBridgeYqlPlugin* plugin, const char* queryId, const char* impersonationUser, const char* queryText, const char* settings, const TBridgeQueryFile* bridgeFiles, int bridgeFileCount)
 {
     static const auto EmptyMap = TYsonString(TString("{}"));
 
     auto* nativePlugin = reinterpret_cast<IYqlPlugin*>(plugin);
     auto* bridgeResult = new TBridgeQueryResult;
 
-    auto result = nativePlugin->Run(NYT::TGuid::FromString(queryId), TString(impersonationUser), TString(queryText), settings ? TYsonString(TString(settings)) : EmptyMap);
+    std::vector<TQueryFile> files(bridgeFileCount);
+    for (int index = 0; index < bridgeFileCount; index++) {
+        const auto& file = bridgeFiles[index];
+        files.push_back(TQueryFile {
+            .Name = TStringBuf(file.Name, file.NameLength),
+            .Content = TStringBuf(file.Content, file.ContentLength),
+            .Type = file.Type,
+        });
+    }
+
+    auto result = nativePlugin->Run(
+        NYT::TGuid::FromString(queryId),
+        TString(impersonationUser),
+        TString(queryText),
+        settings ? TYsonString(TString(settings)) : EmptyMap,
+        files);
     FillString(bridgeResult->YsonResult, bridgeResult->YsonResultLength, result.YsonResult);
     FillString(bridgeResult->Plan, bridgeResult->PlanLength, result.Plan);
     FillString(bridgeResult->Statistics, bridgeResult->StatisticsLength, result.Statistics);

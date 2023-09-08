@@ -14,12 +14,13 @@ using namespace NYTree;
 
 void Serialize(const TQuery& query, NYson::IYsonConsumer* consumer)
 {
-    static_assert(pfr::tuple_size<TQuery>::value == 13);
+    static_assert(pfr::tuple_size<TQuery>::value == 14);
     BuildYsonFluently(consumer)
         .BeginMap()
             .OptionalItem("id", query.Id)
             .OptionalItem("engine", query.Engine)
             .OptionalItem("query", query.Query)
+            .OptionalItem("files", query.Files)
             .OptionalItem("start_time", query.StartTime)
             .OptionalItem("finish_time", query.FinishTime)
             .OptionalItem("settings", query.Settings)

@@ -7,18 +7,7 @@
 $threshold = (
 select
     0.2 * avg(l_quantity) as threshold,
-    l_partkey
-from
-    {{lineitem}}
-group by
-    l_partkey
-);
-
-$join1 = (
-select
-    p.p_partkey as p_partkey,
-    l.l_extendedprice as l_extendedprice,
-    l.l_quantity as l_quantity
+    l.l_partkey as l_partkey
 from
     {{lineitem}} as l
 join
@@ -28,15 +17,18 @@ on
 where
     p.p_brand = 'Brand#35'
     and p.p_container = 'LG DRUM'
+group by
+    l.l_partkey
 );
 
 select
-    sum(j.l_extendedprice) / 7.0 as avg_yearly
+    sum(l.l_extendedprice) / 7.0 as avg_yearly
 from
-    $join1 as j
+    {{lineitem}} as l
 join
     $threshold as t
 on
-    j.p_partkey = t.l_partkey
+    t.l_partkey = l.l_partkey
 where
-    j.l_quantity < t.threshold;
+    l.l_quantity < t.threshold;
+

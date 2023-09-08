@@ -92,6 +92,7 @@ private:
     TString Coordinator;
     TString ResourcePath;
     TString CloudId;
+    TString KafkaApiFlag;
     bool IsServerless;
 };
 

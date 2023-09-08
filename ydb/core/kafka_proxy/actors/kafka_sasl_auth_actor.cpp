@@ -44,14 +44,6 @@ void TKafkaSaslAuthActor::StartPlainAuth(const NActors::TActorContext& ctx) {
 
     DatabasePath = CanonizePath(ClientAuthData.Database);
 
-    if (ClientAuthData.UserName.Empty()) {
-        // ApiKey IAM authentification
-        SendApiKeyRequest();
-    } else {
-        // Login/Password authentification
-        SendLoginRequest(ClientAuthData, ctx);
-    }
-
     SendDescribeRequest(ctx);
 }
 
@@ -60,18 +52,29 @@ void TKafkaSaslAuthActor::Handle(NKikimr::TEvTicketParser::TEvAuthorizeTicketRes
         SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "", ev->Get()->Error.Message, ctx);
         return;
     }
-
     UserToken = ev->Get()->Token;
+
+    if (KafkaApiFlag == "1") { // cloud mode
+        bool gotPermission = false;
+        for (auto & sid : UserToken->GetGroupSIDs()) {
+            if (sid == "ydb.api.kafka@as") {
+                gotPermission = true;
+            }
+        }
+        if (!gotPermission) {
+            SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "", "no permission 'ydb.api.kafka'", ctx);
+            return;
+        }
+    }
+
     SendResponseAndDie(EKafkaErrors::NONE_ERROR, "", "", ctx);
 }
 
 void TKafkaSaslAuthActor::Handle(TEvPrivate::TEvTokenReady::TPtr& ev, const NActors::TActorContext& /*ctx*/) {
-    auto entries = NKikimr::NGRpcProxy::V1::GetTicketParserEntries(DatabaseId, FolderId);
     Send(NKikimr::MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
         .Database = ev->Get()->Database,
         .Ticket = "Login " + ev->Get()->LoginResult.token(),
         .PeerName = TStringBuilder() << Address,
-        .Entries = entries
     }));
 }
 
@@ -99,7 +102,8 @@ void TKafkaSaslAuthActor::SendResponseAndDie(EKafkaErrors errorCode, const TStri
         responseToClient->ErrorMessage = "";
 
         auto evResponse = std::make_shared<TEvKafka::TEvResponse>(CorrelationId, responseToClient, errorCode);
-        auto authResult = new TEvKafka::TEvAuthResult(EAuthSteps::SUCCESS, evResponse, UserToken, DatabasePath, DatabaseId, FolderId, CloudId, ServiceAccountId, Coordinator, ResourcePath, IsServerless, errorMessage);
+        auto authResult = new TEvKafka::TEvAuthResult(EAuthSteps::SUCCESS, evResponse, UserToken, DatabasePath, DatabaseId, FolderId, CloudId, ServiceAccountId, Coordinator,
+                                                                ResourcePath, IsServerless, errorMessage);
         Send(Context->ConnectionId, authResult);
     }
 
@@ -168,10 +172,13 @@ void TKafkaSaslAuthActor::SendLoginRequest(TKafkaSaslAuthActor::TAuthData authDa
 }
 
 void TKafkaSaslAuthActor::SendApiKeyRequest() {
+    auto entries = NKikimr::NGRpcProxy::V1::GetTicketParserEntries(DatabaseId, FolderId, true);
+
     Send(NKikimr::MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
         .Database = DatabasePath,
         .Ticket = "ApiKey " + ClientAuthData.Password,
         .PeerName = TStringBuilder() << Address,
+        .Entries = entries
     }));
 }
 
@@ -193,6 +200,7 @@ void TKafkaSaslAuthActor::Handle(NKikimr::TEvTxProxySchemeCache::TEvNavigateKeyS
     }
     Y_VERIFY(navigate->ResultSet.size() == 1);
     IsServerless = navigate->ResultSet.front().DomainInfo->IsServerless();
+
     for (const auto& attr : navigate->ResultSet.front().Attributes) {
         if (attr.first == "folder_id") FolderId = attr.second;
         if (attr.first == "cloud_id") CloudId = attr.second;
@@ -200,8 +208,22 @@ void TKafkaSaslAuthActor::Handle(NKikimr::TEvTxProxySchemeCache::TEvNavigateKeyS
         if (attr.first == "service_account_id") ServiceAccountId = attr.second;
         if (attr.first == "serverless_rt_coordination_node_path") Coordinator = attr.second;
         if (attr.first == "serverless_rt_base_resource_ru") ResourcePath = attr.second;
+        if (attr.first == "kafka_api") KafkaApiFlag = attr.second;
     }
-    SendLoginRequest(ClientAuthData, ctx);
+
+
+    if (ClientAuthData.UserName.Empty()) {
+        // ApiKey IAM authentification
+
+        if (KafkaApiFlag != "1" && KafkaApiFlag != "2") {
+            SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "", TStringBuilder() << "kafka_api is not allowed on this database", ctx);
+            return;
+        }
+        SendApiKeyRequest();
+    } else {
+        // Login/Password authentification
+        SendLoginRequest(ClientAuthData, ctx);
+    }
 }
 
 } // NKafka

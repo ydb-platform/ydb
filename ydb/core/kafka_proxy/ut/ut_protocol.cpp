@@ -60,7 +60,7 @@ class TTestServer {
 public:
     TIpPort Port;
 
-    TTestServer() {
+    TTestServer(const TString& kafkaApiMode = "1") {
         TPortManager portManager;
         Port = portManager.GetTcpPort();
 
@@ -159,6 +159,7 @@ public:
             client.AlterUserAttributes("/", "Root",
                                        {{"folder_id", DEFAULT_FOLDER_ID},
                                         {"cloud_id", DEFAULT_CLOUD_ID},
+                                        {"kafka_api", kafkaApiMode},
                                         {"database_id", "root"},
                                         {"serverless_rt_coordination_node_path", "/Coordinator/Root"},
                                         {"serverless_rt_base_resource_ru", "/ru_Root"}}));
@@ -415,7 +416,7 @@ private:
 
 Y_UNIT_TEST_SUITE(KafkaProtocol) {
     Y_UNIT_TEST(ProduceScenario) {
-        TInsecureTestServer testServer;
+        TInsecureTestServer testServer("2");
 
         TString topicName = "/Root/topic-0-test";
 
@@ -657,7 +658,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         {
             auto msg = client.SaslAuthenticate("@/Root", "ApiKey-value-valid");
-
+            Cerr << msg->ErrorMessage << "\n";
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
         }
 

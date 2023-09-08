@@ -72,8 +72,8 @@ static inline bool InternalErrorCode(Ydb::PersQueue::ErrorCode::ErrorCode errorC
 void FillIssue(Ydb::Issue::IssueMessage* issue, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const TString& errorReason);
 
 
-static inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>  GetTicketParserEntries(const TString& dbId, const TString& folderId) {
-    static const TVector<TString> permissions = {
+static inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>  GetTicketParserEntries(const TString& dbId, const TString& folderId, bool useKafkaApi = false) {
+    TVector<TString> permissions = {
         "ydb.databases.list",
         "ydb.databases.create",
         "ydb.databases.connect",
@@ -81,6 +81,9 @@ static inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>  GetTicketPar
         "ydb.schemas.getMetadata",
         "ydb.streams.write"
     };
+    if (useKafkaApi) {
+        permissions.push_back("ydb.api.kafka");
+    }
     TVector<std::pair<TString, TString>> attributes;
     if (!dbId.empty()) attributes.push_back({"database_id", dbId});
     if (!folderId.empty()) attributes.push_back({"folder_id", folderId});

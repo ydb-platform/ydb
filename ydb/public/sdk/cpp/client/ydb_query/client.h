@@ -84,6 +84,9 @@ public:
 
     TAsyncExecuteQueryResult RetryQuery(TQueryFunc&& queryFunc, TRetryOperationSettings settings = TRetryOperationSettings());
 
+    TAsyncExecuteQueryResult RetryQuery(const TString& query, const TTxControl& txControl,
+        TDuration timeout, bool isIndempotent);
+
     NThreading::TFuture<TScriptExecutionOperation> ExecuteScript(const TString& script,
         const TExecuteScriptSettings& settings = TExecuteScriptSettings());
 

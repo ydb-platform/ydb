@@ -19,6 +19,7 @@ struct TRetryOperationSettings {
     FLUENT_SETTING_DEFAULT(ui32, MaxRetries, 10);
     FLUENT_SETTING_DEFAULT(bool, RetryNotFound, true);
     FLUENT_SETTING_DEFAULT(TDuration, GetSessionClientTimeout, TDuration::Seconds(5));
+    FLUENT_SETTING_DEFAULT(TDuration, MaxTimeout, TDuration::Max());
     FLUENT_SETTING_DEFAULT(TBackoffSettings, FastBackoffSettings, DefaultFastBackoffSettings());
     FLUENT_SETTING_DEFAULT(TBackoffSettings, SlowBackoffSettings, DefaultSlowBackoffSettings());
     FLUENT_SETTING_FLAG(Idempotent);

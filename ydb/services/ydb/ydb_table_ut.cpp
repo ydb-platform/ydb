@@ -1993,11 +1993,11 @@ R"___(<main>: Error: Transaction not found: , code: 2015
     void CheckRetryResult(const TStatus& status, const TVector<TResultSet>& resultSets, bool expectSuccess)
     {
         if (expectSuccess) {
-            UNIT_ASSERT(status.IsSuccess());
+            UNIT_ASSERT_C(status.IsSuccess(), status);
             UNIT_ASSERT_VALUES_EQUAL(resultSets.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(resultSets[0].ColumnsCount(), 3);
         } else {
-            UNIT_ASSERT(!status.IsSuccess());
+            UNIT_ASSERT_C(!status.IsSuccess(), status);
         }
     }
 
@@ -2100,6 +2100,48 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         TestRetryOperationSync(client, {EStatus::NOT_FOUND}, false, TRetryOperationSettings().RetryNotFound(false));
         TestRetryOperationSync(client, {EStatus::UNDETERMINED}, false, TRetryOperationSettings().Idempotent(false));
         TestRetryOperationSync(client, {EStatus::TRANSPORT_UNAVAILABLE}, false, TRetryOperationSettings().Idempotent(false));
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST(RetryOperationLimitedDuration) {
+        TKikimrWithGrpcAndRootSchema server;
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+        NYdb::NTable::TTableClient client(driver);
+
+        const size_t MaxRetries = 3; // OVERLOADED error has slow backoff policy, 2 retries takes about 2 sec
+        const double MaxDurationSec = 0.5; // Less than 2 sec, should be enough to fail on retry with duration limit
+        const auto retrySettings = TRetryOperationSettings().MaxRetries(MaxRetries).Verbose(true);
+        const auto retrySettingsLimited = TRetryOperationSettings(retrySettings).MaxTimeout(TDuration::Seconds(MaxDurationSec));
+        size_t retryNumber = 0;
+
+        // Asynchronous version
+        auto operation = [&retryNumber] (TSession /*session*/) -> TAsyncStatus {
+            if (retryNumber++ < MaxRetries) {
+                return NThreading::MakeFuture(TStatus(EStatus::OVERLOADED, {}));
+            }
+            return NThreading::MakeFuture(TStatus(EStatus::SUCCESS, {}));
+        };
+
+        retryNumber = 0;
+        UNIT_ASSERT(client.RetryOperation(operation, retrySettings).GetValueSync().IsSuccess());
+
+        retryNumber = 0;
+        UNIT_ASSERT(!client.RetryOperation(operation, retrySettingsLimited).GetValueSync().IsSuccess());
+
+        // Synchronous version
+        auto operationSync = [&retryNumber] (TSession /*session*/) -> TStatus {
+            if (retryNumber++ < MaxRetries) {
+                return TStatus(EStatus::OVERLOADED, {});
+            }
+            return TStatus(EStatus::SUCCESS, {});
+        };
+
+        retryNumber = 0;
+        UNIT_ASSERT(client.RetryOperationSync(operationSync, retrySettings).IsSuccess());
+
+        retryNumber = 0;
+        UNIT_ASSERT(!client.RetryOperationSync(operationSync, retrySettingsLimited).IsSuccess());
 
         driver.Stop(true);
     }

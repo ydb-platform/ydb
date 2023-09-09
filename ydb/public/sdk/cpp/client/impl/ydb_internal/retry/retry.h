@@ -6,6 +6,7 @@
 
 #include <library/cpp/threading/future/core/fwd.h>
 #include <util/datetime/base.h>
+#include <util/datetime/cputimer.h>
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 #include <util/system/types.h>
@@ -33,22 +34,23 @@ enum class NextStep {
 
 class TRetryContextBase : TNonCopyable {
 protected:
-    TRetryOperationSettings Settings;
-    ui32 RetryNumber;
+    TRetryOperationSettings Settings_;
+    ui32 RetryNumber_;
+    TSimpleTimer RetryTimer_;
 
 protected:
     TRetryContextBase(const TRetryOperationSettings& settings)
-        : Settings(settings)
-        , RetryNumber(0)
+        : Settings_(settings)
+        , RetryNumber_(0)
     {}
 
     virtual void Reset() {}
 
     void LogRetry(const TStatus& status) {
-        if (Settings.Verbose_) {
+        if (Settings_.Verbose_) {
             Cerr << "Previous query attempt was finished with unsuccessful status "
                 << status.GetStatus() << ": " << status.GetIssues().ToString(true) << Endl;
-            Cerr << "Sending retry attempt " << RetryNumber << " of " << Settings.MaxRetries_ << Endl;
+            Cerr << "Sending retry attempt " << RetryNumber_ << " of " << Settings_.MaxRetries_ << Endl;
         }
     }
 
@@ -56,7 +58,10 @@ protected:
         if (status.IsSuccess()) {
             return NextStep::Finish;
         }
-        if (RetryNumber >= Settings.MaxRetries_) {
+        if (RetryNumber_ >= Settings_.MaxRetries_) {
+            return NextStep::Finish;
+        }
+        if (RetryTimer_.Get() >= Settings_.MaxTimeout_) {
             return NextStep::Finish;
         }
         switch (status.GetStatus()) {
@@ -76,21 +81,21 @@ protected:
                 return NextStep::RetryImmediately;
 
             case EStatus::NOT_FOUND:
-                if (Settings.RetryNotFound_) {
+                if (Settings_.RetryNotFound_) {
                     return NextStep::RetryImmediately;
                 } else {
                     return NextStep::Finish;
                 }
 
             case EStatus::UNDETERMINED:
-                if (Settings.Idempotent_) {
+                if (Settings_.Idempotent_) {
                     return NextStep::RetryFastBackoff;
                 } else {
                     return NextStep::Finish;
                 }
 
             case EStatus::TRANSPORT_UNAVAILABLE:
-                if (Settings.Idempotent_) {
+                if (Settings_.Idempotent_) {
                     Reset();
                     return NextStep::RetryFastBackoff;
                 } else {
@@ -100,6 +105,10 @@ protected:
             default:
                 return NextStep::Finish;
         }
+    }
+
+    TDuration GetRemainingTimeout() {
+        return Settings_.MaxTimeout_ - RetryTimer_.Get();
     }
 };
 

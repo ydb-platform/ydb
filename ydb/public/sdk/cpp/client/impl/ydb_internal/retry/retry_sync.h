@@ -11,12 +11,13 @@ namespace NYdb::NRetry::Sync {
 template <typename TClient, typename TStatusType>
 class TRetryContext : public TRetryContextBase {
 protected:
-    TClient Client;
+    TClient& Client_;
 
 public:
     TStatusType Execute() {
+        this->RetryTimer_.Reset();
         TStatusType status = Retry(); // first attempt
-        for (this->RetryNumber = 0; this->RetryNumber <= this->Settings.MaxRetries_;) {
+        for (this->RetryNumber_ = 0; this->RetryNumber_ <= this->Settings_.MaxRetries_;) {
             auto nextStep = this->GetNextStep(status);
             switch (nextStep) {
                 case NextStep::RetryImmediately:
@@ -31,9 +32,9 @@ public:
                     return status;
             }
             // make next retry
-            this->RetryNumber++;
+            this->RetryNumber_++;
             this->LogRetry(status);
-            this->Client.Impl_->CollectRetryStatSync(status.GetStatus());
+            this->Client_.Impl_->CollectRetryStatSync(status.GetStatus());
             status = Retry();
         }
         return status;
@@ -42,7 +43,7 @@ public:
 protected:
     TRetryContext(TClient& client, const TRetryOperationSettings& settings)
         : TRetryContextBase(settings)
-        , Client(client)
+        , Client_(client)
     {}
 
     virtual TStatusType Retry() = 0;
@@ -50,21 +51,21 @@ protected:
     virtual TStatusType RunOperation() = 0;
 
     void DoBackoff(bool fast) {
-        const auto &settings = fast ? this->Settings.FastBackoffSettings_
-                                    : this->Settings.SlowBackoffSettings_;
-        Backoff(settings, this->RetryNumber);
+        const auto &settings = fast ? this->Settings_.FastBackoffSettings_
+                                    : this->Settings_.SlowBackoffSettings_;
+        Backoff(settings, this->RetryNumber_);
     }
 };
 
 template<typename TClient, typename TOperation, typename TStatusType = TFunctionResult<TOperation>>
 class TRetryWithoutSession : public TRetryContext<TClient, TStatusType> {
 private:
-    const TOperation& Operation;
+    const TOperation& Operation_;
 
 public:
     TRetryWithoutSession(TClient& client, const TOperation& operation, const TRetryOperationSettings& settings)
         : TRetryContext<TClient, TStatusType>(client, settings)
-        , Operation(operation)
+        , Operation_(operation)
     {}
 
 protected:
@@ -73,7 +74,11 @@ protected:
     }
 
     TStatusType RunOperation() override {
-        return Operation(this->Client);
+        if constexpr (TFunctionArgs<TOperation>::Length == 1) {
+            return Operation_(this->Client_);
+        } else {
+            return Operation_(this->Client_, this->GetRemainingTimeout());
+        }
     }
 };
 
@@ -83,29 +88,29 @@ class TRetryWithSession : public TRetryContext<TClient, TStatusType> {
     using TCreateSessionSettings = typename TClient::TCreateSessionSettings;
 
 private:
-    const TOperation& Operation;
-    TMaybe<TSession> Session;
+    const TOperation& Operation_;
+    TMaybe<TSession> Session_;
 
 public:
     TRetryWithSession(TClient& client, const TOperation& operation, const TRetryOperationSettings& settings)
         : TRetryContext<TClient, TStatusType>(client, settings)
-        , Operation(operation)
+        , Operation_(operation)
     {}
 
 protected:
     TStatusType Retry() override {
         TMaybe<TStatusType> status;
 
-        if (!Session) {
-            auto settings = TCreateSessionSettings().ClientTimeout(this->Settings.GetSessionClientTimeout_);
-            auto sessionResult = this->Client.GetSession(settings).GetValueSync();
+        if (!Session_) {
+            auto settings = TCreateSessionSettings().ClientTimeout(this->Settings_.GetSessionClientTimeout_);
+            auto sessionResult = this->Client_.GetSession(settings).GetValueSync();
             if (sessionResult.IsSuccess()) {
-                Session = sessionResult.GetSession();
+                Session_ = sessionResult.GetSession();
             }
             status = TStatusType(TStatus(sessionResult));
         }
 
-        if (Session) {
+        if (Session_) {
             status = RunOperation();
         }
 
@@ -113,11 +118,15 @@ protected:
     }
 
     TStatusType RunOperation() override {
-        return Operation(this->Session.GetRef());
+        if constexpr (TFunctionArgs<TOperation>::Length == 1) {
+            return Operation_(this->Session_.GetRef());
+        } else {
+            return Operation_(this->Session_.GetRef(), this->GetRemainingTimeout());
+        }
     }
 
     void Reset() override {
-        Session.Clear();
+        Session_.Clear();
     }
 };
 

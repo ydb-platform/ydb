@@ -349,6 +349,7 @@ private:
         YT_LOG_DEBUG("Collecting partitions (Query: %v)", selectQuery);
 
         TSelectRowsOptions selectRowsOptions;
+        selectRowsOptions.ReplicaConsistency = EReplicaConsistency::Sync;
         auto selectRowsResult = WaitFor(client->SelectRows(selectQuery, selectRowsOptions))
             .ValueOrThrow();
 
@@ -422,6 +423,7 @@ private:
         options.KeepMissingRows = true;
         options.RetentionConfig = New<TRetentionConfig>();
         options.RetentionConfig->MaxDataVersions = 1;
+        options.ReplicaConsistency = EReplicaConsistency::Sync;
 
         auto versionedRowset = WaitFor(client->VersionedLookupRows(
             Path_,

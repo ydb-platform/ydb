@@ -99,10 +99,46 @@ def filter_cmd(cmd):
             skip = False
 
 
+def walk(p):
+    for a, b, c in os.walk(p):
+        for x in c:
+            yield os.path.join(a, x)
+
+
+def find_header(p, h):
+    for x in walk(p):
+        if x.endswith(h):
+            return os.path.dirname(x)
+
+    raise Exception('can not find inc dir')
+
+
+def fix_cmd(l, bin):
+    sp = '--sysroot='
+
+    for x in l:
+        if '-isystem' in x and '/share/include' in x:
+            # reparent compiler headers dir into clang-tidy install path
+            yield '-isystem' + find_header(os.path.dirname(os.path.dirname(bin)), 'stddef.h')
+        elif x.startswith(sp):
+            yield '-nostdinc'
+            sr = x[len(sp):]
+            yield '-isystem' + sr + '/usr/include'
+            yield '-isystem' + sr + '/usr/include/x86_64-linux-gnu'
+        elif x == '-nostdinc++':
+            if '.c.o' in str(l):
+                pass
+            else:
+                yield x
+        else:
+            yield x
+
+
 def main():
     args, clang_cmd = parse_args()
     if '/wrapcc.py' in str(clang_cmd):
         clang_cmd = list(filter_cmd(clang_cmd))
+    clang_cmd = list(fix_cmd(clang_cmd, args.clang_tidy_bin))
     setup_script(args)
     clang_tidy_bin = args.clang_tidy_bin
     output_json = args.tidy_json

@@ -1,4 +1,5 @@
 #include "executor_pool_basic.h"
+#include "executor_pool_basic_feature_flags.h"
 #include "actor.h"
 #include "probes.h"
 #include "mailbox.h"
@@ -48,6 +49,15 @@ namespace NActors {
         , Harmonizer(harmonizer)
         , Priority(priority)
     {
+        if constexpr (NFeatures::IsLocalQueues()) {
+            LocalQueues.Reset(new NThreading::TPadded<std::queue<ui32>>[threads]);
+            if constexpr (NFeatures::TLocalQueuesFeatureFlags::FIXED_LOCAL_QUEUE_SIZE) {
+                LocalQueueSize = *NFeatures::TLocalQueuesFeatureFlags::FIXED_LOCAL_QUEUE_SIZE;
+            } else {
+                LocalQueueSize = NFeatures::TLocalQueuesFeatureFlags::MIN_LOCAL_QUEUE_SIZE;
+            }
+        }
+
         Y_UNUSED(maxActivityType);
         i16 limit = Min(threads, (ui32)Max<i16>());
         if (DefaultThreadCount) {
@@ -230,7 +240,7 @@ namespace NActors {
         } while (true);
     }
 
-    ui32 TBasicExecutorPool::GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) {
+    ui32 TBasicExecutorPool::GetReadyActivationCommon(TWorkerContext& wctx, ui64 revolvingCounter) {
         TWorkerId workerId = wctx.WorkerId;
         Y_VERIFY_DEBUG(workerId < PoolThreads);
 
@@ -291,6 +301,33 @@ namespace NActors {
         return 0;
     }
 
+    ui32 TBasicExecutorPool::GetReadyActivationLocalQueue(TWorkerContext& wctx, ui64 revolvingCounter) {
+        TWorkerId workerId = wctx.WorkerId;
+        Y_VERIFY_DEBUG(workerId < static_cast<i32>(PoolThreads));
+
+        if (workerId >= 0 && LocalQueues[workerId].size()) {
+            ui32 activation = LocalQueues[workerId].front();
+            LocalQueues[workerId].pop();
+            return activation;
+        } else {
+            TlsThreadContext->WriteTurn = 0;
+            TlsThreadContext->LocalQueueSize = LocalQueueSize.load(std::memory_order_relaxed);
+        }
+        return GetReadyActivationCommon(wctx, revolvingCounter);
+    }
+
+    ui32 TBasicExecutorPool::GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) {
+        if constexpr (NFeatures::IsLocalQueues()) {
+            if (SharedExecutorsCount) {
+                return GetReadyActivationCommon(wctx, revolvingCounter);
+            }
+            return GetReadyActivationLocalQueue(wctx, revolvingCounter);
+        } else {
+            return GetReadyActivationCommon(wctx, revolvingCounter);
+        }
+        return 0;
+    }
+
     inline void TBasicExecutorPool::WakeUpLoop(i16 currentThreadCount) {
         for (i16 i = 0;;) {
             TThreadCtx& threadCtx = Threads[i];
@@ -320,7 +357,7 @@ namespace NActors {
         }
     }
 
-    void TBasicExecutorPool::ScheduleActivationEx(ui32 activation, ui64 revolvingCounter) {
+    void TBasicExecutorPool::ScheduleActivationExCommon(ui32 activation, ui64 revolvingCounter) {
         Activations.Push(activation, revolvingCounter);
         bool needToWakeUp = false;
 
@@ -342,6 +379,24 @@ namespace NActors {
 
         if (needToWakeUp) { // we must find someone to wake-up
             WakeUpLoop(semaphore.CurrentThreadCount);
+        }
+    }
+
+    void TBasicExecutorPool::ScheduleActivationExLocalQueue(ui32 activation, ui64 revolvingWriteCounter) {
+        if (TlsThreadContext && TlsThreadContext->Pool == this && TlsThreadContext->WorkerId >= 0) {
+            if (++TlsThreadContext->WriteTurn < TlsThreadContext->LocalQueueSize) {
+                LocalQueues[TlsThreadContext->WorkerId].push(activation);
+                return;
+            }
+        }
+        ScheduleActivationExCommon(activation, revolvingWriteCounter);
+    }
+
+    void TBasicExecutorPool::ScheduleActivationEx(ui32 activation, ui64 revolvingCounter) {
+        if constexpr (NFeatures::IsLocalQueues()) {
+            ScheduleActivationExLocalQueue(activation, revolvingCounter);
+        } else {
+            ScheduleActivationExCommon(activation, revolvingCounter);
         }
     }
 
@@ -539,5 +594,11 @@ namespace NActors {
 
     void TBasicExecutorPool::SetSharedExecutorsCount(i16 count) {
         SharedExecutorsCount = count;
+    }
+
+    void TBasicExecutorPool::SetLocalQueueSize(ui16 size) {
+        if constexpr (!NFeatures::TLocalQueuesFeatureFlags::FIXED_LOCAL_QUEUE_SIZE) {
+            LocalQueueSize.store(std::max(size, NFeatures::TLocalQueuesFeatureFlags::MAX_LOCAL_QUEUE_SIZE), std::memory_order_relaxed);
+        }
     }
 }

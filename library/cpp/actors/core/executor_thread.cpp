@@ -352,6 +352,7 @@ namespace NActors {
         TThreadContext threadCtx;
         TlsThreadContext = &threadCtx;
         TlsThreadContext->Pool = static_cast<IExecutorPool*>(ExecutorPool);
+        TlsThreadContext->WorkerId = Ctx.WorkerId;
 
         ExecutorPool->SetRealTimeMode();
         TAffinityGuard affinity(ExecutorPool->Affinity());

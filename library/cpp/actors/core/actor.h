@@ -4,8 +4,9 @@
 #include "event.h"
 #include "executor_thread.h"
 #include "monotonic.h"
-#include <library/cpp/actors/actor_type/indexes.h>
+#include "thread_context.h"
 
+#include <library/cpp/actors/actor_type/indexes.h>
 #include <library/cpp/actors/util/local_process_key.h>
 
 #include <util/system/tls.h>
@@ -24,16 +25,6 @@ namespace NActors {
     namespace NLog {
         struct TSettings;
     }
-
-    struct TThreadContext {
-        IExecutorPool *Pool = nullptr;
-        ui32 CapturedActivation = 0;
-        ESendingType CapturedType = ESendingType::Lazy;
-        ESendingType SendingType = ESendingType::Common;
-        bool IsEnoughCpu = true;
-    };
-
-    extern Y_POD_THREAD(TThreadContext*) TlsThreadContext;
 
     struct TActorContext;
     struct TActivationContext;

@@ -1,6 +1,7 @@
 #include "actorsystem.h"
 #include "actor.h"
 #include "executor_pool_base.h"
+#include "executor_pool_basic_feature_flags.h"
 #include "executor_thread.h"
 #include "mailbox.h"
 #include "probes.h"
@@ -115,8 +116,12 @@ namespace NActors {
         return TlsThreadContext->SendingType != ESendingType::Common;
     }
 
+    Y_FORCE_INLINE bool IsTailSend(IExecutorPool *self) {
+        return TlsThreadContext->Pool == self && TlsThreadContext->SendingType == ESendingType::Tail && TlsThreadContext->CapturedType != ESendingType::Tail;
+    }
+
     void TExecutorPoolBase::SpecificScheduleActivation(ui32 activation) {
-        if (IsAllowedToCapture(this)) {
+        if (NFeatures::IsCommon() && IsAllowedToCapture(this) || IsTailSend(this)) {
             std::swap(TlsThreadContext->CapturedActivation, activation);
             TlsThreadContext->CapturedType = TlsThreadContext->SendingType;
         }

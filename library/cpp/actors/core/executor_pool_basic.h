@@ -10,7 +10,11 @@
 #include <library/cpp/actors/util/threadparkpad.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
+#include <library/cpp/threading/chunk_queue/queue.h>
+
 #include <util/system/mutex.h>
+
+#include <queue>
 
 namespace NActors {
     class TBasicExecutorPool: public TExecutorPoolBase {
@@ -52,6 +56,9 @@ namespace NActors {
         const ui64 SpinThresholdCycles;
 
         TArrayHolder<TThreadCtx> Threads;
+        TArrayHolder<NThreading::TPadded<std::queue<ui32>>> LocalQueues;
+        std::atomic<ui16> LocalQueueSize;
+
 
         TArrayHolder<NSchedulerQueue::TReader> ScheduleReaders;
         TArrayHolder<NSchedulerQueue::TWriter> ScheduleWriters;
@@ -126,12 +133,18 @@ namespace NActors {
         void SetSharedExecutorsCount(i16 count);
 
         ui32 GetReadyActivation(TWorkerContext& wctx, ui64 revolvingReadCounter) override;
+        ui32 GetReadyActivationCommon(TWorkerContext& wctx, ui64 revolvingReadCounter);
+        ui32 GetReadyActivationLocalQueue(TWorkerContext& wctx, ui64 revolvingReadCounter);
 
         void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
         void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
         void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
 
         void ScheduleActivationEx(ui32 activation, ui64 revolvingWriteCounter) override;
+        void ScheduleActivationExCommon(ui32 activation, ui64 revolvingWriteCounter);
+        void ScheduleActivationExLocalQueue(ui32 activation, ui64 revolvingWriteCounter);
+
+        void SetLocalQueueSize(ui16 size);
 
         void Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) override;
         void Start() override;

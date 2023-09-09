@@ -2,6 +2,8 @@
 
 #include "probes.h"
 #include "actorsystem.h"
+#include "executor_pool_basic.h"
+#include "executor_pool_basic_feature_flags.h"
 
 #include <library/cpp/actors/util/cpu_load_log.h>
 #include <library/cpp/actors/util/datetime.h>
@@ -163,6 +165,7 @@ struct TThreadInfo {
 struct TPoolInfo {
     std::vector<TThreadInfo> ThreadInfo;
     IExecutorPool* Pool = nullptr;
+    TBasicExecutorPool* BasicPool = nullptr;
     i16 DefaultThreadCount = 0;
     i16 MinThreadCount = 0;
     i16 MaxThreadCount = 0;
@@ -173,6 +176,7 @@ struct TPoolInfo {
     ui64 LastUpdateTs = 0;
     ui64 NotEnoughCpuExecutions = 0;
     ui64 NewNotEnoughCpuExecutions = 0;
+    ui16 LocalQueueSize = NFeatures::TLocalQueuesFeatureFlags::MIN_LOCAL_QUEUE_SIZE;
 
     TAtomic LastFlags = 0; // 0 - isNeedy; 1 - isStarved; 2 - isHoggish
     TAtomic IncreasingThreadsByNeedyState = 0;
@@ -445,8 +449,8 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
     } else {
         for (size_t needyPoolIdx : needyPools) {
             TPoolInfo &pool = Pools[needyPoolIdx];
+            i64 threadCount = pool.GetThreadCount();
             if (budget >= 1.0) {
-                i64 threadCount = pool.GetThreadCount();
                 if (threadCount + 1 <= pool.MaxThreadCount) {
                     AtomicIncrement(pool.IncreasingThreadsByNeedyState);
                     isNeedyByPool[needyPoolIdx] = false;
@@ -454,6 +458,15 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
                     pool.SetThreadCount(threadCount + 1);
                     budget -= 1.0;
                     LWPROBE(HarmonizeOperation, needyPoolIdx, pool.Pool->GetName(), "increase by needs", threadCount + 1, pool.DefaultThreadCount, pool.MaxThreadCount);
+                }
+            }
+            if constexpr (NFeatures::IsLocalQueues()) {
+                bool needToExpandLocalQueue = budget < 1.0 || threadCount >= pool.MaxThreadCount;
+                needToExpandLocalQueue &= (bool)pool.BasicPool;
+                needToExpandLocalQueue &= (pool.MaxThreadCount > 1);
+                needToExpandLocalQueue &= (pool.LocalQueueSize < NFeatures::TLocalQueuesFeatureFlags::MAX_LOCAL_QUEUE_SIZE);
+                if (needToExpandLocalQueue) {
+                    pool.BasicPool->SetLocalQueueSize(++pool.LocalQueueSize);
                 }
             }
         }
@@ -503,6 +516,10 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
     for (size_t hoggishPoolIdx : hoggishPools) {
         TPoolInfo &pool = Pools[hoggishPoolIdx];
         i64 threadCount = pool.GetThreadCount();
+        if (pool.BasicPool && pool.LocalQueueSize > NFeatures::TLocalQueuesFeatureFlags::MIN_LOCAL_QUEUE_SIZE) {
+            pool.LocalQueueSize = std::min<ui16>(NFeatures::TLocalQueuesFeatureFlags::MIN_LOCAL_QUEUE_SIZE, pool.LocalQueueSize / 2);
+            pool.BasicPool->SetLocalQueueSize(pool.LocalQueueSize);
+        }
         if (threadCount > pool.MinThreadCount) {
             AtomicIncrement(pool.DecreasingThreadsByHoggishState);
             LWPROBE(HarmonizeOperation, hoggishPoolIdx, pool.Pool->GetName(), "decrease by hoggish", threadCount - 1, pool.DefaultThreadCount, pool.MaxThreadCount);
@@ -555,6 +572,7 @@ void THarmonizer::AddPool(IExecutorPool* pool, TSelfPingInfo *pingInfo) {
     TGuard<TSpinLock> guard(Lock);
     TPoolInfo poolInfo;
     poolInfo.Pool = pool;
+    poolInfo.BasicPool = dynamic_cast<TBasicExecutorPool*>(pool);
     poolInfo.DefaultThreadCount = pool->GetDefaultThreadCount();
     poolInfo.MinThreadCount = pool->GetMinThreadCount();
     poolInfo.MaxThreadCount = pool->GetMaxThreadCount();

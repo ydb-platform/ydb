@@ -441,12 +441,6 @@ Y_UNIT_TEST_SUITE(TopicNameConverterForCPTest) {
         );
         UNIT_ASSERT(!converter->IsValid());
 
-        converter = TTopicNameConverter::ForFederation(
-                "", "", "rt3.sas--account--topic", "/LbCommunal/account/", "/LbCommunal/account", true, "sas", "account"
-        );
-        UNIT_ASSERT(!converter->IsValid());
-
-
     }
 }
 } // NTests

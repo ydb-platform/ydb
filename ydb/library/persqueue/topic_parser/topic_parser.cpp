@@ -655,11 +655,6 @@ TTopicConverterPtr TTopicNameConverter::ForFederation(
             res->Reason = TStringBuilder() << "Topic '" << schemeName << "' created as non-local in local cluster";
         }
     } else {
-        if (schemeName.Contains("rt3.")) {
-            res->Valid = false;
-            res->Reason = "Legacy style topic should not be created outside of PQ root";
-            return res;
-        }
         if (federationAccount.empty()) {
             res->Valid = false;
             res->Reason = "Should specify federation account for modern-style topics";

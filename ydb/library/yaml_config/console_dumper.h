@@ -15,6 +15,6 @@ struct TDumpConsoleConfigItemResult {
 
 TDumpConsoleConfigItemResult DumpConsoleConfigItem(const NKikimrConsole::TConfigItem &item);
 
-NKikimrConsole::TConfigItem DumpYamlConfigItem(const TString &config, const TString &domain);
+NKikimrConsole::TConfigureRequest DumpYamlConfigRequest(const TString &config, const TString &domain);
 
 } // namespace NYamlConfig

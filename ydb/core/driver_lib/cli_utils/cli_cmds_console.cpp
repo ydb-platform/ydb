@@ -443,9 +443,7 @@ public:
 
     int Run(TConfig &) override
     {
-        auto item = NYamlConfig::DumpYamlConfigItem(Request, Domain);
-        NKikimrConsole::TConfigureRequest req;
-        req.AddActions()->MutableAddConfigItem()->MutableConfigItem()->CopyFrom(item);
+        NKikimrConsole::TConfigureRequest req = NYamlConfig::DumpYamlConfigRequest(Request, Domain);
         TString result;
         google::protobuf::TextFormat::PrintToString(req, &result);
         Cout << result;

@@ -112,13 +112,18 @@ def on_ya_conf_json(unit, conf_file):
         unit.onsrcdir(conf_dir)
     unit.onresource_files(os.path.basename(conf_file))
 
+    valid_dirs = (
+        "build",
+        conf_dir,
+    )
+
     with open(conf_abs_path) as f:
         conf = json.load(f)
     formulas = set()
     for bottle_name, bottle in conf['bottles'].items():
         formula = bottle['formula']
         if isinstance(formula, six.string_types):
-            if formula.startswith(conf_dir):
+            if formula.startswith(valid_dirs):
                 abs_path = unit.resolve('$S/' + formula)
                 if os.path.exists(abs_path):
                     formulas.add(formula)
@@ -131,7 +136,7 @@ def on_ya_conf_json(unit, conf_file):
             else:
                 ymake.report_configure_error(
                     'File "{}" (referenced from bottle "{}" in "{}") must be located in "{}" file tree'.format(
-                        formula, bottle_name, conf_file, conf_dir
+                        formula, bottle_name, conf_file, '" or "'.join(valid_dirs)
                     )
                 )
     for formula in formulas:

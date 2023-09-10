@@ -491,6 +491,7 @@ public:
     TTabletRequestsState TabletRequests;
 
     TDuration Timeout = TDuration::MilliSeconds(10000);
+    ui32 ChildrenRecordsLimit = 0;
     static constexpr TStringBuf STATIC_STORAGE_POOL_NAME = "static";
 
     bool IsSpecificDatabaseFilter() {
@@ -502,6 +503,7 @@ public:
         if (Request->Request.operation_params().has_operation_timeout()) {
             Timeout = GetDuration(Request->Request.operation_params().operation_timeout());
         }
+        ChildrenRecordsLimit = Request->Request.records_limit();
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
         TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
         DomainPath = "/" + domain->Name;
@@ -1699,7 +1701,6 @@ public:
     static const inline TString BLOCK_4_2 = "block-4-2";
     static const inline TString MIRROR_3_DC = "mirror-3-dc";
     static const int MERGING_IGNORE_SIZE = 4;
-    static const int MERGER_ISSUE_LIMIT = 10;
 
     static void IncrementFor(TStackVec<std::pair<ui32, int>>& realms, ui32 realm) {
         auto itRealm = FindIf(realms, [realm](const std::pair<ui32, int>& p) -> bool {
@@ -1966,9 +1967,9 @@ public:
     }
 
     void RemoveRecordsAboveLimit(TMergeIssuesContext& context, TList<TSelfCheckContext::TIssueRecord>& records) {
-        int commonListed = 0;
+        ui32 commonListed = 0;
         for (auto it = records.begin(); it != records.end(); it++) {
-            if (commonListed == MERGER_ISSUE_LIMIT) {
+            if (commonListed == ChildrenRecordsLimit) {
                 auto removeIt = it;
                 it--;
                 SetIssueCount(*it, GetIssueCount(*it) + GetIssueCount(*removeIt));
@@ -1979,8 +1980,8 @@ public:
                 }
                 context.removeIssuesIds.insert(removeIt->IssueLog.id());
                 records.erase(removeIt);
-            } else if (commonListed + GetIssueListed(*it) > MERGER_ISSUE_LIMIT) {
-                auto aboveLimit = commonListed + GetIssueListed(*it) - MERGER_ISSUE_LIMIT;
+            } else if (commonListed + GetIssueListed(*it) > ChildrenRecordsLimit) {
+                auto aboveLimit = commonListed + GetIssueListed(*it) - ChildrenRecordsLimit;
                 SetIssueListed(*it, GetIssueListed(*it) - aboveLimit);
 
                 switch (it->Tag) {
@@ -2010,7 +2011,7 @@ public:
                     }
                     default: {}
                 }
-                commonListed = MERGER_ISSUE_LIMIT;
+                commonListed = ChildrenRecordsLimit;
             } else {
                 commonListed += GetIssueListed(*it);
             }
@@ -2127,12 +2128,16 @@ public:
 
     void MergeRecords(TList<TSelfCheckContext::TIssueRecord>& records) {
         TMergeIssuesContext mergeContext(records);
-        MergeLevelRecords(mergeContext, ETags::GroupState);
-        MergeLevelRecords(mergeContext, ETags::VDiskState, ETags::GroupState);
-        MergeLevelRecords(mergeContext, ETags::PDiskState, ETags::VDiskState);
-        RemoveRecordsAboveLimit(mergeContext, ETags::PDiskState, ETags::VDiskState);
-        RemoveRecordsAboveLimit(mergeContext, ETags::VDiskState, ETags::GroupState);
-        RemoveRecordsAboveLimit(mergeContext, ETags::GroupState);
+        if (Request->Request.merge_records()) {
+            MergeLevelRecords(mergeContext, ETags::GroupState);
+            MergeLevelRecords(mergeContext, ETags::VDiskState, ETags::GroupState);
+            MergeLevelRecords(mergeContext, ETags::PDiskState, ETags::VDiskState);
+        }
+        if (ChildrenRecordsLimit != 0) {
+            RemoveRecordsAboveLimit(mergeContext, ETags::PDiskState, ETags::VDiskState);
+            RemoveRecordsAboveLimit(mergeContext, ETags::VDiskState, ETags::GroupState);
+            RemoveRecordsAboveLimit(mergeContext, ETags::GroupState);
+        }
         mergeContext.FillRecords(records);
     }
 

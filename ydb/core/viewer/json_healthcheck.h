@@ -71,6 +71,8 @@ public:
         request->Database = Database = params.Get("tenant");
         request->Request.set_return_verbose_status(FromStringWithDefault<bool>(params.Get("verbose"), false));
         request->Request.set_maximum_level(FromStringWithDefault<ui32>(params.Get("max_level"), 0));
+        request->Request.set_merge_records(FromStringWithDefault<bool>(params.Get("merge_records"), false));
+        request->Request.set_records_limit(FromStringWithDefault<ui32>(params.Get("records_limit"), 0));
         SetDuration(TDuration::MilliSeconds(Timeout), *request->Request.mutable_operation_params()->mutable_operation_timeout());
         if (params.Has("min_status")) {
             Ydb::Monitoring::StatusFlag::Status minStatus;
@@ -207,6 +209,8 @@ struct TJsonRequestParameters<TJsonHealthCheck> {
                       {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer"},
                       {"name":"tenant","in":"query","description":"path to database","required":false,"type":"string"},
                       {"name":"verbose","in":"query","description":"return verbose status","required":false,"type":"boolean"},
+                      {"name":"merge_records","in":"query","description":"merge records","required":false,"type":"boolean"},
+                      {"name":"records_limit","in":"query","description":"children records limit","required":false,"type":"integer"},
                       {"name":"max_level","in":"query","description":"max depth of issues to return","required":false,"type":"integer"},
                       {"name":"min_status","in":"query","description":"min status of issues to return","required":false,"type":"string"},
                       {"name":"format","in":"query","description":"format of reply","required":false,"type":"string"}])___";

@@ -181,6 +181,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         }
     }
 
+    static const int MERGER_ISSUE_LIMIT = 10;
+
     void ListingTest(int const groupNumber, int const vdiscPerGroupNumber) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
@@ -226,6 +228,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         runtime.SetObserverFunc(observerFunc);
 
         auto *request = new NHealthCheck::TEvSelfCheckRequest;
+        request->Request.set_merge_records(true);
+        request->Request.set_records_limit(MERGER_ISSUE_LIMIT);
         runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
         NHealthCheck::TEvSelfCheckResult* result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle);
 
@@ -238,7 +242,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     UNIT_ASSERT_VALUES_EQUAL(issue_log.listed(), 0);
                     UNIT_ASSERT_VALUES_EQUAL(issue_log.count(), 0);
                 } else {
-                    int groupListed = std::min<int>(groupNumber, (int)NHealthCheck::TSelfCheckRequest::MERGER_ISSUE_LIMIT);
+                    int groupListed = std::min<int>(groupNumber, MERGER_ISSUE_LIMIT);
                     UNIT_ASSERT_VALUES_EQUAL(issue_log.location().storage().pool().group().id_size(), groupListed);
                     UNIT_ASSERT_VALUES_EQUAL(issue_log.listed(), groupListed);
                     UNIT_ASSERT_VALUES_EQUAL(issue_log.count(), groupNumber);
@@ -394,18 +398,18 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     }
 
     Y_UNIT_TEST(IssuesGroupsMerging) {
-        int groupNumber = NHealthCheck::TSelfCheckRequest::MERGER_ISSUE_LIMIT;
+        int groupNumber = MERGER_ISSUE_LIMIT;
         ListingTest(groupNumber, 1);
     }
 
     Y_UNIT_TEST(IssuesVCardMerging) {
-        int vcardNumber = NHealthCheck::TSelfCheckRequest::MERGER_ISSUE_LIMIT;
+        int vcardNumber = MERGER_ISSUE_LIMIT;
         ListingTest(1, vcardNumber);
     }
 
     Y_UNIT_TEST(IssuesGroupsVCardMerging) {
-        int groupNumber = NHealthCheck::TSelfCheckRequest::MERGER_ISSUE_LIMIT;
-        int vcardNumber = NHealthCheck::TSelfCheckRequest::MERGER_ISSUE_LIMIT;
+        int groupNumber = MERGER_ISSUE_LIMIT;
+        int vcardNumber = MERGER_ISSUE_LIMIT;
         ListingTest(groupNumber, vcardNumber);
     }
 

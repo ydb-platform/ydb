@@ -2076,6 +2076,7 @@ const TTypeDesc& LookupCommonType(const TVector<ui32>& typeIds, bool& castsNeede
     }
     // https://www.postgresql.org/docs/14/typeconv-union-case.html, step 3
     if (unknownsCnt == typeIds.size()) {
+        castsNeeded = true;
         return LookupType("text");
     }
     return *commonType;

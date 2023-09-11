@@ -91,6 +91,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             .Build();
 
         auto it = db.StreamExecuteQuery(R"(
+            DECLARE $value As Int64;
             SELECT $value;
         )", TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -121,6 +122,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             .Build();
 
         auto result = db.ExecuteQuery(R"(
+            DECLARE $value As Int64;
             SELECT $value;
         )", TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -345,6 +347,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             .ExecMode(EExecMode::Explain);
 
         auto result = db.ExecuteQuery(R"(
+            DECLARE $value As Int64;
             SELECT $value;
         )", TTxControl::NoTx(), params, settings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -370,6 +373,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             .StatsMode(EStatsMode::Basic);
 
         auto result = db.ExecuteQuery(R"(
+            DECLARE $value As Uint32;
             SELECT * FROM TwoShard WHERE Key < $value;
         )", TTxControl::BeginTx().CommitTx(), params, settings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -394,6 +398,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             .StatsMode(EStatsMode::Full);
 
         auto result = db.ExecuteQuery(R"(
+            DECLARE $value As Uint32;
             SELECT * FROM TwoShard WHERE Key < $value;
         )", TTxControl::BeginTx().CommitTx(), params, settings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());

@@ -104,6 +104,9 @@ Y_UNIT_TEST_SUITE(KqpParams) {
 
     Y_UNIT_TEST(ImplicitParameterTypes) {
         TKikimrRunner kikimr;
+        if (!kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.GetEnableImplicitQueryParameterTypes()) {
+            return;
+        }
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -132,7 +135,7 @@ Y_UNIT_TEST_SUITE(KqpParams) {
         // enable query cache
         NYdb::NTable::TExecDataQuerySettings execSettings{};
         execSettings.KeepInQueryCache(true);
-        // enable extraction of cache status from the reply 
+        // enable extraction of cache status from the reply
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
         for (int i = 0; i < 2; ++i) {
@@ -151,6 +154,9 @@ Y_UNIT_TEST_SUITE(KqpParams) {
 
     Y_UNIT_TEST(ImplicitSameParameterTypesQueryCacheCheck) {
         TKikimrRunner kikimr;
+        if (!kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.GetEnableImplicitQueryParameterTypes()) {
+            return;
+        }
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -176,6 +182,9 @@ Y_UNIT_TEST_SUITE(KqpParams) {
 
     Y_UNIT_TEST(ImplicitDifferentParameterTypesQueryCacheCheck) {
         TKikimrRunner kikimr;
+        if (!kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.GetEnableImplicitQueryParameterTypes()) {
+            return;
+        }
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 

@@ -111,7 +111,12 @@ Y_UNIT_TEST_SUITE(QueryActorTest) {
                     .AddParam("$v")
                         .String(ToString(Val))
                         .Build();
-                RunDataQuery("UPSERT INTO TestTable (Key, Value) VALUES ($k, $v)", &params, Commit ? TTxControl::BeginAndCommitTx() : TTxControl::BeginTx());
+                RunDataQuery(R"(
+                    DECLARE $k As Uint64;
+                    DECLARE $v As String;
+
+                    UPSERT INTO TestTable (Key, Value) VALUES ($k, $v)
+                    )", &params, Commit ? TTxControl::BeginAndCommitTx() : TTxControl::BeginTx());
             }
 
             void OnQueryResult() override {

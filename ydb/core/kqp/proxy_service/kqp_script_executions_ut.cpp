@@ -200,6 +200,9 @@ struct TScriptExecutionsYdbSetup {
         TStringBuilder sql;
             sql <<
                 R"(
+                    DECLARE $database As Utf8;
+                    DECLARE $execution_id As Utf8;
+
                     SELECT COUNT(*)
                     FROM `.metadata/script_execution_leases`
                     WHERE database = $database AND execution_id = $execution_id;
@@ -236,7 +239,7 @@ struct TScriptExecutionsYdbSetup {
     THolder<TEvScriptLeaseUpdateResponse> UpdateLease(const TString& executionId, TDuration leaseDuration) {
         GetRuntime()->Register(CreateScriptLeaseUpdateActor(GetRuntime()->AllocateEdgeActor(), TestDatabase, executionId, leaseDuration, nullptr));
         auto reply = GetRuntime()->GrabEdgeEvent<TEvScriptLeaseUpdateResponse>();
-        
+
         UNIT_ASSERT(reply != nullptr);
         return reply;
     }
@@ -275,7 +278,7 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
         UNIT_ASSERT_VALUES_EQUAL(checkResult2->Get()->OperationStatus, Ydb::StatusIds::ABORTED);
         ydb.CheckLeaseExistance(executionId, false, Ydb::StatusIds::ABORTED);
     }
-    
+
     Y_UNIT_TEST(UpdatesLeaseAfterExpiring) {
         TScriptExecutionsYdbSetup ydb;
 
@@ -292,7 +295,7 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
         auto updateResponse = ydb.UpdateLease(executionId, leaseDuration);
         UNIT_ASSERT_C(updateResponse->Status == Ydb::StatusIds::SUCCESS, updateResponse->Issues.ToString());
         UNIT_ASSERT(updateResponse->ExecutionEntryExists);
-        
+
         ydb.CheckLeaseExistance(executionId, true, Nothing());
         auto checkResult = ydb.CheckLeaseStatus(executionId);
 
@@ -341,12 +344,12 @@ Y_UNIT_TEST_SUITE(TableCreation) {
         TScriptExecutionsYdbSetup ydb;
 
         constexpr i32 requests = 2;
-        
+
         TVector<TActorId> edgeActors;
         for (i32 i = 0; i < requests; ++i) {
             edgeActors.push_back(ydb.CreateTableInDbAsync(DEFAULT_COLUMNS, { ".test", "test_table" + ToString(i)}));
         }
-        
+
         ydb.WaitTableCreation(std::move(edgeActors));
 
         for(i32 i = 0; i < requests; i++) {
@@ -366,7 +369,7 @@ Y_UNIT_TEST_SUITE(TableCreation) {
                 edgeActors.push_back(ydb.CreateTableInDbAsync(DEFAULT_COLUMNS, { ".test", "test_table" + ToString(i)}));
             }
         }
-        
+
         ydb.WaitTableCreation(std::move(edgeActors));
 
         for(i32 i = 0; i < tables; i++) {
@@ -382,7 +385,7 @@ Y_UNIT_TEST_SUITE(TableCreation) {
         TVector<TActorId> edgeActors;
         for (i32 i = 0; i < requests; ++i) {
             edgeActors.push_back(ydb.CreateTableInDbAsync(i % 2 ? EXTENDED_COLUMNS : DEFAULT_COLUMNS));
-    
+
         }
 
         ydb.WaitTableCreation(edgeActors);
@@ -401,7 +404,7 @@ Y_UNIT_TEST_SUITE(TableCreation) {
         TScriptExecutionsYdbSetup ydb;
 
         constexpr i32 requests = 10;
-        
+
         ydb.CreateTableInDbSync(DEFAULT_COLUMNS);
         ydb.CreateTableInDbSync(EXTENDED_COLUMNS, requests);
 

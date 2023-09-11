@@ -50,6 +50,7 @@ public:
     FEATURE_FLAG_SETTER(EnableTempTables)
     FEATURE_FLAG_SETTER(EnableChangefeedDynamoDBStreamsFormat)
     FEATURE_FLAG_SETTER(ForceColumnTablesCompositeMarks)
+    FEATURE_FLAG_SETTER(EnableUniqConstraint)
 
     #undef FEATURE_FLAG_SETTER
 };

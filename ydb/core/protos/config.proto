@@ -841,6 +841,7 @@ message TFeatureFlags {
     optional bool EnableIcNodeCache = 101 [default = true];
     optional bool EnableTempTables = 102 [default = false];
     optional bool SuppressCompatibilityCheck = 103 [default = false];
+    optional bool EnableUniqConstraint = 104 [default = false];
 }
 
 message THttpProxyConfig {

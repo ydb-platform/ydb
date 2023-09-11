@@ -212,6 +212,11 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
             scheme.MutableCreateTableIndex()->CopyFrom(indexDescription);
             if (!indexDescription.HasType()) {
                 scheme.MutableCreateTableIndex()->SetType(NKikimrSchemeOp::EIndexTypeGlobal);
+            } else if (!AppData()->FeatureFlags.GetEnableUniqConstraint()) {
+                if (indexDescription.GetType() == NKikimrSchemeOp::EIndexTypeGlobalUnique) {
+                    TString msg = TStringBuilder() << "Unique constraint feature is disabled";
+                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, msg)};
+                }
             }
 
             result.push_back(CreateNewTableIndex(NextPartId(nextId, result), scheme));

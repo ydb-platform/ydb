@@ -122,6 +122,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetFrFactory(&UdfFrFactory);
     ServerSettings->SetEnableNotNullColumns(true);
     ServerSettings->SetEnableMoveIndex(true);
+    ServerSettings->SetEnableUniqConstraint(true);
 
     if (settings.Storage) {
         ServerSettings->SetCustomDiskParams(*settings.Storage);

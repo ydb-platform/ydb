@@ -70,6 +70,25 @@ namespace {
         "UNIX_TIME_SECONDS"sv,
         "UNIX_TIME_MICROSECONDS"sv
     };
+
+    TCoAtom InferIndexName(TCoAtomList key, TExprContext& ctx) {
+        static const TString end = "_idx";
+        static const TString delimiter = "_";
+
+        size_t sz = end.Size();
+        for (const auto& n: key)
+            sz += n.Value().Size() + delimiter.Size();
+
+        TString name(Reserve(sz));
+        for (const auto& n: key) {
+            name += n.Value() + delimiter;
+        }
+        name += end;
+
+        return Build<TCoAtom>(ctx, key.Pos())
+            .Value(name)
+            .Done();
+    }
 } // namespace
 
 bool TCommitSettings::EnsureModeEmpty(TExprContext& ctx) {
@@ -251,19 +270,31 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
             } else if (name == "index") {
                 YQL_ENSURE(tuple.Value().Maybe<TCoNameValueTupleList>());
                 auto index = Build<TCoIndex>(ctx, node.Pos());
+                bool inferName = false;
+                TMaybe<TCoAtomList> columnList;
                 for (const auto& item : tuple.Value().Cast<TCoNameValueTupleList>()) {
                     const auto& indexItemName = item.Name().Value();
                     if (indexItemName == "indexName") {
-                        index.Name(item.Value().Cast<TCoAtom>());
+                        if (auto atom = item.Value().Maybe<TCoAtom>()) {
+                            index.Name(atom.Cast());
+                        } else {
+                            // No index name given - infer name from column set
+                            inferName = true;
+                        }
                     } else if (indexItemName == "indexType") {
                         index.Type(item.Value().Cast<TCoAtom>());
                     } else if (indexItemName == "indexColumns") {
+                        columnList = item.Value().Cast<TCoAtomList>();
                         index.Columns(item.Value().Cast<TCoAtomList>());
                     } else if (indexItemName == "dataColumns") {
                         index.DataColumns(item.Value().Cast<TCoAtomList>());
                     } else {
                         YQL_ENSURE(false, "unknown index item");
                     }
+                }
+                if (inferName) {
+                    YQL_ENSURE(columnList);
+                    index.Name(InferIndexName(*columnList, ctx));
                 }
                 indexes.push_back(index.Done());
             } else if (name == "changefeed") {

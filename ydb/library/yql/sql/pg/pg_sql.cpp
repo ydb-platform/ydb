@@ -1427,6 +1427,7 @@ private:
         std::unordered_set<TString> ColumnsSet;
         std::vector<TAstNode*> PrimaryKey;
         std::vector<TAstNode*> NotNullColumns;
+        std::vector<std::vector<TAstNode*>> UniqConstr;
         std::unordered_set<TString> NotNullColSet;
         bool isTemporary;
         std::vector<TAstNode*> SerialColumns;
@@ -1489,6 +1490,31 @@ private:
         return true;
     }
 
+    bool FillUniqueConstraint(TCreateTableCtx& ctx, const Constraint* constr) {
+        if (!CheckConstraintSupported(constr))
+            return false;
+
+        const auto length = ListLength(constr->keys);
+        std::vector<TAstNode*> uniq;
+        uniq.reserve(length);
+
+        for (auto i = 0; i < length; ++i) {
+            auto node = ListNodeNth(constr->keys, i);
+            auto nodeName = StrVal(node);
+
+            if (!ctx.ColumnsSet.contains(nodeName)) {
+                AddError("UNIQUE column does not belong to table");
+                return false;
+            }
+            uniq.push_back(QA(nodeName));
+        }
+
+        Y_ENSURE(0 < uniq.size());
+        ctx.UniqConstr.emplace_back(std::move(uniq));
+
+        return true;
+    }
+
     bool AddNonNullColumn(TCreateTableCtx& ctx, const char* colName) {
         auto [it, inserted] = ctx.NotNullColSet.insert(colName);
         if (inserted)
@@ -1535,6 +1561,10 @@ private:
                         ctx.PrimaryKey.push_back(QA(node->colname));
                     } break;
 
+                    case CONSTR_UNIQUE: {
+                        ctx.UniqConstr.push_back({QA(node->colname)});
+                    } break;
+
                     default:
                         AddError("column constraint not supported");
                         return false;
@@ -1576,6 +1606,12 @@ private:
                 }
             } break;
 
+            case CONSTR_UNIQUE: {
+                if (!FillUniqueConstraint(ctx, node)) {
+                    return false;
+                }
+            } break;
+
             // TODO: support table-level not null constraints like:
             // CHECK (col1 is not null [OR col2 is not null])
 
@@ -1599,6 +1635,14 @@ private:
         }
         if (!ctx.SerialColumns.empty()) {
             options.push_back(QL(QA("serialColumns"), QVL(ctx.SerialColumns.data(), ctx.SerialColumns.size())));
+        }
+        for (auto& uniq : ctx.UniqConstr) {
+            auto columns = QVL(uniq.data(), uniq.size());
+            options.push_back(QL(QA("index"), QL(
+                                  QL(QA("indexName")),
+                                  QL(QA("indexType"), QA("syncGlobalUnique")),
+                                  QL(QA("dataColumns"), QL()),
+                                  QL(QA("indexColumns"), columns))));
         }
         if (ctx.isTemporary) {
             options.push_back(QL(QA("temporary")));

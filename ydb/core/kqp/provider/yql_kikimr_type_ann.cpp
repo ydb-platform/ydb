@@ -774,6 +774,8 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                 indexType = TIndexDescription::EType::GlobalSync;
             } else if (type == "asyncGlobal") {
                 indexType = TIndexDescription::EType::GlobalAsync;
+            } else if (type == "syncGlobalUnique") {
+                indexType = TIndexDescription::EType::GlobalSyncUnique;
             } else {
                 YQL_ENSURE(false, "Unknown index type: " << type);
             }

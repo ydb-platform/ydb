@@ -9,6 +9,8 @@ Y_UNIT_TEST_SUITE(TUniqueIndexTests) {
     Y_UNIT_TEST(CreateTable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        auto& appData = runtime.GetAppData();
+        appData.FeatureFlags.SetEnableUniqConstraint(true);
         ui64 txId = 100;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(

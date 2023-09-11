@@ -26,6 +26,8 @@
 
 {% include [x](_includes/select/distinct.md) %}
 
+{% include [x](_includes/select/unique_distinct_hints.md) %}
+
 {% include [x](_includes/select/execution.md) %}
 
 {% include [x](_includes/select/column_order.md) %}

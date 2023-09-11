@@ -1918,36 +1918,6 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT(!res.Root);
     }
 
-    Y_UNIT_TEST(DefaultValueColumn4) {
-        auto res = SqlToYql(R"( use plato;
-
-            CREATE TABLE tableName (
-                database_id Utf8,
-                cloud_id Utf8,
-                global_id Utf8 DEFAULT Utf8("Data") DEFAULT Utf8("Other"),
-                PRIMARY KEY (database_id)
-            );
-        )");
-
-        UNIT_ASSERT_VALUES_EQUAL(Err2Str(res), "<main>:6:45: Error: multiple default values are not allowed\n");
-        UNIT_ASSERT(!res.Root);
-    }
-
-    Y_UNIT_TEST(DefaultValueColumn5) {
-        auto res = SqlToYql(R"( use plato;
-
-            CREATE TABLE tableName (
-                database_id Utf8,
-                cloud_id Utf8,
-                global_id Utf8 NULL NOT NULL,
-                PRIMARY KEY (database_id)
-            );
-        )");
-
-        UNIT_ASSERT_VALUES_EQUAL(Err2Str(res), "<main>:6:27: Error: not null constraint is ambiguous\n");
-        UNIT_ASSERT(!res.Root);
-    }
-
     Y_UNIT_TEST(DefaultValueColumn) {
         auto res = SqlToYql(R"( use plato;
             CREATE TABLE tableName (

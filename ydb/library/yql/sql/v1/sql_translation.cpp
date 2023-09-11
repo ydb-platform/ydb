@@ -1198,30 +1198,16 @@ TMaybe<TSourcePtr> TSqlTranslation::AsTableImpl(const TRule_table_ref& node) {
 TMaybe<TColumnConstraints> ColumnConstraints(const TRule_column_schema& node, TTranslation& ctx) {
     TNodePtr defaultExpr = nullptr;
     bool nullable = true;
-    bool isNullableConstraintDefined = false;
-    for (size_t idx = 0; idx < node.Block4Size(); idx++) {
-        const auto &constraint = node.GetBlock4(idx).GetRule_column_constraint1();
-        if (constraint.Alt_case() == TRule_column_constraint::kAltColumnConstraint1) {
-            const bool override = !constraint.GetAlt_column_constraint1().HasBlock1();
-            if (isNullableConstraintDefined && nullable != override) {
-                ctx.Error() << "not null constraint is ambiguous";
-                return {};
-            }
 
-            nullable = override;
-            isNullableConstraintDefined = true;
-
-        } else if (constraint.Alt_case() == TRule_column_constraint::kAltColumnConstraint2) {
-            if (defaultExpr) {
-                ctx.Error() << "multiple default values are not allowed";
-                return {};
-            }
-
-            TSqlExpression expr(ctx.Context(), ctx.Context().Settings.Mode);
-            defaultExpr = expr.Build(constraint.GetAlt_column_constraint2().GetRule_expr2());
-            if (!defaultExpr) {
-                return {};
-            }
+    auto constraintsNode = node.GetRule_opt_column_constraints4();
+    if (constraintsNode.HasBlock1()) {
+        nullable = !constraintsNode.GetBlock1().HasBlock1();
+    }
+    if (constraintsNode.HasBlock2()) {
+        TSqlExpression expr(ctx.Context(), ctx.Context().Settings.Mode);
+        defaultExpr = expr.Build(constraintsNode.GetBlock2().GetRule_expr2());
+        if (!defaultExpr) {
+            return {};
         }
     }
 

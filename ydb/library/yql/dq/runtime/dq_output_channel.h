@@ -82,6 +82,9 @@ struct TDqOutputChannelSettings {
     bool CollectProfileStats = false;
 };
 
+struct TDqOutputChannelChunkSizeLimitExceeded : public yexception {
+};
+
 IDqOutputChannel::TPtr CreateDqOutputChannel(ui64 channelId, NKikimr::NMiniKQL::TType* outputType,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     const TDqOutputChannelSettings& settings, const TLogFunc& logFunc = {});

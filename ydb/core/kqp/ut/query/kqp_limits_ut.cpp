@@ -671,12 +671,12 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
             TPrepareDataQuerySettings()
                 .OperationTimeout(TDuration::Seconds(300));
         auto prepareResult = session.PrepareDataQuery(Q_(R"(
-            SELECT ToDict(
+            SELECT DictLength(ToDict(
                 ListMap(
                     ListFromRange(0ul, 10000000ul),
                     ($x) -> { RETURN AsTuple($x, $x + 1); }
                 )
-            );
+            ));
         )"), prepareSettings).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), EStatus::SUCCESS, prepareResult.GetIssues().ToString());
         auto dataQuery = prepareResult.GetQuery();

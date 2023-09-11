@@ -493,6 +493,35 @@ void TestOverflowWithMockStorage(TTestContext& ctx) {
     }
 }
 
+void TestChunkSizeLimit(TTestContext& ctx) {
+    TDqOutputChannelSettings settings;
+    settings.MaxStoredBytes = 500;
+    settings.MaxChunkBytes = 100;
+    settings.ChunkSizeLimit = 100000;
+
+    settings.CollectProfileStats = true;
+    settings.TransportVersion = ctx.TransportVersion;
+
+    auto ch = CreateDqOutputChannel(1, ctx.GetOutputType(), ctx.HolderFactory, settings, Log);
+
+    for (i32 i = 0; i < 10; ++i) {
+        auto row = ctx.CreateRow(i);
+        UNIT_ASSERT(!ch->IsFull());
+        PushRow(ctx, std::move(row), ch);
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(10, ch->GetStats()->RowsIn);
+    UNIT_ASSERT_VALUES_EQUAL(0, ch->GetStats()->RowsOut);
+
+    try {
+        PushRow(ctx, ctx.CreateBigRow(0, 100'500), ch);
+        UNIT_FAIL("");
+    } catch (const TDqOutputChannelChunkSizeLimitExceeded& e) {
+        UNIT_ASSERT(TString(e.what()).Contains("Row data size is too big"));
+    }
+}
+
+
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(DqOutputChannelTests) {
@@ -522,6 +551,11 @@ Y_UNIT_TEST(BigRow) {
     TestBigRow(ctx);
 }
 
+Y_UNIT_TEST(ChunkSizeLimit) {
+    TTestContext ctx(NARROW_CHANNEL, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
+    TestChunkSizeLimit(ctx);
+}
+
 }
 
 Y_UNIT_TEST_SUITE(DqOutputWideChannelTests) {
@@ -549,6 +583,11 @@ Y_UNIT_TEST(PopAll) {
 Y_UNIT_TEST(BigRow) {
     TTestContext ctx(WIDE_CHANNEL, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
     TestBigRow(ctx);
+}
+
+Y_UNIT_TEST(ChunkSizeLimit) {
+    TTestContext ctx(WIDE_CHANNEL, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
+    TestChunkSizeLimit(ctx);
 }
 
 }

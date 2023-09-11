@@ -548,7 +548,14 @@ THolder<TEvDataShard::TEvProposeTransactionResult> KqpCompleteTransaction(const 
                         dataEv->Record.SetNoAck(true);
                         auto outputData = dataEv->Record.MutableChannelData()->MutableData();
                         NDq::TDqSerializedBatch serialized;
-                        fetchStatus = FetchOutput(taskRunner.GetOutputChannel(channel.GetId()).Get(), serialized);
+                        try {
+                            fetchStatus = FetchOutput(taskRunner.GetOutputChannel(channel.GetId()).Get(), serialized);
+                        } catch (const NDq::TDqOutputChannelChunkSizeLimitExceeded& ex) {
+                            auto message = TStringBuilder() << "Datashard " << origin << ": " << ex.what();
+                            LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, message);
+                            result->SetExecutionError(NKikimrTxDataShard::TError::REPLY_SIZE_EXCEEDED, message);
+                            break;
+                        }
                         const size_t outputDataSize = serialized.Size();
                         *outputData = std::move(serialized.Proto);
                         outputData->ClearPayloadId();

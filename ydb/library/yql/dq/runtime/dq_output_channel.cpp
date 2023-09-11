@@ -127,7 +127,7 @@ public:
         size_t packerSize = Packer.PackedSizeEstimate();
         if (packerSize >= MaxChunkBytes) {
             Data.emplace_back();
-            Data.back().Buffer = Packer.Finish();
+            Data.back().Buffer = FinishPackAndCheckSize();
             BasicStats.Bytes += Data.back().Buffer.size();
             PackedDataSize += Data.back().Buffer.size();
             PackedRowCount += ChunkRowCount;
@@ -211,7 +211,7 @@ public:
             Data.pop_front();
         } else {
             data.Proto.SetRows(ChunkRowCount);
-            data.SetPayload(Packer.Finish());
+            data.SetPayload(FinishPackAndCheckSize());
             ChunkRowCount = 0;
         }
 
@@ -256,7 +256,7 @@ public:
         data.Proto.SetTransportVersion(TransportVersion);
         if (SpilledRowCount == 0 && PackedRowCount == 0) {
             data.Proto.SetRows(ChunkRowCount);
-            data.SetPayload(Packer.Finish());
+            data.SetPayload(FinishPackAndCheckSize());
             ChunkRowCount = 0;
             return true;
         }
@@ -264,7 +264,7 @@ public:
         // Repack all - thats why PopAll should never be used
         if (ChunkRowCount) {
             Data.emplace_back();
-            Data.back().Buffer = Packer.Finish();
+            Data.back().Buffer = FinishPackAndCheckSize();
             BasicStats.Bytes += Data.back().Buffer.size();
             PackedDataSize += Data.back().Buffer.size();
             PackedRowCount += ChunkRowCount;
@@ -292,7 +292,7 @@ public:
         }
 
         data.Proto.SetRows(rows.RowCount());
-        data.SetPayload(Packer.Finish());
+        data.SetPayload(FinishPackAndCheckSize());
         YQL_ENSURE(!HasData());
         return true;
     }
@@ -304,6 +304,16 @@ public:
         if (!BasicStats.FirstRowIn) {
             BasicStats.FirstRowIn = TInstant::Now();
         }
+    }
+
+    TRope FinishPackAndCheckSize() {
+        TRope result = Packer.Finish();
+        if (result.size() > ChunkSizeLimit) {
+            // TODO: may relax requirement if OOB transport is enabled
+            ythrow TDqOutputChannelChunkSizeLimitExceeded() << "Row data size is too big: "
+                << result.size() << " bytes, exceeds limit of " << ChunkSizeLimit << " bytes";
+        }
+        return result;
     }
 
     bool HasData() const override {

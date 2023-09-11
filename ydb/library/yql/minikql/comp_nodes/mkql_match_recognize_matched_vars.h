@@ -22,27 +22,27 @@ using TMatchedVar = std::vector<TMatchedRange>;
 
 using TMatchedVars = std::vector<TMatchedVar>;
 
-inline NUdf::TUnboxedValue ToValue(TComputationContext& ctx, const TMatchedRange& range) {
+inline NUdf::TUnboxedValue ToValue(const THolderFactory& holderFactory, const TMatchedRange& range) {
     std::array<NUdf::TUnboxedValue, 2> array = {NUdf::TUnboxedValuePod{range.From}, NUdf::TUnboxedValuePod{range.To}};
-    return ctx.HolderFactory.RangeAsArray(cbegin(array), cend(array));
+    return holderFactory.RangeAsArray(cbegin(array), cend(array));
 }
 
-inline NUdf::TUnboxedValue ToValue(TComputationContext& ctx, const TMatchedVar& var) {
+inline NUdf::TUnboxedValue ToValue(const THolderFactory& holderFactory, const TMatchedVar& var) {
     TUnboxedValueVector data;
     data.reserve(var.size());
     for (const auto& r: var) {
-        data.push_back(ToValue(ctx, r));
+        data.push_back(ToValue(holderFactory, r));
     }
-    return ctx.HolderFactory.VectorAsVectorHolder(std::move(data));
+    return holderFactory.VectorAsVectorHolder(std::move(data));
 }
 
-inline NUdf::TUnboxedValue ToValue(TComputationContext& ctx, const TMatchedVars& vars) {
-    TUnboxedValueVector data;
-    data.reserve(vars.size());
+inline NUdf::TUnboxedValue ToValue(const THolderFactory& holderFactory, const TMatchedVars& vars) {
+    NUdf::TUnboxedValue* ptr;
+    auto result = holderFactory.CreateDirectArrayHolder(vars.size(), ptr);
     for (const auto& v: vars) {
-        data.push_back(ToValue(ctx, v));
+        *ptr++ = ToValue(holderFactory, v);
     }
-    return ctx.HolderFactory.VectorAsVectorHolder(std::move(data));
+    return result;
 }
 
 ///Optimized reference based implementation to be used as an argument

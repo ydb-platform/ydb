@@ -63,7 +63,7 @@ public:
     NUdf::TUnboxedValue GetOutputIfReady(TComputationContext& ctx) override {
         if (Matches.empty())
             return NUdf::TUnboxedValue{};
-        Parameters.MatchedVarsArg->SetValue(ctx, ToValue(ctx, std::move(Matches.front())));
+        Parameters.MatchedVarsArg->SetValue(ctx, ToValue(ctx.HolderFactory, std::move(Matches.front())));
         Matches.pop_front();
         Parameters.MeasureInputDataArg->SetValue(ctx, ctx.HolderFactory.Create<TMeasureInputDataValue>(
                 Parameters.InputDataArg->GetValue(ctx),
@@ -166,7 +166,7 @@ public:
     NUdf::TUnboxedValue GetOutputIfReady(TComputationContext& ctx) override {
         if (!HasMatch)
             return NUdf::TUnboxedValue{};
-        Parameters.MatchedVarsArg->SetValue(ctx, ToValue(ctx, MatchedVars));
+        Parameters.MatchedVarsArg->SetValue(ctx, ToValue(ctx.HolderFactory, MatchedVars));
         HasMatch = false;
         NUdf::TUnboxedValue *itemsPtr = nullptr;
         const auto result = Cache.NewArray(ctx, Parameters.OutputColumnOrder.size(), itemsPtr);

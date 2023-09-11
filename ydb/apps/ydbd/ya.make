@@ -1,7 +1,5 @@
 PROGRAM(ydbd)
 
-INCLUDE(${ARCADIA_ROOT}/ydb/opensource.inc)
-
 IF (OS_LINUX)
     ALLOCATOR(TCMALLOC_256K)
 ELSE()

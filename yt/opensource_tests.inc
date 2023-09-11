@@ -11,10 +11,6 @@ IF (OPENSOURCE)
         EXCLUDE_TAGS(PY2)
     ENDIF()
 
-    LICENSE_RESTRICTION(
-        DENY REQUIRE_DISCLOSURE FORBIDDEN
-    )
-
     LICENSE_RESTRICTION_EXCEPTIONS(
         # Java tests
         contrib/java/junit/junit/4.13

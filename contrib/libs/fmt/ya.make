@@ -9,7 +9,6 @@ ORIGINAL_SOURCE(https://github.com/fmtlib/fmt/archive/8.1.1.tar.gz)
 LICENSE(
     Apache-2.0 WITH LLVM-exception AND
     MIT AND
-    Protestware AND
     Public-Domain AND
     Python-2.0
 )

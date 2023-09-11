@@ -2,6 +2,7 @@
 
 #include "packet.h"
 #include "dispatcher_impl.h"
+#include "ssl_helpers.h"
 
 #include <yt/yt/core/bus/private.h>
 #include <yt/yt/core/bus/bus.h>
@@ -181,11 +182,6 @@ private:
     };
 
     using TPacketPtr = TIntrusivePtr<TPacket>;
-
-    struct TDeleter
-    {
-        void operator()(SSL* ctx) const;
-    };
 
     const TBusConfigPtr Config_;
     const EConnectionType ConnectionType_;

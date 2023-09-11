@@ -5,6 +5,8 @@
 #include <yt/yt/core/net/config.h>
 #include <yt/yt/core/net/address.h>
 
+#include <yt/yt/core/crypto/config.h>
+
 #include <yt/yt/core/ytree/yson_struct.h>
 
 namespace NYT::NBus {
@@ -96,13 +98,11 @@ public:
     // Ssl options.
     EEncryptionMode EncryptionMode;
     EVerificationMode VerificationMode;
-    std::optional<TString> CAFile;
-    std::optional<TString> CertificateChainFile;
-    std::optional<TString> PrivateKeyFile;
+    NCrypto::TPemBlobConfigPtr CA;
+    NCrypto::TPemBlobConfigPtr CertificateChain;
+    NCrypto::TPemBlobConfigPtr PrivateKey;
     std::optional<TString> CipherList;
     bool LoadCertsFromBusCertsDirectory;
-    // For testing purposes.
-    bool UseKeyPairFromSslContext;
 
     REGISTER_YSON_STRUCT(TBusConfig);
 

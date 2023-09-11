@@ -13,7 +13,6 @@ target_link_libraries(yt-core-https PUBLIC
   yutil
   yt-yt-core
   yt-core-http
-  yt-core-crypto
   cpp-http-io
 )
 target_sources(yt-core-https PRIVATE

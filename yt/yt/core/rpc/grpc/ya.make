@@ -16,7 +16,6 @@ SRCS(
 
 PEERDIR(
     yt/yt/core
-    yt/yt/core/crypto
     contrib/libs/grpc
 )
 

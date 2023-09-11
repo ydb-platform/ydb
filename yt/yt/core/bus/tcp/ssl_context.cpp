@@ -1,4 +1,5 @@
 #include "ssl_context.h"
+#include "ssl_helpers.h"
 
 #include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/singleton.h>
@@ -18,41 +19,8 @@ namespace NYT::NBus {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString GetLastSslErrorString()
-{
-    char errorStr[256];
-    ERR_error_string_n(ERR_get_error(), errorStr, sizeof(errorStr));
-    return errorStr;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 class TSslContext::TImpl
 {
-private:
-    struct TDeleter
-    {
-        void operator()(SSL_CTX* ctx) const
-        {
-            SSL_CTX_free(ctx);
-        }
-
-        void operator()(BIO* bio) const
-        {
-            BIO_free(bio);
-        }
-
-        void operator()(RSA* rsa) const
-        {
-            RSA_free(rsa);
-        }
-
-        void operator()(X509* x509) const
-        {
-            X509_free(x509);
-        }
-    };
-
 public:
     TImpl()
     {
@@ -126,6 +94,23 @@ public:
     void UseCA(const TString& ca)
     {
         auto guard = Guard(SpinLock_);
+
+        UseCAUnlocked(ca);
+
+        CAIsLoaded_ = true;
+    }
+
+    void UseCAIfNotUsed(const TString& ca)
+    {
+        if (CAIsLoaded_) {
+            return;
+        }
+
+        auto guard = Guard(SpinLock_);
+
+        if (CAIsLoaded_) {
+            return;
+        }
 
         UseCAUnlocked(ca);
 
@@ -294,6 +279,11 @@ void TSslContext::LoadPrivateKey(const TString& filePath)
 void TSslContext::UseCA(const TString& ca)
 {
     return Impl_->UseCA(ca);
+}
+
+void TSslContext::UseCAIfNotUsed(const TString& ca)
+{
+    return Impl_->UseCAIfNotUsed(ca);
 }
 
 void TSslContext::UseCertificateChain(const TString& certificate)

@@ -11,7 +11,6 @@ SRCS(
 PEERDIR(
     yt/yt/core
     yt/yt/core/http
-    yt/yt/core/crypto
     library/cpp/http/io
 )
 

@@ -27,6 +27,7 @@ SRCS(
     bus/tcp/client.cpp
     bus/tcp/server.cpp
     bus/tcp/ssl_context.cpp
+    bus/tcp/ssl_helpers.cpp
 
     compression/brotli.cpp
     compression/bzip2.cpp
@@ -80,6 +81,10 @@ SRCS(
     concurrency/thread_pool.cpp
     concurrency/throughput_throttler.cpp
     concurrency/two_level_fair_share_thread_pool.cpp
+
+    crypto/config.cpp
+    crypto/crypto.cpp
+    crypto/tls.cpp
 
     logging/compression.cpp
     logging/config.cpp
@@ -301,6 +306,7 @@ PEERDIR(
     contrib/libs/openssl
 
     library/cpp/openssl/init
+    library/cpp/openssl/io
     library/cpp/threading/thread_local
     library/cpp/streams/brotli
     library/cpp/yt/assert

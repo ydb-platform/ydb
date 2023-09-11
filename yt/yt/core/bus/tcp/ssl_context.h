@@ -10,10 +10,6 @@ namespace NYT::NBus {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString GetLastSslErrorString();
-
-////////////////////////////////////////////////////////////////////////////////
-
 class TSslContext
 {
 public:
@@ -26,6 +22,7 @@ public:
     void LoadCAFileIfNotLoaded(const TString& filePath);
     void LoadCertificateChain(const TString& filePath);
     void LoadPrivateKey(const TString& filePath);
+    void UseCAIfNotUsed(const TString& ca);
     void UseCertificateChain(const TString& certificate);
     void UsePrivateKey(const TString& privateKey);
     void SetCipherListIfUnset(const TString& cipherList);

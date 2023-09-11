@@ -52,17 +52,39 @@ public:
     NTesting::TPortHolder Port;
     TString Address;
 
-    TSslTest()
-    {
-        Port = NTesting::GetFreePort();
-        Address = Format("localhost:%v", Port);
+    const char* CA = R"foo(-----BEGIN CERTIFICATE-----
+MIIFWjCCA0KgAwIBAgIBATANBgkqhkiG9w0BAQsFADBGMQswCQYDVQQGEwJSVTEP
+MA0GA1UECAwGTW9zY293MQ8wDQYDVQQKDAZZYW5kZXgxFTATBgNVBAMMDENBQGxv
+Y2FsaG9zdDAeFw0yMzA3MTMxMTUxMTFaFw0zMzA3MTAxMTUxMTFaMEYxCzAJBgNV
+BAYTAlJVMQ8wDQYDVQQIDAZNb3Njb3cxDzANBgNVBAoMBllhbmRleDEVMBMGA1UE
+AwwMQ0FAbG9jYWxob3N0MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA
+mxWRSfbYAJcBgGhYagnQMJOiW60B82Ok94n8muIaa2gRo0ZHKmtY7CMiFIIN0GhI
+Blw+G6HPN8SPYK0+bTlAIHlb0u6/ty2AVyveiH31p7Ld/Ib5S/MSKuMiGt5S/Ci9
+mSdRAmD46twIKfm9bY/8SZmNsTCJIrKnJaTbjTnbz9O3FVAYjiuc8yNGb1LnZNA6
+B4ZrF3fkYr9kn4nKSOd6mypPFIOZAxKGQ95X9nCblajEMAPzHfr+1EArnM+PauAO
+cMcxfKT+OlMPGR4ZtZpl90qX6ZVZqD9zd8gp2I/2SM1vVS7AT96t89T7Uag8OjH2
+c8jMCD2z1fk1oDD4K53pGkBucTwDolCvxIbN77gcwkutdor/dbHLqIvGV/M4Z/iA
+GzqCD6pCpi5gT8SXn2IQrlvSdF01k9YZS093Y8bIQm3dCo1lKDaz6oHytk9Ro+fu
+b+dLOhSjopNfa/1Thw6fgta/mRsdgubWI/IHn+IyMpW65vGbnrMD4oQl1AanRJj5
+iBS73ZXIs/Y9LuMtSNk/I9u1o2fc+Sg0zb1AchC70h8M3sAYaGbqg1churOaDuTO
+Yom5W+bAQO8uLUvmlDcpqxMBYqeE8VJGJWRLtQnhM18iYAa03w7m6uMzrlkoX1Q7
+AHnX4899WSUcz/BJc5JBAtHQXCzEzyudT+8xw5MwqRkCAwEAAaNTMFEwHQYDVR0O
+BBYEFFuWdWxzQ6TF/yH3sQnlk3EEr1VjMB8GA1UdIwQYMBaAFFuWdWxzQ6TF/yH3
+sQnlk3EEr1VjMA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggIBAHqS
+W4FIjH/YKkcj/wuh7sQQTIBAx+LsjosyHb9K/1QbgLNVpxawl/YlOiArfVmgTGud
+9B6xdVacxqI6saMqHNPPgYm7OPnozSnprRKh9yGb2TS9j+2G7hCQLnM+xYroP8XE
+8fL9tyq14lHb/BFYnPsFFxqeA6lXzzm73hlm/hH58CWpL/3eR/TDjC+oiEBBV4VF
+Dm4X3L73MFcniDKkCb7Mw3wdi6zqx231F4+9Cqgq+RqAucnmLXTG7yR7wOKP2u8E
+Ye1Jrt3nnMlD1tqiXyRJywPSK9mMiBTGbzGLLiTcvecBIHG8oRuvn1DnkZa9L/48
++1aTC8QhbRslaeDyXj5IY/7scW7ZkEw18qYCT+9sI4/LngS4U8+taKqLf5S8A5sR
+O8OCP0nMk/l5f84cDwe1dp4GXVQdkbnfT1sd93BLww7Szbw2iMt9sLMmyY8qIe7a
+Ss3OEfP6eyNCBu6KtL8oufdj1AqAQdmYYTlGwgaFZTAomDiJU662EGSt3uXK7V32
+EzgJbpxSSjWh5JpCDA/jnqzlkFkSaw92/HZwO5l1lCdqK+F1UWYQyU0NveOaSEuX
+344PIi8m1YWwUfukUB97D+C6B4y5vgdkC7OYLHb4W4+N0ZvYtbDDaBeTpn70CiI7
+JFWcF3ghP7uPmbONWLiTFwxsSJHT0svVQZgq1aZz
+-----END CERTIFICATE-----)foo";
 
-        LoadKeyPairIntoCxt();
-    }
-
-    void LoadKeyPairIntoCxt()
-    {
-        auto certChain = R"foo(-----BEGIN CERTIFICATE-----
+    const char* CertChain = R"foo(-----BEGIN CERTIFICATE-----
 MIIFUTCCAzmgAwIBAgIBATANBgkqhkiG9w0BAQsFADBGMQswCQYDVQQGEwJSVTEP
 MA0GA1UECAwGTW9zY293MQ8wDQYDVQQKDAZZYW5kZXgxFTATBgNVBAMMDENBQGxv
 Y2FsaG9zdDAeFw0yMzA3MTMxMTUxMTdaFw0zMzA3MTAxMTUxMTdaMEMxCzAJBgNV
@@ -93,9 +115,8 @@ pOeMUr0PUi8fpSK06wIVTES9AWgcfuXL6i7AQ+hadEa3Ve1BGRsu0KOXW2XZZFeo
 3Pczm/o+jwMiLELcgrM5Ngy8dcCKr6v84F+fi9Y+C8+RZ7g37aLJM0kqbaoN8owL
 mP88f9xDGRAmesvuYlHo+57VTyzU
 -----END CERTIFICATE-----)foo";
-        TSslContext::Get()->UseCertificateChain(certChain);
 
-        auto privateKey = R"foo(-----BEGIN PRIVATE KEY-----
+    const char* PrivateKey = R"foo(-----BEGIN PRIVATE KEY-----
 MIIJQQIBADANBgkqhkiG9w0BAQEFAASCCSswggknAgEAAoICAQDVmsP6Rx+ayLnb
 MxntwnFaXykwjWRfW5DoqQ4lFVBW7B4m6GnfmskYrS8eRa+umKE75R6HWOdxF4fw
 9o116O3eA+xgmSxR5HEJpnw75rC3I6rpMrwv2kPNtDJeZ7mTYRr/7KVdIesYbNlS
@@ -147,18 +168,11 @@ qrpW/AReSwhvwVugcMFUgMXaDx/3SAY75B808wX1tizv76omWZAQ774FeGQGyP4C
 8f4t3LIV9h/q2Hj8geMjil9ZGogtWJ5uDspp7As5OyMF0ZMXTMwSnFsXB/L4YIk+
 rPl77gAcribJm3TzBVHm2m6jBGtb
 -----END PRIVATE KEY-----)foo";
-        TSslContext::Get()->UsePrivateKey(privateKey);
-        TSslContext::Get()->CheckPrivateKeyWithCertificate();
-    }
 
-    IBusServerPtr StartBusServer(IMessageHandlerPtr handler)
+    TSslTest()
     {
-        auto config = TBusServerConfig::CreateTcp(Port);
-        config->EncryptionMode = EEncryptionMode::Required;
-        config->UseKeyPairFromSslContext = true;
-        auto server = CreateBusServer(config);
-        server->Start(handler);
-        return server;
+        Port = NTesting::GetFreePort();
+        Address = Format("localhost:%v", Port);
     }
 };
 
@@ -167,8 +181,11 @@ rPl77gAcribJm3TzBVHm2m6jBGtb
 TEST_F(TSslTest, RequiredAndRequiredEncryptionMode)
 {
     auto serverConfig = TBusServerConfig::CreateTcp(Port);
-    serverConfig->UseKeyPairFromSslContext = true;
     serverConfig->EncryptionMode = EEncryptionMode::Required;
+    serverConfig->CertificateChain = New<NCrypto::TPemBlobConfig>();
+    serverConfig->CertificateChain->Value = CertChain;
+    serverConfig->PrivateKey = New<NCrypto::TPemBlobConfig>();
+    serverConfig->PrivateKey->Value = PrivateKey;
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
@@ -192,8 +209,11 @@ TEST_F(TSslTest, RequiredAndRequiredEncryptionMode)
 TEST_F(TSslTest, RequiredAndOptionalEncryptionMode)
 {
     auto serverConfig = TBusServerConfig::CreateTcp(Port);
-    serverConfig->UseKeyPairFromSslContext = true;
     serverConfig->EncryptionMode = EEncryptionMode::Required;
+    serverConfig->CertificateChain = New<NCrypto::TPemBlobConfig>();
+    serverConfig->CertificateChain->Value = CertChain;
+    serverConfig->PrivateKey = New<NCrypto::TPemBlobConfig>();
+    serverConfig->PrivateKey->Value = PrivateKey;
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
@@ -217,8 +237,11 @@ TEST_F(TSslTest, RequiredAndOptionalEncryptionMode)
 TEST_F(TSslTest, OptionalAndRequiredEncryptionMode)
 {
     auto serverConfig = TBusServerConfig::CreateTcp(Port);
-    serverConfig->UseKeyPairFromSslContext = true;
     serverConfig->EncryptionMode = EEncryptionMode::Optional;
+    serverConfig->CertificateChain = New<NCrypto::TPemBlobConfig>();
+    serverConfig->CertificateChain->Value = CertChain;
+    serverConfig->PrivateKey = New<NCrypto::TPemBlobConfig>();
+    serverConfig->PrivateKey->Value = PrivateKey;
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
@@ -242,8 +265,11 @@ TEST_F(TSslTest, OptionalAndRequiredEncryptionMode)
 TEST_F(TSslTest, OptionalAndOptionalEncryptionMode)
 {
     auto serverConfig = TBusServerConfig::CreateTcp(Port);
-    serverConfig->UseKeyPairFromSslContext = true;
     serverConfig->EncryptionMode = EEncryptionMode::Optional;
+    serverConfig->CertificateChain = New<NCrypto::TPemBlobConfig>();
+    serverConfig->CertificateChain->Value = CertChain;
+    serverConfig->PrivateKey = New<NCrypto::TPemBlobConfig>();
+    serverConfig->PrivateKey->Value = PrivateKey;
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
@@ -267,7 +293,6 @@ TEST_F(TSslTest, OptionalAndOptionalEncryptionMode)
 TEST_F(TSslTest, DisabledAndDisabledEncryptionMode)
 {
     auto serverConfig = TBusServerConfig::CreateTcp(Port);
-    serverConfig->UseKeyPairFromSslContext = true;
     serverConfig->EncryptionMode = EEncryptionMode::Disabled;
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
@@ -292,8 +317,11 @@ TEST_F(TSslTest, DisabledAndDisabledEncryptionMode)
 TEST_F(TSslTest, RequiredAndDisabledEncryptionMode)
 {
     auto serverConfig = TBusServerConfig::CreateTcp(Port);
-    serverConfig->UseKeyPairFromSslContext = true;
     serverConfig->EncryptionMode = EEncryptionMode::Required;
+    serverConfig->CertificateChain = New<NCrypto::TPemBlobConfig>();
+    serverConfig->CertificateChain->Value = CertChain;
+    serverConfig->PrivateKey = New<NCrypto::TPemBlobConfig>();
+    serverConfig->PrivateKey->Value = PrivateKey;
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
@@ -312,13 +340,12 @@ TEST_F(TSslTest, RequiredAndDisabledEncryptionMode)
 TEST_F(TSslTest, DisabledAndRequiredEncryptionMode)
 {
     auto serverConfig = TBusServerConfig::CreateTcp(Port);
-    serverConfig->UseKeyPairFromSslContext = true;
-    serverConfig->EncryptionMode = EEncryptionMode::Required;
+    serverConfig->EncryptionMode = EEncryptionMode::Disabled;
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
     auto clientConfig = TBusClientConfig::CreateTcp(Address);
-    clientConfig->EncryptionMode = EEncryptionMode::Disabled;
+    clientConfig->EncryptionMode = EEncryptionMode::Required;
     auto client = CreateBusClient(clientConfig);
 
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
@@ -332,7 +359,6 @@ TEST_F(TSslTest, DisabledAndRequiredEncryptionMode)
 TEST_F(TSslTest, DisabledAndOptionalEncryptionMode)
 {
     auto serverConfig = TBusServerConfig::CreateTcp(Port);
-    serverConfig->UseKeyPairFromSslContext = true;
     serverConfig->EncryptionMode = EEncryptionMode::Disabled;
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
@@ -357,7 +383,6 @@ TEST_F(TSslTest, DisabledAndOptionalEncryptionMode)
 TEST_F(TSslTest, OptionalAndDisabledEncryptionMode)
 {
     auto serverConfig = TBusServerConfig::CreateTcp(Port);
-    serverConfig->UseKeyPairFromSslContext = true;
     serverConfig->EncryptionMode = EEncryptionMode::Optional;
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
@@ -383,12 +408,14 @@ TEST_F(TSslTest, CAVerificationModeFailure)
 {
     // Reset ctx in order to unload possibly loaded CA.
     TSslContext::Get()->Reset();
-    LoadKeyPairIntoCxt();
 
     auto serverConfig = TBusServerConfig::CreateTcp(Port);
-    serverConfig->UseKeyPairFromSslContext = true;
     serverConfig->EncryptionMode = EEncryptionMode::Required;
     serverConfig->VerificationMode = EVerificationMode::None;
+    serverConfig->CertificateChain = New<NCrypto::TPemBlobConfig>();
+    serverConfig->CertificateChain->Value = CertChain;
+    serverConfig->PrivateKey = New<NCrypto::TPemBlobConfig>();
+    serverConfig->PrivateKey->Value = PrivateKey;
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
@@ -409,53 +436,22 @@ TEST_F(TSslTest, CAVerificationModeSuccess)
 {
     // Reset ctx in order to unload possibly loaded CA.
     TSslContext::Get()->Reset();
-    LoadKeyPairIntoCxt();
-
-    // Load CA into ctx.
-    auto ca = R"foo(-----BEGIN CERTIFICATE-----
-MIIFWjCCA0KgAwIBAgIBATANBgkqhkiG9w0BAQsFADBGMQswCQYDVQQGEwJSVTEP
-MA0GA1UECAwGTW9zY293MQ8wDQYDVQQKDAZZYW5kZXgxFTATBgNVBAMMDENBQGxv
-Y2FsaG9zdDAeFw0yMzA3MTMxMTUxMTFaFw0zMzA3MTAxMTUxMTFaMEYxCzAJBgNV
-BAYTAlJVMQ8wDQYDVQQIDAZNb3Njb3cxDzANBgNVBAoMBllhbmRleDEVMBMGA1UE
-AwwMQ0FAbG9jYWxob3N0MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA
-mxWRSfbYAJcBgGhYagnQMJOiW60B82Ok94n8muIaa2gRo0ZHKmtY7CMiFIIN0GhI
-Blw+G6HPN8SPYK0+bTlAIHlb0u6/ty2AVyveiH31p7Ld/Ib5S/MSKuMiGt5S/Ci9
-mSdRAmD46twIKfm9bY/8SZmNsTCJIrKnJaTbjTnbz9O3FVAYjiuc8yNGb1LnZNA6
-B4ZrF3fkYr9kn4nKSOd6mypPFIOZAxKGQ95X9nCblajEMAPzHfr+1EArnM+PauAO
-cMcxfKT+OlMPGR4ZtZpl90qX6ZVZqD9zd8gp2I/2SM1vVS7AT96t89T7Uag8OjH2
-c8jMCD2z1fk1oDD4K53pGkBucTwDolCvxIbN77gcwkutdor/dbHLqIvGV/M4Z/iA
-GzqCD6pCpi5gT8SXn2IQrlvSdF01k9YZS093Y8bIQm3dCo1lKDaz6oHytk9Ro+fu
-b+dLOhSjopNfa/1Thw6fgta/mRsdgubWI/IHn+IyMpW65vGbnrMD4oQl1AanRJj5
-iBS73ZXIs/Y9LuMtSNk/I9u1o2fc+Sg0zb1AchC70h8M3sAYaGbqg1churOaDuTO
-Yom5W+bAQO8uLUvmlDcpqxMBYqeE8VJGJWRLtQnhM18iYAa03w7m6uMzrlkoX1Q7
-AHnX4899WSUcz/BJc5JBAtHQXCzEzyudT+8xw5MwqRkCAwEAAaNTMFEwHQYDVR0O
-BBYEFFuWdWxzQ6TF/yH3sQnlk3EEr1VjMB8GA1UdIwQYMBaAFFuWdWxzQ6TF/yH3
-sQnlk3EEr1VjMA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggIBAHqS
-W4FIjH/YKkcj/wuh7sQQTIBAx+LsjosyHb9K/1QbgLNVpxawl/YlOiArfVmgTGud
-9B6xdVacxqI6saMqHNPPgYm7OPnozSnprRKh9yGb2TS9j+2G7hCQLnM+xYroP8XE
-8fL9tyq14lHb/BFYnPsFFxqeA6lXzzm73hlm/hH58CWpL/3eR/TDjC+oiEBBV4VF
-Dm4X3L73MFcniDKkCb7Mw3wdi6zqx231F4+9Cqgq+RqAucnmLXTG7yR7wOKP2u8E
-Ye1Jrt3nnMlD1tqiXyRJywPSK9mMiBTGbzGLLiTcvecBIHG8oRuvn1DnkZa9L/48
-+1aTC8QhbRslaeDyXj5IY/7scW7ZkEw18qYCT+9sI4/LngS4U8+taKqLf5S8A5sR
-O8OCP0nMk/l5f84cDwe1dp4GXVQdkbnfT1sd93BLww7Szbw2iMt9sLMmyY8qIe7a
-Ss3OEfP6eyNCBu6KtL8oufdj1AqAQdmYYTlGwgaFZTAomDiJU662EGSt3uXK7V32
-EzgJbpxSSjWh5JpCDA/jnqzlkFkSaw92/HZwO5l1lCdqK+F1UWYQyU0NveOaSEuX
-344PIi8m1YWwUfukUB97D+C6B4y5vgdkC7OYLHb4W4+N0ZvYtbDDaBeTpn70CiI7
-JFWcF3ghP7uPmbONWLiTFwxsSJHT0svVQZgq1aZz
------END CERTIFICATE-----)foo";
-    TSslContext::Get()->UseCA(ca);
 
     auto serverConfig = TBusServerConfig::CreateTcp(Port);
-    serverConfig->UseKeyPairFromSslContext = true;
     serverConfig->EncryptionMode = EEncryptionMode::Required;
     serverConfig->VerificationMode = EVerificationMode::None;
+    serverConfig->CertificateChain = New<NCrypto::TPemBlobConfig>();
+    serverConfig->CertificateChain->Value = CertChain;
+    serverConfig->PrivateKey = New<NCrypto::TPemBlobConfig>();
+    serverConfig->PrivateKey->Value = PrivateKey;
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
     auto clientConfig = TBusClientConfig::CreateTcp(Address);
+    clientConfig->CA = New<NCrypto::TPemBlobConfig>();
+    clientConfig->CA->Value = CA;
     clientConfig->EncryptionMode = EEncryptionMode::Required;
     clientConfig->VerificationMode = EVerificationMode::Ca;
-    clientConfig->CAFile = "unused if CA has already been loaded";
     auto client = CreateBusClient(clientConfig);
 
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
@@ -478,53 +474,22 @@ TEST_F(TSslTest, FullVerificationMode)
 {
     // Reset ctx in order to unload possibly loaded CA.
     TSslContext::Get()->Reset();
-    LoadKeyPairIntoCxt();
-
-    // Load CA into ctx.
-    auto ca = R"foo(-----BEGIN CERTIFICATE-----
-MIIFWjCCA0KgAwIBAgIBATANBgkqhkiG9w0BAQsFADBGMQswCQYDVQQGEwJSVTEP
-MA0GA1UECAwGTW9zY293MQ8wDQYDVQQKDAZZYW5kZXgxFTATBgNVBAMMDENBQGxv
-Y2FsaG9zdDAeFw0yMzA3MTMxMTUxMTFaFw0zMzA3MTAxMTUxMTFaMEYxCzAJBgNV
-BAYTAlJVMQ8wDQYDVQQIDAZNb3Njb3cxDzANBgNVBAoMBllhbmRleDEVMBMGA1UE
-AwwMQ0FAbG9jYWxob3N0MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA
-mxWRSfbYAJcBgGhYagnQMJOiW60B82Ok94n8muIaa2gRo0ZHKmtY7CMiFIIN0GhI
-Blw+G6HPN8SPYK0+bTlAIHlb0u6/ty2AVyveiH31p7Ld/Ib5S/MSKuMiGt5S/Ci9
-mSdRAmD46twIKfm9bY/8SZmNsTCJIrKnJaTbjTnbz9O3FVAYjiuc8yNGb1LnZNA6
-B4ZrF3fkYr9kn4nKSOd6mypPFIOZAxKGQ95X9nCblajEMAPzHfr+1EArnM+PauAO
-cMcxfKT+OlMPGR4ZtZpl90qX6ZVZqD9zd8gp2I/2SM1vVS7AT96t89T7Uag8OjH2
-c8jMCD2z1fk1oDD4K53pGkBucTwDolCvxIbN77gcwkutdor/dbHLqIvGV/M4Z/iA
-GzqCD6pCpi5gT8SXn2IQrlvSdF01k9YZS093Y8bIQm3dCo1lKDaz6oHytk9Ro+fu
-b+dLOhSjopNfa/1Thw6fgta/mRsdgubWI/IHn+IyMpW65vGbnrMD4oQl1AanRJj5
-iBS73ZXIs/Y9LuMtSNk/I9u1o2fc+Sg0zb1AchC70h8M3sAYaGbqg1churOaDuTO
-Yom5W+bAQO8uLUvmlDcpqxMBYqeE8VJGJWRLtQnhM18iYAa03w7m6uMzrlkoX1Q7
-AHnX4899WSUcz/BJc5JBAtHQXCzEzyudT+8xw5MwqRkCAwEAAaNTMFEwHQYDVR0O
-BBYEFFuWdWxzQ6TF/yH3sQnlk3EEr1VjMB8GA1UdIwQYMBaAFFuWdWxzQ6TF/yH3
-sQnlk3EEr1VjMA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggIBAHqS
-W4FIjH/YKkcj/wuh7sQQTIBAx+LsjosyHb9K/1QbgLNVpxawl/YlOiArfVmgTGud
-9B6xdVacxqI6saMqHNPPgYm7OPnozSnprRKh9yGb2TS9j+2G7hCQLnM+xYroP8XE
-8fL9tyq14lHb/BFYnPsFFxqeA6lXzzm73hlm/hH58CWpL/3eR/TDjC+oiEBBV4VF
-Dm4X3L73MFcniDKkCb7Mw3wdi6zqx231F4+9Cqgq+RqAucnmLXTG7yR7wOKP2u8E
-Ye1Jrt3nnMlD1tqiXyRJywPSK9mMiBTGbzGLLiTcvecBIHG8oRuvn1DnkZa9L/48
-+1aTC8QhbRslaeDyXj5IY/7scW7ZkEw18qYCT+9sI4/LngS4U8+taKqLf5S8A5sR
-O8OCP0nMk/l5f84cDwe1dp4GXVQdkbnfT1sd93BLww7Szbw2iMt9sLMmyY8qIe7a
-Ss3OEfP6eyNCBu6KtL8oufdj1AqAQdmYYTlGwgaFZTAomDiJU662EGSt3uXK7V32
-EzgJbpxSSjWh5JpCDA/jnqzlkFkSaw92/HZwO5l1lCdqK+F1UWYQyU0NveOaSEuX
-344PIi8m1YWwUfukUB97D+C6B4y5vgdkC7OYLHb4W4+N0ZvYtbDDaBeTpn70CiI7
-JFWcF3ghP7uPmbONWLiTFwxsSJHT0svVQZgq1aZz
------END CERTIFICATE-----)foo";
-    TSslContext::Get()->UseCA(ca);
 
     auto serverConfig = TBusServerConfig::CreateTcp(Port);
-    serverConfig->UseKeyPairFromSslContext = true;
     serverConfig->EncryptionMode = EEncryptionMode::Required;
     serverConfig->VerificationMode = EVerificationMode::None;
+    serverConfig->CertificateChain = New<NCrypto::TPemBlobConfig>();
+    serverConfig->CertificateChain->Value = CertChain;
+    serverConfig->PrivateKey = New<NCrypto::TPemBlobConfig>();
+    serverConfig->PrivateKey->Value = PrivateKey;
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
 
     auto clientConfig = TBusClientConfig::CreateTcp(Address);
     clientConfig->EncryptionMode = EEncryptionMode::Required;
     clientConfig->VerificationMode = EVerificationMode::Full;
-    clientConfig->CAFile = "unused if CA has already been loaded";
+    clientConfig->CA = New<NCrypto::TPemBlobConfig>();
+    clientConfig->CA->Value = CA;
     auto client = CreateBusClient(clientConfig);
 
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
@@ -544,9 +509,12 @@ JFWcF3ghP7uPmbONWLiTFwxsSJHT0svVQZgq1aZz
 TEST_F(TSslTest, ServerCipherList)
 {
     auto serverConfig = TBusServerConfig::CreateTcp(Port);
-    serverConfig->UseKeyPairFromSslContext = true;
     serverConfig->EncryptionMode = EEncryptionMode::Required;
     serverConfig->VerificationMode = EVerificationMode::None;
+    serverConfig->CertificateChain = New<NCrypto::TPemBlobConfig>();
+    serverConfig->CertificateChain->Value = CertChain;
+    serverConfig->PrivateKey = New<NCrypto::TPemBlobConfig>();
+    serverConfig->PrivateKey->Value = PrivateKey;
     serverConfig->CipherList = "AES128-GCM-SHA256:PSK-AES128-GCM-SHA256";
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());
@@ -575,9 +543,12 @@ TEST_F(TSslTest, ServerCipherList)
 TEST_F(TSslTest, DifferentCipherLists)
 {
     auto serverConfig = TBusServerConfig::CreateTcp(Port);
-    serverConfig->UseKeyPairFromSslContext = true;
     serverConfig->EncryptionMode = EEncryptionMode::Required;
     serverConfig->VerificationMode = EVerificationMode::None;
+    serverConfig->CertificateChain = New<NCrypto::TPemBlobConfig>();
+    serverConfig->CertificateChain->Value = CertChain;
+    serverConfig->PrivateKey = New<NCrypto::TPemBlobConfig>();
+    serverConfig->PrivateKey->Value = PrivateKey;
     serverConfig->CipherList = "PSK-AES128-GCM-SHA256";
     auto server = CreateBusServer(serverConfig);
     server->Start(New<TEmptyBusHandler>());

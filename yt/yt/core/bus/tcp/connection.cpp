@@ -4,6 +4,7 @@
 #include "server.h"
 #include "dispatcher_impl.h"
 #include "ssl_context.h"
+#include "ssl_helpers.h"
 
 #include <yt/yt/core/misc/fs.h>
 #include <yt/yt/core/misc/proc.h>
@@ -92,13 +93,6 @@ void TTcpConnection::TPacket::EnableCancel(TTcpConnectionPtr connection)
     if (!Promise.OnCanceled(BIND(&TPacket::OnCancel, MakeWeak(this)))) {
         OnCancel(TError());
     }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-void TTcpConnection::TDeleter::operator()(SSL* ctx) const
-{
-    SSL_free(ctx);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1964,33 +1958,45 @@ void TTcpConnection::TryEstablishSslSession()
     if (ConnectionType_ == EConnectionType::Server) {
         SSL_set_accept_state(Ssl_.get());
 
-        if (!Config_->UseKeyPairFromSslContext) {
-            if (!Config_->CertificateChainFile) {
-                Abort(TError(NBus::EErrorCode::SslError, "Certificate chain file is not set in bus config"));
+        if (!Config_->CertificateChain) {
+            Abort(TError(NBus::EErrorCode::SslError, "Certificate chain file is not set in bus config"));
+            return;
+        }
+
+        if (Config_->CertificateChain->FileName) {
+            const auto& certChainFile = GET_CERT_FILE_PATH(*Config_->CertificateChain->FileName);
+            if (SSL_use_certificate_chain_file(Ssl_.get(), certChainFile.data()) != 1) {
+                Abort(TError(NBus::EErrorCode::SslError, "Failed to load certificate chain file: %v", GetLastSslErrorString()));
                 return;
             }
-
-            const auto& certChainFile = GET_CERT_FILE_PATH(*Config_->CertificateChainFile);
-            if (SSL_use_certificate_chain_file(Ssl_.get(), certChainFile.data()) != 1) {
+        } else {
+            if (!UseCertificateChain(*Config_->CertificateChain->Value, Ssl_.get())) {
                 Abort(TError(NBus::EErrorCode::SslError, "Failed to load certificate chain: %v", GetLastSslErrorString()));
                 return;
             }
+        }
 
-            if (!Config_->PrivateKeyFile) {
-                Abort(TError(NBus::EErrorCode::SslError, "The private key file is not set in bus config"));
+        if (!Config_->PrivateKey) {
+            Abort(TError(NBus::EErrorCode::SslError, "The private key file is not set in bus config"));
+            return;
+        }
+
+        if (Config_->PrivateKey->FileName) {
+            const auto& privateKeyFile = GET_CERT_FILE_PATH(*Config_->PrivateKey->FileName);
+            if (SSL_use_RSAPrivateKey_file(Ssl_.get(), privateKeyFile.data(), SSL_FILETYPE_PEM) != 1) {
+                Abort(TError(NBus::EErrorCode::SslError, "Failed to load private key file: %v", GetLastSslErrorString()));
                 return;
             }
-
-            const auto& privateKeyFile = GET_CERT_FILE_PATH(*Config_->PrivateKeyFile);
-            if (SSL_use_RSAPrivateKey_file(Ssl_.get(), privateKeyFile.data(), SSL_FILETYPE_PEM) != 1) {
+        } else {
+            if (!UsePrivateKey(*Config_->PrivateKey->Value, Ssl_.get())) {
                 Abort(TError(NBus::EErrorCode::SslError, "Failed to load private key: %v", GetLastSslErrorString()));
                 return;
             }
+        }
 
-            if (SSL_check_private_key(Ssl_.get()) != 1) {
-                Abort(TError(NBus::EErrorCode::SslError, "Failed to check the consistency of a private key with the corresponding certificate: %v", GetLastSslErrorString()));
-                return;
-            }
+        if (SSL_check_private_key(Ssl_.get()) != 1) {
+            Abort(TError(NBus::EErrorCode::SslError, "Failed to check the consistency of a private key with the corresponding certificate: %v", GetLastSslErrorString()));
+            return;
         }
     } else {
         SSL_set_connect_state(Ssl_.get());
@@ -2005,13 +2011,17 @@ void TTcpConnection::TryEstablishSslSession()
             }
             [[fallthrough]];
         case EVerificationMode::Ca: {
-            if (!Config_->CAFile) {
+            if (!Config_->CA) {
                 Abort(TError(NBus::EErrorCode::SslError, "CA file is not set in bus config"));
                 return;
             }
 
-            const auto& caFile = GET_CERT_FILE_PATH(*Config_->CAFile);
-            TSslContext::Get()->LoadCAFileIfNotLoaded(caFile);
+            if (Config_->CA->FileName) {
+                const auto& caFile = GET_CERT_FILE_PATH(*Config_->CA->FileName);
+                TSslContext::Get()->LoadCAFileIfNotLoaded(caFile);
+            } else {
+                TSslContext::Get()->UseCAIfNotUsed(*Config_->CA->Value);
+            }
 
             // Enable verification of the peer's certificate with the CA.
             SSL_set_verify(Ssl_.get(), SSL_VERIFY_PEER, /* callback */ nullptr);

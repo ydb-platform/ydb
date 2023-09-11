@@ -12,11 +12,10 @@ IF (OPENSOURCE)
     ENDIF()
 
     LICENSE_RESTRICTION(
-        DENY REQUIRE_DISCLOSURE FORBIDDEN PROTESTWARE
+        DENY REQUIRE_DISCLOSURE FORBIDDEN
     )
 
     LICENSE_RESTRICTION_EXCEPTIONS(
-        contrib/libs/fmt                 # DTCC-1317
         # Java tests
         contrib/java/junit/junit/4.13
         contrib/java/javax/persistence/persistence-api/1.0

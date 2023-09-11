@@ -256,7 +256,7 @@ TProgram::TProgram(
     , TimeProvider_(timeProvider)
     , NextUniqueId_(nextUniqueId)
     , DataProvidersInit_(dataProvidersInit)
-    , Credentials_(credentials)
+    , Credentials_(MakeIntrusive<NYql::TCredentials>(*credentials))
     , UrlListerManager_(urlListerManager)
     , UdfResolver_(udfResolver)
     , UdfIndex_(udfIndex)
@@ -425,6 +425,30 @@ TString TProgram::TakeSessionId() {
     // post-condition: SessionId_ will be empty
     with_lock(SessionIdLock_) {
         return std::move(SessionId_);
+    }
+}
+
+void TProgram::AddCredentials(const TVector<std::pair<TString, TCredential>>& credentials) {
+    for (const auto& credential : credentials) {
+        Credentials_->AddCredential(credential.first, credential.second);
+    }
+
+    if (auto modules = dynamic_cast<TModuleResolver*>(Modules_.get())) {
+        modules->SetCredentials(Credentials_);
+    }
+    if (UrlListerManager_) {
+        UrlListerManager_->SetCredentials(Credentials_);
+    }
+}
+
+void TProgram::ClearCredentials() {
+    Credentials_ = MakeIntrusive<TCredentials>();
+
+    if (auto modules = dynamic_cast<TModuleResolver*>(Modules_.get())) {
+        modules->SetCredentials(Credentials_);
+    }
+    if (UrlListerManager_) {
+        UrlListerManager_->SetCredentials(Credentials_);
     }
 }
 

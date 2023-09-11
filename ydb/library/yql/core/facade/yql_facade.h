@@ -106,6 +106,9 @@ public:
 public:
     ~TProgram();
 
+    void AddCredentials(const TVector<std::pair<TString, TCredential>>& credentials);
+    void ClearCredentials();
+
     void AddUserDataTable(const TUserDataTable& userDataTable);
 
     bool ParseYql();

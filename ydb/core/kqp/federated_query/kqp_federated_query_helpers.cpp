@@ -2,6 +2,8 @@
 
 #include <library/cpp/actors/http/http_proxy.h>
 
+#include <ydb/core/base/counters.h>
+
 #include <ydb/core/fq/libs/actors/database_resolver.h>
 #include <ydb/core/fq/libs/actors/proxy.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
@@ -38,8 +40,11 @@ namespace NKikimr::NKqp {
         const auto& queryServiceConfig = appConfig.GetQueryServiceConfig();
 
         // Initialize HTTP Gateway
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> httpGatewayGroup = GetServiceCounters(
+            appData->Counters, "utils")->GetSubgroup("subcomponent", "http_gateway");
+
         HttpGatewayConfig = queryServiceConfig.HasHttpGateway() ? queryServiceConfig.GetHttpGateway() : DefaultHttpGatewayConfig();
-        HttpGateway = NYql::IHTTPGateway::Make(&HttpGatewayConfig);
+        HttpGateway = NYql::IHTTPGateway::Make(&HttpGatewayConfig, httpGatewayGroup);
 
         S3GatewayConfig = queryServiceConfig.GetS3();
 

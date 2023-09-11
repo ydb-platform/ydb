@@ -31,7 +31,7 @@ class TJsonCluster : public TViewerPipeClient<TJsonCluster> {
     TSet<TNodeId> NodesAlive;
     TJsonSettings JsonSettings;
     ui32 Timeout;
-    ui32 TenantsNumber;
+    ui32 TenantsNumber = 0;
     bool Tablets = false;
 
 public:

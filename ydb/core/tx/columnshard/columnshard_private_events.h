@@ -24,28 +24,39 @@ struct TEvPrivate {
         EvGetExported,
         EvWriteBlobsResult,
         EvStartReadTask,
+        EvWriteDraft,
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
+
+    struct TEvWriteDraft: public TEventLocal<TEvWriteDraft, EvWriteDraft> {
+        const std::shared_ptr<IWriteController> WriteController;
+        TEvWriteDraft(std::shared_ptr<IWriteController> controller)
+            : WriteController(controller)
+        {
+
+        }
+    };
 
     /// Common event for Indexing and GranuleCompaction: write index data in TTxWriteIndex transaction.
     struct TEvWriteIndex : public TEventLocal<TEvWriteIndex, EvWriteIndex> {
         NOlap::TVersionedIndex IndexInfo;
         std::shared_ptr<NOlap::TColumnEngineChanges> IndexChanges;
         bool GranuleCompaction{false};
-        TBlobBatch BlobBatch;
         TUsage ResourceUsage;
         bool CacheData{false};
         TDuration Duration;
         TBlobPutResult::TPtr PutResult;
+        std::shared_ptr<NOlap::IBlobsAction> BlobsAction;
 
         TEvWriteIndex(NOlap::TVersionedIndex&& indexInfo,
             std::shared_ptr<NOlap::TColumnEngineChanges> indexChanges,
-            bool cacheData)
+            bool cacheData, std::shared_ptr<NOlap::IBlobsAction> action)
             : IndexInfo(std::move(indexInfo))
             , IndexChanges(indexChanges)
             , CacheData(cacheData)
+            , BlobsAction(action)
         {
             PutResult = std::make_shared<TBlobPutResult>(NKikimrProto::UNKNOWN);
         }
@@ -184,16 +195,14 @@ struct TEvPrivate {
     public:
         class TPutBlobData {
             YDB_READONLY_DEF(TBlobRange, BlobRange);
-            YDB_READONLY_DEF(TString, BlobData);
             YDB_READONLY_DEF(NKikimrTxColumnShard::TLogicalMetadata, LogicalMeta);
             YDB_ACCESSOR(ui64, RowsCount, 0);
             YDB_ACCESSOR(ui64, RawBytes, 0);
         public:
             TPutBlobData() = default;
 
-            TPutBlobData(const TBlobRange& blobRange, const TString& data, const NArrow::TFirstLastSpecialKeys& specialKeys, ui64 rowsCount, ui64 rawBytes, const TInstant dirtyTime)
+            TPutBlobData(const TBlobRange& blobRange, const NArrow::TFirstLastSpecialKeys& specialKeys, ui64 rowsCount, ui64 rawBytes, const TInstant dirtyTime)
                 : BlobRange(blobRange)
-                , BlobData(data)
                 , RowsCount(rowsCount)
                 , RawBytes(rawBytes)
             {
@@ -211,11 +220,16 @@ struct TEvPrivate {
             Y_VERIFY(PutResult);
         }
 
-        TEvWriteBlobsResult(const NColumnShard::TBlobPutResult::TPtr& putResult, TVector<TPutBlobData>&& blobData, const NEvWrite::TWriteMeta& writeMeta, const ui64 schemaVersion)
+        TEvWriteBlobsResult(const NColumnShard::TBlobPutResult::TPtr& putResult, TVector<TPutBlobData>&& blobData, const std::vector<std::shared_ptr<NOlap::IBlobsAction>>& actions, const NEvWrite::TWriteMeta& writeMeta, const ui64 schemaVersion)
             : TEvWriteBlobsResult(putResult, writeMeta)
         {
+            Actions = actions;
             BlobData = std::move(blobData);
             SchemaVersion = schemaVersion;
+        }
+
+        const std::vector<std::shared_ptr<NOlap::IBlobsAction>>& GetActions() const {
+            return Actions;
         }
 
         const TVector<TPutBlobData>& GetBlobData() const {
@@ -241,6 +255,7 @@ struct TEvPrivate {
     private:
         NColumnShard::TBlobPutResult::TPtr PutResult;
         TVector<TPutBlobData> BlobData;
+        std::vector<std::shared_ptr<NOlap::IBlobsAction>> Actions;
         NEvWrite::TWriteMeta WriteMeta;
         ui64 SchemaVersion = 0;
     };

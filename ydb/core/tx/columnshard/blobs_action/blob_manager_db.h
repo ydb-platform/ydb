@@ -1,7 +1,6 @@
 #pragma once
-#include "defs.h"
-
-#include "blob_manager.h"
+#include <ydb/core/tx/columnshard/defs.h>
+#include <ydb/core/tx/columnshard/blob_manager.h>
 
 namespace NKikimr::NTable {
 class TDatabase;

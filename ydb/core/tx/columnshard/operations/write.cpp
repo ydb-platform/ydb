@@ -1,9 +1,12 @@
 #include "write.h"
+#include "slice_builder.h"
 
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
-#include <ydb/core/tx/columnshard/blob_manager_db.h>
+#include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
+#include <ydb/core/tx/columnshard/blobs_action/bs.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
+#include <ydb/core/tx/conveyor/usage/service.h>
 
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 
@@ -22,8 +25,9 @@ namespace NKikimr::NColumnShard {
         Y_VERIFY(Status == EOperationStatus::Draft);
 
         NEvWrite::TWriteMeta writeMeta((ui64)WriteId, tableId, source);
-        auto writeController = std::make_shared<NOlap::TIndexedWriteController>(ctx.SelfID, NEvWrite::TWriteData(writeMeta, data));
-        ctx.Register(CreateWriteActor(owner.TabletID(), writeController, owner.BlobManager->StartBlobBatch(), TInstant::Max(), owner.Settings.MaxSmallBlobSize));
+        std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildSlicesTask>(owner.TabletID(), ctx.SelfID, std::make_shared<NOlap::TBSWriteAction>(*owner.BlobManager), NEvWrite::TWriteData(writeMeta, data));
+        NConveyor::TCompServiceOperator::SendTaskToExecute(task);
+
         Status = EOperationStatus::Started;
     }
 

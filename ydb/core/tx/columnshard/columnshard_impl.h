@@ -29,9 +29,8 @@ class TCleanupColumnEngineChanges;
 class TTTLColumnEngineChanges;
 class TChangesWithAppend;
 class TCompactColumnEngineChanges;
-class TInGranuleCompactColumnEngineChanges;
-class TSplitCompactColumnEngineChanges;
 class TInsertColumnEngineChanges;
+class TBSWriteAction;
 namespace NCompaction {
 class TGeneralCompactColumnEngineChanges;
 }
@@ -43,7 +42,7 @@ class TOperationsManager;
 
 extern bool gAllowLogBatchingDefaultValue;
 
-IActor* CreateWriteActor(ui64 tabletId, IWriteController::TPtr writeController, TBlobBatch&& blobBatch, const TInstant& deadline, const ui64 maxSmallBlobSize);
+IActor* CreateWriteActor(ui64 tabletId, IWriteController::TPtr writeController, const TInstant& deadline);
 IActor* CreateReadActor(ui64 tabletId,
                         const TActorId& dstActor,
                         std::unique_ptr<TEvColumnShard::TEvReadResult>&& event,
@@ -111,11 +110,10 @@ class TColumnShard
     friend class NOlap::TTTLColumnEngineChanges;
     friend class NOlap::TChangesWithAppend;
     friend class NOlap::TCompactColumnEngineChanges;
-    friend class NOlap::TInGranuleCompactColumnEngineChanges;
-    friend class NOlap::TSplitCompactColumnEngineChanges;
     friend class NOlap::TInsertColumnEngineChanges;
     friend class NOlap::TColumnEngineChanges;
     friend class NOlap::NCompaction::TGeneralCompactColumnEngineChanges;
+    friend class NOlap::TBSWriteAction;
 
     friend class TTxController;
 
@@ -151,6 +149,7 @@ class TColumnShard
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev, const TActorContext& ctx);
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev);
     void Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvWriteDraft::TPtr& ev, const TActorContext& ctx);
 
     ITransaction* CreateTxInitSchema();
     ITransaction* CreateTxRunGc();
@@ -262,6 +261,7 @@ protected:
             HFunc(TEvPrivate::TEvReadFinished, Handle);
             HFunc(TEvPrivate::TEvPeriodicWakeup, Handle);
             HFunc(NEvents::TDataEvents::TEvWrite, Handle);
+            HFunc(TEvPrivate::TEvWriteDraft, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 LOG_S_WARN("TColumnShard.StateWork at " << TabletID()

@@ -1,8 +1,10 @@
 #pragma once
 
-#include <library/cpp/actors/core/event.h>
 #include <ydb/core/protos/base.pb.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract.h>
+#include <ydb/library/accessor/accessor.h>
 
+#include <library/cpp/actors/core/event.h>
 
 namespace NKikimr {
 
@@ -19,20 +21,22 @@ namespace NOlap {
 
 class TUnifiedBlobId;
 
-class IBlobConstructor {
+class TBlobWriteInfo {
+private:
+    YDB_READONLY_DEF(TUnifiedBlobId, BlobId);
+    YDB_READONLY_DEF(TString, Data);
+    YDB_READONLY_DEF(std::shared_ptr<IBlobsAction>, WriteOperator);
+
+    TBlobWriteInfo(const TString& data, const std::shared_ptr<IBlobsAction>& writeOperator)
+        : Data(data)
+        , WriteOperator(writeOperator) {
+        Y_VERIFY(WriteOperator);
+        BlobId = WriteOperator->AllocateNextBlobId(data);
+    }
 public:
-    using TPtr = std::shared_ptr<IBlobConstructor>;
-
-    enum class EStatus {
-        Ok,
-        Finished,
-        Error
-    };
-
-    virtual ~IBlobConstructor() {}
-    virtual const TString& GetBlob() const = 0;
-    virtual bool RegisterBlobId(const TUnifiedBlobId& blobId) = 0;
-    virtual EStatus BuildNext() = 0;
+    static TBlobWriteInfo BuildWriteTask(const TString& data, const std::shared_ptr<IBlobsAction>& writeOperator) {
+        return TBlobWriteInfo(data, writeOperator);
+    }
 };
 
 }

@@ -7,16 +7,17 @@
 
 
 
-add_library(tx-columnshard-operations)
-target_link_libraries(tx-columnshard-operations PUBLIC
+add_library(tx-columnshard-blobs_action)
+target_link_libraries(tx-columnshard-blobs_action PUBLIC
   contrib-libs-cxxsupp
   yutil
   ydb-core-protos
-  core-tx-ev_write
-  ydb-services-metadata
+  libs-apache-arrow
+  ydb-core-tablet_flat
+  core-tx-tiering
 )
-target_sources(tx-columnshard-operations PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/operations/write.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/operations/write_data.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/operations/slice_builder.cpp
+target_sources(tx-columnshard-blobs_action PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/abstract.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/bs.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/blob_manager_db.cpp
 )

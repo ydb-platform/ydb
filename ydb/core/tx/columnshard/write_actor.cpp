@@ -8,29 +8,21 @@ namespace NKikimr::NColumnShard {
 
 namespace {
 
-class TWriteActor : public TActorBootstrapped<TWriteActor> {
+class TWriteActor : public TActorBootstrapped<TWriteActor>, public TMonitoringObjectsCounter<TWriteActor> {
     ui64 TabletId;
     TUsage ResourceUsage;
 
-    TBlobBatch BlobBatch;
     IWriteController::TPtr WriteController;
 
     THashSet<ui32> YellowMoveChannels;
     THashSet<ui32> YellowStopChannels;
     TInstant Deadline;
-    std::optional<ui64> MaxSmallBlobSize;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TX_COLUMNSHARD_WRITE_ACTOR;
-    }
-
-    TWriteActor(ui64 tabletId, TBlobBatch&& blobBatch, IWriteController::TPtr writeController, const TInstant& deadline, std::optional<ui64> maxSmallBlobSize = {})
+    TWriteActor(ui64 tabletId, IWriteController::TPtr writeController, const TInstant& deadline)
         : TabletId(tabletId)
-        , BlobBatch(std::move(blobBatch))
         , WriteController(writeController)
         , Deadline(deadline)
-        , MaxSmallBlobSize(maxSmallBlobSize)
     {}
 
     void Handle(TEvBlobStorage::TEvPutResult::TPtr& ev, const TActorContext& ctx) {
@@ -50,9 +42,8 @@ public:
         }
 
         LOG_S_TRACE("TEvPutResult for blob " << msg->Id.ToString());
-
-        BlobBatch.OnBlobWriteResult(ev);
-        if (BlobBatch.AllBlobWritesCompleted()) {
+        WriteController->OnBlobWriteResult(*msg);
+        if (WriteController->IsBlobActionsReady()) {
             return SendResultAndDie(ctx, NKikimrProto::OK);
         }
     }
@@ -72,7 +63,7 @@ public:
             }
         }
 
-        auto putResult = std::make_shared<TBlobPutResult>(putStatus, std::move(BlobBatch),
+        auto putResult = std::make_shared<TBlobPutResult>(putStatus,
                 std::move(YellowMoveChannels),
                 std::move(YellowStopChannels),
                 ResourceUsage);
@@ -92,25 +83,12 @@ public:
             ctx.Schedule(timeout, new TEvents::TEvWakeup());
         }
 
-        auto blobsConstructor = WriteController->GetBlobConstructor();
-        if (!blobsConstructor) {
-            return SendResultAndDie(ctx, NKikimrProto::CORRUPTED);
-        }
-        auto status = NOlap::IBlobConstructor::EStatus::Finished;
-        while (true) {
-            status = blobsConstructor->BuildNext();
-            if (status != NOlap::IBlobConstructor::EStatus::Ok) {
-                break;
-            }
-            auto blobId = SendWriteBlobRequest(blobsConstructor->GetBlob(), ctx);
-            blobsConstructor->RegisterBlobId(blobId);
-
-        }
-        if (status != NOlap::IBlobConstructor::EStatus::Finished) {
-            return SendResultAndDie(ctx, NKikimrProto::CORRUPTED);
+        while (auto writeInfo = WriteController->Next()) {
+            ResourceUsage.Network += writeInfo->GetData().size();
+            writeInfo->GetWriteOperator()->SendWriteBlobRequest(writeInfo->GetData(), writeInfo->GetBlobId());
         }
 
-        if (BlobBatch.AllBlobWritesCompleted()) {
+        if (WriteController->IsBlobActionsReady()) {
             return SendResultAndDie(ctx, NKikimrProto::OK);
         }
         Become(&TThis::StateWait);
@@ -124,23 +102,12 @@ public:
                 break;
         }
     }
-
-private:
-    TUnifiedBlobId SendWriteBlobRequest(const TString& data, const TActorContext& ctx) {
-        ResourceUsage.Network += data.size();
-        if (MaxSmallBlobSize && data.size() <= *MaxSmallBlobSize) {
-            TUnifiedBlobId smallBlobId = BlobBatch.AddSmallBlob(data);
-            Y_VERIFY(smallBlobId.IsSmallBlob());
-            return smallBlobId;
-        }
-        return BlobBatch.SendWriteBlobRequest(data, Deadline, ctx);
-    }
 };
 
 } // namespace
 
-IActor* CreateWriteActor(ui64 tabletId, IWriteController::TPtr writeController, TBlobBatch&& blobBatch, const TInstant& deadline, const ui64 maxSmallBlobSize) {
-    return new TWriteActor(tabletId, std::move(blobBatch), writeController, deadline, maxSmallBlobSize);
+IActor* CreateWriteActor(ui64 tabletId, IWriteController::TPtr writeController, const TInstant& deadline) {
+    return new TWriteActor(tabletId, writeController, deadline);
 }
 
 }

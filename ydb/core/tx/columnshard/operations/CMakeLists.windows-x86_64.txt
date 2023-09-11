@@ -18,4 +18,5 @@ target_link_libraries(tx-columnshard-operations PUBLIC
 target_sources(tx-columnshard-operations PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/operations/write.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/operations/write_data.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/operations/slice_builder.cpp
 )

@@ -1,8 +1,11 @@
 #include "columnshard_impl.h"
 #include "columnshard_schema.h"
-#include "blob_manager_db.h"
 #include "blob_cache.h"
+#include "blobs_action/bs.h"
+#include "operations/slice_builder.h"
 
+#include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
 #include <ydb/core/tx/columnshard/operations/write.h>
 #include <ydb/core/tx/columnshard/operations/write_data.h>
@@ -10,6 +13,31 @@
 namespace NKikimr::NColumnShard {
 
 using namespace NTabletFlatExecutor;
+
+class TTxWriteDraft: public TTransactionBase<TColumnShard> {
+private:
+    const IWriteController::TPtr WriteController;
+public:
+    TTxWriteDraft(TColumnShard* self, const IWriteController::TPtr writeController)
+        : TBase(self)
+        , WriteController(writeController) {
+    }
+
+    bool Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) override {
+        TBlobManagerDb blobManagerDb(txc.DB);
+        for (auto&& action : WriteController->GetBlobActions()) {
+            action->OnExecuteTxBeforeWrite(*Self, blobManagerDb);
+        }
+        return true;
+    }
+    void Complete(const TActorContext& ctx) override {
+        for (auto&& action : WriteController->GetBlobActions()) {
+            action->OnCompleteTxBeforeWrite(*Self);
+        }
+        ctx.Register(NColumnShard::CreateWriteActor(Self->TabletID(), WriteController, TInstant::Max()));
+    }
+    TTxType GetTxType() const override { return TXTYPE_WRITE_DRAFT; }
+};
 
 class TTxWrite : public TTransactionBase<TColumnShard> {
 public:
@@ -40,8 +68,6 @@ private:
 };
 
 bool TTxWrite::InsertOneBlob(TTransactionContext& txc, const TEvPrivate::TEvWriteBlobsResult::TPutBlobData& blobData, const TWriteId writeId) {
-    const TString data = blobData.GetBlobData();
-
     const NKikimrTxColumnShard::TLogicalMetadata& meta = blobData.GetLogicalMeta();
 
     const auto& blobRange = blobData.GetBlobRange();
@@ -77,7 +103,6 @@ bool TTxWrite::InsertOneBlob(TTransactionContext& txc, const TEvPrivate::TEvWrit
 
         // Put new data into blob cache
         Y_VERIFY(blobRange.IsFullBlob());
-        NBlobCache::AddRangeToCache(blobRange, blobData.GetBlobData());
 
         Self->UpdateInsertTableCounters();
         return true;
@@ -103,7 +128,6 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
     }
 
     TVector<TWriteId> writeIds;
-    ui64 insertedBytes = 0;
     for (auto blobData : PutBlobResult->Get()->GetBlobData()) {
         auto writeId = TWriteId(writeMeta.GetWriteId());
         if (operation) {
@@ -113,26 +137,16 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
             writeId = Self->GetLongTxWrite(db, writeMeta.GetLongTxIdUnsafe(), writeMeta.GetWritePartId());
         }
 
-        if (InsertOneBlob(txc, blobData, writeId)) {
-            insertedBytes += blobData.GetLogicalMeta().GetRawBytes();
-        } else {
+        if (!InsertOneBlob(txc, blobData, writeId)) {
             LOG_S_DEBUG(TxPrefix() << "duplicate writeId " << (ui64)writeId << TxSuffix());
             Self->IncCounter(COUNTER_WRITE_DUPLICATE);
         }
         writeIds.push_back(writeId);
     }
 
-    if (insertedBytes > 0) {
-        TBlobManagerDb blobManagerDb(txc.DB);
-        const auto& blobBatch(PutBlobResult->Get()->GetPutResult().GetBlobBatch());
-        ui64 blobsWritten = blobBatch.GetBlobCount();
-        ui64 bytesWritten = blobBatch.GetTotalSize();
-        Self->IncCounter(COUNTER_UPSERT_BLOBS_WRITTEN, blobsWritten);
-        Self->IncCounter(COUNTER_UPSERT_BYTES_WRITTEN, bytesWritten);
-        Self->IncCounter(COUNTER_RAW_BYTES_UPSERTED, insertedBytes);
-        Self->IncCounter(COUNTER_WRITE_SUCCESS);
-
-        Self->BlobManager->SaveBlobBatch((std::move(PutBlobResult->Get()->GetPutResultPtr()->ReleaseBlobBatch())), blobManagerDb);
+    TBlobManagerDb blobManagerDb(txc.DB);
+    for (auto&& i : PutBlobResult->Get()->GetActions()) {
+        i->OnExecuteTxAfterWrite(*Self, blobManagerDb);
     }
 
     if (operation) {
@@ -234,7 +248,10 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
 
         Execute(new TTxWrite(this, ev), ctx);
     }
+}
 
+void TColumnShard::Handle(TEvPrivate::TEvWriteDraft::TPtr& ev, const TActorContext& ctx) {
+    Execute(new TTxWriteDraft(this, ev->Get()->WriteController), ctx);
 }
 
 void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContext& ctx) {
@@ -304,9 +321,8 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
             << WritesMonitor.DebugString()
             << " at tablet " << TabletID());
 
-        auto writeController = std::make_shared<NOlap::TIndexedWriteController>(ctx.SelfID, writeData);
-        CSCounters.OnWritePutBlobsStart();
-        ctx.Register(CreateWriteActor(TabletID(), writeController, BlobManager->StartBlobBatch(), TInstant::Max(), Settings.MaxSmallBlobSize));
+        std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildSlicesTask>(TabletID(), SelfId(), std::make_shared<NOlap::TBSWriteAction>(*BlobManager), writeData);
+        NConveyor::TCompServiceOperator::SendTaskToExecute(task);
     }
 }
 

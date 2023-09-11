@@ -25,4 +25,7 @@ target_link_libraries(columnshard-engines-writer PUBLIC
 target_sources(columnshard-engines-writer PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/writer/compacted_blob_constructor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/writer/blob_constructor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/writer/put_status.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/writer/write_controller.cpp
 )

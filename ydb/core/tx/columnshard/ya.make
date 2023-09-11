@@ -5,7 +5,6 @@ SRCS(
     blob.cpp
     blob_cache.cpp
     blob_manager.cpp
-    blob_manager_db.cpp
     blob_manager_txs.cpp
     columnshard__export.cpp
     columnshard__forget.cpp
@@ -57,6 +56,7 @@ PEERDIR(
     ydb/core/tx/columnshard/splitter
     ydb/core/tx/columnshard/operations
     ydb/core/tx/columnshard/blobs_reader
+    ydb/core/tx/columnshard/blobs_action
     ydb/core/tx/tiering
     ydb/core/tx/conveyor/usage
     ydb/core/tx/long_tx_service/public

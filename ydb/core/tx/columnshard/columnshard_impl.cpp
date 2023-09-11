@@ -2,6 +2,7 @@
 #include "columnshard_schema.h"
 #include "blobs_reader/task.h"
 #include "blobs_reader/events.h"
+#include "blobs_action/bs.h"
 #include "engines/changes/ttl.h"
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
@@ -771,7 +772,7 @@ void TColumnShard::SetupIndexation() {
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
     indexChanges->Start(*this);
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges,
-        Settings.CacheDataAfterIndexing);
+        Settings.CacheDataAfterIndexing, std::make_shared<NOlap::TBSWriteAction>(*BlobManager));
 
     ActorContext().Send(BlobsReadActor, std::make_unique<NOlap::NBlobOperations::NRead::TEvStartReadTask>(std::make_unique<TChangesReadTask>(std::move(ev), SelfId(), TabletID(), IndexationCounters)));
 }
@@ -793,7 +794,7 @@ void TColumnShard::SetupCompaction() {
         indexChanges->Start(*this);
 
         auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
-        auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges, Settings.CacheDataAfterCompaction);
+        auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges, Settings.CacheDataAfterCompaction, std::make_shared<NOlap::TBSWriteAction>(*BlobManager));
         ActorContext().Send(BlobsReadActor, std::make_unique<NOlap::NBlobOperations::NRead::TEvStartReadTask>(std::make_unique<TChangesReadTask>(std::move(ev), SelfId(), TabletID(), CompactionCounters)));
     }
 
@@ -831,7 +832,7 @@ bool TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls, con
     LOG_S_INFO("TTL" << (needWrites ? " with writes" : "" ) << " prepared at tablet " << TabletID());
 
     indexChanges->Start(*this);
-    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges, false);
+    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges, false, std::make_shared<NOlap::TBSWriteAction>(*BlobManager));
 
     if (needWrites) {
         ActorContext().Send(BlobsReadActor, std::make_unique<NOlap::NBlobOperations::NRead::TEvStartReadTask>(std::make_unique<TChangesReadTask>(std::move(ev), SelfId(), TabletID(), CompactionCounters)));
@@ -882,7 +883,7 @@ std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
     }
 
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
-    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), changes, false);
+    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), changes, false, std::make_shared<NOlap::TBSWriteAction>(*BlobManager));
     ev->SetPutStatus(NKikimrProto::OK); // No new blobs to write
 
     changes->Start(*this);

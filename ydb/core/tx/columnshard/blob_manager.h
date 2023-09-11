@@ -40,10 +40,12 @@ public:
     ~TBlobBatch();
 
     // Write new blob as a part of this batch
-    TUnifiedBlobId SendWriteBlobRequest(const TString& blobData, TInstant deadline, const TActorContext& ctx);
+    void SendWriteBlobRequest(const TString& blobData, const TUnifiedBlobId& blobId, TInstant deadline, const TActorContext& ctx);
+
+    TUnifiedBlobId AllocateNextBlobId(const TString& blobData);
 
     // Called with the result of WriteBlob request
-    void OnBlobWriteResult(TEvBlobStorage::TEvPutResult::TPtr& ev);
+    void OnBlobWriteResult(const TLogoBlobID& blobId, const NKikimrProto::EReplyStatus status);
 
     // Tells if all WriteBlob requests got corresponding results
     bool AllBlobWritesCompleted() const;
@@ -65,7 +67,7 @@ class IBlobManagerDb;
 class IBlobManager {
 protected:
     static constexpr ui32 BLOB_CHANNEL = 2;
-
+    virtual void DoSaveBlobBatch(TBlobBatch&& blobBatch, IBlobManagerDb& db) = 0;
 public:
     virtual ~IBlobManager() = default;
 
@@ -76,8 +78,13 @@ public:
 
     // This method is called in the same transaction in which the user saves references to blobs
     // in some LocalDB table. It tells the BlobManager that the blobs are becoming permanently saved.
-    // NOTE: At this point all blob writes must be already acknowleged.
-    virtual void SaveBlobBatch(TBlobBatch&& blobBatch, IBlobManagerDb& db) = 0;
+    // NOTE: At this point all blob writes must be already acknowledged.
+    void SaveBlobBatch(TBlobBatch&& blobBatch, IBlobManagerDb& db) {
+        if (blobBatch.GetBlobCount() == 0) {
+            return;
+        }
+        return DoSaveBlobBatch(std::move(blobBatch), db);
+    }
 
     // Deletes the blob that was previously permanently saved
     virtual void DeleteBlob(const TUnifiedBlobId& blobId, IBlobManagerDb& db) = 0;
@@ -207,6 +214,8 @@ private:
     std::unordered_map<TEvictedBlob, TEvictMetadata, THash<NKikimr::NOlap::TEvictedBlob>> EvictedBlobs;
     std::unordered_map<TEvictedBlob, TEvictMetadata, THash<NKikimr::NOlap::TEvictedBlob>> DroppedEvictedBlobs;
 
+    virtual void DoSaveBlobBatch(TBlobBatch&& blobBatch, IBlobManagerDb& db) override;
+
 public:
     TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, ui32 gen);
 
@@ -239,7 +248,6 @@ public:
 
     // Implementation of IBlobManager interface
     TBlobBatch StartBlobBatch(ui32 channel = BLOB_CHANNEL) override;
-    void SaveBlobBatch(TBlobBatch&& blobBatch, IBlobManagerDb& db) override;
     void DeleteBlob(const TUnifiedBlobId& blobId, IBlobManagerDb& db) override;
 
     // Implementation of IBlobExporter

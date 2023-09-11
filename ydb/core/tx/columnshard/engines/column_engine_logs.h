@@ -183,7 +183,7 @@ public:
 
     const TGranuleMeta& GetGranuleVerified(const ui64 granuleId) const {
         auto it = Granules.find(granuleId);
-        Y_VERIFY(it != Granules.end());
+        AFL_VERIFY(it != Granules.end())("granule_id", granuleId)("count", Granules.size());
         return *it->second;
     }
 

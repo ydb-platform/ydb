@@ -1,7 +1,7 @@
 #include "tables_manager.h"
 #include "columnshard_schema.h"
-#include "blob_manager_db.h"
 #include "engines/column_engine_logs.h"
+#include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/tiering/manager.h>
 

@@ -1,6 +1,6 @@
 #include "columnshard_impl.h"
-#include "blob_manager_db.h"
 #include "columnshard_schema.h"
+#include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 
 namespace NKikimr::NColumnShard {
 

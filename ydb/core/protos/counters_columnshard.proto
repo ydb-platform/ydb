@@ -174,4 +174,5 @@ enum ETxTypes {
     TXTYPE_READ_BLOB_RANGES = 12                            [(TxTypeOpts) = {Name: "TxReadBlobRanges"}];
     TXTYPE_EXPORT = 13                                      [(TxTypeOpts) = {Name: "TxExport"}];
     TXTYPE_FORGET = 14                                      [(TxTypeOpts) = {Name: "TxForget"}];
+    TXTYPE_WRITE_DRAFT = 15                                 [(TxTypeOpts) = {Name: "TxWriteDraft"}];
 }

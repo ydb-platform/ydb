@@ -6,6 +6,7 @@
 #include <library/cpp/actors/core/actor.h>
 #include <ydb/core/tx/columnshard/blob_manager.h>
 #include <ydb/core/tx/columnshard/defs.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract.h>
 
 
 namespace NKikimr::NColumnShard {
@@ -15,22 +16,16 @@ public:
     using TPtr = std::shared_ptr<TBlobPutResult>;
 
     TBlobPutResult(NKikimrProto::EReplyStatus status,
-        NColumnShard::TBlobBatch&& blobBatch,
         THashSet<ui32>&& yellowMoveChannels,
         THashSet<ui32>&& yellowStopChannels,
         const NColumnShard::TUsage& resourceUsage)
-        : BlobBatch(std::move(blobBatch))
-        , ResourceUsage(resourceUsage)
+        : ResourceUsage(resourceUsage)
     {
         SetPutStatus(status, std::move(yellowMoveChannels), std::move(yellowStopChannels));
     }
 
     TBlobPutResult(NKikimrProto::EReplyStatus status) {
         SetPutStatus(status);
-    }
-
-    NColumnShard::TBlobBatch&& ReleaseBlobBatch() {
-        return std::move(BlobBatch);
     }
 
     void AddResources(const NColumnShard::TUsage& usage) {
@@ -42,7 +37,6 @@ public:
     }
 
 private:
-    YDB_READONLY_DEF(NColumnShard::TBlobBatch, BlobBatch);
     YDB_READONLY_DEF(NColumnShard::TUsage, ResourceUsage);
 };
 
@@ -56,8 +50,10 @@ public:
         DoOnReadyResult(ctx, putResult);
     }
 
-    virtual NOlap::IBlobConstructor::TPtr GetBlobConstructor() = 0;
-
+    virtual void OnBlobWriteResult(const TEvBlobStorage::TEvPutResult& result) = 0;
+    virtual std::optional<NOlap::TBlobWriteInfo> Next() = 0;
+    virtual bool IsBlobActionsReady() const = 0;
+    virtual std::vector<std::shared_ptr<NOlap::IBlobsAction>> GetBlobActions() const = 0;
 private:
     virtual void DoOnReadyResult(const NActors::TActorContext& ctx, const TBlobPutResult::TPtr& putResult) = 0;
 protected:

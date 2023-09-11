@@ -1,7 +1,8 @@
 #include "defs.h"
 #include "columnshard_impl.h"
 #include "blob_manager.h"
-#include "blob_manager_db.h"
+
+#include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 
 #include <ydb/core/base/blobstorage.h>
 

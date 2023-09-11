@@ -1,10 +1,12 @@
 #include "columnshard_impl.h"
 #include "columnshard_private_events.h"
 #include "columnshard_schema.h"
-#include "blob_manager_db.h"
 #include "blob_cache.h"
+#include "blobs_action/bs.h"
 
+#include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/tx/columnshard/engines/writer/compacted_blob_constructor.h>
+#include <library/cpp/actors/core/log.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -73,16 +75,13 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         NOlap::TWriteIndexContext context(txc, dbWrap);
         changes->WriteIndex(*Self, context);
 
-        if (Ev->Get()->PutResult->GetBlobBatch().GetBlobCount()) {
-            Self->BlobManager->SaveBlobBatch(std::move(Ev->Get()->PutResult->ReleaseBlobBatch()), *context.BlobManagerDb);
-        }
+        Ev->Get()->BlobsAction->OnExecuteTxAfterWrite(*Self, *context.BlobManagerDb);
 
         Self->UpdateIndexCounters();
     } else {
         for (ui32 i = 0; i < changes->GetWritePortionsCount(); ++i) {
             for (auto&& i : changes->GetWritePortionInfo(i)->GetPortionInfo().Records) {
-                LOG_S_WARN(TxPrefix() << "(" << changes->TypeString() << ":" << i.BlobRange << ") blob cannot apply changes: "
-                    << TxSuffix());
+                LOG_S_WARN(TxPrefix() << "(" << changes->TypeString() << ":" << i.BlobRange << ") blob cannot apply changes: " << TxSuffix());
             }
         }
         NOlap::TChangesFinishContext context("cannot write index blobs");
@@ -99,8 +98,8 @@ void TTxWriteIndex::Complete(const TActorContext& ctx) {
     CompleteReady = true;
     LOG_S_DEBUG(TxPrefix() << "complete" << TxSuffix());
 
-    const ui64 blobsWritten = Ev->Get()->PutResult->GetBlobBatch().GetBlobCount();
-    const ui64 bytesWritten = Ev->Get()->PutResult->GetBlobBatch().GetTotalSize();
+    const ui64 blobsWritten = Ev->Get()->BlobsAction->GetBlobsCount();
+    const ui64 bytesWritten = Ev->Get()->BlobsAction->GetTotalSize();
 
     if (!Ev->Get()->IndexChanges->IsAborted()) {
         NOlap::TWriteIndexCompleteContext context(ctx, blobsWritten, bytesWritten, Ev->Get()->Duration, TriggerActivity);
@@ -114,6 +113,7 @@ void TTxWriteIndex::Complete(const TActorContext& ctx) {
     }
 
     Self->UpdateResourceMetrics(ctx, Ev->Get()->PutResult->GetResourceUsage());
+    Ev->Get()->BlobsAction->OnCompleteTxAfterWrite(*Self);
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorContext& ctx) {
@@ -121,7 +121,7 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorConte
 
     if (putStatus == NKikimrProto::UNKNOWN) {
         if (IsAnyChannelYellowStop()) {
-            LOG_S_ERROR("WriteIndex (out of disk space) at tablet " << TabletID());
+            ACFL_ERROR("event", "TEvWriteIndex failed")("reason", "channel yellow stop");
 
             IncCounter(COUNTER_OUT_OF_SPACE);
             ev->Get()->SetPutStatus(NKikimrProto::TRYLATER);
@@ -129,11 +129,11 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorConte
             ev->Get()->IndexChanges->Abort(*this, context);
             ctx.Schedule(FailActivationDelay, new TEvPrivate::TEvPeriodicWakeup(true));
         } else {
-            LOG_S_DEBUG("WriteIndex (" << ev->Get()->IndexChanges->GetWritePortionsCount() << " portions) at tablet " << TabletID());
+            ACFL_DEBUG("event", "TEvWriteIndex")("count", ev->Get()->IndexChanges->GetWritePortionsCount());
+            AFL_VERIFY(ev->Get()->IndexChanges->GetWritePortionsCount());
 
-            Y_VERIFY(ev->Get()->IndexChanges->GetWritePortionsCount());
-            auto writeController = std::make_shared<NOlap::TCompactedWriteController>(ctx.SelfID, ev->Release(),  Settings.BlobWriteGrouppingEnabled);
-            ctx.Register(CreateWriteActor(TabletID(), writeController, BlobManager->StartBlobBatch(), TInstant::Max(), Settings.MaxSmallBlobSize));
+            auto writeController = std::make_shared<NOlap::TCompactedWriteController>(ctx.SelfID, ev->Release(), Settings.BlobWriteGrouppingEnabled);
+            ctx.Register(CreateWriteActor(TabletID(), writeController, TInstant::Max()));
         }
     } else {
         if (putStatus == NKikimrProto::OK) {

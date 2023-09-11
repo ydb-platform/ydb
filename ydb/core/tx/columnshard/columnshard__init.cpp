@@ -2,7 +2,7 @@
 #include "columnshard_ttl.h"
 #include "columnshard_private_events.h"
 #include "columnshard_schema.h"
-#include "blob_manager_db.h"
+#include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tx/columnshard/operations/write.h>

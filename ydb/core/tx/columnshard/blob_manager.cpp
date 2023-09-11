@@ -1,8 +1,8 @@
 #include "defs.h"
 #include "columnshard_impl.h"
 #include "blob_manager.h"
-#include "blob_manager_db.h"
 #include "blob_cache.h"
+#include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 
 #include <ydb/core/base/blobstorage.h>
 
@@ -91,22 +91,16 @@ void TBlobBatch::SendWriteRequest(const TActorContext& ctx, ui32 groupId, const 
     SendPutToGroup(ctx, groupId, BatchInfo->TabletInfo.Get(), std::move(put), cookie);
 }
 
-TUnifiedBlobId TBlobBatch::SendWriteBlobRequest(const TString& blobData, TInstant deadline, const TActorContext& ctx) {
-    Y_VERIFY(blobData.size() <= TLimits::GetBlobSizeLimit(), "Blob %" PRISZT" size exceeds the limit %" PRIu64,
-        blobData.size(), TLimits::GetBlobSizeLimit());
+void TBlobBatch::SendWriteBlobRequest(const TString& blobData, const TUnifiedBlobId& blobId, TInstant deadline, const TActorContext& ctx) {
+    Y_VERIFY(blobData.size() <= TLimits::GetBlobSizeLimit(), "Blob %" PRISZT" size exceeds the limit %" PRIu64, blobData.size(), TLimits::GetBlobSizeLimit());
 
-    TUnifiedBlobId blobId = BatchInfo->NextBlobId(blobData.size());
-    ui32 groupId = blobId.GetDsGroup();
-
+    const ui32 groupId = blobId.GetDsGroup();
     SendWriteRequest(ctx, groupId, blobId.GetLogoBlobId(), blobData, 0, deadline);
-
-    return blobId;
 }
 
-void TBlobBatch::OnBlobWriteResult(TEvBlobStorage::TEvPutResult::TPtr& ev) {
-    TLogoBlobID blobId = ev->Get()->Id;
+void TBlobBatch::OnBlobWriteResult(const TLogoBlobID& blobId, const NKikimrProto::EReplyStatus status) {
     BatchInfo->Counters.OnPutResult(blobId.BlobSize());
-    Y_VERIFY(ev->Get()->Status == NKikimrProto::OK, "The caller must handle unsuccessful status");
+    Y_VERIFY(status == NKikimrProto::OK, "The caller must handle unsuccessful status");
     Y_VERIFY(BatchInfo);
     Y_VERIFY(BatchInfo->InFlight[blobId.Cookie()], "Blob %s is already acked!", blobId.ToString().c_str());
 
@@ -138,6 +132,10 @@ ui64 TBlobBatch::GetTotalSize() const {
 TUnifiedBlobId TBlobBatch::AddSmallBlob(const TString& data) {
     Y_VERIFY(BatchInfo);
     return BatchInfo->AddSmallBlob(data);
+}
+
+TUnifiedBlobId TBlobBatch::AllocateNextBlobId(const TString& blobData) {
+    return BatchInfo->NextBlobId(blobData.size());
 }
 
 TBlobManager::TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, ui32 gen)
@@ -467,7 +465,7 @@ TBlobBatch TBlobManager::StartBlobBatch(ui32 channel) {
     return TBlobBatch(std::move(batchInfo));
 }
 
-void TBlobManager::SaveBlobBatch(TBlobBatch&& blobBatch, IBlobManagerDb& db) {
+void TBlobManager::DoSaveBlobBatch(TBlobBatch&& blobBatch, IBlobManagerDb& db) {
     Y_VERIFY(blobBatch.BatchInfo);
     ++CountersUpdate.BatchesCommitted;
     CountersUpdate.BlobsWritten += blobBatch.GetBlobCount();

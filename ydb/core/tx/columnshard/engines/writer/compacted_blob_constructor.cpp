@@ -6,40 +6,29 @@
 
 namespace NKikimr::NOlap {
 
-TCompactedWriteController::TBlobsConstructor::TBlobsConstructor(TCompactedWriteController& owner)
-    : Owner(owner)
-    , IndexChanges(*Owner.WriteIndexEv->IndexChanges)
-{
-}
-
-const TString& TCompactedWriteController::TBlobsConstructor::GetBlob() const {
-    return CurrentBlobInfo->GetBlob();
-}
-
-bool TCompactedWriteController::TBlobsConstructor::RegisterBlobId(const TUnifiedBlobId& blobId) {
-    Y_VERIFY(CurrentBlobInfo);
-    CurrentBlobInfo->RegisterBlobId(*IndexChanges.GetWritePortionInfo(CurrentPortion), blobId);
-    return true;
-}
-
-IBlobConstructor::EStatus TCompactedWriteController::TBlobsConstructor::BuildNext() {
-    while (CurrentPortion < IndexChanges.GetWritePortionsCount()) {
-        TPortionInfoWithBlobs& portionWithBlobs = *IndexChanges.GetWritePortionInfo(CurrentPortion);
-        if (CurrentBlobIndex < portionWithBlobs.GetBlobs().size() && IndexChanges.NeedWritePortion(CurrentPortion)) {
+std::optional<TBlobWriteInfo> TCompactedWriteController::Next() {
+    auto& changes = *WriteIndexEv->IndexChanges;
+    while (CurrentPortion < changes.GetWritePortionsCount()) {
+        auto* pInfo = changes.GetWritePortionInfo(CurrentPortion);
+        Y_VERIFY(pInfo);
+        TPortionInfoWithBlobs& portionWithBlobs = *pInfo;
+        if (CurrentBlobIndex < portionWithBlobs.GetBlobs().size() && changes.NeedWritePortion(CurrentPortion)) {
             CurrentBlobInfo = &portionWithBlobs.GetBlobs()[CurrentBlobIndex];
             ++CurrentBlobIndex;
-            return EStatus::Ok;
+            auto result = TBlobWriteInfo::BuildWriteTask(CurrentBlobInfo->GetBlob(), WriteIndexEv->BlobsAction);
+            CurrentBlobInfo->RegisterBlobId(portionWithBlobs, result.GetBlobId());
+            return result;
         } else {
             ++CurrentPortion;
             CurrentBlobIndex = 0;
         }
     }
-    return EStatus::Finished;
+    return {};
 }
 
 TCompactedWriteController::TCompactedWriteController(const TActorId& dstActor, TAutoPtr<NColumnShard::TEvPrivate::TEvWriteIndex> writeEv, bool /*blobGrouppingEnabled*/)
     : WriteIndexEv(writeEv)
-    , BlobConstructor(std::make_shared<TBlobsConstructor>(*this))
+    , Action(WriteIndexEv->BlobsAction)
     , DstActor(dstActor)
 {}
 

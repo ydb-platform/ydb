@@ -3,7 +3,7 @@
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
-#include <ydb/core/tx/columnshard/blob_manager_db.h>
+#include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 
 namespace NKikimr::NOlap {
 
@@ -26,10 +26,10 @@ bool TInsertColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TApp
 
 void TInsertColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context) {
     TBase::DoWriteIndex(self, context);
-    for (const auto& indsertedData : DataToIndex) {
-        self.InsertTable->EraseCommitted(context.DBWrapper, indsertedData);
-        Y_VERIFY(indsertedData.GetBlobRange().IsFullBlob());
-        self.BlobManager->DeleteBlob(indsertedData.GetBlobRange().GetBlobId(), *context.BlobManagerDb);
+    for (const auto& insertedData : DataToIndex) {
+        self.InsertTable->EraseCommitted(context.DBWrapper, insertedData);
+        Y_VERIFY(insertedData.GetBlobRange().IsFullBlob());
+        self.BlobManager->DeleteBlob(insertedData.GetBlobRange().GetBlobId(), *context.BlobManagerDb);
     }
     if (!DataToIndex.empty()) {
         self.UpdateInsertTableCounters();

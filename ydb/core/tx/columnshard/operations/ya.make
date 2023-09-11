@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     write.cpp
     write_data.cpp
+    slice_builder.cpp
 )
 
 PEERDIR(

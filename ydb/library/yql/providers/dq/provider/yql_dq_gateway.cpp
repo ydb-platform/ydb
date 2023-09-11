@@ -490,6 +490,10 @@ public:
         TPromise<void> Promise;
     };
 
+    void Stop() {
+        GrpcClient.Stop();
+    }
+
 private:
     NGrpc::TGRpcClientConfig GrpcConf;
     NGrpc::TGRpcClientLow GrpcClient;
@@ -516,6 +520,15 @@ public:
     TDqGateway(const TString& host, int port, const TString& vanillaJobPath, const TString& vanillaJobMd5, TDuration timeout = TDuration::Minutes(60), TDuration requestTimeout = TDuration::Max())
         : Impl(std::make_shared<TDqGatewayImpl>(host, port, vanillaJobPath, vanillaJobMd5, timeout, requestTimeout))
     { }
+
+    ~TDqGateway()
+    {
+        Stop();
+    }
+
+    void Stop() override {
+        Impl->Stop();
+    }
 
     TFuture<void> OpenSession(const TString& sessionId, const TString& username) override
     {

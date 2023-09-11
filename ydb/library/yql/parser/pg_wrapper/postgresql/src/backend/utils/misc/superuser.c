@@ -53,7 +53,7 @@ superuser(void)
  * The specified role has Postgres superuser privileges
  */
 bool
-superuser_arg(Oid roleid)
+superuser_arg_original(Oid roleid)
 {
 	bool		result;
 	HeapTuple	rtup;

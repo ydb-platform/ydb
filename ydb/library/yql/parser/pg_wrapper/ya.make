@@ -33,6 +33,7 @@ SRCS(
     pg_kernels.1.cpp
     pg_kernels.2.cpp
     pg_kernels.3.cpp
+    superuser.cpp
     config.cpp
     cost_mocks.cpp
 )

@@ -185,7 +185,7 @@ namespace NTable {
 
             // Note: as we may have cut index key we may both need prev and next pages
 
-            if (auto prev = found; --prev) {
+            if (auto prev = found; prev.Off() && --prev) {
                 TRowId pageBegin = prev->GetRowId();
                 TRowId pageEnd = found ? found->GetRowId() : Index.GetEndRowId();
                 if (pageBegin < endRowId && beginRowId < pageEnd) {

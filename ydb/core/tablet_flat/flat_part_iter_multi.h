@@ -7,6 +7,7 @@
 #include "flat_part_pinout.h"
 #include "flat_part_slice.h"
 #include "flat_table_committed.h"
+#include "flat_part_index_iter.h"
 
 namespace NKikimr {
 namespace NTable {
@@ -16,17 +17,11 @@ namespace NTable {
      */
     class TPartGroupRowIt {
     public:
-        TPartGroupRowIt(const NPage::TIndex& indexRef, NPage::TGroupId groupId)
-            : IndexRef(indexRef)
-            , GroupId(groupId)
-            , Index(IndexRef->Begin())
-        {
-            Y_VERIFY(Index, "Unexpected failure to find the first index record");
-        }
-
         TPartGroupRowIt(const TPart* part, NPage::TGroupId groupId)
-            : TPartGroupRowIt(part->GetGroupIndex(groupId), groupId)
-        { }
+            : GroupId(groupId)
+            , Index(part, groupId)
+        {
+        }
 
         EReady Seek(TRowId rowId, const TPart* part, IPages* env) noexcept {
             // Fast path, check if we already have the needed data page
@@ -49,12 +44,12 @@ namespace NTable {
             Data = { };
 
             // Make sure we're at the correct index position first
-            if (!(Index = IndexRef.LookupRow(rowId, Index))) {
-                return EReady::Gone;
+            if (auto ready = Index.Seek(rowId); ready != EReady::Data) {
+                return ready;
             }
 
             // Make sure we have the correct data page loaded
-            if (!LoadPage(Index->GetPageId(), Index->GetRowId(), part, env)) {
+            if (!LoadPage(Index.GetPageId(), Index.GetRowId(), part, env)) {
                 return EReady::Page;
             }
             Y_VERIFY_DEBUG(Page.BaseRow() <= rowId, "Index and row have an unexpected relation");
@@ -93,11 +88,10 @@ namespace NTable {
         }
 
     protected:
-        const NPage::TIndex& IndexRef;
         const NPage::TGroupId GroupId;
         TPageId PageId = Max<TPageId>();
 
-        NPage::TIndex::TIter Index;
+        TPartIndexIt Index; 
         NPage::TDataPage Page;
         NPage::TDataPage::TIter Data;
     };
@@ -111,8 +105,8 @@ namespace NTable {
     public:
         using TCells = NPage::TCells;
 
-        TPartGroupKeyIt(const NPage::TIndex& indexRef, NPage::TGroupId groupId)
-            : TPartGroupRowIt(indexRef, groupId)
+        TPartGroupKeyIt(const TPart* part, NPage::TGroupId groupId)
+            : TPartGroupRowIt(part, groupId)
         {
             ClearBounds();
         }
@@ -120,14 +114,14 @@ namespace NTable {
         void ClearBounds() noexcept
         {
             BeginRowId = 0;
-            EndRowId = IndexRef.GetEndRowId();
+            EndRowId = Index.GetEndRowId();
             RowId = Max<TRowId>();
         }
 
         void SetBounds(TRowId beginRowId, TRowId endRowId) noexcept
         {
             BeginRowId = beginRowId;
-            EndRowId = Min(endRowId, IndexRef.GetEndRowId());
+            EndRowId = Min(endRowId, Index.GetEndRowId());
             Y_VERIFY_DEBUG(BeginRowId < EndRowId,
                 "Trying to iterate over empty bounds=[%lu,%lu)", BeginRowId, EndRowId);
             RowId = Max<TRowId>();
@@ -141,64 +135,71 @@ namespace NTable {
             Y_VERIFY_DEBUG(seek == ESeek::Exact || seek == ESeek::Lower || seek == ESeek::Upper,
                     "Only ESeek{Exact, Upper, Lower} are currently supported here");
 
-            if (Index = IndexRef.LookupKey(key, scheme, seek, keyDefaults)) {
-                if (Index->GetRowId() >= EndRowId) {
-                    // Page is outside of bounds
+            if (auto ready = Index.Seek(key, seek, scheme, keyDefaults); ready != EReady::Data) {
+                return Terminate(ready);
+            }
+
+            if (Index.GetRowId() >= EndRowId) {
+                // Page is outside of bounds
+                return Exhausted();
+            }
+
+            if (Index.GetRowId() < BeginRowId) {
+                // Find an index record that has BeginRowId
+                if (seek == ESeek::Exact) {
+                    if (Index.GetNextRowId() <= BeginRowId) {
+                        // We cannot return any other row, don't even try
+                        return Exhausted();
+                    }
+                } else {
+                    if (auto ready = SeekIndex(BeginRowId); ready != EReady::Data) {
+                        return Terminate(ready);
+                    }
+                }
+            }
+
+            if (!LoadPage(Index.GetPageId(), Index.GetRowId(), part, env)) {
+                // Exact RowId unknown, don't allow Next until another Seek
+                return Terminate(EReady::Page);
+            }
+
+            if (Data = Page.LookupKey(key, scheme, seek, keyDefaults)) {
+                RowId = Page.BaseRow() + Data.Off();
+
+                if (RowId >= EndRowId) {
+                    // Row is outside of bounds
                     return Exhausted();
                 }
 
-                if (Index->GetRowId() < BeginRowId) {
-                    // Find an index record that has BeginRowId
+                if (RowId < BeginRowId) {
                     if (seek == ESeek::Exact) {
-                        auto next = Index + 1;
-                        if (next && next->GetRowId() <= BeginRowId) {
-                            // We cannot return any other row, don't even try
-                            return Exhausted();
-                        }
-                    } else {
-                        SeekIndex(BeginRowId);
-                    }
-                }
-
-                if (!LoadPage(Index->GetPageId(), Index->GetRowId(), part, env)) {
-                    // Exact RowId unknown, don't allow Next until another Seek
-                    RowId = Max<TRowId>();
-                    return EReady::Page;
-                }
-
-                if (Data = Page.LookupKey(key, scheme, seek, keyDefaults)) {
-                    RowId = Page.BaseRow() + Data.Off();
-
-                    if (RowId >= EndRowId) {
-                        // Row is outside of bounds
+                        // We cannot return any other row, don't even try
                         return Exhausted();
                     }
 
-                    if (RowId < BeginRowId) {
-                        if (seek == ESeek::Exact) {
-                            // We cannot return any other row, don't even try
-                            return Exhausted();
-                        }
-
-                        // Adjust to the first available row
-                        Data += BeginRowId - RowId;
-                        RowId = BeginRowId;
-                        Y_VERIFY_DEBUG(Data, "Unexpected failure to find BeginRowId=%lu", BeginRowId);
-                    }
-
-                    return EReady::Data;
+                    // Adjust to the first available row
+                    Data += BeginRowId - RowId;
+                    RowId = BeginRowId;
+                    Y_VERIFY_DEBUG(Data, "Unexpected failure to find BeginRowId=%lu", BeginRowId);
                 }
 
-                if (seek != ESeek::Exact && ++Index) {
-                    // The row we seek is on the next page
-                    RowId = Index->GetRowId();
-                    Y_VERIFY_DEBUG(RowId > BeginRowId,
-                        "Unexpected next page RowId=%lu (BeginRowId=%lu)",
-                        RowId, BeginRowId);
+                return EReady::Data;
+            }
 
-                    if (RowId < EndRowId) {
-                        return Next(part, env);
-                    }
+            if (seek != ESeek::Exact) {
+                // The row we seek is on the next page
+
+                if (auto ready = Index.Next(); ready != EReady::Data) {
+                    return Terminate(ready);
+                }
+
+                RowId = Index.GetRowId();
+                Y_VERIFY_DEBUG(RowId > BeginRowId,
+                    "Unexpected next page RowId=%lu (BeginRowId=%lu)",
+                    RowId, BeginRowId);
+
+                if (RowId < EndRowId) {
+                    return Next(part, env);
                 }
             }
 
@@ -213,56 +214,62 @@ namespace NTable {
             Y_VERIFY_DEBUG(seek == ESeek::Exact || seek == ESeek::Lower || seek == ESeek::Upper,
                     "Only ESeek{Exact, Upper, Lower} are currently supported here");
 
-            if (Index = IndexRef.LookupKeyReverse(key, scheme, seek, keyDefaults)) {
-                if (Index->GetRowId() < BeginRowId) {
-                    // Page may be outside of bounds
-                    auto next = Index + 1;
-                    if (next && next->GetRowId() <= BeginRowId) {
-                        // All rows are outside of bounds
-                        return Exhausted();
-                    }
+            if (auto ready = Index.SeekReverse(key, seek, scheme, keyDefaults); ready != EReady::Data) {
+                return Terminate(ready);
+            }
+
+            if (Index.GetRowId() < BeginRowId) {
+                // Page may be outside of bounds
+                if (Index.GetNextRowId() <= BeginRowId) {
+                    // All rows are outside of bounds
+                    return Exhausted();
+                }
+            }
+
+            if (EndRowId <= Index.GetRowId()) {
+                // Find an index record that has EndRowId - 1
+                if (auto ready = SeekIndex(EndRowId - 1); ready != EReady::Data) {
+                    return Terminate(ready);
+                }
+            }
+
+            if (!LoadPage(Index.GetPageId(), Index.GetRowId(), part, env)) {
+                // Exact RowId unknown, don't allow Next until another Seek
+                return Terminate(EReady::Page);
+            }
+
+            if (Data = Page.LookupKeyReverse(key, scheme, seek, keyDefaults)) {
+                RowId = Page.BaseRow() + Data.Off();
+
+                if (RowId < BeginRowId) {
+                    // Row is outside of bounds
+                    return Exhausted();
                 }
 
-                if (EndRowId <= Index->GetRowId()) {
-                    // Find an index record that has EndRowId - 1
-                    SeekIndex(EndRowId - 1);
+                if (RowId >= EndRowId) {
+                    // Adjust to the first available row
+                    auto diff = RowId - (EndRowId - 1);
+                    Y_VERIFY_DEBUG(Data.Off() >= diff, "Unexpected failure to find LastRowId=%lu", EndRowId - 1);
+                    Data -= diff;
+                    RowId = EndRowId - 1;
                 }
 
-                if (!LoadPage(Index->GetPageId(), Index->GetRowId(), part, env)) {
-                    // Exact RowId unknown, don't allow Next until another Seek
-                    RowId = Max<TRowId>();
-                    return EReady::Page;
+                return EReady::Data;
+            }
+
+            if (seek != ESeek::Exact) {
+                // The row we seek is on the prev page
+
+                RowId = Index.GetRowId() - 1;
+                if (auto ready = Index.Prev(); ready != EReady::Data) {
+                    return Terminate(ready);
                 }
 
-                if (Data = Page.LookupKeyReverse(key, scheme, seek, keyDefaults)) {
-                    RowId = Page.BaseRow() + Data.Off();
-
-                    if (RowId < BeginRowId) {
-                        // Row is outside of bounds
-                        return Exhausted();
-                    }
-
-                    if (RowId >= EndRowId) {
-                        // Adjust to the first available row
-                        auto diff = RowId - (EndRowId - 1);
-                        Y_VERIFY_DEBUG(Data.Off() >= diff, "Unexpected failure to find LastRowId=%lu", EndRowId - 1);
-                        Data -= diff;
-                        RowId = EndRowId - 1;
-                    }
-
-                    return EReady::Data;
-                }
-
-                if (seek != ESeek::Exact && Index.Off() > 0) {
-                    // The row we seek is on the next page
-                    RowId = Index->GetRowId() - 1;
-                    --Index;
-                    Y_VERIFY_DEBUG(RowId < EndRowId,
-                        "Unexpected prev page RowId=%lu (EndRowId=%lu)",
-                        RowId, EndRowId);
-                    if (RowId >= BeginRowId) {
-                        return Prev(part, env);
-                    }
+                Y_VERIFY_DEBUG(RowId < EndRowId,
+                    "Unexpected prev page RowId=%lu (EndRowId=%lu)",
+                    RowId, EndRowId);
+                if (RowId >= BeginRowId) {
+                    return Prev(part, env);
                 }
             }
 
@@ -275,7 +282,10 @@ namespace NTable {
                 return Exhausted();
             }
 
-            SeekIndex(rowId);
+            if (auto ready = SeekIndex(rowId); ready != EReady::Data) {
+                return Terminate(ready);
+            }
+
             RowId = rowId;
             Data = { };
 
@@ -293,7 +303,10 @@ namespace NTable {
                 return Exhausted();
             }
 
-            SeekIndex(rowId);
+            if (auto ready = SeekIndex(rowId); ready != EReady::Data) {
+                return Terminate(ready);
+            }
+            
             RowId = rowId;
             Data = { };
 
@@ -322,15 +335,17 @@ namespace NTable {
 
                 if (++Data) {
                     return EReady::Data;
-                } else if (!++Index) {
-                    return Exhausted();
+                } else {
+                    if (auto ready = Index.Next(); ready != EReady::Data) {
+                        return Terminate(ready);
+                    }
                 }
             }
 
-            Y_VERIFY_DEBUG(Index && Index->GetRowId() <= RowId,
+            Y_VERIFY_DEBUG(Index.IsValid() && Index.GetRowId() <= RowId,
                 "Next called without a valid index record");
 
-            if (!LoadPage(Index->GetPageId(), Index->GetRowId(), part, env)) {
+            if (!LoadPage(Index.GetPageId(), Index.GetRowId(), part, env)) {
                 return EReady::Page;
             }
 
@@ -338,7 +353,7 @@ namespace NTable {
                 return EReady::Data;
             }
 
-            Y_VERIFY(!++Index, "Unexpected failure to seek in a non-final data page");
+            Y_VERIFY(Index.Next() == EReady::Gone, "Unexpected failure to seek in a non-final data page");
             return Exhausted();
         }
 
@@ -357,23 +372,21 @@ namespace NTable {
                     return Exhausted();
                 }
 
-                if (Data.Off() == 0) {
-                    Data = { };
-                    if (Index.Off() == 0) {
-                        Index = { };
-                        return Exhausted();
-                    }
-                    --Index;
-                } else {
+                if (Data.Off() != 0) {
                     --Data;
                     return EReady::Data;
+                } else {
+                    Data = { };
+                    if (auto ready = Index.Prev(); ready != EReady::Data) {
+                        return Terminate(ready);
+                    }
                 }
             }
 
-            Y_VERIFY_DEBUG(Index && Index->GetRowId() <= RowId,
+            Y_VERIFY_DEBUG(Index.IsValid() && Index.GetRowId() <= RowId,
                 "Prev called without a valid index record");
 
-            if (!LoadPage(Index->GetPageId(), Index->GetRowId(), part, env)) {
+            if (!LoadPage(Index.GetPageId(), Index.GetRowId(), part, env)) {
                 return EReady::Page;
             }
 
@@ -396,17 +409,23 @@ namespace NTable {
     private:
         Y_FORCE_INLINE EReady Exhausted() noexcept
         {
+            return Terminate(EReady::Gone);
+        }
+        
+        Y_FORCE_INLINE EReady Terminate(EReady ready) noexcept
+        {
             Data = { };
             RowId = Max<TRowId>();
-            return EReady::Gone;
+            return ready;
         }
 
-        void SeekIndex(TRowId rowId) noexcept
+        EReady SeekIndex(TRowId rowId) noexcept
         {
-            Index = IndexRef.LookupRow(rowId, Index);
-            Y_VERIFY_DEBUG(Index,
+            auto ready = Index.Seek(rowId);
+            Y_VERIFY_DEBUG(ready != EReady::Gone,
                 "Unexpected failure to find index record for RowId=%lu, bounds=[%lu,%lu)",
                 rowId, BeginRowId, EndRowId);
+            return ready;
         }
 
     protected:
@@ -456,9 +475,10 @@ namespace NTable {
 
             // Helper for loading row id and row version from the index
             auto checkIndex = [&]() -> bool {
-                RowId = Index->Cell(scheme.ColsKeyIdx[0]).AsValue<TRowId>();
-                RowVersion.Step = Index->Cell(scheme.ColsKeyIdx[1]).AsValue<ui64>();
-                RowVersion.TxId = Index->Cell(scheme.ColsKeyIdx[2]).AsValue<ui64>();
+                auto record = Index.GetRecord();
+                RowId = record->Cell(scheme.ColsKeyIdx[0]).AsValue<TRowId>();
+                RowVersion.Step = record->Cell(scheme.ColsKeyIdx[1]).AsValue<ui64>();
+                RowVersion.TxId = record->Cell(scheme.ColsKeyIdx[2]).AsValue<ui64>();
                 return rowId == RowId;
             };
 
@@ -501,9 +521,10 @@ namespace NTable {
 
                         if (!Data) {
                             // Row is not on current page, move to the next
-                            if (!++Index) {
-                                return Exhausted();
-                            } else if (!checkIndex()) {
+                            if (auto ready = Index.Next(); ready != EReady::Data) {
+                                return Terminate(ready);
+                            }
+                            if (!checkIndex()) {
                                 // First row for the next RowId
                                 MaxVersion = TRowVersion::Max();
                                 Y_VERIFY_DEBUG(rowId < RowId);
@@ -546,10 +567,10 @@ namespace NTable {
 
             // Special case when we are following a previous Index estimate
             if (rowId == RowId && RowVersion <= rowVersion && rowVersion <= MaxVersion) {
-                Y_VERIFY_DEBUG(Index);
+                Y_VERIFY_DEBUG(Index.IsValid());
                 Y_VERIFY_DEBUG(!Data);
 
-                if (!LoadPage(Index->GetPageId(), Index->GetRowId(), part, env)) {
+                if (!LoadPage(Index.GetPageId(), Index.GetRowId(), part, env)) {
                     return EReady::Page;
                 }
 
@@ -561,72 +582,74 @@ namespace NTable {
             }
 
             // Full binary search
-            if (Index = IndexRef.LookupKey(key, scheme, ESeek::Lower, keyDefaults)) {
-                // We need exact match on rowId, bail on larger values
-                TRowId indexRowId = Index->Cell(scheme.ColsKeyIdx[0]).AsValue<TRowId>();
-                if (rowId < indexRowId) {
-                    // We cannot compute MaxVersion anyway
-                    return Exhausted();
-                }
+            if (auto ready = Index.Seek(key, ESeek::Lower, scheme, keyDefaults); ready != EReady::Data) {
+                return Terminate(ready);
+            }
 
-                if (!LoadPage(Index->GetPageId(), Index->GetRowId(), part, env)) {
-                    // It's ok to repeat binary search on the next iteration,
-                    // since page faults take a long time and optimizing it
-                    // wouldn't be worth it.
-                    Data = { };
-                    RowId = Max<TRowId>();
-                    return EReady::Page;
-                }
+            // We need exact match on rowId, bail on larger values
+            TRowId indexRowId = Index.GetRecord()->Cell(scheme.ColsKeyIdx[0]).AsValue<TRowId>();
+            if (rowId < indexRowId) {
+                // We cannot compute MaxVersion anyway
+                return Exhausted();
+            }
 
-                if (Data = Page.LookupKey(key, scheme, ESeek::Lower, keyDefaults)) {
-                    if (!checkData()) {
-                        // First row for the next RowId
-                        MaxVersion = TRowVersion::Max();
-                        Y_VERIFY_DEBUG(rowId < RowId);
-                        return EReady::Gone;
-                    }
+            if (!LoadPage(Index.GetPageId(), Index.GetRowId(), part, env)) {
+                // It's ok to repeat binary search on the next iteration,
+                // since page faults take a long time and optimizing it
+                // wouldn't be worth it.
+                Data = { };
+                RowId = Max<TRowId>();
+                return EReady::Page;
+            }
 
-                    Y_VERIFY(RowVersion <= rowVersion, "Data binary search bug");
-
-                    // Save an estimate for MaxVersion
-                    MaxVersion = rowVersion;
-                    return EReady::Data;
-                }
-
-                if (!++Index) {
-                    return Exhausted();
-                }
-
-                if (!checkIndex()) {
-                    // First row for the nextRowId
+            if (Data = Page.LookupKey(key, scheme, ESeek::Lower, keyDefaults)) {
+                if (!checkData()) {
+                    // First row for the next RowId
                     MaxVersion = TRowVersion::Max();
                     Y_VERIFY_DEBUG(rowId < RowId);
                     return EReady::Gone;
                 }
 
-                // The above binary search failed, but since we started with
-                // an index search the first row must be the one we want.
-                Y_VERIFY(RowVersion <= rowVersion, "Index binary search bug");
-
-                if (!LoadPage(Index->GetPageId(), Index->GetRowId(), part, env)) {
-                    // We don't want to repeat binary search on the next
-                    // iteration, as we already know the row is not on a
-                    // previous page, but index search would point to it
-                    // again and reloading would be very expensive.
-                    // Remember current MaxVersion estimate, so we just
-                    // quickly check the same page again after restart.
-                    MaxVersion = rowVersion;
-                    return EReady::Page;
-                }
-
-                Data = Page->Begin();
-
-                Y_VERIFY(Data && checkData() && RowVersion <= rowVersion, "Index and Data are out of sync");
+                Y_VERIFY(RowVersion <= rowVersion, "Data binary search bug");
 
                 // Save an estimate for MaxVersion
                 MaxVersion = rowVersion;
                 return EReady::Data;
             }
+
+            if (auto ready = Index.Next(); ready != EReady::Data) {
+                return Terminate(ready);
+            }
+
+            if (!checkIndex()) {
+                // First row for the nextRowId
+                MaxVersion = TRowVersion::Max();
+                Y_VERIFY_DEBUG(rowId < RowId);
+                return EReady::Gone;
+            }
+
+            // The above binary search failed, but since we started with
+            // an index search the first row must be the one we want.
+            Y_VERIFY(RowVersion <= rowVersion, "Index binary search bug");
+
+            if (!LoadPage(Index.GetPageId(), Index.GetRowId(), part, env)) {
+                // We don't want to repeat binary search on the next
+                // iteration, as we already know the row is not on a
+                // previous page, but index search would point to it
+                // again and reloading would be very expensive.
+                // Remember current MaxVersion estimate, so we just
+                // quickly check the same page again after restart.
+                MaxVersion = rowVersion;
+                return EReady::Page;
+            }
+
+            Data = Page->Begin();
+
+            Y_VERIFY(Data && checkData() && RowVersion <= rowVersion, "Index and Data are out of sync");
+
+            // Save an estimate for MaxVersion
+            MaxVersion = rowVersion;
+            return EReady::Data;
 
             return Exhausted();
         }
@@ -650,10 +673,16 @@ namespace NTable {
         }
 
     private:
-        Y_FORCE_INLINE EReady Exhausted() {
+        Y_FORCE_INLINE EReady Exhausted() noexcept
+        {
+            return Terminate(EReady::Gone);
+        }
+
+        Y_FORCE_INLINE EReady Terminate(EReady ready) noexcept
+        {
             Data = { };
             RowId = Max<TRowId>();
-            return EReady::Gone;
+            return ready;
         }
 
     private:
@@ -672,7 +701,7 @@ namespace NTable {
             , Env(env)
             , Pinout(Part->Scheme->MakePinout(tags))
             , KeyCellDefaults(std::move(keyDefaults))
-            , Main(Part->Index, TGroupId(0))
+            , Main(Part, TGroupId(0))
             , SkipMainDeltas(0)
             , SkipMainVersion(false)
             , SkipEraseVersion(false)
@@ -683,7 +712,7 @@ namespace NTable {
             for (size_t idx : xrange(Pinout.AltGroups().size())) {
                 ui32 group = Pinout.AltGroups()[idx];
                 TGroupId groupId(group);
-                Groups.emplace_back(Part->GetGroupIndex(groupId), groupId);
+                Groups.emplace_back(Part, groupId);
                 GroupRemap[group] = idx;
             }
 

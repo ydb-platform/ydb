@@ -215,7 +215,7 @@ public:
         for (const NKikimrConfig::TBlobStorageFormatConfig::TDrive& drive : bsFormat.GetDrive()) {
             TPDiskInfo pdiskInfo(drive);
             if (pdiskInfo.Type == DesiredPDiskType) {
-                pdisks.push_back(std::move(pdiskInfo));
+                pdisks.push_back(pdiskInfo);
 
                 mapper.RegisterPDisk({
                     .PDiskId{pdiskInfo.NodeId, pdiskInfo.PDiskId},

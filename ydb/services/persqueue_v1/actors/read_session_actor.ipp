@@ -1121,7 +1121,6 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvPartitionSta
 
     auto it = Partitions.find(ev->Get()->Partition.AssignId);
     Y_VERIFY(it != Partitions.end());
-    Y_VERIFY(!it->second.Releasing); // if releasing and no lock sent yet - then server must already release partition
 
     TServerMessage result;
     result.set_status(Ydb::StatusIds::SUCCESS);

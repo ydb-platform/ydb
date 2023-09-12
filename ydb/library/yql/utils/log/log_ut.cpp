@@ -556,11 +556,7 @@ Y_UNIT_TEST_SUITE(TLogTest)
             UNIT_ASSERT_EQUAL(logRow.Level, ELevel::INFO);
             UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Perf);
             UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Performance);
-#ifdef _win_
-            std::regex re("Execution of \\[NTestSuiteTLogTest::Func1\\] took [0-9\\.]+us");
-#else
             std::regex re("Execution of \\[Func1\\] took [0-9\\.]+us");
-#endif
             bool isMatch = std::regex_match(logRow.Message.c_str(), re);
             UNIT_ASSERT_C(isMatch, "Unexpected message: " << logRow.Message);
         }
@@ -570,7 +566,7 @@ Y_UNIT_TEST_SUITE(TLogTest)
             UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Perf);
             UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Performance);
 #ifdef _win_
-            std::regex re("Execution of \\[int __cdecl NTestSuiteTLogTest::Func2\\(int,char\\)\\] took [0-9\\.]+us");
+            std::regex re("Execution of \\[int __cdecl NTestSuiteTLogTest::Func2\\(int, char\\)\\] took [0-9\\.]+us");
 #else
             std::regex re("Execution of \\[int NTestSuiteTLogTest::Func2\\(int, char\\)\\] took [0-9\\.]+us");
 #endif

@@ -32,7 +32,7 @@ static TLogRow ParseLogRow(const TString& str) {
                 ".pid=([0-9]+),"                                                       // (4) process id
                 " tid=(0?x?[0-9a-fA-F]+). "                                            // (5) thread id
                 ".([a-zA-Z0-9_\\. ]+). "                                               // (6) component name
-                "([a-z0-9_\\.]+):"                                                     // (7) file name
+                "([^:]+):"                                                             // (7) file name
                 "([0-9]+): "                                                           // (8) line number
                 "([^\n]*)\n?$"                                                         // (9) message
                 , std::regex_constants::extended);

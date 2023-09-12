@@ -9,6 +9,6 @@ namespace NKikimr {
     } // NFake
 
     IActor *CreateBlobStorageGroupProxyMockActor(TIntrusivePtr<NFake::TProxyDS> model);
-    IActor *CreateBlobStorageGroupProxyMockActor();
+    IActor *CreateBlobStorageGroupProxyMockActor(ui32 groupId);
 
 } // NKikimr

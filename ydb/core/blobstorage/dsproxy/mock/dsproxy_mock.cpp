@@ -93,6 +93,12 @@ namespace NKikimr {
                 : TActor(&TBlobStorageGroupProxyMockActor::StateFunc)
                 , Model(model ? std::move(model) : MakeIntrusive<NFake::TProxyDS>())
             {}
+
+
+            TBlobStorageGroupProxyMockActor(ui32 groupId)
+                : TActor(&TBlobStorageGroupProxyMockActor::StateFunc)
+                , Model(MakeIntrusive<NFake::TProxyDS>(groupId))
+            {}
         };
     } // anon
 
@@ -100,8 +106,8 @@ namespace NKikimr {
         return new TBlobStorageGroupProxyMockActor(std::move(model));
     }
 
-    IActor *CreateBlobStorageGroupProxyMockActor() {
-        return new TBlobStorageGroupProxyMockActor(nullptr);
+    IActor *CreateBlobStorageGroupProxyMockActor(ui32 groupId) {
+        return new TBlobStorageGroupProxyMockActor(groupId);
     }
 
 } // NKikimr

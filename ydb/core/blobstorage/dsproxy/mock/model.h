@@ -55,6 +55,12 @@ namespace NFake {
         TMap<TLogoBlobID, TBlob> Blobs;
         // By default only NKikimrBlobStorage::StatusIsValid is set
         TStorageStatusFlags StorageStatusFlags = TStorageStatusFlags(NKikimrBlobStorage::StatusIsValid);
+        const ui32 GroupId;
+
+    public:
+        TProxyDS(ui32 groupId = 0)
+            : GroupId(groupId)
+        {}
 
     public: // BS events interface : Handle(event) -> event
         TEvBlobStorage::TEvPutResult* Handle(TEvBlobStorage::TEvPut *msg) {
@@ -64,11 +70,11 @@ namespace NFake {
 
             // validate put against set blocks
             if (IsBlocked(id.TabletID(), id.Generation())) {
-                return new TEvBlobStorage::TEvPutResult(NKikimrProto::BLOCKED, id, GetStorageStatusFlags(), 0, 0.f);
+                return new TEvBlobStorage::TEvPutResult(NKikimrProto::BLOCKED, id, GetStorageStatusFlags(), GroupId, 0.f);
             }
             for (const auto& [tabletId, generation] : msg->ExtraBlockChecks) {
                 if (IsBlocked(tabletId, generation)) {
-                    return new TEvBlobStorage::TEvPutResult(NKikimrProto::BLOCKED, id, GetStorageStatusFlags(), 0, 0.f);
+                    return new TEvBlobStorage::TEvPutResult(NKikimrProto::BLOCKED, id, GetStorageStatusFlags(), GroupId, 0.f);
                 }
             }
 
@@ -95,12 +101,12 @@ namespace NFake {
 
             // put an entry into logo blobs database and reply with success
             Blobs.emplace(id, std::move(msg->Buffer));
-            return new TEvBlobStorage::TEvPutResult(NKikimrProto::OK, id, GetStorageStatusFlags(), 0, 0.f);
+            return new TEvBlobStorage::TEvPutResult(NKikimrProto::OK, id, GetStorageStatusFlags(), GroupId, 0.f);
         }
 
         TEvBlobStorage::TEvGetResult* Handle(TEvBlobStorage::TEvGet *msg) {
             // prepare result structure holding the returned data
-            auto result = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, msg->QuerySize, 0u);
+            auto result = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, msg->QuerySize, GroupId);
 
             // traverse against requested blobs and process them
             for (ui32 i = 0; i < msg->QuerySize; ++i) {
@@ -202,7 +208,7 @@ namespace NFake {
             Y_VERIFY(from.Channel() == to.Channel());
             Y_VERIFY(from.TabletID() == msg->TabletId);
 
-            auto result = std::make_unique<TEvBlobStorage::TEvRangeResult>(NKikimrProto::OK, from, to, 0u);
+            auto result = std::make_unique<TEvBlobStorage::TEvRangeResult>(NKikimrProto::OK, from, to, GroupId);
 
             auto process = [&](const TLogoBlobID& id, const TString& buffer) {
                 result->Responses.emplace_back(id, buffer);

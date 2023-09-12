@@ -30,8 +30,9 @@ TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& 
     const auto& params = node->ChildRef(4);
     const auto pos = node->Pos();
 
+    const bool isStreaming = IsStreaming(input);
     TExprNode::TPtr settings = AddSetting(*ctx.NewList(pos, {}), pos,
-          "Streaming", ctx.NewAtom(pos, ToString(IsStreaming(input))), ctx);
+          "Streaming", ctx.NewAtom(pos, ToString(isStreaming)), ctx);
 
     const auto matchRecognize = ctx.Builder(pos)
         .Lambda()
@@ -48,42 +49,58 @@ TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& 
                 .Seal()
             .Seal()
         .Seal()
-        .Build();
+    .Build();
 
     TExprNode::TPtr sortKey;
     TExprNode::TPtr sortOrder;
     ExtractSortKeyAndOrder(pos, sortTraits, sortKey, sortOrder, ctx);
-
-    const auto matchRecognizeOnSortedPartition = sortOrder->ChildrenSize() != 0 ?
-            ctx.Builder(pos)
-                .Lambda()
-                    .Param("partition")
+    TExprNode::TPtr result;
+    if (isStreaming) {
+        //TODO use TimeOrderRecover
+        if (partitionColumns->ChildrenSize() != 0) {
+            result = ctx.Builder(pos)
+                .Callable("ShuffleByKeys")
+                    .Add(0, input)
+                    .Add(1, partitionKeySelector)
+                    .Add(2, matchRecognize)
+                .Seal()
+            .Build();
+        } else {
+            result = matchRecognize;
+        }
+    } else { //non-streaming
+        if (partitionColumns->ChildrenSize() != 0) {
+            result = ctx.Builder(pos)
+                .Callable("PartitionsByKeys")
+                    .Add(0, input)
+                    .Add(1, partitionKeySelector)
+                    .Add(2, sortOrder)
+                    .Add(3, sortKey)
+                    .Add(4, matchRecognize)
+                .Seal()
+            .Build();
+        } else {
+            if (sortOrder->IsCallable("Void")) {
+                result = ctx.Builder(pos)
+                    .Apply(matchRecognize)
+                        .With(0, input)
+                    .Seal()
+                .Build();;
+            } else {
+                result = ctx.Builder(pos)
                     .Apply(matchRecognize)
                         .With(0)
                             .Callable("Sort")
-                                .Arg(0, "partition")
+                                .Add(0, input)
                                 .Add(1, sortOrder)
                                 .Add(2, sortKey)
                             .Seal()
                         .Done()
                     .Seal()
-                .Seal()
-                .Build() :
-             matchRecognize;
-
-    const auto result = partitionColumns->ChildrenSize() != 0 ?
-        ctx.Builder(pos)
-            .Callable("ShuffleByKeys")
-                .Add(0, input)
-                .Add(1, partitionKeySelector)
-                .Add(2, matchRecognizeOnSortedPartition)
-            .Seal()
-            .Build() :
-        ctx.Builder(pos)
-            .Apply(matchRecognizeOnSortedPartition)
-                  .With(0, input)
-            .Seal()
-            .Build();
+                .Build();
+            }
+        }
+    }
     YQL_CLOG(INFO, Core) << "Expanded MatchRecognize";
     return result;
 }

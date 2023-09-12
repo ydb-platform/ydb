@@ -35,7 +35,7 @@ To update cluster (stop + start):
             prog=program_name
         )
     )
-    subparsers = parser.add_subparsers(help='sub-command help')
+    subparsers = parser.add_subparsers(help='sub-command help', required=True)
     deploy = subparsers.add_parser(
         'deploy',
         formatter_class=argparse.RawTextHelpFormatter,

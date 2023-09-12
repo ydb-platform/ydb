@@ -15,6 +15,11 @@ on:
         required: true
         default: trunk
         description: "docker image tag"
+      local_ydb_ref:
+        type: string
+        required: true
+        default: main
+        description: "Git branch/tag revision to builld local_ydb"
 
 jobs:
   provide-runner:
@@ -47,14 +52,10 @@ jobs:
     needs: provide-runner
     runs-on: [ self-hosted, "${{ needs.provide-runner.outputs.label }}" ]
     steps:
-      - name: Checkout PR
-        uses: actions/checkout@v3
-        with:
-          sparse-checkout: .github
       - name: install docker
         shell: bash
         run: |
-          apt-get update 
+          apt-get update
           apt-get install -y --no-install-recommends docker.io
 
   build:
@@ -63,10 +64,27 @@ jobs:
       - prepare-vm
     runs-on: "${{ needs.provide-runner.outputs.label }}"
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+      - name: Checkout .github and local_ydb
+        uses: actions/checkout@v4
         with:
-          sparse-checkout: .github
+          ref: main
+          path: main
+          sparse-checkout: |
+            .github
+            ydb/public/tools/local_ydb/
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.git_ref || 'main' }}
+          path: ydb
+
+      - name: get revision
+        shell: bash
+        id: get-sha
+        working-directory: ydb
+        run: |
+          echo "SHA=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
@@ -78,18 +96,31 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: |
+            ghcr.io/${{ github.repository_owner }}/local-ydb
+          labels: |
+            ydb.revision=${{ steps.get-sha.outputs.SHA }}
+            org.opencontainers.image.revision=${{ steps.get-sha.outputs.SHA }}
+          tags: |
+            type=schedule,pattern=nightly
+            type=raw,value=${{ inputs.image_tag || 'trunk' }}
+
       - name: Build and push docker image
         uses: docker/build-push-action@v4
         with:
           push: true
-          context: .github/docker/
-          file: .github/docker/Dockerfile
-          tags: ghcr.io/${{ github.repository_owner }}/local-ydb:${{ inputs.image_tag || 'trunk' }}
+          context: .
+          file: main/.github/docker/Dockerfile
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64
           provenance: false
-          build-args: |
-            GIT_REPO=${{ github.server_url }}/${{ github.repository }}
-            GIT_REF=${{ inputs.git_ref || 'main' }}
+          cache-from: type=s3,name=local_ydb,region=ru-central1,bucket=${{ vars.AWS_BUCKET }},endpoint_url=${{ vars.AWS_ENDPOINT }},access_key_id=${{ secrets.AWS_KEY_ID }},secret_access_key=${{ secrets.AWS_KEY_VALUE }}
+          cache-to: type=s3,name=local_ydb,region=ru-central1,bucket=${{ vars.AWS_BUCKET }},endpoint_url=${{ vars.AWS_ENDPOINT }},access_key_id=${{ secrets.AWS_KEY_ID }},secret_access_key=${{ secrets.AWS_KEY_VALUE }},mode=max
           secrets: |
             "ccache_remote_storage=${{ vars.REMOTE_CACHE_URL && format('http://{0}{1}', secrets.REMOTE_CACHE_AUTH, vars.REMOTE_CACHE_URL) || ''}}"
 

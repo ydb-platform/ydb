@@ -50,6 +50,7 @@
 
 #include <ydb/core/grpc_services/grpc_mon.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
+#include <ydb/core/grpc_services/db_metadata_cache.h>
 
 #include <ydb/core/log_backend/log_backend.h>
 
@@ -2668,6 +2669,16 @@ void TIcNodeCacheServiceInitializer::InitializeServices(NActors::TActorSystemSet
     }
 }
 
+TDatabaseMetadataCacheInitializer::TDatabaseMetadataCacheInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{
+}
+
+void TDatabaseMetadataCacheInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    setup->LocalServices.emplace_back(
+        MakeDatabaseMetadataCacheId(NodeId),
+        TActorSetupCmd(CreateDatabaseMetadataCache(appData->TenantName), TMailboxType::HTSwap, appData->UserPoolId));
+}
 
 } // namespace NKikimrServicesInitializers
 } // namespace NKikimr

@@ -63,6 +63,30 @@ namespace NHealthCheck {
 using namespace NActors;
 using namespace Ydb;
 
+void RemoveUnrequestedEntries(Ydb::Monitoring::SelfCheckResult& result, const Ydb::Monitoring::SelfCheckRequest& request) {
+    if (!request.return_verbose_status()) {
+        result.clear_database_status();
+    }
+    if (request.minimum_status() != Ydb::Monitoring::StatusFlag::UNSPECIFIED) {
+        for (auto itIssue = result.mutable_issue_log()->begin(); itIssue != result.mutable_issue_log()->end();) {
+            if (itIssue->status() < request.minimum_status()) {
+                itIssue = result.mutable_issue_log()->erase(itIssue);
+            } else {
+                ++itIssue;
+            }
+        }
+    }
+    if (request.maximum_level() != 0) {
+        for (auto itIssue = result.mutable_issue_log()->begin(); itIssue != result.mutable_issue_log()->end();) {
+            if (itIssue->level() > request.maximum_level()) {
+                itIssue = result.mutable_issue_log()->erase(itIssue);
+            } else {
+                ++itIssue;
+            }
+        }
+    }
+}
+
 struct TEvPrivate {
     enum EEv {
         EvRetryNodeWhiteboard = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
@@ -2394,28 +2418,7 @@ public:
         }
 
         FillResult({&result});
-
-        if (!Request->Request.return_verbose_status()) {
-            result.clear_database_status();
-        }
-        if (Request->Request.minimum_status() != Ydb::Monitoring::StatusFlag::UNSPECIFIED) {
-            for (auto itIssue = result.mutable_issue_log()->begin(); itIssue != result.mutable_issue_log()->end();) {
-                if (itIssue->status() < Request->Request.minimum_status()) {
-                    itIssue = result.mutable_issue_log()->erase(itIssue);
-                } else {
-                    ++itIssue;
-                }
-            }
-        }
-        if (Request->Request.maximum_level() != 0) {
-            for (auto itIssue = result.mutable_issue_log()->begin(); itIssue != result.mutable_issue_log()->end();) {
-                if (itIssue->level() > Request->Request.maximum_level()) {
-                    itIssue = result.mutable_issue_log()->erase(itIssue);
-                } else {
-                    ++itIssue;
-                }
-            }
-        }
+        RemoveUnrequestedEntries(result, Request->Request);
 
         for (TActorId pipe : PipeClients) {
             NTabletPipe::CloseClient(SelfId(), pipe);

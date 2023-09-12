@@ -592,5 +592,11 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
+class TDatabaseMetadataCacheInitializer : public IKikimrServicesInitializer {
+public:
+    TDatabaseMetadataCacheInitializer(const TKikimrRunConfig& runConfig);
+
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
 } // namespace NKikimrServicesInitializers
 } // namespace NKikimr

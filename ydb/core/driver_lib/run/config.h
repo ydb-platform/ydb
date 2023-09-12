@@ -78,16 +78,23 @@ union TBasicKikimrServicesMask {
         bool EnableMemoryTracker:1;
 
         // next 64 flags
+
+        bool EnableDatabaseMetadataCache:1;
     };
 
-    ui64 Raw;
+    struct {
+        ui64 Raw1;
+        ui64 Raw2;
+    };
 
     void DisableAll() {
-        Raw = 0;
+        Raw1 = 0;
+        Raw2 = 0;
     }
 
     void EnableAll() {
-        Raw = 0xFFFFFFFFFFFFFFFFLL;
+        Raw1 = 0xFFFFFFFFFFFFFFFFLL;
+        Raw2 = 0xFFFFFFFFFFFFFFFFLL;
     }
 
     void EnableYQ() {
@@ -117,7 +124,7 @@ union TBasicKikimrServicesMask {
     }
 };
 
-static_assert(sizeof(TBasicKikimrServicesMask) == 8, "expected sizeof(TBasicKikimrServicesMask) == 8");
+static_assert(sizeof(TBasicKikimrServicesMask) == 16, "expected sizeof(TBasicKikimrServicesMask) == 16");
 
 
 struct TKikimrRunConfig {

@@ -6,6 +6,7 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/viewer/viewer.h>
 #include <ydb/public/lib/base/msgbus.h>
+#include <ydb/core/grpc_services/db_metadata_cache.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/services/auth/grpc_service.h>
 #include <ydb/services/fq/grpc_service.h>
@@ -802,6 +803,12 @@ namespace Tests {
             IActor* healthCheck = NHealthCheck::CreateHealthCheckService();
             TActorId healthCheckId = Runtime->Register(healthCheck, nodeIdx);
             Runtime->RegisterService(NHealthCheck::MakeHealthCheckID(), healthCheckId, nodeIdx);
+        }
+        {
+            const auto& appData = Runtime->GetAppData(nodeIdx);
+            IActor* metadataCache = CreateDatabaseMetadataCache(appData.TenantName).release();
+            TActorId metadataCacheId = Runtime->Register(metadataCache, nodeIdx);
+            Runtime->RegisterService(MakeDatabaseMetadataCacheId(Runtime->GetNodeId(nodeIdx)), metadataCacheId, nodeIdx);
         }
         {
             auto kqpProxySharedResources = std::make_shared<NKqp::TKqpProxySharedResources>();

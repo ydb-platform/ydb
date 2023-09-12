@@ -23,6 +23,7 @@ SRCS(
     blobstorage_vdisk_internal.proto
     blobstorage_config.proto
     blockstore_config.proto
+    db_metadata_cache.proto
     filestore_config.proto
     bootstrapper.proto
     change_exchange.proto

@@ -167,6 +167,7 @@ struct TKikimrEvents : TEvents {
         ES_KAFKA,
         ES_STATISTICS,
         ES_LDAP_AUTH_PROVIDER,
+        ES_DB_METADATA_CACHE,
     };
 };
 

@@ -1,0 +1,5 @@
+package NKikimrMetadataCache;
+
+message TDatabaseMetadataCacheInfo {
+    optional uint64 StartTimestamp = 1; // microseconds
+}

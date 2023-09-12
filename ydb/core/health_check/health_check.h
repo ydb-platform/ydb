@@ -10,9 +10,11 @@ enum EEv {
     // requests
     EvSelfCheckRequest = EventSpaceBegin(TKikimrEvents::ES_HEALTH_CHECK),
     EvNodeCheckRequest,
+    EvSelfCheckRequestProto,
 
     // replies
     EvSelfCheckResult = EvSelfCheckRequest + 512,
+    EvSelfCheckResultProto,
 
     EvEnd
 };
@@ -31,6 +33,12 @@ struct TEvNodeCheckRequest : TEventLocal<TEvNodeCheckRequest, EvNodeCheckRequest
 struct TEvSelfCheckResult : TEventLocal<TEvSelfCheckResult, EvSelfCheckResult> {
     Ydb::Monitoring::SelfCheckResult Result;
 };
+
+struct TEvSelfCheckRequestProto : TEventPB<TEvSelfCheckRequestProto, Ydb::Monitoring::SelfCheckRequest, EvSelfCheckRequestProto> {};
+
+struct TEvSelfCheckResultProto : TEventPB<TEvSelfCheckResultProto, Ydb::Monitoring::SelfCheckResult, EvSelfCheckResultProto> {};
+
+void RemoveUnrequestedEntries(Ydb::Monitoring::SelfCheckResult& result, const Ydb::Monitoring::SelfCheckRequest& request);
 
 inline NActors::TActorId MakeHealthCheckID() { return NActors::TActorId(0, "healthcheck"); }
 IActor* CreateHealthCheckService();

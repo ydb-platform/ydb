@@ -73,11 +73,11 @@
         "5034668332": "http://s3.mds.yandex.net/test-devtools-registry/5034668332",
         "5034672610": "http://s3.mds.yandex.net/test-devtools-registry/5034672610",
         "5034691927": "http://s3.mds.yandex.net/test-devtools-registry/5034691927",
-        "5017941083": "http://s3.mds.yandex.net/test-devtools-registry/5017941083",
-        "5017941113": "http://s3.mds.yandex.net/test-devtools-registry/5017941113",
-        "5017949665": "http://s3.mds.yandex.net/test-devtools-registry/5017949665",
-        "5017959833": "http://s3.mds.yandex.net/test-devtools-registry/5017959833",
-        "5017955612": "http://s3.mds.yandex.net/test-devtools-registry/5017955612",
+        "5062909541": "http://s3.mds.yandex.net/test-devtools-registry/5062909541",
+        "5062909022": "http://s3.mds.yandex.net/test-devtools-registry/5062909022",
+        "5062911545": "http://s3.mds.yandex.net/test-devtools-registry/5062911545",
+        "5062918361": "http://s3.mds.yandex.net/test-devtools-registry/5062918361",
+        "5062915848": "http://s3.mds.yandex.net/test-devtools-registry/5062915848",
         "4825838152": "http://s3.mds.yandex.net/test-devtools-registry/4825838152",
         "4825839069": "http://s3.mds.yandex.net/test-devtools-registry/4825839069",
         "4825834530": "http://s3.mds.yandex.net/test-devtools-registry/4825834530",
@@ -158,11 +158,11 @@
         "5034668332": "yexport for darwin",
         "5034672610": "yexport for darwin-arm64",
         "5034691927": "yexport for linux",
-        "5017941083": "ymake for darwin",
-        "5017941113": "ymake for darwin-arm64",
-        "5017949665": "ymake for linux",
-        "5017959833": "ymake for linux-aarch64",
-        "5017955612": "ymake.exe for win32-clang-cl",
+        "5062909541": "ymake for darwin",
+        "5062909022": "ymake for darwin-arm64",
+        "5062911545": "ymake for linux",
+        "5062918361": "ymake for linux-aarch64",
+        "5062915848": "ymake.exe for win32-clang-cl",
         "4825838152": "yolint for darwin",
         "4825839069": "yolint for darwin-arm64",
         "4825834530": "yolint for linux",
@@ -193,20 +193,20 @@
         "1885743377": {
             "linux-x86_64": "4940633745"
         },
-        "1908457630": {
-            "darwin": "5017941083"
+        "1922156040": {
+            "darwin": "5062909541"
         },
-        "1908457639": {
-            "darwin-arm64": "5017941113"
+        "1922156060": {
+            "darwin-arm64": "5062909022"
         },
-        "1908457617": {
-            "linux": "5017949665"
+        "1922156032": {
+            "linux": "5062911545"
         },
-        "1908457650": {
-            "linux-aarch64": "5017959833"
+        "1922156096": {
+            "linux-aarch64": "5062918361"
         },
-        "1908457621": {
-            "win32-clang-cl": "5017955612"
+        "1922156035": {
+            "win32-clang-cl": "5062915848"
         }
     }
 }

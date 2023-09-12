@@ -65,7 +65,7 @@ SRCS(
 IF (NOT EXPORT_CMAKE)
     RESOURCE(
         monitoring/index.html monitoring/index.html
-        monitoring/static/css/main.a0419d3f.css monitoring/static/css/main.a0419d3f.css
+        monitoring/static/css/main.0997256f.css monitoring/static/css/main.0997256f.css
         monitoring/static/favicon.png monitoring/static/favicon.png
         monitoring/static/js/1058.3df06184.chunk.js monitoring/static/js/1058.3df06184.chunk.js
         monitoring/static/js/1115.1e053b1d.chunk.js monitoring/static/js/1115.1e053b1d.chunk.js
@@ -108,8 +108,8 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/5444.f86e47ff.chunk.js monitoring/static/js/5444.f86e47ff.chunk.js
         monitoring/static/js/5517.a1034916.chunk.js monitoring/static/js/5517.a1034916.chunk.js
         monitoring/static/js/5646.ced0e1ae.chunk.js monitoring/static/js/5646.ced0e1ae.chunk.js
-        monitoring/static/js/5695.d81b70ca.chunk.js monitoring/static/js/5695.d81b70ca.chunk.js
         monitoring/static/js/569.abbf95fd.chunk.js monitoring/static/js/569.abbf95fd.chunk.js
+        monitoring/static/js/5695.d81b70ca.chunk.js monitoring/static/js/5695.d81b70ca.chunk.js
         monitoring/static/js/5748.fa2a8e02.chunk.js monitoring/static/js/5748.fa2a8e02.chunk.js
         monitoring/static/js/5784.26f46213.chunk.js monitoring/static/js/5784.26f46213.chunk.js
         monitoring/static/js/5885.c5ee8345.chunk.js monitoring/static/js/5885.c5ee8345.chunk.js
@@ -146,7 +146,7 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/939.4c5d6b68.chunk.js monitoring/static/js/939.4c5d6b68.chunk.js
         monitoring/static/js/9803.e1567af5.chunk.js monitoring/static/js/9803.e1567af5.chunk.js
         monitoring/static/js/983.18afe3d6.chunk.js monitoring/static/js/983.18afe3d6.chunk.js
-        monitoring/static/js/main.8a169fdc.js monitoring/static/js/main.8a169fdc.js
+        monitoring/static/js/main.6a338807.js monitoring/static/js/main.6a338807.js
         monitoring/static/media/403.271ae19f0d1101a2c67a904146bbd4d3.svg monitoring/static/media/403.271ae19f0d1101a2c67a904146bbd4d3.svg
         monitoring/static/media/403.6367e52f9464706633f52a2488a41958.svg monitoring/static/media/403.6367e52f9464706633f52a2488a41958.svg
         monitoring/static/media/codicon.80a4c25b73c1f97077ed.ttf monitoring/static/media/codicon.80a4c25b73c1f97077ed.ttf

@@ -1,4 +1,4 @@
-#include <ydb/public/sdk/cpp/client/ydb_topic/ut/managed_executor.h>
+#include "managed_executor.h"
 
 namespace NYdb::NTopic::NTests {
 

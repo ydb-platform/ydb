@@ -1,3 +1,5 @@
+#include "ut_utils/topic_sdk_test_setup.h"
+
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/ut_utils.h>
@@ -9,101 +11,6 @@
 namespace NYdb::NTopic::NTests {
 
 Y_UNIT_TEST_SUITE(TxUsage) {
-
-NKikimr::Tests::TServerSettings MakeServerSettings()
-{
-    auto loggerInitializer = [](TTestActorRuntime& runtime) {
-        runtime.SetLogPriority(NKikimrServices::PQ_READ_PROXY, NActors::NLog::PRI_DEBUG);
-        runtime.SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NActors::NLog::PRI_DEBUG);
-        runtime.SetLogPriority(NKikimrServices::PQ_MIRRORER, NActors::NLog::PRI_DEBUG);
-        runtime.SetLogPriority(NKikimrServices::PQ_METACACHE, NActors::NLog::PRI_DEBUG);
-        runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_DEBUG);
-        runtime.SetLogPriority(NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, NActors::NLog::PRI_DEBUG);
-    };
-
-    auto settings = PQSettings(0);
-    settings.SetDomainName("Root");
-    settings.SetEnableTopicServiceTx(true);
-    settings.PQConfig.SetTopicsAreFirstClassCitizen(true);
-    settings.PQConfig.SetRoot("/Root");
-    settings.PQConfig.SetDatabase("/Root");
-    settings.SetLoggerInitializer(loggerInitializer);
-
-    return settings;
-}
-
-class TEnvironment {
-public:
-    TEnvironment();
-
-    void CreateTopic(const TString& path, const TString& consumer);
-
-    TString GetEndpoint() const;
-    TString GetTopicPath(const TString& name) const;
-    TString GetTopicParent() const;
-    TString GetDatabase() const;
-
-    const TDriver& GetDriver();
-
-private:
-    TString Database;
-    ::NPersQueue::TTestServer Server;
-    TMaybe<TDriver> Driver;
-};
-
-TEnvironment::TEnvironment() :
-    Database("/Root"),
-    Server(MakeServerSettings(), false)
-{
-    Server.StartServer(true, GetDatabase());
-}
-
-void TEnvironment::CreateTopic(const TString& path, const TString& consumer)
-{
-    NTopic::TTopicClient client(GetDriver());
-
-    NTopic::TCreateTopicSettings topics;
-    NTopic::TConsumerSettings<NTopic::TCreateTopicSettings> consumers(topics, consumer);
-    topics.AppendConsumers(consumers);
-
-    auto status = client.CreateTopic(path, topics).GetValueSync();
-    UNIT_ASSERT(status.IsSuccess());
-}
-
-TString TEnvironment::GetEndpoint() const
-{
-    return "localhost:" + ToString(Server.GrpcPort);
-}
-
-TString TEnvironment::GetTopicPath(const TString& name) const
-{
-    return GetTopicParent() + "/" + name;
-}
-
-TString TEnvironment::GetTopicParent() const
-{
-    return GetDatabase();
-}
-
-TString TEnvironment::GetDatabase() const
-{
-    return Database;
-}
-
-const TDriver& TEnvironment::GetDriver()
-{
-    if (!Driver) {
-        TDriverConfig config;
-        config.SetEndpoint(GetEndpoint());
-        config.SetDatabase(GetDatabase());
-        config.SetAuthToken("root@builtin");
-        config.SetLog(MakeHolder<TStreamLogBackend>(&Cerr));
-
-        Driver.ConstructInPlace(config);
-    }
-
-    return *Driver;
-}
 
 class TFixture : public NUnitTest::TBaseFixture {
 protected:
@@ -126,29 +33,25 @@ protected:
     void WriteMessage(const TString& data);
 
 protected:
-    const TDriver& GetDriver();
-
-    TString GetTopicPath() const;
-    TString GetMessageGroupId() const;
+    const TDriver& GetDriver() const;
 
 private:
-    TString GetTopicName() const;
-    TString GetConsumerName() const;
-
     template<class E>
     E ReadEvent(TTopicReadSessionPtr reader, NTable::TTransaction& tx);
     template<class E>
     E ReadEvent(TTopicReadSessionPtr reader);
 
-    std::shared_ptr<TEnvironment> Env;
-    TMaybe<TDriver> Driver;
+    std::unique_ptr<TTopicSdkTestSetup> Setup;
+    std::unique_ptr<TDriver> Driver;
 };
 
 void TFixture::SetUp(NUnitTest::TTestContext&)
 {
-    Env = std::make_shared<TEnvironment>();
+    NKikimr::Tests::TServerSettings settings = TTopicSdkTestSetup::MakeServerSettings();
+    settings.SetEnableTopicServiceTx(true);
+    Setup = std::make_unique<TTopicSdkTestSetup>(TEST_CASE_NAME, settings);
 
-    Env->CreateTopic(GetTopicPath(), GetConsumerName());
+    Driver = std::make_unique<TDriver>(Setup->MakeDriver());
 }
 
 NTable::TSession TFixture::CreateSession()
@@ -174,8 +77,8 @@ auto TFixture::CreateReader() -> TTopicReadSessionPtr
 {
     NTopic::TTopicClient client(GetDriver());
     TReadSessionSettings options;
-    options.ConsumerName(GetConsumerName());
-    options.AppendTopics(GetTopicPath());
+    options.ConsumerName(TEST_CONSUMER);
+    options.AppendTopics(TEST_TOPIC);
     return client.CreateReadSession(options);
 }
 
@@ -231,8 +134,8 @@ E TFixture::ReadEvent(TTopicReadSessionPtr reader)
 void TFixture::WriteMessage(const TString& data)
 {
     NTopic::TWriteSessionSettings options;
-    options.Path(GetTopicPath());
-    options.MessageGroupId(GetMessageGroupId());
+    options.Path(TEST_TOPIC);
+    options.MessageGroupId(TEST_MESSAGE_GROUP_ID);
 
     NTopic::TTopicClient client(GetDriver());
     auto session = client.CreateSimpleBlockingWriteSession(options);
@@ -240,29 +143,9 @@ void TFixture::WriteMessage(const TString& data)
     session->Close();
 }
 
-TString TFixture::GetTopicPath() const
+const TDriver& TFixture::GetDriver() const
 {
-    return Env->GetTopicPath(GetTopicName());
-}
-
-TString TFixture::GetTopicName() const
-{
-    return "my-topic";
-}
-
-TString TFixture::GetConsumerName() const
-{
-    return "my-consumer";
-}
-
-TString TFixture::GetMessageGroupId() const
-{
-    return "my-message-group";
-}
-
-const TDriver& TFixture::GetDriver()
-{
-    return Env->GetDriver();
+    return *Driver;
 }
 
 Y_UNIT_TEST_F(SessionAbort, TFixture)
@@ -333,8 +216,8 @@ Y_UNIT_TEST_F(TwoSessionOneConsumer, TFixture)
 Y_UNIT_TEST_F(WriteToTopic, TFixture)
 {
     NTopic::TWriteSessionSettings options;
-    options.Path(GetTopicPath());
-    options.MessageGroupId(GetMessageGroupId());
+    options.Path(TEST_TOPIC);
+    options.MessageGroupId(TEST_MESSAGE_GROUP_ID);
 
     auto session = CreateSession();
     auto tx = BeginTx(session);

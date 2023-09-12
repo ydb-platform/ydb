@@ -1,9 +1,9 @@
+#include "ut_utils/topic_sdk_test_setup.h"
+
 #include <ydb/library/persqueue/topic_parser_public/topic_parser.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/ut/managed_executor.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/common.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/ut_utils.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -16,14 +16,14 @@ namespace NYdb::NTopic::NTests {
 
     Y_UNIT_TEST_SUITE(Describe) {
 
-        void DescribeTopic(NPersQueue::NTests::TPersQueueYdbSdkTestSetup& setup, TTopicClient& client, bool requireStats, bool requireNonEmptyStats, bool requireLocation, bool killTablets)
+        void DescribeTopic(TTopicSdkTestSetup& setup, TTopicClient& client, bool requireStats, bool requireNonEmptyStats, bool requireLocation, bool killTablets)
         {
             TDescribeTopicSettings settings;
             settings.IncludeStats(requireStats);
             settings.IncludeLocation(requireLocation);
 
             {
-                auto result = client.DescribeTopic(setup.GetTestTopicPath(), settings).GetValueSync();
+                auto result = client.DescribeTopic(TEST_TOPIC, settings).GetValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
                 const auto& description = result.GetTopicDescription();
@@ -63,9 +63,9 @@ namespace NYdb::NTopic::NTests {
 
             if (killTablets)
             {
-                setup.GetServer().KillTopicPqTablets(setup.GetTestTopicPath());
+                setup.GetServer().KillTopicPqTablets(setup.GetTopicPath());
 
-                auto result = client.DescribeTopic(setup.GetTestTopicPath(), settings).GetValueSync();
+                auto result = client.DescribeTopic(TEST_TOPIC, settings).GetValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
                 const auto& description = result.GetTopicDescription();
@@ -104,14 +104,14 @@ namespace NYdb::NTopic::NTests {
             }
         }
 
-        void DescribeConsumer(NPersQueue::NTests::TPersQueueYdbSdkTestSetup& setup, TTopicClient& client, bool requireStats, bool requireNonEmptyStats, bool requireLocation, bool killTablets)
+        void DescribeConsumer(TTopicSdkTestSetup& setup, TTopicClient& client, bool requireStats, bool requireNonEmptyStats, bool requireLocation, bool killTablets)
         {
             TDescribeConsumerSettings settings;
             settings.IncludeStats(requireStats);
             settings.IncludeLocation(requireLocation);
 
             {
-                auto result = client.DescribeConsumer(setup.GetTestTopicPath(), ::NPersQueue::SDKTestSetup::GetTestConsumer(), settings).GetValueSync();
+                auto result = client.DescribeConsumer(TEST_TOPIC, TEST_CONSUMER, settings).GetValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
                 const auto& description = result.GetConsumerDescription();
@@ -162,9 +162,9 @@ namespace NYdb::NTopic::NTests {
 
             if (killTablets)
             {
-                setup.GetServer().KillTopicPqTablets(setup.GetTestTopicPath());
+                setup.GetServer().KillTopicPqTablets(setup.GetTopicPath());
 
-                auto result = client.DescribeConsumer(setup.GetTestTopicPath(), ::NPersQueue::SDKTestSetup::GetTestConsumer(), settings).GetValueSync();
+                auto result = client.DescribeConsumer(TEST_TOPIC, TEST_CONSUMER, settings).GetValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
                 const auto& description = result.GetConsumerDescription();
@@ -186,7 +186,7 @@ namespace NYdb::NTopic::NTests {
             }
         }
 
-        void DescribePartition(NPersQueue::NTests::TPersQueueYdbSdkTestSetup& setup, TTopicClient& client, bool requireStats, bool requireNonEmptyStats, bool requireLocation, bool killTablets)
+        void DescribePartition(TTopicSdkTestSetup& setup, TTopicClient& client, bool requireStats, bool requireNonEmptyStats, bool requireLocation, bool killTablets)
         {
             TDescribePartitionSettings settings;
             settings.IncludeStats(requireStats);
@@ -195,7 +195,7 @@ namespace NYdb::NTopic::NTests {
             i64 testPartitionId = 0;
 
             {
-                auto result = client.DescribePartition(setup.GetTestTopicPath(), testPartitionId, settings).GetValueSync();
+                auto result = client.DescribePartition(TEST_TOPIC, testPartitionId, settings).GetValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
                 const auto& description = result.GetPartitionDescription();
@@ -235,9 +235,9 @@ namespace NYdb::NTopic::NTests {
 
             if (killTablets)
             {
-                setup.GetServer().KillTopicPqTablets(setup.GetTestTopicPath());
+                setup.GetServer().KillTopicPqTablets(setup.GetTopicPath());
 
-                auto result = client.DescribePartition(setup.GetTestTopicPath(), testPartitionId, settings).GetValueSync();
+                auto result = client.DescribePartition(TEST_TOPIC, testPartitionId, settings).GetValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
                 const auto& description = result.GetPartitionDescription();
@@ -257,8 +257,8 @@ namespace NYdb::NTopic::NTests {
         }
 
         Y_UNIT_TEST(Basic) {
-            NPersQueue::NTests::TPersQueueYdbSdkTestSetup setup(TEST_CASE_NAME);
-            TTopicClient client(setup.GetDriver());
+            TTopicSdkTestSetup setup(TEST_CASE_NAME);
+            TTopicClient client = setup.MakeClient();
 
             DescribeTopic(setup, client, false, false, false, false);
             DescribeConsumer(setup, client, false, false, false, false);
@@ -266,8 +266,8 @@ namespace NYdb::NTopic::NTests {
         }
 
         Y_UNIT_TEST(Statistics) {
-            NPersQueue::NTests::TPersQueueYdbSdkTestSetup setup(TEST_CASE_NAME);
-            TTopicClient client(setup.GetDriver());
+            TTopicSdkTestSetup setup(TEST_CASE_NAME);
+            TTopicClient client = setup.MakeClient();
 
             // Get empty description
             DescribeTopic(setup, client, true, false, false, false);
@@ -276,7 +276,7 @@ namespace NYdb::NTopic::NTests {
 
             // Write a message
             {
-                auto writeSettings = TWriteSessionSettings().Path(setup.GetTestTopicPath()).MessageGroupId(::NPersQueue::SDKTestSetup::GetTestMessageGroupId());
+                auto writeSettings = TWriteSessionSettings().Path(TEST_TOPIC).MessageGroupId(TEST_MESSAGE_GROUP_ID);
                 auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
                 std::string message(10_KB, 'x');
                 UNIT_ASSERT(writeSession->Write(message));
@@ -285,9 +285,7 @@ namespace NYdb::NTopic::NTests {
 
             // Read a message
             {
-                auto readSettings = TReadSessionSettings()
-                                        .ConsumerName(setup.GetTestConsumer())
-                                        .AppendTopics(setup.GetTestTopicPath());
+                auto readSettings = TReadSessionSettings().ConsumerName(TEST_CONSUMER).AppendTopics(TEST_TOPIC);
                 auto readSession = client.CreateReadSession(readSettings);
 
                 // Event 1: start partition session
@@ -328,8 +326,8 @@ namespace NYdb::NTopic::NTests {
         }
 
         Y_UNIT_TEST(Location) {
-            NPersQueue::NTests::TPersQueueYdbSdkTestSetup setup(TEST_CASE_NAME);
-            TTopicClient client(setup.GetDriver());
+            TTopicSdkTestSetup setup(TEST_CASE_NAME);
+            TTopicClient client = setup.MakeClient();
 
             DescribeTopic(setup, client, false, false, true, false);
             DescribeConsumer(setup, client, false, false, true, false);

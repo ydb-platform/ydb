@@ -1,6 +1,6 @@
 #include <ydb/public/sdk/cpp/client/ydb_federated_topic/federated_topic.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/ut/managed_executor.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/ut/ut_utils/managed_executor.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
 

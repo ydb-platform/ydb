@@ -1,13 +1,14 @@
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include "ut_utils/managed_executor.h"
+#include "ut_utils/topic_sdk_test_setup.h"
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/ut_utils.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/ut/managed_executor.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/common.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/write_session.h>
-
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/ut_utils.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/write_session.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -18,8 +19,8 @@
 
 namespace NYdb::NTopic::NTests {
 
-void WriteAndReadToEndWithRestarts(NYdb::NTopic::TReadSessionSettings readSettings, NPersQueue::TWriteSessionSettings writeSettings, std::string message, ui32 count, std::shared_ptr<NPersQueue::NTests::TPersQueueYdbSdkTestSetup> setup, TIntrusivePtr<TManagedExecutor> decompressor) {
-    auto& client = setup->GetPersQueueClient();
+void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSessionSettings writeSettings, const std::string& message, ui32 count, TTopicSdkTestSetup& setup, TIntrusivePtr<TManagedExecutor> decompressor) {
+    auto client = setup.MakeClient();
     auto session = client.CreateSimpleBlockingWriteSession(writeSettings);
 
     for (ui32 i = 1; i <= count; ++i) {
@@ -29,10 +30,9 @@ void WriteAndReadToEndWithRestarts(NYdb::NTopic::TReadSessionSettings readSettin
     bool res = session->Close(TDuration::Seconds(10));
     UNIT_ASSERT(res);
 
-    std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
+    std::shared_ptr<IReadSession> ReadSession;
 
-    // Create topic client.
-    NYdb::NTopic::TTopicClient topicClient(setup->GetDriver());
+    TTopicClient topicClient = setup.MakeClient();
 
 
     auto WaitTasks = [&](auto f, size_t c) {
@@ -61,7 +61,7 @@ void WriteAndReadToEndWithRestarts(NYdb::NTopic::TReadSessionSettings readSettin
         WaitPlannedTasks(e, n);
         size_t completed = e->GetExecutedCount();
 
-        setup->GetServer().KillTopicPqrbTablet(setup->GetTestTopicPath());
+        setup.GetServer().KillTopicPqrbTablet(setup.GetTopicPath());
         Sleep(TDuration::MilliSeconds(100));
 
         e->StartFuncs(tasks);
@@ -76,7 +76,7 @@ void WriteAndReadToEndWithRestarts(NYdb::NTopic::TReadSessionSettings readSettin
     auto f = checkedPromise.GetFuture();
     readSettings.EventHandlers_.SimpleDataHandlers(
         [&]
-        (NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& ev) mutable {
+        (TReadSessionEvent::TDataReceivedEvent& ev) mutable {
         AtomicSet(lastOffset, ev.GetMessages().back().GetOffset());
         Cerr << ">>> TEST: last offset = " << lastOffset << Endl;
     });
@@ -93,10 +93,10 @@ void WriteAndReadToEndWithRestarts(NYdb::NTopic::TReadSessionSettings readSettin
 
 Y_UNIT_TEST_SUITE(BasicUsage) {
     Y_UNIT_TEST(ConnectToYDB) {
-        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
+        TTopicSdkTestSetup setup(TEST_CASE_NAME);
 
         NYdb::TDriverConfig cfg;
-        cfg.SetEndpoint(TStringBuilder() << "invalid:" << setup->GetGrpcPort());
+        cfg.SetEndpoint(TStringBuilder() << "invalid:" << setup.GetServer().GrpcPort);
         cfg.SetDatabase("/Invalid");
         cfg.SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG));
         auto driver = NYdb::TDriver(cfg);
@@ -105,8 +105,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             TTopicClient client(driver);
 
             auto writeSettings = TWriteSessionSettings()
-                .Path(setup->GetTestTopic())
-                .MessageGroupId("group_id")
+                .Path(TEST_TOPIC)
+                .MessageGroupId(TEST_MESSAGE_GROUP_ID)
                 // TODO why retries? see LOGBROKER-8490
                 .RetryPolicy(IRetryPolicy::GetNoRetryPolicy());
             auto writeSession = client.CreateWriteSession(writeSettings);
@@ -118,13 +118,13 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         {
             auto settings = TTopicClientSettings()
                 .Database({"/Root"})
-                .DiscoveryEndpoint({TStringBuilder() << "localhost:" << setup->GetGrpcPort()});
+                .DiscoveryEndpoint({TStringBuilder() << "localhost:" << setup.GetServer().GrpcPort});
 
             TTopicClient client(driver, settings);
 
             auto writeSettings = TWriteSessionSettings()
-                .Path(setup->GetTestTopic())
-                .MessageGroupId("group_id")
+                .Path(TEST_TOPIC)
+                .MessageGroupId(TEST_MESSAGE_GROUP_ID)
                 .RetryPolicy(IRetryPolicy::GetNoRetryPolicy());
             auto writeSession = client.CreateWriteSession(writeSettings);
 
@@ -135,22 +135,22 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
 
     Y_UNIT_TEST(WriteRead) {
-        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
-        TTopicClient client(setup->GetDriver());
-
+        TTopicSdkTestSetup setup(TEST_CASE_NAME);
+        TTopicClient client = setup.MakeClient();
+        
         {
             auto writeSettings = TWriteSessionSettings()
-                        .Path(setup->GetTestTopic())
-                        .ProducerId(setup->GetTestMessageGroupId())
-                        .MessageGroupId(setup->GetTestMessageGroupId());
+                        .Path(TEST_TOPIC)
+                        .ProducerId(TEST_MESSAGE_GROUP_ID)
+                        .MessageGroupId(TEST_MESSAGE_GROUP_ID);
             auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
             UNIT_ASSERT(writeSession->Write("message_using_MessageGroupId"));
             writeSession->Close();
         }
         {
             auto writeSettings = TWriteSessionSettings()
-                        .Path(setup->GetTestTopic())
-                        .ProducerId(setup->GetTestMessageGroupId())
+                        .Path(TEST_TOPIC)
+                        .ProducerId(TEST_MESSAGE_GROUP_ID)
                         .PartitionId(0);
             auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
             UNIT_ASSERT(writeSession->Write("message_using_PartitionId"));
@@ -159,8 +159,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         {
             auto readSettings = TReadSessionSettings()
-                .ConsumerName(setup->GetTestConsumer())
-                .AppendTopics(setup->GetTestTopic());
+                .ConsumerName(TEST_CONSUMER)
+                .AppendTopics(TEST_TOPIC);
             auto readSession = client.CreateReadSession(readSettings);
 
             auto event = readSession->GetEvent(true);
@@ -183,23 +183,24 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
     }
 
     Y_UNIT_TEST(ReadWithoutConsumerWithRestarts) {
-        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
-        auto compressor = new NPersQueue::TSyncExecutor();
+        TTopicSdkTestSetup setup(TEST_CASE_NAME);
+        auto compressor = new TSyncExecutor();
         auto decompressor = CreateThreadPoolManagedExecutor(1);
 
-        NYdb::NTopic::TReadSessionSettings readSettings;
-        NYdb::NTopic::TTopicReadSettings topic = setup->GetTestTopic();
+        TReadSessionSettings readSettings;
+        TTopicReadSettings topic = TEST_TOPIC;
         topic.AppendPartitionIds(0);
         readSettings
             .WithoutConsumer()
             .MaxMemoryUsageBytes(1_MB)
             .DecompressionExecutor(decompressor)
             .AppendTopics(topic);
-
-        NPersQueue::TWriteSessionSettings writeSettings;
+            
+        TWriteSessionSettings writeSettings;
         writeSettings
-            .Path(setup->GetTestTopic()).MessageGroupId("src_id")
-            .Codec(NPersQueue::ECodec::RAW)
+            .Path(TEST_TOPIC)
+            .MessageGroupId(TEST_MESSAGE_GROUP_ID)
+            .Codec(NTopic::ECodec::RAW)
             .CompressionExecutor(compressor);
 
 
@@ -210,19 +211,19 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
     }
 
     Y_UNIT_TEST(MaxByteSizeEqualZero) {
-        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
-        TTopicClient client(setup->GetDriver());
+        TTopicSdkTestSetup setup(TEST_CASE_NAME);
+        TTopicClient client = setup.MakeClient();
 
         auto writeSettings = TWriteSessionSettings()
-            .Path(setup->GetTestTopic())
-            .MessageGroupId("group_id");
+            .Path(TEST_TOPIC)
+            .MessageGroupId(TEST_MESSAGE_GROUP_ID);
         auto writeSession = client.CreateSimpleBlockingWriteSession(writeSettings);
         UNIT_ASSERT(writeSession->Write("message"));
         writeSession->Close();
 
         auto readSettings = TReadSessionSettings()
-            .ConsumerName(setup->GetTestConsumer())
-            .AppendTopics(setup->GetTestTopic());
+            .ConsumerName(TEST_CONSUMER)
+            .AppendTopics(TEST_TOPIC);
         auto readSession = client.CreateReadSession(readSettings);
 
         auto event = readSession->GetEvent(true);
@@ -246,7 +247,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
 
         NPersQueue::TWriteSessionSettings writeSettings;
-        writeSettings.Path(setup->GetTestTopic()).MessageGroupId("src_id");
+        writeSettings.Path(setup->GetTestTopic()).MessageGroupId(TEST_MESSAGE_GROUP_ID);
         writeSettings.Codec(NPersQueue::ECodec::RAW);
         NPersQueue::IExecutor::TPtr executor = new NPersQueue::TSyncExecutor();
         writeSettings.CompressionExecutor(executor);
@@ -277,13 +278,13 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         }
         session->Close();
 
-        std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
+        std::shared_ptr<IReadSession> ReadSession;
 
         // Create topic client.
         NYdb::NTopic::TTopicClient topicClient(setup->GetDriver());
 
         // Create read session.
-        NYdb::NTopic::TReadSessionSettings readSettings;
+        TReadSessionSettings readSettings;
         readSettings
             .ConsumerName(setup->GetTestConsumer())
             .MaxMemoryUsageBytes(1_MB)
@@ -299,7 +300,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         readSettings.EventHandlers_.SimpleDataHandlers(
             // [checkedPromise = std::move(checkedPromise), &check, &sentMessages, &totalReceived]
             [&]
-            (NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& ev) mutable {
+            (TReadSessionEvent::TDataReceivedEvent& ev) mutable {
             Y_VERIFY_S(AtomicGet(check) != 0, "check is false");
             auto& messages = ev.GetMessages();
             for (size_t i = 0u; i < messages.size(); ++i) {
@@ -321,7 +322,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT(status.GetValueSync().IsSuccess());
 
         auto describeConsumerSettings = TDescribeConsumerSettings().IncludeStats(true);
-        auto result = topicClient.DescribeConsumer("/Root/PQ/rt3.dc1--" + setup->GetTestTopic(), setup->GetTestConsumer(), describeConsumerSettings).GetValueSync();
+        auto result = topicClient.DescribeConsumer(setup->GetTestTopicPath(), setup->GetTestConsumer(), describeConsumerSettings).GetValueSync();
         UNIT_ASSERT(result.IsSuccess());
 
         auto description = result.GetConsumerDescription();
@@ -333,21 +334,21 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
 
     Y_UNIT_TEST(ReadWithRestarts) {
-        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
-        auto compressor = new NPersQueue::TSyncExecutor();
+        TTopicSdkTestSetup setup(TEST_CASE_NAME);
+        auto compressor = new TSyncExecutor();
         auto decompressor = CreateThreadPoolManagedExecutor(1);
 
-        NYdb::NTopic::TReadSessionSettings readSettings;
+        TReadSessionSettings readSettings;
         readSettings
-            .ConsumerName(setup->GetTestConsumer())
+            .ConsumerName(TEST_CONSUMER)
             .MaxMemoryUsageBytes(1_MB)
             .DecompressionExecutor(decompressor)
-            .AppendTopics(setup->GetTestTopic());
+            .AppendTopics(TEST_TOPIC);
 
-        NPersQueue::TWriteSessionSettings writeSettings;
+        TWriteSessionSettings writeSettings;
         writeSettings
-            .Path(setup->GetTestTopic()).MessageGroupId("src_id")
-            .Codec(NPersQueue::ECodec::RAW)
+            .Path(TEST_TOPIC).MessageGroupId(TEST_MESSAGE_GROUP_ID)
+            .Codec(NTopic::ECodec::RAW)
             .CompressionExecutor(compressor);
 
 
@@ -358,13 +359,13 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
     }
 
     Y_UNIT_TEST(SessionNotDestroyedWhileCompressionInFlight) {
-        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
+        TTopicSdkTestSetup setup(TEST_CASE_NAME);
 
         // controlled executor
         auto stepByStepExecutor = CreateThreadPoolManagedExecutor(1);
 
         // Create topic client.
-        NYdb::NTopic::TTopicClient topicClient(setup->GetDriver());
+        TTopicClient topicClient = setup.MakeClient();
 
         NThreading::TPromise<void> promiseToWrite = NThreading::NewPromise<void>();
         auto futureWrite = promiseToWrite.GetFuture();
@@ -372,18 +373,18 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         NThreading::TPromise<void> promiseToRead = NThreading::NewPromise<void>();
         auto futureRead = promiseToRead.GetFuture();
 
-        NYdb::NTopic::TWriteSessionSettings writeSettings;
-        writeSettings.Path(setup->GetTestTopic())
-                     .MessageGroupId("src_id")
-                     .ProducerId("src_id")
+        TWriteSessionSettings writeSettings;
+        writeSettings.Path(TEST_TOPIC)
+                     .MessageGroupId(TEST_MESSAGE_GROUP_ID)
+                     .ProducerId(TEST_MESSAGE_GROUP_ID)
                      .CompressionExecutor(stepByStepExecutor);
 
         // Create read session.
-        NYdb::NTopic::TReadSessionSettings readSettings;
+        TReadSessionSettings readSettings;
         readSettings
-            .ConsumerName(setup->GetTestConsumer())
+            .ConsumerName(TEST_CONSUMER)
             .MaxMemoryUsageBytes(1_MB)
-            .AppendTopics(setup->GetTestTopic())
+            .AppendTopics(TEST_TOPIC)
             .DecompressionExecutor(stepByStepExecutor);
 
         auto f = std::async(std::launch::async,
@@ -405,7 +406,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                 auto future = promise.GetFuture();
 
                 readSettings.EventHandlers_.SimpleDataHandlers(
-                    [promise = std::move(promise)](NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& ev) mutable {
+                    [promise = std::move(promise)](TReadSessionEvent::TDataReceivedEvent& ev) mutable {
                     ev.Commit();
                     promise.SetValue();
                     Cerr << ">>>TEST: get read event " << Endl;
@@ -465,13 +466,13 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
     }
 
     Y_UNIT_TEST(SessionNotDestroyedWhileUserEventHandlingInFlight) {
-        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
+        TTopicSdkTestSetup setup(TEST_CASE_NAME);
 
         // controlled executor
         auto stepByStepExecutor = CreateThreadPoolManagedExecutor(1);
 
         // Create topic client.
-        NYdb::NTopic::TTopicClient topicClient(setup->GetDriver());
+        TTopicClient topicClient = setup.MakeClient();
 
         // NThreading::TPromise<void> promiseToWrite = NThreading::NewPromise<void>();
         // auto futureWrite = promiseToWrite.GetFuture();
@@ -480,9 +481,9 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto futureRead = promiseToRead.GetFuture();
 
         auto writeSettings = TWriteSessionSettings()
-            .Path(setup->GetTestTopic())
-            .MessageGroupId("src_id")
-            .ProducerId("src_id");
+            .Path(TEST_TOPIC)
+            .MessageGroupId(TEST_MESSAGE_GROUP_ID)
+            .ProducerId(TEST_MESSAGE_GROUP_ID);
 
         auto writeSession = topicClient.CreateSimpleBlockingWriteSession(writeSettings);
         std::string message(2'000, 'x');
@@ -495,9 +496,9 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         // Create read session.
         auto readSettings = TReadSessionSettings()
-            .ConsumerName(setup->GetTestConsumer())
+            .ConsumerName(TEST_CONSUMER)
             .MaxMemoryUsageBytes(1_MB)
-            .AppendTopics(setup->GetTestTopic());
+            .AppendTopics(TEST_TOPIC);
 
         readSettings.EventHandlers_
             .HandlersExecutor(stepByStepExecutor);
@@ -531,7 +532,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                 auto future = promise.GetFuture();
 
                 readSettings.EventHandlers_.SimpleDataHandlers(
-                    [promise = std::move(promise)](NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& ev) mutable {
+                    [promise = std::move(promise)](TReadSessionEvent::TDataReceivedEvent& ev) mutable {
                     Cerr << ">>>TEST: in SimpleDataHandlers " << Endl;
                     ev.Commit();
                     promise.SetValue();

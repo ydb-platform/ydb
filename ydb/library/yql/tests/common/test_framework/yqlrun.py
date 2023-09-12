@@ -26,7 +26,7 @@ FIX_DIR_PREFIXES = {
 
 class YQLRun(object):
 
-    def __init__(self, udfs_dir=None, prov='yt', use_sql2yql=False, keep_temp=True, binary=None, gateway_config=None, fs_config=None, extra_args=[], cfg_dir=None):
+    def __init__(self, udfs_dir=None, prov='yt', use_sql2yql=False, keep_temp=True, binary=None, gateway_config=None, fs_config=None, extra_args=[], cfg_dir=None, support_udfs=True):
         if binary is None:
             self.yqlrun_binary = yql_utils.yql_binary_path(os.getenv('YQL_YQLRUN_PATH') or 'ydb/library/yql/tools/yqlrun/yqlrun')
         else:
@@ -43,10 +43,14 @@ class YQLRun(object):
         except Exception:
             self.udf_resolver_binary = None
 
-        if udfs_dir is None:
-            self.udfs_path = yql_utils.get_udfs_path()
+        if support_udfs:
+            if udfs_dir is None:
+                self.udfs_path = yql_utils.get_udfs_path()
+            else:
+                self.udfs_path = udfs_dir
         else:
-            self.udfs_path = udfs_dir
+            self.udfs_path = None
+
         res_dir = yql_utils.get_yql_dir(prefix='yqlrun_')
         self.res_dir = res_dir
         self.tables = {}
@@ -147,12 +151,14 @@ class YQLRun(object):
             '--result-file=%(results_file)s ' \
             '--plan-file=%(plan_file)s ' \
             '--err-file=%(err_file)s ' \
-            '--udfs-dir=%(udfs_dir)s ' \
             '--gateways=%(prov)s ' \
             '--syntax-version=%(syntax_version)d ' \
             '--tmp-dir=%(res_dir)s ' \
             '--gateways-cfg=%(gateways_cfg_file)s ' \
             '--fs-cfg=%(fs_cfg_file)s ' % locals()
+
+        if self.udfs_path is not None:
+            cmd += '--udfs-dir=%(udfs_dir)s ' % locals()
 
         if ansi_lexer:
             cmd += '--ansi-lexer '

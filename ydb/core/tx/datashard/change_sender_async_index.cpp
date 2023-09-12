@@ -2,6 +2,7 @@
 #include "change_exchange_impl.h"
 #include "change_sender_common_ops.h"
 #include "change_sender_monitoring.h"
+#include "datashard_impl.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/services/services.pb.h>
@@ -58,20 +59,32 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
     /// Handshake
 
     void Handshake() {
-        auto ev = MakeHolder<TEvChangeExchange::TEvHandshake>();
-        ev->Record.SetOrigin(DataShard.TabletId);
-        ev->Record.SetGeneration(DataShard.Generation);
-
-        Send(LeaderPipeCache, new TEvPipeCache::TEvForward(ev.Release(), ShardId, true));
+        Send(DataShard.ActorId, new TDataShard::TEvPrivate::TEvConfirmReadonlyLease, 0, ++LeaseConfirmationCookie);
         Become(&TThis::StateHandshake);
     }
 
     STATEFN(StateHandshake) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(TDataShard::TEvPrivate::TEvReadonlyLeaseConfirmation, Handle);
             hFunc(TEvChangeExchange::TEvStatus, Handshake);
         default:
             return StateBase(ev);
         }
+    }
+
+    void Handle(TDataShard::TEvPrivate::TEvReadonlyLeaseConfirmation::TPtr& ev) {
+        if (ev->Cookie != LeaseConfirmationCookie) {
+            LOG_W("Readonly lease confirmation cookie mismatch"
+                << ": expected# " << LeaseConfirmationCookie
+                << ", got# " << ev->Cookie);
+            return;
+        }
+
+        auto handshake = MakeHolder<TEvChangeExchange::TEvHandshake>();
+        handshake->Record.SetOrigin(DataShard.TabletId);
+        handshake->Record.SetGeneration(DataShard.Generation);
+
+        Send(LeaderPipeCache, new TEvPipeCache::TEvForward(handshake.Release(), ShardId, true));
     }
 
     void Handshake(TEvChangeExchange::TEvStatus::TPtr& ev) {
@@ -266,6 +279,7 @@ public:
         , ShardId(shardId)
         , IndexTablePathId(indexTablePathId)
         , TagMap(tagMap)
+        , LeaseConfirmationCookie(0)
         , LastRecordOrder(0)
     {
     }
@@ -292,6 +306,7 @@ private:
     mutable TMaybe<TString> LogPrefix;
 
     TActorId LeaderPipeCache;
+    ui64 LeaseConfirmationCookie;
     ui64 LastRecordOrder;
 
     // Retry on delivery problem

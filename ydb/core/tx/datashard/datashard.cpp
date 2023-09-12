@@ -2224,6 +2224,10 @@ void TDataShard::SendWithConfirmedReadOnlyLease(
     SendWithConfirmedReadOnlyLease(TMonotonic::Zero(), target, event, cookie, sessionId);
 }
 
+void TDataShard::Handle(TEvPrivate::TEvConfirmReadonlyLease::TPtr& ev, const TActorContext&) {
+    SendWithConfirmedReadOnlyLease(ev->Get()->Timestamp, ev->Sender, new TEvPrivate::TEvReadonlyLeaseConfirmation, ev->Cookie);
+}
+
 void TDataShard::SendImmediateReadResult(
     TMonotonic readTime,
     const TActorId& target,

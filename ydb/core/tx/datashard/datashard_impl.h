@@ -301,6 +301,8 @@ class TDataShard
     friend class TTxStartMvccStateChange;
     friend class TTxExecuteMvccStateChange;
 
+    friend class TAsyncIndexChangeSenderShard;
+
     class TTxPersistSubDomainPathId;
     class TTxPersistSubDomainOutOfSpace;
 
@@ -347,6 +349,8 @@ class TDataShard
             EvCdcStreamScanContinue,
             EvRestartOperation, // used to restart after an aborted scan (e.g. backup)
             EvChangeExchangeExecuteHandshakes,
+            EvConfirmReadonlyLease,
+            EvReadonlyLeaseConfirmation,
             EvEnd
         };
 
@@ -529,6 +533,17 @@ class TDataShard
         };
 
         struct TEvChangeExchangeExecuteHandshakes : public TEventLocal<TEvChangeExchangeExecuteHandshakes, EvChangeExchangeExecuteHandshakes> {};
+
+        struct TEvConfirmReadonlyLease : public TEventLocal<TEvConfirmReadonlyLease, EvConfirmReadonlyLease> {
+            explicit TEvConfirmReadonlyLease(TMonotonic ts = TMonotonic::Zero())
+                : Timestamp(ts)
+            {
+            }
+
+            const TMonotonic Timestamp;
+        };
+
+        struct TEvReadonlyLeaseConfirmation: public TEventLocal<TEvReadonlyLeaseConfirmation, EvReadonlyLeaseConfirmation> {};
     };
 
     struct Schema : NIceDb::Schema {
@@ -1302,6 +1317,8 @@ class TDataShard
     void Handle(TEvDataShard::TEvGetOpenTxs::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvRemoveLockChangeRecords::TPtr& ev, const TActorContext& ctx);
+
+    void Handle(TEvPrivate::TEvConfirmReadonlyLease::TPtr& ev, const TActorContext& ctx);
 
     void HandleByReplicationSourceOffsetsServer(STATEFN_SIG);
 
@@ -2922,6 +2939,7 @@ protected:
             HFunc(TEvLongTxService::TEvLockStatus, Handle);
             HFunc(TEvDataShard::TEvGetOpenTxs, Handle);
             HFuncTraced(TEvPrivate::TEvRemoveLockChangeRecords, Handle);
+            HFunc(TEvPrivate::TEvConfirmReadonlyLease, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 ALOG_WARN(NKikimrServices::TX_DATASHARD,

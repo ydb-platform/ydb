@@ -34,6 +34,7 @@ void TKafkaMetadataActor::Bootstrap(const TActorContext& ctx) {
         auto namesIter = partitionActors.find(topicName);
         if (namesIter.IsEnd()) {
             child = SendTopicRequest(reqTopic);
+            partitionActors[topicName] = child;
         } else {
             child = namesIter->second;
         }
@@ -101,19 +102,6 @@ void TKafkaMetadataActor::AddTopicResponse(TMetadataResponseData::TMetadataRespo
                 Response->Brokers.emplace_back(std::move(broker));
             }
         }
-    }
-}
-
-EKafkaErrors ConvertErrorCode(Ydb::StatusIds::StatusCode status) {
-    switch (status) {
-        case Ydb::StatusIds::BAD_REQUEST:
-            return EKafkaErrors::INVALID_REQUEST;
-        case Ydb::StatusIds::SCHEME_ERROR:
-            return EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION;
-        case Ydb::StatusIds::UNAUTHORIZED:
-            return EKafkaErrors::TOPIC_AUTHORIZATION_FAILED;
-        default:
-            return EKafkaErrors::UNKNOWN_SERVER_ERROR;
     }
 }
 

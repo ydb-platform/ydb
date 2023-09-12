@@ -85,8 +85,10 @@ struct TDescribeTopicActorSettings {
         , RequireLocation(requireLocation)
     {}
     
-    static TDescribeTopicActorSettings DescribeTopic(bool requireStats, bool requireLocation) {
-        return TDescribeTopicActorSettings{EMode::DescribeTopic, requireStats, requireLocation};
+    static TDescribeTopicActorSettings DescribeTopic(bool requireStats, bool requireLocation, const TVector<ui32>& partitions = {}) {
+        TDescribeTopicActorSettings res{EMode::DescribeTopic, requireStats, requireLocation};
+        res.Partitions = partitions;
+        return res;
     }
 
     static TDescribeTopicActorSettings DescribeConsumer(const TString& consumer, bool requireStats, bool requireLocation)
@@ -114,13 +116,13 @@ class TDescribeTopicActorImpl
 {
 protected:
     struct TTabletInfo {
-        ui64 TabletId;
+        ui64 TabletId = 0;
         std::vector<ui32> Partitions;
         TActorId Pipe;
         ui32 NodeId = 0;
         ui32 RetriesLeft = 3;
         bool ResultRecived = false;
-
+        ui64 Generation = 0;
         TTabletInfo() = default;
         TTabletInfo(ui64 tabletId)
             : TabletId(tabletId)

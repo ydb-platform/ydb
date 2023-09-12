@@ -171,12 +171,10 @@ protected:
     }
 
     void SendRequestMetrics(const TActorContext& ctx) {
-        if (Context) {
-            ctx.Send(MakeKafkaMetricsServiceID(),
-                        new TEvKafka::TEvUpdateCounter(1, BuildLabels(Context, Request->Method, "", "api.kafka.request.count", "")));
-            ctx.Send(MakeKafkaMetricsServiceID(),
+        ctx.Send(MakeKafkaMetricsServiceID(),
+                    new TEvKafka::TEvUpdateCounter(1, BuildLabels(Context, Request->Method, "", "api.kafka.request.count", "")));
+        ctx.Send(MakeKafkaMetricsServiceID(),
                         new TEvKafka::TEvUpdateCounter(Request->Size, BuildLabels(Context, Request->Method, "", "api.kafka.request.bytes", "")));
-        }
     }
 
     void SendResponseMetrics(const TString method, const TInstant requestStartTime, i32 bytes, EKafkaErrors errorCode, const TActorContext& ctx) {
@@ -244,11 +242,15 @@ protected:
         Register(CreateKafkaSaslHandshakeActor(Context, header->CorrelationId, message));
     }
 
+    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TListOffsetsRequestData>& message) {
+        Register(CreateKafkaListOffsetsActor(Context, header->CorrelationId, message));
+    }
+
     template<class T>
     TMessagePtr<T> Cast(std::shared_ptr<Msg>& request) {
         return TMessagePtr<T>(request->Buffer, request->Message);
     }
-
+   
     void ProcessRequest(const TActorContext& ctx) {
         KAFKA_LOG_D("process message: ApiKey=" << Request->Header.RequestApiKey << ", ExpectedSize=" << Request->ExpectedSize
                                                << ", Size=" << Request->Size);
@@ -283,6 +285,10 @@ protected:
             case SASL_AUTHENTICATE:
                 HandleMessage(&Request->Header, Cast<TSaslAuthenticateRequestData>(Request));
                 break;
+
+            case LIST_OFFSETS:
+                HandleMessage(&Request->Header, Cast<TListOffsetsRequestData>(Request));
+                return;
 
             default:
                 KAFKA_LOG_ERROR("Unsupported message: ApiKey=" << Request->Header.RequestApiKey);

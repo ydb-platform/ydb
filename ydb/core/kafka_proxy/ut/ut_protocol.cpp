@@ -365,6 +365,26 @@ public:
         return WriteAndRead<TProduceResponseData>(header, request);
     }
 
+    TListOffsetsResponseData::TPtr ListOffsets(ui64 partitionsCount, const TString& topic) {
+        Cerr << ">>>>> TListOffsetsResponseData\n";
+
+        TRequestHeaderData header = Header(NKafka::EApiKey::LIST_OFFSETS, 4);
+
+        TListOffsetsRequestData request;
+        request.IsolationLevel = 0;
+        request.ReplicaId = 0;
+        NKafka::TListOffsetsRequestData::TListOffsetsTopic newTopic{};
+        newTopic.Name = topic;
+        for(ui64 i = 0; i < partitionsCount; i++) {
+            NKafka::TListOffsetsRequestData::TListOffsetsTopic::TListOffsetsPartition newPartition{};
+            newPartition.PartitionIndex = i;
+            newPartition.Timestamp = -2;
+            newTopic.Partitions.emplace_back(newPartition);
+        }
+        request.Topics.emplace_back(newTopic);
+        return WriteAndRead<TListOffsetsResponseData>(header, request);
+    }
+
     void UnknownApiKey() {
         Cerr << ">>>>> Unknown apiKey\n";
 
@@ -419,6 +439,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TInsecureTestServer testServer("2");
 
         TString topicName = "/Root/topic-0-test";
+        ui64 minActivePartitions = 10;
 
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
         {
@@ -426,7 +447,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 pqClient
                     .CreateTopic(topicName,
                                  NYdb::NTopic::TCreateTopicSettings()
-                                    .PartitioningSettings(10, 100)
+                                    .PartitioningSettings(minActivePartitions, 100)
                                     .BeginAddConsumer("consumer-0").EndAddConsumer())
                     .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
@@ -459,6 +480,15 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.SaslAuthenticate("ouruser@/Root", "ourUserPassword");
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+
+        {
+            auto msg = client.ListOffsets(minActivePartitions, topicName);
+            for (auto& topic: msg->Topics) {
+                for (auto& partition: topic.Partitions) {
+                    UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+                }
+            }
         }
 
         {

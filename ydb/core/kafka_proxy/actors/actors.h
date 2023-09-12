@@ -70,11 +70,25 @@ inline bool RequireAuthentication(EApiKey apiKey) {
     return !(EApiKey::API_VERSIONS == apiKey || EApiKey::SASL_HANDSHAKE == apiKey || EApiKey::SASL_AUTHENTICATE == apiKey);
 }
 
+inline EKafkaErrors ConvertErrorCode(Ydb::StatusIds::StatusCode status) {
+    switch (status) {
+        case Ydb::StatusIds::BAD_REQUEST:
+            return EKafkaErrors::INVALID_REQUEST;
+        case Ydb::StatusIds::SCHEME_ERROR:
+            return EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION;
+        case Ydb::StatusIds::UNAUTHORIZED:
+            return EKafkaErrors::TOPIC_AUTHORIZATION_FAILED;
+        default:
+            return EKafkaErrors::UNKNOWN_SERVER_ERROR;
+    }
+}
+
 NActors::IActor* CreateKafkaApiVersionsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TApiVersionsRequestData>& message);
 NActors::IActor* CreateKafkaInitProducerIdActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TInitProducerIdRequestData>& message);
 NActors::IActor* CreateKafkaMetadataActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TMetadataRequestData>& message);
 NActors::IActor* CreateKafkaProduceActor(const TContext::TPtr context);
 NActors::IActor* CreateKafkaSaslHandshakeActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TSaslHandshakeRequestData>& message);
 NActors::IActor* CreateKafkaSaslAuthActor(const TContext::TPtr context, const ui64 correlationId, const NKikimr::NRawSocket::TSocketDescriptor::TSocketAddressType address, const TMessagePtr<TSaslAuthenticateRequestData>& message);
+NActors::IActor* CreateKafkaListOffsetsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TListOffsetsRequestData>& message);
 
 } // namespace NKafka

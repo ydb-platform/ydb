@@ -1,4 +1,4 @@
-    #include "schema_actors.h"
+#include "schema_actors.h"
 
 #include "persqueue_utils.h"
 
@@ -530,6 +530,7 @@ void TDescribeTopicActorImpl::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev
         auto it = Tablets.find(ev->Get()->TabletId);
         if (it == Tablets.end()) return;
         it->second.NodeId = ev->Get()->ServerId.NodeId();
+        it->second.Generation = ev->Get()->Generation;
     }
 }
 
@@ -1232,9 +1233,12 @@ void TDescribeConsumerActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::
 bool TDescribeTopicActorImpl::ProcessTablets(
         const NKikimrSchemeOp::TPersQueueGroupDescription& pqDescr, const TActorContext& ctx
 ) {
+    std::unordered_set<ui32> partitionSet(Settings.Partitions.begin(), Settings.Partitions.end());
     auto partitionFilter = [&] (ui32 partId) {
         if (Settings.Mode == TDescribeTopicActorSettings::EMode::DescribePartitions) {
             return Settings.RequireStats && partId == Settings.Partitions[0];
+        } else if (Settings.Mode == TDescribeTopicActorSettings::EMode::DescribeTopic) {
+            return Settings.RequireStats && (partitionSet.empty() || partitionSet.find(partId) != partitionSet.end());
         } else {
             return Settings.RequireStats;
         }

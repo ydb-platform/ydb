@@ -2,6 +2,7 @@
 
 #include <library/cpp/actors/core/event_local.h>
 #include <ydb/core/base/events.h>
+#include <ydb/services/persqueue_v1/actors/events.h>
 
 #include "kafka_messages.h"
 #include "ydb/library/aclib/aclib.h"
@@ -20,6 +21,7 @@ struct TEvKafka {
         EvWakeup,
         EvUpdateCounter,
         EvUpdateHistCounter,
+        EvTopicOffsetsResponse,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -130,6 +132,33 @@ struct TEvKafka {
 
     struct TEvWakeup : public TEventLocal<TEvWakeup, EvWakeup> {
     };
+
+struct TPartitionOffsetsInfo {
+    ui64 PartitionId;
+    ui64 Generation;
+    ui64 StartOffset;
+    ui64 EndOffset;
+};
+
+struct TGetOffsetsRequest : public NKikimr::NGRpcProxy::V1::TLocalRequestBase {
+    TGetOffsetsRequest() = default;
+    TGetOffsetsRequest(const TString& topic, const TString& database, const TString& token, const TVector<ui32>& partitionIds)
+        : TLocalRequestBase(topic, database, token)
+        , PartitionIds(partitionIds)
+    {}
+
+    TVector<ui32> PartitionIds;
+};
+
+struct TEvTopicOffsetsResponse : public NActors::TEventLocal<TEvTopicOffsetsResponse, EvTopicOffsetsResponse> 
+                           , public NKikimr::NGRpcProxy::V1::TEvPQProxy::TLocalResponseBase
+{
+    TEvTopicOffsetsResponse()
+    {}
+
+    TVector<TPartitionOffsetsInfo> Partitions;
+};
+
 };
 
 } // namespace NKafka

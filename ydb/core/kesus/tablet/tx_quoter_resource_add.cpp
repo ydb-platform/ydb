@@ -33,11 +33,11 @@ struct TKesusTablet::TTxQuoterResourceAdd : public TTxBase {
         LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
             "[" << Self->TabletID() << "] TTxQuoterResourceAdd::Execute (sender=" << Sender
                 << ", cookie=" << Cookie << ", path=\"" << Record.GetResource().GetResourcePath()
-                    << "\", config=" << Record.GetResource().GetHierarhicalDRRResourceConfig() << ")");
+                    << "\", config=" << Record.GetResource().GetHierarchicalDRRResourceConfig() << ")");
 
         const auto& resourceDesc = Record.GetResource();
         if (const TQuoterResourceTree* resource = Self->QuoterResources.FindPath(resourceDesc.GetResourcePath())) {
-            if (NProtoBuf::IsEqual(resource->GetProps().GetHierarhicalDRRResourceConfig(), resourceDesc.GetHierarhicalDRRResourceConfig())) {
+            if (NProtoBuf::IsEqual(resource->GetProps().GetHierarchicalDRRResourceConfig(), resourceDesc.GetHierarchicalDRRResourceConfig())) {
                 THolder<TEvKesus::TEvAddQuoterResourceResult> reply =
                     MakeHolder<TEvKesus::TEvAddQuoterResourceResult>(
                         Ydb::StatusIds::ALREADY_EXISTS,
@@ -103,7 +103,7 @@ void TKesusTablet::Handle(TEvKesus::TEvAddQuoterResource::TPtr& ev) {
         return;
     }
 
-    if (!resourceDesc.HasHierarhicalDRRResourceConfig()) {
+    if (!resourceDesc.HasHierarchicalDRRResourceConfig()) {
         Send(ev->Sender,
             new TEvKesus::TEvAddQuoterResourceResult(
                 Ydb::StatusIds::BAD_REQUEST,

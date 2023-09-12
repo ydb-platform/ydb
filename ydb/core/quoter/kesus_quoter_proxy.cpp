@@ -163,7 +163,7 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
 
         void SetProps(const NKikimrKesus::TStreamingQuoterResource& props) {
             Props = props;
-            const auto& cfg = Props.GetHierarhicalDRRResourceConfig();
+            const auto& cfg = Props.GetHierarchicalDRRResourceConfig();
             const double speed = cfg.GetMaxUnitsPerSecond();
             const double prefetch = cfg.GetPrefetchCoefficient() ? cfg.GetPrefetchCoefficient() : PREFETCH_COEFFICIENT_DEFAULT;
             const double watermark = std::clamp(cfg.GetPrefetchWatermark() ? cfg.GetPrefetchWatermark() : PREFETCH_WATERMARK_DEFAULT, 0.0, 1.0);
@@ -982,7 +982,7 @@ TKesusResourceAllocationStatistics::TKesusResourceAllocationStatistics(size_t wi
 
 void TKesusResourceAllocationStatistics::SetProps(const NKikimrKesus::TStreamingQuoterResource& props) {
     DefaultAllocationDelta = TDuration::MilliSeconds(100);
-    DefaultAllocationAmount = props.GetHierarhicalDRRResourceConfig().GetMaxUnitsPerSecond() / 10;
+    DefaultAllocationAmount = props.GetHierarchicalDRRResourceConfig().GetMaxUnitsPerSecond() / 10;
 }
 
 void TKesusResourceAllocationStatistics::OnConnected() {

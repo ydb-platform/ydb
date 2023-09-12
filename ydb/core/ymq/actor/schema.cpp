@@ -375,7 +375,7 @@ void TCreateUserSchemaActor::AddRPSQuota() {
     NKikimrKesus::TEvAddQuoterResource cmd;
     auto& res = *cmd.MutableResource();
     res.SetResourcePath(RPS_QUOTA_NAME);
-    res.MutableHierarhicalDRRResourceConfig()->SetMaxUnitsPerSecond(1000);
+    res.MutableHierarchicalDRRResourceConfig()->SetMaxUnitsPerSecond(1000);
     AddQuoterResourceActor_ = RunAddQuoterResource(KesusPathId_.first, KesusPathId_.second, cmd, RequestId_);
 }
 

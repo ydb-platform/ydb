@@ -111,7 +111,7 @@ void TTestServer::CreateKesusResource(ui64 kesusTabletId, const TString& resourc
 
     TAutoPtr<NKesus::TEvKesus::TEvAddQuoterResource> request(new NKesus::TEvKesus::TEvAddQuoterResource());
     request->Record.MutableResource()->SetResourcePath(resourcePath);
-    auto* hdrrConfig = request->Record.MutableResource()->MutableHierarhicalDRRResourceConfig(); // Create HDRR config
+    auto* hdrrConfig = request->Record.MutableResource()->MutableHierarchicalDRRResourceConfig(); // Create HDRR config
     if (maxUnitsPerSecond) {
         hdrrConfig->SetMaxUnitsPerSecond(*maxUnitsPerSecond);
     }

@@ -206,7 +206,7 @@ protected:
 static void CopyProps(const Ydb::RateLimiter::Resource& src, NKikimrKesus::TStreamingQuoterResource& dst) {
     dst.SetResourcePath(src.resource_path());
     const auto& srcProps = src.hierarchical_drr();
-    auto& props = *dst.MutableHierarhicalDRRResourceConfig();
+    auto& props = *dst.MutableHierarchicalDRRResourceConfig();
     props.SetMaxUnitsPerSecond(srcProps.max_units_per_second());
     props.SetMaxBurstSizeCoefficient(srcProps.max_burst_size_coefficient());
     props.SetPrefetchCoefficient(srcProps.prefetch_coefficient());
@@ -215,7 +215,7 @@ static void CopyProps(const Ydb::RateLimiter::Resource& src, NKikimrKesus::TStre
 
 static void CopyProps(const NKikimrKesus::TStreamingQuoterResource& src, Ydb::RateLimiter::Resource& dst) {
     dst.set_resource_path(src.GetResourcePath());
-    const auto& srcProps = src.GetHierarhicalDRRResourceConfig();
+    const auto& srcProps = src.GetHierarchicalDRRResourceConfig();
     auto& props = *dst.mutable_hierarchical_drr();
     props.set_max_units_per_second(srcProps.GetMaxUnitsPerSecond());
     props.set_max_burst_size_coefficient(srcProps.GetMaxBurstSizeCoefficient());

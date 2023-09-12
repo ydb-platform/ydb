@@ -2508,7 +2508,7 @@ namespace Tests {
     Ydb::StatusIds::StatusCode TClient::AddQuoterResource(TTestActorRuntime* runtime, const TString& kesusPath, const TString& resourcePath, const NKikimrKesus::THierarchicalDRRResourceConfig& props) {
         THolder<NKesus::TEvKesus::TEvAddQuoterResource> request = MakeHolder<NKesus::TEvKesus::TEvAddQuoterResource>();
         request->Record.MutableResource()->SetResourcePath(resourcePath);
-        *request->Record.MutableResource()->MutableHierarhicalDRRResourceConfig() = props;
+        *request->Record.MutableResource()->MutableHierarchicalDRRResourceConfig() = props;
 
         TActorId sender = runtime->AllocateEdgeActor(0);
         ForwardToTablet(*runtime, GetKesusTabletId(kesusPath), sender, request.Release(), 0);

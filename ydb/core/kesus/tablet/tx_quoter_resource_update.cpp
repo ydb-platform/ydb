@@ -31,7 +31,7 @@ struct TKesusTablet::TTxQuoterResourceUpdate : public TTxBase {
         LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
             "[" << Self->TabletID() << "] TTxQuoterResourceUpdate::Execute (sender=" << Sender
                 << ", cookie=" << Cookie << ", id=" << Record.GetResource().GetResourceId() << ", path=\"" << Record.GetResource().GetResourcePath()
-                    << "\", config=" << Record.GetResource().GetHierarhicalDRRResourceConfig() << ")");
+                    << "\", config=" << Record.GetResource().GetHierarchicalDRRResourceConfig() << ")");
 
         const auto& resourceDesc = Record.GetResource();
         TQuoterResourceTree* resource = resourceDesc.GetResourceId() ?
@@ -102,7 +102,7 @@ void TKesusTablet::Handle(TEvKesus::TEvUpdateQuoterResource::TPtr& ev) {
         return;
     }
 
-    if (!resourceDesc.HasHierarhicalDRRResourceConfig()) {
+    if (!resourceDesc.HasHierarchicalDRRResourceConfig()) {
         Send(ev->Sender,
             new TEvKesus::TEvUpdateQuoterResourceResult(
                 Ydb::StatusIds::BAD_REQUEST,

@@ -1397,13 +1397,13 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
                 UNIT_ASSERT_VALUES_EQUAL(resources.GetResources(7).GetResourceId(), 8);
 
                 UNIT_ASSERT_DOUBLES_EQUAL(
-                   resources.GetResources(1).GetHierarhicalDRRResourceConfig().GetMaxUnitsPerSecond(),
+                   resources.GetResources(1).GetHierarchicalDRRResourceConfig().GetMaxUnitsPerSecond(),
                    100500, 0.001);
                 UNIT_ASSERT_DOUBLES_EQUAL(
-                   resources.GetResources(6).GetHierarhicalDRRResourceConfig().GetMaxBurstSizeCoefficient(),
+                   resources.GetResources(6).GetHierarchicalDRRResourceConfig().GetMaxBurstSizeCoefficient(),
                    1.5, 0.001);
                 UNIT_ASSERT_DOUBLES_EQUAL(
-                   resources.GetResources(7).GetHierarhicalDRRResourceConfig().GetMaxUnitsPerSecond(),
+                   resources.GetResources(7).GetHierarchicalDRRResourceConfig().GetMaxUnitsPerSecond(),
                    10, 0.001);
             }
             {
@@ -1452,7 +1452,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
             NKikimrKesus::TStreamingQuoterResource res;
             res.SetResourceId(42);
             res.SetResourcePath("/CorrentPath");
-            res.MutableHierarhicalDRRResourceConfig();
+            res.MutableHierarchicalDRRResourceConfig();
             ctx.AddQuoterResource(res, Ydb::StatusIds::BAD_REQUEST); // resource id specified
         }
         {
@@ -1483,7 +1483,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
             UNIT_ASSERT_VALUES_EQUAL(resources.GetResources(2).GetResourceId(), 2);
 
             UNIT_ASSERT_DOUBLES_EQUAL(
-                resources.GetResources(1).GetHierarhicalDRRResourceConfig().GetMaxUnitsPerSecond(),
+                resources.GetResources(1).GetHierarchicalDRRResourceConfig().GetMaxUnitsPerSecond(),
                 100500, 0.001);
         };
         checkResources();
@@ -1545,10 +1545,10 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
             UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(1).GetResourcePath(), "Root/Q");
 
             UNIT_ASSERT_DOUBLES_EQUAL(
-                resources.GetResources(0).GetHierarhicalDRRResourceConfig().GetMaxUnitsPerSecond(),
+                resources.GetResources(0).GetHierarchicalDRRResourceConfig().GetMaxUnitsPerSecond(),
                 100, 0.001);
             UNIT_ASSERT_DOUBLES_EQUAL(
-                resources.GetResources(1).GetHierarhicalDRRResourceConfig().GetMaxUnitsPerSecond(),
+                resources.GetResources(1).GetHierarchicalDRRResourceConfig().GetMaxUnitsPerSecond(),
                 100, 0.001);
         };
         testBeforeModification();
@@ -1562,10 +1562,10 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
             UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(1).GetResourcePath(), "Root/Q");
 
             UNIT_ASSERT_DOUBLES_EQUAL(
-                resources.GetResources(0).GetHierarhicalDRRResourceConfig().GetMaxUnitsPerSecond(),
+                resources.GetResources(0).GetHierarchicalDRRResourceConfig().GetMaxUnitsPerSecond(),
                 5, 0.001);
             UNIT_ASSERT_DOUBLES_EQUAL(
-                resources.GetResources(1).GetHierarhicalDRRResourceConfig().GetMaxUnitsPerSecond(),
+                resources.GetResources(1).GetHierarchicalDRRResourceConfig().GetMaxUnitsPerSecond(),
                 5, 0.001);
         };
 
@@ -1578,7 +1578,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         // test validation
         {
             NKikimrKesus::TStreamingQuoterResource req;
-            *req.MutableHierarhicalDRRResourceConfig() = cfg3;
+            *req.MutableHierarchicalDRRResourceConfig() = cfg3;
 
             ctx.UpdateQuoterResource(req, Ydb::StatusIds::BAD_REQUEST); // no resource path and id
             testAfterModification();
@@ -1599,7 +1599,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
             testAfterModification();
 
             req.SetResourcePath("/Root/P");
-            *req.MutableHierarhicalDRRResourceConfig() = cfg3;
+            *req.MutableHierarchicalDRRResourceConfig() = cfg3;
             ctx.UpdateQuoterResource(req, Ydb::StatusIds::NOT_FOUND); // no such resource
             testAfterModification();
             ctx.RebootTablet();
@@ -1724,8 +1724,8 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
 
         NKikimrKesus::TStreamingQuoterResource cfg;
         cfg.SetResourcePath("/Root");
-        cfg.MutableHierarhicalDRRResourceConfig()->SetMaxUnitsPerSecond(100.0);
-        cfg.MutableHierarhicalDRRResourceConfig()->SetPrefetchCoefficient(300.0);
+        cfg.MutableHierarchicalDRRResourceConfig()->SetMaxUnitsPerSecond(100.0);
+        cfg.MutableHierarchicalDRRResourceConfig()->SetPrefetchCoefficient(300.0);
         cfg.MutableAccountingConfig()->SetEnabled(true);
         cfg.MutableAccountingConfig()->SetReportPeriodMs(1000);
         cfg.MutableAccountingConfig()->SetAccountPeriodMs(1000);
@@ -1777,8 +1777,8 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
 
         NKikimrKesus::TStreamingQuoterResource cfg;
         cfg.SetResourcePath("/Root");
-        cfg.MutableHierarhicalDRRResourceConfig()->SetMaxUnitsPerSecond(300.0);
-        cfg.MutableHierarhicalDRRResourceConfig()->SetPrefetchCoefficient(1.0);
+        cfg.MutableHierarchicalDRRResourceConfig()->SetMaxUnitsPerSecond(300.0);
+        cfg.MutableHierarchicalDRRResourceConfig()->SetPrefetchCoefficient(1.0);
         cfg.MutableAccountingConfig()->SetEnabled(true);
         cfg.MutableAccountingConfig()->SetReportPeriodMs(1000);
         cfg.MutableAccountingConfig()->SetAccountPeriodMs(1000);
@@ -1830,8 +1830,8 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
 
         NKikimrKesus::TStreamingQuoterResource cfg;
         cfg.SetResourcePath("/Root");
-        cfg.MutableHierarhicalDRRResourceConfig()->SetMaxUnitsPerSecond(300.0);
-        cfg.MutableHierarhicalDRRResourceConfig()->SetPrefetchCoefficient(1.0);
+        cfg.MutableHierarchicalDRRResourceConfig()->SetMaxUnitsPerSecond(300.0);
+        cfg.MutableHierarchicalDRRResourceConfig()->SetPrefetchCoefficient(1.0);
         cfg.MutableAccountingConfig()->SetEnabled(true);
         cfg.MutableAccountingConfig()->SetReportPeriodMs(1000);
         cfg.MutableAccountingConfig()->SetAccountPeriodMs(1000);
@@ -1887,8 +1887,8 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
 
         NKikimrKesus::TStreamingQuoterResource cfg;
         cfg.SetResourcePath("/Root");
-        cfg.MutableHierarhicalDRRResourceConfig()->SetMaxUnitsPerSecond(300.0);
-        cfg.MutableHierarhicalDRRResourceConfig()->SetPrefetchCoefficient(1.0);
+        cfg.MutableHierarchicalDRRResourceConfig()->SetMaxUnitsPerSecond(300.0);
+        cfg.MutableHierarchicalDRRResourceConfig()->SetPrefetchCoefficient(1.0);
         cfg.MutableAccountingConfig()->SetEnabled(true);
         cfg.MutableAccountingConfig()->SetReportPeriodMs(1000);
         cfg.MutableAccountingConfig()->SetAccountPeriodMs(1000);
@@ -1948,8 +1948,8 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
 
         NKikimrKesus::TStreamingQuoterResource cfg;
         cfg.SetResourcePath("/Root");
-        cfg.MutableHierarhicalDRRResourceConfig()->SetMaxUnitsPerSecond(300.0);
-        cfg.MutableHierarhicalDRRResourceConfig()->SetPrefetchCoefficient(1.0);
+        cfg.MutableHierarchicalDRRResourceConfig()->SetMaxUnitsPerSecond(300.0);
+        cfg.MutableHierarchicalDRRResourceConfig()->SetPrefetchCoefficient(1.0);
         cfg.MutableAccountingConfig()->SetEnabled(true);
         cfg.MutableAccountingConfig()->SetReportPeriodMs(1000);
         cfg.MutableAccountingConfig()->SetAccountPeriodMs(1000);
@@ -2012,8 +2012,8 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
 
         NKikimrKesus::TStreamingQuoterResource cfg;
         cfg.SetResourcePath("/Root");
-        cfg.MutableHierarhicalDRRResourceConfig()->SetMaxUnitsPerSecond(300.0);
-        cfg.MutableHierarhicalDRRResourceConfig()->SetPrefetchCoefficient(1.0);
+        cfg.MutableHierarchicalDRRResourceConfig()->SetMaxUnitsPerSecond(300.0);
+        cfg.MutableHierarchicalDRRResourceConfig()->SetPrefetchCoefficient(1.0);
         cfg.MutableAccountingConfig()->SetEnabled(true);
         cfg.MutableAccountingConfig()->SetReportPeriodMs(1000);
         cfg.MutableAccountingConfig()->SetAccountPeriodMs(1000);
@@ -2071,8 +2071,8 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
 
         NKikimrKesus::TStreamingQuoterResource cfg;
         cfg.SetResourcePath("/Root");
-        cfg.MutableHierarhicalDRRResourceConfig()->SetMaxUnitsPerSecond(300.0);
-        cfg.MutableHierarhicalDRRResourceConfig()->SetPrefetchCoefficient(1.0);
+        cfg.MutableHierarchicalDRRResourceConfig()->SetMaxUnitsPerSecond(300.0);
+        cfg.MutableHierarchicalDRRResourceConfig()->SetPrefetchCoefficient(1.0);
         cfg.MutableAccountingConfig()->SetEnabled(true);
         cfg.MutableAccountingConfig()->SetReportPeriodMs(1000);
         cfg.MutableAccountingConfig()->SetAccountPeriodMs(1000);
@@ -2143,7 +2143,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         UNIT_ASSERT_VALUES_EQUAL(result->Record.ResourcesInfoSize(), 1);
         const auto& info = result->Record.GetResourcesInfo(0);
         UNIT_ASSERT_VALUES_EQUAL(info.GetStateNotification().GetStatus(), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_DOUBLES_EQUAL(info.GetEffectiveProps().GetHierarhicalDRRResourceConfig().GetMaxUnitsPerSecond(), 150.0, 0.001);
+        UNIT_ASSERT_DOUBLES_EQUAL(info.GetEffectiveProps().GetHierarchicalDRRResourceConfig().GetMaxUnitsPerSecond(), 150.0, 0.001);
     }
 
     Y_UNIT_TEST(TestGetQuoterResourceCounters) {

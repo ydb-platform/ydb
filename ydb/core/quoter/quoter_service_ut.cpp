@@ -147,7 +147,7 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
         // request
         TAutoPtr<NKesus::TEvKesus::TEvAddQuoterResource> request(new NKesus::TEvKesus::TEvAddQuoterResource());
         request->Record.MutableResource()->SetResourcePath("/Res");
-        request->Record.MutableResource()->MutableHierarhicalDRRResourceConfig()->SetMaxUnitsPerSecond(rate);
+        request->Record.MutableResource()->MutableHierarchicalDRRResourceConfig()->SetMaxUnitsPerSecond(rate);
 
         // Get tablet id
         TAutoPtr<NMsgBusProxy::TBusResponse> resp = client.Ls(TStringBuilder() << Tests::TestDomainName << "/KesusQuoter");

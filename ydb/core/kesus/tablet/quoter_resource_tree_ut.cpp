@@ -158,7 +158,7 @@ public:
     TQuoterResourceTree* AddResource(const TString& path, const NKikimrKesus::THierarchicalDRRResourceConfig& config = {}) {
         NKikimrKesus::TStreamingQuoterResource cfg;
         cfg.SetResourcePath(path);
-        *cfg.MutableHierarhicalDRRResourceConfig() = config;
+        *cfg.MutableHierarchicalDRRResourceConfig() = config;
         TString errorMessage;
         TQuoterResourceTree* res = Resources->AddResource(NextResourceId++, cfg, errorMessage);
         UNIT_ASSERT_C(res, "Failed to add resource [" << path << "]: " << errorMessage);
@@ -254,14 +254,14 @@ public:
                 .After(oldSettingsAllocation)
                 .WillOnce(Invoke([](ui64, double, const NKikimrKesus::TStreamingQuoterResource* props) {
                     UNIT_ASSERT(props != nullptr);
-                    UNIT_ASSERT_DOUBLES_EQUAL(props->GetHierarhicalDRRResourceConfig().GetMaxUnitsPerSecond(), 400, 0.001);
+                    UNIT_ASSERT_DOUBLES_EQUAL(props->GetHierarchicalDRRResourceConfig().GetMaxUnitsPerSecond(), 400, 0.001);
                 }));
         EXPECT_CALL(*session.Sink, OnSend(_, DoubleNear(40, 0.01), nullptr))
             .After(updateSend);
 
         ProcessTicks(2);
         NKikimrKesus::TStreamingQuoterResource newProps;
-        newProps.MutableHierarhicalDRRResourceConfig()->SetMaxUnitsPerSecond(400);
+        newProps.MutableHierarchicalDRRResourceConfig()->SetMaxUnitsPerSecond(400);
         TString msg;
         UNIT_ASSERT(root->Update(newProps, msg));
         Resources->OnUpdateResourceProps(root);
@@ -429,10 +429,10 @@ public:
         cfg.SetMaxUnitsPerSecond(200);
         auto* res = AddResource("/Root/Res", cfg);
 
-        UNIT_ASSERT_DOUBLES_EQUAL(res->GetEffectiveProps().GetHierarhicalDRRResourceConfig().GetMaxUnitsPerSecond(), 100, 0.001); // min
+        UNIT_ASSERT_DOUBLES_EQUAL(res->GetEffectiveProps().GetHierarchicalDRRResourceConfig().GetMaxUnitsPerSecond(), 100, 0.001); // min
 
         auto* res2 = AddResource("/Root/Res2");
-        UNIT_ASSERT_DOUBLES_EQUAL(res2->GetEffectiveProps().GetHierarhicalDRRResourceConfig().GetMaxUnitsPerSecond(), 100, 0.001); // inherits
+        UNIT_ASSERT_DOUBLES_EQUAL(res2->GetEffectiveProps().GetHierarchicalDRRResourceConfig().GetMaxUnitsPerSecond(), 100, 0.001); // inherits
     }
 
     void TestWeights() {
@@ -491,7 +491,7 @@ public:
         // It is expected that a new weight will be applied in the next tick.
         TString msg;
         NKikimrKesus::TStreamingQuoterResource newPropsWithoutWeight;
-        newPropsWithoutWeight.MutableHierarhicalDRRResourceConfig();
+        newPropsWithoutWeight.MutableHierarchicalDRRResourceConfig();
         UNIT_ASSERT_C(heavyRes->Update(newPropsWithoutWeight, msg), msg);
         Resources->OnUpdateResourceProps(heavyRes);
 

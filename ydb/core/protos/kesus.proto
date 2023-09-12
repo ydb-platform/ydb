@@ -361,8 +361,8 @@ message TStreamingQuoterResource {
     string ResourcePath = 2;
 
     oneof AlgorithmSpecificConfig {
-        // For Hierarhical DRR algorithm.
-        THierarchicalDRRResourceConfig HierarhicalDRRResourceConfig = 3;
+        // For Hierarchical DRR algorithm.
+        THierarchicalDRRResourceConfig HierarchicalDRRResourceConfig = 3;
     }
     TAccountingConfig AccountingConfig = 4;
 }

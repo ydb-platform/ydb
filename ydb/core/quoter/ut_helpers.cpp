@@ -75,7 +75,7 @@ void TKesusQuoterTestSetup::CreateKesusResource(const TString& kesusPath, const 
 
     TAutoPtr<NKesus::TEvKesus::TEvAddQuoterResource> request(new NKesus::TEvKesus::TEvAddQuoterResource());
     request->Record.MutableResource()->SetResourcePath(resourcePath);
-    *request->Record.MutableResource()->MutableHierarhicalDRRResourceConfig() = cfg;
+    *request->Record.MutableResource()->MutableHierarchicalDRRResourceConfig() = cfg;
 
     TActorId sender = GetEdgeActor();
     Cerr << "AddQuoterResource: " << request->Record << Endl;

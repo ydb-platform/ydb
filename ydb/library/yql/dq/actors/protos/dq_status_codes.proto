@@ -20,5 +20,6 @@ message StatusIds {
         EXTERNAL_ERROR = 12;
         CLUSTER_OVERLOADED = 13;
         SCHEME_ERROR = 14;
+        GENERIC_ERROR = 15;
     }
 }

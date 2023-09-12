@@ -26,6 +26,7 @@ Ydb::StatusIds::StatusCode DqStatusToYdbStatus(NYql::NDqProto::StatusIds::Status
         return Ydb::StatusIds::OVERLOADED;
     case NYql::NDqProto::StatusIds::SCHEME_ERROR:
         return Ydb::StatusIds::SCHEME_ERROR;
+    case NYql::NDqProto::StatusIds::GENERIC_ERROR:
     default:
         return Ydb::StatusIds::GENERIC_ERROR;
     }
@@ -58,6 +59,8 @@ NYql::NDqProto::StatusIds::StatusCode YdbStatusToDqStatus(Ydb::StatusIds::Status
         return NYql::NDqProto::StatusIds::CANCELLED;
     case Ydb::StatusIds::SCHEME_ERROR:
         return NYql::NDqProto::StatusIds::SCHEME_ERROR;
+    case Ydb::StatusIds::GENERIC_ERROR:
+        return NYql::NDqProto::StatusIds::GENERIC_ERROR;
     default:
         return NYql::NDqProto::StatusIds::UNSPECIFIED;
     }

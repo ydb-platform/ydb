@@ -64,6 +64,12 @@ void TBackoffStrategy::ApplyJitter()
     BackoffWithJitter_ = isNegative ? Backoff_ - jitter : Backoff_ + jitter;
 }
 
+
+void TBackoffStrategy::UpdateOptions(const TExponentialBackoffOptions& newOptions)
+{
+    Options_ = newOptions;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

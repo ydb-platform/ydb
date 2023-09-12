@@ -52,8 +52,10 @@ public:
 
     TDuration GetBackoff() const;
 
+    void UpdateOptions(const TExponentialBackoffOptions& newOptions);
+
 private:
-    const TExponentialBackoffOptions Options_;
+    TExponentialBackoffOptions Options_;
 
     int RetryIndex_;
     TDuration Backoff_;

@@ -12,7 +12,8 @@
 
 namespace NKafka {
 
-static constexpr char EMPTY_AUTH_BYTES[] = "";
+static constexpr char EmptyAuthBytes[] = "";
+static constexpr char DebugKafkaApiFlagValue[] = "2";
 
 NActors::IActor* CreateKafkaSaslAuthActor(const TContext::TPtr context, const ui64 correlationId, const NKikimr::NRawSocket::TSocketDescriptor::TSocketAddressType address, const TMessagePtr<TSaslAuthenticateRequestData>& message) {
     return new TKafkaSaslAuthActor(context, correlationId, address, message);
@@ -54,15 +55,16 @@ void TKafkaSaslAuthActor::Handle(NKikimr::TEvTicketParser::TEvAuthorizeTicketRes
     }
     UserToken = ev->Get()->Token;
 
-    if (KafkaApiFlag == "1") { // cloud mode
+    if (KafkaApiFlag != DebugKafkaApiFlagValue) {
         bool gotPermission = false;
         for (auto & sid : UserToken->GetGroupSIDs()) {
-            if (sid == "ydb.api.kafka@as") {
+            if (sid == NKikimr::NGRpcProxy::V1::KafkaPlainAuthSid) {
                 gotPermission = true;
+                break;
             }
         }
         if (!gotPermission) {
-            SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "", "no permission 'ydb.api.kafka'", ctx);
+            SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "", TStringBuilder() << "no permission '" << NKikimr::NGRpcProxy::V1::KafkaPlainAuthPermission << "'", ctx);
             return;
         }
     }
@@ -83,7 +85,7 @@ void TKafkaSaslAuthActor::SendResponseAndDie(EKafkaErrors errorCode, const TStri
 
     auto responseToClient = std::make_shared<TSaslAuthenticateResponseData>();
     responseToClient->ErrorCode = errorCode;
-    responseToClient->AuthBytes = TKafkaRawBytes(EMPTY_AUTH_BYTES, sizeof(EMPTY_AUTH_BYTES));
+    responseToClient->AuthBytes = TKafkaRawBytes(EmptyAuthBytes, sizeof(EmptyAuthBytes));
 
     if (isFailed) {
         KAFKA_LOG_ERROR("Authentication failure. " << errorMessage << " " << details);
@@ -203,22 +205,17 @@ void TKafkaSaslAuthActor::Handle(NKikimr::TEvTxProxySchemeCache::TEvNavigateKeyS
 
     for (const auto& attr : navigate->ResultSet.front().Attributes) {
         if (attr.first == "folder_id") FolderId = attr.second;
-        if (attr.first == "cloud_id") CloudId = attr.second;
-        if (attr.first == "database_id") DatabaseId = attr.second;
-        if (attr.first == "service_account_id") ServiceAccountId = attr.second;
-        if (attr.first == "serverless_rt_coordination_node_path") Coordinator = attr.second;
-        if (attr.first == "serverless_rt_base_resource_ru") ResourcePath = attr.second;
-        if (attr.first == "kafka_api") KafkaApiFlag = attr.second;
+        else if (attr.first == "cloud_id") CloudId = attr.second;
+        else if (attr.first == "database_id") DatabaseId = attr.second;
+        else if (attr.first == "service_account_id") ServiceAccountId = attr.second;
+        else if (attr.first == "serverless_rt_coordination_node_path") Coordinator = attr.second;
+        else if (attr.first == "serverless_rt_base_resource_ru") ResourcePath = attr.second;
+        else if (attr.first == "kafka_api") KafkaApiFlag = attr.second;
     }
 
 
     if (ClientAuthData.UserName.Empty()) {
         // ApiKey IAM authentification
-
-        if (KafkaApiFlag != "1" && KafkaApiFlag != "2") {
-            SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "", TStringBuilder() << "kafka_api is not allowed on this database", ctx);
-            return;
-        }
         SendApiKeyRequest();
     } else {
         // Login/Password authentification

@@ -15,6 +15,9 @@ namespace NKikimr::NGRpcProxy::V1 {
 #endif
 #define PQ_LOG_PREFIX "session cookie " << Cookie << " consumer " << ClientPath << " session " << Session
 
+static constexpr char KafkaPlainAuthPermission[] = "ydb.api.kafkaPlainAuth";
+static constexpr char KafkaPlainAuthSid[] = "ydb.api.kafkaPlainAuth@as";
+
 // moved to ydb/core/client/server/msgbus_server_persqueue.h?
 // const TString& TopicPrefix(const TActorContext& ctx);
 
@@ -82,7 +85,7 @@ static inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>  GetTicketPar
         "ydb.streams.write"
     };
     if (useKafkaApi) {
-        permissions.push_back("ydb.api.kafka");
+        permissions.push_back(KafkaPlainAuthPermission);
     }
     TVector<std::pair<TString, TString>> attributes;
     if (!dbId.empty()) attributes.push_back({"database_id", dbId});

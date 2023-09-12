@@ -22,7 +22,7 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
         return {
             .User = Request->Get()->Record.GetUser(),
             .Password = Request->Get()->Record.GetPassword(),
-            .ExternalAuth = (Request->Get()->Record.HasExternalAuth() ? std::make_optional(Request->Get()->Record.GetExternalAuth()) : std::nullopt)
+            .ExternalAuth = Request->Get()->Record.GetExternalAuth()
             };
     }
 

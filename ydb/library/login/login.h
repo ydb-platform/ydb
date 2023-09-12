@@ -41,7 +41,7 @@ public:
         TString User;
         TString Password;
         TOptions Options;
-        std::optional<TString> ExternalAuth;
+        TString ExternalAuth;
     };
 
     struct TLoginUserResponse : TBasicResponse {
@@ -58,7 +58,7 @@ public:
         TString User;
         std::optional<std::vector<TString>> Groups;
         std::chrono::system_clock::time_point ExpiresAt;
-        std::optional<TString> ExternalAuth;
+        TString ExternalAuth;
     };
 
     struct TCreateUserRequest : TBasicRequest {

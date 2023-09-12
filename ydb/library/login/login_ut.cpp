@@ -220,7 +220,7 @@ Y_UNIT_TEST_SUITE(Login) {
             auto response3 = provider.ValidateToken(request3);
             UNIT_ASSERT_VALUES_EQUAL(response3.Error, "");
             UNIT_ASSERT(response3.User == request2.User);
-            UNIT_ASSERT(response3.ExternalAuth.has_value());
+            UNIT_ASSERT(!response3.ExternalAuth.empty());
             UNIT_ASSERT(response3.ExternalAuth == request2.ExternalAuth);
         }
         {
@@ -234,7 +234,7 @@ Y_UNIT_TEST_SUITE(Login) {
             auto response3 = provider.ValidateToken(request3);
             UNIT_ASSERT_VALUES_EQUAL(response3.Error, "");
             UNIT_ASSERT(response3.User == request1.User);
-            UNIT_ASSERT(!response3.ExternalAuth.has_value());
+            UNIT_ASSERT(response3.ExternalAuth.empty());
         }
     }
 }

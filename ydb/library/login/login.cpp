@@ -235,7 +235,7 @@ std::vector<TString> TLoginProvider::GetGroupsMembership(const TString& member) 
 
 TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserRequest& request) {
     TLoginUserResponse response;
-    if (!request.ExternalAuth.has_value()) {
+    if (!request.ExternalAuth) {
         auto itUser = Sids.find(request.User);
         if (itUser == Sids.end() || itUser->second.Type != ESidType::USER) {
             response.Error = "Invalid user";
@@ -276,8 +276,8 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
         token.set_audience(Audience);
     }
 
-    if (request.ExternalAuth.has_value()) {
-        token.set_payload_claim(EXTERNAL_AUTH_CLAIM_NAME, jwt::claim(request.ExternalAuth.value()));
+    if (request.ExternalAuth) {
+        token.set_payload_claim(EXTERNAL_AUTH_CLAIM_NAME, jwt::claim(request.ExternalAuth));
     } else {
         if (request.Options.WithUserGroups) {
             auto groups = GetGroupsMembership(request.User);

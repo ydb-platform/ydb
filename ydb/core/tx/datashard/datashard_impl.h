@@ -1936,6 +1936,7 @@ public:
     void DeleteReadIterator(TReadIteratorsMap::iterator it);
     void CancelReadIterators(Ydb::StatusIds::StatusCode code, const TString& issue, const TActorContext& ctx);
     void ReadIteratorsOnNodeDisconnected(const TActorId& sessionId, const TActorContext &ctx);
+    void UnsubscribeReadIteratorSessions(const TActorContext& ctx);
 
     void SubscribeNewLocks(const TActorContext &ctx);
     void SubscribeNewLocks();
@@ -2975,6 +2976,7 @@ protected:
 
         StopFindSubDomainPathId();
         StopWatchingSubDomainPathId();
+        UnsubscribeReadIteratorSessions(ctx);
 
         LoanReturnTracker.Shutdown(ctx);
         Y_VERIFY(LoanReturnTracker.Empty());

@@ -2696,7 +2696,7 @@ void TDataShard::CancelReadIterators(Ydb::StatusIds::StatusCode code, const TStr
     }
 
     ReadIterators.clear();
-    ReadIteratorSessions.clear();
+    UnsubscribeReadIteratorSessions(ctx);
 
     SetCounter(COUNTER_READ_ITERATORS_COUNT, 0);
     SetCounter(COUNTER_READ_ITERATORS_EXHAUSTED_COUNT, 0);
@@ -2752,6 +2752,14 @@ void TDataShard::ReadIteratorsOnNodeDisconnected(const TActorId& sessionId, cons
     ReadIteratorSessions.erase(itSession);
     SetCounter(COUNTER_READ_ITERATORS_COUNT, ReadIterators.size());
     DecCounter(COUNTER_READ_ITERATORS_EXHAUSTED_COUNT, exhaustedCount);
+}
+
+void TDataShard::UnsubscribeReadIteratorSessions(const TActorContext& ctx) {
+    Y_UNUSED(ctx);
+    for (const auto& pr : ReadIteratorSessions) {
+        Send(pr.first, new TEvents::TEvUnsubscribe);
+    }
+    ReadIteratorSessions.clear();
 }
 
 } // NKikimr::NDataShard

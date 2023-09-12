@@ -439,7 +439,7 @@ public:
     THashSet<TNodeId> StorageNodeIds;
     THashSet<TNodeId> ComputeNodeIds;
     std::unordered_map<std::pair<TNodeId, int>, ui32> NodeRetries;
-    ui32 MaxRetries = 3;
+    ui32 MaxRetries = 20;
     TDuration RetryDelay = TDuration::MilliSeconds(250);
 
     THashMap<TString, TDatabaseState> DatabaseState;

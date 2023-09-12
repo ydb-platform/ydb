@@ -115,7 +115,8 @@ class RegExp:
     VECTOR = r'\bvector\b'
     DICTIONARY = r'\bdictionary\b'
     ANY = r'\bany[^_]'
-    ENUM = r'\benum\b'
+    ENUM = r'\b(?<!bitfield )enum\b'
+    BITFIELD_ENUM = r'\bbitfield enum\b'
     TIME = r'\b(time_interval|abs_timestamp|rel_timestamp)\b'
     BITMAP = r'\bbitmap\b'
     VIEW_PROVIDER = r'\bview_provider\b'
@@ -684,6 +685,15 @@ class IdlFileProcessor:
             output_includes={'memory'},
             android_output_includes={'string', self._context.runtime_include('verify_and_run.h')},
             ios_output_includes={self._context.runtime_include('verify_and_run.h')},
+        )
+
+        # bitfield enum rule
+        self._create_or_rule(
+            rules={
+                self._create_reg_exp_rule(RegExp.BITFIELD_ENUM),
+            },
+            ios_output_types={OutputType.IOS_PRIVATE_HEADER},
+            android_output_types={OutputType.ANDROID_HEADER},
         )
 
         if self._context.unit.enabled("MAPS_MOBILE_USE_STD_VARIANT"):

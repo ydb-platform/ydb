@@ -97,7 +97,7 @@ private:
 
     void OnTimer(bool aborted);
     void OnCallbackSuccess();
-    void OnCallbackFailure();
+    void OnCallbackInvocationFailed();
 
     TDuration NextDelay();
 };

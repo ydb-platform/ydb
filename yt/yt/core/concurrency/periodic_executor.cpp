@@ -160,7 +160,7 @@ void TPeriodicExecutor::PostCallback()
     GuardedInvoke(
         Invoker_,
         BIND_NO_PROPAGATE(&TPeriodicExecutor::OnCallbackSuccess, this_),
-        BIND_NO_PROPAGATE(&TPeriodicExecutor::OnCallbackFailure, this_));
+        BIND_NO_PROPAGATE(&TPeriodicExecutor::OnCallbackInvocationFailed, this_));
 }
 
 void TPeriodicExecutor::OnTimer(bool aborted)
@@ -248,7 +248,7 @@ void TPeriodicExecutor::OnCallbackSuccess()
     cleanup(false);
 }
 
-void TPeriodicExecutor::OnCallbackFailure()
+void TPeriodicExecutor::OnCallbackInvocationFailed()
 {
     auto guard = Guard(SpinLock_);
 

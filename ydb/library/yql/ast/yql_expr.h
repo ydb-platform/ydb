@@ -2085,6 +2085,7 @@ private:
         , UsedInDependsOn(0)
         , UnordChildren(0)
         , ShallBeDisclosed(0)
+        , LiteralList(0)
     {}
 
     TExprNode(const TExprNode&) = delete;

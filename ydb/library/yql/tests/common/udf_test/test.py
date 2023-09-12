@@ -14,7 +14,7 @@ import yatest.common
 project_path = yatest.common.context.project_path
 SOURCE_PATH = yql_utils.yql_source_path((project_path + '/cases').replace('\\', '/'))
 DATA_PATH = yatest.common.output_path('cases')
-ASTDIFF_PATH = yql_utils.yql_binary_path('ydb/library/yql/tools/astdiff/astdiff')
+ASTDIFF_PATH = yql_utils.yql_binary_path(os.getenv('YQL_ASTDIFF_PATH') or 'ydb/library/yql/tools/astdiff/astdiff')
 
 
 def pytest_generate_tests(metafunc):
@@ -82,7 +82,7 @@ def test(case):
     if "YA_TEST_RUNNER" in extra_env:
         del extra_env["YA_TEST_RUNNER"]
 
-    yqlrun_res = YQLRun(udfs_dir=udfs_dir, prov='yt', use_sql2yql=False, cfg_dir='ydb/library/yql/cfg/udf_test').yql_exec(
+    yqlrun_res = YQLRun(udfs_dir=udfs_dir, prov='yt', use_sql2yql=False, cfg_dir=os.getenv('YQL_CONFIG_DIR') or 'ydb/library/yql/cfg/udf_test').yql_exec(
         program=program,
         run_sql=True,
         tables=in_tables,

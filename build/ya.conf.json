@@ -83,7 +83,7 @@
                     "ya-tc"
                 ]
             },
-            "formula": "build/external_resources/ya-tc/public.resources.json"
+            "formula": "build/external_resources/ya-tc/resources.json"
         },
         "yexport": {
             "executable": {
@@ -99,7 +99,7 @@
                     "ymake"
                 ]
             },
-            "formula": "build/external_resources/ymake/public.resources.json"
+            "formula": "build/external_resources/ymake/resources.json"
         },
         "ymake_python3": {
             "executable": {

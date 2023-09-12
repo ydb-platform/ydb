@@ -45,7 +45,7 @@ public:
     explicit TBackoffStrategy(const TExponentialBackoffOptions& options);
 
     void Restart();
-    bool NextRetry();
+    bool Next();
 
     int GetRetryIndex() const;
     int GetRetryCount() const;

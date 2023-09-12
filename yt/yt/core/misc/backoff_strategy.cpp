@@ -32,7 +32,7 @@ void TBackoffStrategy::Restart()
     ApplyJitter();
 }
 
-bool TBackoffStrategy::NextRetry()
+bool TBackoffStrategy::Next()
 {
     if (RetryIndex_ > 0) {
         Backoff_ = std::min(Backoff_ * Options_.BackoffMultiplier, Options_.MaxBackoff);

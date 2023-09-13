@@ -194,7 +194,3 @@ target_sources(yt-yt-client PRIVATE
   ${CMAKE_SOURCE_DIR}/yt/yt/client/zookeeper/protocol.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/client/zookeeper/requests.cpp
 )
-configure_file(
-  ${CMAKE_SOURCE_DIR}/yt/yt/client/api/rpc_proxy/protocol_version_variables.h.in
-  ${CMAKE_BINARY_DIR}/yt/yt/client/_/api/rpc_proxy/protocol_version_variables.h
-)

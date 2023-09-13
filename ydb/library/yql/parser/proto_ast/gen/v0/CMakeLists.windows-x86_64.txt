@@ -72,14 +72,6 @@ run_antlr(
   -language
   protobuf
 )
-configure_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/protobuf/protobuf.stg.in
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0/org/antlr/codegen/templates/protobuf/protobuf.stg
-)
-configure_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/Cpp/Cpp.stg.in
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0/org/antlr/codegen/templates/Cpp/Cpp.stg
-)
 run_antlr(
   OUTPUT
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v0/SQLParser.cpp

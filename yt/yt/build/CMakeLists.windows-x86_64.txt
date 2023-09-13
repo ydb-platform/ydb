@@ -83,11 +83,3 @@ target_sources(yt-yt-build PRIVATE
   ${CMAKE_SOURCE_DIR}/yt/yt/build/ya_version.cpp
   ${CMAKE_BINARY_DIR}/yt/yt/build/build.cpp
 )
-configure_file(
-  ${CMAKE_SOURCE_DIR}/yt/yt/build/config.h.in
-  ${CMAKE_BINARY_DIR}/yt/yt/build/config.h
-)
-configure_file(
-  ${CMAKE_SOURCE_DIR}/yt/yt/build/build.cpp.in
-  ${CMAKE_BINARY_DIR}/yt/yt/build/build.cpp
-)

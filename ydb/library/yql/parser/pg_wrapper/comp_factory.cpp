@@ -808,8 +808,12 @@ private:
             callInfo1.args[1] = { Int32GetDatum(typeMod), false };
             callInfo1.args[2] = { BoolGetDatum(true), false };
         } else {
-            callInfo1.args[1] = { ObjectIdGetDatum(TypeIOParam), false };
-            callInfo1.args[2] = { Int32GetDatum(typeMod), false };
+            if (FInfo1.fn_nargs == 2) {
+                callInfo1.args[1] = { Int32GetDatum(typeMod), false };
+            } else {
+                callInfo1.args[1] = { ObjectIdGetDatum(TypeIOParam), false };
+                callInfo1.args[2] = { Int32GetDatum(typeMod), false };
+            }
         }
 
         void* freeMem = nullptr;

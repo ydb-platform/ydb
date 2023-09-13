@@ -82,7 +82,7 @@ const char* StrFloatVal(const Value& node) {
 }
 
 const char* StrVal(const Value& node) {
-    Y_ENSURE(node.type == T_String);
+    Y_ENSURE(node.type == T_String || node.type == T_BitString);
     return strVal(&node);
 }
 
@@ -102,7 +102,7 @@ const char* StrFloatVal(const Node* node) {
 }
 
 const char* StrVal(const Node* node) {
-    Y_ENSURE(node->type == T_String);
+    Y_ENSURE(node->type == T_String || node->type == T_BitString);
     return strVal((const Value*)node);
 }
 
@@ -116,7 +116,8 @@ bool ValueAsString(const Value& val, TString& ret) {
         ret = StrFloatVal(val);
         return true;
     }
-    case T_String: {
+    case T_String: 
+    case T_BitString: {
         ret = StrVal(val);
         return true;
     }
@@ -217,6 +218,7 @@ public:
             numeric,
             text,
             unknown,
+            bit,
             nil,
         };
 
@@ -232,6 +234,8 @@ public:
                     return "text";
                 case TPgConst::Type::unknown:
                     return "unknown";
+                case TPgConst::Type::bit:
+                    return "bit";
                 case TPgConst::Type::nil:
                     return "unknown";
                 }
@@ -2665,6 +2669,11 @@ public:
                 pgConst.type = TPgConst::Type::unknown; // to support implicit casts
                 return pgConst;
             }
+            case T_BitString: {
+                pgConst.value = ToString(StrVal(val));
+                pgConst.type = TPgConst::Type::bit;
+                return pgConst;
+            }
             case T_Null: {
                 pgConst.type = TPgConst::Type::nil;
                 return pgConst;
@@ -2716,13 +2725,12 @@ public:
         }
 
         switch (NodeTag(val)) {
-            case T_Integer: {
-                return L(A("PgConst"), QA(valueNType->value.GetRef()), pgTypeNode);
-            }
+            case T_Integer:
             case T_Float: {
                 return L(A("PgConst"), QA(valueNType->value.GetRef()), pgTypeNode);
             }
-            case T_String: {
+            case T_String:
+            case T_BitString: {
                 return L(A("PgConst"), QAX(valueNType->value.GetRef()), pgTypeNode);
             }
             case T_Null: {

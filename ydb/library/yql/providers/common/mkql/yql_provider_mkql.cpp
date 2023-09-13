@@ -2484,7 +2484,10 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         }
 
         auto typeMod1 = typeMod;
-        if (node.GetTypeAnn()->Cast<TPgExprType>()->GetName() != "interval" && node.GetTypeAnn()->Cast<TPgExprType>()->GetName() != "_interval") {
+        if (node.GetTypeAnn()->Cast<TPgExprType>()->GetName() != "interval" && 
+            node.GetTypeAnn()->Cast<TPgExprType>()->GetName() != "_interval" &&
+            node.GetTypeAnn()->Cast<TPgExprType>()->GetName() != "bit" &&
+            node.GetTypeAnn()->Cast<TPgExprType>()->GetName() != "_bit" ) {
             typeMod1 = TRuntimeNode();
         }
 
@@ -2565,7 +2568,10 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         }
 
         auto typeMod1 = typeMod;
-        if (node.GetTypeAnn()->Cast<TPgExprType>()->GetName() != "interval" && node.GetTypeAnn()->Cast<TPgExprType>()->GetName() != "_interval") {
+        if (node.GetTypeAnn()->Cast<TPgExprType>()->GetName() != "interval" && 
+            node.GetTypeAnn()->Cast<TPgExprType>()->GetName() != "_interval" &&
+            node.GetTypeAnn()->Cast<TPgExprType>()->GetName() != "bit" &&
+            node.GetTypeAnn()->Cast<TPgExprType>()->GetName() != "_bit") {
             typeMod1 = TRuntimeNode();
         }
 

@@ -225,7 +225,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
     
     Y_UNIT_TEST(AutoParamConsts_Select) {
         TString query = R"(
-            select 1, 'test'
+            select 1, 'test', B'10001'
         )";
         TString expectedParamJsonInt4 = R"(
             {"type":{"pg_type": {"oid": 23}},
@@ -235,15 +235,24 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
             {"type":{"pg_type": {"oid": 705}},
             "value":{"text_value": "test"}}
         )";
+        TString expectedParamJsonBit = R"(
+            {"type":{"pg_type": {"oid": 1560}},
+            "value":{"text_value": "b10001"}}
+        )";
         THashSet<TString> enabledScopes {"SELECT"};
         const TUsedParamsGetter dummyGetter = [] (TSet<TString>& usedParams, const NYql::TAstNode&) {
-            usedParams = {"a0", "a1"};
+            usedParams = {"a0", "a1", "a2"};
         };
         TMap<TString, TString> expectedParamTypes {
             {"a0", "(PgType 'int4)"},
             {"a1", "(PgType 'unknown)"},
+            {"a2", "(PgType 'bit)"},
         };
-        TestAutoParam(query, {{"a0", expectedParamJsonInt4}, {"a1", expectedParamJsonText}}, expectedParamTypes, dummyGetter, enabledScopes);
+        TestAutoParam(query, {
+            {"a0", expectedParamJsonInt4}, 
+            {"a1", expectedParamJsonText},
+            {"a2", expectedParamJsonBit},
+            }, expectedParamTypes, dummyGetter, enabledScopes);
     }
 
 }

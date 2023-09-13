@@ -754,7 +754,7 @@ unistr('d\u0061t\U00000061') → data
 ```||
 |#
 
-9.5. Binary String Functions and Operators
+# 9.5. Binary String Functions and Operators
 This section describes functions and operators for examining and manipulating binary strings, that is values of type bytea. Many of these are equivalent, in purpose and syntax, to the text-string functions described in the previous section.
 
 SQL defines some string functions that use key words, rather than commas, to separate arguments. Details are in Table 9.11. PostgreSQL also provides versions of these functions that use the regular function invocation syntax (see Table 9.12).
@@ -929,3 +929,110 @@ Decodes binary data from a textual representation; supported format values are t
 decode('MTIzAAE=', 'base64') → \x3132330001
 ```||
 |#
+
+# 9.6. Bit String Functions and Operators
+This section describes functions and operators for examining and manipulating bit strings, that is values of the types bit and bit varying. (While only type bit is mentioned in these tables, values of type bit varying can be used interchangeably.) Bit strings support the usual comparison operators shown in Table 9.1, as well as the operators shown in Table 9.14.
+
+Table 9.14. Bit String Operators
+
+#|
+||Operator|Description|Example(s)||
+bit \|\| bit → bit |
+Concatenation |
+```sql
+B'10001' || B'011' → 10001011
+```||
+||bit & bit → bit|
+Bitwise AND (inputs must be of equal length)|
+```sql
+B'10001' & B'01101' → 00001
+```||
+||bit \| bit → bit|
+Bitwise OR (inputs must be of equal length)|
+```sql
+B'10001' | B'01101' → 11101
+```||
+||bit # bit → bit|
+Bitwise exclusive OR (inputs must be of equal length)|
+```sql
+B'10001' # B'01101' → 11100
+```||
+||~ bit → bit|
+Bitwise NOT|
+```sql
+~ B'10001' → 01110
+```||
+||bit << integer → bit|
+Bitwise shift left (string length is preserved)|
+```sql
+B'10001' << 3 → 01000
+```||
+||bit >> integer → bit|
+Bitwise shift right (string length is preserved)|
+```sql
+B'10001' >> 2 → 00100
+```||
+|#
+
+Some of the functions available for binary strings are also available for bit strings, as shown in Table 9.15.
+
+Table 9.15. Bit String Functions
+
+#|
+||Function|Description|Example(s)||
+||bit_count ( bit ) → bigint|
+Returns the number of bits set in the bit string (also known as “popcount”).|
+```sql
+bit_count(B'10111') → 4
+```||
+||bit_length ( bit ) → integer|
+Returns number of bits in the bit string. (NOT SUPPORTED)|
+```sql
+#bit_length(B'10111') → 5
+```||
+||length ( bit ) → integer|
+Returns number of bits in the bit string.|
+```sql
+length(B'10111') → 5
+```||
+||octet_length ( bit ) → integer|
+Returns number of bytes in the bit string.|
+```sql
+octet_length(B'1011111011') → 2
+```||
+||overlay ( bits bit PLACING newsubstring bit FROM start integer [ FOR count integer ] ) → bit|
+Replaces the substring of bits that starts at the start'th bit and extends for count bits with newsubstring. If count is omitted, it defaults to the length of newsubstring.|
+```sql
+overlay(B'01010101010101010' placing B'11111' from 2 for 3) → 0111110101010101010
+```||
+||position ( substring bit IN bits bit ) → integer|
+Returns first starting index of the specified substring within bits, or zero if it's not present.|
+```sql
+position(B'010' in B'000001101011') → 8
+```||
+||substring ( bits bit [ FROM start integer ] [ FOR count integer ] ) → bit|
+Extracts the substring of bits starting at the start'th bit if that is specified, and stopping after count bits if that is specified. Provide at least one of start and count.|
+```sql
+substring(B'110010111111' from 3 for 2) → 00
+```||
+||get_bit ( bits bit, n integer ) → integer|
+Extracts n'th bit from bit string; the first (leftmost) bit is bit 0.|
+```sql
+get_bit(B'101010101010101010', 6) → 1
+```||
+||set_bit ( bits bit, n integer, newvalue integer ) → bit|
+Sets n'th bit in bit string to newvalue; the first (leftmost) bit is bit 0.|
+```sql
+set_bit(B'101010101010101010', 6, 0) → 101010001010101010
+```||
+|#
+
+In addition, it is possible to cast integral values to and from type bit. Casting an integer to bit(n) copies the rightmost n bits. Casting an integer to a bit string width wider than the integer itself will sign-extend on the left. Some examples:
+
+```sql
+44::bit(10)                    → 0000101100
+44::bit(3)                     → 100
+cast(-44 as bit(12))           → 111111010100
+'1110'::bit(4)::integer        → 14
+```
+Note that casting to just “bit” means casting to bit(1), and so will deliver only the least significant bit of the integer.

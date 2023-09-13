@@ -485,8 +485,8 @@ TDescribeConsumerActor::TDescribeConsumerActor(NKikimr::NGRpcService::IRequestOp
     : TBase(ctx, dynamic_cast<const Ydb::Topic::DescribeConsumerRequest*>(ctx->GetRequest())->path())
     , TDescribeTopicActorImpl(TDescribeTopicActorSettings::DescribeConsumer(
             dynamic_cast<const Ydb::Topic::DescribeConsumerRequest*>(ctx->GetRequest())->consumer(),
-            dynamic_cast<const Ydb::Topic::DescribeTopicRequest*>(ctx->GetRequest())->include_stats(),
-            dynamic_cast<const Ydb::Topic::DescribeTopicRequest*>(ctx->GetRequest())->include_location()))
+            dynamic_cast<const Ydb::Topic::DescribeConsumerRequest*>(ctx->GetRequest())->include_stats(),
+            dynamic_cast<const Ydb::Topic::DescribeConsumerRequest*>(ctx->GetRequest())->include_location()))
 {
 }
 

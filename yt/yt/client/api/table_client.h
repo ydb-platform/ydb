@@ -331,6 +331,7 @@ struct TUpdateChaosTableReplicaProgressOptions
     , public TMutatingOptions
 {
     NChaosClient::TReplicationProgress Progress;
+    bool Force;
 };
 
 struct TAlterReplicationCardOptions

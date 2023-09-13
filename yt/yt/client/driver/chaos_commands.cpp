@@ -17,6 +17,7 @@ TUpdateChaosTableReplicaProgressCommand::TUpdateChaosTableReplicaProgressCommand
 {
     RegisterParameter("replica_id", ReplicaId);
     RegisterParameter("progress", Options.Progress);
+    RegisterParameter("force", Options.Force);
 }
 
 void TUpdateChaosTableReplicaProgressCommand::DoExecute(ICommandContextPtr context)

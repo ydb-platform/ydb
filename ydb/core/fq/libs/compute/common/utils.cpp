@@ -5,36 +5,114 @@
 
 namespace NFq {
 
-void EnumeratePlans(NYson::TYsonWriter& writer, NJson::TJsonValue& value) {
-    if (auto* subNode = value.GetValueByPath("Plans")) {
-        ui32 index = 0;
-        TString nodeType = "Unknown";
-        if (auto* subNode = value.GetValueByPath("PlanNodeType")) {
-            nodeType = subNode->GetStringRobust();
-        }
-        for (auto plan : subNode->GetArray()) {
-            writer.OnKeyedItem(nodeType + "." + ToString(index++));
-            writer.OnBeginMap();
-            EnumeratePlans(writer, plan);
-            if (auto* subNode = plan.GetValueByPath("Stats")) {
-                for (auto& [key, value] : subNode->GetMapSafe()) {
-                    auto v = value.GetIntegerRobust();
-                    writer.OnKeyedItem(key);
+void WriteNamedNode(NYson::TYsonWriter& writer, NJson::TJsonValue& node, const TString& name) {
+    switch (node.GetType()) {
+        case NJson::JSON_INTEGER:
+        case NJson::JSON_DOUBLE:
+        case NJson::JSON_UINTEGER: 
+            if (name) {
+                auto v = node.GetIntegerRobust();
+                writer.OnKeyedItem(name);
+                writer.OnBeginMap();
+                    writer.OnKeyedItem("sum");
+                    writer.OnInt64Scalar(v);
+                    writer.OnKeyedItem("count");
+                    writer.OnInt64Scalar(1);
+                    writer.OnKeyedItem("avg");
+                    writer.OnInt64Scalar(v);
+                    writer.OnKeyedItem("max");
+                    writer.OnInt64Scalar(v);
+                    writer.OnKeyedItem("min");
+                    writer.OnInt64Scalar(v);
+                writer.OnEndMap();
+            }
+            break;
+        case NJson::JSON_ARRAY:
+            if (name) {
+                writer.OnKeyedItem(name);
+                writer.OnBeginMap();
+            }
+            for (auto item : node.GetArray()) {
+                if (auto* subNode = item.GetValueByPath("Name")) {
+                    WriteNamedNode(writer, item, subNode->GetStringRobust());
+                }
+            }
+            if (name) {
+                writer.OnEndMap();
+            }
+            break;
+        case NJson::JSON_MAP:
+            if (auto* subNode = node.GetValueByPath("Sum")) {
+                auto sum = subNode->GetIntegerRobust();
+                auto count = 1;
+                if (auto* subNode = node.GetValueByPath("Count")) {
+                    count = subNode->GetIntegerRobust();
+                    if (count <= 1) {
+                        count = 1;
+                    }
+                }
+                auto min = sum;
+                if (auto* subNode = node.GetValueByPath("Min")) {
+                    min = subNode->GetIntegerRobust();
+                }
+                auto max = sum;
+                if (auto* subNode = node.GetValueByPath("Max")) {
+                    max = subNode->GetIntegerRobust();
+                }
+                writer.OnKeyedItem(name);
+                writer.OnBeginMap();
+                    writer.OnKeyedItem("sum");
+                    writer.OnInt64Scalar(sum);
+                    writer.OnKeyedItem("count");
+                    writer.OnInt64Scalar(count);
+                    writer.OnKeyedItem("avg");
+                    writer.OnInt64Scalar(sum / count);
+                    writer.OnKeyedItem("max");
+                    writer.OnInt64Scalar(max);
+                    writer.OnKeyedItem("min");
+                    writer.OnInt64Scalar(min);
+                writer.OnEndMap();
+            } else {
+                if (name) {
+                    writer.OnKeyedItem(name);
                     writer.OnBeginMap();
-                        writer.OnKeyedItem("sum");
-                        writer.OnInt64Scalar(v);
-                        writer.OnKeyedItem("count");
-                        writer.OnInt64Scalar(v);
-                        writer.OnKeyedItem("avg");
-                        writer.OnInt64Scalar(v);
-                        writer.OnKeyedItem("max");
-                        writer.OnInt64Scalar(v);
-                        writer.OnKeyedItem("min");
-                        writer.OnInt64Scalar(v);
+                }
+                for (auto& [key, value] : node.GetMapSafe()) {
+                    WriteNamedNode(writer, value, key);
+                }
+                if (name) {
                     writer.OnEndMap();
                 }
             }
-            writer.OnEndMap();
+            break;
+        default:
+            break;
+    }
+}
+
+void EnumeratePlans(NYson::TYsonWriter& writer, NJson::TJsonValue& value, const TString& prefix) {
+    if (auto* subNode = value.GetValueByPath("Plans")) {
+        ui32 index = 0;
+        TString nodeType = "Unknown";
+        if (auto* subNode = value.GetValueByPath("Node Type")) {
+            nodeType = subNode->GetStringRobust();
+        }
+        if (prefix) {
+            nodeType = prefix + "." + nodeType;
+        }
+        for (auto plan : subNode->GetArray()) {
+            auto itemPrefix = nodeType + "[" + ToString(index++) + "]";
+            auto* statNode = plan.GetValueByPath("Stats");
+            if (statNode) {
+                writer.OnKeyedItem(itemPrefix);
+                writer.OnBeginMap();
+                itemPrefix = "";
+            }
+            EnumeratePlans(writer, plan, itemPrefix);
+            if (statNode) {
+                WriteNamedNode(writer, *statNode, "");
+                writer.OnEndMap();
+            }
         }
     }
 }
@@ -48,7 +126,7 @@ TString GetV1StatFromV2Plan(const TString& plan) {
     NJson::TJsonValue stat;
     if (NJson::ReadJsonTree(plan, &jsonConfig, &stat)) {
         if (auto* subNode = stat.GetValueByPath("Plan")) {
-            EnumeratePlans(writer, *subNode);
+            EnumeratePlans(writer, *subNode, "");
         }
     }
     writer.OnEndMap();

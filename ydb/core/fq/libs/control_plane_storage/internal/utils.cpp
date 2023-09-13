@@ -179,6 +179,62 @@ void RemapNode(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, const 
     }
 }
 
+void AggregateNode(const NJson::TJsonValue& node, const TString& path, ui64& min, ui64& max, ui64& sum, ui64& count) {
+    if (node.GetType() == NJson::JSON_MAP) {
+        if (auto* subNode = node.GetValueByPath(path)) {
+            if (auto* keyNode = subNode->GetValueByPath("count")) {
+                auto nodeCount = keyNode->GetInteger();
+                if (nodeCount) {
+                    if (auto* keyNode = subNode->GetValueByPath("min")) {
+                        auto nodeMin = keyNode->GetInteger();
+                        min = count ? std::min<ui64>(min, nodeMin) : nodeMin;
+                    }
+                    if (auto* keyNode = subNode->GetValueByPath("max")) {
+                        auto nodeMax = keyNode->GetInteger();
+                        max = count ? std::max<ui64>(max, nodeMax) : nodeMax;
+                    }
+                    if (auto* keyNode = subNode->GetValueByPath("sum")) {
+                        sum += keyNode->GetInteger();
+                    }
+                    // ignore "avg"
+                    count += nodeCount;
+                }
+            }
+        }
+        for (const auto& p : node.GetMap()) {
+            if (p.first == "min" || p.first == "max" || p.first == "sum" || p.first == "count" || p.first == "avg") {
+                return;
+            }
+            AggregateNode(p.second, path, min, max, sum, count);
+        }
+    }
+}
+
+void AggregateNode(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, const TString& path, const TString& key) {
+    ui64 min = 0;
+    ui64 max = 0;
+    ui64 sum = 0;
+    ui64 count = 0;
+
+    AggregateNode(node, path, min, max, sum, count);
+
+    if (count) {
+        writer.OnKeyedItem(key);
+        writer.OnBeginMap();
+            writer.OnKeyedItem("sum");
+            writer.OnInt64Scalar(sum);
+            writer.OnKeyedItem("count");
+            writer.OnInt64Scalar(count);
+            writer.OnKeyedItem("avg");
+            writer.OnInt64Scalar(sum / count);
+            writer.OnKeyedItem("min");
+            writer.OnInt64Scalar(min);
+            writer.OnKeyedItem("max");
+            writer.OnInt64Scalar(max);
+        writer.OnEndMap();
+    }
+}
+
 TString GetPrettyStatistics(const TString& statistics) {
     TStringStream out;
     NYson::TYsonWriter writer(&out);
@@ -187,6 +243,7 @@ TString GetPrettyStatistics(const TString& statistics) {
     NJson::TJsonValue stat;
     if (NJson::ReadJsonTree(statistics, &jsonConfig, &stat)) {
         for (const auto& p : stat.GetMap()) {
+            // YQv1
             if (p.first.StartsWith("Graph=") || p.first.StartsWith("Precompute=")) {
                 writer.OnKeyedItem(p.first);
                 writer.OnBeginMap();
@@ -201,6 +258,16 @@ TString GetPrettyStatistics(const TString& statistics) {
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.IngressPqSourceBytes", "IngressStreamBytes");
                     RemapNode(writer, p.second, "TaskRunner.Stage=Total.EgressPqSinkBytes", "EgressStreamBytes");
                     RemapNode(writer, p.second, "TaskRunner.Source=0.Stage=Total.RowsIn", "IngressRows");
+                writer.OnEndMap();
+            }
+            // YQv2
+            if (p.first.StartsWith("Query[")) {
+                writer.OnKeyedItem(p.first);
+                writer.OnBeginMap();
+                    RemapNode(writer, p.second, "TotalTasks", "TasksCount");
+                    RemapNode(writer, p.second, "TotalCpuTimeUs", "CpuTimeUs");
+                    AggregateNode(writer, p.second, "IngressBytes.S3Source", "IngressObjectStorageBytes");
+                    AggregateNode(writer, p.second, "EgressBytes.S3Sink", "EgressObjectStorageBytes");
                 writer.OnEndMap();
             }
         }

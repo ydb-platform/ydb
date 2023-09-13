@@ -1817,6 +1817,30 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                 stats["TotalOutputRows"] = (*stat)->GetOutputRows().GetSum();
                 stats["TotalOutputBytes"] = (*stat)->GetOutputBytes().GetSum();
 
+                if (!(*stat)->GetIngressBytes().empty()) {
+                    auto& ingressStats = stats.InsertValue("IngressBytes", NJson::JSON_ARRAY);
+                    for (auto ingressBytes : (*stat)->GetIngressBytes()) {
+                        auto& ingressInfo = ingressStats.AppendValue(NJson::JSON_MAP);
+                        ingressInfo["Name"] = ingressBytes.first;
+                        ingressInfo["Min"] = ingressBytes.second.GetMin();
+                        ingressInfo["Max"] = ingressBytes.second.GetMax();
+                        ingressInfo["Sum"] = ingressBytes.second.GetSum();
+                        ingressInfo["Count"] = ingressBytes.second.GetCnt();
+                    }
+                }
+
+                if (!(*stat)->GetEgressBytes().empty()) {
+                    auto& egressStats = stats.InsertValue("EgressBytes", NJson::JSON_ARRAY);
+                    for (auto egressBytes : (*stat)->GetEgressBytes()) {
+                        auto& egressInfo = egressStats.AppendValue(NJson::JSON_MAP);
+                        egressInfo["Name"] = egressBytes.first;
+                        egressInfo["Min"] = egressBytes.second.GetMin();
+                        egressInfo["Max"] = egressBytes.second.GetMax();
+                        egressInfo["Sum"] = egressBytes.second.GetSum();
+                        egressInfo["Count"] = egressBytes.second.GetCnt();
+                    }
+                }
+
                 NKqpProto::TKqpStageExtraStats kqpStageStats;
                 if ((*stat)->GetExtra().UnpackTo(&kqpStageStats)) {
                     auto& nodesStats = stats.InsertValue("NodesScanShards", NJson::JSON_ARRAY);

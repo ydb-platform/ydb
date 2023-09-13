@@ -245,6 +245,10 @@ message TDqStageStats {
         bool UseLlvm = 18;
     }
 
+    // currently only 1 source/sink per stage is supported
+    map<string, TDqStatsAggr> IngressBytes = 19; // ingress from external source, per provider
+    map<string, TDqStatsAggr> EgressBytes = 20; // egress to external consumer, per provider
+
     google.protobuf.Any Extra = 100;
 }
 

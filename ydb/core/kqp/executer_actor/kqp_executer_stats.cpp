@@ -171,6 +171,13 @@ void TQueryExecutionStats::AddComputeActorStats(ui32 /* nodeId */, NYql::NDqProt
             UpdateMinMax(stageStats->MutableFinishTimeMs(), task.GetFinishTimeMs());
 
             stageStats->SetDurationUs((stageStats->GetFinishTimeMs().GetMax() - stageStats->GetFirstRowTimeMs().GetMin()) * 1'000);
+
+            for (auto ingressStat : task.GetIngress()) {
+                UpdateAggr(&(*stageStats->MutableIngressBytes())[ingressStat.GetName()], ingressStat.GetBytes());
+            }
+            for (auto egressStat : task.GetEgress()) {
+                UpdateAggr(&(*stageStats->MutableEgressBytes())[egressStat.GetName()], egressStat.GetBytes());
+            }
         }
     }
 

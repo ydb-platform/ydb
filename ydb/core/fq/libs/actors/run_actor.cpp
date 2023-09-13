@@ -7,6 +7,7 @@
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/library/yql/core/services/mounts/yql_mounts.h>
+#include <ydb/library/yql/core/services/yql_out_transformers.h>
 #include <ydb/library/yql/core/facade/yql_facade.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
@@ -44,6 +45,7 @@
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/protos/issue_message.pb.h>
+#include <ydb/library/yql/utils/actor_log/log.h>
 
 #include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/library/services/services.pb.h>
@@ -122,6 +124,32 @@ struct TEvPrivate {
     };
 };
 
+class TTraceOptPipelineConfigurator : public IPipelineConfigurator {
+public:
+    TTraceOptPipelineConfigurator() = default;
+
+    void AfterCreate(TTransformationPipeline* pipeline) const final {
+        Y_UNUSED(pipeline);
+    }
+
+    void AfterTypeAnnotation(TTransformationPipeline* pipeline) const final {
+        pipeline->Add(
+            TExprLogTransformer::Sync(
+                "OptimizedExpr",
+                NYql::NLog::EComponent::Core,
+                NYql::NLog::ELevel::TRACE),
+            "OptTrace",
+            TIssuesIds::CORE,
+            "OptTrace");
+    }
+
+    void AfterOptimize(TTransformationPipeline* pipeline) const final {
+        Y_UNUSED(pipeline);
+    }
+};
+
+static TTraceOptPipelineConfigurator TraceOptPipelineConfigurator;
+
 }
 
 class TProgramRunnerActor : public NActors::TActorBootstrapped<TProgramRunnerActor> {
@@ -194,13 +222,13 @@ public:
         TProgram::TFutureStatus futureStatus;
         switch (ExecuteMode) {
         case FederatedQuery::ExecuteMode::EXPLAIN:
-            futureStatus = Program->OptimizeAsync("");
+            futureStatus = Program->OptimizeAsyncWithConfig("", TraceOptPipelineConfigurator);
             break;
         case FederatedQuery::ExecuteMode::VALIDATE:
             futureStatus = Program->ValidateAsync("");
             break;
         case FederatedQuery::ExecuteMode::RUN:
-            futureStatus = Program->RunAsync("");
+            futureStatus = Program->RunAsyncWithConfig("", TraceOptPipelineConfigurator);
             break;
         default:
             SendStatusAndDie(TProgram::TStatus::Error, TStringBuilder() << "Unexpected execute mode " << static_cast<int>(ExecuteMode));
@@ -1802,6 +1830,10 @@ private:
     }
 
     void RunProgram() {
+        //NYql::NLog::YqlLogger().SetComponentLevel(NYql::NLog::EComponent::Core, NYql::NLog::ELevel::TRACE);
+        //NYql::NLog::YqlLogger().SetComponentLevel(NYql::NLog::EComponent::CoreEval, NYql::NLog::ELevel::TRACE);
+        //NYql::NLog::YqlLogger().SetComponentLevel(NYql::NLog::EComponent::CorePeepHole, NYql::NLog::ELevel::TRACE);
+
         LOG_D("Compiling query ...");
         NYql::TGatewaysConfig gatewaysConfig;
         SetupDqSettings(*gatewaysConfig.MutableDq());
@@ -1895,7 +1927,7 @@ private:
             return;
         }
 
-        ProgramRunnerId = Register(new TProgramRunnerActor(
+        ProgramRunnerId = Register(new NYql::NDq::TLogWrapReceive(new TProgramRunnerActor(
             SelfId(),
             Params.FunctionRegistry,
             Params.NextUniqueId,
@@ -1907,7 +1939,7 @@ private:
             sqlSettings,
             Params.ExecuteMode,
             Params.QueryId
-        ));
+        ), Params.QueryId));
     }
 
     void Handle(TEvPrivate::TEvProgramFinished::TPtr& ev) {
@@ -2199,7 +2231,7 @@ IActor* CreateRunActor(
     const ::NYql::NCommon::TServiceCounters& serviceCounters,
     TRunActorParams&& params
 ) {
-    return new TRunActor(fetcherId, serviceCounters, std::move(params));
+    return new NYql::NDq::TLogWrapReceive(new TRunActor(fetcherId, serviceCounters, std::move(params)), params.QueryId);
 }
 
 } /* NFq */

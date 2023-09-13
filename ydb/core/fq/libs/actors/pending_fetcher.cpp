@@ -292,6 +292,11 @@ private:
         return FetcherGuid + ToString(FetcherGeneration);
     }
 
+    NActors::NLog::EPriority GetYqlLogLevel() const {
+        ui8 currentLevel = TlsActivationContext->LoggerSettings()->GetComponentSettings(NKikimrServices::YQL_PROXY).Raw.X.Level;
+        return static_cast<NActors::NLog::EPriority>(currentLevel);
+    }
+
     void RunTask(const Fq::Private::GetTaskResult::Task& task) {
         LOG_D("NewTask:"
               << " Scope: " << task.scope()
@@ -304,7 +309,7 @@ private:
             serviceAccounts[identity.value()] = identity.signature();
         }
 
-        NDq::SetYqlLogLevels(NActors::NLog::PRI_TRACE);
+        NDq::SetYqlLogLevels(GetYqlLogLevel());
 
         const TString folderId = NYdb::NFq::TScope(task.scope()).ParseFolder();
         const TString cloudId = task.sensor_labels().at("cloud_id");

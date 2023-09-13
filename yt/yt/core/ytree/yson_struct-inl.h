@@ -293,4 +293,74 @@ void UpdateYsonStructField(TIntrusivePtr<TDst>& dst, const TIntrusivePtr<TSrc>& 
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#undef DECLARE_YSON_STRUCT
+#undef REGISTER_YSON_STRUCT
+#undef DECLARE_YSON_STRUCT_LITE
+#undef REGISTER_YSON_STRUCT_LITE
+#undef DEFINE_YSON_STRUCT
+
+
+#define YSON_STRUCT_IMPL__DECLARE_ALIASES(TStruct) \
+private: \
+    using TRegistrar = ::NYT::NYTree::TYsonStructRegistrar<TStruct>; \
+    using TThis = TStruct; \
+    friend class ::NYT::NYTree::TYsonStructRegistry;
+
+#define YSON_STRUCT_IMPL__CTOR_BODY(TStruct) \
+    ::NYT::NYTree::TYsonStructRegistry::Get()->InitializeStruct(this);
+
+
+#define DECLARE_YSON_STRUCT(TStruct) \
+public: \
+    TStruct(); \
+    YSON_STRUCT_IMPL__DECLARE_ALIASES(TStruct)
+
+#define REGISTER_YSON_STRUCT(TStruct) \
+public: \
+    TStruct() \
+    { \
+        YSON_STRUCT_IMPL__CTOR_BODY(TStruct) \
+    } \
+    YSON_STRUCT_IMPL__DECLARE_ALIASES(TStruct)
+
+
+#define REGISTER_YSON_STRUCT_LITE_BASE(TStruct) \
+public: \
+    static TStruct Create() \
+    { \
+        static_assert(std::is_base_of_v<::NYT::NYTree::TYsonStructLite, TStruct>, "Class must inherit from TYsonStructLite"); \
+        TStruct result; \
+        result.SetDefaults(); \
+        return result; \
+    } \
+ \
+    template <class T> \
+    friend const std::type_info& ::NYT::NYTree::CallCtor(); \
+ \
+   YSON_STRUCT_IMPL__DECLARE_ALIASES(TStruct) \
+
+#define DECLARE_YSON_STRUCT_LITE(TStruct) \
+    REGISTER_YSON_STRUCT_LITE_BASE(TStruct) \
+ \
+protected: \
+    TStruct();
+
+#define REGISTER_YSON_STRUCT_LITE(TStruct) \
+    REGISTER_YSON_STRUCT_LITE_BASE(TStruct) \
+ \
+protected: \
+    TStruct() \
+    { \
+        YSON_STRUCT_IMPL__CTOR_BODY(TStruct) \
+    }
+
+
+#define DEFINE_YSON_STRUCT(TStruct) \
+TStruct::TStruct() \
+{ \
+    YSON_STRUCT_IMPL__CTOR_BODY(TStruct) \
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NYTree

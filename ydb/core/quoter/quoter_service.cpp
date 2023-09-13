@@ -127,18 +127,18 @@ void TReqState::Free(TRequestId idx) {
     Unused.push_back(idx);
 }
 
-TResourceLeaf& TResState::Get(TResponseId idx) {
+TResourceLeaf& TResState::Get(TResourceLeafId idx) {
     Y_VERIFY(idx < Leafs.size());
     return Leafs[idx];
 }
 
-TResponseId TResState::Allocate(TResource *resource, ui64 amount, bool isUsedAmount, TRequestId requestIdx) {
-    TResponseId idx;
+TResourceLeafId TResState::Allocate(TResource *resource, ui64 amount, bool isUsedAmount, TRequestId requestIdx) {
+    TResourceLeafId idx;
     if (Unused) {
         idx = Unused.back();
         Unused.pop_back();
     } else {
-        idx = TResponseId{static_cast<ui32>(Leafs.size())};
+        idx = TResourceLeafId{static_cast<ui32>(Leafs.size())};
         Leafs.emplace_back();
     }
 
@@ -161,8 +161,8 @@ TResponseId TResState::Allocate(TResource *resource, ui64 amount, bool isUsedAmo
     return idx;
 }
 
-void TResState::FreeChain(TResponseId headIdx) {
-    while (headIdx != TResponseId{}) {
+void TResState::FreeChain(TResourceLeafId headIdx) {
+    while (headIdx != TResourceLeafId{}) {
         auto &x = Get(headIdx);
         Y_VERIFY_DEBUG(x.Resource == nullptr);
         Y_VERIFY_DEBUG(x.NextInWaitQueue == TRequestId{});
@@ -170,7 +170,7 @@ void TResState::FreeChain(TResponseId headIdx) {
 
         Unused.push_back(headIdx);
         headIdx = x.NextResourceLeaf;
-        x.NextResourceLeaf = TResponseId{};
+        x.NextResourceLeaf = TResourceLeafId{};
 
         x.Amount = Max<ui64>();
         x.RequestIdx = TRequestId{};
@@ -397,7 +397,7 @@ void TQuoterService::ForgetRequest(TRequest &request, TRequestId reqIdx) {
     // so only correct entry points are from ReplyRequest or from CancelRequest
 
     // cleanup from resource wait queue
-    for (TResponseId leafIdx = request.ResourceLeaf; leafIdx != TResponseId{}; ) {
+    for (TResourceLeafId leafIdx = request.ResourceLeaf; leafIdx != TResourceLeafId{}; ) {
         TResourceLeaf &leaf = ResState.Get(leafIdx);
 
         switch (leaf.State) {
@@ -431,8 +431,8 @@ void TQuoterService::ForgetRequest(TRequest &request, TRequestId reqIdx) {
                 // TODO: resource schedule update over new active entry
 
                 leaf.Resource = nullptr;
-                leaf.PrevInWaitQueue = TResponseId{};
-                leaf.NextInWaitQueue = TResponseId{};
+                leaf.PrevInWaitQueue = TResourceLeafId{};
+                leaf.NextInWaitQueue = TResourceLeafId{};
             }
             break;
         case EResourceState::ResolveQuoter:
@@ -451,7 +451,7 @@ void TQuoterService::ForgetRequest(TRequest &request, TRequestId reqIdx) {
     }
 
     ResState.FreeChain(request.ResourceLeaf);
-    request.ResourceLeaf = TResponseId{};
+    request.ResourceLeaf = TResourceLeafId{};
 
     // cleanup from deadline queue is inside of generic ReqState::Free
     ReqState.Free(reqIdx);
@@ -504,8 +504,8 @@ TQuoterService::EInitLeafStatus TQuoterService::InitSystemLeaf(const TEvQuota::T
             quores.NextTick = TInstant::Zero();
             quores.LastTick = TInstant::Zero();
 
-            quores.QueueHead = TResponseId{};
-            quores.QueueTail = TResponseId{};
+            quores.QueueHead = TResourceLeafId{};
+            quores.QueueTail = TResourceLeafId{};
 
             quores.LastAllocated = TInstant::Zero();
             quores.AmountConsumed = 0.0;
@@ -578,7 +578,7 @@ TQuoterService::EInitLeafStatus TQuoterService::InitResourceLeaf(const TEvQuota:
         quoter->WaitingQueueResolve.emplace(reqIdx);
 
         // todo: make generic 'leaf for resolve' helper
-        const TResponseId resLeafIdx = ResState.Allocate(nullptr, leaf.Amount, leaf.IsUsedAmount, reqIdx);
+        const TResourceLeafId resLeafIdx = ResState.Allocate(nullptr, leaf.Amount, leaf.IsUsedAmount, reqIdx);
         TResourceLeaf& resLeaf = ResState.Get(resLeafIdx);
 
         resLeaf.QuoterId = quoterId;
@@ -609,7 +609,7 @@ TQuoterService::EInitLeafStatus TQuoterService::InitResourceLeaf(const TEvQuota:
             auto rIndxIt = quoter->WaitingResource.emplace(leaf.Resource, TSet<TRequestId>());
             rIndxIt.first->second.emplace(reqIdx);
 
-            const TResponseId resLeafIdx = ResState.Allocate(nullptr, leaf.Amount, leaf.IsUsedAmount, reqIdx);
+            const TResourceLeafId resLeafIdx = ResState.Allocate(nullptr, leaf.Amount, leaf.IsUsedAmount, reqIdx);
             TResourceLeaf& resLeaf = ResState.Get(resLeafIdx);
 
             resLeaf.QuoterId = quoterId;
@@ -705,7 +705,7 @@ TQuoterService::EInitLeafStatus TQuoterService::TryCharge(TResource& quores, ui6
     }
 
     // need wait entry for resource
-    const TResponseId resLeafIdx = ResState.Allocate(&quores, leaf.Amount, leaf.IsUsedAmount, reqIdx);
+    const TResourceLeafId resLeafIdx = ResState.Allocate(&quores, leaf.Amount, leaf.IsUsedAmount, reqIdx);
     TResourceLeaf& resLeaf = ResState.Get(resLeafIdx);
 
     resLeaf.State = EResourceState::Wait;
@@ -925,8 +925,8 @@ void TQuoterService::Handle(TEvQuota::TEvProxySession::TPtr &ev) {
     // move requests to 'wait resource' state
     for (TRequestId reqId : waitingRequests) {
         TRequest &req = ReqState.Get(reqId);
-        TResponseId resIdx = req.ResourceLeaf;
-        while (resIdx != TResponseId{}) {
+        TResourceLeafId resIdx = req.ResourceLeaf;
+        while (resIdx != TResourceLeafId{}) {
             TResourceLeaf &leaf = ResState.Get(resIdx);
             Y_VERIFY(leaf.RequestIdx == reqId);
             if (leaf.State == EResourceState::ResolveResource
@@ -945,7 +945,7 @@ void TQuoterService::Handle(TEvQuota::TEvProxySession::TPtr &ev) {
                     quores.QueueTail = resIdx;
                     quores.QueueHead = resIdx;
                 } else {
-                    Y_VERIFY_DEBUG(ResState.Get(quores.QueueTail).NextInWaitQueue == TResponseId{});
+                    Y_VERIFY_DEBUG(ResState.Get(quores.QueueTail).NextInWaitQueue == TResourceLeafId{});
                     leaf.PrevInWaitQueue = quores.QueueTail;
                     ResState.Get(quores.QueueTail).NextInWaitQueue = resIdx;
                     quores.QueueTail = resIdx;
@@ -1068,7 +1068,7 @@ void TQuoterService::CreateKesusQuoter(NSchemeCache::TSchemeCacheNavigate::TEntr
     TSet<TRequestId> waitingQueueResolve(std::move(quoter.WaitingQueueResolve));
     for (TRequestId reqIdx : waitingQueueResolve) {
         TRequest &req = ReqState.Get(reqIdx);
-        for (TResponseId resLeafIdx = req.ResourceLeaf; resLeafIdx != Max<ui32>(); ) {
+        for (TResourceLeafId resLeafIdx = req.ResourceLeaf; resLeafIdx != Max<ui32>(); ) {
             TResourceLeaf &leaf = ResState.Get(resLeafIdx);
             if (leaf.QuoterId == quoterId) {
                 Y_VERIFY(leaf.State == EResourceState::ResolveQuoter);
@@ -1147,7 +1147,7 @@ void TQuoterService::ForbidResource(TResource &quores) {
 void TQuoterService::CheckRequest(TRequestId reqIdx) {
     TRequest &request = ReqState.Get(reqIdx);
 
-    for (TResponseId nextLeaf = request.ResourceLeaf; nextLeaf != Max<ui32>(); ) {
+    for (TResourceLeafId nextLeaf = request.ResourceLeaf; nextLeaf != Max<ui32>(); ) {
         auto &leaf = ResState.Get(nextLeaf);
         if (leaf.State != EResourceState::Cleared)
             return;
@@ -1248,20 +1248,20 @@ void TQuoterService::AllocateResource(TResource &quores) {
 
             if (quores.QueueHead != Max<ui32>()) {
                 TResourceLeaf &nextLeaf = ResState.Get(quores.QueueHead);
-                nextLeaf.PrevInWaitQueue = TResponseId{};
+                nextLeaf.PrevInWaitQueue = TResourceLeafId{};
 
                 quores.QueueSize -= 1;
                 quores.QueueWeight -= leaf.Amount;
             } else {
                 // last entry in queue
-                quores.QueueTail = TResponseId{};
+                quores.QueueTail = TResourceLeafId{};
 
                 quores.QueueSize = 0;
                 quores.QueueWeight = 0.0;
             }
 
-            leaf.NextInWaitQueue = TResponseId{};
-            leaf.PrevInWaitQueue = TResponseId{};
+            leaf.NextInWaitQueue = TResourceLeafId{};
+            leaf.PrevInWaitQueue = TResourceLeafId{};
             leaf.Resource = nullptr;
             leaf.State = EResourceState::Cleared;
 

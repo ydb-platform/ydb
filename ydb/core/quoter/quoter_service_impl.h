@@ -49,14 +49,14 @@ struct TRequestId {
     auto operator<=>(const TRequestId&) const = default;
 };
 
-struct TResponseId {
+struct TResourceLeafId {
     ui32 Value = Max<ui32>();
 
     operator ui32() const {
         return Value;
     }
 
-    auto operator<=>(const TResponseId&) const = default;
+    auto operator<=>(const TResourceLeafId&) const = default;
 };
 
 struct TResource;
@@ -70,7 +70,7 @@ struct TRequest {
     TInstant StartTime;
     EResourceOperator Operator = EResourceOperator::Unknown;
     TInstant Deadline = TInstant::Max();
-    TResponseId ResourceLeaf;
+    TResourceLeafId ResourceLeaf;
 
     TRequestId PrevDeadlineRequest;
     TRequestId NextDeadlineRequest;
@@ -110,10 +110,10 @@ struct TResourceLeaf {
 
     TRequestId RequestIdx;
 
-    TResponseId NextInWaitQueue;
-    TResponseId PrevInWaitQueue;
+    TResourceLeafId NextInWaitQueue;
+    TResourceLeafId PrevInWaitQueue;
 
-    TResponseId NextResourceLeaf;
+    TResourceLeafId NextResourceLeaf;
 
     EResourceState State = EResourceState::Unknown;
 
@@ -130,11 +130,11 @@ struct TResourceLeaf {
 class TResState {
 private:
     TVector<TResourceLeaf> Leafs;
-    TVector<TResponseId> Unused;
+    TVector<TResourceLeafId> Unused;
 public:
-    TResourceLeaf& Get(TResponseId idx);
-    TResponseId Allocate(TResource *resource, ui64 amount, bool isUsedAmount, TRequestId requestIdx);
-    void FreeChain(TResponseId headIdx);
+    TResourceLeaf& Get(TResourceLeafId idx);
+    TResourceLeafId Allocate(TResource *resource, ui64 amount, bool isUsedAmount, TRequestId requestIdx);
+    void FreeChain(TResourceLeafId headIdx);
 };
 
 struct TResource {
@@ -148,8 +148,8 @@ struct TResource {
     TInstant NextTick = TInstant::Zero();
     TInstant LastTick = TInstant::Zero();
 
-    TResponseId QueueHead; // to resource leaf
-    TResponseId QueueTail;
+    TResourceLeafId QueueHead; // to resource leaf
+    TResourceLeafId QueueTail;
 
     ui32 QueueSize = 0;
     double QueueWeight = 0;

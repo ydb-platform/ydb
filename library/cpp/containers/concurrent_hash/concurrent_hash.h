@@ -54,6 +54,16 @@ public:
             typename TActualMap::const_iterator it = Map.find(key);
             return (it != Map.end());
         }
+
+        const V* TryGetUnsafe(const K& key) const {
+            typename TActualMap::const_iterator it = Map.find(key);
+            return it == Map.end() ? nullptr : &it->second;
+        }
+
+        V* TryGetUnsafe(const K& key) {
+            typename TActualMap::iterator it = Map.find(key);
+            return it == Map.end() ? nullptr : &it->second;
+        }
     };
 
     std::array<TBucket, BucketCount> Buckets;
@@ -87,12 +97,26 @@ public:
         return bucket.Map.insert(std::make_pair(key, value)).first->second;
     }
 
+    template <typename TKey, typename... Args>
+    V& EmplaceIfAbsent(TKey&& key, Args&&... args) {
+        TBucket& bucket = GetBucketForKey(key);
+        TGuard<TLock> guard(bucket.Mutex);
+        if (V* value = bucket.TryGetUnsafe(key)) {
+            return *value;
+        }
+        return bucket.Map.emplace(
+            std::piecewise_construct,
+            std::forward_as_tuple(std::forward<TKey>(key)),
+            std::forward_as_tuple(std::forward<Args>(args)...)
+        ).first->second;
+    }
+
     template <typename Callable>
     V& InsertIfAbsentWithInit(const K& key, Callable initFunc) {
         TBucket& bucket = GetBucketForKey(key);
         TGuard<TLock> guard(bucket.Mutex);
-        if (bucket.HasUnsafe(key)) {
-            return bucket.GetUnsafe(key);
+        if (V* value = bucket.TryGetUnsafe(key)) {
+            return *value;
         }
 
         return bucket.Map.insert(std::make_pair(key, initFunc())).first->second;
@@ -107,8 +131,8 @@ public:
     bool Get(const K& key, V& result) const {
         const TBucket& bucket = GetBucketForKey(key);
         TGuard<TLock> guard(bucket.Mutex);
-        if (bucket.HasUnsafe(key)) {
-            result = bucket.GetUnsafe(key);
+        if (const V* value = bucket.TryGetUnsafe(key)) {
+            result = *value;
             return true;
         }
         return false;

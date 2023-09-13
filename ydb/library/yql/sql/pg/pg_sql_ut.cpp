@@ -322,9 +322,9 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
         settings.PgParameterTypeOids = {};
         auto res = PgSqlToYql(R"(select $1 as "x", $2 as "y", $3 as "z")");
         TMap<TString, TString> expectedParamToType {
-            {"$p1", "'text"},
-            {"$p2", "'text"},
-            {"$p3", "'text"},
+            {"$p1", "'unknown"},
+            {"$p2", "'unknown"},
+            {"$p3", "'unknown"},
         };
         UNIT_ASSERT(res.Root);
         auto actualParamToTypes = GetParamNameToPgType(*res.Root);

@@ -47,7 +47,7 @@ extern "C" {
 
 constexpr auto PREPARED_PARAM_PREFIX =  "$p";
 constexpr auto AUTO_PARAM_PREFIX =  "a";
-constexpr auto DEFAULT_PARAM_TYPE = "text";
+constexpr auto DEFAULT_PARAM_TYPE = "unknown";
 
 namespace NSQLTranslationPG {
 

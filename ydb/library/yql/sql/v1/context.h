@@ -78,6 +78,7 @@ namespace NSQLTranslationV1 {
         Allow,
         AsStringLiteral,
         AsPgType,
+        MatchRecognize,
     };
 
     class TContext {
@@ -195,6 +196,12 @@ namespace NSQLTranslationV1 {
             return TopLevelColumnReferenceState;
         }
 
+        TStringBuf GetMatchRecognizeDefineVar() const {
+            YQL_ENSURE(EColumnRefState::MatchRecognize == ColumnReferenceState,
+                       "DefineVar can only be accessed within processing of MATCH_RECOGNIZE lambdas");
+            return MatchRecognizeDefineVar;
+        }
+
         TVector<NSQLTranslation::TSQLHint> PullHintForToken(NYql::TPosition tokenPos);
         void WarnUnusedHints();
 
@@ -215,6 +222,7 @@ namespace NSQLTranslationV1 {
 
         EColumnRefState ColumnReferenceState = EColumnRefState::Deny;
         EColumnRefState TopLevelColumnReferenceState = EColumnRefState::Deny;
+        TString MatchRecognizeDefineVar;
         TString NoColumnErrorContext = "in current scope";
         TVector<TBlocks*> CurrentBlocks;
 
@@ -305,10 +313,11 @@ namespace NSQLTranslationV1 {
 
     class TColumnRefScope {
     public:
-        TColumnRefScope(TContext& ctx, EColumnRefState state, bool isTopLevelExpr = true)
+        TColumnRefScope(TContext& ctx, EColumnRefState state, bool isTopLevelExpr = true, const TString& defineVar = "")
             : PrevTop(ctx.TopLevelColumnReferenceState)
             , Prev(ctx.ColumnReferenceState)
             , PrevErr(ctx.NoColumnErrorContext)
+            , PrevDefineVar(ctx.MatchRecognizeDefineVar)
             , Ctx(ctx)
         {
             if (isTopLevelExpr) {
@@ -316,6 +325,8 @@ namespace NSQLTranslationV1 {
             } else {
                 Ctx.ColumnReferenceState = state;
             }
+            YQL_ENSURE(defineVar.empty() || EColumnRefState::MatchRecognize == state, "Internal logic error");
+            ctx.MatchRecognizeDefineVar = defineVar;
         }
 
         void SetNoColumnErrContext(const TString& msg) {
@@ -326,11 +337,13 @@ namespace NSQLTranslationV1 {
             Ctx.TopLevelColumnReferenceState = PrevTop;
             Ctx.ColumnReferenceState = Prev;
             std::swap(Ctx.NoColumnErrorContext, PrevErr);
+            std::swap(Ctx.MatchRecognizeDefineVar, PrevDefineVar);
         }
     private:
         const EColumnRefState PrevTop;
         const EColumnRefState Prev;
         TString PrevErr;
+        TString PrevDefineVar;
         TContext& Ctx;
     };
 

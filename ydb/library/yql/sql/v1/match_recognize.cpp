@@ -1,7 +1,16 @@
 #include "match_recognize.h"
 #include "source.h"
+#include "context.h"
 
 namespace NSQLTranslationV1 {
+
+namespace {
+
+const auto VarDataName = "data";
+const auto VarMatchedVarsName = "vars";
+const auto VarLastRowIndexName = "lri";
+
+} //namespace {
 
 class TMatchRecognize: public TAstListNode {
 public:
@@ -9,14 +18,14 @@ public:
             TPosition pos,
             ISource* source,
             const TString& inputTable,
-            std::pair<TPosition, TVector<TPartitioner>>&& partitioners,
+            std::pair<TPosition, TVector<TNamedFunction>>&& partitioners,
             std::pair<TPosition, TVector<TSortSpecificationPtr>>&& sortSpecs,
-            std::pair<TPosition, TVector<TNamedLambda>>&& measures,
+            std::pair<TPosition, TVector<TNamedFunction>>&& measures,
             std::pair<TPosition, ERowsPerMatch>&& rowsPerMatch,
             std::pair<TPosition, TAfterMatchSkipTo>&& skipTo,
             std::pair<TPosition, NYql::NMatchRecognize::TRowPattern>&& pattern,
             std::pair<TPosition, TNodePtr>&& subset,
-            std::pair<TPosition, TVector<TNamedLambda>>&& definitions
+            std::pair<TPosition, TVector<TNamedFunction>>&& definitions
             ): TAstListNode(pos, {BuildAtom(pos, "block")})
     {
         Add(BuildBlockStatements(
@@ -38,14 +47,14 @@ private:
             TPosition pos,
             ISource* source,
             const TString& inputTable,
-            std::pair<TPosition, TVector<TPartitioner>>&& partitioners,
+            std::pair<TPosition, TVector<TNamedFunction>>&& partitioners,
             std::pair<TPosition, TVector<TSortSpecificationPtr>>&& sortSpecs,
-            std::pair<TPosition, TVector<TNamedLambda>>&& measures,
+            std::pair<TPosition, TVector<TNamedFunction>>&& measures,
             std::pair<TPosition, ERowsPerMatch>&& rowsPerMatch,
             std::pair<TPosition, TAfterMatchSkipTo>&& skipTo,
             std::pair<TPosition, NYql::NMatchRecognize::TRowPattern>&& pattern,
             std::pair<TPosition, TNodePtr>&& subset,
-            std::pair<TPosition, TVector<TNamedLambda>>&& definitions
+            std::pair<TPosition, TVector<TNamedFunction>>&& definitions
             ) {
         Y_UNUSED(pos);
 
@@ -66,20 +75,20 @@ private:
 
         auto measureNames = Y();
         for (const auto& m: measures.second){
-            measureNames->Add(BuildQuotedAtom(m.lambda->GetPos(), m.name));
+            measureNames->Add(BuildQuotedAtom(m.callable->GetPos(), m.name));
         }
         TNodePtr measuresNode = Y("MatchRecognizeMeasures", inputRowType, patternNode, Q(measureNames));
         for (const auto& m: measures.second){
-            measuresNode->Add(m.lambda);
+            measuresNode->Add(BuildLambda(m.callable->GetPos(), Y(VarDataName, VarMatchedVarsName), m.callable));
         }
         auto defineNames = Y();
         for (const auto& d: definitions.second) {
-            defineNames->Add(BuildQuotedAtom(d.lambda->GetPos(), d.name));
+            defineNames->Add(BuildQuotedAtom(d.callable->GetPos(), d.name));
         }
 
         TNodePtr defineNode = Y("MatchRecognizeDefines", inputRowType, patternNode, Q(defineNames));
         for (const auto& d: definitions.second) {
-            defineNode->Add(d.lambda);
+            defineNode->Add(BuildLambda(d.callable->GetPos(), Y(VarDataName, VarMatchedVarsName, VarLastRowIndexName), d.callable));
         }
 
         return Q(Y(
@@ -143,7 +152,6 @@ private:
     }
 };
 
-
 TNodePtr TMatchRecognizeBuilder::Build(TContext& ctx, TString&& inputTable, ISource* source){
     TNodePtr node = new TMatchRecognize(
             Pos,
@@ -161,6 +169,77 @@ TNodePtr TMatchRecognizeBuilder::Build(TContext& ctx, TString&& inputTable, ISou
     if (!node->Init(ctx, source))
         return nullptr;
     return node;
+}
+
+namespace {
+const auto DefaultNavigatingFunction = "MatchRecognizeDefaultNavigating";
+}
+
+bool TMatchRecognizeVarAccessNode::DoInit(TContext& ctx, ISource* src) {
+        //If referenced var is the var that is currently being defined
+        //then it's a reference to the last row in a partition
+        Node = new TMatchRecognizeNavigate(ctx.Pos(), DefaultNavigatingFunction, TVector<TNodePtr>{this});
+        return Node->Init(ctx, src);
+}
+
+bool TMatchRecognizeNavigate::DoInit(TContext& ctx, ISource* src) {
+    Y_UNUSED(src);
+    if (Args.size() != 1) {
+        ctx.Error(Pos) << "Exactly one argument is required in MATCH_RECOGNIZE navigation function";
+        return false;
+    }
+    const auto varColumn = dynamic_cast<TMatchRecognizeVarAccessNode *>(Args[0].Get());
+    if (not varColumn) {
+        ctx.Error(Pos) << "Row pattern navigation operations are applicable to row pattern variable only";
+        return false;
+    }
+    const auto varData = BuildAtom(ctx.Pos(), VarDataName);
+    const auto varMatchedVars = BuildAtom(ctx.Pos(), VarMatchedVarsName);
+    const auto varLastRowIndex = BuildAtom(ctx.Pos(), VarLastRowIndexName);
+
+    const auto matchedRanges = Y("Member", varMatchedVars, Q(varColumn->GetVar()));
+    TNodePtr navigatedRowIndex;
+    if (DefaultNavigatingFunction == Name) {
+        if (not varColumn->IsTheSameVar()) {
+            ctx.Error(Pos) << "Row pattern navigation function is required";
+        }
+        navigatedRowIndex =  varLastRowIndex;
+    }
+    else if ("PREV" == Name) {
+        if (not varColumn->IsTheSameVar()) {
+            ctx.Error(Pos) << "PREV relative to matched vars is not implemented yet";
+            return false;
+        }
+        navigatedRowIndex = Y(
+            "-",
+            varLastRowIndex,
+            Y("Uint64", Q("1"))
+        );
+    } else if ("FIRST" == Name) {
+        navigatedRowIndex = Y(
+            "Member",
+            Y("Head", matchedRanges),
+            Q("From")
+        );
+    } else if ("LAST" == Name) {
+        navigatedRowIndex = Y(
+            "Member",
+            Y("Last", matchedRanges),
+            Q("To")
+        );
+    } else {
+        ctx.Error(Pos) << "Internal logic error";
+    }
+    Add("Member");
+    Add(
+        Y(
+            "Lookup",
+            Y("ToIndexDict", varData),
+            navigatedRowIndex
+        )
+    ),
+    Add(Q(varColumn->GetColumn()));
+    return true;
 }
 
 } // namespace NSQLTranslationV1

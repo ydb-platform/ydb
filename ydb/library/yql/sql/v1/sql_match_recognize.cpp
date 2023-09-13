@@ -25,7 +25,7 @@ TMatchRecognizeBuilderPtr TSqlMatchRecognizeClause::CreateBuilder(const NSQLv1Ge
         Ctx.Error(pos, TIssuesIds::CORE) << "Unexpected MATCH_RECOGNIZE";
         return {};
     }
-    TVector<TPartitioner> partitioners;
+    TVector<TNamedFunction> partitioners;
     TPosition partitionsPos = pos;
     if (matchRecognizeClause.HasBlock3()) {
         const auto& partitionClause = matchRecognizeClause.GetBlock3().GetRule_window_partition_clause1();
@@ -45,7 +45,7 @@ TMatchRecognizeBuilderPtr TSqlMatchRecognizeClause::CreateBuilder(const NSQLv1Ge
     }
 
     TPosition measuresPos = pos;
-    TVector<TNamedLambda> measures;
+    TVector<TNamedFunction> measures;
     if (matchRecognizeClause.HasBlock5()) {
         const auto& measuresClause = matchRecognizeClause.GetBlock5().GetRule_row_pattern_measures1();
         measuresPos = TokenPosition(measuresClause.GetToken1());
@@ -121,7 +121,7 @@ TMatchRecognizeBuilderPtr TSqlMatchRecognizeClause::CreateBuilder(const NSQLv1Ge
 
 }
 
-TVector<TPartitioner> TSqlMatchRecognizeClause::ParsePartitionBy(const TRule_window_partition_clause& partitionClause) {
+TVector<TNamedFunction> TSqlMatchRecognizeClause::ParsePartitionBy(const TRule_window_partition_clause& partitionClause) {
     TColumnRefScope scope(Ctx, EColumnRefState::Allow);
     TVector<TNodePtr> partitionExprs;
     if (!NamedExprList(
@@ -129,19 +129,19 @@ TVector<TPartitioner> TSqlMatchRecognizeClause::ParsePartitionBy(const TRule_win
             partitionExprs)) {
         return {};
     }
-    TVector<TPartitioner> partitioners;
+    TVector<TNamedFunction> partitioners;
     for (const auto& p: partitionExprs) {
         auto label = p->GetLabel();
         if (!label && p->GetColumnName()) {
             label = *p->GetColumnName();
         }
-        partitioners.push_back(TPartitioner{p, label});
+        partitioners.push_back(TNamedFunction{p, label});
     }
     return partitioners;
 }
 
-TNamedLambda TSqlMatchRecognizeClause::ParseOneMeasure(const TRule_row_pattern_measure_definition& node) {
-    TColumnRefScope scope(Ctx, EColumnRefState::Allow);
+TNamedFunction TSqlMatchRecognizeClause::ParseOneMeasure(const TRule_row_pattern_measure_definition& node) {
+    TColumnRefScope scope(Ctx, EColumnRefState::MatchRecognize);
     const auto& expr = TSqlExpression(Ctx, Mode).Build(node.GetRule_expr1());
     const auto& name = Id(node.GetRule_an_id3(), *this);
     //TODO https://st.yandex-team.ru/YQL-16186
@@ -151,8 +151,8 @@ TNamedLambda TSqlMatchRecognizeClause::ParseOneMeasure(const TRule_row_pattern_m
     return {expr, name};
 }
 
-TVector<TNamedLambda> TSqlMatchRecognizeClause::ParseMeasures(const TRule_row_pattern_measure_list& node) {
-    TVector<TNamedLambda> result{ ParseOneMeasure(node.GetRule_row_pattern_measure_definition1()) };
+TVector<TNamedFunction> TSqlMatchRecognizeClause::ParseMeasures(const TRule_row_pattern_measure_list& node) {
+    TVector<TNamedFunction> result{ ParseOneMeasure(node.GetRule_row_pattern_measure_definition1()) };
     for (const auto& m: node.GetBlock2()) {
         result.push_back(ParseOneMeasure(m.GetRule_row_pattern_measure_definition2()));
     }
@@ -315,15 +315,15 @@ NYql::NMatchRecognize::TRowPattern TSqlMatchRecognizeClause::ParsePattern(const 
     return result;
 }
 
-TNamedLambda TSqlMatchRecognizeClause::ParseOneDefinition(const TRule_row_pattern_definition& node){
+TNamedFunction TSqlMatchRecognizeClause::ParseOneDefinition(const TRule_row_pattern_definition& node){
     const auto& varName = PatternVar(node.GetRule_row_pattern_definition_variable_name1().GetRule_row_pattern_variable_name1(), *this);
-    TColumnRefScope scope(Ctx, EColumnRefState::Allow);
+    TColumnRefScope scope(Ctx, EColumnRefState::MatchRecognize, true, varName);
     const auto& searchCondition = TSqlExpression(Ctx, Mode).Build(node.GetRule_row_pattern_definition_search_condition3().GetRule_search_condition1().GetRule_expr1());
-    return TNamedLambda{searchCondition, varName};
+    return TNamedFunction{searchCondition, varName};
 }
 
-TVector<TNamedLambda> TSqlMatchRecognizeClause::ParseDefinitions(const TRule_row_pattern_definition_list& node) {
-    TVector<TNamedLambda> result { ParseOneDefinition(node.GetRule_row_pattern_definition1())};
+TVector<TNamedFunction> TSqlMatchRecognizeClause::ParseDefinitions(const TRule_row_pattern_definition_list& node) {
+    TVector<TNamedFunction> result { ParseOneDefinition(node.GetRule_row_pattern_definition1())};
     for (const auto& d: node.GetBlock2()) {
         //TODO https://st.yandex-team.ru/YQL-16186
         //Each define must be a predicate lambda, that accepts 3 args:

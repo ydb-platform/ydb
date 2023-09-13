@@ -815,6 +815,61 @@ TNodePtr TSqlExpression::JsonApiExpr(const TRule_json_api_expr& node) {
     return result;
 }
 
+TNodePtr MatchRecognizeVarAccess(TTranslation& ctx, const TString& var, const TRule_an_id_or_type& suffix, bool theSameVar) {
+    switch (suffix.GetAltCase()) {
+        case TRule_an_id_or_type::kAltAnIdOrType1:
+            break;
+        case TRule_an_id_or_type::kAltAnIdOrType2:
+            break;
+        case TRule_an_id_or_type::ALT_NOT_SET:
+            break;
+    }
+    const auto& column = Id(
+            suffix.GetAlt_an_id_or_type1()
+                .GetRule_id_or_type1().GetAlt_id_or_type1().GetRule_id1(),
+            ctx
+    );
+    return BuildMatchRecognizeVarAccess(TPosition{}, var, column, theSameVar);
+}
+
+TNodePtr TSqlExpression::RowPatternVarAccess(const TString& alias, const TRule_unary_subexpr_suffix_TBlock1_TAlt3_TBlock1_TBlock2 block) {
+    switch (block.GetAltCase()) {
+        case TRule_unary_subexpr_suffix_TBlock1_TAlt3_TBlock1_TBlock2::kAlt1:
+            break;
+        case TRule_unary_subexpr_suffix_TBlock1_TAlt3_TBlock1_TBlock2::kAlt2:
+            break;
+        case TRule_unary_subexpr_suffix_TBlock1_TAlt3_TBlock1_TBlock2::kAlt3:
+            switch (block.GetAlt3().GetRule_an_id_or_type1().GetAltCase()) {
+                case TRule_an_id_or_type::kAltAnIdOrType1: {
+                    const auto &idOrType = block.GetAlt3().GetRule_an_id_or_type1().GetAlt_an_id_or_type1().GetRule_id_or_type1();
+                    switch(idOrType.GetAltCase()) {
+                        case TRule_id_or_type::kAltIdOrType1:
+                            return BuildMatchRecognizeVarAccess(
+                                    Ctx.Pos(),
+                                    alias,
+                                    Id(idOrType.GetAlt_id_or_type1().GetRule_id1(), *this),
+                                    Ctx.GetMatchRecognizeDefineVar() == alias
+                            );
+                        case TRule_id_or_type::kAltIdOrType2:
+                            break;
+
+                        case TRule_id_or_type::ALT_NOT_SET:
+                            break;
+                    }
+                }
+                case TRule_an_id_or_type::kAltAnIdOrType2:
+                    break;
+                case TRule_an_id_or_type::ALT_NOT_SET:
+                    break;
+            }
+            return MatchRecognizeVarAccess(*this, alias, block.GetAlt3().GetRule_an_id_or_type1(),
+                                           Ctx.GetMatchRecognizeDefineVar() == alias);
+        case TRule_unary_subexpr_suffix_TBlock1_TAlt3_TBlock1_TBlock2::ALT_NOT_SET:
+            Y_FAIL("You should change implementation according to grammar changes");
+    }
+    return TNodePtr{};
+}
+
 template<typename TUnaryCasualExprRule>
 TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const TTrailingQuestions& tail) {
     // unary_casual_subexpr: (id_expr | atom_expr) unary_subexpr_suffix;
@@ -889,7 +944,16 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
             break;
         }
         case TRule_unary_subexpr_suffix::TBlock1::kAlt3: {
-            // dot
+            // In case of MATCH_RECOGNIZE lambdas
+            // X.Y is treated as Var.Column access
+            if (isColumnRef && EColumnRefState::MatchRecognize == Ctx.GetColumnReferenceState()) {
+                if (auto rowPatternVarAccess = RowPatternVarAccess(
+                    name,
+                    b.GetAlt3().GetBlock1().GetBlock2())
+                ) {
+                    return rowPatternVarAccess;
+                }
+            }
             break;
         }
         case TRule_unary_subexpr_suffix::TBlock1::ALT_NOT_SET:

@@ -25,7 +25,6 @@ const NYql::TAstNode* FindMatchRecognizeParam(const NYql::TAstNode* root, TStrin
     return paramNode->GetChild(2);
 }
 
-
 bool IsQuotedListOfSize(const NYql::TAstNode* node, ui32 size) {
     UNIT_ASSERT(node->IsListOfSize(2));
     if (!node->IsListOfSize(2))
@@ -35,6 +34,16 @@ bool IsQuotedListOfSize(const NYql::TAstNode* node, ui32 size) {
         return false;
     UNIT_ASSERT_EQUAL(node->GetChild(1)->GetChildrenCount(), size);
     return node->GetChild(1)->IsListOfSize(size);
+}
+
+bool IsLambda(const NYql::TAstNode* node, ui32 numberOfArgs) {
+    if (!node->IsListOfSize(3)) {
+        return false;
+    }
+    if (!node->GetChild(0)->IsAtom() || node->GetChild(0)->GetContent() != "lambda") {
+        return  false;
+    }
+    return IsQuotedListOfSize(node->GetChild(1), numberOfArgs);
 }
 
 Y_UNIT_TEST_SUITE(MatchRecognize) {
@@ -125,7 +134,27 @@ FROM Input MATCH_RECOGNIZE(
         UNIT_ASSERT(IsQuotedListOfSize(sortTraits->GetChild(3)->GetChild(2), 3));
     }
     Y_UNIT_TEST(Measures) {
-        //TODO https://st.yandex-team.ru/YQL-16186
+        auto stmt = R"(
+USE plato;
+SELECT *
+FROM Input MATCH_RECOGNIZE(
+    MEASURES
+        Last(Q.dt) as T,
+        First(Y.key) as Key
+    PATTERN ( A )
+    DEFINE Y as true
+)
+)";
+        auto r = MatchRecognizeSqlToYql(stmt);
+        UNIT_ASSERT(r.IsOk());
+        const auto measures = FindMatchRecognizeParam(r.Root, "measures");
+        UNIT_ASSERT_VALUES_EQUAL(6, measures->GetChildrenCount());
+        const auto columnNames = measures->GetChild(3);
+        UNIT_ASSERT(IsQuotedListOfSize(columnNames, 2));
+        UNIT_ASSERT_VALUES_EQUAL("T", columnNames->GetChild(1)->GetChild(0)->GetChild(1)->GetContent());
+        UNIT_ASSERT_VALUES_EQUAL("Key", columnNames->GetChild(1)->GetChild(1)->GetChild(1)->GetContent());
+        UNIT_ASSERT(IsLambda(measures->GetChild(4), 2));
+        UNIT_ASSERT(IsLambda(measures->GetChild(5), 2));
     }
     Y_UNIT_TEST(RowsPerMatch) {
         {
@@ -594,6 +623,29 @@ FROM Input MATCH_RECOGNIZE(
     }
 
     Y_UNIT_TEST(Defines) {
-        //TODO https://st.yandex-team.ru/YQL-16186
+        auto stmt = R"(
+USE plato;
+SELECT *
+FROM Input MATCH_RECOGNIZE(
+    PATTERN ( Y Q L )
+    DEFINE
+        Y as true,
+        Q as Q.V = "value",
+        L as L.V = LAST(Q.T)
+)
+)";
+        auto r = MatchRecognizeSqlToYql(stmt);
+        UNIT_ASSERT(r.IsOk());
+        const auto defines = FindMatchRecognizeParam(r.Root, "define");
+        UNIT_ASSERT_VALUES_EQUAL(7, defines->GetChildrenCount());
+        const auto varNames = defines->GetChild(3);
+        UNIT_ASSERT(IsQuotedListOfSize(varNames, 3));
+        UNIT_ASSERT_VALUES_EQUAL("Y", varNames->GetChild(1)->GetChild(0)->GetChild(1)->GetContent());
+        UNIT_ASSERT_VALUES_EQUAL("Q", varNames->GetChild(1)->GetChild(1)->GetChild(1)->GetContent());
+        UNIT_ASSERT_VALUES_EQUAL("L", varNames->GetChild(1)->GetChild(2)->GetChild(1)->GetContent());
+
+        UNIT_ASSERT(IsLambda(defines->GetChild(4), 3));
+        UNIT_ASSERT(IsLambda(defines->GetChild(5), 3));
+        UNIT_ASSERT(IsLambda(defines->GetChild(6), 3));
     }
 }

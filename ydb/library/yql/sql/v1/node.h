@@ -1157,6 +1157,7 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildColumn(TPosition pos, const TDeferredAtom& column, const TString& source = TString());
     TNodePtr BuildColumnOrType(TPosition pos, const TString& column = TString());
     TNodePtr BuildAccess(TPosition pos, const TVector<INode::TIdPart>& ids, bool isLookup);
+    TNodePtr BuildMatchRecognizeVarAccess(TPosition pos, const TString& var, const TString& column, bool theSameVar);
     TNodePtr BuildBind(TPosition pos, const TString& module, const TString& alias);
     TNodePtr BuildLambda(TPosition pos, TNodePtr params, TNodePtr body, const TString& resName = TString());
     TNodePtr BuildLambda(TPosition pos, TNodePtr params, const TVector<TNodePtr>& bodies);

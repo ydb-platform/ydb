@@ -2184,6 +2184,10 @@ TNodePtr BuildAccess(TPosition pos, const TVector<INode::TIdPart>& ids, bool isL
     return new TAccessNode(pos, ids, isLookup);
 }
 
+TNodePtr BuildMatchRecognizeVarAccess(TPosition pos, const TString& var, const TString& column, bool theSameVar) {
+    return new TMatchRecognizeVarAccessNode(pos, var, column, theSameVar);
+}
+
 void WarnIfAliasFromSelectIsUsedInGroupBy(TContext& ctx, const TVector<TNodePtr>& selectTerms, const TVector<TNodePtr>& groupByTerms,
                                           const TVector<TNodePtr>& groupByExprTerms)
 {

@@ -2,6 +2,7 @@
 #include "context.h"
 
 #include "list_builtin.h"
+#include "match_recognize.h"
 
 #include <ydb/library/yql/ast/yql_type_string.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
@@ -3089,6 +3090,10 @@ struct TBuiltinFuncData {
             // Hopping intervals time functions
             {"hopstart", BuildSimpleBuiltinFactoryCallback<THoppingTime<true>>()},
             {"hopend", BuildSimpleBuiltinFactoryCallback<THoppingTime<false>>()},
+
+            //MatchRecognize navigation functions
+            {"first", BuildNamedBuiltinFactoryCallback<TMatchRecognizeNavigate>("FIRST")},
+            {"last", BuildNamedBuiltinFactoryCallback<TMatchRecognizeNavigate>("LAST")},
         };
         return builtinFuncs;
     }

@@ -9,21 +9,32 @@ from ..package_manager.base import utils
 DEFAULT_TS_CONFIG_FILE = "tsconfig.json"
 
 
-def merge_dicts(d1, d2):
-    """
-    Merges two dicts recursively assuming that both have similar structure.
-    If d1.x.y.z has different type than d2.x.y.z then d2 will override d1 and result value res.x.y.z == d2.x.y.z.
-    If corresponding values are lists then the result will have a sum of those lists.
-    """
-    if isinstance(d1, dict) and isinstance(d2, dict):
-        for k in d2:
-            d1[k] = merge_dicts(d1[k], d2[k]) if k in d1 else d2[k]
-    else:
-        if isinstance(d1, list) and isinstance(d2, list):
-            return d1 + d2
-        else:
-            return d2
-    return d1
+class RootFields:
+    extends = 'extends'
+
+    exclude = 'exclude'
+    files = 'files'
+    include = 'include'
+
+    compilerOptions = 'compilerOptions'
+
+    PATH_LIST_FIELDS = {
+        exclude,
+        files,
+        include,
+    }
+
+
+class CompilerOptionsFields:
+    baseUrl = 'baseUrl'
+    outDir = 'outDir'
+    rootDir = 'rootDir'
+
+    PATH_FIELDS = {
+        baseUrl,
+        outDir,
+        rootDir,
+    }
 
 
 class TsConfig(object):
@@ -54,52 +65,46 @@ class TsConfig(object):
             raise TsError("Failed to read tsconfig {}: {}".format(self.path, e))
 
     def merge(self, rel_path, base_tsconfig):
+        # type: (TsConfig, str, TsConfig) -> None
         """
         :param rel_path: relative path to the configuration file we are merging in.
         It is required to set the relative paths correctly.
-        :type rel_path: str
+
         :param base_tsconfig: base TsConfig we are merging with our TsConfig instance
-        :type base_tsconfig: dict
         """
         if not base_tsconfig.data:
             return
 
+        # 'data' from the file in 'extends'
+        base_data = copy.deepcopy(base_tsconfig.data)
+
         def relative_path(p):
             return os.path.normpath(os.path.join(rel_path, p))
 
-        base_config_data = copy.deepcopy(base_tsconfig.data)
+        for root_field, root_value in base_data.items():
+            # extends
+            if root_field == RootFields.extends:
+                # replace itself to its own `extends` (for multi level extends)
+                self.data[RootFields.extends] = relative_path(root_value)
 
-        parameter_section_labels = ["compilerOptions", "typeAcquisition", "watchOptions"]
-        for opt_label in parameter_section_labels:
-            base_options = base_config_data.get(opt_label)
-            if not base_options:
-                continue
+            # exclude, files, include
+            elif root_field in RootFields.PATH_LIST_FIELDS:
+                if root_field not in self.data:
+                    self.data[root_field] = [relative_path(p) for p in root_value]
 
-            new_options = self.data.get(opt_label)
-            for key in base_options:
-                val = base_options[key]
+            # compilerOptions
+            elif root_field == RootFields.compilerOptions:
+                for option, option_value in root_value.items():
+                    is_path_field = option in CompilerOptionsFields.PATH_FIELDS
 
-                # lists of paths
-                if key in ["extends", "outDir", "rootDir", "baseUrl", "include"]:
-                    val = relative_path(val)
+                    if not self.has_compiler_option(option):
+                        new_value = relative_path(option_value) if is_path_field else option_value
+                        self.set_compiler_option(option, new_value)
 
-                # path string
-                elif key in ["rootDirs", "excludeDirectories", "excludeFiles"]:
-                    val = map(relative_path, val)
-
-                # dicts having paths as values
-                elif key in ["paths"]:
-                    new_paths = new_options.get(key)
-                    val = map(relative_path, val) + (new_paths if new_paths else [])
-
-                base_options[key] = val
-
-            if new_options and base_options:
-                base_options.update(new_options)
-                self.data[opt_label] = base_options
-
-        base_config_data.update(self.data)
-        self.data = base_config_data
+            # other fields (just copy if it has not existed)
+            elif root_field not in self.data:
+                self.data[root_field] = root_value
+        pass
 
     def inline_extend(self, dep_paths):
         """
@@ -111,7 +116,7 @@ class TsConfig(object):
         :type dep_paths: dict
         :rtype: list of str
         """
-        ext_value = self.data.get("extends")
+        ext_value = self.data.get(RootFields.extends)
         if not ext_value:
             return []
 
@@ -142,7 +147,7 @@ class TsConfig(object):
         paths = [base_config_path] + base_config.inline_extend(dep_paths)
 
         self.merge(rel_path, base_config)
-        del self.data["extends"]
+        del self.data[RootFields.extends]
 
         return paths
 
@@ -151,21 +156,10 @@ class TsConfig(object):
         Returns ref to the "compilerOptions" dict.
         :rtype: dict
         """
-        opts = self.data.get("compilerOptions")
-        if opts is None:
-            opts = {}
-            self.data["compilerOptions"] = opts
+        if RootFields.compilerOptions not in self.data:
+            self.data[RootFields.compilerOptions] = {}
 
-        return opts
-
-    def prepend_include(self, value):
-        """
-        Prepends `value` to `include` list
-        :param value: value to prepend
-        :type value: str
-        """
-        includeList = self.data.get("include")
-        self.data["include"] = [value] + includeList
+        return self.data[RootFields.compilerOptions]
 
     def compiler_option(self, name, default=None):
         """
@@ -177,28 +171,16 @@ class TsConfig(object):
         """
         return self.get_or_create_compiler_options().get(name, default)
 
-    def add_to_compiler_option(self, name, add_value):
-        """
-        Merges the existing value with add_value for the option with label=name.
-        Merge is done recursively if the value is of a dict instance.
-        :param name: option key
-        :type name: str
-        :param value: option value to set
-        :type value: mixed
-        """
-        default_value = {} if isinstance(add_value, dict) else []
-        opts = self.get_or_create_compiler_options()
-        opts[name] = merge_dicts(opts.get(name, default_value), add_value)
+    def has_compiler_option(self, name):
+        # type: (str) -> bool
+        compiler_options = self.data.get(RootFields.compilerOptions, {})
 
-    def inject_plugin(self, plugin):
-        """
-        :param plugin: plugin dict (ts-patch compatible, see https://github.com/nonara/ts-patch)
-        :type plugin: dict of str
-        """
-        opts = self.get_or_create_compiler_options()
-        if not opts.get("plugins"):
-            opts["plugins"] = []
-        opts["plugins"].append(plugin)
+        return name in compiler_options
+
+    def set_compiler_option(self, name, value):
+        # type: (str, Any) -> None
+        compiler_options = self.get_or_create_compiler_options()
+        compiler_options[name] = value
 
     def validate(self):
         """
@@ -206,8 +188,8 @@ class TsConfig(object):
         """
         opts = self.get_or_create_compiler_options()
         errors = []
-        root_dir = opts.get("rootDir")
-        out_dir = opts.get("outDir")
+        root_dir = opts.get(CompilerOptionsFields.rootDir)
+        out_dir = opts.get(CompilerOptionsFields.outDir)
         config_dir = os.path.dirname(self.path)
 
         def is_mod_subdir(p):
@@ -262,9 +244,9 @@ class TsConfig(object):
         """
 
         ts_glob_config = TsGlobConfig(
-            root_dir=self.compiler_option("rootDir"),
-            out_dir=self.compiler_option("outDir"),
-            include=self.data.get("include"),
+            root_dir=self.compiler_option(CompilerOptionsFields.rootDir),
+            out_dir=self.compiler_option(CompilerOptionsFields.outDir),
+            include=self.data.get(RootFields.include),
         )
 
         return ts_glob(ts_glob_config, all_files)

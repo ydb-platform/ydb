@@ -1,0 +1,18 @@
+To install the library, execute the command:
+
+	make prefix=`pwd`/usr install
+
+which will install the binaries and header files into the directory 
+usr.  Set prefix=/usr to get them installed into the main system.
+
+Please note:  Do not attempt to install on the system the
+"libredhat-kernel.so" file.  It is a dummy shared library
+provided only for the purpose of being able to bootstrap
+this facility while running on systems without the correct
+libredhat-kernel.so built.  The contents of the included
+libredhat-kernel.so are only stubs; this library is NOT
+functional for anything except the internal purpose of
+linking libaio.so against the provided stubs.  At runtime,
+libaio.so requires a real libredhat-kernel.so library; this
+is provided by the Red Hat kernel RPM packages with async
+I/O functionality.

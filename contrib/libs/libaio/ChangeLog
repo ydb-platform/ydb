@@ -1,0 +1,54 @@
+0.3.107
+	- Make tests compile again on modern systems (warnings + -Werror)
+	- Add 'make partcheck' and don't require manual setup for testing.
+	- Change test harness to compile against this dir, not global install
+	- Fix 5.t for archs where PROT_WRITE mappings are readable.
+	- Allow sending of SIGXFSZ on aio over limits
+	- Explicitly specify bash for runtests.sh
+	- Put deprecating comments on never-merged io_prep_poll
+	- Add io_prep_preadv and io_prep_pwritev
+	- Add eventfd support (io_set_eventfd).
+
+0.4.0
+	- remove libredhat-kernel
+	- add rough outline for man pages
+	- make the compiled io_getevents() add the extra parameter and 
+	  pass the timeout for updating as per 2.5
+	- fixes for ia64, now works
+	- fixes for x86-64
+	- powerpc support from Gianni Tedesco <gianni@ecsc.co.uk>
+	- disable the NULL check in harness/cases/4.t on ia64: ia64 
+	  maps the 0 page and causes this check to fail.
+
+0.3.15
+	- use real syscall interface, but don't break source compatibility 
+	  yet (that will happen with 0.4.0)
+
+0.3.13
+	- add test cases
+
+0.3.11
+	- use library versioning of libredhat-kernel to always provide a 
+	  fallback
+
+0.3.9
+	- add io_queue_release function
+
+0.3.8
+	- make clean deletes libredhat-kernel.so.1
+	- const struct timespec *
+	- add make srpm target
+
+0.3.7
+	- fix assembly function .types
+	- export io_getevents
+	- fix io_submit function prototype to match the kernel
+	- provide /usr/lib/libredhat-kernel.so link for compilation
+	  (do NOT link against libredhat-kernel.so directly)
+	- fix soname to libaio.so.1
+	- fix dummy libredhat-kernel's soname
+	- work around nfs bug
+	- provide and install libredhat-kernel.so.1 stub
+	- Makefile improvements
+	- make sure dummy libredhat-kernel.so only returns -ENOSYS
+

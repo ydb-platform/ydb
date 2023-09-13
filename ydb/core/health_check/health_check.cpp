@@ -1838,7 +1838,7 @@ public:
         }
     };
 
-    bool FindRecordsForMerge(TList<TSelfCheckContext::TIssueRecord>& records, TList<TSelfCheckContext::TIssueRecord>& similar, TList<TSelfCheckContext::TIssueRecord>& Mergeed) {
+    bool FindRecordsForMerge(TList<TSelfCheckContext::TIssueRecord>& records, TList<TSelfCheckContext::TIssueRecord>& similar, TList<TSelfCheckContext::TIssueRecord>& merged) {
         while (!records.empty() && similar.empty()) {
             similar.splice(similar.end(), records, records.begin());
             for (auto it = records.begin(); it != records.end(); ) {
@@ -1856,8 +1856,8 @@ public:
                 }
             }
 
-            if (similar.size() <= MERGING_IGNORE_SIZE) {
-                Mergeed.splice(Mergeed.end(), similar);
+            if (similar.size() == 1) {
+                merged.splice(merged.end(), similar);
             }
         }
 
@@ -1991,6 +1991,7 @@ public:
     }
 
     void RemoveRecordsAboveLimit(TMergeIssuesContext& context, TList<TSelfCheckContext::TIssueRecord>& records) {
+        records.sort([](TSelfCheckContext::TIssueRecord& a, TSelfCheckContext::TIssueRecord& b) { return b.IssueLog.status() < a.IssueLog.status(); }); 
         ui32 commonListed = 0;
         for (auto it = records.begin(); it != records.end(); it++) {
             if (commonListed == ChildrenRecordsLimit) {
@@ -2419,6 +2420,37 @@ public:
 
         FillResult({&result});
         RemoveUnrequestedEntries(result, Request->Request);
+
+        auto byteSize = result.ByteSizeLong();
+        auto byteLimit = 50_MB - 1_KB; // 1_KB - for HEALTHCHECK STATUS issue going last
+        if (byteSize > byteLimit) {
+            do {
+                ui32 total = result.issue_log_size();
+                ui32 to_remove = total / 20;
+                for (ui32 i = 0; i < to_remove; ++i) {
+                    result.mutable_issue_log()->RemoveLast();
+                }
+            } while (result.ByteSizeLong() > byteLimit); 
+        }
+        if (byteSize > 30_MB) {
+            auto* issue = result.add_issue_log();
+            issue->set_type("HEALTHCHECK_STATUS");
+            issue->set_level(1);
+            if (byteSize > byteLimit) {
+                issue->set_status(Ydb::Monitoring::StatusFlag::RED);
+                issue->set_message("Healthcheck response size exceeds 50 MB and will be truncated");
+            } else if (byteSize > 40_MB) {
+                issue->set_status(Ydb::Monitoring::StatusFlag::ORANGE);
+                issue->set_message("Healthcheck response size exceeds 40 MB");
+            } else if (byteSize > 30_MB) {
+                issue->set_status(Ydb::Monitoring::StatusFlag::YELLOW);
+                issue->set_message("Healthcheck response size exceeds 30 MB");
+            }
+            TStringStream id;
+            id << Ydb::Monitoring::StatusFlag_Status_Name(issue->status());
+            id << '-' << TSelfCheckResult::crc16(issue->message());
+            issue->set_id(id.Str());
+        } 
 
         for (TActorId pipe : PipeClients) {
             NTabletPipe::CloseClient(SelfId(), pipe);

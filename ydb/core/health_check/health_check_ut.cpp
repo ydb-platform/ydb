@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     }
 
     int const GROUP_START_ID = 1200;
-    int const VCARD_START_ID = 124;
+    int const VCARD_START_ID = 55;
 
     void ChangeDescribeSchemeResult(TEvSchemeShard::TEvDescribeSchemeResult::TPtr* ev, ui64 size = 20000000, ui64 quota = 90000000) {
         auto record = (*ev)->Get()->MutableRecord();
@@ -91,7 +91,6 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         pbConfig->clear_pdisk();
 
         auto groupId = GROUP_START_ID;
-        auto vslotId = VCARD_START_ID;
         for (int i = 0; i < groupCount; i++) {
 
             auto group = pbConfig->add_group();
@@ -100,6 +99,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             group->set_erasurespecies(erasurespecies);
 
             group->clear_vslotid();
+            auto vslotId = VCARD_START_ID;
             for (int j = 0; j < vslotCount; j++) {
                 auto vslot = pbConfig->add_vslot();
                 vslot->CopyFrom(vslotSample);
@@ -124,13 +124,14 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         pbRecord.clear_vdiskstateinfo();
 
         auto groupId = GROUP_START_ID;
-        auto slotId = VCARD_START_ID;
         for (int i = 0; i < groupCount; i++) {
+            auto slotId = VCARD_START_ID;
             for (int j = 0; j < vslotCount; j++) {
                 auto state = pbRecord.add_vdiskstateinfo();
                 state->CopyFrom(sample);
                 state->mutable_vdiskid()->set_vdisk(slotId++);
                 state->mutable_vdiskid()->set_groupid(groupId);
+                state->set_vdiskstate(NKikimrWhiteboard::EVDiskState::SyncGuidRecovery);
             }
             groupId++;
         }
@@ -143,7 +144,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         pbRecord.clear_vdiskstateinfo();
 
         auto groupId = GROUP_START_ID;
-        auto vslotId = VCARD_START_ID;
+        auto vslotId = VCARD_START_ID; // vslotId have to be less than 256
 
         for (auto status: vdiskStatuses) {
             switch (status) {
@@ -181,9 +182,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         }
     }
 
-    static const int MERGER_ISSUE_LIMIT = 10;
-
-    void ListingTest(int const groupNumber, int const vdiscPerGroupNumber) {
+    Ydb::Monitoring::SelfCheckResult RequestHc(int const groupNumber, int const vdiscPerGroupNumber, bool const isMergeRecords = false, int const recordsLimit = 0) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -228,21 +227,23 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         runtime.SetObserverFunc(observerFunc);
 
         auto *request = new NHealthCheck::TEvSelfCheckRequest;
-        request->Request.set_merge_records(true);
-        request->Request.set_records_limit(MERGER_ISSUE_LIMIT);
+        request->Request.set_merge_records(isMergeRecords);
+        request->Request.set_records_limit(recordsLimit);
         runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
-        NHealthCheck::TEvSelfCheckResult* result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle);
+        return runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+    }
 
+    void CheckHcResult(Ydb::Monitoring::SelfCheckResult& result, int const groupNumber, int const vdiscPerGroupNumber, bool const isMergeRecords = false, int const recordsLimit = 0) {
         int groupIssuesCount = 0;
-        int groupIssuesNumber = groupNumber <= NHealthCheck::TSelfCheckRequest::MERGING_IGNORE_SIZE ? groupNumber : 1;
-        for (const auto& issue_log : result->Result.Getissue_log()) {
+        int groupIssuesNumber = !isMergeRecords ? groupNumber : 1;
+        for (const auto& issue_log : result.Getissue_log()) {
             if (issue_log.type() == "STORAGE_GROUP" && issue_log.location().storage().pool().name() == "/Root:test") {
-                if (groupNumber <= NHealthCheck::TSelfCheckRequest::MERGING_IGNORE_SIZE) {
+                if (!isMergeRecords || groupNumber == 1) {
                     UNIT_ASSERT_VALUES_EQUAL(issue_log.location().storage().pool().group().id_size(), 1);
                     UNIT_ASSERT_VALUES_EQUAL(issue_log.listed(), 0);
                     UNIT_ASSERT_VALUES_EQUAL(issue_log.count(), 0);
                 } else {
-                    int groupListed = std::min<int>(groupNumber, MERGER_ISSUE_LIMIT);
+                    int groupListed = recordsLimit == 0 ? groupNumber : std::min<int>(groupNumber, recordsLimit);
                     UNIT_ASSERT_VALUES_EQUAL(issue_log.location().storage().pool().group().id_size(), groupListed);
                     UNIT_ASSERT_VALUES_EQUAL(issue_log.listed(), groupListed);
                     UNIT_ASSERT_VALUES_EQUAL(issue_log.count(), groupNumber);
@@ -252,12 +253,10 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         }
         UNIT_ASSERT_VALUES_EQUAL(groupIssuesCount, groupIssuesNumber);
 
-        int vdiscCountField = groupNumber <= NHealthCheck::TSelfCheckRequest::MERGING_IGNORE_SIZE ? vdiscPerGroupNumber : groupNumber * vdiscPerGroupNumber;
-        int issueVdiscPerGroupNumber = vdiscCountField <= NHealthCheck::TSelfCheckRequest::MERGING_IGNORE_SIZE ? vdiscCountField : 1;
-        int issueVdiscNumber = groupIssuesNumber * issueVdiscPerGroupNumber;
+        int issueVdiscNumber = !isMergeRecords ? vdiscPerGroupNumber : 1;
 
         int issueVdiscCount = 0;
-        for (const auto& issue_log : result->Result.issue_log()) {
+        for (const auto& issue_log : result.issue_log()) {
             if (issue_log.type() == "VDISK" && issue_log.location().storage().pool().name() == "/Root:test") {
                 issueVdiscCount++;
             }
@@ -265,7 +264,12 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT_VALUES_EQUAL(issueVdiscCount, issueVdiscNumber);
     }
 
-    void CheckGroupStatusDependsOnVdisks(TString erasurespecies, const Ydb::Monitoring::StatusFlag::Status expectiongGroupStatus, const TVector<Ydb::Monitoring::StatusFlag::Status>& vdiskStatuses) {
+    void ListingTest(int const groupNumber, int const vdiscPerGroupNumber, bool const isMergeRecords = false, int const recordsLimit = 0) {
+        auto result = RequestHc(groupNumber, vdiscPerGroupNumber, isMergeRecords, recordsLimit);
+        CheckHcResult(result, groupNumber, vdiscPerGroupNumber, isMergeRecords, recordsLimit);
+    }
+
+    Ydb::Monitoring::SelfCheckResult RequestHcWithVdisks(TString erasurespecies, const TVector<Ydb::Monitoring::StatusFlag::Status>& vdiskStatuses) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -315,16 +319,21 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         runtime.SetObserverFunc(observerFunc);
 
         auto *request = new NHealthCheck::TEvSelfCheckRequest;
+        request->Request.set_merge_records(true);
+        request->Request.set_records_limit(10);
+
         runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
-        NHealthCheck::TEvSelfCheckResult* result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle);
-        int groupIssuesCount = 0;
-        for (const auto& issue_log : result->Result.Getissue_log()) {
-            if (issue_log.type() == "STORAGE_GROUP" && issue_log.location().storage().pool().name() == "/Root:test") {
-                UNIT_ASSERT_VALUES_EQUAL((int)issue_log.status(), (int)expectiongGroupStatus);
-                groupIssuesCount++;
+        return runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+    }
+
+    void CheckHcResultHasIssuesWithStatus(Ydb::Monitoring::SelfCheckResult& result, const TString& type, const Ydb::Monitoring::StatusFlag::Status expectingStatus, ui32 total) {
+        int issuesCount = 0;
+        for (const auto& issue_log : result.Getissue_log()) {
+            if (issue_log.type() == type && issue_log.location().storage().pool().name() == "/Root:test" && issue_log.status() == expectingStatus) {
+                issuesCount++;
             }
         }
-        UNIT_ASSERT_VALUES_EQUAL(groupIssuesCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(issuesCount, total);
     }
 
     void ChangeUsageDescribeSchemeResult(TEvSchemeShard::TEvDescribeSchemeResult::TPtr* ev, ui64 size, ui64 quota) {
@@ -381,116 +390,139 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT_VALUES_EQUAL(storageIssuesCount, storageIssuesNumber);
     }
 
-    Y_UNIT_TEST(IssuesGroupsListing) {
-        int groupNumber = NHealthCheck::TSelfCheckRequest::MERGING_IGNORE_SIZE;
-        ListingTest(groupNumber, 1);
+    Y_UNIT_TEST(OneIssueListing) {
+        ListingTest(1, 1);
     }
 
-    Y_UNIT_TEST(IssuesVCardListing) {
-        int vcardNumber = NHealthCheck::TSelfCheckRequest::MERGING_IGNORE_SIZE;
-        ListingTest(1, vcardNumber);
-    }
-
-    Y_UNIT_TEST(IssuesGroupsVCardListing) {
-        int groupNumber = NHealthCheck::TSelfCheckRequest::MERGING_IGNORE_SIZE;
-        int vcardNumber = NHealthCheck::TSelfCheckRequest::MERGING_IGNORE_SIZE;
-        ListingTest(groupNumber, vcardNumber);
-    }
-
-    Y_UNIT_TEST(IssuesGroupsMerging) {
-        int groupNumber = MERGER_ISSUE_LIMIT;
-        ListingTest(groupNumber, 1);
-    }
-
-    Y_UNIT_TEST(IssuesVCardMerging) {
-        int vcardNumber = MERGER_ISSUE_LIMIT;
-        ListingTest(1, vcardNumber);
-    }
-
-    Y_UNIT_TEST(IssuesGroupsVCardMerging) {
-        int groupNumber = MERGER_ISSUE_LIMIT;
-        int vcardNumber = MERGER_ISSUE_LIMIT;
-        ListingTest(groupNumber, vcardNumber);
-    }
-
-    Y_UNIT_TEST(IssuesGroupsDeleting) {
+    Y_UNIT_TEST(Issues100GroupsListing) {
         ListingTest(100, 1);
     }
 
-    Y_UNIT_TEST(IssuesVCardDeleting) {
+    Y_UNIT_TEST(Issues100VCardListing) {
         ListingTest(1, 100);
     }
 
-    Y_UNIT_TEST(IssuesGroupsVCardDeleting) {
-        ListingTest(100, 100);
+    Y_UNIT_TEST(Issues100Groups100VCardListing) {
+        ListingTest(5, 5);
     }
-    
+
+    Y_UNIT_TEST(Issues100GroupsMerging) {
+        ListingTest(100, 1, true);
+    }
+
+    Y_UNIT_TEST(Issues100VCardMerging) {
+        ListingTest(1, 100, true);
+    }
+
+    Y_UNIT_TEST(Issues100Groups100VCardMerging) {
+        ListingTest(100, 100, true);
+    }
+
+    Y_UNIT_TEST(Issues100GroupsMergingAndLimiting) {
+        ListingTest(100, 1, true, 10);
+    }
+
+    Y_UNIT_TEST(Issues100VCardMergingAndLimiting) {
+        ListingTest(1, 100, true, 10);
+    }
+
+    Y_UNIT_TEST(Issues100Groups100VCardMergingAndLimiting) {
+        ListingTest(100, 100, true, 10);
+    }
+
     Y_UNIT_TEST(NoneRedGroupWhenRedVdisk) {
-        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::NONE, Ydb::Monitoring::StatusFlag::RED, {Ydb::Monitoring::StatusFlag::RED});
+        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::NONE, {Ydb::Monitoring::StatusFlag::RED});
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1);
     }
-    
+
     Y_UNIT_TEST(NoneRedGroupWhenBlueVdisk) {
-        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::NONE, Ydb::Monitoring::StatusFlag::RED, {Ydb::Monitoring::StatusFlag::BLUE});
+        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::NONE, {Ydb::Monitoring::StatusFlag::BLUE});
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1);
     }
-    
+
     Y_UNIT_TEST(NoneYellowGroupWhenYellowVdisk) {
-        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::NONE, Ydb::Monitoring::StatusFlag::YELLOW, {Ydb::Monitoring::StatusFlag::YELLOW});
+        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::NONE, {Ydb::Monitoring::StatusFlag::YELLOW});
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1);
     }
-    
+
+    Y_UNIT_TEST(Block42OrangeGroupWhen100YellowAnd2RedVdisks) {
+        TVector<Ydb::Monitoring::StatusFlag::Status> vdiskStatuses(100, Ydb::Monitoring::StatusFlag::YELLOW);
+        vdiskStatuses.emplace_back(Ydb::Monitoring::StatusFlag::RED);
+        vdiskStatuses.emplace_back(Ydb::Monitoring::StatusFlag::RED);
+        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::BLOCK_4_2, vdiskStatuses);
+        
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1);
+        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::RED, 1);
+    }
+
     Y_UNIT_TEST(Block42RedGroupWhen3RedVdisks) {
-        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::BLOCK_4_2, Ydb::Monitoring::StatusFlag::RED, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::RED});
+        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::BLOCK_4_2, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::RED});
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1);
     }
-    
+
     Y_UNIT_TEST(Block42RedGroupWhen2RedBlueVdisks) {
-        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::BLOCK_4_2, Ydb::Monitoring::StatusFlag::RED, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::BLUE});
+        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::BLOCK_4_2, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::BLUE});
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1);
     }
-    
+
     Y_UNIT_TEST(Block42OrangeGroupWhen2RedVdisks) {
-        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::BLOCK_4_2, Ydb::Monitoring::StatusFlag::ORANGE, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::RED});
+        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::BLOCK_4_2, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::RED});
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1);
     }
-    
+
     Y_UNIT_TEST(Block42OrangeGroupWhenRedBlueVdisks) {
-        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::BLOCK_4_2, Ydb::Monitoring::StatusFlag::ORANGE, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::BLUE});
+        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::BLOCK_4_2, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::BLUE});
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1);
     }
-    
+
     Y_UNIT_TEST(Block42YellowGroupWhenRedVdisk) {
-        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::BLOCK_4_2, Ydb::Monitoring::StatusFlag::YELLOW, {Ydb::Monitoring::StatusFlag::RED});
+        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::BLOCK_4_2, {Ydb::Monitoring::StatusFlag::RED});
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1);
     }
-    
+
     Y_UNIT_TEST(Block42BlueGroupWhenBlueVdisk) {
-        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::BLOCK_4_2, Ydb::Monitoring::StatusFlag::BLUE, {Ydb::Monitoring::StatusFlag::BLUE});
+        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::BLOCK_4_2, {Ydb::Monitoring::StatusFlag::BLUE});
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::BLUE, 1);
     }
-    
+
     Y_UNIT_TEST(Block42YellowGroupWhenYellowVdisk) {
-        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::BLOCK_4_2, Ydb::Monitoring::StatusFlag::YELLOW, {Ydb::Monitoring::StatusFlag::YELLOW});
+        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::BLOCK_4_2, {Ydb::Monitoring::StatusFlag::YELLOW});
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1);
     }
-    
+
     Y_UNIT_TEST(Mirrot3dcYellowGroupWhen3RedVdisks) {
-        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::MIRROR_3_DC, Ydb::Monitoring::StatusFlag::YELLOW, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::RED});
+        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::MIRROR_3_DC, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::RED});
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1);
     }
-    
+
     Y_UNIT_TEST(Mirrot3dcYellowGroupWhen2RedBlueVdisks) {
-        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::MIRROR_3_DC, Ydb::Monitoring::StatusFlag::YELLOW, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::BLUE});
+        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::MIRROR_3_DC, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::BLUE});
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1);
     }
-    
+
     Y_UNIT_TEST(Mirrot3dcYellowGroupWhen2RedVdisks) {
-        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::MIRROR_3_DC, Ydb::Monitoring::StatusFlag::YELLOW, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::RED});
+        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::MIRROR_3_DC, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::RED});
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1);
     }
-    
+
     Y_UNIT_TEST(Mirrot3dcYellowGroupWhenRedBlueVdisks) {
-        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::MIRROR_3_DC, Ydb::Monitoring::StatusFlag::YELLOW, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::BLUE});
+        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::MIRROR_3_DC, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::BLUE});
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1);
     }
-    
+
     Y_UNIT_TEST(Mirrot3dcYellowGroupWhenRedVdisk) {
-        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::MIRROR_3_DC, Ydb::Monitoring::StatusFlag::YELLOW, {Ydb::Monitoring::StatusFlag::RED});
+        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::MIRROR_3_DC, {Ydb::Monitoring::StatusFlag::RED});
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1);
     }
-    
+
     Y_UNIT_TEST(Mirrot3dcBlueGroupWhenBlueVdisk) {
-        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::MIRROR_3_DC, Ydb::Monitoring::StatusFlag::BLUE, {Ydb::Monitoring::StatusFlag::BLUE});
+        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::MIRROR_3_DC, {Ydb::Monitoring::StatusFlag::BLUE});
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::BLUE, 1);
     }
-    
+
     Y_UNIT_TEST(Mirrot3dcYellowGroupWhenYellowVdisk) {
-        CheckGroupStatusDependsOnVdisks(NHealthCheck::TSelfCheckRequest::MIRROR_3_DC, Ydb::Monitoring::StatusFlag::YELLOW, {Ydb::Monitoring::StatusFlag::YELLOW});
+        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::MIRROR_3_DC, {Ydb::Monitoring::StatusFlag::YELLOW});
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1);
     }
 
     Y_UNIT_TEST(StorageLimit95) {
@@ -511,6 +543,28 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
     Y_UNIT_TEST(StorageNoQuota) {
         StorageTest(100, 0, 0, Ydb::Monitoring::StatusFlag::GREEN);
+    }
+
+    void CheckHcProtobufSize(Ydb::Monitoring::SelfCheckResult& result, const Ydb::Monitoring::StatusFlag::Status expectingStatus, ui32 total) {
+        int issuesCount = 0;
+        for (const auto& issue_log : result.Getissue_log()) {
+            if (issue_log.type() == "HEALTHCHECK_STATUS" && issue_log.status() == expectingStatus) {
+                issuesCount++;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(issuesCount, total);
+    }
+
+    Y_UNIT_TEST(ProtobufUnderLimit50Mb) {
+        auto result = RequestHc(3000, 1);
+        CheckHcProtobufSize(result, Ydb::Monitoring::StatusFlag::RED, 0);
+        CheckHcProtobufSize(result, Ydb::Monitoring::StatusFlag::ORANGE, 0);
+        CheckHcProtobufSize(result, Ydb::Monitoring::StatusFlag::YELLOW, 0);
+    }
+
+    Y_UNIT_TEST(ProtobufBeyondLimit50Mb) {
+        auto result = RequestHc(350000, 1);
+        CheckHcProtobufSize(result, Ydb::Monitoring::StatusFlag::RED, 1);
     }
 }
 

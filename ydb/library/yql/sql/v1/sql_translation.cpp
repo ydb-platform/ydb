@@ -448,6 +448,17 @@ TString Id(const TRule_an_id_pure& node, TTranslation& ctx) {
     }
 }
 
+TViewDescription Id(const TRule_view_name& node, TTranslation& ctx) {
+    switch (node.Alt_case()) {
+        case TRule_view_name::kAltViewName1:
+            return {Id(node.GetAlt_view_name1().GetRule_an_id1(), ctx)};
+        case TRule_view_name::kAltViewName2:
+            return {"", true};
+        case TRule_view_name::ALT_NOT_SET:
+            Y_FAIL("You should change implementation according to grammar changes");
+    }
+}
+
 bool NamedNodeImpl(const TRule_bind_parameter& node, TString& name, TTranslation& ctx) {
     // bind_parameter: DOLLAR (an_id_or_type | TRUE | FALSE);
     TString id;
@@ -594,20 +605,20 @@ bool CreateTableIndex(const TRule_table_index& node, TTranslation& ctx, TVector<
     return true;
 }
 
-std::pair<TString, TString> TableKeyImpl(const std::pair<bool, TString>& nameWithAt, TString view, TTranslation& ctx) {
+std::pair<TString, TViewDescription> TableKeyImpl(const std::pair<bool, TString>& nameWithAt, TViewDescription view, TTranslation& ctx) {
     if (nameWithAt.first) {
-        view = "@";
+        view = {"@"};
         ctx.Context().IncrementMonCounter("sql_features", "AnonymousTable");
     }
 
     return std::make_pair(nameWithAt.second, view);
 }
 
-std::pair<TString, TString> TableKeyImpl(const TRule_table_key& node, TTranslation& ctx, bool hasAt) {
+std::pair<TString, TViewDescription> TableKeyImpl(const TRule_table_key& node, TTranslation& ctx, bool hasAt) {
     auto name(Id(node.GetRule_id_table_or_type1(), ctx));
-    TString view;
+    TViewDescription view;
     if (node.HasBlock2()) {
-        view = Id(node.GetBlock2().GetRule_an_id2(), ctx);
+        view = Id(node.GetBlock2().GetRule_view_name2(), ctx);
         ctx.Context().IncrementMonCounter("sql_features", "View");
     }
 
@@ -798,7 +809,7 @@ TMaybe<TTableArg> TSqlTranslation::TableArgImpl(const TRule_table_arg& node) {
     }
 
     if (node.HasBlock3()) {
-        ret.View = Id(node.GetBlock3().GetRule_an_id2(), *this);
+        ret.View = Id(node.GetBlock3().GetRule_view_name2(), *this);
         Context().IncrementMonCounter("sql_features", "View");
     }
 
@@ -934,7 +945,7 @@ bool TSqlTranslation::ApplyTableBinding(const TString& binding, TTableRef& tr, T
     tr.Cluster = TDeferredAtom(Ctx.Pos(), bindingInfo.Cluster);
 
     const TString view = "";
-    tr.Keys = BuildTableKey(Ctx.Pos(), tr.Service, tr.Cluster, TDeferredAtom(Ctx.Pos(), bindingInfo.Path), view);
+    tr.Keys = BuildTableKey(Ctx.Pos(), tr.Service, tr.Cluster, TDeferredAtom(Ctx.Pos(), bindingInfo.Path), {view});
 
     return true;
 }
@@ -982,9 +993,9 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
             auto pair = TableKeyImpl(block.GetAlt1().GetRule_table_key1(), *this, hasAt);
             if (isBinding) {
                 TString binding = pair.first;
-                TString view = pair.second;
-                if (!view.empty()) {
-                    YQL_ENSURE(view != "@");
+                auto view = pair.second;
+                if (!view.ViewName.empty()) {
+                    YQL_ENSURE(view != TViewDescription{"@"});
                     Ctx.Error() << "VIEW is not supported for table bindings";
                     return false;
                 }
@@ -1102,9 +1113,12 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
             TTableHints contextHints = GetContextHints(Ctx);
             auto ret = BuildInnerSource(Ctx.Pos(), nodePtr, service, cluster);
             if (alt.HasBlock3()) {
-                auto view = Id(alt.GetBlock3().GetRule_an_id2(), *this);
+                auto view = Id(alt.GetBlock3().GetRule_view_name2(), *this);
                 Ctx.IncrementMonCounter("sql_features", "View");
-                if (!ret->SetViewName(Ctx, Ctx.Pos(), view)) {
+                bool result = view.PrimaryFlag
+                    ? ret->SetPrimaryView(Ctx, Ctx.Pos())
+                    : ret->SetViewName(Ctx, Ctx.Pos(), view.ViewName);
+                if (!result) {
                     return false;
                 }
             }
@@ -3067,7 +3081,7 @@ bool TSqlTranslation::SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& 
 
         result = TTableRef(Context().MakeName("table"), service, cluster, nullptr);
         auto tableOrAt = Id(node.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetRule_id_or_at2(), *this);
-        auto tableAndView = TableKeyImpl(tableOrAt, "", *this);
+        auto tableAndView = TableKeyImpl(tableOrAt, {}, *this);
         result.Keys = BuildTableKey(Context().Pos(), result.Service, result.Cluster,
             TDeferredAtom(Context().Pos(), tableAndView.first), tableAndView.second);
         break;
@@ -3091,7 +3105,7 @@ bool TSqlTranslation::SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& 
         TDeferredAtom table;
         MakeTableFromExpression(Context(), named, table);
         result = TTableRef(Context().MakeName("table"), service, cluster, nullptr);
-        result.Keys = BuildTableKey(Context().Pos(), result.Service, result.Cluster, table, at ? "@" : "");
+        result.Keys = BuildTableKey(Context().Pos(), result.Service, result.Cluster, table, {at ? "@" : ""});
         break;
     }
     case TRule_simple_table_ref_core::AltCase::ALT_NOT_SET:

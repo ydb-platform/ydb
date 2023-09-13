@@ -152,6 +152,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnablePreparedDdl = false;
     bool EnableSequences = false;
     NSQLTranslation::EBindingsMode BindingsMode = NSQLTranslation::EBindingsMode::ENABLED;
+    bool EnableIndexAutoChooser = false;
 };
 
 }

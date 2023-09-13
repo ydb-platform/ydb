@@ -171,6 +171,7 @@ namespace NSQLTranslationV1 {
         virtual void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs);
         virtual TPtr WindowSpecFunc(const TPtr& type) const;
         virtual bool SetViewName(TContext& ctx, TPosition pos, const TString& view);
+        virtual bool SetPrimaryView(TContext& ctx, TPosition pos);
         void UseAsInner();
         virtual bool UsedSubquery() const;
         virtual bool IsSelect() const;
@@ -465,6 +466,14 @@ namespace NSQLTranslationV1 {
         TWinRank(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args);
     };
 
+    struct TViewDescription {
+        TString ViewName = "";
+        bool PrimaryFlag = false;
+
+        bool empty() const { return *this == TViewDescription(); }
+        bool operator == (const TViewDescription&) const = default;
+    };
+
     class ITableKeys: public INode {
     public:
         enum class EBuildKeysMode {
@@ -477,6 +486,9 @@ namespace NSQLTranslationV1 {
         ITableKeys(TPosition pos);
         virtual const TString* GetTableName() const;
         virtual TNodePtr BuildKeys(TContext& ctx, EBuildKeysMode mode) = 0;
+
+    protected:
+        TNodePtr AddView(TNodePtr key, const TViewDescription& view);
 
     private:
         /// all TableKeys no clonnable
@@ -900,7 +912,7 @@ namespace NSQLTranslationV1 {
         bool HasAt = false;
         TNodePtr Expr;
         TDeferredAtom Id;
-        TString View;
+        TViewDescription View;
     };
 
     class TTableRows final : public INode {

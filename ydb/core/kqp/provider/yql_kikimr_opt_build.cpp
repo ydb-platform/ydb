@@ -123,8 +123,9 @@ struct TKiExploreTxResults {
         YQL_ENSURE(tableMeta, "Empty table metadata");
 
         bool uncommittedChangesRead = false;
-        if (key.GetView()) {
-            const auto& indexName = key.GetView().GetRef();
+        auto view = key.GetView();
+        if (view && view->Name) {
+            const auto& indexName = view->Name;
             const auto indexTablePath = IKikimrGateway::CreateIndexTablePath(tableMeta->Name, indexName);
 
             auto indexIt = std::find_if(tableMeta->Indexes.begin(), tableMeta->Indexes.end(), [&indexName](const auto& index){

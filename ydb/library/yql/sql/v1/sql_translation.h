@@ -103,9 +103,9 @@ bool PureColumnOrNamedListStr(const TRule_pure_column_or_named_list& node, TTran
 
 bool CreateTableIndex(const TRule_table_index& node, TTranslation& ctx, TVector<TIndexDescription>& indexes);
 
-std::pair<TString, TString> TableKeyImpl(const std::pair<bool, TString>& nameWithAt, TString view, TTranslation& ctx);
+std::pair<TString, TViewDescription> TableKeyImpl(const std::pair<bool, TString>& nameWithAt, TViewDescription view, TTranslation& ctx);
 
-std::pair<TString, TString> TableKeyImpl(const TRule_table_key& node, TTranslation& ctx, bool hasAt);
+std::pair<TString, TViewDescription> TableKeyImpl(const TRule_table_key& node, TTranslation& ctx, bool hasAt);
 
 TMaybe<TColumnConstraints> ColumnConstraints(const TRule_column_schema& node, TTranslation& ctx);
 

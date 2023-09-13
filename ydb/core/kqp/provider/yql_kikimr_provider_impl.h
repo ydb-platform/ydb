@@ -76,6 +76,11 @@ public:
         Permission
     };
 
+    struct TViewDescription {
+        TString Name;
+        bool PrimaryFlag = false;
+    };
+
 public:
     TKikimrKey(TExprContext& ctx)
         : Ctx(ctx) {}
@@ -115,7 +120,7 @@ public:
         return Target;
     }
 
-    const TMaybe<TString>& GetView() const {
+    const TMaybe<TViewDescription>& GetView() const {
         return View;
     }
 
@@ -139,7 +144,7 @@ private:
     TMaybe<Type> KeyType;
     TString Target;
     TMaybe<TString> ObjectType;
-    TMaybe<TString> View;
+    TMaybe<TViewDescription> View;
 };
 
 struct TKiDataQueryBlockSettings {

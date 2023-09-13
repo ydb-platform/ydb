@@ -265,7 +265,7 @@ public:
             case NKikimrSchemeOp::TAuth::kNone:
                 properties["authMethod"] = "SERVICE_ACCOUNT";
                 break;
-            
+
             case NKikimrSchemeOp::TAuth::kBasic:
                 properties["authMethod"] = "BASIC";
                 properties["login"] = metadata.ExternalSource.DataSourceAuth.GetBasic().GetLogin();

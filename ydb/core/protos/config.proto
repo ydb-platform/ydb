@@ -1381,6 +1381,7 @@ message TTableServiceConfig {
     }
 
     optional EChannelTransportVersion ChannelTransportVersion = 46 [default = CTV_OOB_PICKLE_1_0];
+    optional bool EnableIndexAutoChooser = 49 [default = false];
 };
 
 message TQueryServiceConfig {

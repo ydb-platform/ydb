@@ -3871,6 +3871,47 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         CompareYson(R"([[["id"]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
+
+    Y_UNIT_TEST(PrimaryView) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session);
+
+        NYdb::NTable::TExecDataQuerySettings querySettings;
+        querySettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
+
+        auto result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+            SELECT * FROM `/Root/SecondaryKeys` VIEW @primary WHERE Fk <= 1;
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW()), querySettings).GetValueSync();
+        AssertSuccessResult(result);
+        AssertTableReads(result, "/Root/SecondaryKeys/Index/indexImplTable", 0);
+    }
+
+    Y_UNIT_TEST(AutoChooseIndex) {
+        TKikimrSettings settings;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableIndexAutoChooser(true);
+        settings.SetAppConfig(appConfig);
+
+        TKikimrRunner kikimr(settings);
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session);
+
+        NYdb::NTable::TExecDataQuerySettings querySettings;
+        querySettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
+
+        auto result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+            SELECT * FROM `/Root/SecondaryKeys` WHERE Fk <= 1;
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW()), querySettings).GetValueSync();
+        AssertSuccessResult(result);
+        AssertTableReads(result, "/Root/SecondaryKeys/Index/indexImplTable", 1);
+    }
+
 }
 
 } // namespace NKikimr::NKqp

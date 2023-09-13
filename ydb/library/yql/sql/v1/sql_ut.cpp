@@ -1892,7 +1892,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, program.find("columnsDefaultValues"));
         UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, program.find("columnsDefaultValues"));
         UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, program.find("Write"));
-        
+
 #if 0
         Cerr << program << Endl;
 #endif
@@ -1900,7 +1900,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TWordCountHive elementStat = { {TString("Write"), 0} };
         VerifyProgram(res, elementStat);
 
-        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);        
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 
     Y_UNIT_TEST(DefaultValueColumn3) {
@@ -1946,7 +1946,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("default"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("columnsDefaultValues"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("columnFamilies"));   
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("columnFamilies"));
             }
         };
 
@@ -3154,6 +3154,12 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
         );
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:1: Error: Column value is not in source column set\n");
+    }
+
+    Y_UNIT_TEST(PrimaryViewAbortMapReduce) {
+        NYql::TAstParseResult res = SqlToYql("SELECT key FROM plato.Input VIEW @primary");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:17: Error: @primary is not supported for yt tables\n");
     }
 
     Y_UNIT_TEST(InsertAbortMapReduce) {

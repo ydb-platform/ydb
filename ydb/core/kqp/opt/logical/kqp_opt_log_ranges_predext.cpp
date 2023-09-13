@@ -227,8 +227,8 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
         indexName = maybeIndexRead.Cast().Index();
     }
 
+    auto readSettings = TKqpReadTableSettings::Parse(read.Settings());
     const auto& mainTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path());
-    auto& tableDesc = indexName ? kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, mainTableDesc.Metadata->GetIndexMetadata(TString(indexName.Cast())).first->Name) : mainTableDesc;
 
     THashSet<TString> possibleKeys;
     TPredicateExtractorSettings settings;
@@ -238,6 +238,11 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
 
     if (!kqpCtx.Config->PredicateExtract20) {
         // test for trivial cases (explicit literals or parameters)
+        auto& tableDesc = indexName
+            ? kqpCtx.Tables->ExistingTable(
+                kqpCtx.Cluster,
+                mainTableDesc.Metadata->GetIndexMetadata(TString(indexName.Cast())).first->Name)
+            : mainTableDesc;
         if (auto expr = TryBuildTrivialReadTable(flatmap, read, *readMatch, tableDesc, ctx, kqpCtx, indexName)) {
             return expr.Cast();
         }
@@ -246,10 +251,39 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
     }
 
     auto extractor = MakePredicateRangeExtractor(settings);
-    YQL_ENSURE(tableDesc.SchemeNode);
+    YQL_ENSURE(mainTableDesc.SchemeNode);
 
     bool prepareSuccess = extractor->Prepare(flatmap.Lambda().Ptr(), *mainTableDesc.SchemeNode, possibleKeys, ctx, typesCtx);
     YQL_ENSURE(prepareSuccess);
+
+    if (!indexName.IsValid() && !readSettings.ForcePrimary && kqpCtx.Config->EnableIndexAutoChooser) {
+        TVector<std::tuple<size_t, size_t, TMaybe<TString>>> indices;
+        {
+            auto buildResult = extractor->BuildComputeNode(mainTableDesc.Metadata->KeyColumnNames, ctx, typesCtx);
+            indices.push_back(std::make_tuple(
+                    buildResult.UsedPrefixLen,
+                    buildResult.PointPrefixLen,
+                    TMaybe<TString>()));
+        }
+        for (auto& index : mainTableDesc.Metadata->Indexes) {
+            if (index.Type == TIndexDescription::EType::GlobalSync) {
+                auto buildResult = extractor->BuildComputeNode(index.KeyColumns, ctx, typesCtx);
+                indices.push_back(std::make_tuple(
+                        buildResult.UsedPrefixLen,
+                        buildResult.PointPrefixLen,
+                        TMaybe<TString>(index.Name)));
+            }
+        }
+        if (!indices.empty()) {
+            auto it = std::max_element(indices.begin(), indices.end());
+            auto name = std::get<TMaybe<TString>>(*it);
+            if (name) {
+                indexName = ctx.NewAtom(read.Pos(), *name);
+            }
+        }
+    }
+
+    auto& tableDesc = indexName ? kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, mainTableDesc.Metadata->GetIndexMetadata(TString(indexName.Cast())).first->Name) : mainTableDesc;
 
     auto buildResult = extractor->BuildComputeNode(tableDesc.Metadata->KeyColumnNames, ctx, typesCtx);
 

@@ -407,6 +407,10 @@ bool TKikimrKey::Extract(const TExprNode& key) {
             auto tag = key.Child(i)->Child(0);
             if (tag->Content() == TStringBuf("view")) {
                 const TExprNode* viewNode = key.Child(i)->Child(1);
+                if (viewNode->ChildrenSize() == 0 && viewNode->IsList()) {
+                    View = {"", true};
+                    continue;
+                }
                 if (!viewNode->IsCallable("String")) {
                     Ctx.AddError(TIssue(Ctx.GetPosition(viewNode->Pos()), "Expected String"));
                     return false;
@@ -420,8 +424,20 @@ bool TKikimrKey::Extract(const TExprNode& key) {
                     Ctx.AddError(TIssue(Ctx.GetPosition(viewNode->Child(0)->Pos()), "Secondary index name must not be empty"));
                     return false;
                 }
-                View = viewNode->Child(0)->Content();
 
+                if (View) {
+                    Ctx.AddError(TIssue(Ctx.GetPosition(tag->Pos()), "Incosistent view tags"));
+                    return false;
+                }
+
+                View = TViewDescription{TString(viewNode->Child(0)->Content())};
+            } else if (tag->Content() == TStringBuf("primary_view")) {
+                if (View) {
+                    Ctx.AddError(TIssue(Ctx.GetPosition(tag->Pos()), "Incosistent view tags"));
+                    return false;
+                }
+
+                View = TViewDescription{"", true};
             } else {
                 Ctx.AddError(TIssue(Ctx.GetPosition(tag->Pos()), TStringBuilder() << "Unexpected tag for kikimr key child: " << tag->Content()));
                 return false;

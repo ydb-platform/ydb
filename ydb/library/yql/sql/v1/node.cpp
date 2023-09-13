@@ -274,6 +274,12 @@ bool INode::SetViewName(TContext& ctx, TPosition pos, const TString& view) {
     return false;
 }
 
+bool INode::SetPrimaryView(TContext& ctx, TPosition pos) {
+    Y_UNUSED(pos);
+    ctx.Error() << "Node not support primary views";
+    return false;
+}
+
 void INode::UseAsInner() {
     AsInner = true;
 }
@@ -877,6 +883,17 @@ protected:
 
 TNodePtr BuildQuotedAtom(TPosition pos, const TString& content, ui32 flags) {
     return new TQuotedAtomNode(pos, content, flags);
+}
+
+
+TNodePtr ITableKeys::AddView(TNodePtr key, const TViewDescription& view) {
+    if (view.PrimaryFlag) {
+        return L(key, Q(Y(Q("primary_view"))));
+    } else if (!view.empty()) {
+        return L(key, Q(Y(Q("view"), Y("String", BuildQuotedAtom(Pos, view.ViewName)))));
+    } else {
+        return key;
+    }
 }
 
 TString TColumns::AddUnnamed() {
@@ -2131,7 +2148,7 @@ public:
     const TVector<TIdPart>& GetParts() const {
         return Ids;
     }
-    
+
 protected:
     void DoUpdateState() const override {
         YQL_ENSURE(Node);
@@ -2503,7 +2520,7 @@ bool TUdfNode::DoInit(TContext& ctx, ISource* src) {
     }
 
     TTupleNode* as_tuple = dynamic_cast<TTupleNode*>(Args[0].Get());
-    
+
     if (!as_tuple || as_tuple->GetTupleSize() < 1) {
         ctx.Error(Pos) << "Udf: first argument must be a callable, like Foo::Bar";
         return false;
@@ -2520,7 +2537,7 @@ bool TUdfNode::DoInit(TContext& ctx, ISource* src) {
     ModuleName = function->ModuleName();
     TVector<TNodePtr> external;
     external.reserve(as_tuple->GetTupleSize() - 1);
-    
+
     for (size_t i = 1; i < as_tuple->GetTupleSize(); ++i) {
         // TODO(): support named args in GetFunctionArgColumnStatus
         TNodePtr current = as_tuple->GetTupleElement(i);
@@ -2532,7 +2549,7 @@ bool TUdfNode::DoInit(TContext& ctx, ISource* src) {
     }
 
     ExternalTypesTuple = new TCallNodeImpl(Pos, "TupleType", external);
-    
+
     if (Args.size() == 1) {
         return true;
     }
@@ -2775,7 +2792,7 @@ TSourcePtr TryMakeSourceFromExpression(TContext& ctx, const TString& currService
     }
 
     if (auto literal = node->GetLiteral("String")) {
-        TNodePtr tableKey = BuildTableKey(node->GetPos(), currService, currCluster, TDeferredAtom(node->GetPos(), *literal), view);
+        TNodePtr tableKey = BuildTableKey(node->GetPos(), currService, currCluster, TDeferredAtom(node->GetPos(), *literal), {view});
         TTableRef table(ctx.MakeName("table"), currService, currCluster, tableKey);
         table.Options = BuildInputOptions(node->GetPos(), GetContextHints(ctx));
         return BuildTableSource(node->GetPos(), table);
@@ -2787,7 +2804,7 @@ TSourcePtr TryMakeSourceFromExpression(TContext& ctx, const TString& currService
     }
 
     auto wrappedNode = node->Y("EvaluateAtom", node);
-    TNodePtr tableKey = BuildTableKey(node->GetPos(), currService, currCluster, TDeferredAtom(wrappedNode, ctx), view);
+    TNodePtr tableKey = BuildTableKey(node->GetPos(), currService, currCluster, TDeferredAtom(wrappedNode, ctx), {view});
     TTableRef table(ctx.MakeName("table"), currService, currCluster, tableKey);
     table.Options = BuildInputOptions(node->GetPos(), GetContextHints(ctx));
     return BuildTableSource(node->GetPos(), table);

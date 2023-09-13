@@ -771,10 +771,10 @@ define_action_or_subquery_body: SEMICOLON* (sql_stmt_core (SEMICOLON+ sql_stmt_c
 if_stmt: EVALUATE? IF expr do_stmt (ELSE do_stmt)?;
 for_stmt: EVALUATE? FOR bind_parameter IN expr do_stmt (ELSE do_stmt)?;
 
-table_ref: (cluster_expr DOT)? AT? (table_key | an_id_expr LPAREN (table_arg (COMMA table_arg)* COMMA?)? RPAREN | bind_parameter (LPAREN expr_list? RPAREN)? (VIEW an_id)?) table_hints?;
+table_ref: (cluster_expr DOT)? AT? (table_key | an_id_expr LPAREN (table_arg (COMMA table_arg)* COMMA?)? RPAREN | bind_parameter (LPAREN expr_list? RPAREN)? (VIEW view_name)?) table_hints?;
 
-table_key: id_table_or_type (VIEW an_id)?;
-table_arg: AT? named_expr (VIEW an_id)?;
+table_key: id_table_or_type (VIEW view_name)?;
+table_arg: AT? named_expr (VIEW view_name)?;
 table_hints: WITH (table_hint | LPAREN table_hint (COMMA table_hint)* RPAREN);
 table_hint:
       an_id_hint (EQUALS (type_name_tag | LPAREN type_name_tag (COMMA type_name_tag)* COMMA? RPAREN))?
@@ -1012,6 +1012,8 @@ an_id_without: id_without | STRING_VALUE;
 an_id_hint: id_hint | STRING_VALUE;
 an_id_pure: identifier | STRING_VALUE;
 an_id_as_compat: id_as_compat | STRING_VALUE;
+
+view_name: an_id | AT PRIMARY;
 
 opt_id_prefix: (an_id DOT)?;
 cluster_expr: (an_id COLON)? (pure_column_or_named | ASTERISK);

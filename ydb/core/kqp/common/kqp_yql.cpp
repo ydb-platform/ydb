@@ -163,6 +163,9 @@ TKqpReadTableSettings ParseInternal(const TCoNameValueTupleList& node) {
         } else if (name == TKqpReadTableSettings::SequentialSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 2);
             settings.SequentialInFlight = FromString<ui64>(tuple.Value().Cast<TCoAtom>().Value());
+        } else if (name == TKqpReadTableSettings::ForcePrimaryName) {
+            YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
+            settings.ForcePrimary = true;
         } else {
             YQL_ENSURE(false, "Unknown KqpReadTable setting name '" << name << "'");
         }
@@ -220,6 +223,14 @@ NNodes::TCoNameValueTupleList TKqpReadTableSettings::BuildNode(TExprContext& ctx
             Build<TCoNameValueTuple>(ctx, pos)
                 .Name()
                     .Build(ReverseSettingName)
+                .Done());
+    }
+
+    if (ForcePrimary) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name()
+                    .Build(ForcePrimaryName)
                 .Done());
     }
 

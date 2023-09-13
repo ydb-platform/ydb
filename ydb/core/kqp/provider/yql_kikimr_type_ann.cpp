@@ -140,13 +140,14 @@ private:
                     return TStatus::Error;
                 }
 
-                if (const auto& view = key.GetView()) {
+                const auto& view = key.GetView();
+                if (view && view->Name) {
                     if (!ValidateTableHasIndex(tableDesc->Metadata, ctx, node.Pos())) {
                         return TStatus::Error;
                     }
-                    if (tableDesc->Metadata->GetIndexMetadata(view.GetRef()).first == nullptr) {
+                    if (tableDesc->Metadata->GetIndexMetadata(view->Name).first == nullptr) {
                         ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_SCHEME_ERROR, TStringBuilder()
-                            << "Required global index not found, index name: " << view.GetRef()));
+                            << "Required global index not found, index name: " << view->Name));
                         return TStatus::Error;
                     }
                 }
@@ -425,7 +426,7 @@ private:
             const auto& columnInfo = table->Metadata->Columns.at(keyColumnName);
             if (rowType->FindItem(keyColumnName)) {
                 continue;
-            }            
+            }
             if (!columnInfo.IsDefaultKindDefined())  {
                 ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
                     << "Missing key column in input: " << keyColumnName
@@ -846,7 +847,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             const TTypeAnnotationNode* columnAnnotation = columnInfo->second;
 
             if (columnAnnotation->HasOptional()) {
-                columnAnnotation = columnAnnotation->Cast<TOptionalExprType>()->GetItemType();   
+                columnAnnotation = columnAnnotation->Cast<TOptionalExprType>()->GetItemType();
             }
 
             if (!IsSameAnnotation(*type, *columnAnnotation)) {

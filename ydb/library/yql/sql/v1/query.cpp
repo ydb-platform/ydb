@@ -15,10 +15,18 @@ using namespace NYql;
 
 namespace NSQLTranslationV1 {
 
+bool ValidateView(TPosition pos, TContext& ctx, TStringBuf service, TViewDescription& view) {
+    if (view.PrimaryFlag && !(service == KikimrProviderName || service == YdbProviderName)) {
+        ctx.Error(pos) << "@primary is not supported for " << service << " tables";
+        return false;
+    }
+    return true;
+}
+
 class TUniqueTableKey: public ITableKeys {
 public:
     TUniqueTableKey(TPosition pos, const TString& service, const TDeferredAtom& cluster,
-        const TDeferredAtom& name, const TString& view)
+        const TDeferredAtom& name, const TViewDescription& view)
         : ITableKeys(pos)
         , Service(service)
         , Cluster(cluster)
@@ -26,18 +34,25 @@ public:
         , View(view)
         , Full(name.GetRepr())
     {
-        if (!View.empty()) {
-            Full += ":" + View;
+        if (!View.ViewName.empty()) {
+            Full += ":" + View.ViewName;
         }
+    }
+
+    bool SetPrimaryView(TContext& ctx, TPosition pos) override {
+        Y_UNUSED(ctx);
+        Y_UNUSED(pos);
+        View = {"", true};
+        return true;
     }
 
     bool SetViewName(TContext& ctx, TPosition pos, const TString& view) override {
         Y_UNUSED(ctx);
         Y_UNUSED(pos);
         Full = Name.GetRepr();
-        View = view;
+        View = {view};
         if (!View.empty()) {
-            Full = ":" + View;
+            Full = ":" + View.ViewName;
         }
 
         return true;
@@ -48,7 +63,7 @@ public:
     }
 
     TNodePtr BuildKeys(TContext& ctx, ITableKeys::EBuildKeysMode mode) override {
-        if (View == "@") {
+        if (View == TViewDescription{"@"}) {
             auto key = Y("TempTable", Name.Build());
             return key;
         }
@@ -63,8 +78,9 @@ public:
             return nullptr;
         }
         auto key = Y("Key", Q(Y(Q(tableScheme ? "tablescheme" : "table"), Y("String", path))));
-        if (!View.empty()) {
-            key = L(key, Q(Y(Q("view"), Y("String", BuildQuotedAtom(Pos, View)))));
+        key = AddView(key, View);
+        if (!ValidateView(GetPos(), ctx, Service, View)) {
+            return nullptr;
         }
         if (mode == ITableKeys::EBuildKeysMode::INPUT &&
             IsQueryMode(ctx.Settings.Mode) &&
@@ -81,12 +97,12 @@ private:
     TString Service;
     TDeferredAtom Cluster;
     TDeferredAtom Name;
-    TString View;
+    TViewDescription View;
     TString Full;
 };
 
 TNodePtr BuildTableKey(TPosition pos, const TString& service, const TDeferredAtom& cluster,
-    const TDeferredAtom& name, const TString& view) {
+    const TDeferredAtom& name, const TViewDescription& view) {
     return new TUniqueTableKey(pos, service, cluster, name, view);
 }
 
@@ -242,8 +258,9 @@ public:
                     }
 
                     key = Y("Key", Q(Y(Q("table"), Y("String", path))));
-                    if (!arg.View.empty()) {
-                        key = L(key, Q(Y(Q("view"), Y("String", BuildQuotedAtom(Pos, arg.View)))));
+                    key = AddView(key, arg.View);
+                    if (!ValidateView(GetPos(), ctx, Service, arg.View)) {
+                        return nullptr;
                     }
                 }
 
@@ -265,8 +282,9 @@ public:
                     }
 
                     key = Y("Key", Q(Y(Q("table"), Y("String", path))));
-                    if (!arg.View.empty()) {
-                        key = L(key, Q(Y(Q("view"), Y("String", BuildQuotedAtom(Pos, arg.View)))));
+                    key = AddView(key, arg.View);
+                    if (!ValidateView(GetPos(), ctx, Service, arg.View)) {
+                        return nullptr;
                     }
                 }
 
@@ -409,8 +427,10 @@ public:
                 auto key = Y("Key", Q(Y(Q("table"), Y("EvaluateExpr",
                     Y("EnsureType", Y("Coalesce", arg.Expr,
                     Y("List", type)), type)))));
-                if (!arg.View.empty()) {
-                    key = L(key, Q(Y(Q("view"), Y("String", BuildQuotedAtom(Pos, arg.View)))));
+
+                key = AddView(key, arg.View);
+                if (!ValidateView(GetPos(), ctx, Service, arg.View)) {
+                    return nullptr;
                 }
                 each = L(each, key);
             }

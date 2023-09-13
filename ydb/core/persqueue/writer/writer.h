@@ -95,20 +95,19 @@ struct TEvPartitionWriter {
     };
 
     struct TEvWriteResponse: public TEventPB<TEvWriteResponse, NKikimrClient::TResponse, EvWriteResponse> {
-        enum EErrors {
+        enum class EErrorCode {
             InternalError,
             // Partition located on other node.
             PartitionNotLocal,
             // Partitition restarted.
             PartitionDisconnected,
-            Overload
         };
 
         struct TSuccess {
         };
 
         struct TError {
-            EErrors Code;
+            EErrorCode Code;
             TString Reason;
         };
 
@@ -128,7 +127,7 @@ struct TEvPartitionWriter {
         }
 
         TEvWriteResponse(const TString& sessionId, const TString& txId,
-                         const EErrors code, const TString& reason, NKikimrClient::TResponse&& response)
+                         const EErrorCode code, const TString& reason, NKikimrClient::TResponse&& response)
             : SessionId(sessionId)
             , TxId(txId)
             , Result(TError{code, reason})

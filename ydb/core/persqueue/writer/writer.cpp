@@ -101,6 +101,7 @@ TString TEvPartitionWriter::TEvWriteResponse::ToString() const {
 }
 
 class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRlHelpers {
+    using EErrorCode = TEvPartitionWriter::TEvWriteResponse::EErrorCode;
 
     static constexpr size_t MAX_QUOTA_INFLIGHT = 3;
     
@@ -154,7 +155,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         return response;
     }
 
-    void BecomeZombie(const TEvPartitionWriter::TEvWriteResponse::EErrors errorCode, const TString& error) {
+    void BecomeZombie(EErrorCode errorCode, const TString& error) {
         ErrorCode = errorCode;
 
         SendError(error);
@@ -183,7 +184,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
     void InitResult(const TString& reason, NKikimrClient::TResponse&& response) {
         SendInitResult(reason, std::move(response));
-        BecomeZombie(TEvPartitionWriter::TEvWriteResponse::EErrors::InternalError, "Init error");
+        BecomeZombie(EErrorCode::InternalError, "Init error");
     }
 
     void InitResult(const TString& ownerCookie, const TEvPartitionWriter::TEvInitResult::TSourceIdInfo& sourceIdInfo, ui64 writeId) {
@@ -195,7 +196,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         Send(Client, new TEvPartitionWriter::TEvWriteResponse(Opts.SessionId, Opts.TxId, std::forward<Args>(args)...));
     }
 
-    void WriteResult(TEvPartitionWriter::TEvWriteResponse::EErrors errorCode, const TString& reason, NKikimrClient::TResponse&& response) {
+    void WriteResult(EErrorCode errorCode, const TString& reason, NKikimrClient::TResponse&& response) {
         SendWriteResult(errorCode, reason, std::move(response));
         BecomeZombie(errorCode, "Write error");
     }
@@ -209,7 +210,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         Send(Client, new TEvPartitionWriter::TEvWriteAccepted(Opts.SessionId, Opts.TxId, cookie));
     }
 
-    void Disconnected(TEvPartitionWriter::TEvWriteResponse::EErrors errorCode) {
+    void Disconnected(EErrorCode errorCode) {
         Send(Client, new TEvPartitionWriter::TEvDisconnected());
         BecomeZombie(errorCode, "Disconnected");
     }
@@ -540,7 +541,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
             if (cookie != *qit) {
                 ERROR("The order of reservation and quota requests should be the same. ReserveCookie=" << cookie << ", QuotaCookie=" << *qit);
-                Disconnected(TEvPartitionWriter::TEvWriteResponse::InternalError);
+                Disconnected(EErrorCode::InternalError);
                 return;
             }
 
@@ -569,7 +570,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
             if (pit == PendingReserve.end()) {
                 ERROR("The received quota does not apply to any request. Cookie=" << *qit);
-                Disconnected(TEvPartitionWriter::TEvWriteResponse::InternalError);
+                Disconnected(EErrorCode::InternalError);
                 return;
             }
 
@@ -614,13 +615,13 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
         TString error;
         if (!BasicCheck(record, error)) {
-            return WriteResult(TEvPartitionWriter::TEvWriteResponse::InternalError, error, std::move(record));
+            return WriteResult(EErrorCode::InternalError, error, std::move(record));
         }
 
         const auto& response = record.GetPartitionResponse();
         if (!response.CmdWriteResultSize()) {
             if (PendingReserve.empty()) {
-                return WriteResult(TEvPartitionWriter::TEvWriteResponse::InternalError, "Unexpected ReserveBytes response", std::move(record));
+                return WriteResult(EErrorCode::InternalError, "Unexpected ReserveBytes response", std::move(record));
             }
 
             const auto cookie = PendingReserve.begin()->first;
@@ -628,7 +629,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
                 error = TStringBuilder() << "Unexpected cookie at ReserveBytes"
                     << ": expected# " << cookie
                     << ", got# " << response.GetCookie();
-                return WriteResult(TEvPartitionWriter::TEvWriteResponse::InternalError, error, std::move(record));
+                return WriteResult(EErrorCode::InternalError, error, std::move(record));
             }
 
             WriteAccepted(cookie);
@@ -647,7 +648,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
             }
         } else {
             if (PendingWrite.empty()) {
-                return WriteResult(TEvPartitionWriter::TEvWriteResponse::InternalError, "Unexpected Write response", std::move(record));
+                return WriteResult(EErrorCode::InternalError, "Unexpected Write response", std::move(record));
             }
 
             const auto cookie = PendingWrite.front();
@@ -655,7 +656,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
                 error = TStringBuilder() << "Unexpected cookie at Write"
                     << ": expected# " << cookie
                     << ", got# " << response.GetCookie();
-                return WriteResult(TEvPartitionWriter::TEvWriteResponse::InternalError, error, std::move(record));
+                return WriteResult(EErrorCode::InternalError, error, std::move(record));
             }
 
             WriteResult(std::move(record));
@@ -669,7 +670,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
         if (msg->Status != NKikimrProto::OK) {
             ERROR("received TEvClientConnected with status " << ev->Get()->Status);
-            Disconnected(TEvPartitionWriter::TEvWriteResponse::InternalError);
+            Disconnected(EErrorCode::InternalError);
             return;
         }
 
@@ -680,13 +681,13 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
             if(*ExpectedGeneration != msg->Generation)
             {
                 INFO("received TEvClientConnected with wrong generation. Expected: " << *ExpectedGeneration << ", received " << msg->Generation);
-                Disconnected(TEvPartitionWriter::TEvWriteResponse::PartitionNotLocal);
+                Disconnected(EErrorCode::PartitionNotLocal);
                 return PassAway();
             }
             if (NActors::TActivationContext::ActorSystem()->NodeId != msg->ServerId.NodeId())
             {
                 INFO("received TEvClientConnected with wrong NodeId. Expected: " << NActors::TActivationContext::ActorSystem()->NodeId << ", received " << msg->ServerId.NodeId());
-                Disconnected(TEvPartitionWriter::TEvWriteResponse::PartitionNotLocal);
+                Disconnected(EErrorCode::PartitionNotLocal);
                 return PassAway();
             }
         }
@@ -695,7 +696,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
         if (ev->Get()->TabletId == TabletId) {
             DEBUG("received TEvClientDestroyed");
-            Disconnected(TEvPartitionWriter::TEvWriteResponse::PartitionDisconnected);
+            Disconnected(EErrorCode::PartitionDisconnected);
         }
     }
 
@@ -825,7 +826,7 @@ private:
     TDeque<ui64> ReceivedQuota;
     TDeque<ui64> PendingWrite;
 
-    TEvPartitionWriter::TEvWriteResponse::EErrors ErrorCode = TEvPartitionWriter::TEvWriteResponse::EErrors::InternalError;
+    EErrorCode ErrorCode = EErrorCode::InternalError;
 
     ui64 WriteId = INVALID_WRITE_ID;
 }; // TPartitionWriter

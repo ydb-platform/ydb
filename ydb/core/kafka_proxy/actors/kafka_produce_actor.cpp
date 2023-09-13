@@ -436,10 +436,12 @@ void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr reque
     Cookies.erase(cookie);
 }
 
-EKafkaErrors Convert(TEvPartitionWriter::TEvWriteResponse::EErrors value) {
-    switch(value) {
-        case TEvPartitionWriter::TEvWriteResponse::EErrors::PartitionDisconnected:
-        case TEvPartitionWriter::TEvWriteResponse::EErrors::PartitionNotLocal:
+EKafkaErrors Convert(TEvPartitionWriter::TEvWriteResponse::EErrorCode value) {
+    using EErrorCode = TEvPartitionWriter::TEvWriteResponse::EErrorCode;
+
+    switch (value) {
+        case EErrorCode::PartitionDisconnected:
+        case EErrorCode::PartitionNotLocal:
             return EKafkaErrors::NOT_LEADER_OR_FOLLOWER;
         default:
             return EKafkaErrors::UNKNOWN_SERVER_ERROR;

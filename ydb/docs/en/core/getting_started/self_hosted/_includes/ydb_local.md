@@ -15,7 +15,7 @@ As a result of completing the steps described below, you'll get a YDB database r
 Create a working directory. In this directory, run a script to download an archive with the `ydbd` executable file and libraries required for using {{ ydb-short-name }}, as well as a set of scripts and auxiliary files to start and stop a server:
 
 ```bash
-curl {{ ydb-binaries-url }}/local_scripts/install.sh | bash
+curl {{ ydbd-install-url }} | bash
 ```
 
 {% include [wget_auth_overlay.md](wget_auth_overlay.md) %}

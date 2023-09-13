@@ -25,7 +25,7 @@ Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk 
    2. Download and run the installation script:
 
       ```bash
-      curl {{ ydb-binaries-url }}/local_scripts/install.sh | bash
+      curl {{ ydbd-install-url }} | bash
       ```
 
       This will download and unpack the archive containing the `ydbd` executable, libraries, configuration files, and scripts needed to start and stop the local cluster.

@@ -3,6 +3,7 @@ PY23_LIBRARY()
 PY_SRCS(
     TOP_LEVEL
     yql_utils.py
+    yql_ports.py
     yqlrun.py
 )
 

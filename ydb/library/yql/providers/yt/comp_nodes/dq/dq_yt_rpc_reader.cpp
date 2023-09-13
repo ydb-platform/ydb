@@ -1,4 +1,5 @@
 #include "dq_yt_rpc_reader.h"
+#include "yt_convert_helpers.h"
 
 #include "yt/cpp/mapreduce/common/helpers.h"
 
@@ -110,7 +111,8 @@ TParallelFileInputState::TParallelFileInputState(const TMkqlIOSpecs& spec,
     TVector<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr>&& rawInputs,
     size_t blockSize,
     size_t inflight,
-    std::unique_ptr<TSettingsHolder>&& settings)
+    std::unique_ptr<TSettingsHolder>&& settings,
+    TVector<size_t>&& originalIndexes)
     : InnerState_(new TInnerState (rawInputs.size()))
     , StateByReader_(rawInputs.size())
     , Spec_(&spec)
@@ -120,17 +122,18 @@ TParallelFileInputState::TParallelFileInputState(const TMkqlIOSpecs& spec,
     , Inflight_(inflight)
     , Settings_(std::move(settings))
     , TimerAwaiting_(RPCReaderAwaitingStallTime, 100)
+    , OriginalIndexes_(std::move(originalIndexes))
 {
 #ifdef RPC_PRINT_TIME
     print_add(1);
 #endif
-    YQL_ENSURE(Spec_->Inputs.size() == RawInputs_.size());
+    YQL_ENSURE(RawInputs_.size() == OriginalIndexes_.size());
     MkqlReader_.SetSpecs(*Spec_, HolderFactory_);
     Valid_ = NextValue();
 }
 
 size_t TParallelFileInputState::GetTableIndex() const {
-    return CurrentInput_;
+    return OriginalIndexes_[CurrentInput_];
 }
 
 size_t TParallelFileInputState::GetRecordIndex() const {
@@ -241,7 +244,7 @@ bool TParallelFileInputState::NextValue() {
         if (MkqlReader_.IsValid()) {
             CurrentValue_ = std::move(MkqlReader_.GetRow());
             if (!Spec_->InputGroups.empty()) {
-                CurrentValue_ = HolderFactory_.CreateVariantHolder(CurrentValue_.Release(), Spec_->InputGroups.at(CurrentInput_));
+                CurrentValue_ = HolderFactory_.CreateVariantHolder(CurrentValue_.Release(), Spec_->InputGroups.at(OriginalIndexes_[CurrentInput_]));
             }
             MkqlReader_.Next();
             return true;
@@ -274,7 +277,7 @@ bool TParallelFileInputState::NextValue() {
         }
         CurrentInput_ = result.Input_;
         CurrentReader_ = MakeIntrusive<TFakeRPCReader>(std::move(result.Value_));
-        MkqlReader_.SetReader(*CurrentReader_, 1, BlockSize_, ui32(CurrentInput_), true, StateByReader_[CurrentInput_].CurrentRow, StateByReader_[CurrentInput_].CurrentRange);
+        MkqlReader_.SetReader(*CurrentReader_, 1, BlockSize_, ui32(OriginalIndexes_[CurrentInput_]), true, StateByReader_[CurrentInput_].CurrentRow, StateByReader_[CurrentInput_].CurrentRange);
         MkqlReader_.Next();
     }
 }
@@ -295,8 +298,15 @@ void TDqYtReadWrapperRPC::MakeState(TComputationContext& ctx, NUdf::TUnboxedValu
     auto apiServiceProxy = client->CreateApiServiceProxy();
 
     TVector<NYT::TFuture<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr>> waitFor;
-
+    TVector<size_t> originalIndexes;
+    size_t inputIdx = 0;
     for (auto [richYPath, format]: Tables) {
+        if (richYPath.GetRanges() && richYPath.GetRanges()->empty()) {
+            ++inputIdx;
+            continue;
+        }
+
+        originalIndexes.push_back(inputIdx++);
         auto request = apiServiceProxy.ReadTable();
         client->InitStreamingRequest(*request);
         request->ClientAttachmentsStreamingParameters().ReadTimeout = TDuration::MilliSeconds(Timeout);
@@ -319,13 +329,7 @@ void TDqYtReadWrapperRPC::MakeState(TComputationContext& ctx, NUdf::TUnboxedValu
             SamplingSpec.Save(&ss);
             request->set_config(ss.Str());
         }
-
-        if (richYPath.TransactionId_) {
-            ui32* dw = richYPath.TransactionId_->dw;
-            // P. S. No proper way to convert it
-            request->mutable_transactional_options()->mutable_transaction_id()->set_first((ui64)dw[3] | (ui64(dw[2]) << 32));
-            request->mutable_transactional_options()->mutable_transaction_id()->set_second((ui64)dw[1] | (ui64(dw[0]) << 32));
-        }
+        ConfigureTransaction(request, richYPath);
 
         // Get skiff format yson string
         TStringStream fmt;
@@ -342,6 +346,9 @@ void TDqYtReadWrapperRPC::MakeState(TComputationContext& ctx, NUdf::TUnboxedValu
 
     TVector<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr> rawInputs;
     NYT::NConcurrency::WaitFor(NYT::AllSucceeded(waitFor)).ValueOrThrow().swap(rawInputs);
-    state = ctx.HolderFactory.Create<TDqYtReadWrapperBase<TDqYtReadWrapperRPC, TParallelFileInputState>::TState>(Specs, ctx.HolderFactory, std::move(rawInputs), 4_MB, Inflight, std::make_unique<TSettingsHolder>(TSettingsHolder{std::move(connection), std::move(client)}));
+    state = ctx.HolderFactory.Create<TDqYtReadWrapperBase<TDqYtReadWrapperRPC, TParallelFileInputState>::TState>(
+            Specs, ctx.HolderFactory, std::move(rawInputs), 4_MB, Inflight,
+            std::make_unique<TSettingsHolder>(TSettingsHolder{std::move(connection), std::move(client)}), std::move(originalIndexes)
+        );
 }
 }

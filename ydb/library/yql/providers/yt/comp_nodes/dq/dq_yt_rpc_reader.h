@@ -25,7 +25,8 @@ public:
         TVector<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr>&& rawInputs,
         size_t blockSize,
         size_t inflight,
-        std::unique_ptr<TSettingsHolder>&& client);
+        std::unique_ptr<TSettingsHolder>&& client,
+        TVector<size_t>&& originalIndexes);
 
     size_t GetTableIndex() const;
 
@@ -74,6 +75,7 @@ private:
     NUdf::TUnboxedValue CurrentValue_;
     std::function<void()> OnNextBlockCallback_;
     NKikimr::NMiniKQL::TSamplingStatTimer TimerAwaiting_;
+    TVector<size_t> OriginalIndexes_;
 
 };
 

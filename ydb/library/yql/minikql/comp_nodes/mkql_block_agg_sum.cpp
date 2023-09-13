@@ -623,7 +623,7 @@ std::unique_ptr<typename TTag::TPreparedAggregator> PrepareSum(TTupleType* tuple
         sumRetType = TDataType::Create(NUdf::TDataType<ui64>::Id, env);
     } else {
         Y_ENSURE(typeInfo.Features & NYql::NUdf::EDataTypeFeatures::FloatType);
-        sumRetType = TDataType::Create(NUdf::TDataType<double>::Id, env);
+        sumRetType = dataType;
     }
     sumRetType = TOptionalType::Create(sumRetType, env);
 
@@ -646,7 +646,7 @@ std::unique_ptr<typename TTag::TPreparedAggregator> PrepareSum(TTupleType* tuple
     case NUdf::EDataSlot::Uint64:
         return PrepareSumFixed<TTag, ui64, ui64>(sumRetType, isOptional, isScalar, filterColumn, argColumn);
     case NUdf::EDataSlot::Float:
-        return PrepareSumFixed<TTag, float, double>(sumRetType, isOptional, isScalar, filterColumn, argColumn);
+        return PrepareSumFixed<TTag, float, float>(sumRetType, isOptional, isScalar, filterColumn, argColumn);
     case NUdf::EDataSlot::Double:
         return PrepareSumFixed<TTag, double, double>(sumRetType, isOptional, isScalar, filterColumn, argColumn);
     default:

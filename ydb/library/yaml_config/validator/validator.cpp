@@ -79,8 +79,16 @@ bool TValidationResult::TIssue::operator==(const TValidationResult::TIssue& othe
 }
 
 TValidationResult TValidator::Validate(const TString& documentStr) {
-    TDocument document = TDocument::Parse(documentStr);
-    return Validate(document.Root());
+    try {
+        TDocument document = TDocument::Parse(documentStr);
+        return Validate(document.Root());
+    } catch (TFyamlEx e) {
+        TValidationResult validationResult;
+        for (const auto& error : e.Errors()) {
+            validationResult.Issues.emplace_back("", error);
+        }
+        return validationResult;
+    }
 }
 
 TValidator::TValidator(ENodeType nodeType)

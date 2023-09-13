@@ -8,40 +8,35 @@
 namespace NYamlConfig::NValidator {
 
 TNodeWrapper::TNodeWrapper(
-    TCheckContext* context,
+    TCheckContext& context,
     NFyaml::TNodeRef node,
     TValidator* validator,
     TMaybe<ENodeType> nodeType,
     const TString& pathFromCheckNode)
-    : Context_(context)
-    , Node_(node)
+    : TBase(context, node, pathFromCheckNode)
     , Validator_(validator)
-    , NodeType_(nodeType)
-    , PathFromCheckNode_(pathFromCheckNode) {}
+    , NodeType_(nodeType) {}
 
 TGenericNodeWrapper TNodeWrapper::Generic() {
     // opaque nodes doesn't have validators and generic node type doesn't exist
     Y_ASSERT(!IsOpaqueChild());
 
-    TGenericCheckContext* context = nullptr;
     TGenericValidator* validator = nullptr;
 
     if (Node_) {
         Y_ASSERT(NodeType_ == ENodeType::Generic);
 
-        context = static_cast<TGenericCheckContext*>(Context_);
         validator = static_cast<TGenericValidator*>(Validator_);
     }
 
     return TGenericNodeWrapper(
-        context,
+        static_cast<TGenericCheckContext&>(Context_),
         Node_,
         validator,
         PathFromCheckNode_);
 }
 
 TMapNodeWrapper TNodeWrapper::Map() {
-    TMapCheckContext* context = nullptr;
     TMapValidator* validator = nullptr;
 
     if (Node_) {
@@ -49,23 +44,21 @@ TMapNodeWrapper TNodeWrapper::Map() {
             Y_ASSERT(NodeType_ == ENodeType::Map);
         } else {
             if (Node_.Type() != NFyaml::ENodeType::Mapping) {
-                throw yexception() << "Must be a map";
+                throw TCheckException() << PathFromCheckNode_ << ": Must be a map";
             }
         }
 
-        context = static_cast<TMapCheckContext*>(Context_);
         validator = static_cast<TMapValidator*>(Validator_);
     }
     
     return TMapNodeWrapper(
-        context,
+        static_cast<TMapCheckContext&>(Context_),
         Node_,
         validator,
         PathFromCheckNode_);
 }
 
 TArrayNodeWrapper TNodeWrapper::Array() {
-    TArrayCheckContext* context = nullptr;
     TArrayValidator* validator = nullptr;
 
     if (Node_) {
@@ -73,91 +66,94 @@ TArrayNodeWrapper TNodeWrapper::Array() {
             Y_ASSERT(NodeType_ == ENodeType::Array);
         } else {
             if (Node_.Type() != NFyaml::ENodeType::Sequence) {
-                throw yexception() << "Must be an array";
+                throw TCheckException() << PathFromCheckNode_ << ": Must be an array";
             }
         }
 
-        context = static_cast<TArrayCheckContext*>(Context_);
         validator = static_cast<TArrayValidator*>(Validator_);
     }
     
     return TArrayNodeWrapper(
-        context,
+        static_cast<TArrayCheckContext&>(Context_),
         Node_,
         validator,
         PathFromCheckNode_);
 }
 
+namespace {
+    void ThrowIfScalarNodeValidationIsNotOk(TValidationResult validationResult, TString pathFromCheckNode) {
+        if (!validationResult.Ok()) {
+            auto e = TCheckException() << pathFromCheckNode << ": " << validationResult.Issues[0].Problem;
+            for (int i = 1; i < validationResult.Issues.ysize(); ++i) {
+                e << ", " << validationResult.Issues[i].Problem;
+            }
+
+            throw e;
+        }
+    }
+}
+
 TInt64NodeWrapper TNodeWrapper::Int64() {
-    TInt64CheckContext* context = nullptr;
     TInt64Validator* validator = nullptr;
 
     if (Node_) {
         if (!IsOpaqueChild()) {
             Y_ASSERT(NodeType_ == ENodeType::Int64);
         } else {
-            auto validationResult = TInt64Builder().CreateValidator().Validate(Node_);
-            if (!validationResult.Ok()) {
-                throw yexception() << validationResult;
-            }
+            ThrowIfScalarNodeValidationIsNotOk(
+                TInt64Builder().CreateValidator().Validate(Node_),
+                PathFromCheckNode_);
         }
 
-        context = static_cast<TInt64CheckContext*>(Context_);
         validator = static_cast<TInt64Validator*>(Validator_);
     }
     
     return TInt64NodeWrapper(
-        context,
+        static_cast<TInt64CheckContext&>(Context_),
         Node_,
         validator,
         PathFromCheckNode_);
 }
 
 TStringNodeWrapper TNodeWrapper::String() {
-    TStringCheckContext* context = nullptr;
     TStringValidator* validator = nullptr;
 
     if (Node_) {
         if (!IsOpaqueChild()) {
             Y_ASSERT(NodeType_ == ENodeType::String);
         } else {
-            auto validationResult = TStringBuilder().CreateValidator().Validate(Node_);
-            if (!validationResult.Ok()) {
-                throw yexception() << validationResult;
-            }
+            ThrowIfScalarNodeValidationIsNotOk(
+                TStringBuilder().CreateValidator().Validate(Node_),
+                PathFromCheckNode_);
         }
 
-        context = static_cast<TStringCheckContext*>(Context_);
         validator = static_cast<TStringValidator*>(Validator_);
     }
     
     return TStringNodeWrapper(
-        context,
+        static_cast<TStringCheckContext&>(Context_),
         Node_,
         validator,
         PathFromCheckNode_);
 }
 
 TBoolNodeWrapper TNodeWrapper::Bool() {
-    TBoolCheckContext* context = nullptr;
     TBoolValidator* validator = nullptr;
 
     if (Node_) {
         if (!IsOpaqueChild()) {
             Y_ASSERT(NodeType_ == ENodeType::Bool);
         } else {
-            auto validationResult = TBoolBuilder().CreateValidator().Validate(Node_);
-            if (!validationResult.Ok()) {
-                throw yexception() << validationResult;
-            }
+            ThrowIfScalarNodeValidationIsNotOk(
+                TBoolBuilder().CreateValidator().Validate(Node_),
+                PathFromCheckNode_);
         }
 
-        context = static_cast<TBoolCheckContext*>(Context_);
         validator = static_cast<TBoolValidator*>(Validator_);
     }
     
     return TBoolNodeWrapper(
-        context,
+        static_cast<TBoolCheckContext&>(Context_),
         Node_,
         validator,
         PathFromCheckNode_);
@@ -194,23 +190,17 @@ bool TNodeWrapper::IsBool() {
 }
 
 bool TNodeWrapper::IsScalar() {
-    return IsInt64() || IsString() || IsBool();
+    return IsString();
 }
 
 
 TGenericNodeWrapper::TGenericNodeWrapper(
-    TGenericCheckContext* context,
+    TGenericCheckContext& context,
     NFyaml::TNodeRef node,
     TGenericValidator* validator,
     const TString& pathFromCheckNode)
-    : Context_(context)
-    , Node_(node)
-    , Validator_(validator)
-    , PathFromCheckNode_(pathFromCheckNode) {
-        Y_UNUSED(Validator_);
-        Y_UNUSED(Context_);
-        Y_UNUSED(Node_);
-    }
+    : TBase(context, node, pathFromCheckNode)
+    , Validator_(validator) {}
 
 TGenericNodeWrapper::operator TNodeWrapper() {
     return TNodeWrapper(Context_, Node_, Validator_, ENodeType::Generic, PathFromCheckNode_);
@@ -218,14 +208,12 @@ TGenericNodeWrapper::operator TNodeWrapper() {
 
 
 TMapNodeWrapper::TMapNodeWrapper(
-    TMapCheckContext* context,
+    TMapCheckContext& context,
     NFyaml::TNodeRef node,
     TMapValidator* validator,
     const TString& pathFromCheckNode)
-    : Context_(context)
-    , Node_(node)
-    , Validator_(validator)
-    , PathFromCheckNode_(pathFromCheckNode) {
+    : TBase(context, node, pathFromCheckNode)
+    , Validator_(validator) {
         if (Node_) {
             Y_ASSERT(node.Type() == NFyaml::ENodeType::Mapping);
         }
@@ -262,9 +250,8 @@ TNodeWrapper TMapNodeWrapper::At(const TString& field) {
     ThrowIfNullNode();
 
     if (!Map().Has(field)) {
-        TString nodePath = Context_->CheckNodePath_ + "/" + PathFromCheckNode_;
-        TString message = "Node \"" + nodePath + "\" is not presented";
-        throw yexception() << message;
+        TString message = "Node \"" + PathFromCheckNode_ + "\" is not presented";
+        throw TCheckException() << message;
     }
 
     TValidator* validator = nullptr;
@@ -273,7 +260,7 @@ TNodeWrapper TMapNodeWrapper::At(const TString& field) {
     if (!IsOpaqueChild()) {
         Y_ASSERT(Validator_);
         if (Validator_->Children_.contains(field)) {
-            validator = Validator_->Children_.at(field).Get();
+            validator = Validator_->Children_[field].Get();
             nodeType = validator->NodeType_;
         }
     }
@@ -300,14 +287,12 @@ TMapNodeWrapper::operator TNodeWrapper() {
 
 
 TArrayNodeWrapper::TArrayNodeWrapper(
-    TArrayCheckContext* context,
+    TArrayCheckContext& context,
     NFyaml::TNodeRef node,
     TArrayValidator* validator,
     const TString& pathFromCheckNode)
-    : Context_(context)
-    , Node_(node)
-    , Validator_(validator)
-    , PathFromCheckNode_(pathFromCheckNode) {
+    : TBase(context, node, pathFromCheckNode)
+    , Validator_(validator) {
         Y_ASSERT(node.Type() == NFyaml::ENodeType::Sequence);
     }
 
@@ -353,21 +338,19 @@ TArrayNodeWrapper::operator TNodeWrapper() {
 
 
 TInt64NodeWrapper::TInt64NodeWrapper(
-    TInt64CheckContext* context,
+    TInt64CheckContext& context,
     NFyaml::TNodeRef node,
     TInt64Validator* validator,
     const TString& pathFromCheckNode)
-    : Context_(context)
-    , Node_(node)
-    , Validator_(validator)
-    , PathFromCheckNode_(pathFromCheckNode) {}
+    : TBase(context, node, pathFromCheckNode)
+    , Validator_(validator) {}
 
-i64 TInt64NodeWrapper::Value() {
+i64 TInt64NodeWrapper::Value() const {
     ThrowIfNullNode();
     return FromString<i64>(Node_.Scalar());
 }
 
-TInt64NodeWrapper::operator i64() {
+TInt64NodeWrapper::operator i64() const {
     return Value();
 }
 
@@ -377,21 +360,19 @@ TInt64NodeWrapper::operator TNodeWrapper() {
 
 
 TStringNodeWrapper::TStringNodeWrapper(
-    TStringCheckContext* context,
+    TStringCheckContext& context,
     NFyaml::TNodeRef node,
     TStringValidator* validator,
     const TString& pathFromCheckNode)
-    : Context_(context)
-    , Node_(node)
-    , Validator_(validator)
-    , PathFromCheckNode_(pathFromCheckNode) {}
+    : TBase(context, node, pathFromCheckNode)
+    , Validator_(validator) {}
 
-TString TStringNodeWrapper::Value() {
+TString TStringNodeWrapper::Value() const {
     ThrowIfNullNode();
     return Node_.Scalar();
 }
 
-TStringNodeWrapper::operator TString() {
+TStringNodeWrapper::operator TString() const {
     return Value();
 }
 
@@ -401,23 +382,21 @@ TStringNodeWrapper::operator TNodeWrapper() {
 
 
 TBoolNodeWrapper::TBoolNodeWrapper(
-    TBoolCheckContext* context,
+    TBoolCheckContext& context,
     NFyaml::TNodeRef node,
     TBoolValidator* validator,
     const TString& pathFromCheckNode)
-    : Context_(context)
-    , Node_(node)
-    , Validator_(validator)
-    , PathFromCheckNode_(pathFromCheckNode) {}
+    : TBase(context, node, pathFromCheckNode)
+    , Validator_(validator) {}
 
-bool TBoolNodeWrapper::Value() {
+bool TBoolNodeWrapper::Value() const {
     ThrowIfNullNode();
     TString scalar = Node_.Scalar();
     scalar.to_lower();
     return scalar == "true";
 }
 
-TBoolNodeWrapper::operator bool() {
+TBoolNodeWrapper::operator bool() const {
     return Value();
 }
 
@@ -435,16 +414,37 @@ TCheckContext::TCheckContext(
 void TCheckContext::Expect(bool condition, TString error) {
     if (!condition) {
         AddError(error);
-        someExpectFailed = true;
+        someErrorOccured_ = true;
     }
 }
 
 void TCheckContext::Expect(bool condition) {
-    someExpectFailed |= !condition;
+    someErrorOccured_ |= !condition;
 }
 
 void TCheckContext::AddError(TString error) {
     Errors_.emplace_back(std::move(error));
+}
+
+void TCheckContext::Fail() {
+    throw TFailException();
+}
+
+void TCheckContext::Fail(TString error) {
+    AddError(error);
+    Fail();
+}
+
+void TCheckContext::Assert(bool condition) {
+    if (!condition) {
+        Fail();
+    }
+}
+
+void TCheckContext::Assert(bool condition, TString error) {
+    if (!condition) {
+        Fail(error);
+    }
 }
 
 TGenericCheckContext::TGenericCheckContext(
@@ -454,7 +454,7 @@ TGenericCheckContext::TGenericCheckContext(
     : TCheckContext(node, checkNodePath), Validator_(validator) {}
 
 TGenericNodeWrapper TGenericCheckContext::Node() {
-    return TGenericNodeWrapper(this, Node_, Validator_, CheckNodePath_);
+    return TGenericNodeWrapper(*this, Node_, Validator_, CheckNodePath_);
 }
 
 TMapCheckContext::TMapCheckContext(
@@ -464,7 +464,7 @@ TMapCheckContext::TMapCheckContext(
     : TCheckContext(node, checkNodePath), Validator_(validator) {}
 
 TMapNodeWrapper TMapCheckContext::Node() {
-    return TMapNodeWrapper(this, Node_.Map(), Validator_, CheckNodePath_);
+    return TMapNodeWrapper(*this, Node_.Map(), Validator_, CheckNodePath_);
 }
 
 TArrayCheckContext::TArrayCheckContext(
@@ -474,7 +474,7 @@ TArrayCheckContext::TArrayCheckContext(
     : TCheckContext(node, checkNodePath), Validator_(validator) {}
 
 TArrayNodeWrapper TArrayCheckContext::Node() {
-    return TArrayNodeWrapper(this, Node_.Sequence(), Validator_, CheckNodePath_);
+    return TArrayNodeWrapper(*this, Node_.Sequence(), Validator_, CheckNodePath_);
 }
 
 TInt64CheckContext::TInt64CheckContext(
@@ -484,7 +484,7 @@ TInt64CheckContext::TInt64CheckContext(
     : TCheckContext(node, checkNodePath), Validator_(validator) {}
 
 TInt64NodeWrapper TInt64CheckContext::Node() {
-    return TInt64NodeWrapper(this, Node_, Validator_, CheckNodePath_);
+    return TInt64NodeWrapper(*this, Node_, Validator_, CheckNodePath_);
 }
 
 TStringCheckContext::TStringCheckContext(
@@ -494,7 +494,7 @@ TStringCheckContext::TStringCheckContext(
     : TCheckContext(node, checkNodePath), Validator_(validator) {}
 
 TStringNodeWrapper TStringCheckContext::Node() {
-    return TStringNodeWrapper(this, Node_, Validator_, CheckNodePath_);
+    return TStringNodeWrapper(*this, Node_, Validator_, CheckNodePath_);
 }
 
 TBoolCheckContext::TBoolCheckContext(
@@ -504,7 +504,7 @@ TBoolCheckContext::TBoolCheckContext(
     : TCheckContext(node, checkNodePath), Validator_(validator) {}
 
 TBoolNodeWrapper TBoolCheckContext::Node() {
-    return TBoolNodeWrapper(this, Node_, Validator_, CheckNodePath_);
+    return TBoolNodeWrapper(*this, Node_, Validator_, CheckNodePath_);
 }
 
 }

@@ -33,35 +33,65 @@ namespace NDetail {
 template <typename TThis>
 class TNodeWrapperCommonOps {
 public:
-    bool Exists();
+    TNodeWrapperCommonOps(TCheckContext& context, NFyaml::TNodeRef node, TString pathFromCheckNode);
+    bool Exists() const;
+
+    TNodeWrapperCommonOps<TThis>& operator=(const TNodeWrapperCommonOps<TThis>& other);
 
 protected:
+    TCheckContext& Context_;
+    NFyaml::TNodeRef Node_;
+    TString PathFromCheckNode_;
+
     // if true, then has no validator, node type and can be anything
-    bool IsOpaqueChild();
-    void ThrowIfNullNode();
+    bool IsOpaqueChild() const;
+    void ThrowIfNullNode() const;
 
 private:
+    const TThis& AsDerived() const;
     TThis& AsDerived();
 };
 
 template <typename TThis>
-void TNodeWrapperCommonOps<TThis>::ThrowIfNullNode() {
-    if (!AsDerived().Node_) {
-        throw yexception() <<
+TNodeWrapperCommonOps<TThis>::TNodeWrapperCommonOps(
+    TCheckContext& context,
+    NFyaml::TNodeRef node,
+    TString pathFromCheckNode)
+    : Context_(context)
+    , Node_(node)
+    , PathFromCheckNode_(pathFromCheckNode) {}
+
+template <typename TThis>
+TNodeWrapperCommonOps<TThis>& TNodeWrapperCommonOps<TThis>::operator=(const TNodeWrapperCommonOps<TThis>& other) {
+    Context_ = other.Context_;
+    Node_ = other.Node_;
+    PathFromCheckNode_ = other.PathFromCheckNode_;
+    return *this;
+}
+
+template <typename TThis>
+void TNodeWrapperCommonOps<TThis>::ThrowIfNullNode() const {
+    if (!Node_) {
+        throw TCheckException() <<
             "Node \"" +
-            AsDerived().PathFromCheckNode_ +
+            PathFromCheckNode_ +
             "\" is not presented";
     }
 }
 
 template <typename TThis>
-bool TNodeWrapperCommonOps<TThis>::IsOpaqueChild() {
+bool TNodeWrapperCommonOps<TThis>::IsOpaqueChild() const {
     return !AsDerived().Validator_;
 }
 
 template <typename TThis>
-bool TNodeWrapperCommonOps<TThis>::Exists() {
-    return AsDerived().Node_ != nullptr;
+bool TNodeWrapperCommonOps<TThis>::Exists() const {
+    return Node_ != nullptr;
+}
+
+template <typename TThis>
+const TThis& TNodeWrapperCommonOps<TThis>::AsDerived() const {
+    return static_cast<const TThis&>(*this);
 }
 
 template <typename TThis>
@@ -74,9 +104,11 @@ TThis& TNodeWrapperCommonOps<TThis>::AsDerived() {
 class TNodeWrapper : public NDetail::TNodeWrapperCommonOps<TNodeWrapper> {
     template <typename> friend class NDetail::TNodeWrapperCommonOps;
 
+    using TBase = NDetail::TNodeWrapperCommonOps<TNodeWrapper>;
+
 public:
     TNodeWrapper(
-        TCheckContext* context,
+        TCheckContext& context,
         NFyaml::TNodeRef node,
         TValidator* validator,
         TMaybe<ENodeType> nodeType,
@@ -99,20 +131,19 @@ public:
     bool IsScalar();
 
 protected:
-    TCheckContext* Context_;
-    NFyaml::TNodeRef Node_;
     TValidator* Validator_;
     TMaybe<ENodeType> NodeType_;
-    TString PathFromCheckNode_;
 };
 
 class TGenericNodeWrapper : public NDetail::TNodeWrapperCommonOps<TGenericNodeWrapper> {
     template <typename> friend class NDetail::TNodeWrapperCommonOps;
 
+    using TBase = NDetail::TNodeWrapperCommonOps<TGenericNodeWrapper>;
+
 // TODO: make some functionality for generic wrapper
 public:
     TGenericNodeWrapper(
-        TGenericCheckContext* context,
+        TGenericCheckContext& context,
         NFyaml::TNodeRef node,
         TGenericValidator* validator,
         const TString& pathFromCheckNode);
@@ -120,18 +151,17 @@ public:
     operator TNodeWrapper();
 
 private:
-    TGenericCheckContext* Context_;
-    NFyaml::TNodeRef Node_;
     TGenericValidator* Validator_;
-    TString PathFromCheckNode_;
 };
 
 class TMapNodeWrapper : public NDetail::TNodeWrapperCommonOps<TMapNodeWrapper> {
     template <typename> friend class NDetail::TNodeWrapperCommonOps;
 
+    using TBase = NDetail::TNodeWrapperCommonOps<TMapNodeWrapper>;
+
 public:
     TMapNodeWrapper(
-        TMapCheckContext* context,
+        TMapCheckContext& context,
         NFyaml::TNodeRef node,
         TMapValidator* validator,
         const TString& pathFromCheckNode);
@@ -143,10 +173,7 @@ public:
     bool Has(const TString& field);
 
 private:
-    TMapCheckContext* Context_;
-    NFyaml::TNodeRef Node_;
     TMapValidator* Validator_;
-    TString PathFromCheckNode_;
 
     NFyaml::TMapping Map();
 };
@@ -154,9 +181,11 @@ private:
 class TArrayNodeWrapper : public NDetail::TNodeWrapperCommonOps<TArrayNodeWrapper> {
     template <typename> friend class NDetail::TNodeWrapperCommonOps;
 
+    using TBase = NDetail::TNodeWrapperCommonOps<TArrayNodeWrapper>;
+
 public:
     TArrayNodeWrapper(
-        TArrayCheckContext* context,
+        TArrayCheckContext& context,
         NFyaml::TNodeRef node,
         TArrayValidator* validator,
         const TString& pathFromCheckNode);
@@ -168,10 +197,7 @@ public:
     operator TNodeWrapper();
 
 private:
-    TArrayCheckContext* Context_;
-    NFyaml::TNodeRef Node_;
     TArrayValidator* Validator_;
-    TString PathFromCheckNode_;
 
     NFyaml::TSequence Sequence();
 };
@@ -179,67 +205,64 @@ private:
 class TInt64NodeWrapper : public NDetail::TNodeWrapperCommonOps<TInt64NodeWrapper> {
     template <typename> friend class NDetail::TNodeWrapperCommonOps;
 
+    using TBase = NDetail::TNodeWrapperCommonOps<TInt64NodeWrapper>;
+
 public:
     TInt64NodeWrapper(
-        TInt64CheckContext* context,
+        TInt64CheckContext& context,
         NFyaml::TNodeRef node,
         TInt64Validator* validator,
         const TString& pathFromCheckNode);
 
-    i64 Value();
-    operator i64();
+    i64 Value() const;
+    operator i64() const;
 
     operator TNodeWrapper();
 
 private:
-    TInt64CheckContext* Context_;
-    NFyaml::TNodeRef Node_;
     TInt64Validator* Validator_;
-    TString PathFromCheckNode_;
 };
 
 class TStringNodeWrapper : public NDetail::TNodeWrapperCommonOps<TStringNodeWrapper> {
     template <typename> friend class NDetail::TNodeWrapperCommonOps;
 
+    using TBase = NDetail::TNodeWrapperCommonOps<TStringNodeWrapper>;
+
 public:
     TStringNodeWrapper(
-        TStringCheckContext* context,
+        TStringCheckContext& context,
         NFyaml::TNodeRef node,
         TStringValidator* validator,
         const TString& pathFromCheckNode);
 
-    TString Value();
-    operator TString();
+    TString Value() const;
+    operator TString() const;
 
     operator TNodeWrapper();
 
 private:
-    TStringCheckContext* Context_;
-    NFyaml::TNodeRef Node_;
     TStringValidator* Validator_;
-    TString PathFromCheckNode_;
 };
 
 class TBoolNodeWrapper : public NDetail::TNodeWrapperCommonOps<TBoolNodeWrapper> {
     template <typename> friend class NDetail::TNodeWrapperCommonOps;
 
+    using TBase = NDetail::TNodeWrapperCommonOps<TBoolNodeWrapper>;
+
 public:
     TBoolNodeWrapper(
-        TBoolCheckContext* context,
+        TBoolCheckContext& context,
         NFyaml::TNodeRef node,
         TBoolValidator* validator,
         const TString& pathFromCheckNode);
 
-    bool Value();
-    operator bool();
+    bool Value() const;
+    operator bool() const;
 
     operator TNodeWrapper();
 
 private:
-    TBoolCheckContext* Context_;
-    NFyaml::TNodeRef Node_;
     TBoolValidator* Validator_;
-    TString PathFromCheckNode_;
 };
 
 
@@ -258,6 +281,10 @@ public:
     void Expect(bool condition, TString error);
     void Expect(bool condition);
     void AddError(TString error);
+    void Fail(TString error);
+    void Fail();
+    void Assert(bool condition, TString error);
+    void Assert(bool condition);
 
     virtual ~TCheckContext() = default;
 
@@ -265,7 +292,7 @@ protected:
     TVector<TString> Errors_;
     NFyaml::TNodeRef Node_;
     TString CheckNodePath_;
-    bool someExpectFailed = false;
+    bool someErrorOccured_ = false;
 };
 
 class TGenericCheckContext : public TCheckContext {

@@ -315,14 +315,13 @@ Y_UNIT_TEST_SUITE(Checks) {
                 b.Range(0, 3);
             });
         })
-        .AddCheck("field/field/.../field level must equal /depth", [](auto& c) {
+        .AddCheck("field/field/.../field level must equal /depth and must be a scalar", [](auto& c) {
             int remaining_depth = c.Node()["depth"].Int64();
             int cur_depth = 0;
             TNodeWrapper node = c.Node();
             while (remaining_depth > 0) {
                 if (!node.IsMap()) {
-                    c.Expect(false, "field \"field\" on level " + ToString<i64>(cur_depth) + " must be a map");
-                    return;
+                    c.Fail("field \"field\" on level " + ToString<i64>(cur_depth) + " must be a map");
                 }
                 node = node.Map()["field"];
                 remaining_depth--;
@@ -331,8 +330,7 @@ Y_UNIT_TEST_SUITE(Checks) {
             if (cur_depth == 0) {
                 c.Expect(!node.Map()["field"].Exists(), "If depth == 0, field \"field\" must not be there");
             } else {
-                c.Expect(node.Exists(), "field \"field\" on level " + ToString<i64>(cur_depth) + " must exist");
-                return;
+                c.Assert(node.Exists(), "field \"field\" on level " + ToString<i64>(cur_depth) + " must exist");
                 c.Expect(node.IsScalar(), "field \"field\" on level " + ToString<i64>(cur_depth) + " must be a scalar");
             }
         })
@@ -343,7 +341,7 @@ Y_UNIT_TEST_SUITE(Checks) {
         "field: value\n";
 
         UNIT_ASSERT(HasOnlyThisIssues(v.Validate(yaml), {{
-            "/", "Check \"field/field/.../field level must equal /depth\" failed: If depth == 0, field \"field\" must not be there"
+            "/", "Check \"field/field/.../field level must equal /depth and must be a scalar\" failed: If depth == 0, field \"field\" must not be there"
         }}));
         
         yaml = 
@@ -356,7 +354,7 @@ Y_UNIT_TEST_SUITE(Checks) {
         "depth: 1\n";
 
         UNIT_ASSERT(HasOnlyThisIssues(v.Validate(yaml), {{
-            "/", "Check \"field/field/.../field level must equal /depth\" failed: field \"field\" on level 1 must exist"
+            "/", "Check \"field/field/.../field level must equal /depth and must be a scalar\" failed: field \"field\" on level 1 must exist"
         }}));
 
         yaml = 
@@ -371,7 +369,9 @@ Y_UNIT_TEST_SUITE(Checks) {
         "field:\n"
         "  field: []\n";
 
-        UNIT_ASSERT(Valid(v.Validate(yaml)));
+        UNIT_ASSERT(HasOnlyThisIssues(v.Validate(yaml), {{
+            "/", "Check \"field/field/.../field level must equal /depth and must be a scalar\" failed: field \"field\" on level 2 must be a scalar"
+        }}));
 
         yaml = 
         "depth: 2\n"
@@ -379,6 +379,8 @@ Y_UNIT_TEST_SUITE(Checks) {
         "  field:\n"
         "    field: value\n";
 
-        UNIT_ASSERT(Valid(v.Validate(yaml)));
+        UNIT_ASSERT(HasOnlyThisIssues(v.Validate(yaml), {{
+            "/", "Check \"field/field/.../field level must equal /depth and must be a scalar\" failed: field \"field\" on level 2 must be a scalar"
+        }}));
     }
 }

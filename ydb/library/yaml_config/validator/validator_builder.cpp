@@ -159,7 +159,7 @@ TMapBuilder::TMapBuilder(std::function<void(TMapBuilder&)> configurator)
 
 void TMapBuilder::ThrowIfAlreadyHasField(const TString& field) {
     if (Children_.contains(field)) {
-        ythrow BuilderException() << "Node already has field \"" << field << "\"";
+        ythrow TBuilderException() << "Node already has field \"" << field << "\"";
     }
 }
 
@@ -317,7 +317,7 @@ TArrayBuilder& TArrayBuilder::BoolItem(std::function<void(TBoolBuilder&)> config
 
 NDetail::TBuilder& TArrayBuilder::GetItem() {
     if (ItemPtr_.Get() == nullptr) {
-        ythrow BuilderException() << "There is no item builder yet";
+        ythrow TBuilderException() << "There is no item builder yet";
     }
     return *ItemPtr_.Get();
 }

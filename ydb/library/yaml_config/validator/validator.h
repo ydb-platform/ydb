@@ -118,12 +118,14 @@ void TValidatorCommonOps<TThis, TContext>::performChecks(TValidationResult& vali
         TContext context(node, nodePath, This);
         try {
             checker(context);
-        } catch (yexception& ye) {
-            context.AddError(ye.what());
-            context.someExpectFailed = true;
+        } catch (NValidator::TCheckException& e) {
+            context.AddError(e.what());
+            context.someErrorOccured_ = true;
+        } catch (NValidator::TFailException& e) {
+            context.someErrorOccured_ = true;
         }
         
-        if (context.someExpectFailed) {
+        if (context.someErrorOccured_) {
             if (context.Errors_.empty()) {
                 validationResult.AddIssue({node.Path(), checkName});
             } else if (context.Errors_.size() == 1) {

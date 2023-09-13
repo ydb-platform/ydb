@@ -15,7 +15,7 @@
 
 namespace NYamlConfig::NValidator {
 
-class BuilderException : public yexception {};
+class TBuilderException : public yexception {};
 
 namespace NDetail {
 
@@ -275,7 +275,7 @@ TThis& NDetail::TCommonBuilderOps<TThis, TCheckContext>::Configure(std::function
 template <typename TThis, typename TCheckContext>
 TThis& NDetail::TCommonBuilderOps<TThis, TCheckContext>::AddCheck(TString name, std::function<void(TCheckContext&)> checker) {
     if (Checkers_.contains(name)) {
-        ythrow yexception() << "Already has check named \"" << name << "\"";
+        ythrow TBuilderException() << "Already has check named \"" << name << "\"";
     }
     Checkers_[name] = checker;
     return AsDerived();

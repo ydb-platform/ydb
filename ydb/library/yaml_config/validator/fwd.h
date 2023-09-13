@@ -1,5 +1,6 @@
 #pragma once
 
+#include <util/generic/yexception.h>
 #include <util/generic/ptr.h>
 
 namespace NYamlConfig::NValidator {
@@ -40,6 +41,9 @@ class TStringCheckContext;
 class TBoolCheckContext;
 
 class TValidationResult;
+
+class TCheckException : public yexception {};
+class TFailException : public yexception {};
 
 namespace NDetail {
 

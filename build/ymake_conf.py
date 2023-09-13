@@ -25,6 +25,14 @@ def init_logger(verbose):
     logging.basicConfig(level=logging.DEBUG if verbose else logging.INFO)
 
 
+def find_conf(conf_file):
+    script_dir = os.path.dirname(__file__)
+    full_path = os.path.join(script_dir, conf_file)
+    if os.path.exists(full_path):
+        return full_path
+    return None
+
+
 class DebugString(object):
     def __init__(self, get_string_func):
         self.get_string_func = get_string_func
@@ -777,17 +785,6 @@ class YMake(object):
 
     def print_settings(self):
         emit_with_ignore_comment('ARCADIA_ROOT', self.arcadia.root)
-
-    @staticmethod
-    def _find_conf(conf_file):
-        script_dir = os.path.dirname(__file__)
-        full_path = os.path.join(script_dir, conf_file)
-        if os.path.exists(full_path):
-            return full_path
-        return None
-
-    def _find_core_conf(self):
-        return self._find_conf('ymake.core.conf')
 
 
 class System(object):
@@ -2530,6 +2527,12 @@ def main():
     ymake = YMake(arcadia)
 
     ymake.print_core_conf()
+
+    _INTERNAL_CONF = 'internal/conf/internal.conf'
+    internal_conf_full_path = find_conf(_INTERNAL_CONF)
+    if internal_conf_full_path and not is_positive('DISABLE_YMAKE_CONF_CUSTOMIZATION'):
+        print('@import "${{CONF_ROOT}}/{}"'.format(_INTERNAL_CONF))
+
     ymake.print_presets()
     ymake.print_settings()
 

@@ -3,6 +3,8 @@ from yqlrun import YQLRun
 import cyson
 from multiprocessing.pool import ThreadPool
 import time
+import base64
+import binascii
 
 
 def run_one(item):
@@ -32,6 +34,8 @@ def test_doc():
         doc_data = f.readlines()
     in_code = False
     queue = []
+    total = 0
+    skipped = 0
     for line in doc_data:
         line = line.strip()
         if line.startswith("```sql"):
@@ -42,14 +46,16 @@ def test_doc():
             continue
         if not in_code:
             continue
+        total += 1
         input, output = [x.strip() for x in line.split("→")]
         if input.startswith("#"):
+            skipped += 1
             continue
         if not input.startswith("SELECT"):
             input = "SELECT " + input
         queue.append((line, input, output))
     with ThreadPool(16) as pool:
-        for res in pool.imap_unordered(run_one, queue):
+        for res in pool.map(run_one, queue):
             line, input, output, dom, e, elapsed_time = res
             print("TEST: " + line)
             print("INPUT: ", input)
@@ -57,6 +63,15 @@ def test_doc():
             print("ELAPSED: ", elapsed_time)
             if e is not None:
                 raise e
-            value = dom[0][b"Write"][0][b"Data"][0][0].decode("utf-8")
+            cell = dom[0][b"Write"][0][b"Data"][0][0]
+            if isinstance(cell, bytes):
+                if output.startswith("\\x"):
+                    value = "\\x" + binascii.hexlify(cell).decode("utf-8")
+                else:
+                    value = cell.decode("utf-8")
+            else:
+                value = "\\x" + binascii.hexlify(base64.b64decode(cell[0])).decode("utf-8")
             print("VALUE: ", value)
             assert value == output, f"Expected '{output}' but got '{value}', test: {line}"
+    print("TOTAL TESTS:", total)
+    print("SKIPPED TESTS:", skipped)

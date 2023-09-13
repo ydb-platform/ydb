@@ -234,6 +234,8 @@ extern "C" void setup_pg_thread_cleanup() {
     static thread_local TThreadCleanup ThreadCleanup;
     Log_error_verbosity = PGERROR_DEFAULT;
     SetDatabaseEncoding(PG_UTF8);
+    SetClientEncoding(PG_UTF8);
+    InitializeClientEncoding();
     MemoryContextInit();
     auto owner = ResourceOwnerCreate(NULL, "TopTransaction");
     TopTransactionResourceOwner = owner;

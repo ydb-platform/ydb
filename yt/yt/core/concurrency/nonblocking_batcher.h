@@ -78,7 +78,7 @@ class TNonblockingBatcher
 public:
     using TBatch = std::vector<T>;
 
-    TNonblockingBatcher(TBatchLimiter batchLimiter, TDuration batchDuration);
+    TNonblockingBatcher(TBatchLimiter batchLimiter, TDuration batchDuration, bool allowEmptyBatches = false);
     ~TNonblockingBatcher();
 
     template <class... U>
@@ -89,12 +89,16 @@ public:
 
     void UpdateBatchDuration(TDuration batchDuration);
     void UpdateBatchLimiter(TBatchLimiter batchLimiter);
+    void UpdateAllowEmptyBatches(bool allowEmptyBatches);
+
+    void UpdateSettings(TDuration batchDuration, TBatchLimiter batchLimiter, bool allowEmptyBatches);
 
 private:
     using ETimerState = ETNonblockingBatcherTimerState;
 
     TBatchLimiter BatchLimiter_;
     TDuration BatchDuration_;
+    bool AllowEmptyBatches_;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
     TBatch CurrentBatch_;

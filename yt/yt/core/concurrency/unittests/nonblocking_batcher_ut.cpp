@@ -266,6 +266,53 @@ TEST(TNonblockingBatcherTest, UpdateLimiter)
     }
 }
 
+TEST(TNonblockingBatcherTest, NoEmptyBatches)
+{
+    auto timeout = Quantum;
+    auto overTimeout = timeout * 2;
+
+    auto b = New<TNonblockingBatcher<int>>(TBatchSizeLimiter(2), timeout, false);
+    auto e1 = b->DequeueBatch();
+    auto e2 = b->DequeueBatch();
+    ASSERT_FALSE(e1.IsSet());
+    ASSERT_FALSE(e2.IsSet());
+    Sleep(overTimeout);
+    ASSERT_FALSE(e1.IsSet());
+    ASSERT_FALSE(e2.IsSet());
+    EnqueueAll(b, {1});
+    ASSERT_FALSE(e1.IsSet());
+    ASSERT_FALSE(e2.IsSet());
+    Sleep(overTimeout);
+    ASSERT_TRUE(e1.IsSet());
+    ASSERT_FALSE(e2.IsSet());
+    Sleep(overTimeout);
+    ASSERT_FALSE(e2.IsSet());
+    EnqueueAll(b, {2});
+    ASSERT_FALSE(e2.IsSet());
+    Sleep(overTimeout);
+    ASSERT_TRUE(e2.IsSet());
+    ASSERT_EQ(e1.Get().ValueOrThrow(), std::vector<int>({1}));
+    ASSERT_EQ(e2.Get().ValueOrThrow(), std::vector<int>({2}));
+}
+
+TEST(TNonblockingBatcherTest, AllowEmptyBatches)
+{
+    auto timeout = Quantum;
+    auto overTimeout = timeout * 2;
+
+    auto b = New<TNonblockingBatcher<int>>(TBatchSizeLimiter(2), timeout, true);
+    auto e1 = b->DequeueBatch();
+    auto e2 = b->DequeueBatch();
+    ASSERT_FALSE(e1.IsSet());
+    ASSERT_FALSE(e2.IsSet());
+    Sleep(overTimeout);
+    ASSERT_TRUE(e1.IsSet());
+    Sleep(overTimeout);
+    ASSERT_TRUE(e2.IsSet());
+    ASSERT_EQ(e1.Get().ValueOrThrow(), std::vector<int>({}));
+    ASSERT_EQ(e2.Get().ValueOrThrow(), std::vector<int>({}));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

@@ -88,6 +88,10 @@ public:
     }
 
     void Clear() {
+        CurrentPatternsSizeBytes = 0;
+        CurrentCompiledPatternsSize = 0;
+        CurrentPatternsCompiledCodeSizeInBytes = 0;
+
         SerializedProgramToPatternCacheHolder.clear();
         for (auto & holder : LRUPatternList) {
             holder.Entry->IsInCache.store(false);

@@ -225,7 +225,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
          UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
     }
 
-    void ConfigureSettings(TKikimrSettings & settings, bool useCache, bool useAsyncPatternCompilation) {
+    void ConfigureSettings(TKikimrSettings & settings, bool useCache, bool useAsyncPatternCompilation, bool useCompiledCapacityBytesLimit) {
         size_t cacheSize = 0;
         if (useCache) {
             cacheSize = useAsyncPatternCompilation ? 10_MB : 1_MB;
@@ -233,6 +233,10 @@ Y_UNIT_TEST_SUITE(KqpService) {
 
         auto * tableServiceConfig = settings.AppConfig.MutableTableServiceConfig();
         tableServiceConfig->MutableResourceManager()->SetKqpPatternCacheCapacityBytes(cacheSize);
+        if (useCompiledCapacityBytesLimit) {
+            tableServiceConfig->MutableResourceManager()->SetKqpPatternCacheCompiledCapacityBytes(1_MB * 0.1);
+        }
+
         tableServiceConfig->SetEnableAsyncComputationPatternCompilation(useAsyncPatternCompilation);
 
         if (useAsyncPatternCompilation) {
@@ -241,17 +245,28 @@ Y_UNIT_TEST_SUITE(KqpService) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(PatternCache, UseCache, UseAsyncPatternCompilation) {
+    enum AsyncPatternCompilationStrategy {
+        Off,
+        On,
+        OnWithLimit,
+    };
+
+    template <bool UseCache, AsyncPatternCompilationStrategy AsyncPatternCompilation>
+    void PatternCacheImpl() {
+        constexpr bool UseAsyncPatternCompilation = AsyncPatternCompilation == AsyncPatternCompilationStrategy::On ||
+            AsyncPatternCompilation == AsyncPatternCompilationStrategy::OnWithLimit;
+        constexpr bool UseCompiledCapacityBytesLimit = AsyncPatternCompilation == AsyncPatternCompilationStrategy::OnWithLimit;
+
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
-        ConfigureSettings(settings, UseCache, UseAsyncPatternCompilation);
+        ConfigureSettings(settings, UseCache, UseAsyncPatternCompilation, UseCompiledCapacityBytesLimit);
 
         auto kikimr = TKikimrRunner{settings};
         auto driver = kikimr.GetDriver();
 
         NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
 
-        static constexpr i64 AsyncPatternCompilationUniqueRequestsSize = 5;
+        static constexpr i64 AsyncPatternCompilationUniqueRequestsSize = UseCompiledCapacityBytesLimit ? 20 : 5;
 
         auto async_compilation_condition = [&]() {
             if constexpr (UseCache && UseAsyncPatternCompilation) {
@@ -320,6 +335,15 @@ Y_UNIT_TEST_SUITE(KqpService) {
         if constexpr (UseCache && UseAsyncPatternCompilation) {
             UNIT_ASSERT(*counters.CompiledComputationPatterns >= AsyncPatternCompilationUniqueRequestsSize);
         }
+    }
+
+    Y_UNIT_TEST(PatternCache) {
+        PatternCacheImpl<false, AsyncPatternCompilationStrategy::Off>();
+        PatternCacheImpl<false, AsyncPatternCompilationStrategy::On>();
+        PatternCacheImpl<false, AsyncPatternCompilationStrategy::OnWithLimit>();
+        PatternCacheImpl<true, AsyncPatternCompilationStrategy::Off>();
+        PatternCacheImpl<true, AsyncPatternCompilationStrategy::On>();
+        PatternCacheImpl<true, AsyncPatternCompilationStrategy::OnWithLimit>();
     }
 
     // YQL-15582

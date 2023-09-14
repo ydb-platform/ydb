@@ -344,42 +344,44 @@ private:
     const size_t Width_;
 };
 
+class TPrecomputedArrowNode : public IArrowKernelComputationNode {
+public:
+    TPrecomputedArrowNode(const arrow::Datum& datum, TStringBuf kernelName)
+        : Kernel_({}, datum.type(), [datum](arrow::compute::KernelContext*, const arrow::compute::ExecBatch&, arrow::Datum* res) {
+            *res = datum;
+            return arrow::Status::OK();
+        })
+        , KernelName_(kernelName)
+    {
+        Kernel_.null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
+        Kernel_.mem_allocation = arrow::compute::MemAllocation::NO_PREALLOCATE;
+    }
+
+    TStringBuf GetKernelName() const final {
+        return KernelName_;
+    }
+
+    const arrow::compute::ScalarKernel& GetArrowKernel() const {
+        return Kernel_;
+    }
+
+    const std::vector<arrow::ValueDescr>& GetArgsDesc() const {
+        return EmptyDesc_;
+    }
+
+    const IComputationNode* GetArgument(ui32 index) const {
+        Y_UNUSED(index);
+        ythrow yexception() << "No input arguments";
+    }
+
+private:
+    arrow::compute::ScalarKernel Kernel_;
+    const TStringBuf KernelName_;
+    const std::vector<arrow::ValueDescr> EmptyDesc_;
+};
+
 class TAsScalarWrapper : public TMutableComputationNode<TAsScalarWrapper> {
 public:
-    class TArrowNode : public IArrowKernelComputationNode {
-    public:
-        TArrowNode(const arrow::Datum& datum)
-            : Kernel_({}, datum.scalar()->type, [datum](arrow::compute::KernelContext*, const arrow::compute::ExecBatch&, arrow::Datum* res) {
-                *res = datum;
-                return arrow::Status::OK();
-            })
-        {
-            Kernel_.null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
-            Kernel_.mem_allocation = arrow::compute::MemAllocation::NO_PREALLOCATE;
-        }
-
-        TStringBuf GetKernelName() const final {
-            return "AsScalar";
-        }
-
-        const arrow::compute::ScalarKernel& GetArrowKernel() const {
-            return Kernel_;
-        }
-
-        const std::vector<arrow::ValueDescr>& GetArgsDesc() const {
-            return EmptyDesc_;
-        }
-
-        const IComputationNode* GetArgument(ui32 index) const {
-            Y_UNUSED(index);
-            ythrow yexception() << "No input arguments";
-        }
-
-    private:
-        arrow::compute::ScalarKernel Kernel_;
-        const std::vector<arrow::ValueDescr> EmptyDesc_;
-    };
-
     TAsScalarWrapper(TComputationMutables& mutables, IComputationNode* arg, TType* type)
         : TMutableComputationNode(mutables)
         , Arg_(arg)
@@ -398,7 +400,7 @@ public:
     std::unique_ptr<IArrowKernelComputationNode> PrepareArrowKernelComputationNode(TComputationContext& ctx) const final {
         auto value = Arg_->GetValue(ctx);
         arrow::Datum result = ConvertScalar(Type_, value, ctx.ArrowMemoryPool);
-        return std::make_unique<TArrowNode>(result);
+        return std::make_unique<TPrecomputedArrowNode>(result, "AsScalar");
     }
 
 private:
@@ -408,6 +410,50 @@ private:
 
 private:
     IComputationNode* const Arg_;
+    TType* Type_;
+};
+
+class TReplicateScalarWrapper : public TMutableComputationNode<TReplicateScalarWrapper> {
+public:
+    TReplicateScalarWrapper(TComputationMutables& mutables, IComputationNode* value, IComputationNode* count, TType* type)
+        : TMutableComputationNode(mutables)
+        , Value_(value)
+        , Count_(count)
+        , Type_(type)
+    {
+        std::shared_ptr<arrow::DataType> arrowType;
+        MKQL_ENSURE(ConvertArrowType(Type_, arrowType), "Unsupported type of scalar");
+    }
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        return ctx.HolderFactory.CreateArrowBlock(DoReplicate(ctx));
+    }
+
+    std::unique_ptr<IArrowKernelComputationNode> PrepareArrowKernelComputationNode(TComputationContext& ctx) const final {
+        return std::make_unique<TPrecomputedArrowNode>(DoReplicate(ctx), "ReplicateScalar");
+    }
+
+private:
+    arrow::Datum DoReplicate(TComputationContext& ctx) const {
+        auto value = TArrowBlock::From(Value_->GetValue(ctx)).GetDatum().scalar();
+        const ui64 count = TArrowBlock::From(Count_->GetValue(ctx)).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+
+        auto reader = MakeBlockReader(TTypeInfoHelper(), Type_);
+        auto builder = MakeArrayBuilder(TTypeInfoHelper(), Type_, ctx.ArrowMemoryPool, count, &ctx.Builder->GetPgBuilder());
+
+        TBlockItem item = reader->GetScalarItem(*value);
+        builder->Add(item, count);
+        return builder->Build(true);
+    }
+
+    void RegisterDependencies() const final {
+        DependsOn(Value_);
+        DependsOn(Count_);
+    }
+
+private:
+    IComputationNode* const Value_;
+    IComputationNode* const Count_;
     TType* Type_;
 };
 
@@ -485,6 +531,17 @@ IComputationNode* WrapAsScalar(TCallable& callable, const TComputationNodeFactor
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 args, got " << callable.GetInputsCount());
 
     return new TAsScalarWrapper(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0), callable.GetInput(0).GetStaticType());
+}
+
+IComputationNode* WrapReplicateScalar(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args, got " << callable.GetInputsCount());
+
+    const auto valueType = AS_TYPE(TBlockType, callable.GetInput(0).GetStaticType());
+    MKQL_ENSURE(valueType->GetShape() == TBlockType::EShape::Scalar, "Expecting scalar as first arg");
+
+    auto value = LocateNode(ctx.NodeLocator, callable, 0);
+    auto count = LocateNode(ctx.NodeLocator, callable, 1);
+    return new TReplicateScalarWrapper(ctx.Mutables, value, count, valueType->GetItemType());
 }
 
 IComputationNode* WrapBlockExpandChunked(TCallable& callable, const TComputationNodeFactoryContext& ctx) {

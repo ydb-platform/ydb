@@ -37,6 +37,31 @@ IGraphTransformer::TStatus AsScalarWrapper(const TExprNode::TPtr& input, TExprNo
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus ReplicateScalarWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto source = input->Child(0);
+    if (!EnsureScalarType(*source, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto length = input->Child(1);
+    if (!EnsureScalarType(*length, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    const TTypeAnnotationNode* lengthItemType = length->GetTypeAnn()->Cast<TScalarExprType>()->GetItemType();
+    if (!EnsureSpecificDataType(length->Pos(), *lengthItemType, EDataSlot::Uint64, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    input->SetTypeAnn(ctx.Expr.MakeType<TBlockExprType>(source->GetTypeAnn()->Cast<TScalarExprType>()->GetItemType()));
+    return IGraphTransformer::TStatus::Ok;
+}
+
 IGraphTransformer::TStatus BlockCompressWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     Y_UNUSED(output);
     if (!EnsureArgsCount(*input, 2U, ctx.Expr)) {

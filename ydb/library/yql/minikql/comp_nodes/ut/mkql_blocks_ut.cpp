@@ -257,6 +257,42 @@ Y_UNIT_TEST(TestScalar) {
     UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(value).GetDatum().scalar_as<arrow::UInt64Scalar>().value, testValue);
 }
 
+Y_UNIT_TEST(TestReplicateScalar) {
+    const ui64 count = 1000;
+    const ui32 value = 42;
+
+    TSetup<false> setup;
+    auto& pb = *setup.PgmBuilder;
+
+    const auto valueType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
+
+    const auto scalarValue = pb.AsScalar(pb.NewDataLiteral<ui32>(value));
+    const auto scalarCount = pb.AsScalar(pb.NewDataLiteral<ui64>(count));
+
+    const auto replicated = pb.ReplicateScalar(scalarValue, scalarCount);
+
+    const auto replicatedType = pb.NewBlockType(valueType, TBlockType::EShape::Many);
+
+    const auto listOfReplicated = pb.NewList(replicatedType, { replicated });
+
+    const auto flowOfReplicated = pb.ToFlow(listOfReplicated);
+
+    const auto flowAfterBlocks = pb.FromBlocks(flowOfReplicated);
+    const auto pgmReturn = pb.ForwardList(flowAfterBlocks);
+
+    const auto graph = setup.BuildGraph(pgmReturn);
+    const auto iterator = graph->GetValue().GetListIterator();
+
+    for (size_t i = 0; i < count; ++i) {
+        NUdf::TUnboxedValue item;
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.Get<ui32>(), value);
+    }
+
+    NUdf::TUnboxedValue item;
+    UNIT_ASSERT(!iterator.Next(item));
+}
+
 Y_UNIT_TEST(TestBlockFunc) {
     TSetup<false> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;

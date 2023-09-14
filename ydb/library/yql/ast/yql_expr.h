@@ -241,12 +241,15 @@ public:
     }
 
     bool IsBlockOrScalar() const {
-        auto kind = GetKind();
-        return kind == ETypeAnnotationKind::Block || kind == ETypeAnnotationKind::Scalar;
+        return IsBlock() || IsScalar();
     }
 
     bool IsBlock() const {
         return GetKind() == ETypeAnnotationKind::Block;
+    }
+
+    bool IsScalar() const {
+        return GetKind() == ETypeAnnotationKind::Scalar;
     }
 
     bool HasFixedSizeRepr() const {

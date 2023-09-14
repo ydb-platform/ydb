@@ -1502,6 +1502,29 @@ TRuntimeNode TProgramBuilder::AsScalar(TRuntimeNode value) {
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TProgramBuilder::ReplicateScalar(TRuntimeNode value, TRuntimeNode count) {
+    if constexpr (RuntimeVersion < 43U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    auto valueType = AS_TYPE(TBlockType, value.GetStaticType());
+    auto countType = AS_TYPE(TBlockType, count.GetStaticType());
+
+    MKQL_ENSURE(valueType->GetShape() == TBlockType::EShape::Scalar, "Expecting scalar as first arguemnt");
+    MKQL_ENSURE(countType->GetShape() == TBlockType::EShape::Scalar, "Expecting scalar as second arguemnt");
+
+    MKQL_ENSURE(countType->GetItemType()->IsData(), "Expected scalar data as second argument");
+    MKQL_ENSURE(AS_TYPE(TDataType, countType->GetItemType())->GetSchemeType() ==
+        NUdf::TDataType<ui64>::Id, "Expected scalar ui64 as second argument");
+
+    auto outputType = NewBlockType(valueType->GetItemType(), TBlockType::EShape::Many);
+
+    TCallableBuilder callableBuilder(Env, __func__, outputType);
+    callableBuilder.Add(value);
+    callableBuilder.Add(count);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::BlockExtend(const TArrayRef<const TRuntimeNode>& args) {
     MKQL_ENSURE(!args.empty(), "Expected at least one argument");
 

@@ -553,6 +553,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         {"WideTakeBlocks", &TProgramBuilder::WideTakeBlocks},
         {"WideSkipBlocks", &TProgramBuilder::WideSkipBlocks},
         {"BlockCoalesce", &TProgramBuilder::BlockCoalesce},
+        {"ReplicateScalar", &TProgramBuilder::ReplicateScalar},
 
         {"BlockAnd", &TProgramBuilder::BlockAnd},
         {"BlockOr", &TProgramBuilder::BlockOr},

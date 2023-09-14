@@ -5903,6 +5903,33 @@ bool EnsureBlockOrScalarType(TPositionHandle position, const TTypeAnnotationNode
     return true;
 }
 
+bool EnsureScalarType(const TExprNode& node, TExprContext& ctx) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
+        YQL_ENSURE(node.Type() == TExprNode::Lambda);
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected scalar type, but got lambda"));
+        return false;
+    }
+
+    return EnsureScalarType(node.Pos(), *node.GetTypeAnn(), ctx);
+}
+
+bool EnsureScalarType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
+    if (HasError(&type, ctx)) {
+        return false;
+    }
+
+    if (!type.IsScalar()) {
+        ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected scalar type, but got: " << type));
+        return false;
+    }
+
+    return true;
+}
+
 const TTypeAnnotationNode* GetBlockItemType(const TTypeAnnotationNode& type, bool& isScalar) {
     YQL_ENSURE(type.IsBlockOrScalar());
     const auto kind = type.GetKind();

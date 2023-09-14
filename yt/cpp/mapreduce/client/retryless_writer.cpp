@@ -40,6 +40,11 @@ void TRetrylessWriter::Abort()
     Running_ = false;
 }
 
+size_t TRetrylessWriter::GetBufferMemoryUsage() const
+{
+    return BufferSize_;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

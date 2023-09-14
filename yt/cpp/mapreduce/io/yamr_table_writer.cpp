@@ -13,6 +13,11 @@ TYaMRTableWriter::TYaMRTableWriter(THolder<IProxyOutput> output)
 TYaMRTableWriter::~TYaMRTableWriter()
 { }
 
+size_t TYaMRTableWriter::GetBufferMemoryUsage() const
+{
+    return Output_->GetBufferMemoryUsage();
+}
+
 size_t TYaMRTableWriter::GetTableCount() const
 {
     return Output_->GetStreamCount();

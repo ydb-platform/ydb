@@ -19,6 +19,7 @@ public:
     void AddRow(const TNode& row, size_t tableIndex) override;
     void AddRow(TNode&& row, size_t tableIndex) override;
 
+    size_t GetBufferMemoryUsage() const override;
     size_t GetTableCount() const override;
     void FinishTable(size_t) override;
     void Abort() override;

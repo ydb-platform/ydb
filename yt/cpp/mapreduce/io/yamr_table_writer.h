@@ -18,6 +18,7 @@ public:
     void AddRow(const TYaMRRow& row, size_t tableIndex) override;
     void AddRow(TYaMRRow&& row, size_t tableIndex) override;
 
+    size_t GetBufferMemoryUsage() const override;
     size_t GetTableCount() const override;
     void FinishTable(size_t) override;
     void Abort() override;

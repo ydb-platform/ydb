@@ -740,6 +740,11 @@ struct IWriterImplBase
         }
     }
 
+    virtual size_t GetBufferMemoryUsage() const
+    {
+        return 0;
+    }
+
     virtual size_t GetTableCount() const = 0;
     virtual void FinishTable(size_t tableIndex) = 0;
     virtual void Abort()
@@ -816,6 +821,11 @@ public:
         }
     }
 
+    size_t GetBufferMemoryUsage() const
+    {
+        return DoGetBufferMemoryUsage();
+    }
+
 protected:
     template <class U>
     void DoAddRow(const U& row, size_t tableIndex = 0, size_t rowWeight = 0)
@@ -867,6 +877,11 @@ protected:
 
         auto guard = Guard((*Locks_)[tableIndex]);
         Writer_->AddRowBatch(std::move(rowBatch), tableIndex, rowBatchWeight);
+    }
+
+    size_t DoGetBufferMemoryUsage() const
+    {
+        return Writer_->GetBufferMemoryUsage();
     }
 
     ::TIntrusivePtr<IWriterImpl> GetWriterImpl()

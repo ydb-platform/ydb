@@ -35,6 +35,7 @@ public:
         const TRichYPath& path,
         size_t bufferSize,
         const TWriterOptions& options)
+        : BufferSize_(bufferSize)
     {
         THttpHeader header("PUT", command);
         header.SetInputFormat(format);
@@ -51,18 +52,22 @@ public:
 
         auto hostName = GetProxyForHeavyRequest(context);
         Request_ = context.HttpClient->StartRequest(GetFullUrl(hostName, context, header), requestId, header);
-        BufferedOutput_.Reset(new TBufferedOutput(Request_->GetStream(), bufferSize));
+        BufferedOutput_.Reset(new TBufferedOutput(Request_->GetStream(), BufferSize_));
     }
 
     ~TRetrylessWriter() override;
     void NotifyRowEnd() override;
     void Abort() override;
 
+    size_t GetBufferMemoryUsage() const override;
+
 protected:
     void DoWrite(const void* buf, size_t len) override;
     void DoFinish() override;
 
 private:
+    const size_t BufferSize_ = 0;
+
     bool Running_ = true;
     NHttpClient::IHttpRequestPtr Request_;
     THolder<TBufferedOutput> BufferedOutput_;

@@ -145,6 +145,11 @@ void TRetryfulWriter::Abort()
     WriterState_ = Completed;
 }
 
+size_t TRetryfulWriter::GetBufferMemoryUsage() const
+{
+    return BufferSize_ * 4;
+}
+
 size_t TRetryfulWriter::GetBufferSize(const TMaybe<TWriterOptions>& writerOptions)
 {
     auto retryBlockSize = TMaybe<size_t>();

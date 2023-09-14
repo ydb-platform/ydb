@@ -168,6 +168,11 @@ public:
     /// By default it does nothing, but implementations are welcome to override this method.
     virtual void Abort()
     { }
+
+    virtual size_t GetBufferMemoryUsage() const
+    {
+        return 0;
+    }
 };
 
 /// @brief Interface to deal with multiple raw output streams.
@@ -191,6 +196,11 @@ public:
     /// By default it does nothing, but implementations are welcome to override this method.
     virtual void Abort()
     { }
+
+    virtual size_t GetBufferMemoryUsage() const
+    {
+        return 0;
+    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -378,6 +388,8 @@ public:
 
     /// Stop writing data as soon as possible (without flushing data, e.g. before aborting parent transaction).
     void Finish();
+
+    size_t GetBufferMemoryUsage() const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -18,6 +18,7 @@ public:
     explicit TJobWriter(size_t outputTableCount);
     explicit TJobWriter(const TVector<TFile>& fileList);
 
+    size_t GetBufferMemoryUsage() const override;
     size_t GetStreamCount() const override;
     IOutputStream* GetStream(size_t tableIndex) const override;
     void OnRowFinished(size_t tableIndex) override;

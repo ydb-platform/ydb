@@ -24,6 +24,11 @@ TNodeTableWriter::TNodeTableWriter(THolder<IProxyOutput> output, NYson::EYsonFor
 TNodeTableWriter::~TNodeTableWriter()
 { }
 
+size_t TNodeTableWriter::GetBufferMemoryUsage() const
+{
+    return Output_->GetBufferMemoryUsage();
+}
+
 size_t TNodeTableWriter::GetTableCount() const
 {
     return Output_->GetStreamCount();

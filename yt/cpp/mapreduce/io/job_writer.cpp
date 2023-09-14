@@ -56,6 +56,11 @@ IOutputStream* TJobWriter::GetStream(size_t tableIndex) const
 void TJobWriter::OnRowFinished(size_t)
 { }
 
+size_t TJobWriter::GetBufferMemoryUsage() const
+{
+    return TStream::BUFFER_SIZE * GetStreamCount();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 THolder<IProxyOutput> CreateRawJobWriter(size_t outputTableCount)

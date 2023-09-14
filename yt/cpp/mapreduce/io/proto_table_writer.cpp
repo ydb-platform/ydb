@@ -105,6 +105,11 @@ TProtoTableWriter::TProtoTableWriter(
 TProtoTableWriter::~TProtoTableWriter()
 { }
 
+size_t TProtoTableWriter::GetBufferMemoryUsage() const
+{
+    return NodeWriter_->GetBufferMemoryUsage();
+}
+
 size_t TProtoTableWriter::GetTableCount() const
 {
     return NodeWriter_->GetTableCount();
@@ -142,6 +147,11 @@ TLenvalProtoTableWriter::TLenvalProtoTableWriter(
 
 TLenvalProtoTableWriter::~TLenvalProtoTableWriter()
 { }
+
+size_t TLenvalProtoTableWriter::GetBufferMemoryUsage() const
+{
+    return Output_->GetBufferMemoryUsage();
+}
 
 size_t TLenvalProtoTableWriter::GetTableCount() const
 {

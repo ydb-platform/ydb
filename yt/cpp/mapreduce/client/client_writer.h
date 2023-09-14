@@ -29,11 +29,12 @@ public:
     IOutputStream* GetStream(size_t tableIndex) const override;
     void OnRowFinished(size_t tableIndex) override;
     void Abort() override;
+    size_t GetBufferMemoryUsage() const override;
 
 private:
-    ::TIntrusivePtr<TRawTableWriter> RawWriter_;
+    const size_t BufferSize_ = 64 << 20;
 
-    const size_t BUFFER_SIZE = 64 << 20;
+    ::TIntrusivePtr<TRawTableWriter> RawWriter_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

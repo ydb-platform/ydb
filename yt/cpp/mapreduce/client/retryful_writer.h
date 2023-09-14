@@ -75,6 +75,8 @@ public:
     void NotifyRowEnd() override;
     void Abort() override;
 
+    size_t GetBufferMemoryUsage() const override;
+
     size_t GetRetryBlockRemainingSize() const
     {
       return (BufferSize_ > Buffer_.size()) ? (BufferSize_ - Buffer_.size()) : 0;

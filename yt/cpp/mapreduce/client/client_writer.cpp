@@ -19,7 +19,7 @@ TClientWriter::TClientWriter(
     const TTransactionId& transactionId,
     const TMaybe<TFormat>& format,
     const TTableWriterOptions& options)
-    : BUFFER_SIZE(options.BufferSize_)
+    : BufferSize_(options.BufferSize_)
 {
     if (options.SingleHttpRequest_) {
         RawWriter_.Reset(new TRetrylessWriter(
@@ -28,7 +28,7 @@ TClientWriter::TClientWriter(
             GetWriteTableCommand(context.Config->ApiVersion),
             format,
             path,
-            BUFFER_SIZE,
+            BufferSize_,
             options));
     } else {
         RawWriter_.Reset(new TRetryfulWriter(
@@ -62,6 +62,11 @@ void TClientWriter::OnRowFinished(size_t)
 void TClientWriter::Abort()
 {
     RawWriter_->Abort();
+}
+
+size_t TClientWriter::GetBufferMemoryUsage() const
+{
+    return RawWriter_->GetBufferMemoryUsage();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

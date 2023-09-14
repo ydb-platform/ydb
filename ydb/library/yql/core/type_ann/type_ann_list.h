@@ -133,5 +133,6 @@ namespace NTypeAnnImpl {
     IGraphTransformer::TStatus IterableWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus SqueezeToListWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus EmptyFromWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+    IGraphTransformer::TStatus TimeOrderRecoverWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
 } // namespace NTypeAnnImpl
 } // namespace NYql

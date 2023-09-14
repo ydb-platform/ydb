@@ -90,6 +90,7 @@
 #include "mkql_squeeze_to_list.h"
 #include "mkql_switch.h"
 #include "mkql_take.h"
+#include "mkql_time_order_recover.h"
 #include "mkql_timezone.h"
 #include "mkql_tobytes.h"
 #include "mkql_todict.h"
@@ -345,6 +346,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"NextValue", &WrapNextValue},
         {"Nop", &WrapNop},
         {"MatchRecognizeCore", &WrapMatchRecognizeCore},
+        {"TimeOrderRecover", WrapComputationBuilder(TimeOrderRecover)}
     };
 };
 

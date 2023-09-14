@@ -138,6 +138,7 @@ target_sources(minikql-comp_nodes-llvm PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_condense1.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_switch.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_take.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_time_order_recover.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_timezone.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_tobytes.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/comp_nodes/mkql_todict.cpp

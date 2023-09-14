@@ -12120,6 +12120,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["MatchRecognizePattern"] = &MatchRecognizePatternWrapper;
         Functions["MatchRecognizeDefines"] = &MatchRecognizeDefinesWrapper;
         ExtFunctions["MatchRecognizeCore"] = &MatchRecognizeCoreWrapper;
+        Functions["TimeOrderRecover"] = &TimeOrderRecoverWrapper;
 
         Functions["FromPg"] = &FromPgWrapper;
         Functions["ToPg"] = &ToPgWrapper;

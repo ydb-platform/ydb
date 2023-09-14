@@ -919,6 +919,23 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
                 );
     });
 
+    AddCallable("TimeOrderRecover", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto inputStream = node.Child(0);
+        const auto timeExtractor = node.Child(1);
+        const auto delay = node.Child(2);
+        const auto ahead = node.Child(3);
+        const auto rowLimit = node.Child(4);
+        return ctx.ProgramBuilder.TimeOrderRecover(
+            MkqlBuildExpr(*inputStream, ctx),
+            [timeExtractor, &ctx](TRuntimeNode row) {
+                return MkqlBuildLambda(*timeExtractor, ctx, {row});
+            },
+            MkqlBuildExpr(*delay, ctx),
+            MkqlBuildExpr(*ahead, ctx),
+            MkqlBuildExpr(*rowLimit, ctx)
+        );
+    });
+
     AddCallable("Guess", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto variantObj = MkqlBuildExpr(node.Head(), ctx);
         auto type = node.Head().GetTypeAnn();

@@ -707,6 +707,14 @@ public:
         bool streamingMode
     );
 
+    TRuntimeNode TimeOrderRecover(
+        TRuntimeNode inputStream,
+        const TUnaryLambda& getTimeExtractor,
+        TRuntimeNode delay,
+        TRuntimeNode ahead,
+        TRuntimeNode rowLimit
+    );
+
 protected:
     TRuntimeNode Invoke(const std::string_view& funcName, TType* resultType, const TArrayRef<const TRuntimeNode>& args);
     TRuntimeNode IfPresent(TRuntimeNode optional, const TUnaryLambda& thenBranch, TRuntimeNode elseBranch);

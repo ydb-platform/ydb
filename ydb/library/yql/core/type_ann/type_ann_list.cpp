@@ -2,6 +2,7 @@
 #include "type_ann_impl.h"
 #include "type_ann_list.h"
 
+#include <ydb/library/yql/core/sql_types/time_order_recover.h>
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
@@ -7344,6 +7345,92 @@ namespace {
         }
 
         return true;
+    }
+
+    IGraphTransformer::TStatus TimeOrderRecoverWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        const auto& source = input->ChildRef(0);
+        auto& timeExtractor = input->ChildRef(1);
+        const auto& delay = input->ChildRef(2);
+        const auto& ahead = input->ChildRef(3);
+        const auto& rowLimit = input->ChildRef(4);
+
+        if (!EnsureFlowType(*source, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        const auto& inputRowType = GetSeqItemType(source->GetTypeAnn());
+
+        if (!EnsureStructType(source->Pos(), *inputRowType, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        //add artificial boolean column to taint out of order rows in the result table
+        auto outputRowColumns = inputRowType->Cast<TStructExprType>()->GetItems();
+        outputRowColumns.push_back(ctx.Expr.MakeType<TItemExprType>(
+            NYql::NTimeOrderRecover::OUT_OF_ORDER_MARKER,
+            ctx.Expr.MakeType<TDataExprType>(EDataSlot::Bool)
+        ));
+        auto outputRowType = ctx.Expr.MakeType<TStructExprType>(outputRowColumns);
+        if (!outputRowType->Validate(input->Pos(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        auto status = ConvertToLambda(timeExtractor, ctx.Expr, 1, 1);
+        if (status.Level != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+        { //timeExtractor
+            if (!UpdateLambdaAllArgumentsTypes(timeExtractor, {inputRowType}, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            if (!timeExtractor->GetTypeAnn()) {
+                return IGraphTransformer::TStatus::Repeat;
+            }
+            bool isOptional;
+            const TDataExprType* type;
+            if (!EnsureDataOrOptionalOfData(*timeExtractor, isOptional, type, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            if (type->GetSlot() != EDataSlot::Timestamp) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(timeExtractor->Pos()), TStringBuilder() << "Expected Timestamp, but got: " << type->GetSlot()));
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+        { //delay
+            bool isOptional;
+            const TDataExprType* type;
+            if (!EnsureDataOrOptionalOfData(*delay, isOptional, type, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            if (type->GetSlot() != EDataSlot::Interval) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(delay->Pos()), TStringBuilder() << "Expected Interval, but got: " << type->GetSlot()));
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+        { //ahead
+            bool isOptional;
+            const TDataExprType* type;
+            if (!EnsureDataOrOptionalOfData(*ahead, isOptional, type, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            if (type->GetSlot() != EDataSlot::Interval) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(ahead->Pos()), TStringBuilder() << "Expected Interval, but got: " << type->GetSlot()));
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+        { //rowLimit
+            bool isOptional;
+            const TDataExprType* type;
+            if (!EnsureDataOrOptionalOfData(*rowLimit, isOptional, type, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            if (type->GetSlot() != EDataSlot::Uint32) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(rowLimit->Pos()), TStringBuilder() << "Expected Uint32, but got: " << type->GetSlot()));
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
+        input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(outputRowType));
+        return IGraphTransformer::TStatus::Ok;
     }
 } // namespace NTypeAnnImpl
 }

@@ -8,6 +8,7 @@
 #include "ydb/library/yql/minikql/mkql_utils.h"
 #include "ydb/library/yql/minikql/mkql_type_builder.h"
 #include "ydb/library/yql/core/sql_types/match_recognize.h"
+#include "ydb/library/yql/core/sql_types/time_order_recover.h"
 
 #include <util/string/cast.h>
 #include <util/string/printf.h>
@@ -6001,6 +6002,41 @@ TRuntimeNode TProgramBuilder::MatchRecognizeCore(
         callableBuilder.Add(d);
     }
     callableBuilder.Add(NewDataLiteral(streamingMode));
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::TimeOrderRecover(
+    TRuntimeNode inputStream,
+    const TUnaryLambda& getTimeExtractor,
+    TRuntimeNode delay,
+    TRuntimeNode ahead,
+    TRuntimeNode rowLimit
+    )
+{
+    MKQL_ENSURE(RuntimeVersion >= 44, "TimeOrderRecover is not supported in runtime version " << RuntimeVersion);
+
+    auto& inputRowType = *static_cast<TStructType*>(AS_TYPE(TStructType, AS_TYPE(TFlowType, inputStream.GetStaticType())->GetItemType()));
+    const auto inputRowArg = Arg(&inputRowType);
+    TStructTypeBuilder outputRowTypeBuilder(Env);
+    outputRowTypeBuilder.Reserve(inputRowType.GetMembersCount() + 1);
+    const ui32 inputRowColumnCount = inputRowType.GetMembersCount();
+    for (ui32 i = 0; i != inputRowColumnCount; ++i) {
+        outputRowTypeBuilder.Add(inputRowType.GetMemberName(i), inputRowType.GetMemberType(i));
+    }
+    using NYql::NTimeOrderRecover::OUT_OF_ORDER_MARKER;
+    outputRowTypeBuilder.Add(OUT_OF_ORDER_MARKER, TDataType::Create(NUdf::TDataType<bool>::Id, Env));
+    const auto outputRowType = outputRowTypeBuilder.Build();
+    const auto outOfOrderColumnIndex = outputRowType->GetMemberIndex(OUT_OF_ORDER_MARKER);
+    TCallableBuilder callableBuilder(GetTypeEnvironment(), "TimeOrderRecover", TFlowType::Create(outputRowType, Env));
+
+    callableBuilder.Add(inputStream);
+    callableBuilder.Add(inputRowArg);
+    callableBuilder.Add(getTimeExtractor(inputRowArg));
+    callableBuilder.Add(NewDataLiteral(inputRowColumnCount));
+    callableBuilder.Add(NewDataLiteral(outOfOrderColumnIndex));
+    callableBuilder.Add(delay),
+    callableBuilder.Add(ahead),
+    callableBuilder.Add(rowLimit);
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 

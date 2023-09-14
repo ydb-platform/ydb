@@ -105,10 +105,10 @@ func Fatalf(ctx context.Context, l log.Logger, format string, args ...interface{
 }
 
 func mergeFields(a, b []log.Field) []log.Field {
-	if a == nil {
+	if len(a) == 0 {
 		return b
 	}
-	if b == nil {
+	if len(b) == 0 {
 		return a
 	}
 

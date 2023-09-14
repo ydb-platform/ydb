@@ -1,6 +1,9 @@
 GO_LIBRARY()
 
+TAG(ya:run_go_benchmark)
+
 SRCS(
+    context.go
     deploy.go
     qloud.go
     zap.go

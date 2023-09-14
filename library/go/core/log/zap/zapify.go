@@ -1,6 +1,7 @@
 package zap
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/ydb-platform/ydb/library/go/core/log"
@@ -79,6 +80,8 @@ func zapifyField(field log.Field) zap.Field {
 		return zap.Reflect(field.Key(), field.Interface())
 	case log.FieldTypeByteString:
 		return zap.ByteString(field.Key(), field.Binary())
+	case log.FieldTypeContext:
+		return Context(field.Interface().(context.Context))
 	default:
 		// For when new field type is not added to this func
 		panic(fmt.Sprintf("unknown field type: %d", field.Type()))

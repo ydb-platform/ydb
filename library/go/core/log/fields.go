@@ -1,6 +1,7 @@
 package log
 
 import (
+	"context"
 	"fmt"
 	"time"
 )
@@ -42,6 +43,8 @@ const (
 	FieldTypeReflect
 	// FieldTypeByteString is for a bytes that can be represented as UTF-8 string
 	FieldTypeByteString
+	// FieldTypeContext wraps context for lazy context fields evaluation if possible
+	FieldTypeContext
 )
 
 // Field stores one structured logging field
@@ -152,6 +155,8 @@ func (f Field) Any() interface{} {
 	case FieldTypeReflect:
 		return f.Interface()
 	case FieldTypeByteString:
+		return f.Interface()
+	case FieldTypeContext:
 		return f.Interface()
 	default:
 		// For when new field type is not added to this func
@@ -371,6 +376,11 @@ func ByteString(key string, value []byte) Field {
 	return Field{key: key, ftype: FieldTypeByteString, iface: value}
 }
 
+// Context constructs field for lazy context fields evaluation if possible
+func Context(ctx context.Context) Field {
+	return Field{ftype: FieldTypeContext, iface: ctx}
+}
+
 // Any tries to deduce interface{} underlying type and constructs Field from it.
 // Use of this function is ok only for the sole purpose of not repeating its entire code
 // or parts of it in user's code (when you need to log interface{} types with unknown content).
@@ -440,6 +450,8 @@ func Any(key string, value interface{}) Field {
 		return NamedError(key, val)
 	case []error:
 		return Errors(key, val)
+	case context.Context:
+		return Context(val)
 	default:
 		return Field{key: key, ftype: FieldTypeAny, iface: value}
 	}

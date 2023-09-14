@@ -503,6 +503,54 @@ TEST_F(TLoggingTest, ThreadMinLogLevel)
     }
 }
 
+TEST_F(TLoggingTest, PlainTextLoggingStructuredFormatter)
+{
+    TLogEvent event;
+    event.Family = ELogFamily::PlainText;
+    event.Category = Logger.GetCategory();
+    event.Level = ELogLevel::Debug;
+    event.MessageRef = TSharedRef::FromString("test_message");
+    event.MessageKind = ELogMessageKind::Unstructured;
+    event.FiberId = 31;
+    event.TraceId = TGuid(1, 2, 3, 4);
+    event.SourceFile = "a/b.cpp";
+    event.SourceLine = 123;
+
+    for (auto enableSourceLocation : {false, true}) {
+        for (auto format : {ELogFormat::Yson, ELogFormat::Json}) {
+            TTempFile logFile(GenerateLogFileName());
+
+            auto writerConfig = New<TFileLogWriterConfig>();
+            writerConfig->FileName = logFile.Name();
+
+            auto writer = CreateFileLogWriter(
+                std::make_unique<TStructuredLogFormatter>(format, THashMap<TString, INodePtr>{}, /*enableControllMessages*/ true, enableSourceLocation),
+                "test_writer",
+                writerConfig,
+                this);
+
+            WriteEvent(writer, event);
+            TLogManager::Get()->Synchronize();
+
+            auto lines = ReadPlainTextEvents(logFile.Name());
+            EXPECT_EQ(1, std::ssize(lines));
+
+            auto message = DeserializeStructuredEvent(lines[0], format);
+            EXPECT_EQ(message->GetChildOrThrow("message")->AsString()->GetValue(), "test_message");
+            EXPECT_EQ(message->GetChildOrThrow("level")->AsString()->GetValue(), "debug");
+            EXPECT_EQ(message->GetChildOrThrow("category")->AsString()->GetValue(), Logger.GetCategory()->Name);
+            EXPECT_EQ(message->GetChildOrThrow("fiberId")->AsString()->GetValue(), "1f");
+            EXPECT_EQ(message->GetChildOrThrow("traceId")->AsString()->GetValue(), "4-3-2-1");
+
+            if (enableSourceLocation) {
+                EXPECT_EQ(message->GetChildOrThrow("sourceFile")->AsString()->GetValue(), "b.cpp:123");
+            } else {
+                EXPECT_EQ(message->FindChild("sourceFile"), nullptr);
+            }
+        }
+    }
+}
+
 TEST_F(TLoggingTest, StructuredLogging)
 {
     TLogEvent event;
@@ -514,6 +562,9 @@ TEST_F(TLoggingTest, StructuredLogging)
         .Finish()
         .ToSharedRef();
     event.MessageKind = ELogMessageKind::Structured;
+
+    event.FiberId = 31;
+    event.TraceId = TGuid(1, 2, 3, 4);
 
     for (auto format : {ELogFormat::Yson, ELogFormat::Json}) {
         TTempFile logFile(GenerateLogFileName());
@@ -537,6 +588,9 @@ TEST_F(TLoggingTest, StructuredLogging)
         EXPECT_EQ(message->GetChildOrThrow("message")->AsString()->GetValue(), "test_message");
         EXPECT_EQ(message->GetChildOrThrow("level")->AsString()->GetValue(), "debug");
         EXPECT_EQ(message->GetChildOrThrow("category")->AsString()->GetValue(), Logger.GetCategory()->Name);
+
+        EXPECT_EQ(message->FindChild("fiberId"), nullptr);
+        EXPECT_EQ(message->FindChild("traceId"), nullptr);
     }
 }
 
@@ -604,6 +658,7 @@ TEST_F(TLoggingTest, StructuredLoggingJsonFormat)
         ELogFormat::Json,
         /*commonFields*/ THashMap<TString, INodePtr>{},
         /*enableControlMessages*/ true,
+        /*enableSourceLocation*/ false,
         jsonFormat);
 
     auto writer = CreateFileLogWriter(

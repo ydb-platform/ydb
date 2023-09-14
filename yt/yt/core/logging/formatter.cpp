@@ -136,10 +136,12 @@ TStructuredLogFormatter::TStructuredLogFormatter(
     ELogFormat format,
     THashMap<TString, NYTree::INodePtr> commonFields,
     bool enableSystemMessages,
+    bool enableSourceLocation,
     NJson::TJsonFormatConfigPtr jsonFormat)
     : Format_(format)
     , CommonFields_(std::move(commonFields))
     , EnableSystemMessages_(enableSystemMessages)
+    , EnableSourceLocation_(enableSourceLocation)
     , JsonFormat_(!jsonFormat && (Format_ == ELogFormat::Json)
         ? New<NJson::TJsonFormatConfig>()
         : std::move(jsonFormat))
@@ -183,6 +185,18 @@ i64 TStructuredLogFormatter::WriteFormatted(IOutputStream* stream, const TLogEve
             .Item("instant").Value(dateTimeBuffer.GetBuffer())
             .Item("level").Value(FormatEnum(event.Level))
             .Item("category").Value(event.Category->Name)
+            .DoIf(event.Family == ELogFamily::PlainText, [&] (auto fluent) {
+                if (event.FiberId != TFiberId()) {
+                    fluent.Item("fiberId").Value(Format("%x", event.FiberId));
+                }
+                if (event.TraceId != TTraceId()) {
+                    fluent.Item("traceId").Value(event.TraceId);
+                }
+                if (EnableSourceLocation_ && event.SourceFile) {
+                    auto sourceFile = event.SourceFile;
+                    fluent.Item("sourceFile").Value(Format("%v:%v", sourceFile.RNextTok(LOCSLASH_C), event.SourceLine));
+                }
+            })
         .EndMap();
     consumer->Flush();
 

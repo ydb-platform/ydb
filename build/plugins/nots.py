@@ -138,6 +138,23 @@ def on_from_npm_lockfiles(unit, *args):
             unit.message(["WARN", "on_from_npm_lockfiles exception: {}".format(e)])
             pass
 
+def _check_nodejs_version(unit, major):
+    if major < 14:
+        raise Exception(
+            "Node.js {} is unsupported. Update Node.js please. See https://nda.ya.ru/t/joB9Mivm6h4znu".format(
+                major
+            )
+        )
+
+    if major < 18:
+        unit.message(
+            [
+                "WARN",
+                "Node.js {} is deprecated. Update Node.js please. See https://nda.ya.ru/t/joB9Mivm6h4znu".format(
+                    major
+                ),
+            ]
+        )
 
 @_with_report_configure_error
 def on_peerdir_ts_resource(unit, *resources):
@@ -147,6 +164,8 @@ def on_peerdir_ts_resource(unit, *resources):
     dirs = []
 
     nodejs_version = _select_matching_version(erm_json, "nodejs", pj.get_nodejs_version())
+
+    _check_nodejs_version(unit, nodejs_version.major)
 
     for tool in resources:
         if tool == "nodejs":

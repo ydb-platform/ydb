@@ -2486,9 +2486,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
         auto typeMod1 = typeMod;
         if (node.GetTypeAnn()->Cast<TPgExprType>()->GetName() != "interval" && 
-            node.GetTypeAnn()->Cast<TPgExprType>()->GetName() != "_interval" &&
-            node.GetTypeAnn()->Cast<TPgExprType>()->GetName() != "bit" &&
-            node.GetTypeAnn()->Cast<TPgExprType>()->GetName() != "_bit" ) {
+            node.GetTypeAnn()->Cast<TPgExprType>()->GetName() != "_interval") {
             typeMod1 = TRuntimeNode();
         }
 
@@ -2570,10 +2568,22 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
         auto typeMod1 = typeMod;
         if (node.GetTypeAnn()->Cast<TPgExprType>()->GetName() != "interval" && 
-            node.GetTypeAnn()->Cast<TPgExprType>()->GetName() != "_interval" &&
-            node.GetTypeAnn()->Cast<TPgExprType>()->GetName() != "bit" &&
-            node.GetTypeAnn()->Cast<TPgExprType>()->GetName() != "_bit") {
+            node.GetTypeAnn()->Cast<TPgExprType>()->GetName() != "_interval") {
             typeMod1 = TRuntimeNode();
+        }
+
+        if (node.Head().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Null) {
+            auto sourceTypeId = node.Head().GetTypeAnn()->Cast<TPgExprType>()->GetId();
+            auto targetTypeId = node.GetTypeAnn()->Cast<TPgExprType>()->GetId();
+            const auto& sourceTypeDesc = NPg::LookupType(sourceTypeId);
+            const auto& targetTypeDesc = NPg::LookupType(targetTypeId);
+            const bool isSourceArray = sourceTypeDesc.TypeId == sourceTypeDesc.ArrayTypeId;
+            const bool isTargetArray = targetTypeDesc.TypeId == targetTypeDesc.ArrayTypeId;
+            if (isSourceArray == isTargetArray && NPg::HasCast(
+                isSourceArray ? sourceTypeDesc.ElementTypeId : sourceTypeId,
+                isTargetArray ? targetTypeDesc.ElementTypeId : targetTypeId)) {
+                typeMod1 = typeMod;
+            }
         }
 
         auto cast = ctx.ProgramBuilder.PgCast(input, returnType, typeMod1);

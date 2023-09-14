@@ -58,6 +58,7 @@ TTxCoordinator::TTxCoordinator(TTabletStorageInfo *info, const TActorId &tablet)
     , EnableLeaderLeases(1, 0, 1)
     , MinLeaderLeaseDurationUs(250000, 1000, 5000000)
     , VolatilePlanLeaseMs(250, 0, 10000)
+    , PlanAheadTimeShiftMs(50, 0, 86400000)
 #ifdef COORDINATOR_LOG_TO_FILE
     , DebugName(Sprintf("/tmp/coordinator_db_log_%" PRIu64 ".%" PRIi32 ".%" PRIu64 ".gz", TabletID(), getpid(), tablet.LocalId()))
     , DebugLogFile(DebugName)
@@ -222,7 +223,8 @@ bool TTxCoordinator::AllowReducedPlanResolution() const {
 
 void TTxCoordinator::SchedulePlanTick() {
     const ui64 resolution = Config.Resolution;
-    const TInstant now = TAppData::TimeProvider->Now();
+    const ui64 timeShiftMs = PlanAheadTimeShiftMs;
+    const TInstant now = TAppData::TimeProvider->Now() + TDuration::MilliSeconds(timeShiftMs);
     const TMonotonic monotonic = AppData()->MonotonicTimeProvider->Now();
 
     // Step corresponding to current time
@@ -287,7 +289,8 @@ void TTxCoordinator::SchedulePlanTickExact(ui64 next) {
         return;
     }
 
-    const TInstant now = TAppData::TimeProvider->Now();
+    const ui64 timeShiftMs = PlanAheadTimeShiftMs;
+    const TInstant now = TAppData::TimeProvider->Now() + TDuration::MilliSeconds(timeShiftMs);
     const TMonotonic monotonic = AppData()->MonotonicTimeProvider->Now();
 
     TDuration delay = Min(TInstant::MilliSeconds(next) - now, MaxPlanTickDelay);
@@ -333,7 +336,8 @@ void TTxCoordinator::Handle(TEvPrivate::TEvPlanTick::TPtr &ev, const TActorConte
     }
 
     const ui64 resolution = Config.Resolution;
-    const TInstant now = TAppData::TimeProvider->Now();
+    const ui64 timeShiftMs = PlanAheadTimeShiftMs;
+    const TInstant now = TAppData::TimeProvider->Now() + TDuration::MilliSeconds(timeShiftMs);
 
     // Check the step corresponding to current time
     ui64 current = now.MilliSeconds();
@@ -491,6 +495,7 @@ void TTxCoordinator::IcbRegister() {
         AppData()->Icb->RegisterSharedControl(EnableLeaderLeases, "CoordinatorControls.EnableLeaderLeases");
         AppData()->Icb->RegisterSharedControl(MinLeaderLeaseDurationUs, "CoordinatorControls.MinLeaderLeaseDurationUs");
         AppData()->Icb->RegisterSharedControl(VolatilePlanLeaseMs, "CoordinatorControls.VolatilePlanLeaseMs");
+        AppData()->Icb->RegisterSharedControl(PlanAheadTimeShiftMs, "CoordinatorControls.PlanAheadTimeShiftMs");
         IcbRegistered = true;
     }
 }

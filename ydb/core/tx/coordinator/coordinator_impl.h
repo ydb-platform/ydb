@@ -573,6 +573,7 @@ private:
     TControlWrapper EnableLeaderLeases;
     TControlWrapper MinLeaderLeaseDurationUs;
     TControlWrapper VolatilePlanLeaseMs;
+    TControlWrapper PlanAheadTimeShiftMs;
 
     TVolatileState VolatileState;
     TConfig Config;

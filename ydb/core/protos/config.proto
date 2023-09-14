@@ -1557,6 +1557,11 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 10000,
             DefaultValue: 250 }];
+        optional uint64 PlanAheadTimeShiftMs = 4 [(ControlOptions) = {
+            Description: "Wall-clock time shift in milliseconds when planning ahead (50ms for compatibility with older versions)",
+            MinValue: 0,
+            MaxValue: 86400000,
+            DefaultValue: 50 }];
     }
 
     message TSchemeShardControls {

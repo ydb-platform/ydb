@@ -159,6 +159,25 @@ TBoolNodeWrapper TNodeWrapper::Bool() {
         PathFromCheckNode_);
 }
 
+TEnumNodeWrapper TNodeWrapper::Enum() {
+    // opaque enum is just a string
+    Y_ASSERT(!IsOpaqueChild());
+
+    TEnumValidator* validator = nullptr;
+
+    if (Node_) {
+        Y_ASSERT(NodeType_ == ENodeType::Enum);
+
+        validator = static_cast<TEnumValidator*>(Validator_);
+    }
+
+    return TEnumNodeWrapper(
+        static_cast<TEnumCheckContext&>(Context_),
+        Node_,
+        validator,
+        PathFromCheckNode_);
+}
+
 TMaybe<ENodeType> TNodeWrapper::ValidatorType() {
     ThrowIfNullNode();
     return NodeType_;
@@ -405,6 +424,28 @@ TBoolNodeWrapper::operator TNodeWrapper() {
 }
 
 
+TEnumNodeWrapper::TEnumNodeWrapper(
+    TEnumCheckContext& context,
+    NFyaml::TNodeRef node,
+    TEnumValidator* validator,
+    const TString& pathFromCheckNode)
+    : TBase(context, node, pathFromCheckNode)
+    , Validator_(validator) {}
+
+TString TEnumNodeWrapper::Value() const {
+    ThrowIfNullNode();
+    return Node_.Scalar();
+}
+
+TEnumNodeWrapper::operator TString() const {
+    return Value();
+}
+
+TEnumNodeWrapper::operator TNodeWrapper() {
+    return TNodeWrapper(Context_, Node_, Validator_, ENodeType::Bool, PathFromCheckNode_);
+}
+
+
 TCheckContext::TCheckContext(
     NFyaml::TNodeRef node,
     const TString& checkNodePath)
@@ -505,6 +546,16 @@ TBoolCheckContext::TBoolCheckContext(
 
 TBoolNodeWrapper TBoolCheckContext::Node() {
     return TBoolNodeWrapper(*this, Node_, Validator_, CheckNodePath_);
+}
+
+TEnumCheckContext::TEnumCheckContext(
+    NFyaml::TNodeRef node,
+    const TString& checkNodePath,
+    TEnumValidator* validator)
+    : TCheckContext(node, checkNodePath), Validator_(validator) {}
+
+TEnumNodeWrapper TEnumCheckContext::Node() {
+    return TEnumNodeWrapper(*this, Node_, Validator_, CheckNodePath_);
 }
 
 }

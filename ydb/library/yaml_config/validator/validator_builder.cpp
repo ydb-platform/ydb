@@ -30,6 +30,9 @@ TSimpleSharedPtr<TValidator> CreateValidatorPtr(const TSimpleSharedPtr<TBuilder>
         case ENodeType::Bool: {
             return MakeSimpleShared<TBoolValidator>(static_cast<TBoolBuilder*>(builder.Get())->CreateValidator());
         }
+        case ENodeType::Enum: {
+            return MakeSimpleShared<TEnumValidator>(static_cast<TEnumBuilder*>(builder.Get())->CreateValidator());
+        }
     }
 }
 
@@ -103,6 +106,11 @@ TGenericBuilder& TGenericBuilder::CanBeInt64(std::function<void(TInt64Builder&)>
     return *this;
 }
 
+TGenericBuilder& TGenericBuilder::CanBeInt64(i64 min, i64 max) {
+    PossibleBuilderPtrs_.emplace_back(new TInt64Builder(min, max));
+    return *this;
+}
+
 TGenericBuilder& TGenericBuilder::CanBeString(std::function<void(TStringBuilder&)> configurator) {
     PossibleBuilderPtrs_.emplace_back(new TStringBuilder(configurator));
     return *this;
@@ -110,6 +118,16 @@ TGenericBuilder& TGenericBuilder::CanBeString(std::function<void(TStringBuilder&
 
 TGenericBuilder& TGenericBuilder::CanBeBool(std::function<void(TBoolBuilder&)> configurator) {
     PossibleBuilderPtrs_.emplace_back(new TBoolBuilder(configurator));
+    return *this;
+}
+
+TGenericBuilder& TGenericBuilder::CanBeEnum(std::function<void(TEnumBuilder&)> configurator) {
+    PossibleBuilderPtrs_.emplace_back(new TEnumBuilder(configurator));
+    return *this;
+}
+
+TGenericBuilder& TGenericBuilder::CanBeEnum(THashSet<TString> items) {
+    PossibleBuilderPtrs_.emplace_back(new TEnumBuilder(std::move(items)));
     return *this;
 }
 
@@ -187,6 +205,12 @@ TMapBuilder& TMapBuilder::Int64(const TString& field, std::function<void(TInt64B
     return *this;
 }
 
+TMapBuilder& TMapBuilder::Int64(const TString& field, i64 min, i64 max) {
+    ThrowIfAlreadyHasField(field);
+    Children_[field] = TSimpleSharedPtr<TBuilder>(new TInt64Builder(min, max));
+    return *this;
+}
+
 TMapBuilder& TMapBuilder::String(const TString& field, std::function<void(TStringBuilder&)> configurator) {
     ThrowIfAlreadyHasField(field);
     Children_[field] = TSimpleSharedPtr<TBuilder>(new TStringBuilder(configurator));
@@ -196,6 +220,18 @@ TMapBuilder& TMapBuilder::String(const TString& field, std::function<void(TStrin
 TMapBuilder& TMapBuilder::Bool(const TString& field, std::function<void(TBoolBuilder&)> configurator) {
     ThrowIfAlreadyHasField(field);
     Children_[field] = TSimpleSharedPtr<TBuilder>(new TBoolBuilder(configurator));
+    return *this;
+}
+
+TMapBuilder& TMapBuilder::Enum(const TString& field, std::function<void(TEnumBuilder&)> configurator) {
+    ThrowIfAlreadyHasField(field);
+    Children_[field] = TSimpleSharedPtr<TBuilder>(new TEnumBuilder(configurator));
+    return *this;
+}
+
+TMapBuilder& TMapBuilder::Enum(const TString& field, THashSet<TString> items) {
+    ThrowIfAlreadyHasField(field);
+    Children_[field] = TSimpleSharedPtr<TBuilder>(new TEnumBuilder(std::move(items)));
     return *this;
 }
 
@@ -235,6 +271,10 @@ TStringBuilder& TMapBuilder::StringAt(const TString& field) {
 
 TBoolBuilder& TMapBuilder::BoolAt(const TString& field) {
     return static_cast<TBoolBuilder&>(*Children_.at(field).Get());
+}
+
+TEnumBuilder& TMapBuilder::EnumAt(const TString& field) {
+    return static_cast<TEnumBuilder&>(*Children_.at(field).Get());
 }
 
 TMapValidator TMapBuilder::CreateValidator() {
@@ -305,6 +345,11 @@ TArrayBuilder& TArrayBuilder::Int64Item(std::function<void(TInt64Builder&)> conf
     return *this;
 }
 
+TArrayBuilder& TArrayBuilder::Int64Item(i64 min, i64 max) {
+    Item(TInt64Builder(min, max));
+    return *this;
+}
+
 TArrayBuilder& TArrayBuilder::StringItem(std::function<void(TStringBuilder&)> configurator) {
     Item(TStringBuilder(configurator));
     return *this;
@@ -312,6 +357,16 @@ TArrayBuilder& TArrayBuilder::StringItem(std::function<void(TStringBuilder&)> co
 
 TArrayBuilder& TArrayBuilder::BoolItem(std::function<void(TBoolBuilder&)> configurator) {
     Item(TBoolBuilder(configurator));
+    return *this;
+}
+
+TArrayBuilder& TArrayBuilder::EnumItem(std::function<void(TEnumBuilder&)> configurator) {
+    Item(TEnumBuilder(configurator));
+    return *this;
+}
+
+TArrayBuilder& TArrayBuilder::EnumItem(THashSet<TString> items) {
+    Item(TEnumBuilder(items));
     return *this;
 }
 
@@ -333,6 +388,9 @@ TArrayValidator TArrayBuilder::CreateValidator() {
 // TInt64Builder
 TInt64Builder::TInt64Builder()
     : TBase(ENodeType::Int64) {}
+
+TInt64Builder::TInt64Builder(i64 min, i64 max)
+    : TBase(ENodeType::Int64), Min_(min), Max_(max) {}
 
 TInt64Builder::TInt64Builder(const TInt64Builder& builder)
     : TBase(builder)
@@ -449,6 +507,42 @@ TBoolValidator TBoolBuilder::CreateValidator() {
     auto result = TBoolValidator();
     result.Checkers_ = Checkers_;
     result.Required_ = Required_;
+    return result;
+}
+
+
+// TEnumBuilder
+TEnumBuilder::TEnumBuilder(THashSet<TString> items)
+    : TBase(ENodeType::Enum), Items_(std::move(items)) {}
+
+TEnumBuilder::TEnumBuilder(const TEnumBuilder& builder)
+    : TBase(builder), Items_(builder.Items_) {}
+
+TEnumBuilder::TEnumBuilder(TEnumBuilder&& builder)
+    : TBase(std::move(builder)), Items_(std::move(builder.Items_)) {}
+
+TEnumBuilder& TEnumBuilder::operator=(const TEnumBuilder& builder) {
+    TBuilder::operator=(builder);
+    Items_ = builder.Items_;
+    return *this;
+}
+
+TEnumBuilder& TEnumBuilder::operator=(TEnumBuilder&& builder) {
+    TBuilder::operator=(std::move(builder));
+    Items_ = std::move(builder.Items_);
+    return *this;
+}
+
+TEnumBuilder::TEnumBuilder(std::function<void(TEnumBuilder&)> configurator)
+    : TBase(ENodeType::Enum) {
+    configurator(*this);
+}
+
+TEnumValidator TEnumBuilder::CreateValidator() {
+    auto result = TEnumValidator();
+    result.Checkers_ = Checkers_;
+    result.Required_ = Required_;
+    result.Items_ = Items_;
     return result;
 }
 

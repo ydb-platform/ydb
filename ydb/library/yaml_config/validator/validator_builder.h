@@ -6,6 +6,7 @@
 #include <util/generic/vector.h>
 #include <util/generic/string.h>
 #include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 #include <util/string/cast.h>
 #include <util/system/types.h>
 #include <util/generic/yexception.h>
@@ -81,8 +82,11 @@ public:
     TGenericBuilder& CanBeMap(std::function<void(TMapBuilder&)> configurator = [](auto&){});
     TGenericBuilder& CanBeArray(std::function<void(TArrayBuilder&)> configurator = [](auto&){});
     TGenericBuilder& CanBeInt64(std::function<void(TInt64Builder&)> configurator = [](auto&){});
+    TGenericBuilder& CanBeInt64(i64 min, i64 max);
     TGenericBuilder& CanBeString(std::function<void(TStringBuilder&)> configurator = [](auto&){});
     TGenericBuilder& CanBeBool(std::function<void(TBoolBuilder&)> configurator = [](auto&){});
+    TGenericBuilder& CanBeEnum(std::function<void(TEnumBuilder&)> configurator = [](auto&){});
+    TGenericBuilder& CanBeEnum(THashSet<TString> items);
 
     TGenericValidator CreateValidator();
 
@@ -119,8 +123,11 @@ public:
     TMapBuilder& Map(const TString& field, std::function<void(TMapBuilder&)> configurator = [](auto&){});
     TMapBuilder& Array(const TString& field, std::function<void(TArrayBuilder&)> configurator = [](auto&){});
     TMapBuilder& Int64(const TString& field, std::function<void(TInt64Builder&)> configurator = [](auto&){});
+    TMapBuilder& Int64(const TString& field, i64 min, i64 max);
     TMapBuilder& String(const TString& field, std::function<void(TStringBuilder&)> configurator = [](auto&){});
     TMapBuilder& Bool(const TString& field, std::function<void(TBoolBuilder&)> configurator = [](auto&){});
+    TMapBuilder& Enum(const TString& field, std::function<void(TEnumBuilder&)> configurator = [](auto&){});
+    TMapBuilder& Enum(const TString& field, THashSet<TString> items);
 
     TMapBuilder& Opaque();
     TMapBuilder& NotOpaque();
@@ -133,6 +140,7 @@ public:
     TInt64Builder& Int64At(const TString& field);
     TStringBuilder& StringAt(const TString& field);
     TBoolBuilder& BoolAt(const TString& field);
+    TEnumBuilder& EnumAt(const TString& field);
 
     TMapValidator CreateValidator();
 
@@ -164,8 +172,11 @@ public:
     TArrayBuilder& MapItem(std::function<void(TMapBuilder&)> configurator = [](auto&){});
     TArrayBuilder& ArrayItem(std::function<void(TArrayBuilder&)> configurator = [](auto&){});
     TArrayBuilder& Int64Item(std::function<void(TInt64Builder&)> configurator = [](auto&){});
+    TArrayBuilder& Int64Item(i64 min, i64 max);
     TArrayBuilder& StringItem(std::function<void(TStringBuilder&)> configurator = [](auto&){});
     TArrayBuilder& BoolItem(std::function<void(TBoolBuilder&)> configurator = [](auto&){});
+    TArrayBuilder& EnumItem(std::function<void(TEnumBuilder&)> configurator = [](auto&){});
+    TArrayBuilder& EnumItem(THashSet<TString> items);
 
     TBuilder& GetItem();
 
@@ -181,6 +192,7 @@ class TInt64Builder : public NDetail::TCommonBuilderOps<TInt64Builder, TInt64Che
 
 public:
     TInt64Builder();
+    TInt64Builder(i64 min, i64 max);
 
     TInt64Builder(const TInt64Builder& builder);
     TInt64Builder(TInt64Builder&& builder);
@@ -233,6 +245,28 @@ public:
     TBoolBuilder(std::function<void(TBoolBuilder&)> configurator);
 
     TBoolValidator CreateValidator();
+};
+
+class TEnumBuilder : public NDetail::TCommonBuilderOps<TEnumBuilder, TEnumCheckContext> {
+    using TBase = NDetail::TCommonBuilderOps<TEnumBuilder, TEnumCheckContext>;
+
+public:
+    TEnumBuilder(THashSet<TString> Items_);
+
+    TEnumBuilder(const TEnumBuilder& builder);
+    TEnumBuilder(TEnumBuilder&& builder);
+
+    TEnumBuilder& operator=(const TEnumBuilder& builder);
+    TEnumBuilder& operator=(TEnumBuilder&& builder);
+
+    TEnumBuilder(std::function<void(TEnumBuilder&)> configurator);
+
+    void SetItems(const THashSet<TString>& items);
+
+    TEnumValidator CreateValidator();
+
+private:
+    THashSet<TString> Items_;
 };
 
 template <typename TThis, typename TCheckContext>

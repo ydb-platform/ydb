@@ -1,5 +1,6 @@
 #include "validator.h"
 
+#include "util/string/vector.h"
 #include <util/string/cast.h>
 #include <util/system/types.h>
 
@@ -370,6 +371,37 @@ TValidationResult TBoolValidator::Validate(const TNodeRef& node) {
     TValidationResult validationResult;
 
     performChecks(validationResult, node);
+
+    return validationResult;
+}
+
+TEnumValidator::TEnumValidator()
+    : TBase(ENodeType::Enum) {}
+
+TEnumValidator::TEnumValidator(TEnumValidator&& validator)
+    : TBase(std::move(validator)), Items_(std::move(validator.Items_)) {}
+
+TValidationResult TEnumValidator::Validate(const TNodeRef& node) {
+    if (node.Type() != NFyaml::ENodeType::Scalar) {
+        return TValidationResult({{
+            node.Path(),
+            "Node must be Scalar(Enum)"
+        }});
+    }
+
+    TValidationResult validationResult;
+
+    if (!Items_.contains(node.Scalar())) {
+        TString variants = JoinStrings(Items_.begin(), Items_.end(), ", ");
+
+        validationResult.Issues.push_back({
+            node.Path(),
+            "Node value must be one of the following: " + variants + ". (it was \"" + node.Scalar() + "\")"});
+    }
+
+    if (validationResult.Ok()) {
+        performChecks(validationResult, node);
+    }
 
     return validationResult;
 }

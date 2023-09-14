@@ -6,7 +6,7 @@
 namespace NYamlConfig::NValidator {
 
 enum class ENodeType {
-    Generic, Map, Array, Int64, String, Bool
+    Generic, Map, Array, Int64, String, Bool, Enum
 };
 
 class TGenericBuilder;
@@ -15,6 +15,7 @@ class TArrayBuilder;
 class TInt64Builder;
 class TStringBuilder;
 class TBoolBuilder;
+class TEnumBuilder;
 
 class TValidator;
 class TGenericValidator;
@@ -23,6 +24,7 @@ class TArrayValidator;
 class TInt64Validator;
 class TStringValidator;
 class TBoolValidator;
+class TEnumValidator;
 
 class TNodeWrapper;
 class TGenericNodeWrapper;
@@ -31,6 +33,7 @@ class TArrayNodeWrapper;
 class TInt64NodeWrapper;
 class TStringNodeWrapper;
 class TBoolNodeWrapper;
+class TEnumNodeWrapper;
 
 class TCheckContext;
 class TGenericCheckContext;
@@ -39,6 +42,7 @@ class TArrayCheckContext;
 class TInt64CheckContext;
 class TStringCheckContext;
 class TBoolCheckContext;
+class TEnumCheckContext;
 
 class TValidationResult;
 

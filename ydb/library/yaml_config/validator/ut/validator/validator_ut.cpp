@@ -293,4 +293,16 @@ Y_UNIT_TEST_SUITE(Validator) {
         Y_ENSURE(HasOneIssue(opaque.Validate("{}"), {"/int", "Node is required"}));
         Y_ENSURE(opaque.Validate("{int: 1, int2: 2}").Ok());
     }
+
+    Y_UNIT_TEST(Enums) {
+        auto v = TEnumBuilder({"a", "b", "c"}).CreateValidator();
+
+        Y_ENSURE(v.Validate("a").Ok());
+        Y_ENSURE(v.Validate("b").Ok());
+        Y_ENSURE(v.Validate("c").Ok());
+
+        Y_ENSURE(HasOneIssue(
+            v.Validate("d"),
+            {"/", "Node value must be one of the following: a, b, c. (it was \"d\")"}));
+    }
 }

@@ -120,6 +120,7 @@ public:
     TInt64NodeWrapper Int64();
     TStringNodeWrapper String();
     TBoolNodeWrapper Bool();
+    TEnumNodeWrapper Enum();
 
     TMaybe<ENodeType> ValidatorType();
 
@@ -265,6 +266,27 @@ private:
     TBoolValidator* Validator_;
 };
 
+class TEnumNodeWrapper : public NDetail::TNodeWrapperCommonOps<TEnumNodeWrapper> {
+    template <typename> friend class NDetail::TNodeWrapperCommonOps;
+
+    using TBase = NDetail::TNodeWrapperCommonOps<TEnumNodeWrapper>;
+
+public:
+    TEnumNodeWrapper(
+        TEnumCheckContext& context,
+        NFyaml::TNodeRef node,
+        TEnumValidator* validator,
+        const TString& pathFromCheckNode);
+
+    TString Value() const;
+    operator TString() const;
+
+    operator TNodeWrapper();
+
+private:
+    TEnumValidator* Validator_;
+};
+
 
 class TCheckContext {
     friend class TMapNodeWrapper; // for access to node path
@@ -381,6 +403,20 @@ public:
 
 private:
     TBoolValidator* Validator_;
+};
+
+class TEnumCheckContext : public TCheckContext {
+    friend class TEnumNodeWrapper;
+
+public:
+    TEnumCheckContext(NFyaml::TNodeRef node,
+        const TString& checkNodePath,
+        TEnumValidator* validator);
+
+    TEnumNodeWrapper Node();
+
+private:
+    TEnumValidator* Validator_;
 };
 
 } // namespace NYamlConfig::NValidator

@@ -268,6 +268,24 @@ public:
     using TValidator::Validate;
 };
 
+class TEnumValidator : public NDetail::TValidatorCommonOps<TEnumValidator, TEnumCheckContext> {
+    friend class TEnumNodeWrapper;
+    friend class TEnumBuilder;
+
+    using TBase = NDetail::TValidatorCommonOps<TEnumValidator, TEnumCheckContext>;
+
+public:
+    TEnumValidator();
+
+    TEnumValidator(TEnumValidator&& validator);
+
+    TValidationResult Validate(const NFyaml::TNodeRef& node) override;
+    using TValidator::Validate;
+
+private:
+    THashSet<TString> Items_;
+};
+
 } // namespace NYamlConfig::NValidator
 
 IOutputStream& operator<<(IOutputStream& out, const NYamlConfig::NValidator::TValidationResult::TIssue& issue);

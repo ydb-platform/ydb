@@ -158,6 +158,8 @@ namespace NKikimr::NStorage {
         // subscribed IC sessions
         THashMap<ui32, TActorId> SubscribedSessions;
 
+        friend void ::Out<ERootState>(IOutputStream&, ERootState);
+
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::NODEWARDEN_DISTRIBUTED_CONFIG;

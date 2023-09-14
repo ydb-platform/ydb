@@ -862,8 +862,6 @@ TNodePtr TSqlExpression::RowPatternVarAccess(const TString& alias, const TRule_u
                 case TRule_an_id_or_type::ALT_NOT_SET:
                     break;
             }
-            return MatchRecognizeVarAccess(*this, alias, block.GetAlt3().GetRule_an_id_or_type1(),
-                                           Ctx.GetMatchRecognizeDefineVar() == alias);
         case TRule_unary_subexpr_suffix_TBlock1_TAlt3_TBlock1_TBlock2::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }

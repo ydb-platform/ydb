@@ -78,7 +78,6 @@ public:
         , Var(var)
         , TheSameVar(theSameVar)
         , Column(column)
-        , WithinNavigationFunction(false)
     {
     }
 
@@ -92,10 +91,6 @@ public:
 
     TString GetColumn() const {
         return Column;
-    }
-
-    void SetWithinNavigationFunction() {
-        WithinNavigationFunction = true;
     }
 
     bool DoInit(TContext& ctx, ISource* src) override;
@@ -125,7 +120,6 @@ private:
     const TString Var;
     const bool TheSameVar; //reference the same var as being defined by this expression;
     const TString Column;
-    bool WithinNavigationFunction;
 };
 
 class TMatchRecognizeNavigate: public TAstListNode {

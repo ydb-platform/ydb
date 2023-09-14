@@ -178,7 +178,7 @@ const auto DefaultNavigatingFunction = "MatchRecognizeDefaultNavigating";
 bool TMatchRecognizeVarAccessNode::DoInit(TContext& ctx, ISource* src) {
         //If referenced var is the var that is currently being defined
         //then it's a reference to the last row in a partition
-        Node = new TMatchRecognizeNavigate(ctx.Pos(), DefaultNavigatingFunction, TVector<TNodePtr>{this});
+        Node = new TMatchRecognizeNavigate(ctx.Pos(), DefaultNavigatingFunction, TVector<TNodePtr>{this->Clone()});
         return Node->Init(ctx, src);
 }
 

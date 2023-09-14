@@ -5,28 +5,19 @@ namespace NKikimr::NStorage {
     struct TExConfigError : yexception {};
 
     void TDistributedConfigKeeper::CheckRootNodeStatus() {
-        if (RootState == ERootState::INITIAL && !Binding && HasQuorum()) {
-            STLOG(PRI_DEBUG, BS_NODE, NWDC18, "Starting QUORUM_CHECK_TIMEOUT");
-            TActivationContext::Schedule(QuorumCheckTimeout, new IEventHandle(TEvPrivate::EvQuorumCheckTimeout, 0,
-                SelfId(), {}, nullptr, 0));
-            RootState = ERootState::QUORUM_CHECK_TIMEOUT;
-        }
+//        if (RootState == ERootState::INITIAL && !Binding && HasQuorum()) {
+//            STLOG(PRI_DEBUG, BS_NODE, NWDC19, "Starting config collection");
+//            RootState = ERootState::COLLECT_CONFIG;
+//            TEvScatter task;
+//            task.MutableCollectConfigs();
+//            IssueScatterTask(true, std::move(task));
+//        }
     }
 
-    void TDistributedConfigKeeper::HandleQuorumCheckTimeout() {
-        if (HasQuorum()) {
-            STLOG(PRI_DEBUG, BS_NODE, NWDC19, "Quorum check timeout hit, quorum remains");
-
-            RootState = ERootState::COLLECT_CONFIG;
-
-            TEvScatter task;
-            task.MutableCollectConfigs();
-            IssueScatterTask(true, std::move(task));
-        } else {
-            STLOG(PRI_DEBUG, BS_NODE, NWDC20, "Quorum check timeout hit, quorum reset");
-            RootState = ERootState::INITIAL; // fall back to waiting for quorum
-            IssueNextBindRequest();
-        }
+    void TDistributedConfigKeeper::HandleErrorTimeout() {
+        STLOG(PRI_DEBUG, BS_NODE, NWDC20, "Error timeout hit");
+        RootState = ERootState::INITIAL;
+        IssueNextBindRequest();
     }
 
     void TDistributedConfigKeeper::ProcessGather(TEvGather *res) {
@@ -43,7 +34,7 @@ namespace NKikimr::NStorage {
 
             case ERootState::PROPOSE_NEW_STORAGE_CONFIG:
                 if (res->HasProposeStorageConfig()) {
-                    ProcessProposeStorageConig(res->MutableProposeStorageConfig());
+                    ProcessProposeStorageConfig(res->MutableProposeStorageConfig());
                 } else {
                     // ?
                 }
@@ -58,15 +49,21 @@ namespace NKikimr::NStorage {
     }
 
     bool TDistributedConfigKeeper::HasQuorum() const {
-        // we have strict majority of all nodes (including this one)
-        return AllBoundNodes.size() + 1 > (NodeIds.size() + 1) / 2;
+        THashSet<TNodeIdentifier> connectedNodes;
+        for (const auto& [nodeId, node] : AllBoundNodes) {
+            connectedNodes.emplace(nodeId);
+        }
+        return HasNodeQuorum(StorageConfig, nullptr, connectedNodes);
     }
 
     void TDistributedConfigKeeper::ProcessCollectConfigs(TEvGather::TCollectConfigs *res) {
         STLOG(PRI_DEBUG, BS_NODE, NWDC31, "ProcessCollectConfigs", (RootState, RootState), (Res, *res));
 
-        NKikimrBlobStorage::TStorageConfig bestConfig;
-        ui32 bestNodes = 0;
+        struct TConfigRecord {
+            NKikimrBlobStorage::TStorageConfig Config; // full config
+            THashSet<TNodeIdentifier> HavingNodeIds; // node ids having this config
+        };
+        THashMap<TStorageConfigMeta, TConfigRecord> configs;
 
         for (const auto& item : res->GetItems()) {
             if (!item.HasConfig()) {
@@ -75,16 +72,70 @@ namespace NKikimr::NStorage {
             }
 
             const auto& config = item.GetConfig();
-            if (!bestNodes || bestConfig.GetGeneration() < config.GetGeneration() ||
-                    bestConfig.GetGeneration() == config.GetGeneration() && bestNodes < item.NodesSize()) {
-                // check for split generations
-                bestConfig.CopyFrom(config);
-                bestNodes = item.NodesSize();
+            TStorageConfigMeta meta(config);
+            const auto [it, inserted] = configs.try_emplace(std::move(meta));
+            TConfigRecord& record = it->second;
+            if (inserted) {
+                record.Config.CopyFrom(config);
+            }
+            for (const auto& nodeId : item.GetNodeIds()) {
+                record.HavingNodeIds.emplace(nodeId);
             }
         }
 
-        if (!bestNodes) {
-            // ?
+        for (auto it = configs.begin(); it != configs.end(); ) {
+            TConfigRecord& record = it->second;
+            if (HasNodeQuorum(record.Config, nullptr, record.HavingNodeIds)) {
+                ++it;
+            } else {
+                configs.erase(it++);
+            }
+        }
+
+        if (configs.empty()) {
+            STLOG(PRI_INFO, BS_NODE, NWDC38, "No possible quorum for CollectConfigs");
+            RootState = ERootState::ERROR_TIMEOUT;
+            TActivationContext::Schedule(ErrorTimeout, new IEventHandle(TEvPrivate::EvErrorTimeout, 0, SelfId(), {}, nullptr, 0));
+            return;
+        }
+
+        // leave configs with the maximum possible generation
+        ui64 maxGeneration = 0;
+        for (const auto& [meta, record] : configs) {
+            maxGeneration = Max(maxGeneration, meta.GetGeneration());
+        }
+        for (auto it = configs.begin(); it != configs.end(); ++it) {
+            const TStorageConfigMeta& meta = it->first;
+            if (meta.GetGeneration() == maxGeneration) {
+                ++it;
+            } else {
+                configs.erase(it++);
+            }
+        }
+
+        // ensure there was no split-brain for these nodes
+        if (configs.size() != 1) {
+            STLOG(PRI_ERROR, BS_NODE, NWDC39, "Different variations of collected config detected");
+            RootState = ERootState::ERROR_TIMEOUT;
+            TActivationContext::Schedule(ErrorTimeout, new IEventHandle(TEvPrivate::EvErrorTimeout, 0, SelfId(), {}, nullptr, 0));
+            return;
+        }
+
+        auto it = configs.begin();
+        auto& bestConfig = it->second.Config;
+
+        bool canParticipate = false;
+        for (const auto& node : bestConfig.GetAllNodes()) {
+            if (SelfNode == TNodeIdentifier(node)) {
+                canParticipate = true;
+                break;
+            }
+        }
+        if (!canParticipate) {
+            STLOG(PRI_ERROR, BS_NODE, NWDC40, "Current node can't be coordinating one in voted config");
+            RootState = ERootState::INITIAL;
+            IssueNextBindRequest();
+            // TODO: request direct bound nodes to re-decide
             return;
         }
 
@@ -118,17 +169,25 @@ namespace NKikimr::NStorage {
             propose->MutableConfig()->Swap(&bestConfig);
             IssueScatterTask(true, std::move(task));
             RootState = ERootState::PROPOSE_NEW_STORAGE_CONFIG;
+        } else {
+            RootState = ERootState::ERROR_TIMEOUT;
+            TActivationContext::Schedule(ErrorTimeout, new IEventHandle(TEvPrivate::EvErrorTimeout, 0, SelfId(), {}, nullptr, 0));
         }
     }
 
-    void TDistributedConfigKeeper::ProcessProposeStorageConig(TEvGather::TProposeStorageConfig *res) {
-        THashSet<ui32> successfulNodes, failedNodes;
+    void TDistributedConfigKeeper::ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res) {
+        THashSet<TNodeIdentifier> among;
+        THashSet<TNodeIdentifier> successful;
+
+        for (const auto& node : CurrentProposedStorageConfig.GetAllNodes()) {
+            among.emplace(node);
+        }
 
         for (const auto& item : res->GetStatus()) {
-            const ui32 nodeId = item.GetNodeId();
+            TNodeIdentifier nodeId(item.GetNodeId());
             switch (item.GetStatus()) {
                 case TEvGather::TProposeStorageConfig::ACCEPTED:
-                    successfulNodes.insert(nodeId);
+                    successful.insert(std::move(nodeId));
                     break;
 
                 case TEvGather::TProposeStorageConfig::HAVE_NEWER_GENERATION:
@@ -139,25 +198,27 @@ namespace NKikimr::NStorage {
                 case TEvGather::TProposeStorageConfig::ERROR:
                     break;
 
+                case TEvGather::TProposeStorageConfig::NO_STORAGE:
+                    among.erase(nodeId);
+                    break;
+
                 default:
                     break;
             }
         }
 
-        failedNodes.insert(NodeIds.begin(), NodeIds.end());
-        failedNodes.insert(SelfId().NodeId());
-        for (const ui32 nodeId : successfulNodes) {
-            failedNodes.erase(nodeId);
-        }
-
-        if (successfulNodes.size() > failedNodes.size()) {
-            StorageConfig.CopyFrom(CurrentProposedStorageConfig);
-            ProposedStorageConfig.reset();
-            PersistConfig({});
-            for (const auto& [nodeId, info] : DirectBoundNodes) {
-                SendEvent(nodeId, info, std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(), &StorageConfig));
-            }
+        if (HasNodeQuorum(CurrentProposedStorageConfig, &among, successful)) {
+            TEvScatter task;
+            auto *commit = task.MutableCommitStorageConfig();
+            TStorageConfigMeta meta(CurrentProposedStorageConfig);
+            commit->MutableMeta()->CopyFrom(meta);
+            IssueScatterTask(true, std::move(task));
             RootState = ERootState::COMMIT_CONFIG;
+        } else {
+            CurrentProposedStorageConfig.Clear();
+            STLOG(PRI_DEBUG, BS_NODE, NWDC04, "No quorum for ProposedStorageConfig, restarting");
+            RootState = ERootState::ERROR_TIMEOUT;
+            TActivationContext::Schedule(ErrorTimeout, new IEventHandle(TEvPrivate::EvErrorTimeout, 0, SelfId(), {}, nullptr, 0));
         }
     }
 
@@ -349,7 +410,7 @@ namespace NKikimr::NStorage {
             case TEvScatter::kProposeStorageConfig:
                 if (ProposedStorageConfigCookie) {
                     auto *status = task.Response.MutableProposeStorageConfig()->AddStatus();
-                    status->SetNodeId(SelfId().NodeId());
+                    SelfNode.Serialize(status->MutableNodeId());
                     status->SetStatus(TEvGather::TProposeStorageConfig::RACE);
                 } else {
                     ProposedStorageConfig.emplace(task.Request.GetProposeStorageConfig().GetConfig());
@@ -359,22 +420,74 @@ namespace NKikimr::NStorage {
                         Y_VERIFY(cookie == ProposedStorageConfigCookie);
                         ProposedStorageConfigCookie.reset();
 
-                        ui32 numOk = 0;
-                        ui32 numError = 0;
-                        for (const auto& [path, status] : msg.StatusPerPath) {
-                            ++(status ? numOk : numError);
-                        }
-
                         if (auto it = ScatterTasks.find(cookie); it != ScatterTasks.end()) {
                             TScatterTask& task = it->second;
 
                             auto *status = task.Response.MutableProposeStorageConfig()->AddStatus();
-                            status->SetNodeId(SelfId().NodeId());
+                            SelfNode.Serialize(status->MutableNodeId());
 
-                            if (numOk > numError) { // stored successfully
-                                status->SetStatus(TEvGather::TProposeStorageConfig::ACCEPTED);
+                            auto pdiskMap = MakePDiskMap(*ProposedStorageConfig);
+                            ui32 numOk = 0;
+                            ui32 numError = 0;
+                            for (const auto& [path, ok] : msg.StatusPerPath) {
+                                if (ok) {
+                                    if (const auto it = pdiskMap.find(path); it != pdiskMap.end()) {
+                                        status->AddSuccessfulPDiskIds(it->second);
+                                    }
+                                    ++numOk;
+                                } else {
+                                    ++numError;
+                                }
+                            }
+
+                            status->SetStatus(numOk + numError == 0 ? TEvGather::TProposeStorageConfig::NO_STORAGE :
+                                numOk > numError ? TEvGather::TProposeStorageConfig::ACCEPTED :
+                                TEvGather::TProposeStorageConfig::ERROR);
+
+                            FinishAsyncOperation(cookie);
+                        }
+                    });
+                    task.AsyncOperationsPending = true;
+                }
+                break;
+
+            case TEvScatter::kCommitStorageConfig: {
+                auto error = [&](const TString& reason) {
+                    auto *status = task.Response.MutableCommitStorageConfig()->AddStatus();
+                    SelfNode.Serialize(status->MutableNodeId());
+                    status->SetReason(reason);
+                };
+                if (ProposedStorageConfigCookie) {
+                    error("proposition is still in progress");
+                } else if (CommitStorageConfigCookie) {
+                    error("commit is still in progress");
+                } else if (!ProposedStorageConfig) {
+                    error("no proposed config found");
+                } else if (const TStorageConfigMeta meta(task.Request.GetCommitStorageConfig().GetMeta()); meta != *ProposedStorageConfig) {
+                    error("proposed config mismatch");
+                } else {
+                    CommitStorageConfigCookie.emplace(cookie);
+                    ProposedStorageConfig->Swap(&StorageConfig);
+                    ProposedStorageConfig.reset();
+                    PersistConfig([this, cookie](TEvPrivate::TEvStorageConfigStored& msg) {
+                        Y_VERIFY(CommitStorageConfigCookie);
+                        Y_VERIFY(cookie == CommitStorageConfigCookie);
+                        CommitStorageConfigCookie.reset();
+
+                        if (const auto it = ScatterTasks.find(cookie); it != ScatterTasks.end()) {
+                            TScatterTask& task = it->second;
+                            auto *status = task.Response.MutableCommitStorageConfig()->AddStatus();
+                            SelfNode.Serialize(status->MutableNodeId());
+
+                            ui32 numOk = 0;
+                            ui32 numError = 0;
+                            for (const auto& [path, status] : msg.StatusPerPath) {
+                                ++(status ? numOk : numError);
+                            }
+                            if (numOk > numError) {
+                                status->SetSuccess(true);
                             } else {
-                                status->SetStatus(TEvGather::TProposeStorageConfig::ERROR);
+                                status->SetReason("no PDisk quorum");
                             }
 
                             FinishAsyncOperation(cookie);
@@ -383,6 +496,7 @@ namespace NKikimr::NStorage {
                     task.AsyncOperationsPending = true;
                 }
                 break;
+            }
 
             case TEvScatter::REQUEST_NOT_SET:
                 break;
@@ -397,6 +511,10 @@ namespace NKikimr::NStorage {
 
             case TEvScatter::kProposeStorageConfig:
                 Perform(task.Response.MutableProposeStorageConfig(), task.Request.GetProposeStorageConfig(), task);
+                break;
+
+            case TEvScatter::kCommitStorageConfig:
+                Perform(task.Response.MutableCommitStorageConfig(), task.Request.GetCommitStorageConfig(), task);
                 break;
 
             case TEvScatter::REQUEST_NOT_SET:
@@ -417,16 +535,13 @@ namespace NKikimr::NStorage {
                 ptr = response->AddItems();
                 ptr->MutableConfig()->CopyFrom(config);
             }
-            for (const auto& node : item.GetNodes()) {
-                ptr->AddNodes()->CopyFrom(node);
+            for (const auto& node : item.GetNodeIds()) {
+                ptr->AddNodeIds()->CopyFrom(node);
             }
         };
 
         TEvGather::TCollectConfigs::TItem s;
-        auto *node = s.AddNodes();
-        node->SetHost(SelfHost);
-        node->SetPort(SelfPort);
-        node->SetNodeId(SelfId().NodeId());
+        SelfNode.Serialize(s.AddNodeIds());
         auto *cfg = s.MutableConfig();
         cfg->CopyFrom(StorageConfig);
         addConfig(s);
@@ -444,10 +559,55 @@ namespace NKikimr::NStorage {
             const TEvScatter::TProposeStorageConfig& /*request*/, TScatterTask& task) {
         for (const auto& reply : task.CollectedResponses) {
             if (reply.HasProposeStorageConfig()) {
-                const auto& item = reply.GetProposeStorageConfig();
-                response->MutableStatus()->MergeFrom(item.GetStatus());
+                response->MutableStatus()->MergeFrom(reply.GetProposeStorageConfig().GetStatus());
             }
         }
+    }
+
+    void TDistributedConfigKeeper::Perform(TEvGather::TCommitStorageConfig *response,
+            const TEvScatter::TCommitStorageConfig& /*request*/, TScatterTask& task) {
+        for (const auto& reply : task.CollectedResponses) {
+            if (reply.HasCommitStorageConfig()) {
+                response->MutableStatus()->MergeFrom(reply.GetCommitStorageConfig().GetStatus());
+            }
+        }
+    }
+
+    THashMap<TString, ui32> TDistributedConfigKeeper::MakePDiskMap(const NKikimrBlobStorage::TStorageConfig& config) {
+        if (!config.HasBlobStorageConfig()) {
+            return {};
+        }
+        const auto& bsConfig = config.GetBlobStorageConfig();
+
+        if (!bsConfig.HasServiceSet()) {
+            return {};
+        }
+        const auto& serviceSet = bsConfig.GetServiceSet();
+
+        THashMap<TString, ui32> res;
+        for (const auto& pdisk : serviceSet.GetPDisks()) {
+            if (pdisk.GetNodeID() == SelfId().NodeId()) {
+                res.emplace(pdisk.GetPath(), pdisk.GetPDiskID());
+            }
+        }
+        return res;
+    }
+
+    bool TDistributedConfigKeeper::HasNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config,
+            const THashSet<TNodeIdentifier> *among, const THashSet<TNodeIdentifier>& successful) const {
+        ui32 numOk = 0;
+        ui32 numError = 0;
+
+        THashSet<TNodeIdentifier> nodesInConfig;
+        for (const auto& node : config.GetAllNodes()) {
+            const TNodeIdentifier ni(node);
+            if (among && !among->contains(ni)) { // skip this node, not interested in its status
+                continue;
+            }
+            ++(successful.contains(ni) ? numOk : numError);
+        }
+
+        return numOk > numError;
     }
 
 } // NKikimr::NStorage

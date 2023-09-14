@@ -12,6 +12,11 @@ message TNodeIdentifier {
     NActorsInterconnect.TNodeLocation Location = 4;
 }
 
+message TStorageConfigMeta {
+    uint64 Generation = 1;
+    bytes Fingerprint = 2;
+}
+
 message TStorageConfig { // contents of storage metadata
     uint64 Generation = 1; // stored generation
     bytes Fingerprint = 2; // hash for config validation (must be the same for all nodes with the same Generation)
@@ -33,18 +38,19 @@ message TPDiskMetadataRecord {
 
 // Attach sender node to the recipient one; if already bound, then just update configuration.
 message TEvNodeConfigPush {
+    message TBoundNode {
+        TNodeIdentifier NodeId = 1;
+        TStorageConfigMeta Meta = 2;
+    }
     bool Initial = 1; // set to true if this push is initial connection establishment
-    reserved 2;
-    repeated uint32 NewBoundNodeIds = 3; // a list of nodes (not including sender) that are attached
-    repeated uint32 DeletedBoundNodeIds = 4; // a list of detached nodes
-    optional TStorageConfig StorageConfig = 5; // initial configuration or updated one
+    repeated TBoundNode BoundNodes = 2; // a list of bound node updates (including itself)
+    repeated TNodeIdentifier DeletedBoundNodeIds = 3; // a list of detached nodes
 }
 
 // Used to reverse-propagate configuration and to confirm/reject initial TEvNodePushBinding query.
 message TEvNodeConfigReversePush {
-    optional TStorageConfig StorageConfig = 1; // initial configuration or updated one
-    uint32 RootNodeId = 2; // current tree root as known by the sender, always nonzero
-    bool Rejected = 3; // is the request rejected due to cyclic graph?
+    uint32 RootNodeId = 1; // current tree root as known by the sender, always nonzero
+    bool Rejected = 2; // is the request rejected due to cyclic graph?
 }
 
 // Remove node from bound list.
@@ -57,7 +63,11 @@ message TEvNodeConfigScatter {
     }
 
     message TProposeStorageConfig {
-        optional TStorageConfig Config = 1;
+        TStorageConfig Config = 1;
+    }
+
+    message TCommitStorageConfig {
+        TStorageConfigMeta Meta = 1; // meta of config being committed
     }
 
     optional uint64 Cookie = 1;
@@ -65,6 +75,7 @@ message TEvNodeConfigScatter {
     oneof Request {
         TCollectConfigs CollectConfigs = 2;
         TProposeStorageConfig ProposeStorageConfig = 3;
+        TCommitStorageConfig CommitStorageConfig = 4;
     }
 }
 
@@ -72,8 +83,8 @@ message TEvNodeConfigScatter {
 message TEvNodeConfigGather {
     message TCollectConfigs {
         message TItem {
-            repeated TNodeIdentifier Nodes = 1; // nodes with the same config
-            optional TStorageConfig Config = 2; // the config itself
+            repeated TNodeIdentifier NodeIds = 1; // nodes with the same config
+            TStorageConfig Config = 2; // the config itself
         }
         repeated TItem Items = 1;
     }
@@ -85,11 +96,23 @@ message TEvNodeConfigGather {
             HAVE_NEWER_GENERATION = 2;
             RACE = 3;
             ERROR = 4;
+            NO_STORAGE = 5; // nowhere to store configuration to
         }
         message TStatus {
-            uint32 NodeId = 1;
+            TNodeIdentifier NodeId = 1;
             EStatus Status = 2;
             string Reason = 3;
+            repeated uint32 SuccessfulPDiskIds = 4;
+        }
+        repeated TStatus Status = 1;
+    }
+
+    message TCommitStorageConfig {
+        message TStatus {
+            TNodeIdentifier NodeId = 1;
+            bool Success = 2;
+            string Reason = 3; // in case of error
+            repeated uint32 SuccessfulPDiskIds = 4;
         }
         repeated TStatus Status = 1;
     }
@@ -99,5 +122,6 @@ message TEvNodeConfigGather {
     oneof Response {
         TCollectConfigs CollectConfigs = 2;
         TProposeStorageConfig ProposeStorageConfig = 3;
+        TCommitStorageConfig CommitStorageConfig = 4;
     }
 }

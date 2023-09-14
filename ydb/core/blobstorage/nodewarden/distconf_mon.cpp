@@ -27,8 +27,12 @@ namespace NKikimr::NStorage {
                 NJson::TJsonValue res(NJson::JSON_ARRAY);
                 for (const auto& [nodeId, info] : DirectBoundNodes) {
                     NJson::TJsonValue boundNodeIds(NJson::JSON_ARRAY);
-                    for (const ui32 boundNodeId : info.BoundNodeIds) {
-                        boundNodeIds.AppendValue(boundNodeId);
+                    for (const auto& boundNodeId : info.BoundNodeIds) {
+                        boundNodeIds.AppendValue(NJson::TJsonMap{
+                            {"host", std::get<0>(boundNodeId)},
+                            {"port", std::get<1>(boundNodeId)},
+                            {"node_id", std::get<2>(boundNodeId)},
+                        });
                     }
                     NJson::TJsonValue scatterTasks(NJson::JSON_ARRAY);
                     for (const ui64 cookie : info.ScatterTasks) {
@@ -112,7 +116,10 @@ namespace NKikimr::NStorage {
 
                                     auto makeBoundNodeIds = [&] {
                                         TStringStream s;
-                                        std::vector<ui32> ids(info.BoundNodeIds.begin(), info.BoundNodeIds.end());
+                                        std::vector<ui32> ids;
+                                        for (const auto& boundNodeId : info.BoundNodeIds) {
+                                            ids.push_back(std::get<2>(boundNodeId));
+                                        }
                                         std::sort(ids.begin(), ids.end());
                                         for (size_t begin = 0; begin < ids.size(); ) {
                                             size_t end;

@@ -11,19 +11,8 @@ namespace NKikimr::NStorage {
     {
         TEvNodeConfigPush() = default;
 
-        // ctor for initial push request
-        TEvNodeConfigPush(const THashMap<ui32, ui32>& boundNodeIds, const NKikimrBlobStorage::TStorageConfig& config) {
-            for (const auto [nodeId, counter] : boundNodeIds) {
-                Record.AddNewBoundNodeIds(nodeId);
-            }
-            Record.SetInitial(true);
-            if (config.GetGeneration()) {
-                Record.MutableStorageConfig()->CopyFrom(config);
-            }
-        }
-
         bool IsUseful() const {
-            return Record.NewBoundNodeIdsSize() || Record.DeletedBoundNodeIdsSize() || Record.HasStorageConfig();
+            return Record.BoundNodesSize() || Record.DeletedBoundNodeIdsSize();
         }
     };
 
@@ -32,11 +21,8 @@ namespace NKikimr::NStorage {
     {
         TEvNodeConfigReversePush() = default;
 
-        TEvNodeConfigReversePush(ui32 rootNodeId, const NKikimrBlobStorage::TStorageConfig *config) {
+        TEvNodeConfigReversePush(ui32 rootNodeId) {
             Record.SetRootNodeId(rootNodeId);
-            if (config) {
-                Record.MutableStorageConfig()->CopyFrom(*config);
-            }
         }
 
         static std::unique_ptr<TEvNodeConfigReversePush> MakeRejected() {

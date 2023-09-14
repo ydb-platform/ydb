@@ -12,9 +12,9 @@ namespace NKikimr::NStorage {
         for (const auto& item : ev->Get()->Nodes) {
             if (item.NodeId == selfNodeId) {
                 iAmStatic = item.IsStatic;
-                SelfHost = item.ResolveHost;
-                SelfPort = item.Port;
-            } else if (item.IsStatic) {
+                SelfNode = TNodeIdentifier(item.ResolveHost, item.Port, selfNodeId);
+            }
+            if (item.IsStatic) {
                 nodeIds.push_back(item.NodeId);
             }
         }
@@ -70,8 +70,7 @@ namespace NKikimr::NStorage {
                 Binding.emplace(*nodeId, ++BindingCookie);
 
                 if (const auto [it, inserted] = SubscribedSessions.try_emplace(Binding->NodeId); it->second) {
-                    Binding->SessionId = it->second;
-                    SendEvent(*Binding, std::make_unique<TEvNodeConfigPush>(AllBoundNodes, StorageConfig));
+                    BindToSession(it->second);
                 } else if (inserted) {
                     TActivationContext::Send(new IEventHandle(TEvInterconnect::EvConnectNode, 0,
                         TActivationContext::InterconnectProxy(Binding->NodeId), SelfId(), nullptr,
@@ -89,6 +88,24 @@ namespace NKikimr::NStorage {
         }
     }
 
+    void TDistributedConfigKeeper::BindToSession(TActorId sessionId) {
+        Y_VERIFY(Binding);
+        Binding->SessionId = sessionId;
+
+        auto ev = std::make_unique<TEvNodeConfigPush>();
+        auto& record = ev->Record;
+
+        record.SetInitial(true);
+
+        for (const auto& [nodeId, node] : AllBoundNodes) {
+            auto *boundNode = record.AddBoundNodes();
+            nodeId.Serialize(boundNode->MutableNodeId());
+            boundNode->MutableMeta()->CopyFrom(node.Configs.back());
+        }
+
+        SendEvent(*Binding, std::move(ev));
+    }
+
     void TDistributedConfigKeeper::Handle(TEvInterconnect::TEvNodeConnected::TPtr ev) {
         const ui32 nodeId = ev->Get()->NodeId;
         const TActorId sessionId = ev->Sender;
@@ -103,8 +120,7 @@ namespace NKikimr::NStorage {
 
         if (Binding && Binding->NodeId == nodeId) {
             STLOG(PRI_DEBUG, BS_NODE, NWDC09, "Continuing bind", (Binding, Binding));
-            Binding->SessionId = ev->Sender;
-            SendEvent(*Binding, std::make_unique<TEvNodeConfigPush>(AllBoundNodes, StorageConfig));
+            BindToSession(ev->Sender);
         }
 
         // in case of obsolete subscriptions
@@ -165,7 +181,7 @@ namespace NKikimr::NStorage {
             IssueNextBindRequest();
 
             for (const auto& [nodeId, info] : DirectBoundNodes) {
-                SendEvent(nodeId, info, std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(), nullptr));
+                SendEvent(nodeId, info, std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId()));
             }
 
             UnsubscribeInterconnect(binding.NodeId);
@@ -201,44 +217,67 @@ namespace NKikimr::NStorage {
                 AbortBinding("binding cycle");
             } else if (prevRootNodeId != GetRootNodeId()) {
                 STLOG(PRI_DEBUG, BS_NODE, NWDC13, "Binding updated", (Binding, Binding), (PrevRootNodeId, prevRootNodeId));
-            }
-            bool updateConfig = false;
-            if (record.HasStorageConfig()) {
-                updateConfig = UpdateConfig(record.GetStorageConfig());
-            }
-            if (prevRootNodeId != GetRootNodeId() || updateConfig) {
                 for (const auto& [nodeId, info] : DirectBoundNodes) {
-                    SendEvent(nodeId, info, std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(),
-                        updateConfig ? &StorageConfig : nullptr));
+                    SendEvent(nodeId, info, std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId()));
                 }
             }
         }
     }
 
-    void TDistributedConfigKeeper::AddBound(ui32 nodeId, TEvNodeConfigPush *msg) {
-        if (const auto [it, inserted] = AllBoundNodes.try_emplace(nodeId, 1); inserted) {
-            if (msg) {
-                msg->Record.AddNewBoundNodeIds(nodeId);
-            }
-            if (nodeId != SelfId().NodeId()) {
-                BindQueue.Disable(nodeId);
-            }
-        } else {
-            ++it->second;
+    void TDistributedConfigKeeper::UpdateBound(ui32 refererNodeId, TNodeIdentifier nodeId, const TStorageConfigMeta& meta, TEvNodeConfigPush *msg) {
+        STLOG(PRI_DEBUG, BS_NODE, NWDC18, "UpdateBound", (RefererNodeId, refererNodeId), (NodeId, nodeId), (Meta, meta));
+
+        const auto [it, inserted] = AllBoundNodes.try_emplace(std::move(nodeId));
+        TIndirectBoundNode& node = it->second;
+
+        if (inserted) { // disable this node from target binding set, this is the first mention of this node
+            BindQueue.Disable(it->first.NodeId());
+        }
+
+        // remember previous config meta
+        const std::optional<TStorageConfigMeta> prev = node.Configs.empty()
+            ? std::nullopt
+            : std::make_optional(node.Configs.back());
+
+        const auto [refIt, refInserted] = node.Refs.try_emplace(refererNodeId);
+        if (refInserted) { // new entry
+            refIt->second = node.Configs.emplace(node.Configs.end(), meta);
+        } else { // update meta (even if it didn't change)
+            refIt->second->CopyFrom(meta);
+            node.Configs.splice(node.Configs.end(), node.Configs, refIt->second);
+        }
+
+        if (msg && prev != node.Configs.back()) { // update config for this node
+            auto *boundNode = msg->Record.AddBoundNodes();
+            it->first.Serialize(boundNode->MutableNodeId());
+            boundNode->MutableMeta()->CopyFrom(node.Configs.back());
         }
     }
 
-    void TDistributedConfigKeeper::DeleteBound(ui32 nodeId, TEvNodeConfigPush *msg) {
+    void TDistributedConfigKeeper::DeleteBound(ui32 refererNodeId, const TNodeIdentifier& nodeId, TEvNodeConfigPush *msg) {
+        STLOG(PRI_DEBUG, BS_NODE, NWDC34, "DeleteBound", (RefererNodeId, refererNodeId), (NodeId, nodeId));
+
         const auto it = AllBoundNodes.find(nodeId);
         Y_VERIFY(it != AllBoundNodes.end());
-        if (!--it->second) {
+        TIndirectBoundNode& node = it->second;
+
+        Y_VERIFY(!node.Configs.empty());
+        const TStorageConfigMeta prev = node.Configs.back();
+
+        const auto refIt = node.Refs.find(refererNodeId);
+        node.Configs.erase(refIt->second);
+        node.Refs.erase(refIt);
+
+        if (node.Refs.empty()) {
             AllBoundNodes.erase(it);
+            BindQueue.Enable(nodeId.NodeId());
             if (msg) {
-                msg->Record.AddDeletedBoundNodeIds(nodeId);
+                nodeId.Serialize(msg->Record.AddDeletedBoundNodeIds());
             }
-            if (nodeId != SelfId().NodeId()) {
-                BindQueue.Enable(nodeId);
-            }
+        } else if (msg && prev != node.Configs.back()) {
+            auto *boundNode = msg->Record.AddBoundNodes();
+            nodeId.Serialize(boundNode->MutableNodeId());
+            boundNode->MutableMeta()->CopyFrom(node.Configs.back());
         }
     }
 
@@ -288,10 +327,7 @@ namespace NKikimr::NStorage {
         const auto [it, inserted] = DirectBoundNodes.try_emplace(senderNodeId, ev->Cookie, ev->InterconnectSession);
         TBoundNode& info = it->second;
         if (inserted) {
-            const bool sendConfig = record.GetStorageConfig().GetGeneration() < StorageConfig.GetGeneration();
-            SendEvent(senderNodeId, info, std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(),
-                sendConfig ? &StorageConfig : nullptr));
-            AddBound(senderNodeId, getPushEv());
+            SendEvent(senderNodeId, info, std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId()));
             for (auto& [cookie, task] : ScatterTasks) {
                 IssueScatterTaskForNode(senderNodeId, info, cookie, task);
             }
@@ -306,25 +342,18 @@ namespace NKikimr::NStorage {
             return;
         }
 
-        // process added items
-        for (const ui32 nodeId : record.GetNewBoundNodeIds()) {
-            if (info.BoundNodeIds.insert(nodeId).second) {
-                AddBound(nodeId, getPushEv());
-            } else {
-                STLOG(PRI_CRIT, BS_NODE, NWDC04, "distributed configuration protocol violation: adding duplicate item",
-                    (Sender, ev->Sender),
-                    (Cookie, ev->Cookie),
-                    (SessionId, ev->InterconnectSession),
-                    (Record, record),
-                    (NodeId, nodeId));
-                Y_VERIFY_DEBUG(false);
-            }
+        // process updates
+        for (const auto& item : record.GetBoundNodes()) {
+            const auto& nodeId = item.GetNodeId();
+            UpdateBound(senderNodeId, nodeId, item.GetMeta(), getPushEv());
+            info.BoundNodeIds.insert(nodeId);
         }
 
         // process deleted items
-        for (const ui32 nodeId : record.GetDeletedBoundNodeIds()) {
+        for (const auto& item : record.GetDeletedBoundNodeIds()) {
+            const TNodeIdentifier nodeId(item);
             if (info.BoundNodeIds.erase(nodeId)) {
-                DeleteBound(nodeId, getPushEv());
+                DeleteBound(senderNodeId, nodeId, getPushEv());
             } else {
                 STLOG(PRI_CRIT, BS_NODE, NWDC05, "distributed configuration protocol violation: deleting nonexisting item",
                     (Sender, ev->Sender),
@@ -333,18 +362,6 @@ namespace NKikimr::NStorage {
                     (Record, record),
                     (NodeId, nodeId));
                 Y_VERIFY_DEBUG(false);
-            }
-        }
-
-        // update configuration (if any)
-        if (record.HasStorageConfig() && UpdateConfig(record.GetStorageConfig())) {
-            if (auto *ev = getPushEv()) {
-                ev->Record.MutableStorageConfig()->CopyFrom(StorageConfig);
-            }
-            for (const auto& [nodeId, info] : DirectBoundNodes) {
-                if (nodeId != senderNodeId) {
-                    SendEvent(nodeId, info, std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(), &StorageConfig));
-                }
             }
         }
 
@@ -381,9 +398,8 @@ namespace NKikimr::NStorage {
                 return pushEv.get();
             };
 
-            DeleteBound(nodeId, getPushEv());
-            for (const ui32 boundNodeId : info.BoundNodeIds) {
-                DeleteBound(boundNodeId, getPushEv());
+            for (const TNodeIdentifier& boundNodeId : info.BoundNodeIds) {
+                DeleteBound(nodeId, boundNodeId, getPushEv());
             }
 
             if (pushEv && pushEv->IsUseful()) {
@@ -405,24 +421,6 @@ namespace NKikimr::NStorage {
 
     ui32 TDistributedConfigKeeper::GetRootNodeId() const {
         return Binding && Binding->RootNodeId ? Binding->RootNodeId : SelfId().NodeId();
-    }
-
-    bool TDistributedConfigKeeper::UpdateConfig(const NKikimrBlobStorage::TStorageConfig& config) {
-        if (StorageConfig.GetGeneration() < config.GetGeneration()) {
-            STLOG(PRI_INFO, BS_NODE, NWDC34, "UpdateConfig", (CurrentGeneration, StorageConfig.GetGeneration()),
-                (CurrentFingerprint, EscapeC(StorageConfig.GetFingerprint())),
-                (NewGeneration, config.GetGeneration()),
-                (NewFingerprint, EscapeC(config.GetFingerprint())));
-            StorageConfig.CopyFrom(config);
-            if (ProposedStorageConfig && ProposedStorageConfig->GetGeneration() == config.GetGeneration() &&
-                    ProposedStorageConfig->GetFingerprint() == config.GetFingerprint()) {
-                ProposedStorageConfig.reset();
-            }
-            PersistConfig({});
-            return true;
-        } else {
-            return false;
-        }
     }
 
 } // NKikimr::NStorage

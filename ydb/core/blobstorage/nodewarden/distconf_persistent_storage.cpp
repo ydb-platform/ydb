@@ -171,6 +171,8 @@ namespace NKikimr::NStorage {
                     Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvUpdateServiceSet(bsConfig.GetServiceSet()));
                 }
             }
+            const ui32 selfNodeId = SelfId().NodeId();
+            UpdateBound(selfNodeId, SelfNode, item.Record.GetStorageConfig(), nullptr);
         }
         PersistQ.pop_front();
 

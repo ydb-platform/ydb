@@ -60,15 +60,6 @@ namespace NKikimr::NStorage {
 
 #ifndef NDEBUG
     void TDistributedConfigKeeper::ConsistencyCheck() {
-        THashMap<ui32, ui32> refAllBoundNodeIds;
-        for (const auto& [nodeId, info] : DirectBoundNodes) {
-            ++refAllBoundNodeIds[nodeId];
-            for (const ui32 boundNodeId : info.BoundNodeIds) {
-                ++refAllBoundNodeIds[boundNodeId];
-            }
-        }
-        Y_VERIFY(AllBoundNodes == refAllBoundNodeIds);
-
         for (const auto& [nodeId, info] : DirectBoundNodes) {
             Y_VERIFY(std::binary_search(NodeIds.begin(), NodeIds.end(), nodeId));
         }
@@ -130,10 +121,7 @@ namespace NKikimr::NStorage {
 #endif
 
     STFUNC(TDistributedConfigKeeper::StateWaitForInit) {
-        auto processPendingEvent = [&] {
-            Y_VERIFY(!PendingEvents.empty());
-            StateFunc(PendingEvents.front());
-            PendingEvents.pop_front();
+        auto processPendingEvents = [&] {
             if (PendingEvents.empty()) {
                 Become(&TThis::StateFunc);
             } else {
@@ -141,30 +129,34 @@ namespace NKikimr::NStorage {
             }
         };
 
+        bool change = false;
+
         switch (ev->GetTypeRewrite()) {
             case TEvInterconnect::TEvNodesInfo::EventType:
-                PendingEvents.push_front(std::move(ev));
-                NodeListObtained = true;
-                if (StorageConfigLoaded) {
-                    processPendingEvent();
-                }
+                Handle(reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr&>(ev));
+                NodeListObtained = change = true;
                 break;
 
             case TEvPrivate::EvStorageConfigLoaded:
                 Handle(reinterpret_cast<TEvPrivate::TEvStorageConfigLoaded::TPtr&>(ev));
-                StorageConfigLoaded = true;
-                if (NodeListObtained) {
-                    processPendingEvent();
-                }
+                StorageConfigLoaded = change = true;
                 break;
 
             case TEvPrivate::EvProcessPendingEvent:
-                processPendingEvent();
+                Y_VERIFY(!PendingEvents.empty());
+                StateFunc(PendingEvents.front());
+                PendingEvents.pop_front();
+                processPendingEvents();
                 break;
 
             default:
                 PendingEvents.push_back(std::move(ev));
                 break;
+        }
+
+        if (NodeListObtained && StorageConfigLoaded && change) {
+            UpdateBound(SelfNode.NodeId(), SelfNode, StorageConfig, nullptr);
+            processPendingEvents();
         }
     }
 
@@ -179,7 +171,7 @@ namespace NKikimr::NStorage {
             hFunc(TEvInterconnect::TEvNodeConnected, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
-            cFunc(TEvPrivate::EvQuorumCheckTimeout, HandleQuorumCheckTimeout);
+            cFunc(TEvPrivate::EvErrorTimeout, HandleErrorTimeout);
             hFunc(TEvPrivate::TEvStorageConfigLoaded, Handle);
             hFunc(TEvPrivate::TEvStorageConfigStored, Handle);
             hFunc(NMon::TEvHttpInfo, Handle);
@@ -206,10 +198,15 @@ void Out<NKikimr::NStorage::TDistributedConfigKeeper::ERootState>(IOutputStream&
     using E = decltype(state);
     switch (state) {
         case E::INITIAL:                    s << "INITIAL";                    return;
-        case E::QUORUM_CHECK_TIMEOUT:       s << "QUORUM_CHECK_TIMEOUT";       return;
         case E::COLLECT_CONFIG:             s << "COLLECT_CONFIG";             return;
         case E::PROPOSE_NEW_STORAGE_CONFIG: s << "PROPOSE_NEW_STORAGE_CONFIG"; return;
         case E::COMMIT_CONFIG:              s << "COMMIT_CONFIG";              return;
+        case E::ERROR_TIMEOUT:              s << "ERROR_TIMEOUT";              return;
     }
     Y_FAIL();
+}
+
+template<>
+void Out<NKikimr::NStorage::TNodeIdentifier>(IOutputStream& s, const NKikimr::NStorage::TNodeIdentifier& value) {
+    s << std::get<0>(value) << ':' << std::get<1>(value) << '/' << std::get<2>(value);
 }

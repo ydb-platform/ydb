@@ -7,6 +7,62 @@
 
 namespace NKikimr::NStorage {
 
+    struct TNodeIdentifier : std::tuple<TString, ui32, ui32> {
+        TNodeIdentifier() = default;
+
+        TNodeIdentifier(TString host, ui32 port, ui32 nodeId)
+            : std::tuple<TString, ui32, ui32>(std::move(host), port, nodeId)
+        {}
+
+        TNodeIdentifier(const NKikimrBlobStorage::TNodeIdentifier& proto)
+            : std::tuple<TString, ui32, ui32>(proto.GetHost(), proto.GetPort(), proto.GetNodeId())
+        {}
+
+        ui32 NodeId() const {
+            return std::get<2>(*this);
+        }
+
+        void Serialize(NKikimrBlobStorage::TNodeIdentifier *proto) const {
+            proto->SetHost(std::get<0>(*this));
+            proto->SetPort(std::get<1>(*this));
+            proto->SetNodeId(std::get<2>(*this));
+        }
+    };
+
+    struct TStorageConfigMeta : NKikimrBlobStorage::TStorageConfigMeta {
+        TStorageConfigMeta(const NKikimrBlobStorage::TStorageConfigMeta& m)
+            : NKikimrBlobStorage::TStorageConfigMeta(m)
+        {}
+
+        TStorageConfigMeta(const NKikimrBlobStorage::TStorageConfig& config) {
+            SetGeneration(config.GetGeneration());
+            SetFingerprint(config.GetFingerprint());
+        }
+
+        friend bool operator ==(const TStorageConfigMeta& x, const TStorageConfigMeta& y) {
+            return x.GetGeneration() == y.GetGeneration()
+                && x.GetFingerprint() == y.GetFingerprint();
+        }
+
+        friend bool operator !=(const TStorageConfigMeta& x, const TStorageConfigMeta& y) {
+            return !(x == y);
+        }
+    };
+
+} // NKikimr::NStorage
+
+template<>
+struct THash<NKikimr::NStorage::TNodeIdentifier> : THash<std::tuple<TString, ui32, ui32>> {};
+
+template<>
+struct THash<NKikimr::NStorage::TStorageConfigMeta> {
+    size_t operator ()(const NKikimr::NStorage::TStorageConfigMeta& m) const {
+        return MultiHash(m.GetGeneration(), m.GetFingerprint());
+    }
+};
+
+namespace NKikimr::NStorage {
+
     class TDistributedConfigKeeper : public TActorBootstrapped<TDistributedConfigKeeper> {
         using TEvGather = NKikimrBlobStorage::TEvNodeConfigGather;
         using TEvScatter = NKikimrBlobStorage::TEvNodeConfigScatter;
@@ -14,7 +70,7 @@ namespace NKikimr::NStorage {
         struct TEvPrivate {
             enum {
                EvProcessPendingEvent = EventSpaceBegin(TEvents::ES_PRIVATE),
-               EvQuorumCheckTimeout,
+               EvErrorTimeout,
                EvStorageConfigLoaded,
                EvStorageConfigStored,
             };
@@ -70,8 +126,8 @@ namespace NKikimr::NStorage {
         struct TBoundNode {
             ui64 Cookie; // cookie presented in original TEvNodeConfig push message
             TActorId SessionId; // interconnect session for this peer
-            THashSet<ui32> BoundNodeIds; // a set of provided bound nodes by this peer (not including itself)
             THashSet<ui64> ScatterTasks; // unanswered scatter queries
+            THashSet<TNodeIdentifier> BoundNodeIds; // a set of provided bound nodes by this peer (not including itself)
 
             TBoundNode(ui64 cookie, TActorId sessionId)
                 : Cookie(cookie)
@@ -111,6 +167,7 @@ namespace NKikimr::NStorage {
         // most relevant proposed config
         std::optional<NKikimrBlobStorage::TStorageConfig> ProposedStorageConfig;
         std::optional<ui64> ProposedStorageConfigCookie;
+        std::optional<ui64> CommitStorageConfigCookie;
         using TPersistCallback = std::function<void(TEvPrivate::TEvStorageConfigStored&)>;
         struct TPersistQueueItem {
             THPTimer Timer;
@@ -130,14 +187,17 @@ namespace NKikimr::NStorage {
         bool Scheduled = false;
 
         // incoming bindings
+        struct TIndirectBoundNode {
+            std::list<TStorageConfigMeta> Configs; // last one is the latest one
+            THashMap<ui32, std::list<TStorageConfigMeta>::iterator> Refs;
+        };
         THashMap<ui32, TBoundNode> DirectBoundNodes; // a set of nodes directly bound to this one
-        THashMap<ui32, ui32> AllBoundNodes; // counter may be more than 2 in case of races, but not for long
+        THashMap<TNodeIdentifier, TIndirectBoundNode> AllBoundNodes; // a set of all bound nodes in tree, including this one
 
         // pending event queue
         std::deque<TAutoPtr<IEventHandle>> PendingEvents;
         std::vector<ui32> NodeIds;
-        TString SelfHost;
-        ui16 SelfPort = 0;
+        TNodeIdentifier SelfNode;
 
         // scatter tasks
         ui64 NextScatterCookie = RandomNumber<ui64>();
@@ -146,12 +206,12 @@ namespace NKikimr::NStorage {
         // root node operation
         enum class ERootState {
             INITIAL,
-            QUORUM_CHECK_TIMEOUT,
             COLLECT_CONFIG,
             PROPOSE_NEW_STORAGE_CONFIG,
             COMMIT_CONFIG,
+            ERROR_TIMEOUT,
         };
-        static constexpr TDuration QuorumCheckTimeout = TDuration::Seconds(3); // time to wait after obtaining quorum
+        static constexpr TDuration ErrorTimeout = TDuration::Seconds(3);
         ERootState RootState = ERootState::INITIAL;
         NKikimrBlobStorage::TStorageConfig CurrentProposedStorageConfig;
 
@@ -203,6 +263,7 @@ namespace NKikimr::NStorage {
         // Binding to peer nodes
 
         void IssueNextBindRequest();
+        void BindToSession(TActorId sessionId);
         void Handle(TEvInterconnect::TEvNodeConnected::TPtr ev);
         void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr ev);
         void Handle(TEvents::TEvUndelivered::TPtr ev);
@@ -210,13 +271,12 @@ namespace NKikimr::NStorage {
         void AbortBinding(const char *reason, bool sendUnbindMessage = true);
         void HandleWakeup();
         void Handle(TEvNodeConfigReversePush::TPtr ev);
-        bool UpdateConfig(const NKikimrBlobStorage::TStorageConfig& config);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Binding requests from peer nodes
 
-        void AddBound(ui32 nodeId, TEvNodeConfigPush *msg);
-        void DeleteBound(ui32 nodeId, TEvNodeConfigPush *msg);
+        void UpdateBound(ui32 refererNodeId, TNodeIdentifier nodeId, const TStorageConfigMeta& meta, TEvNodeConfigPush *msg);
+        void DeleteBound(ui32 refererNodeId, const TNodeIdentifier& nodeId, TEvNodeConfigPush *msg);
         void Handle(TEvNodeConfigPush::TPtr ev);
         void Handle(TEvNodeConfigUnbind::TPtr ev);
         void UnbindNode(ui32 nodeId, const char *reason);
@@ -226,11 +286,11 @@ namespace NKikimr::NStorage {
         // Root node operation
 
         void CheckRootNodeStatus();
-        void HandleQuorumCheckTimeout();
+        void HandleErrorTimeout();
         void ProcessGather(TEvGather *res);
         bool HasQuorum() const;
         void ProcessCollectConfigs(TEvGather::TCollectConfigs *res);
-        void ProcessProposeStorageConig(TEvGather::TProposeStorageConfig *res);
+        void ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res);
         bool EnrichBlobStorageConfig(NKikimrConfig::TBlobStorageConfig *bsConfig,
             const NKikimrBlobStorage::TStorageConfig& config);
 
@@ -239,6 +299,12 @@ namespace NKikimr::NStorage {
         void PerformScatterTask(TScatterTask& task);
         void Perform(TEvGather::TCollectConfigs *response, const TEvScatter::TCollectConfigs& request, TScatterTask& task);
         void Perform(TEvGather::TProposeStorageConfig *response, const TEvScatter::TProposeStorageConfig& request, TScatterTask& task);
+        void Perform(TEvGather::TCommitStorageConfig *response, const TEvScatter::TCommitStorageConfig& request, TScatterTask& task);
+
+        THashMap<TString, ui32> MakePDiskMap(const NKikimrBlobStorage::TStorageConfig& config);
+
+        bool HasNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config, const THashSet<TNodeIdentifier> *among,
+            const THashSet<TNodeIdentifier>& successful) const;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Scatter/gather logic

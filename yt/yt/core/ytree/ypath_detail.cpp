@@ -44,6 +44,11 @@ void TYPathServiceContextWrapper::SetRequestHeader(std::unique_ptr<NRpc::NProto:
     UnderlyingContext_->SetRequestHeader(std::move(header));
 }
 
+void TYPathServiceContextWrapper::SetReadRequestComplexityLimiter(const TReadRequestComplexityLimiterPtr& limiter)
+{
+    UnderlyingContext_->SetReadRequestComplexityLimiter(limiter);
+}
+
 TReadRequestComplexityLimiterPtr TYPathServiceContextWrapper::GetReadRequestComplexityLimiter()
 {
     return UnderlyingContext_->GetReadRequestComplexityLimiter();
@@ -580,6 +585,34 @@ TFuture<TYsonString> TSupportsAttributes::DoGetAttribute(
    }
 }
 
+namespace {
+
+void OnAttributeRead(auto* context, auto* response, const TErrorOr<TYsonString>& ysonOrError)
+{
+    if (!ysonOrError.IsOK()) {
+        context->Reply(ysonOrError);
+        return;
+    }
+
+    auto yson = ysonOrError.Value().AsStringBuf();
+
+    if (auto limiter = context->GetReadRequestComplexityLimiter()) {
+        limiter->Charge({
+            .NodeCount = 1,
+            .ResultSize = std::ssize(yson),
+        });
+        if (auto error = limiter->CheckOverdraught(); !error.IsOK()) {
+            context->Reply(error);
+            return;
+        }
+    }
+
+    response->set_value(TString(yson));
+    context->Reply();
+}
+
+} // namespace
+
 void TSupportsAttributes::GetAttribute(
     const TYPath& path,
     TReqGet* request,
@@ -593,24 +626,7 @@ void TSupportsAttributes::GetAttribute(
         : TAttributeFilter();
 
     DoGetAttribute(path, attributeFilter).Subscribe(BIND([=] (const TErrorOr<TYsonString>& ysonOrError) {
-        if (!ysonOrError.IsOK()) {
-            context->Reply(ysonOrError);
-            return;
-        }
-
-        {
-            auto resultSize = ysonOrError.Value().AsStringBuf().Size();
-            if (auto limiter = context->GetReadRequestComplexityLimiter()) {
-                limiter->Charge(TReadRequestComplexityUsage({/*nodeCount*/ 1, resultSize}));
-                if (auto error = limiter->CheckOverdraught(); !error.IsOK()) {
-                    context->Reply(error);
-                    return;
-                }
-            }
-        }
-
-        response->set_value(ysonOrError.Value().ToString());
-        context->Reply();
+        OnAttributeRead(context.Get(), response, ysonOrError);
     }));
 }
 
@@ -702,22 +718,7 @@ void TSupportsAttributes::ListAttribute(
     context->SetRequestInfo();
 
     DoListAttribute(path).Subscribe(BIND([=] (const TErrorOr<TYsonString>& ysonOrError) {
-        if (ysonOrError.IsOK()) {
-            {
-                auto resultSize = ysonOrError.Value().AsStringBuf().Size();
-                if (auto limiter = context->GetReadRequestComplexityLimiter()) {
-                    limiter->Charge(TReadRequestComplexityUsage({/*nodeCount*/ 1, resultSize}));
-                    if (auto error = limiter->CheckOverdraught(); !error.IsOK()) {
-                        context->Reply(error);
-                        return;
-                    }
-                }
-            }
-            response->set_value(ysonOrError.Value().ToString());
-            context->Reply();
-        } else {
-            context->Reply(ysonOrError);
-        }
+        OnAttributeRead(context.Get(), response, ysonOrError);
     }));
 }
 
@@ -1652,7 +1653,6 @@ public:
     template <class... TArgs>
     TYPathServiceContext(TArgs&&... args)
         : TServiceContextBase(std::forward<TArgs>(args)...)
-        , ReadComplexityLimiter_(New<TReadRequestComplexityLimiter>())
     { }
 
     void SetRequestHeader(std::unique_ptr<NRpc::NProto::TRequestHeader> header) override
@@ -1662,13 +1662,18 @@ public:
         CachedYPathExt_ = nullptr;
     }
 
+    void SetReadRequestComplexityLimiter(const TReadRequestComplexityLimiterPtr& limiter) final
+    {
+        ReadComplexityLimiter_ = limiter;
+    }
+
     TReadRequestComplexityLimiterPtr GetReadRequestComplexityLimiter() final
     {
         return ReadComplexityLimiter_;
     }
 
 protected:
-    TReadRequestComplexityLimiterPtr ReadComplexityLimiter_;
+    TReadRequestComplexityLimiterPtr ReadComplexityLimiter_ = nullptr;
 
     std::optional<NProfiling::TWallTimer> Timer_;
     const NProto::TYPathHeaderExt* CachedYPathExt_ = nullptr;

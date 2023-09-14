@@ -229,6 +229,8 @@ TFuture<TYsonString> TClientBase::GetNode(
         req->set_max_size(*options.MaxSize);
     }
 
+    ToProto(req->mutable_complexity_limits(), options.ComplexityLimits);
+
     ToProto(req->mutable_transactional_options(), options);
     ToProto(req->mutable_prerequisite_options(), options);
     ToProto(req->mutable_master_read_options(), options);
@@ -264,6 +266,8 @@ TFuture<TYsonString> TClientBase::ListNode(
     if (options.MaxSize) {
         req->set_max_size(*options.MaxSize);
     }
+
+    ToProto(req->mutable_complexity_limits(), options.ComplexityLimits);
 
     ToProto(req->mutable_transactional_options(), options);
     ToProto(req->mutable_prerequisite_options(), options);

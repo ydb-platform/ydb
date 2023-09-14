@@ -30,6 +30,8 @@ struct IYPathServiceContext
     : public virtual NRpc::IServiceContext
 {
     virtual void SetRequestHeader(std::unique_ptr<NRpc::NProto::TRequestHeader> header) = 0;
+
+    virtual void SetReadRequestComplexityLimiter(const TReadRequestComplexityLimiterPtr& limiter) = 0;
     virtual TReadRequestComplexityLimiterPtr GetReadRequestComplexityLimiter() = 0;
 };
 
@@ -45,6 +47,8 @@ public:
     explicit TYPathServiceContextWrapper(IYPathServiceContextPtr underlyingContext);
 
     void SetRequestHeader(std::unique_ptr<NRpc::NProto::TRequestHeader> header) override;
+
+    void SetReadRequestComplexityLimiter(const TReadRequestComplexityLimiterPtr& limiter) override;
     TReadRequestComplexityLimiterPtr GetReadRequestComplexityLimiter() override;
 
     const IYPathServiceContextPtr& GetUnderlyingContext() const;

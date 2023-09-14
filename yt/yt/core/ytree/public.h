@@ -124,6 +124,7 @@ YT_DEFINE_ERROR_ENUM(
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TReadRequestComplexity;
+struct TReadRequestComplexityOverrides;
 
 DECLARE_REFCOUNTED_CLASS(TReadRequestComplexityLimiter)
 

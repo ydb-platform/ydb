@@ -3,10 +3,16 @@
 #include "client_common.h"
 
 #include <yt/yt/core/ytree/attribute_filter.h>
+#include <yt/yt/core/ytree/request_complexity_limits.h>
 
 namespace NYT::NApi {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+struct TReadCypressReqeustOptions
+{
+    NYTree::TReadRequestComplexityOverrides ComplexityLimits;
+};
 
 struct TGetNodeOptions
     : public TTimeoutOptions
@@ -14,6 +20,7 @@ struct TGetNodeOptions
     , public TMasterReadOptions
     , public TSuppressableAccessTrackingOptions
     , public TPrerequisiteOptions
+    , public TReadCypressReqeustOptions
 {
     // NB(eshcherbin): Used in profiling Orchid.
     NYTree::IAttributeDictionaryPtr Options;
@@ -58,6 +65,7 @@ struct TListNodeOptions
     , public TMasterReadOptions
     , public TSuppressableAccessTrackingOptions
     , public TPrerequisiteOptions
+    , public TReadCypressReqeustOptions
 {
     NYTree::TAttributeFilter Attributes;
     std::optional<i64> MaxSize;

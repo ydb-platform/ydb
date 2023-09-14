@@ -1,50 +1,10 @@
 #pragma once
 
+#include "request_complexity_limits.h"
+
 #include <yt/yt/core/yson/async_writer.h>
 
 namespace NYT::NYTree {
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct TReadRequestComplexity
-{
-    std::optional<i64> NodeCount;
-    std::optional<i64> ResultSize;
-
-    TReadRequestComplexity() noexcept = default;
-    TReadRequestComplexity(std::optional<i64> nodeCount, std::optional<i64> resultSize) noexcept;
-    void Sanitize(const TReadRequestComplexity& max) noexcept;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TReadRequestComplexityUsage
-    : private TReadRequestComplexity
-{
-public:
-    friend class TReadRequestComplexityLimits;
-
-    TReadRequestComplexityUsage() noexcept;
-    explicit TReadRequestComplexityUsage(const TReadRequestComplexity& usage) noexcept;
-
-    TReadRequestComplexityUsage& operator+=(const TReadRequestComplexityUsage& that) noexcept;
-
-    const TReadRequestComplexity& AsComplexity() const noexcept;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TReadRequestComplexityLimits
-    : private TReadRequestComplexity
-{
-public:
-    TReadRequestComplexityLimits() noexcept = default;
-
-    // NB: Limits must be non-negative.
-    explicit TReadRequestComplexityLimits(const TReadRequestComplexity& limits) noexcept;
-
-    TError CheckOverdraught(const TReadRequestComplexityUsage& usage) const noexcept;
-};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -53,20 +13,21 @@ class TReadRequestComplexityLimiter
     , public TNonCopyable
 {
 public:
-    TReadRequestComplexityLimiter() noexcept;
+    explicit TReadRequestComplexityLimiter(TReadRequestComplexity limits) noexcept;
 
-    void Reconfigure(const TReadRequestComplexity& limits) noexcept;
-
-    void Charge(const TReadRequestComplexityUsage& usage) noexcept;
+    void Charge(TReadRequestComplexity usage) noexcept;
 
     TError CheckOverdraught() const noexcept;
     void ThrowIfOverdraught() const;
 
-    TReadRequestComplexity GetUsage() const noexcept;
+    struct TReadRequestComplexityUsage
+    {
+        std::atomic<i64> NodeCount;
+    };
+    DEFINE_BYVAL_RO_PROPERTY(TReadRequestComplexity, Usage);
 
 private:
-    TReadRequestComplexityUsage Usage_;
-    TReadRequestComplexityLimits Limits_;
+    const TReadRequestComplexity Limits_;
 };
 
 DEFINE_REFCOUNTED_TYPE(TReadRequestComplexityLimiter)

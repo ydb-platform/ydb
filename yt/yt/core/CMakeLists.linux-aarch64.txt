@@ -286,6 +286,7 @@ target_sources(yt-yt-core PRIVATE
   ${CMAKE_SOURCE_DIR}/yt/yt/core/ytree/node_detail.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/ytree/permission.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/ytree/request_complexity_limiter.cpp
+  ${CMAKE_SOURCE_DIR}/yt/yt/core/ytree/request_complexity_limits.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/ytree/serialize.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/ytree/static_service_dispatcher.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/ytree/system_attribute_provider.cpp

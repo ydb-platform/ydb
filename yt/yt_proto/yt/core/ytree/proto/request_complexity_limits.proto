@@ -1,0 +1,13 @@
+package NYT.NYTree.NProto;
+
+option go_package = "github.com/ydb-platform/ydb/yt/go/proto/core/ytree";
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReadRequestComplexityLimits
+{
+    optional int64 node_count = 1;
+    optional int64 result_size = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////

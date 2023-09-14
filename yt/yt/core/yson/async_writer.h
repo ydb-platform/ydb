@@ -43,7 +43,7 @@ public:
     TFuture<TYsonString> Finish();
     const TAsyncSegments& GetSegments() const;
 
-    ui64 GetTotalWrittenSize() const;
+    i64 GetTotalWrittenSize() const;
 
 private:
     const EYsonType Type_;
@@ -52,7 +52,7 @@ private:
     TBufferedBinaryYsonWriter SyncWriter_;
 
     TAsyncSegments AsyncSegments_;
-    std::shared_ptr<std::atomic<ui64>> FlushedSize_;
+    std::shared_ptr<std::atomic<i64>> FlushedSize_;
 
     void FlushCurrentSegment();
 };

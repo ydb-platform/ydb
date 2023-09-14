@@ -30,6 +30,12 @@ TGetCommand::TGetCommand()
         .Optional();
     RegisterParameter("return_only_value", ShouldReturnOnlyValue)
         .Default(false);
+    RegisterParameter("node_count_limit", Options.ComplexityLimits.NodeCount)
+        .Optional()
+        .GreaterThanOrEqual(0);
+    RegisterParameter("result_size_limit", Options.ComplexityLimits.ResultSize)
+        .Optional()
+        .GreaterThanOrEqual(0);
 }
 
 void TGetCommand::DoExecute(ICommandContextPtr context)
@@ -126,6 +132,12 @@ TListCommand::TListCommand()
         .Optional();
     RegisterParameter("return_only_value", ShouldReturnOnlyValue)
         .Default(false);
+    RegisterParameter("node_count_limit", Options.ComplexityLimits.NodeCount)
+        .Optional()
+        .GreaterThanOrEqual(0);
+    RegisterParameter("result_size_limit", Options.ComplexityLimits.ResultSize)
+        .Optional()
+        .GreaterThanOrEqual(0);
 }
 
 void TListCommand::DoExecute(ICommandContextPtr context)

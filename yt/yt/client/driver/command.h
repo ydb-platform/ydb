@@ -94,7 +94,6 @@ class TTypedCommandBase
 {
 protected:
     TOptions Options;
-
 };
 
 template <class TOptions, class = void>

@@ -6,118 +6,34 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace {
-
-////////////////////////////////////////////////////////////////////////////////
-
-void VerifyNonNegative(const TReadRequestComplexity& complexity) noexcept
-{
-    YT_VERIFY(complexity.NodeCount.value_or(0) >= 0);
-    YT_VERIFY(complexity.ResultSize.value_or(0) >= 0);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-} // namespace
-
-TReadRequestComplexity::TReadRequestComplexity(std::optional<i64> nodeCount, std::optional<i64> resultSize) noexcept
-    : NodeCount(std::move(nodeCount))
-    , ResultSize(std::move(resultSize))
-{
-    VerifyNonNegative(*this);
-}
-
-void TReadRequestComplexity::Sanitize(const TReadRequestComplexity& max) noexcept
-{
-    auto applyMax = [] (std::optional<i64> value, std::optional<i64> maxValue) {
-        return (value.has_value() && maxValue.has_value())
-            ? std::optional(std::min(*value, *maxValue))
-            : value;
-    };
-    NodeCount = applyMax(NodeCount, max.NodeCount);
-    ResultSize = applyMax(ResultSize, max.ResultSize);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-TReadRequestComplexityUsage::TReadRequestComplexityUsage() noexcept
-    : TReadRequestComplexity(0, 0)
+TReadRequestComplexityLimiter::TReadRequestComplexityLimiter(TReadRequestComplexity limits) noexcept
+    : Limits_{limits}
 { }
 
-TReadRequestComplexityUsage::TReadRequestComplexityUsage(const TReadRequestComplexity& usage) noexcept
-    : TReadRequestComplexity(usage)
+void TReadRequestComplexityLimiter::Charge(TReadRequestComplexity usage) noexcept
 {
-    VerifyNonNegative(usage);
-}
-
-TReadRequestComplexityUsage& TReadRequestComplexityUsage::operator+=(const TReadRequestComplexityUsage& that) noexcept
-{
-    auto add = [] (std::optional<i64> target, std::optional<i64> source) {
-        if (source.has_value()) {
-            target = target.value_or(0) + source.value();
-        }
-        return target;
-    };
-
-    NodeCount = add(NodeCount, that.NodeCount);
-    ResultSize = add(ResultSize, that.ResultSize);
-    return *this;
-}
-
-const TReadRequestComplexity& TReadRequestComplexityUsage::AsComplexity() const noexcept
-{
-    return static_cast<const TReadRequestComplexity&>(*this);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-TReadRequestComplexityLimits::TReadRequestComplexityLimits(
-    const TReadRequestComplexity& limits) noexcept
-    : TReadRequestComplexity(limits)
-{
-    VerifyNonNegative(limits);
-}
-
-TError TReadRequestComplexityLimits::CheckOverdraught(
-    const TReadRequestComplexityUsage& usage) const noexcept
-{
-    TError error;
-
-    auto checkField = [&] (TStringBuf fieldName, std::optional<i64> limit, std::optional<i64> usage) {
-        if (limit.has_value() && usage.value_or(0) > *limit) {
-            error.SetCode(NYT::EErrorCode::Generic);
-            error = error << TErrorAttribute(Format("%v_usage", fieldName), *usage);
-            error = error << TErrorAttribute(Format("%v_limit", fieldName), *limit);
-        }
-    };
-
-    checkField("node_count", NodeCount, usage.NodeCount);
-    checkField("result_size", ResultSize, usage.ResultSize);
-
-    if (!error.IsOK()) {
-        error.SetMessage("Read complexity limit exceeded");
-    }
-
-    return error;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-TReadRequestComplexityLimiter::TReadRequestComplexityLimiter() noexcept = default;
-
-void TReadRequestComplexityLimiter::Reconfigure(const TReadRequestComplexity& limits) noexcept
-{
-    Limits_ = TReadRequestComplexityLimits(limits);
-}
-
-void TReadRequestComplexityLimiter::Charge(const TReadRequestComplexityUsage& usage) noexcept
-{
-    Usage_ += usage;
+    Usage_.NodeCount += usage.NodeCount;
+    Usage_.ResultSize += usage.ResultSize;
 }
 
 TError TReadRequestComplexityLimiter::CheckOverdraught() const noexcept
 {
-    return Limits_.CheckOverdraught(Usage_);
+    TError error;
+
+    auto doCheck = [&] (TStringBuf fieldName, i64 limit, i64 usage) {
+        if (limit < usage) {
+            error.SetCode(NYT::EErrorCode::Generic);
+            error = error
+                << TErrorAttribute(Format("%v_usage", fieldName), usage)
+                << TErrorAttribute(Format("%v_limit", fieldName), limit);
+            error.SetMessage("Read request complexity limits exceeded");
+        }
+    };
+
+    doCheck("node_count", Limits_.NodeCount, Usage_.NodeCount);
+    doCheck("result_size", Limits_.ResultSize, Usage_.ResultSize);
+
+    return error;
 }
 
 void TReadRequestComplexityLimiter::ThrowIfOverdraught() const
@@ -125,11 +41,6 @@ void TReadRequestComplexityLimiter::ThrowIfOverdraught() const
     if (auto error = CheckOverdraught(); !error.IsOK()) {
         THROW_ERROR error;
     }
-}
-
-TReadRequestComplexity TReadRequestComplexityLimiter::GetUsage() const noexcept
-{
-    return Usage_.AsComplexity();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -145,16 +56,14 @@ void DoOnSomething(
     void (TAsyncYsonWriter::*onSomething)(Args...),
     Args... values)
 {
+    auto writtenBefore = writer.GetTotalWrittenSize();
+    (writer.*onSomething)(Args(values)...);
     if (auto limiter = weakLimiter.Lock()) {
-        auto writtenBefore = writer.GetTotalWrittenSize();
-        (writer.*onSomething)(values...);
-        if (limiter) {
-            limiter->Charge(TReadRequestComplexityUsage({
-                /*nodeCount*/ CountNodes ? 1 : 0,
-                /*resultSize*/ writer.GetTotalWrittenSize() - writtenBefore,
-            }));
-            limiter->ThrowIfOverdraught();
-        }
+        limiter->Charge({
+            .NodeCount = CountNodes ? 1 : 0,
+            .ResultSize = writer.GetTotalWrittenSize() - writtenBefore,
+        });
+        limiter->ThrowIfOverdraught();
     }
 }
 
@@ -185,47 +94,47 @@ void TLimitedAsyncYsonWriter::OnBooleanScalar(bool value)
 
 void TLimitedAsyncYsonWriter::OnEntity()
 {
-    DoOnSomething<true>(ComplexityLimiter_, UnderlyingWriter_,&TAsyncYsonWriter::OnEntity);
+    DoOnSomething<true>(ComplexityLimiter_, UnderlyingWriter_, &TAsyncYsonWriter::OnEntity);
 }
 
 void TLimitedAsyncYsonWriter::OnBeginList()
 {
-    DoOnSomething<true>(ComplexityLimiter_, UnderlyingWriter_,&TAsyncYsonWriter::OnBeginList);
+    DoOnSomething<true>(ComplexityLimiter_, UnderlyingWriter_, &TAsyncYsonWriter::OnBeginList);
 }
 
 void TLimitedAsyncYsonWriter::OnListItem()
 {
-    DoOnSomething<false>(ComplexityLimiter_, UnderlyingWriter_,&TAsyncYsonWriter::OnListItem);
+    DoOnSomething<false>(ComplexityLimiter_, UnderlyingWriter_, &TAsyncYsonWriter::OnListItem);
 }
 
 void TLimitedAsyncYsonWriter::OnEndList()
 {
-    DoOnSomething<false>(ComplexityLimiter_, UnderlyingWriter_,&TAsyncYsonWriter::OnEndList);
+    DoOnSomething<false>(ComplexityLimiter_, UnderlyingWriter_, &TAsyncYsonWriter::OnEndList);
 }
 
 void TLimitedAsyncYsonWriter::OnBeginMap()
 {
-    DoOnSomething<true>(ComplexityLimiter_, UnderlyingWriter_,&TAsyncYsonWriter::OnBeginMap);
+    DoOnSomething<true>(ComplexityLimiter_, UnderlyingWriter_, &TAsyncYsonWriter::OnBeginMap);
 }
 
 void TLimitedAsyncYsonWriter::OnKeyedItem(TStringBuf value)
 {
-    DoOnSomething<false>(ComplexityLimiter_, UnderlyingWriter_,&TAsyncYsonWriter::OnKeyedItem, value);
+    DoOnSomething<false>(ComplexityLimiter_, UnderlyingWriter_, &TAsyncYsonWriter::OnKeyedItem, value);
 }
 
 void TLimitedAsyncYsonWriter::OnEndMap()
 {
-    DoOnSomething<false>(ComplexityLimiter_, UnderlyingWriter_,&TAsyncYsonWriter::OnEndMap);
+    DoOnSomething<false>(ComplexityLimiter_, UnderlyingWriter_, &TAsyncYsonWriter::OnEndMap);
 }
 
 void TLimitedAsyncYsonWriter::OnBeginAttributes()
 {
-    DoOnSomething<true>(ComplexityLimiter_, UnderlyingWriter_,&TAsyncYsonWriter::OnBeginAttributes);
+    DoOnSomething<true>(ComplexityLimiter_, UnderlyingWriter_, &TAsyncYsonWriter::OnBeginAttributes);
 }
 
 void TLimitedAsyncYsonWriter::OnEndAttributes()
 {
-    DoOnSomething<false>(ComplexityLimiter_, UnderlyingWriter_,&TAsyncYsonWriter::OnEndAttributes);
+    DoOnSomething<false>(ComplexityLimiter_, UnderlyingWriter_, &TAsyncYsonWriter::OnEndAttributes);
 }
 
 void TLimitedAsyncYsonWriter::OnRaw(TStringBuf yson, EYsonType type)
@@ -235,21 +144,22 @@ void TLimitedAsyncYsonWriter::OnRaw(TStringBuf yson, EYsonType type)
 
 void TLimitedAsyncYsonWriter::OnRaw(TFuture<TYsonString> asyncStr)
 {
-    ComplexityLimiter_->ThrowIfOverdraught();
-    asyncStr.Subscribe(BIND(
-        [weakLimiter = TWeakPtr(ComplexityLimiter_)] (const TErrorOr<TYsonString>& str) {
-            if (auto limiter = weakLimiter.Lock()) {
+    if (ComplexityLimiter_) {
+        ComplexityLimiter_->ThrowIfOverdraught();
+        asyncStr.Subscribe(BIND(
+            [weakLimiter = TWeakPtr(ComplexityLimiter_)] (const TErrorOr<TYsonString>& str) {
                 if (str.IsOK()) {
-                    limiter->Charge(TReadRequestComplexityUsage({
-                        /*nodeCount*/ 1,
-                        /*resultSize*/ str.Value().AsStringBuf().size()
-                    }));
+                    if (auto limiter = weakLimiter.Lock()) {
+                        limiter->Charge({
+                            .NodeCount = 0,
+                            .ResultSize = std::ssize(str.Value().AsStringBuf())
+                        });
+                    }
                 }
-            }
-        }));
+            }));
+    }
     UnderlyingWriter_.OnRaw(std::move(asyncStr));
 }
-
 
 TFuture<TYsonString> TLimitedAsyncYsonWriter::Finish()
 {

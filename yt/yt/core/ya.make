@@ -263,6 +263,7 @@ SRCS(
     ytree/node_detail.cpp
     ytree/permission.cpp
     ytree/request_complexity_limiter.cpp
+    ytree/request_complexity_limits.cpp
     ytree/serialize.cpp
     ytree/static_service_dispatcher.cpp
     ytree/system_attribute_provider.cpp

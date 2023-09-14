@@ -20,6 +20,7 @@ SRCS(
     yson/proto/protobuf_interop.proto
 
     ytree/proto/attributes.proto
+    ytree/proto/request_complexity_limits.proto
     ytree/proto/ypath.proto
 )
 

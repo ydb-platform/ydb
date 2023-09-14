@@ -9,6 +9,7 @@ option go_package = "github.com/ydb-platform/ydb/yt/go/proto/client/api/rpc_prox
 import "yt_proto/yt/core/misc/proto/guid.proto";
 import "yt_proto/yt/core/misc/proto/error.proto";
 import "yt_proto/yt/core/ytree/proto/attributes.proto";
+import "yt_proto/yt/core/ytree/proto/request_complexity_limits.proto";
 import "yt_proto/yt/client/hive/proto/timestamp_map.proto";
 import "yt_proto/yt/client/chunk_client/proto/data_statistics.proto";
 import "yt_proto/yt/client/chaos_client/proto/replication_card.proto";
@@ -1152,6 +1153,7 @@ message TReqGetNode
     optional NYT.NYTree.NProto.TAttributeFilter attributes = 4;
 
     optional int64 max_size = 3;
+    optional NYT.NYTree.NProto.TReadRequestComplexityLimits complexity_limits = 6;
 
     optional TTransactionalOptions transactional_options = 100;
     optional TPrerequisiteOptions prerequisite_options = 101;
@@ -1179,6 +1181,7 @@ message TReqListNode
     optional NYT.NYTree.NProto.TAttributeFilter attributes = 4;
 
     optional int64 max_size = 3;
+    optional NYT.NYTree.NProto.TReadRequestComplexityLimits complexity_limits = 6;
 
     optional TTransactionalOptions transactional_options = 100;
     optional TPrerequisiteOptions prerequisite_options = 101;

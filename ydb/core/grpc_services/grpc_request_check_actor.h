@@ -124,7 +124,7 @@ public:
         }
 
         if (AppData(ctx)->FeatureFlags.GetEnableGrpcAudit()) {
-            AuditLog(GrpcRequestBaseCtx_, CheckedDatabaseName_, GetSubject(), ctx);
+            AuditLog(GrpcRequestBaseCtx_, CheckedDatabaseName_, TBase::GetUserSID());
         }
 
         // Simple rps limitation
@@ -235,11 +235,6 @@ public:
     }
 
 private:
-    TString GetSubject() const {
-        const auto sid = TBase::GetUserSID();
-        return sid ? sid : "no subject";
-    }
-
     static NYql::TIssues GetRlIssues(const Ydb::RateLimiter::AcquireResourceResponse& resp) {
         NYql::TIssues opIssues;
         NYql::IssuesFromMessage(resp.operation().issues(), opIssues);

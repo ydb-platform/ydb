@@ -87,6 +87,7 @@ PEERDIR(
     library/cpp/cgiparam
     library/cpp/digest/old_crc
     ydb/core/actorlib_impl
+    ydb/core/audit
     ydb/core/base
     ydb/core/control
     ydb/core/discovery

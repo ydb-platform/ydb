@@ -25,6 +25,7 @@ target_link_libraries(ydb-core-grpc_services PUBLIC
   library-cpp-cgiparam
   cpp-digest-old_crc
   ydb-core-actorlib_impl
+  ydb-core-audit
   ydb-core-base
   ydb-core-control
   ydb-core-discovery

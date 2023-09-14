@@ -1,4 +1,5 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/persqueue/writer/source_id_encoding.h>
 
 #include <contrib/libs/protobuf/src/google/protobuf/text_format.h>
 
@@ -509,6 +510,147 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
                 state = DescribePrivatePath(runtime, "/MyRoot/Table/Stream")
                     .GetPathDescription().GetCdcStreamDescription().GetState();
             } while (state != NKikimrSchemeOp::ECdcStreamStateReady);
+        });
+    }
+
+    struct TItem {
+        TString Path;
+        ui32 nPartitions;
+    };
+
+    void CheckRegistrations(TTestActorRuntime& runtime, const TItem& table, const TItem& topic) {
+        auto tableDesc = DescribePath(runtime, table.Path, true, true);
+        const auto& tablePartitions = tableDesc.GetPathDescription().GetTablePartitions();
+        UNIT_ASSERT_VALUES_EQUAL(tablePartitions.size(), table.nPartitions);
+
+        auto topicDesc = DescribePrivatePath(runtime, topic.Path);
+        const auto& topicPartitions = topicDesc.GetPathDescription().GetPersQueueGroup().GetPartitions();
+        UNIT_ASSERT_VALUES_EQUAL(topicPartitions.size(), topic.nPartitions);
+
+        while (true) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            bool done = true;
+
+            for (ui32 i = 0; i < topic.nPartitions; ++i) {
+                auto request = MakeHolder<TEvPersQueue::TEvRequest>();
+                {
+                    auto& record = *request->Record.MutablePartitionRequest();
+                    record.SetPartition(topicPartitions[i].GetPartitionId());
+                    auto& cmd = *record.MutableCmdGetMaxSeqNo();
+                    for (const auto& tablePartition : tablePartitions) {
+                        cmd.AddSourceId(NPQ::NSourceIdEncoding::EncodeSimple(ToString(tablePartition.GetDatashardId())));
+                    }
+                }
+
+                const auto& sender = runtime.AllocateEdgeActor();
+                ForwardToTablet(runtime, topicPartitions[i].GetTabletId(), sender, request.Release());
+
+                auto response = runtime.GrabEdgeEvent<TEvPersQueue::TEvResponse>(sender);
+                {
+                    const auto& record = response->Get()->Record.GetPartitionResponse();
+                    const auto& result = record.GetCmdGetMaxSeqNoResult().GetSourceIdInfo();
+
+                    UNIT_ASSERT_VALUES_EQUAL(result.size(), table.nPartitions);
+                    for (const auto& item: result) {
+                        done &= item.GetState() == NKikimrPQ::TMessageGroupInfo::STATE_REGISTERED;
+                        if (!done) {
+                            break;
+                        }
+                    }
+                }
+
+                if (!done) {
+                    break;
+                }
+            }
+
+            if (done) {
+                break;
+            }
+        }
+    }
+
+    Y_UNIT_TEST(SplitTable) {
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Uint64" }
+                    Columns { Name: "value" Type: "Uint64" }
+                    KeyColumnNames: ["key"]
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", R"(
+                    TableName: "Table"
+                    StreamDescription {
+                      Name: "Stream"
+                      Mode: ECdcStreamModeKeysOnly
+                      Format: ECdcStreamFormatProto
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            TestSplitTable(runtime, ++t.TxId, "/MyRoot/Table", Sprintf(R"(
+                SourceTabletId: %lu
+                SplitBoundary {
+                    KeyPrefix {
+                        Tuple { Optional { Uint64: 2 } }
+                    }
+                }
+            )", TTestTxConfig::FakeHiveTablets));
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                CheckRegistrations(runtime, {"/MyRoot/Table", 2}, {"/MyRoot/Table/Stream/streamImpl", 1});
+            }
+        });
+    }
+
+    Y_UNIT_TEST(MergeTable) {
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Uint64" }
+                    Columns { Name: "value" Type: "Uint64" }
+                    KeyColumnNames: ["key"]
+                    UniformPartitionsCount: 2
+                    PartitionConfig {
+                      PartitioningPolicy {
+                        MinPartitionsCount: 1
+                      }
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCreateCdcStream(runtime, ++t.TxId, "/MyRoot", R"(
+                    TableName: "Table"
+                    StreamDescription {
+                      Name: "Stream"
+                      Mode: ECdcStreamModeKeysOnly
+                      Format: ECdcStreamFormatProto
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            TestSplitTable(runtime, ++t.TxId, "/MyRoot/Table", Sprintf(R"(
+                SourceTabletId: %lu
+                SourceTabletId: %lu
+            )", TTestTxConfig::FakeHiveTablets + 0, TTestTxConfig::FakeHiveTablets + 1));
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                CheckRegistrations(runtime, {"/MyRoot/Table", 1}, {"/MyRoot/Table/Stream/streamImpl", 2});
+            }
         });
     }
 

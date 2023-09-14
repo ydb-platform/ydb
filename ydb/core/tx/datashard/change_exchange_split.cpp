@@ -19,17 +19,33 @@ namespace NKikimr {
 namespace NDataShard {
 
 class TCdcPartitionWorker: public TActorBootstrapped<TCdcPartitionWorker> {
+    TStringBuf GetLogPrefix() const {
+        if (!LogPrefix) {
+            LogPrefix = TStringBuilder()
+                << "[ChangeExchangeSplitCdcPartitionWorker]"
+                << "[" << SrcTabletId << "]"
+                << "[" << PartitionId << "]"
+                << SelfId() /* contains brackets */ << " ";
+        }
+
+        return LogPrefix.GetRef();
+    }
+
     void Ack() {
+        LOG_I("Send ack");
         Send(Parent, new TEvChangeExchange::TEvSplitAck());
         PassAway();
     }
 
     void Leave() {
+        LOG_I("Leave");
         Send(Parent, new TEvents::TEvGone());
         PassAway();
     }
 
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+
         const auto& response = ev->Get()->Record;
 
         switch (response.GetStatus()) {
@@ -52,12 +68,14 @@ class TCdcPartitionWorker: public TActorBootstrapped<TCdcPartitionWorker> {
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         if (ev->Get()->TabletId == TabletId && ev->Get()->Status != NKikimrProto::OK) {
+            LOG_W("Pipe connection error");
             Leave();
         }
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
         if (ev->Get()->TabletId == TabletId) {
+            LOG_W("Pipe disconnected");
             Leave();
         }
     }
@@ -131,6 +149,7 @@ private:
     const ui64 TabletId;
     const ui64 SrcTabletId;
     const TVector<ui64> DstTabletIds;
+    mutable TMaybe<TString> LogPrefix;
 
     TActorId PipeClient;
 
@@ -375,12 +394,7 @@ class TCdcWorker: public TActorBootstrapped<TCdcWorker>, private TSchemeCacheHel
     }
 
     STATEFN(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvChangeExchange::TEvSplitAck, Handle);
-            hFunc(TEvents::TEvGone, Handle);
-        default:
-            return StateBase(ev);
-        }
+        return StateBase(ev);
     }
 
     void Handle(TEvChangeExchange::TEvSplitAck::TPtr& ev) {
@@ -400,7 +414,7 @@ class TCdcWorker: public TActorBootstrapped<TCdcWorker>, private TSchemeCacheHel
         Workers[it->second] = TActorId();
         Pending.erase(it);
 
-        if (Pending.empty()) {
+        if (!IsResolving() && Pending.empty()) {
             Ack();
         }
     }
@@ -457,6 +471,8 @@ public:
 
     STATEFN(StateBase) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(TEvChangeExchange::TEvSplitAck, Handle);
+            hFunc(TEvents::TEvGone, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }

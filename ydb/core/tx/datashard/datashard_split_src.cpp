@@ -416,6 +416,7 @@ public:
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " Sending snapshots from src for split OpId " << Self->SrcSplitOpId);
         Self->SplitSrcSnapshotSender.DoSend(ctx);
         if (ChangeExchangeSplit) {
+            Self->KillChangeSender(ctx);
             Self->ChangeExchangeSplitter.DoSplit(ctx);
         }
     }

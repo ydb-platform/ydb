@@ -149,7 +149,7 @@ namespace NFwd {
                     if (!Tags.at(page.Tag) || page.Size >= Edge.at(page.Tag) || !Filter.Has(rel.Row)) {
                         /* Page doesn't fits to load criteria   */
                     } else if (page.Fetch == EFetch::None) {
-                        auto size = head->AddToQueue(Grow, ui16(EPage::Opaque));
+                        auto size = head->AddToQueue(Grow, EPage::Opaque);
 
                         Y_VERIFY(size == page.Size, "Inconsistent page sizez");
 

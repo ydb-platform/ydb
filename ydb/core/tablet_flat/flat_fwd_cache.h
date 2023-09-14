@@ -120,7 +120,7 @@ namespace NFwd {
             };
 
             while (auto more = Index.More(until())) {
-                auto size = head->AddToQueue(more, ui16(EPage::DataPage));
+                auto size = head->AddToQueue(more, EPage::DataPage);
 
                 Stat.Fetch += size;
                 OnFetch += size;

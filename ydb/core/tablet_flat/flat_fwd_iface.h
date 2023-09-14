@@ -1,10 +1,13 @@
 #pragma once
 
+#include "flat_page_iface.h"
 #include "flat_sausage_fetch.h"
 #include "flat_fwd_misc.h"
 
 namespace NKikimr {
 namespace NTable {
+    using EPage = NPage::EPage;
+
 namespace NFwd {
 
     struct TPage;
@@ -13,7 +16,7 @@ namespace NFwd {
     public:
         virtual ~IPageLoadingQueue() = default;
 
-        virtual ui64 AddToQueue(ui32 page, ui16 type) noexcept = 0;
+        virtual ui64 AddToQueue(ui32 page, EPage type) noexcept = 0;
     };
 
     class IPageLoadingLogic {

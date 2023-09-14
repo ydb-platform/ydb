@@ -40,7 +40,7 @@ namespace NFwd {
             return PageLoadingLogic.Get();
         }
 
-        ui64 AddToQueue(TPageId pageId, ui16 type) noexcept override
+        ui64 AddToQueue(TPageId pageId, EPage type) noexcept override
         {
             if (!Fetch) {
                 Fetch.Reset(new TFetch(Cookie, PageCollection, { }));
@@ -49,7 +49,7 @@ namespace NFwd {
 
             const auto meta = PageCollection->Page(pageId);
 
-            if (meta.Type != type || meta.Size == 0)
+            if (meta.Type != ui16(type) || meta.Size == 0)
                 Y_FAIL("Got a non-data page while part index traverse");
 
             Fetch->Pages.emplace_back(pageId);
@@ -75,9 +75,11 @@ namespace NFwd {
             TIntrusiveConstPtr<IPageCollection> PageCollection;
         };
 
-    public:
-        using TData = const TSharedData*;
+        struct TSimpleEnv {
+            TMap<TPageId, NPageCollection::TLoadedPage> Pages;
+        };
 
+    public:
         TEnv(const TConf &conf, const TSubset &subset)
             : Salt(RandomNumber<ui32>())
             , Conf(conf)
@@ -106,10 +108,16 @@ namespace NFwd {
             return Pending == 0;
         }
 
-        TData TryGetPage(const TPart* part, TPageId ref, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart* part, TPageId ref, TGroupId groupId) override
         {
             ui16 room = (groupId.Historic ? part->Groups + 2 : 0) + groupId.Index;
-            return Handle(GetQueue(part, room), ref).Page;
+            TSlot slot = GetQueueSlot(part, room);
+
+            if (part->IndexPages.Has(groupId, ref)) {
+                return TryGetIndexPage(slot, ref);
+            }
+                
+            return Handle(Queues.at(slot), ref).Page;
         }
 
         TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) noexcept override
@@ -150,7 +158,18 @@ namespace NFwd {
                     "Page fwd cache got more pages than was requested");
 
             Pending -= pages.size();
-            Queues.at(part)->Apply(pages);
+
+            TVector<NPageCollection::TLoadedPage> queuePages(Reserve(pages.size()));
+            for (auto& page : pages) {
+                const auto &meta = pageCollection->Page(page.PageId);
+                if (NTable::EPage(meta.Type) == EPage::Index) {
+                    IndexPages.at(part).Pages[page.PageId] = page;
+                } else {
+                    queuePages.push_back(page);
+                }
+            }
+
+            Queues.at(part)->Apply(queuePages);
         }
 
         IPages* Reset() noexcept
@@ -168,6 +187,7 @@ namespace NFwd {
             Total = Stats();
             Parts.clear();
             Queues.clear();
+            IndexPages.clear();
             ColdParts.clear();
 
             for (auto &one : Subset.Flatten)
@@ -239,6 +259,23 @@ namespace NFwd {
         }
 
     private:
+        const TSharedData* TryGetIndexPage(TSlot slot, TPageId pageId) noexcept
+        {
+            // TODO: count index pages in Stats later
+
+            auto &env = IndexPages.at(slot);
+            auto pageIt = env.Pages.find(pageId);
+
+            if (pageIt != env.Pages.end()) {
+                return &pageIt->second.Data;
+            } else {
+                auto &queue = Queues.at(slot);
+                queue.AddToQueue(pageId, EPage::Index);
+                Queue.PushBack(&queue);
+                return nullptr;
+            }            
+        }
+
         TResult Handle(TPageLoadingQueue &q, TPageId ref) noexcept
         {
             auto got = q->Handle(&q, ref, Conf.AheadLo);
@@ -277,7 +314,7 @@ namespace NFwd {
                 "Cannot handle multiple parts on the same page collection");
         }
 
-        TPageLoadingQueue& GetQueue(const TPart *part, ui16 room) noexcept
+        TSlot GetQueueSlot(const TPart *part, ui16 room) noexcept
         {
             auto it = Parts.find(part);
             Y_VERIFY(it != Parts.end(),
@@ -289,7 +326,12 @@ namespace NFwd {
             Y_VERIFY(Queues.at(it->second[0]).PageCollection->Label() == part->Label,
                 "Cannot handle multiple parts on the same page collection");
 
-            return Queues.at(it->second[room]);
+            return it->second[room];
+        }
+
+        TPageLoadingQueue& GetQueue(const TPart *part, ui16 room) noexcept
+        {
+            return Queues.at(GetQueueSlot(part, room));
         }
 
         TSlot Settle(TEgg egg, ui32 slot) noexcept
@@ -298,6 +340,7 @@ namespace NFwd {
                 const ui64 cookie = (ui64(Queues.size()) << 32) | ui32(Salt + Epoch);
 
                 Queues.emplace_back(slot, cookie, std::move(egg.PageCollection), egg.PageLoadingLogic);
+                IndexPages.emplace_back();
 
                 return Queues.size() - 1;
             } else {
@@ -373,6 +416,7 @@ namespace NFwd {
         const TVector<ui32> Keys; /* Tags to expand ELargeObj references */
 
         TDeque<TPageLoadingQueue> Queues;
+        TDeque<TSimpleEnv> IndexPages;
         THashMap<const TPart*, TSlotVec> Parts;
         THashSet<const TPart*> ColdParts;
         // Wrapper for memable blobs

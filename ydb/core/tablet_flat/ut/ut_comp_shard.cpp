@@ -33,36 +33,41 @@ namespace {
 
     /**
      * A special kind of TTestEnv that will fail loading every page until
-     * Lock() call, and then would only pass previously requested pages
+     * Load() call, and then would only pass previously requested pages
      */
     class TStrictEnv : public TTestEnv {
     public:
         const TSharedData *TryGetPage(const TPart *part, TPageId ref, TGroupId groupId) override {
             ui64 token = ref | (ui64(groupId.Raw()) << 32);
-            if (Locked) {
-                if (auto* info = Parts.FindPtr(part)) {
-                    if (info->Seen.contains(token)) {
-                        return TTestEnv::TryGetPage(part, ref, groupId);
-                    }
-                }
-            } else {
-                Parts[part].Seen.insert(token);
+            auto& info = Parts[part];
+            
+            info.Touched.insert(token);
+
+            if (part->IndexPages.Has(groupId, ref)) {
+                // TODO: delete after index precharge
+                return NTest::TTestEnv::TryGetPage(part, ref, groupId);
+            }
+
+            if (info.Loaded.contains(token)) {
+                return TTestEnv::TryGetPage(part, ref, groupId);
             }
 
             return nullptr;
         }
 
-        void Lock() {
-            Locked = true;
+        void Load() {
+            for (auto &p: Parts) {
+                p.second.Loaded = std::move(p.second.Touched);
+            }
         }
 
     private:
         struct TPartInfo {
-            THashSet<ui64> Seen;
+            THashSet<ui64> Touched;
+            THashSet<ui64> Loaded;
         };
 
     private:
-        bool Locked = false;
         THashMap<const TPart*, TPartInfo> Parts;
     };
 
@@ -284,7 +289,7 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
                             bool ok1 = op.Execute(&env);
                             UNIT_ASSERT_VALUES_EQUAL(ok1, false);
 
-                            env.Lock();
+                            env.Load();
                             bool ok2 = op.Execute(&env);
                             UNIT_ASSERT_VALUES_EQUAL(ok2, true);
 
@@ -368,7 +373,7 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
         bool ok1 = op.Execute(&env);
         UNIT_ASSERT_VALUES_EQUAL(ok1, false);
 
-        env.Lock();
+        env.Load();
         bool ok2 = op.Execute(&env);
         UNIT_ASSERT_VALUES_EQUAL(ok2, true);
 
@@ -434,7 +439,7 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
         bool ok1 = op.Execute(&env);
         UNIT_ASSERT_VALUES_EQUAL(ok1, false);
 
-        env.Lock();
+        env.Load();
         bool ok2 = op.Execute(&env);
         UNIT_ASSERT_VALUES_EQUAL(ok2, true);
 
@@ -1236,7 +1241,7 @@ Y_UNIT_TEST_SUITE(TShardedCompactionScenarios) {
             TStrictEnv env;
             auto first = backend.RunRead(&env);
             UNIT_ASSERT(!first.Completed);
-            env.Lock();
+            env.Load();
             auto second = backend.RunRead(first.ReadId, &env);
             UNIT_ASSERT(second.Completed);
         }

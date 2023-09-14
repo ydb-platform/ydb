@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ydb/core/tablet_flat/flat_table_part.h"
 #include <ydb/core/tablet_flat/flat_page_label.h>
 #include <ydb/core/tablet_flat/flat_part_iface.h>
 #include <ydb/core/tablet_flat/flat_sausage_misc.h>
@@ -23,6 +24,8 @@ namespace NTest {
 
         struct TEggs {
             bool Rooted;
+            TVector<TPageId> IndexGroupsPages;
+            TVector<TPageId> IndexHistoricPages;
             TData *Index;
             TData *Scheme;
             TData *Blobs;
@@ -111,6 +114,8 @@ namespace NTest {
 
             return {
                 Rooted,
+                { Indexes.back() }, 
+                { },
                 GetPage(MainPageCollection, Indexes.back()),
                 GetPage(MainPageCollection, Scheme),
                 GetPage(MainPageCollection, Globs),

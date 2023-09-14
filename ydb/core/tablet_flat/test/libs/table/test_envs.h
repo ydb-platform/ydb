@@ -61,6 +61,11 @@ namespace NTest {
             {
                 return Token == seen.Token && Ref == seen.Ref;
             }
+            
+            bool operator<(const TSeen &seen) const noexcept
+            {
+                return Token < seen.Token || Token == seen.Token && Ref < seen.Ref;
+            }
 
             const void *Token = nullptr;
             ui64 Ref = Max<ui64>();
@@ -89,7 +94,7 @@ namespace NTest {
 
         TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) noexcept override
         {
-            if (ShouldPass((const void*)part->Large.Get(), ref)) {
+            if (ShouldPass((const void*)part->Large.Get(), ref, false)) {
                 return TTestEnv::Locate(part, ref, lob);
             } else {
                 return { true, nullptr };
@@ -98,29 +103,45 @@ namespace NTest {
 
         const TSharedData* TryGetPage(const TPart* part, TPageId ref, TGroupId groupId) override
         {
-            auto pass = ShouldPass((const void*)part, ref | (ui64(groupId.Raw()) << 32));
+            auto pass = ShouldPass((const void*)part, ref | (ui64(groupId.Raw()) << 32), part->IndexPages.Has(groupId, ref));
 
             return pass ? TTestEnv::TryGetPage(part, ref, groupId) : nullptr;
         }
 
-        bool ShouldPass(const void *token, ui64 id)
+        bool ShouldPass(const void *token, ui64 id, bool isIndex)
         {
-            const auto pass = IsRecent({ token, id }) || AmILucky();
+            const TSeen seen(token, id);
+            const auto pass = IsRecent(seen, isIndex) || AmILucky();
 
             Touches++, Success += pass ? 1 : 0;
 
             if (!pass) {
-                Offset = (Offset + 1) % Trace.size();
-
-                Trace[Offset] = { token, id };
+                if (isIndex) {
+                    // allow to pass on index page next ttl times
+                    IndexTraceTtl[seen] = Rnd.Uniform(5, 10);
+                } else {
+                    Offset = (Offset + 1) % Trace.size();
+                    Trace[Offset] = seen;
+                }
             }
 
             return pass;
         }
 
-        bool IsRecent(TSeen seen) const noexcept
+        bool IsRecent(TSeen seen, bool isIndex) noexcept
         {
-            return std::find(Trace.begin(), Trace.end(), seen) != Trace.end();
+            if (isIndex) {
+                auto it = IndexTraceTtl.find(seen);
+                if (it == IndexTraceTtl.end()) {
+                    return false;
+                }
+                if (it->second-- <= 1) {
+                    IndexTraceTtl.erase(it);
+                }
+                return true;
+            } else {
+                return std::find(Trace.begin(), Trace.end(), seen) != Trace.end();
+            }
         }
 
         bool AmILucky() noexcept
@@ -133,6 +154,7 @@ namespace NTest {
         ui64 Touches = 0;
         ui64 Success = 0;
         TVector<TSeen> Trace;
+        TMap<TSeen, ui64> IndexTraceTtl;
         ui32 Offset = Max<ui32>();
     };
 
@@ -170,7 +192,7 @@ namespace NTest {
             }
 
         private:
-            ui64 AddToQueue(TPageId pageId, ui16 /* type */) noexcept override
+            ui64 AddToQueue(TPageId pageId, EPage) noexcept override
             {
                 Fetch.push_back(pageId);
 
@@ -233,8 +255,12 @@ namespace NTest {
 
             Y_VERIFY(groupId.Index < partStore->Store->GetGroupCount());
 
-            ui32 room = (groupId.Historic ? partStore->Store->GetRoomCount() : 0) + groupId.Index;
-            return Get(part, room).DoLoad(pageId, AheadLo, AheadHi).Page;
+            if (part->IndexPages.Has(groupId, pageId)) {
+                return partStore->Store->GetPage(groupId.Index, pageId);
+            } else {
+                ui32 room = (groupId.Historic ? partStore->Store->GetRoomCount() : 0) + groupId.Index;
+                return Get(part, room).DoLoad(pageId, AheadLo, AheadHi).Page;
+            }
         }
 
     private:

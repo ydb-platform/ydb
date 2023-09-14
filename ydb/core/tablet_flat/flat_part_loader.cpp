@@ -188,11 +188,18 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
     // Use epoch from metadata unless it has been provided to loader externally
     TEpoch epoch = Epoch != TEpoch::Max() ? Epoch : TEpoch(Root.GetEpoch());
 
+    TVector<TPageId> groupIndexesIds(Reserve(GroupIndexesIds.size() + 1));
+    groupIndexesIds.push_back(IndexId);
+    for (auto pageId : GroupIndexesIds) {
+        groupIndexesIds.push_back(pageId);
+    }
+
     auto *partStore = new TPartStore(
         Packs.front()->PageCollection->Label(),
         {
             epoch,
             TPartScheme::Parse(*scheme, Rooted),
+            { groupIndexesIds, HistoricIndexesIds },
             *index,
             blobs ? new NPage::TExtBlobs(*blobs, extra) : nullptr,
             byKey ? new NPage::TBloom(*byKey) : nullptr,

@@ -34,7 +34,7 @@ namespace {
         {
         }
 
-        ui64 AddToQueue(ui32 page, ui16) noexcept override
+        ui64 AddToQueue(ui32 page, EPage) noexcept override
         {
             Pages.push_back(page);
 

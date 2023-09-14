@@ -80,6 +80,7 @@ namespace NTest {
                     {
                         epoch,
                         TPartScheme::Parse(*eggs.Scheme, eggs.Rooted),
+                        { eggs.IndexGroupsPages, eggs.IndexHistoricPages },
                         *eggs.Index,
                         eggs.Blobs ? new TExtBlobs(*eggs.Blobs, { }) : nullptr,
                         eggs.ByKey ? new TBloom(*eggs.ByKey) : nullptr,
@@ -109,18 +110,27 @@ namespace NTest {
         {
             const auto undef = Max<NPage::TPageId>();
 
+            TVector<TPageId> indexGroupsPages, indexHistoricPages;
+            if (lay.HasIndex()) {
+                indexGroupsPages.push_back(lay.GetIndex());
+            }
+
             TVector<TSharedData> groupIndexes;
             for (ui32 pageId : lay.GetGroupIndexes()) {
+                indexGroupsPages.push_back(pageId);
                 groupIndexes.emplace_back(*Store->GetPage(0, pageId));
             }
 
             TVector<TSharedData> historicIndexes;
             for (ui32 pageId : lay.GetHistoricIndexes()) {
+                indexHistoricPages.push_back(pageId);
                 historicIndexes.emplace_back(*Store->GetPage(0, pageId));
             }
 
             return {
                 true /* rooted page collection */,
+                indexGroupsPages, 
+                indexHistoricPages,
                 Store->GetPage(0, lay.HasIndex() ? lay.GetIndex() : undef),
                 Store->GetPage(0, lay.HasScheme() ? lay.GetScheme() : undef),
                 Store->GetPage(0, lay.HasGlobs() ? lay.GetGlobs() : undef),

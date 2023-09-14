@@ -46,9 +46,39 @@ namespace NTable {
             Trace = 2, /* how many last data pages to keep while seq scans */
         };
 
+        class TIndexPages {
+        public:
+            using TPageId = NPage::TPageId;
+            using TGroupId = NPage::TGroupId;
+
+            TIndexPages(TVector<TPageId> groups, TVector<TPageId> historic)
+                : Groups(std::move(groups))
+                , Historic(std::move(historic))
+                , All(Groups.size() + Historic.size())
+            {
+                for (auto p : Groups) {
+                    All.insert(p);
+                }
+                for (auto p : Historic) {
+                    All.insert(p);
+                }
+            }
+
+            const TVector<TPageId> Groups;
+            const TVector<TPageId> Historic;
+
+            bool Has(NPage::TGroupId groupId, TPageId pageId) const {
+                return groupId.IsMain() && All.contains(pageId);
+            }
+
+        private:
+            THashSet<TPageId> All;
+        };
+
         struct TParams {
             TEpoch Epoch;
             TIntrusiveConstPtr<TPartScheme> Scheme;
+            TIndexPages IndexPages;
             TSharedData Index;
             TIntrusiveConstPtr<NPage::TExtBlobs> Blobs;
             TIntrusiveConstPtr<NPage::TBloom> ByKey;
@@ -78,6 +108,7 @@ namespace NTable {
             , Blobs(std::move(params.Blobs))
             , Large(std::move(params.Large))
             , Small(std::move(params.Small))
+            , IndexPages(std::move(params.IndexPages))
             , Index(std::move(params.Index))
             , GroupIndexes(
                 std::make_move_iterator(params.GroupIndexes.begin()),
@@ -154,6 +185,7 @@ namespace NTable {
             , Blobs(src.Blobs)
             , Large(src.Large)
             , Small(src.Small)
+            , IndexPages(src.IndexPages)
             , Index(src.Index)
             , GroupIndexes(src.GroupIndexes)
             , HistoricIndexes(src.HistoricIndexes)
@@ -182,6 +214,7 @@ namespace NTable {
         const TIntrusiveConstPtr<NPage::TExtBlobs> Blobs;
         const TIntrusiveConstPtr<NPage::TFrames> Large;
         const TIntrusiveConstPtr<NPage::TFrames> Small;
+        const TIndexPages IndexPages;
         const NPage::TIndex Index;
         const TVector<NPage::TIndex> GroupIndexes;
         const TVector<NPage::TIndex> HistoricIndexes;

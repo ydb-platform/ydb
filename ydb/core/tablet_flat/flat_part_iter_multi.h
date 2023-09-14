@@ -17,13 +17,15 @@ namespace NTable {
      */
     class TPartGroupRowIt {
     public:
-        TPartGroupRowIt(const TPart* part, NPage::TGroupId groupId)
-            : GroupId(groupId)
-            , Index(part, groupId)
+        TPartGroupRowIt(const TPart* part, IPages* env, NPage::TGroupId groupId)
+            : Part(part)
+            , Env(env) 
+            , GroupId(groupId)
+            , Index(part, env, groupId)
         {
         }
 
-        EReady Seek(TRowId rowId, const TPart* part, IPages* env) noexcept {
+        EReady Seek(TRowId rowId) noexcept {
             // Fast path, check if we already have the needed data page
             if (Data) {
                 TRowId minRowId = Page.BaseRow();
@@ -49,7 +51,7 @@ namespace NTable {
             }
 
             // Make sure we have the correct data page loaded
-            if (!LoadPage(Index.GetPageId(), Index.GetRowId(), part, env)) {
+            if (!LoadPage(Index.GetPageId(), Index.GetRowId())) {
                 return EReady::Page;
             }
             Y_VERIFY_DEBUG(Page.BaseRow() <= rowId, "Index and row have an unexpected relation");
@@ -73,11 +75,11 @@ namespace NTable {
         }
 
     protected:
-        bool LoadPage(TPageId pageId, TRowId baseRow, const TPart* part, IPages* env) noexcept
+        bool LoadPage(TPageId pageId, TRowId baseRow) noexcept
         {
             if (PageId != pageId) {
                 Data = { };
-                if (!Page.Set(env->TryGetPage(part, pageId, GroupId))) {
+                if (!Page.Set(Env->TryGetPage(Part, pageId, GroupId))) {
                     PageId = Max<TPageId>();
                     return false;
                 }
@@ -88,10 +90,13 @@ namespace NTable {
         }
 
     protected:
+        const TPart* const Part;
+        IPages* const Env;
         const NPage::TGroupId GroupId;
+
         TPageId PageId = Max<TPageId>();
 
-        TPartIndexIt Index; 
+        TPartIndexIt Index;
         NPage::TDataPage Page;
         NPage::TDataPage::TIter Data;
     };
@@ -105,8 +110,8 @@ namespace NTable {
     public:
         using TCells = NPage::TCells;
 
-        TPartGroupKeyIt(const TPart* part, NPage::TGroupId groupId)
-            : TPartGroupRowIt(part, groupId)
+        TPartGroupKeyIt(const TPart* part, IPages* env, NPage::TGroupId groupId)
+            : TPartGroupRowIt(part, env, groupId)
         {
             ClearBounds();
         }
@@ -129,7 +134,6 @@ namespace NTable {
 
         EReady Seek(
                 const TCells key, ESeek seek,
-                const TPart* part, IPages* env,
                 const TPartScheme::TGroupInfo& scheme, const TKeyCellDefaults* keyDefaults) noexcept
         {
             Y_VERIFY_DEBUG(seek == ESeek::Exact || seek == ESeek::Lower || seek == ESeek::Upper,
@@ -158,7 +162,7 @@ namespace NTable {
                 }
             }
 
-            if (!LoadPage(Index.GetPageId(), Index.GetRowId(), part, env)) {
+            if (!LoadPage(Index.GetPageId(), Index.GetRowId())) {
                 // Exact RowId unknown, don't allow Next until another Seek
                 return Terminate(EReady::Page);
             }
@@ -199,7 +203,7 @@ namespace NTable {
                     RowId, BeginRowId);
 
                 if (RowId < EndRowId) {
-                    return Next(part, env);
+                    return Next();
                 }
             }
 
@@ -208,7 +212,6 @@ namespace NTable {
 
         EReady SeekReverse(
                 const TCells key, ESeek seek,
-                const TPart* part, IPages* env,
                 const TPartScheme::TGroupInfo& scheme, const TKeyCellDefaults* keyDefaults) noexcept
         {
             Y_VERIFY_DEBUG(seek == ESeek::Exact || seek == ESeek::Lower || seek == ESeek::Upper,
@@ -233,7 +236,7 @@ namespace NTable {
                 }
             }
 
-            if (!LoadPage(Index.GetPageId(), Index.GetRowId(), part, env)) {
+            if (!LoadPage(Index.GetPageId(), Index.GetRowId())) {
                 // Exact RowId unknown, don't allow Next until another Seek
                 return Terminate(EReady::Page);
             }
@@ -269,14 +272,14 @@ namespace NTable {
                     "Unexpected prev page RowId=%lu (EndRowId=%lu)",
                     RowId, EndRowId);
                 if (RowId >= BeginRowId) {
-                    return Prev(part, env);
+                    return Prev();
                 }
             }
 
             return Exhausted();
         }
 
-        EReady Seek(TRowId rowId, const TPart* part, IPages* env) noexcept
+        EReady Seek(TRowId rowId) noexcept
         {
             if (Y_UNLIKELY(rowId < BeginRowId || rowId >= EndRowId)) {
                 return Exhausted();
@@ -289,15 +292,15 @@ namespace NTable {
             RowId = rowId;
             Data = { };
 
-            return Next(part, env);
+            return Next();
         }
 
-        EReady SeekToStart(const TPart* part, IPages* env) noexcept
+        EReady SeekToStart() noexcept
         {
-            return Seek(BeginRowId, part, env);
+            return Seek(BeginRowId);
         }
 
-        EReady SeekReverse(TRowId rowId, const TPart* part, IPages* env) noexcept
+        EReady SeekReverse(TRowId rowId) noexcept
         {
             if (Y_UNLIKELY(rowId < BeginRowId || rowId >= EndRowId)) {
                 return Exhausted();
@@ -310,15 +313,15 @@ namespace NTable {
             RowId = rowId;
             Data = { };
 
-            return Prev(part, env);
+            return Prev();
         }
 
-        EReady SeekToEnd(const TPart* part, IPages* env) noexcept
+        EReady SeekToEnd() noexcept
         {
-            return SeekReverse(EndRowId - 1, part, env);
+            return SeekReverse(EndRowId - 1);
         }
 
-        EReady Next(const TPart* part, IPages* env) noexcept
+        EReady Next() noexcept
         {
             if (Y_UNLIKELY(RowId == Max<TRowId>())) {
                 return EReady::Gone;
@@ -345,7 +348,7 @@ namespace NTable {
             Y_VERIFY_DEBUG(Index.IsValid() && Index.GetRowId() <= RowId,
                 "Next called without a valid index record");
 
-            if (!LoadPage(Index.GetPageId(), Index.GetRowId(), part, env)) {
+            if (!LoadPage(Index.GetPageId(), Index.GetRowId())) {
                 return EReady::Page;
             }
 
@@ -357,7 +360,7 @@ namespace NTable {
             return Exhausted();
         }
 
-        EReady Prev(const TPart* part, IPages* env) noexcept
+        EReady Prev() noexcept
         {
             if (Y_UNLIKELY(RowId == Max<TRowId>())) {
                 return EReady::Gone;
@@ -386,7 +389,7 @@ namespace NTable {
             Y_VERIFY_DEBUG(Index.IsValid() && Index.GetRowId() <= RowId,
                 "Prev called without a valid index record");
 
-            if (!LoadPage(Index.GetPageId(), Index.GetRowId(), part, env)) {
+            if (!LoadPage(Index.GetPageId(), Index.GetRowId())) {
                 return EReady::Page;
             }
 
@@ -443,13 +446,12 @@ namespace NTable {
     public:
         using TCells = NPage::TCells;
 
-        explicit TPartGroupHistoryIt(const TPart* part)
-            : TPartGroupRowIt(part, NPage::TGroupId(0, /* historic */ true))
+        explicit TPartGroupHistoryIt(const TPart* part, IPages* env)
+            : TPartGroupRowIt(part, env, NPage::TGroupId(0, /* historic */ true))
         { }
 
         EReady Seek(
-            TRowId rowId, const TRowVersion& rowVersion,
-            const TPart* part, IPages* env) noexcept
+            TRowId rowId, const TRowVersion& rowVersion) noexcept
         {
             Y_VERIFY_DEBUG(rowId != Max<TRowId>());
 
@@ -466,12 +468,12 @@ namespace NTable {
             TCells key{ keyCells, 3 };
 
             // Directly use the history group scheme
-            const auto& scheme = part->Scheme->HistoryGroup;
+            const auto& scheme = Part->Scheme->HistoryGroup;
             Y_VERIFY_DEBUG(scheme.ColsKeyIdx.size() == 3);
             Y_VERIFY_DEBUG(scheme.ColsKeyData.size() == 3);
 
             // Directly use the histroy key keyDefaults with correct sort order
-            const TKeyCellDefaults* keyDefaults = part->Scheme->HistoryKeys.Get();
+            const TKeyCellDefaults* keyDefaults = Part->Scheme->HistoryKeys.Get();
 
             // Helper for loading row id and row version from the index
             auto checkIndex = [&]() -> bool {
@@ -570,7 +572,7 @@ namespace NTable {
                 Y_VERIFY_DEBUG(Index.IsValid());
                 Y_VERIFY_DEBUG(!Data);
 
-                if (!LoadPage(Index.GetPageId(), Index.GetRowId(), part, env)) {
+                if (!LoadPage(Index.GetPageId(), Index.GetRowId())) {
                     return EReady::Page;
                 }
 
@@ -593,7 +595,7 @@ namespace NTable {
                 return Exhausted();
             }
 
-            if (!LoadPage(Index.GetPageId(), Index.GetRowId(), part, env)) {
+            if (!LoadPage(Index.GetPageId(), Index.GetRowId())) {
                 // It's ok to repeat binary search on the next iteration,
                 // since page faults take a long time and optimizing it
                 // wouldn't be worth it.
@@ -632,7 +634,7 @@ namespace NTable {
             // an index search the first row must be the one we want.
             Y_VERIFY(RowVersion <= rowVersion, "Index binary search bug");
 
-            if (!LoadPage(Index.GetPageId(), Index.GetRowId(), part, env)) {
+            if (!LoadPage(Index.GetPageId(), Index.GetRowId())) {
                 // We don't want to repeat binary search on the next
                 // iteration, as we already know the row is not on a
                 // previous page, but index search would point to it
@@ -701,7 +703,7 @@ namespace NTable {
             , Env(env)
             , Pinout(Part->Scheme->MakePinout(tags))
             , KeyCellDefaults(std::move(keyDefaults))
-            , Main(Part, TGroupId(0))
+            , Main(Part, Env, TGroupId(0))
             , SkipMainDeltas(0)
             , SkipMainVersion(false)
             , SkipEraseVersion(false)
@@ -712,7 +714,7 @@ namespace NTable {
             for (size_t idx : xrange(Pinout.AltGroups().size())) {
                 ui32 group = Pinout.AltGroups()[idx];
                 TGroupId groupId(group);
-                Groups.emplace_back(Part, groupId);
+                Groups.emplace_back(Part, Env, groupId);
                 GroupRemap[group] = idx;
             }
 
@@ -743,49 +745,49 @@ namespace NTable {
         EReady Seek(const TCells key, ESeek seek) noexcept
         {
             ClearKey();
-            return Main.Seek(key, seek, Part, Env, Part->Scheme->Groups[0], &*KeyCellDefaults);
+            return Main.Seek(key, seek, Part->Scheme->Groups[0], &*KeyCellDefaults);
         }
 
         EReady SeekReverse(const TCells key, ESeek seek) noexcept
         {
             ClearKey();
-            return Main.SeekReverse(key, seek, Part, Env, Part->Scheme->Groups[0], &*KeyCellDefaults);
+            return Main.SeekReverse(key, seek, Part->Scheme->Groups[0], &*KeyCellDefaults);
         }
 
         EReady Seek(TRowId rowId) noexcept
         {
             ClearKey();
-            return Main.Seek(rowId, Part, Env);
+            return Main.Seek(rowId);
         }
 
         EReady SeekToStart() noexcept
         {
             ClearKey();
-            return Main.SeekToStart(Part, Env);
+            return Main.SeekToStart();
         }
 
         EReady SeekReverse(TRowId rowId) noexcept
         {
             ClearKey();
-            return Main.SeekReverse(rowId, Part, Env);
+            return Main.SeekReverse(rowId);
         }
 
         EReady SeekToEnd() noexcept
         {
             ClearKey();
-            return Main.SeekToEnd(Part, Env);
+            return Main.SeekToEnd();
         }
 
         EReady Next() noexcept
         {
             ClearKey();
-            return Main.Next(Part, Env);
+            return Main.Next();
         }
 
         EReady Prev() noexcept
         {
             ClearKey();
-            return Main.Prev(Part, Env);
+            return Main.Prev();
         }
 
         Y_FORCE_INLINE bool IsValid() const noexcept
@@ -940,7 +942,7 @@ namespace NTable {
 
                 if (!HistoryState) {
                     // Initialize history state once per iterator
-                    HistoryState.ConstructInPlace(Part, Pinout);
+                    HistoryState.ConstructInPlace(Part, Env, Pinout);
                 }
 
                 trustHistory = false;
@@ -969,7 +971,7 @@ namespace NTable {
                 SkipEraseVersion = false;
 
                 // Find the first row that is as old as rowVersion
-                ready = HistoryState->History.Seek(Main.GetRowId(), rowVersion, Part, Env);
+                ready = HistoryState->History.Seek(Main.GetRowId(), rowVersion);
             }
 
             switch (ready) {
@@ -1200,7 +1202,7 @@ namespace NTable {
                 auto& g = SkipMainVersion ? HistoryState->Groups.at(altIdx) : Groups.at(altIdx);
                 TRowId altRowId = SkipMainVersion ? HistoryState->History.GetHistoryRowId() : Main.GetRowId();
 
-                switch (g.Seek(altRowId, Part, Env)) {
+                switch (g.Seek(altRowId)) {
                     case EReady::Data:
                         data = g.GetRecord()->GetAltRecord(altIndex);
                         break;
@@ -1287,15 +1289,15 @@ namespace NTable {
             TPartGroupHistoryIt History;
             mutable TSmallVec<TPartGroupRowIt> Groups;
 
-            THistoryState(const TPart* part, const TPinout& pinout)
-                : History(part)
+            THistoryState(const TPart* part, IPages* env, const TPinout& pinout)
+                : History(part, env)
             {
                 Groups.reserve(pinout.AltGroups().size());
 
                 for (size_t idx : xrange(pinout.AltGroups().size())) {
                     ui32 group = pinout.AltGroups()[idx];
                     TGroupId groupId(group, /* historic */ true);
-                    Groups.emplace_back(part, groupId);
+                    Groups.emplace_back(part, env, groupId);
                 }
             }
         };
@@ -1521,7 +1523,14 @@ namespace NTable {
 
             UpdateCurrent();
 
-            return SeekToStart();
+            ready = SeekToStart();
+            if (ready == EReady::Page) {
+                // we haven't seeked start, will do it again later  
+                Current--;
+                UpdateCurrent();
+            }
+
+            return ready;
         }
 
         EReady Prev() noexcept
@@ -1546,7 +1555,14 @@ namespace NTable {
             --Current;
             UpdateCurrent();
 
-            return SeekToEnd();
+            ready = SeekToEnd();
+            if (ready == EReady::Page) {
+                // we haven't seeked end, will do it again later  
+                Current++;
+                UpdateCurrent();
+            }
+
+            return ready;
         }
 
         bool IsValid() const noexcept

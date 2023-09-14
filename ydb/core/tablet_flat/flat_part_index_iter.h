@@ -15,8 +15,9 @@ public:
     using TIter = NPage::TIndex::TIter;
     using TGroupId = NPage::TGroupId;
 
-    TPartIndexIt(const TPart* part, TGroupId groupId)
+    TPartIndexIt(const TPart* part, IPages* env, TGroupId groupId)
         : Part(part)
+        , Env(env)
         , GroupId(groupId)
         , EndRowId(part->GetGroupIndex(groupId).GetEndRowId())
     { }
@@ -112,13 +113,18 @@ private:
         if (Index) {
             return &*Index;
         }
-        // TODO: get index from Env
-        Index = Part->GetGroupIndex(GroupId);
-        return &*Index;
+        auto pageId = GroupId.IsHistoric() ? Part->IndexPages.Historic[GroupId.Index] : Part->IndexPages.Groups[GroupId.Index];
+        auto page = Env->TryGetPage(Part, pageId);
+        if (page) {
+            Index = TIndex(*page);
+            return &*Index;
+        }
+        return { };
     }
 
 private:
     const TPart* const Part;
+    IPages* const Env;
     const TGroupId GroupId;
     std::optional<TIndex> Index;
     TIter Iter;

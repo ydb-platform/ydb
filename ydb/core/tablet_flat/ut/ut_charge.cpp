@@ -50,6 +50,11 @@ namespace {
 
         const TSharedData* TryGetPage(const TPart *part, TPageId id, TGroupId groupId) override
         {
+            if (part->IndexPages.Has(groupId, id)) {
+                // TODO: delete after index precharge
+                return NTest::TTestEnv::TryGetPage(part, id, groupId);
+            }
+            
             Touched[groupId].insert(id);
             return Fail ? nullptr : NTest::TTestEnv::TryGetPage(part, id, groupId);
         }

@@ -1,5 +1,6 @@
 #include "format.h"
 
+#include "arrow_writer.h"
 #include "dsv_parser.h"
 #include "dsv_writer.h"
 #include "protobuf_parser.h"
@@ -308,6 +309,14 @@ ISchemalessFormatWriterPtr CreateStaticTableWriterForFormat(
         case EFormatType::Skiff:
             return CreateWriterForSkiff(
                 format.Attributes(),
+                nameTable,
+                tableSchemas,
+                std::move(output),
+                enableContextSaving,
+                controlAttributesConfig,
+                keyColumnCount);
+        case EFormatType::Arrow:
+            return CreateWriterForArrow(
                 nameTable,
                 tableSchemas,
                 std::move(output),

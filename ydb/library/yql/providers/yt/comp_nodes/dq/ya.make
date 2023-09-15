@@ -15,6 +15,7 @@ IF(LINUX)
     PEERDIR(
         yt/yt/client
         yt/yt/client/arrow
+        ydb/library/yql/providers/yt/lib/yt_rpc_helpers
     )
 
     SRCS(

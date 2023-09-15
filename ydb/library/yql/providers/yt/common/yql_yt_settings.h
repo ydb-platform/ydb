@@ -63,6 +63,13 @@ enum class ECostBasedOptimizer {
     PG,
 };
 
+enum class EInferSchemaMode {
+    Sequential = 0ULL  /* "sequential" */,
+    Parallel   = 1ULL  /* "parallel" */,
+    RPC        = 2ULL  /* "rpc" */,
+};
+
+
 struct TYtSettings {
     using TConstPtr = std::shared_ptr<const TYtSettings>;
 
@@ -98,6 +105,7 @@ struct TYtSettings {
     NCommon::TConfSetting<bool, false> _UseMultisetAttributes;
     NCommon::TConfSetting<TDuration, false> FileCacheTtl;
     NCommon::TConfSetting<TString, false> _ImpersonationUser;
+    NCommon::TConfSetting<EInferSchemaMode, false> InferSchemaMode;
 
     // Job runtime
     NCommon::TConfSetting<TString, true> Pool;

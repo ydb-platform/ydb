@@ -425,6 +425,7 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, NetworkProject);
     REGISTER_SETTING(*this, FileCacheTtl);
     REGISTER_SETTING(*this, _ImpersonationUser);
+    REGISTER_SETTING(*this, InferSchemaMode).Parser([](const TString& v) { return FromString<EInferSchemaMode>(v); });
     REGISTER_SETTING(*this, JoinCommonUseMapMultiOut);
     REGISTER_SETTING(*this, _EnableYtPartitioning);
     REGISTER_SETTING(*this, UseAggPhases);
@@ -450,7 +451,7 @@ TYtConfiguration::TYtConfiguration()
             }
             return res;
         });
-    REGISTER_SETTING(*this, CostBasedOptimizer).Parser([](const TString& v) { return FromString<ECostBasedOptimizer>(v); });;
+    REGISTER_SETTING(*this, CostBasedOptimizer).Parser([](const TString& v) { return FromString<ECostBasedOptimizer>(v); });
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

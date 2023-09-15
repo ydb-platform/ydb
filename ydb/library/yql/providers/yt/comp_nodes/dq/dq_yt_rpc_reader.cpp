@@ -1,5 +1,4 @@
 #include "dq_yt_rpc_reader.h"
-#include "yt_convert_helpers.h"
 
 #include "yt/cpp/mapreduce/common/helpers.h"
 
@@ -11,6 +10,8 @@
 #include <yt/yt/client/api/rpc_proxy/config.h>
 #include <yt/yt/client/api/rpc_proxy/connection.h>
 #include <yt/yt/client/api/rpc_proxy/row_stream.h>
+
+#include <ydb/library/yql/providers/yt/lib/yt_rpc_helpers/yt_convert_helpers.h>
 
 namespace NYql::NDqs {
 

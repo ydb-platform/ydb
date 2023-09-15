@@ -16,5 +16,6 @@ RECURSE(
     url_mapper
     yson_helpers
     yt_download
+    yt_rpc_helpers
     yt_url_lister
 )

@@ -16,6 +16,7 @@
 #include <ydb/library/yql/providers/yt/lib/res_pull/table_limiter.h>
 #include <ydb/library/yql/providers/yt/lib/yson_helpers/yson_helpers.h>
 #include <ydb/library/yql/providers/yt/lib/infer_schema/infer_schema.h>
+#include <ydb/library/yql/providers/yt/lib/infer_schema/infer_schema_rpc.h>
 #include <ydb/library/yql/providers/yt/lib/schema/schema.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
 #include <ydb/library/yql/providers/yt/common/yql_configuration.h>
@@ -2415,12 +2416,10 @@ private:
                     metaInfo->Attrs.erase(YqlRowSpecAttribute);
                     if (isDynamic) {
                         schemaAttrs = GetSchemaFromAttributes(attrs, false, tables[idx.first].IgnoreWeakSchema());
-                    }
-                    else {
+                    } else if (!statInfo->IsEmpty()) {
                         idxsToInferFromContent.push_back(idx);
                     }
-                }
-                else {
+                } else {
                     if (attrs.HasKey(QB2Premapper)) {
                         metaInfo->Attrs[QB2Premapper] = NYT::NodeToYsonString(attrs[QB2Premapper], NYT::NYson::EYsonFormat::Text);
                         metaInfo->Attrs[TString{YqlRowSpecAttribute}.append("_qb2")] = NYT::NodeToYsonString(
@@ -2429,8 +2428,7 @@ private:
 
                     if (schemaValid) {
                         schemaAttrs = GetSchemaFromAttributes(attrs, false, tables[idx.first].IgnoreWeakSchema());
-                    }
-                    else if (!attrs.HasKey(YqlRowSpecAttribute) && !isDynamic && tables[idx.first].InferSchemaRows() > 0) {
+                    } else if (!attrs.HasKey(YqlRowSpecAttribute) && !isDynamic && tables[idx.first].InferSchemaRows() > 0 && !statInfo->IsEmpty()) {
                         idxsToInferFromContent.push_back(idx);
                     }
                 }
@@ -2489,10 +2487,41 @@ private:
 
         TVector<TMaybeSchema> result;
         if (idxs.size() <= jobThreshold) {
+            result.reserve(idxs.size());
+            auto mode = execCtx->Options_.Config()->InferSchemaMode.Get().GetOrElse(EInferSchemaMode::Sequential);
+            if (EInferSchemaMode::Sequential == mode) {
+                for (auto& idx : idxs) {
+                    YQL_ENSURE(tables[idx.first].InferSchemaRows() > 0);
+                    result.push_back(InferSchemaFromTableContents(tx, idx.second, tables[idx.first].Table(), tables[idx.first].InferSchemaRows()));
+                }
+                return result;
+            }
+            if (EInferSchemaMode::RPC == mode) {
+#ifdef __linux__
+                std::vector<TTableInferSchemaRequest> requests;
+                requests.reserve(idxs.size());
+                for (auto& idx : idxs) {
+                    YQL_ENSURE(tables[idx.first].InferSchemaRows() > 0);
+                    requests.push_back({idx.second, tables[idx.first].Table(), tables[idx.first].InferSchemaRows()});
+                }
+                return InferSchemaFromTablesContents(execCtx->Cluster_, execCtx->GetAuth(), tx->GetId(), requests);
+#else
+                ythrow yexception() << "Unimplemented RPC reader on non-linux platforms";
+#endif
+            }
+            result.resize(idxs.size());
+            std::vector<NThreading::TFuture<void>> futures;
+            futures.reserve(idxs.size());
+            size_t i = 0;
             for (auto& idx : idxs) {
                 YQL_ENSURE(tables[idx.first].InferSchemaRows() > 0);
-                result.push_back(InferSchemaFromTableContents(tx, idx.second, tables[idx.first].Table(), tables[idx.first].InferSchemaRows()));
+                futures.push_back(execCtx->Session_->Queue_->Async([i, idx, &result, &tables, &tx](){
+                        YQL_CLOG(INFO, ProviderYt) << "Infering schema for table '" << tables[idx.first].Table() << "'";
+                        result[i] = InferSchemaFromTableContents(tx, idx.second, tables[idx.first].Table(), tables[idx.first].InferSchemaRows());
+                    }));
+                ++i;
             }
+            (NThreading::WaitAll(futures)).Wait();
             return result;
         }
 

@@ -230,9 +230,11 @@ TQueryInfoList TKvWorkloadGenerator::WriteRows(TString operation, TVector<TRow>&
         }
     }
 
-    ss << ") VALUES (";
+    ss << ") VALUES ";
 
     for (size_t row = 0; row < Params.RowsCnt; ++row) {
+        ss << "(";
+
         for (size_t col = 0; col < Params.ColumnsCnt; ++col) {
             ss << "$c" << row << "_" << col;
             if (col + 1 < Params.ColumnsCnt) {

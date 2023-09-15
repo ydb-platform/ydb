@@ -136,6 +136,8 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TDataTransac
     PartitionRepliesExpected = 0;
 
     ReadSetCount = 0;
+
+    Coordinators.assign(txBody.GetCoordinators().begin(), txBody.GetCoordinators().end());
 }
 
 void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TConfigTransaction& txBody)

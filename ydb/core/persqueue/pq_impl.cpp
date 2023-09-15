@@ -2850,7 +2850,11 @@ void TPersQueue::ScheduleProposeTransactionResult(const TDistributedTransaction&
     event->Record.SetMinStep(tx.MinStep);
     event->Record.SetMaxStep(tx.MaxStep);
 
-    if (ProcessingParams) {
+    // If you have sent a list of preferred coordinators, then we will use them.
+    // Otherwise, we take the list of coordinators from the domain description
+    if (tx.Coordinators) {
+        event->Record.MutableDomainCoordinators()->Add(tx.Coordinators.begin(), tx.Coordinators.end());
+    } else if (ProcessingParams) {
         event->Record.MutableDomainCoordinators()->CopyFrom(ProcessingParams->GetCoordinators());
     }
 

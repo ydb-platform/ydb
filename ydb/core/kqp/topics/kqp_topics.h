@@ -61,12 +61,15 @@ public:
     bool HasReadOperations() const;
     bool HasWriteOperations() const;
 
+    void SetCoordinators(const TVector<ui64>& coordinators);
+
 private:
     TMaybe<TString> Topic_;
     TMaybe<ui32> Partition_;
     THashMap<TString, TConsumerOperations> Operations_;
     bool HasWriteOperations_ = false;
     TMaybe<ui64> TabletId_;
+    std::unordered_set<ui64> Coordinators_;
 };
 
 struct TTopicPartition {

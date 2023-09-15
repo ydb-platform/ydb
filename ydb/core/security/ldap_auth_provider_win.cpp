@@ -142,5 +142,19 @@ char* GetDn(LDAP* ld, LDAPMessage* entry) {
     return ldap_get_dn(ld, entry);
 }
 
+int SetOption(LDAP*, const EOption&, const void*) {
+    // stub
+    return LDAP_SUCCESS;
 }
 
+int StartTLS(LDAP* ld) {
+    // Do not use tls on Windows
+    return LDAP_SERVER_DOWN;
+}
+
+int ConvertRequireCert(const NKikimrProto::TLdapAuthentication::TUseTls::TCertRequire&) {
+    // stub
+    return LDAP_SUCCESS;
+}
+
+}

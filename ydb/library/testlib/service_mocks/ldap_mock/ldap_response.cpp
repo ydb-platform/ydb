@@ -17,13 +17,13 @@ TLdapResponse::TLdapResponse(int msgId, const std::vector<TLdapRequestProcessor:
     EncodeLdapMsg(msgId, protocolResults);
 }
 
-bool TLdapResponse::Send(TAtomicSharedPtr<TStreamSocket> socket) {
+bool TLdapResponse::Send(TAtomicSharedPtr<TLdapSocketWrapper> socket) {
     if (DataResponses.empty()) {
         return false;
     }
     try {
         for (const auto& data : DataResponses) {
-            TBaseSocket::Check(socket->Send(data.data(), data.size()), "send");
+            socket->Send(data.data(), data.size());
         }
     } catch (TSystemError e) {
         return false;
@@ -32,8 +32,14 @@ bool TLdapResponse::Send(TAtomicSharedPtr<TStreamSocket> socket) {
 }
 
 void TLdapResponse::EncodeLdapMsg(int msgId, const std::vector<TLdapRequestProcessor::TProtocolOpData>& protocolResults) {
-    if (protocolResults.size() == 1 && protocolResults.front().Type == EProtocolOp::UNBIND_OP_REQUEST) {
-        return;
+    if (protocolResults.size() == 1) {
+        const auto& result = protocolResults.front();
+        if (result.Type == EProtocolOp::UNBIND_OP_REQUEST) {
+            return;
+        }
+        if (result.Type == EProtocolOp::EXTENDED_OP_RESPONSE) {
+            NeedEnableTls = true;
+        }
     }
     for (const auto& result : protocolResults) {
         TString sequenceBody = EncodeInt(msgId);
@@ -43,6 +49,10 @@ void TLdapResponse::EncodeLdapMsg(int msgId, const std::vector<TLdapRequestProce
 
         DataResponses.push_back(EncodeSequence(sequenceBody));
     }
+}
+
+bool TLdapResponse::EnableTls() {
+    return NeedEnableTls;
 }
 
 }

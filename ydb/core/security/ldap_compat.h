@@ -15,6 +15,14 @@ enum class EScope : int {
     SUBTREE,
 };
 
+enum class EOption {
+    DEBUG,
+    TLS_CACERTFILE,
+    TLS_CACERTDIR,
+    TLS_REQUIRE_CERT,
+    PROTOCOL_VERSION,
+};
+
 int Bind(LDAP* ld, const TString& dn, const TString& password);
 int Unbind(LDAP* ld);
 LDAP* Init(const TString& host, ui32 port);
@@ -35,10 +43,13 @@ void MsgFree(LDAPMessage* lm);
 int CountEntries(LDAP *ld, LDAPMessage *chain);
 std::vector<TString> GetAllValuesOfAttribute(LDAP* ld, LDAPMessage* entry, char* target);
 int SetProtocolVersion(LDAP* ld);
+int SetOption(LDAP* ld, const EOption& option, const void* value);
 ui32 GetPort();
 int GetScope(const EScope& scope);
 bool IsSuccess(int result);
 NKikimr::TEvLdapAuthProvider::EStatus ErrorToStatus(int err);
 bool IsRetryableError(int error);
 char* GetDn(LDAP* ld, LDAPMessage* entry);
+int StartTLS(LDAP* ld);
+int ConvertRequireCert(const NKikimrProto::TLdapAuthentication::TUseTls::TCertRequire& requireCertOption);
 }

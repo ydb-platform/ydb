@@ -5,6 +5,8 @@
 
 namespace LdapMock {
 
+constexpr const char* LDAP_EXOP_START_TLS = "1.3.6.1.4.1.1466.20037";
+
 enum EStatus {
     SUCCESS = 0x00,
     PROTOCOL_ERROR = 0x02,
@@ -18,7 +20,9 @@ enum EProtocolOp {
     BIND_OP_RESPONSE = 0x61,
     SEARCH_OP_REQUEST = 0x63,
     SEARCH_OP_ENTRY_RESPONSE = 0x64,
-    SEARCH_OP_DONE_RESPONSE = 0x65
+    SEARCH_OP_DONE_RESPONSE = 0x65,
+    EXTENDED_OP_REQUEST = 0x77,
+    EXTENDED_OP_RESPONSE = 0x78,
 };
 
 enum EFilterType {

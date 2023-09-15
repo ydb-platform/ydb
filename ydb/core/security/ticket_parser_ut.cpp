@@ -9,6 +9,7 @@
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
 #include <ydb/library/testlib/service_mocks/ldap_mock/ldap_simple_server.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
+#include <util/system/tempfile.h>
 
 #include "ldap_auth_provider.h"
 #include "ticket_parser.h"
@@ -16,41 +17,71 @@
 namespace NKikimr {
 
 using TAccessServiceMock = TTicketParserAccessServiceMock;
+namespace {
 
-void InitLdapSettings(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort) {
+TString certificateContent = R"___(-----BEGIN CERTIFICATE-----
+MIIDjTCCAnWgAwIBAgIURt5IBx0J3xgEaQvmyrFH2A+NkpMwDQYJKoZIhvcNAQEL
+BQAwVjELMAkGA1UEBhMCUlUxDzANBgNVBAgMBk1vc2NvdzEPMA0GA1UEBwwGTW9z
+Y293MQ8wDQYDVQQKDAZZYW5kZXgxFDASBgNVBAMMC3Rlc3Qtc2VydmVyMB4XDTE5
+MDkyMDE3MTQ0MVoXDTQ3MDIwNDE3MTQ0MVowVjELMAkGA1UEBhMCUlUxDzANBgNV
+BAgMBk1vc2NvdzEPMA0GA1UEBwwGTW9zY293MQ8wDQYDVQQKDAZZYW5kZXgxFDAS
+BgNVBAMMC3Rlc3Qtc2VydmVyMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKC
+AQEAs0WY6HTuwKntcEcjo+pBuoNp5/GRgMX2qOJi09Iw021ZLK4Vf4drN7pXS5Ba
+OVqzUPFmXvoiG13hS7PLTuobJc63qPbIodiB6EXB+Sp0v+mE6lYUUyW9YxNnTPDc
+GG8E4vk9j3tBawT4yJIFTudIALWJfQvn3O9ebmYkilvq0ZT+TqBU8Mazo4lNu0T2
+YxWMlivcEyNRLPbka5W2Wy5eXGOnStidQFYka2mmCgljtulWzj1i7GODg93vmVyH
+NzjAs+mG9MJkT3ietG225BnyPDtu5A3b+vTAFhyJtMmDMyhJ6JtXXHu6zUDQxKiX
+6HLGCLIPhL2sk9ckPSkwXoMOywIDAQABo1MwUTAdBgNVHQ4EFgQUDv/xuJ4CvCgG
+fPrZP3hRAt2+/LwwHwYDVR0jBBgwFoAUDv/xuJ4CvCgGfPrZP3hRAt2+/LwwDwYD
+VR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEAinKpMYaA2tjLpAnPVbjy
+/ZxSBhhB26RiQp3Re8XOKyhTWqgYE6kldYT0aXgK9x9mPC5obQannDDYxDc7lX+/
+qP/u1X81ZcDRo/f+qQ3iHfT6Ftt/4O3qLnt45MFM6Q7WabRm82x3KjZTqpF3QUdy
+tumWiuAP5DMd1IRDtnKjFHO721OsEsf6NLcqdX89bGeqXDvrkwg3/PNwTyW5E7cj
+feY8L2eWtg6AJUnIBu11wvfzkLiH3QKzHvO/SIZTGf5ihDsJ3aKEE9UNauTL3bVc
+CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
+6g==
+-----END CERTIFICATE-----)___";
+
+void InitLdapSettings(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, TTempFileHandle& certificateFile) {
     ldapSettings->SetHost("localhost");
     ldapSettings->SetPort(ldapPort);
     ldapSettings->SetBaseDn("dc=search,dc=yandex,dc=net");
     ldapSettings->SetBindDn("cn=robouser,dc=search,dc=yandex,dc=net");
     ldapSettings->SetBindPassword("robouserPassword");
     ldapSettings->SetSearchFilter("uid=$username");
+
+    auto useTls = ldapSettings->MutableUseTls();
+    useTls->SetEnable(true);
+    certificateFile.Write(certificateContent.data(), certificateContent.size());
+    useTls->SetCaCertFile(certificateFile.Name());
+    useTls->SetCertRequire(NKikimrProto::TLdapAuthentication::TUseTls::ALLOW); // Enable TLS connection if server certificate is untrusted
 }
 
-void InitLdapSettingsWithInvalidRobotUserLogin(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort) {
-    InitLdapSettings(ldapSettings, ldapPort);
+void InitLdapSettingsWithInvalidRobotUserLogin(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, TTempFileHandle& certificateFile) {
+    InitLdapSettings(ldapSettings, ldapPort, certificateFile);
     ldapSettings->SetBindDn("cn=invalidRobouser,dc=search,dc=yandex,dc=net");
 }
 
-void InitLdapSettingsWithInvalidRobotUserPassword(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort) {
-    InitLdapSettings(ldapSettings, ldapPort);
+void InitLdapSettingsWithInvalidRobotUserPassword(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, TTempFileHandle& certificateFile) {
+    InitLdapSettings(ldapSettings, ldapPort, certificateFile);
     ldapSettings->SetBindPassword("invalidPassword");
 }
 
-void InitLdapSettingsWithInvalidFilter(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort) {
-    InitLdapSettings(ldapSettings, ldapPort);
+void InitLdapSettingsWithInvalidFilter(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, TTempFileHandle& certificateFile) {
+    InitLdapSettings(ldapSettings, ldapPort, certificateFile);
     ldapSettings->SetSearchFilter("&(uid=$username)()");
 }
 
-void InitLdapSettingsWithUnavaliableHost(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort) {
-    InitLdapSettings(ldapSettings, ldapPort);
+void InitLdapSettingsWithUnavaliableHost(NKikimrProto::TLdapAuthentication* ldapSettings, ui16 ldapPort, TTempFileHandle& certificateFile) {
+    InitLdapSettings(ldapSettings, ldapPort, certificateFile);
     ldapSettings->SetHost("unavaliablehost");
 }
 
 class TLdapKikimrServer {
 public:
-    TLdapKikimrServer(std::function<void(NKikimrProto::TLdapAuthentication*, ui16)> initLdapSettings)
-        : InitLdapSettings(std::move(initLdapSettings))
-        , Server(InitSettings()) {
+    TLdapKikimrServer(std::function<void(NKikimrProto::TLdapAuthentication*, ui16, TTempFileHandle&)> initLdapSettings)
+        : CaCertificateFile()
+        , Server(InitSettings(std::move(initLdapSettings))) {
         Server.EnableGRpc(GrpcPort);
         Server.GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
         Server.GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
@@ -65,7 +96,7 @@ public:
     }
 
 private:
-    Tests::TServerSettings InitSettings() {
+    Tests::TServerSettings InitSettings(std::function<void(NKikimrProto::TLdapAuthentication*, ui16, TTempFileHandle&)>&& initLdapSettings) {
         using namespace Tests;
         TPortManager tp;
         LdapPort = tp.GetPort(389);
@@ -76,7 +107,7 @@ private:
         authConfig.SetUseLoginProvider(true);
         authConfig.SetRefreshTime("5s");
 
-        InitLdapSettings(authConfig.MutableLdapAuthentication(), LdapPort);
+        initLdapSettings(authConfig.MutableLdapAuthentication(), LdapPort, CaCertificateFile);
 
         Tests::TServerSettings settings(kikimrPort, authConfig);
         settings.SetDomainName("Root");
@@ -85,7 +116,7 @@ private:
     }
 
 private:
-    std::function<void(NKikimrProto::TLdapAuthentication*, ui16)> InitLdapSettings;
+    TTempFileHandle CaCertificateFile;
     Tests::TServer Server;
     ui16 LdapPort;
     ui16 GrpcPort;
@@ -154,6 +185,7 @@ LdapMock::TLdapMockResponses TCorrectLdapResponse::GetResponses(const TString& l
     responses.SearchResponses.push_back({fetchGroupsSearchRequestInfo, fetchGroupsSearchResponseInfo});
     return responses;
 }
+} // namespace
 
 Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
@@ -486,12 +518,17 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
         UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
         UNIT_ASSERT(ticketParserResult->Token != nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + "@ldap");
+        const TString ldapDomain = "@ldap";
+        UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
         const auto& fetchedGroups = ticketParserResult->Token->GetGroupSIDs();
         THashSet<TString> groups(fetchedGroups.begin(), fetchedGroups.end());
 
-        THashSet<TString> expectedGroups(TCorrectLdapResponse::Groups.begin(), TCorrectLdapResponse::Groups.end());
+        THashSet<TString> expectedGroups;
+        std::transform(TCorrectLdapResponse::Groups.begin(), TCorrectLdapResponse::Groups.end(), std::inserter(expectedGroups, expectedGroups.end()), [&ldapDomain](TString& group) {
+            return group.append(ldapDomain);
+        });
         expectedGroups.insert("all-users@well-known");
+
         UNIT_ASSERT_VALUES_EQUAL(fetchedGroups.size(), expectedGroups.size());
         for (const auto& expectedGroup : expectedGroups) {
             UNIT_ASSERT_C(groups.contains(expectedGroup), "Can not find " + expectedGroup);
@@ -603,7 +640,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TAutoPtr<IEventHandle> handle = LdapAuthenticate(server, login, password);
         TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = handle->Get<TEvTicketParser::TEvAuthorizeTicketResult>();
         UNIT_ASSERT_C(!ticketParserResult->Error.empty(), "Expected return error message");
-        UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "Could not perform initial LDAP bind for dn cn=robouser,dc=search,dc=yandex,dc=net on server unavaliablehost\nCan't contact LDAP server");
+        UNIT_ASSERT_STRINGS_EQUAL(ticketParserResult->Error.Message, "Could not start TLS\nCan't contact LDAP server");
 
         ldapServer.Stop();
     }
@@ -625,18 +662,23 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
         UNIT_ASSERT(ticketParserResult->Token != nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + "@ldap");
+        const TString ldapDomain = "@ldap";
+        UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
         const auto& fetchedGroups = ticketParserResult->Token->GetGroupSIDs();
         THashSet<TString> groups(fetchedGroups.begin(), fetchedGroups.end());
 
-        THashSet<TString> expectedGroups(TCorrectLdapResponse::Groups.begin(), TCorrectLdapResponse::Groups.end());
+        THashSet<TString> expectedGroups;
+        std::transform(TCorrectLdapResponse::Groups.begin(), TCorrectLdapResponse::Groups.end(), std::inserter(expectedGroups, expectedGroups.end()), [&ldapDomain](TString& group) {
+            return group.append(ldapDomain);
+        });
         expectedGroups.insert("all-users@well-known");
+
         UNIT_ASSERT_VALUES_EQUAL(fetchedGroups.size(), expectedGroups.size());
         for (const auto& expectedGroup : expectedGroups) {
             UNIT_ASSERT_C(groups.contains(expectedGroup), "Can not find " + expectedGroup);
         }
 
-        THashSet<TString> newExpectedGroups {
+        std::vector<TString> newLdapGroups {
             "ou=groups,dc=search,dc=yandex,dc=net",
             "cn=people,ou=groups,dc=search,dc=yandex,dc=net",
             "cn=desiners,ou=groups,dc=search,dc=yandex,dc=net"
@@ -645,10 +687,15 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             {
                 .Dn = "uid=" + login + ",dc=search,dc=yandex,dc=net",
                 .AttributeList = {
-                                    {"memberOf", std::vector(newExpectedGroups.begin(), newExpectedGroups.end())}
+                                    {"memberOf", newLdapGroups}
                                 }
             }
         };
+
+        THashSet<TString> newExpectedGroups;
+        std::transform(newLdapGroups.begin(), newLdapGroups.end(), std::inserter(newExpectedGroups, newExpectedGroups.end()), [&ldapDomain](TString& group) {
+            return group.append(ldapDomain);
+        });
         newExpectedGroups.insert("all-users@well-known");
 
         LdapMock::TSearchResponseInfo newFetchGroupsSearchResponseInfo {
@@ -695,12 +742,17 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         UNIT_ASSERT_C(ticketParserResult->Error.empty(), ticketParserResult->Error);
         UNIT_ASSERT(ticketParserResult->Token != nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + "@ldap");
+        const TString ldapDomain = "@ldap";
+        UNIT_ASSERT_VALUES_EQUAL(ticketParserResult->Token->GetUserSID(), login + ldapDomain);
         const auto& fetchedGroups = ticketParserResult->Token->GetGroupSIDs();
         THashSet<TString> groups(fetchedGroups.begin(), fetchedGroups.end());
 
-        THashSet<TString> expectedGroups(TCorrectLdapResponse::Groups.begin(), TCorrectLdapResponse::Groups.end());
+        THashSet<TString> expectedGroups;
+        std::transform(TCorrectLdapResponse::Groups.begin(), TCorrectLdapResponse::Groups.end(), std::inserter(expectedGroups, expectedGroups.end()), [&ldapDomain](TString& group) {
+            return group.append(ldapDomain);
+        });
         expectedGroups.insert("all-users@well-known");
+
         UNIT_ASSERT_VALUES_EQUAL(fetchedGroups.size(), expectedGroups.size());
         for (const auto& expectedGroup : expectedGroups) {
             UNIT_ASSERT_C(groups.contains(expectedGroup), "Can not find " + expectedGroup);

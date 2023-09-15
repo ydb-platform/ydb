@@ -1,4 +1,3 @@
-#include <util/network/sock.h>
 #include <util/stream/format.h>
 #include <utility>
 #include <algorithm>
@@ -10,10 +9,23 @@ namespace LdapMock {
 
 namespace {
 
-TString CreateResopnse(const EStatus& status, const TString& matchedDN = "", const TString& diagnosticMsg = "") {
-    TString result = EncodeEnum(static_cast<int>(status));
-    result += EncodeString(matchedDN);
-    result += EncodeString(diagnosticMsg);
+struct TResponseInfo {
+    EStatus Status;
+    TString MatchedDN = "";
+    TString DiagnosticMsg = "";
+};
+
+TString CreateResopnse(const TResponseInfo& responseInfo) {
+    TString result = EncodeEnum(static_cast<int>(responseInfo.Status));
+    result += EncodeString(responseInfo.MatchedDN);
+    result += EncodeString(responseInfo.DiagnosticMsg);
+    return result;
+}
+
+TString CreateExtendedResponse(const TResponseInfo& responseInfo, const TString& oid = "", const TString& oidValue = "") {
+    TString result = CreateResopnse(responseInfo);
+    result += EncodeString(oid);
+    result += EncodeString(oidValue);
     return result;
 }
 
@@ -60,9 +72,13 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> CreateSearchEntryResponses(c
 
 }
 
-TLdapRequestProcessor::TLdapRequestProcessor(TAtomicSharedPtr<TStreamSocket> socket)
+TLdapRequestProcessor::TLdapRequestProcessor(TAtomicSharedPtr<TLdapSocketWrapper> socket)
         : Socket(socket)
     {}
+
+void TLdapRequestProcessor::SslAccept() {
+    Socket->SslAccept();
+}
 
 unsigned char TLdapRequestProcessor::GetByte() {
     unsigned char res;
@@ -71,7 +87,7 @@ unsigned char TLdapRequestProcessor::GetByte() {
 }
 
 void TLdapRequestProcessor::GetNBytes(unsigned char* buf, size_t n) {
-    TBaseSocket::Check(Socket->Recv(buf, n), "recv");
+    Socket->Receive(buf, n);
     ReadBytes += n;
 }
 
@@ -132,10 +148,38 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
         case EProtocolOp::UNBIND_OP_REQUEST: {
             return {{.Type = EProtocolOp::UNBIND_OP_REQUEST}};
         }
+        case EProtocolOp::EXTENDED_OP_REQUEST: {
+            return ProcessExtendedRequest();
+        }
         default: {
-            return {{.Type = EProtocolOp::UNKNOWN_OP, .Data = CreateResopnse(EStatus::PROTOCOL_ERROR)}};
+            return {{.Type = EProtocolOp::UNKNOWN_OP, .Data = CreateResopnse({.Status = EStatus::PROTOCOL_ERROR})}};
         }
     }
+}
+
+std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::ProcessExtendedRequest() {
+    TProtocolOpData responseOpData;
+    responseOpData.Type  = EProtocolOp::EXTENDED_OP_RESPONSE;
+
+    size_t lenght = GetLength();
+
+    if (lenght == 0) {
+        responseOpData.Data = CreateResopnse({.Status = EStatus::PROTOCOL_ERROR});
+        return {responseOpData};
+    }
+
+    TString oid = GetString();
+    Y_UNUSED(oid);
+    TString oidValue = GetString();
+
+    EStatus status = EStatus::PROTOCOL_ERROR;
+    if (oidValue == LDAP_EXOP_START_TLS) {
+        status = EStatus::SUCCESS;
+    }
+
+    responseOpData.Data = CreateExtendedResponse({.Status = status}, oidValue, "");
+
+    return {responseOpData};
 }
 
 std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::ProcessBindRequest(const std::vector<std::pair<TBindRequestInfo, TBindResponseInfo>>& responses) {
@@ -147,19 +191,19 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
     size_t lenght = GetLength();
 
     if (lenght == 0) {
-        responseOpData.Data = CreateResopnse(EStatus::PROTOCOL_ERROR);
+        responseOpData.Data = CreateResopnse({.Status = EStatus::PROTOCOL_ERROR});
         return {responseOpData};
     }
 
     int version = GetInt();
     if (version > 127) {
-        responseOpData.Data = CreateResopnse(EStatus::PROTOCOL_ERROR);
+        responseOpData.Data = CreateResopnse({.Status = EStatus::PROTOCOL_ERROR});
         return {responseOpData};
     }
 
     unsigned char elementType = GetByte();
     if (elementType != EElementType::STRING) {
-        responseOpData.Data = CreateResopnse(EStatus::PROTOCOL_ERROR);
+        responseOpData.Data = CreateResopnse({.Status = EStatus::PROTOCOL_ERROR});
         return {responseOpData};
     }
 
@@ -176,11 +220,11 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
     });
 
     if (it == responses.end()) {
-        responseOpData.Data = CreateResopnse(EStatus::PROTOCOL_ERROR);
+        responseOpData.Data = CreateResopnse({.Status = EStatus::PROTOCOL_ERROR});
         return {responseOpData};
     }
 
-    responseOpData.Data = CreateResopnse(it->second.Status, it->second.MatchedDN, it->second.DiagnosticMsg);
+    responseOpData.Data = CreateResopnse({.Status = it->second.Status, .MatchedDN = it->second.MatchedDN, .DiagnosticMsg = it->second.DiagnosticMsg});
     return {responseOpData};
 }
 
@@ -192,14 +236,14 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
 
     size_t length = GetLength();
     if (length == 0) {
-        responseOpData.Data = CreateResopnse(EStatus::PROTOCOL_ERROR);
+        responseOpData.Data = CreateResopnse({.Status = EStatus::PROTOCOL_ERROR});
         return {responseOpData};
     }
 
     // extract BaseDn
     unsigned char elementType = GetByte();
     if (elementType != EElementType::STRING) {
-        responseOpData.Data = CreateResopnse(EStatus::PROTOCOL_ERROR);
+        responseOpData.Data = CreateResopnse({.Status = EStatus::PROTOCOL_ERROR});
         return {responseOpData};
     }
 
@@ -208,12 +252,12 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
     // Extarct scope
     elementType = GetByte();
     if (elementType != EElementType::ENUMERATED) {
-        responseOpData.Data = CreateResopnse(EStatus::PROTOCOL_ERROR);
+        responseOpData.Data = CreateResopnse({.Status = EStatus::PROTOCOL_ERROR});
         return {responseOpData};
     }
     length = GetLength();
     if (length == 0) {
-        responseOpData.Data = CreateResopnse(EStatus::PROTOCOL_ERROR);
+        responseOpData.Data = CreateResopnse({.Status = EStatus::PROTOCOL_ERROR});
         return {responseOpData};
     }
     requestInfo.Scope = GetByte();
@@ -221,12 +265,12 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
     // Extract derefAlliases
     elementType = GetByte();
     if (elementType != EElementType::ENUMERATED) {
-        responseOpData.Data = CreateResopnse(EStatus::PROTOCOL_ERROR);
+        responseOpData.Data = CreateResopnse({.Status = EStatus::PROTOCOL_ERROR});
         return {responseOpData};
     }
     length = GetLength();
     if (length == 0) {
-        responseOpData.Data = CreateResopnse(EStatus::PROTOCOL_ERROR);
+        responseOpData.Data = CreateResopnse({.Status = EStatus::PROTOCOL_ERROR});
         return {responseOpData};
     }
     requestInfo.DerefAliases = GetByte();
@@ -242,12 +286,12 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
     // Extact typesOnly
     elementType = GetByte();
     if (elementType != EElementType::BOOL) {
-        responseOpData.Data = CreateResopnse(EStatus::PROTOCOL_ERROR);
+        responseOpData.Data = CreateResopnse({.Status = EStatus::PROTOCOL_ERROR});
         return {responseOpData};
     }
     length = GetLength();
     if (length == 0) {
-        responseOpData.Data = CreateResopnse(EStatus::PROTOCOL_ERROR);
+        responseOpData.Data = CreateResopnse({.Status = EStatus::PROTOCOL_ERROR});
         return {responseOpData};
     }
     requestInfo.TypesOnly = GetByte();
@@ -257,7 +301,7 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
     // Extarct Attributes
     elementType = GetByte();
     if (elementType != EElementType::SEQUENCE) {
-        responseOpData.Data = CreateResopnse(EStatus::PROTOCOL_ERROR);
+        responseOpData.Data = CreateResopnse({.Status = EStatus::PROTOCOL_ERROR});
         return {responseOpData};
     }
     length = GetLength();
@@ -265,7 +309,7 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
     while (ReadBytes < limit) {
         elementType = GetByte();
         if (elementType != EElementType::STRING) {
-            responseOpData.Data = CreateResopnse(EStatus::PROTOCOL_ERROR);
+            responseOpData.Data = CreateResopnse({.Status = EStatus::PROTOCOL_ERROR});
             return {responseOpData};
         }
         requestInfo.Attributes.push_back(GetString());
@@ -277,14 +321,14 @@ std::vector<TLdapRequestProcessor::TProtocolOpData> TLdapRequestProcessor::Proce
     });
 
     if (it == responses.end()) {
-        responseOpData.Data = CreateResopnse(EStatus::PROTOCOL_ERROR);
+        responseOpData.Data = CreateResopnse({.Status = EStatus::PROTOCOL_ERROR});
         return {responseOpData};
     }
 
     std::vector<TLdapRequestProcessor::TProtocolOpData> res = CreateSearchEntryResponses(it->second.ResponseEntries);
 
     const auto& responseDoneInfo = it->second.ResponseDone;
-    responseOpData.Data = CreateResopnse(responseDoneInfo.Status, responseDoneInfo.MatchedDN, responseDoneInfo.DiagnosticMsg);
+    responseOpData.Data = CreateResopnse({.Status = responseDoneInfo.Status, .MatchedDN = responseDoneInfo.MatchedDN, .DiagnosticMsg = responseDoneInfo.DiagnosticMsg});
     res.push_back(std::move(responseOpData));
     return res;
 }

@@ -11,6 +11,7 @@ add_library(testlib-service_mocks-ldap_mock)
 target_link_libraries(testlib-service_mocks-ldap_mock PUBLIC
   contrib-libs-cxxsupp
   yutil
+  contrib-libs-openssl
 )
 target_sources(testlib-service_mocks-ldap_mock PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/testlib/service_mocks/ldap_mock/ldap_simple_server.cpp
@@ -19,4 +20,5 @@ target_sources(testlib-service_mocks-ldap_mock PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/testlib/service_mocks/ldap_mock/ldap_response.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/testlib/service_mocks/ldap_mock/ber.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/testlib/service_mocks/ldap_mock/ldap_defines.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/testlib/service_mocks/ldap_mock/ldap_socket_wrapper.cpp
 )

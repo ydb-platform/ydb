@@ -15,6 +15,26 @@ namespace {
 
 char ldapNoAttribute[] = LDAP_NO_ATTRS;
 
+int ConvertOption(const EOption& option) {
+    switch(option) {
+        case EOption::DEBUG: {
+            return LDAP_OPT_DEBUG_LEVEL;
+        }
+        case EOption::TLS_CACERTDIR: {
+            return LDAP_OPT_X_TLS_CACERTDIR;
+        }
+        case EOption::TLS_CACERTFILE: {
+            return LDAP_OPT_X_TLS_CACERTFILE;
+        }
+        case EOption::TLS_REQUIRE_CERT: {
+            return LDAP_OPT_X_TLS_REQUIRE_CERT;
+        }
+        case EOption::PROTOCOL_VERSION: {
+            return LDAP_OPT_PROTOCOL_VERSION;
+        }
+    }
+}
+
 }
 
 char* noAttributes[] = {ldapNoAttribute, nullptr};
@@ -110,7 +130,7 @@ bool IsSuccess(int result) {
 
 int SetProtocolVersion(LDAP* ld) {
     static const ui32 USED_LDAP_VERSION = LDAP_VERSION3;
-    return ldap_set_option(ld, LDAP_OPT_PROTOCOL_VERSION, &USED_LDAP_VERSION);
+    return SetOption(ld, EOption::PROTOCOL_VERSION, &USED_LDAP_VERSION);
 }
 
 NKikimr::TEvLdapAuthProvider::EStatus ErrorToStatus(int err) {
@@ -138,5 +158,32 @@ char* GetDn(LDAP* ld, LDAPMessage* entry) {
     return ldap_get_dn(ld, entry);
 }
 
+int SetOption(LDAP* ld, const EOption& option, const void* value) {
+    return ldap_set_option(ld, ConvertOption(option), value);
 }
 
+int StartTLS(LDAP* ld) {
+    return ldap_start_tls_s(ld, nullptr, nullptr);
+}
+
+int ConvertRequireCert(const NKikimrProto::TLdapAuthentication::TUseTls::TCertRequire& requireCertOption) {
+    switch (requireCertOption) {
+        case NKikimrProto::TLdapAuthentication::TUseTls::NEVER: {
+            return LDAP_OPT_X_TLS_NEVER;
+        }
+        case NKikimrProto::TLdapAuthentication::TUseTls::HARD: {
+            return LDAP_OPT_X_TLS_HARD;
+        }
+        case NKikimrProto::TLdapAuthentication::TUseTls::DEMAND: {
+            return LDAP_OPT_X_TLS_DEMAND;
+        }
+        case NKikimrProto::TLdapAuthentication::TUseTls::ALLOW: {
+            return LDAP_OPT_X_TLS_ALLOW;
+        }
+        case NKikimrProto::TLdapAuthentication::TUseTls::TRY: {
+            return LDAP_OPT_X_TLS_TRY;
+        }
+    }
+}
+
+}

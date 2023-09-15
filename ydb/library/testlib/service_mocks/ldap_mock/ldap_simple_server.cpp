@@ -7,6 +7,7 @@
 #include <util/thread/pool.h>
 
 #include "ldap_mock.h"
+#include "ldap_socket_wrapper.h"
 
 namespace LdapMock {
 
@@ -46,10 +47,8 @@ TLdapSimpleServer::TLdapSimpleServer(ui16 port, const TLdapMockResponses& respon
                 if (!cookies[i]) {
                     running = false;
                 } else {
-                    TSockAddrInet addr;
-                    TAtomicSharedPtr<TStreamSocket> socket = MakeAtomicShared<TInetStreamSocket>();
-                    int ret = listenSocket->Accept(socket.Get(), &addr);
-                    Y_ENSURE_EX(ret == 0, TSystemError() << "Can not accept connection");
+                    TAtomicSharedPtr<TLdapSocketWrapper> socket = MakeAtomicShared<TLdapSocketWrapper>(listenSocket);
+                    socket->OnAccept();
 
                     SystemThreadFactory()->Run(
                         [socket, &responses] {

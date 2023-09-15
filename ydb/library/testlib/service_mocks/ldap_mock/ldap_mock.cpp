@@ -1,14 +1,15 @@
 #include <util/stream/output.h>
-#include <util/network/sock.h>
+#include "ldap_socket_wrapper.h"
 #include "ldap_mock.h"
 #include "ldap_response.h"
 #include "ldap_message_processor.h"
 #include "ldap_defines.h"
 
+
 namespace LdapMock {
 
 namespace {
-    TLdapResponse HandleLdapMessage(TAtomicSharedPtr<TStreamSocket> socket, const TLdapMockResponses& responses) {
+    TLdapResponse HandleLdapMessage(TAtomicSharedPtr<TLdapSocketWrapper> socket, const TLdapMockResponses& responses) {
         TLdapRequestProcessor requestProcessor(socket);
         unsigned char elementType = requestProcessor.GetByte();
         if (elementType != EElementType::SEQUENCE) {
@@ -24,11 +25,14 @@ namespace {
     }
 }
 
-void LdapRequestHandler(TAtomicSharedPtr<TStreamSocket> socket, const TLdapMockResponses& responses) {
+void LdapRequestHandler(TAtomicSharedPtr<TLdapSocketWrapper> socket, const TLdapMockResponses& responses) {
     while (true) {
         TLdapResponse response = HandleLdapMessage(socket, responses);
         if (!response.Send(socket)) {
             break;
+        }
+        if (response.EnableTls()) {
+            socket->SslAccept();
         }
     }
 }

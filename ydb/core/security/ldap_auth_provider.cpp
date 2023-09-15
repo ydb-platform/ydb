@@ -21,6 +21,7 @@ using BerElement = berelement;
 namespace NKikimr {
 
 class TLdapAuthProvider : public NActors::TActorBootstrapped<TLdapAuthProvider> {
+private:
     using TThis = TLdapAuthProvider;
     using TBase = NActors::TActorBootstrapped<TLdapAuthProvider>;
 
@@ -58,6 +59,11 @@ class TLdapAuthProvider : public NActors::TActorBootstrapped<TLdapAuthProvider> 
 
     struct TAuthenticateUserResponse : TBasicResponse {};
 
+    struct TInitAndBindResponse {
+        bool Success = true;
+        THolder<IEventBase> Event;
+    };
+
 public:
     TLdapAuthProvider(const NKikimrProto::TLdapAuthentication& settings)
         : Settings(settings)
@@ -79,22 +85,11 @@ private:
     void Handle(TEvLdapAuthProvider::TEvAuthenticateRequest::TPtr& ev) {
         TEvLdapAuthProvider::TEvAuthenticateRequest* request = ev->Get();
         LDAP* ld = nullptr;
-        auto initializeResponse = InitializeLDAPConnection(&ld);
-        if (initializeResponse.Error) {
-            Send(ev->Sender, new TEvLdapAuthProvider::TEvAuthenticateResponse(initializeResponse.Status, initializeResponse.Error));
-            return;
-        }
-
-        int result = NKikimrLdap::Bind(ld, Settings.GetBindDn(), Settings.GetBindPassword());
-        if (!NKikimrLdap::IsSuccess(result)) {
-            TEvLdapAuthProvider::TError error {
-                .Message = "Could not perform initial LDAP bind for dn " + Settings.GetBindDn() + " on server " + Settings.GetHost() + "\n"
-                            + NKikimrLdap::ErrorToString(result)
-            };
-            // The Unbind operation is not the antithesis of the Bind operation as the name implies.
-            // Close the LDAP connection, free the resources contained in the LDAP structure
-            NKikimrLdap::Unbind(ld);
-            Send(ev->Sender, new TEvLdapAuthProvider::TEvAuthenticateResponse(NKikimrLdap::ErrorToStatus(result), error));
+        auto initAndBindResult = InitAndBind(&ld, [](const TEvLdapAuthProvider::EStatus& status, const TEvLdapAuthProvider::TError& error) {
+            return MakeHolder<TEvLdapAuthProvider::TEvAuthenticateResponse>(status, error);
+        });
+        if (!initAndBindResult.Success) {
+            Send(ev->Sender, initAndBindResult.Event.Release());
             return;
         }
 
@@ -116,23 +111,11 @@ private:
     void Handle(TEvLdapAuthProvider::TEvEnrichGroupsRequest::TPtr& ev) {
         TEvLdapAuthProvider::TEvEnrichGroupsRequest* request = ev->Get();
         LDAP* ld = nullptr;
-        const auto initializeResponse = InitializeLDAPConnection(&ld);
-        if (initializeResponse.Error) {
-            Send(ev->Sender, new TEvLdapAuthProvider::TEvEnrichGroupsResponse(request->Key, initializeResponse.Status, initializeResponse.Error));
-            return;
-        }
-
-        int result = NKikimrLdap::Bind(ld, Settings.GetBindDn(), Settings.GetBindPassword());
-        if (!NKikimrLdap::IsSuccess(result)) {
-            TEvLdapAuthProvider::TError error {
-                .Message = "Could not perform initial LDAP bind for dn " + Settings.GetBindDn() + " on server " + Settings.GetHost() + "\n"
-                            + NKikimrLdap::ErrorToString(result),
-                .Retryable = NKikimrLdap::IsRetryableError(result)
-            };
-            // The Unbind operation is not the antithesis of the Bind operation as the name implies.
-            // Close the LDAP connection, free the resources contained in the LDAP structure
-            NKikimrLdap::Unbind(ld);
-            Send(ev->Sender, new TEvLdapAuthProvider::TEvEnrichGroupsResponse(request->Key, NKikimrLdap::ErrorToStatus(result), error));
+        auto initAndBindResult = InitAndBind(&ld, [&request](const TEvLdapAuthProvider::EStatus& status, const TEvLdapAuthProvider::TError& error) {
+            return MakeHolder<TEvLdapAuthProvider::TEvEnrichGroupsResponse>(request->Key, status, error);
+        });
+        if (!initAndBindResult.Success) {
+            Send(ev->Sender, initAndBindResult.Event.Release());
             return;
         }
 
@@ -161,6 +144,42 @@ private:
         Send(ev->Sender, new TEvLdapAuthProvider::TEvEnrichGroupsResponse(request->Key, request->User, groupsDn));
     }
 
+    TInitAndBindResponse InitAndBind(LDAP** ld, std::function<THolder<IEventBase>(const TEvLdapAuthProvider::EStatus&, const TEvLdapAuthProvider::TError&)> eventFabric) {
+        const auto initializeResponse = InitializeLDAPConnection(ld);
+        if (initializeResponse.Error) {
+            return {.Success = false, .Event = eventFabric(initializeResponse.Status, initializeResponse.Error)};
+        }
+
+        int result = 0;
+        if (Settings.GetUseTls().GetEnable()) {
+            result = NKikimrLdap::StartTLS(*ld);
+            if (!NKikimrLdap::IsSuccess(result)) {
+                TEvLdapAuthProvider::TError error {
+                    .Message = "Could not start TLS\n" + NKikimrLdap::ErrorToString(result),
+                    .Retryable = NKikimrLdap::IsRetryableError(result)
+                };
+                // The Unbind operation is not the antithesis of the Bind operation as the name implies.
+                // Close the LDAP connection, free the resources contained in the LDAP structure
+                NKikimrLdap::Unbind(*ld);
+                return {.Success = false, .Event = eventFabric(NKikimrLdap::ErrorToStatus(result), error)};
+            }
+        }
+
+        result = NKikimrLdap::Bind(*ld, Settings.GetBindDn(), Settings.GetBindPassword());
+        if (!NKikimrLdap::IsSuccess(result)) {
+            TEvLdapAuthProvider::TError error {
+                .Message = "Could not perform initial LDAP bind for dn " + Settings.GetBindDn() + " on server " + Settings.GetHost() + "\n"
+                            + NKikimrLdap::ErrorToString(result),
+                .Retryable = NKikimrLdap::IsRetryableError(result)
+            };
+            // The Unbind operation is not the antithesis of the Bind operation as the name implies.
+            // Close the LDAP connection, free the resources contained in the LDAP structure
+            NKikimrLdap::Unbind(*ld);
+            return {.Success = false, .Event = eventFabric(NKikimrLdap::ErrorToStatus(result), error)};
+        }
+        return {};
+    }
+
     TInitializeLdapConnectionResponse InitializeLDAPConnection(LDAP** ld) {
         const TString& host = Settings.GetHost();
         if (host.empty()) {
@@ -169,6 +188,18 @@ private:
 
         const ui32 port = Settings.GetPort() != 0 ? Settings.GetPort() : NKikimrLdap::GetPort();
 
+        int result = 0;
+        if (Settings.GetUseTls().GetEnable()) {
+            const TString& caCertificateFile = Settings.GetUseTls().GetCaCertFile();
+            result = NKikimrLdap::SetOption(*ld, NKikimrLdap::EOption::TLS_CACERTFILE, caCertificateFile.c_str());
+            if (!NKikimrLdap::IsSuccess(result)) {
+                NKikimrLdap::Unbind(*ld);
+                return {{NKikimrLdap::ErrorToStatus(result),
+                        {.Message = "Could not set LDAP ca certificate file \"" + caCertificateFile + "\": " + NKikimrLdap::ErrorToString(result),
+                        .Retryable = NKikimrLdap::IsRetryableError(result)}}};
+            }
+        }
+
         *ld = NKikimrLdap::Init(host, port);
         if (*ld == nullptr) {
             return {{TEvLdapAuthProvider::EStatus::UNAVAILABLE,
@@ -176,12 +207,23 @@ private:
                     .Retryable = false}}};
         }
 
-        int result = NKikimrLdap::SetProtocolVersion(*ld);
+        result = NKikimrLdap::SetProtocolVersion(*ld);
         if (!NKikimrLdap::IsSuccess(result)) {
             NKikimrLdap::Unbind(*ld);
             return {{NKikimrLdap::ErrorToStatus(result),
                     {.Message = "Could not set LDAP protocol version: " + NKikimrLdap::ErrorToString(result),
                     .Retryable = NKikimrLdap::IsRetryableError(result)}}};
+        }
+
+        if (Settings.GetUseTls().GetEnable()) {
+            int requireCert = NKikimrLdap::ConvertRequireCert(Settings.GetUseTls().GetCertRequire());
+            result = NKikimrLdap::SetOption(*ld, NKikimrLdap::EOption::TLS_REQUIRE_CERT, &requireCert);
+            if (!NKikimrLdap::IsSuccess(result)) {
+                NKikimrLdap::Unbind(*ld);
+                return {{NKikimrLdap::ErrorToStatus(result),
+                        {.Message = "Could not set require certificate option: " + NKikimrLdap::ErrorToString(result),
+                        .Retryable = NKikimrLdap::IsRetryableError(result)}}};
+            }
         }
         return {};
     }

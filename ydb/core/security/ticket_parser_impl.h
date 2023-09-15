@@ -495,10 +495,14 @@ private:
             const auto& key = it->first;
             auto& record = it->second;
             if (response->Status == TEvLdapAuthProvider::EStatus::SUCCESS) {
+                const TString domain {"@" + Config.GetLdapAuthenticationDomain()};
                 TVector<NACLib::TSID> groups(response->Groups.cbegin(), response->Groups.cend());
+                std::transform(groups.begin(), groups.end(), groups.begin(), [&domain](NACLib::TSID& group) {
+                    return group.append(domain);
+                });
                 SetToken(key, record, new NACLib::TUserToken({
                     .OriginalUserToken = record.Ticket,
-                    .UserSID = response->User + "@" + Config.GetLdapAuthenticationDomain(),
+                    .UserSID = response->User + domain,
                     .GroupSIDs = groups,
                     .AuthType = record.GetAuthType()
                 }));

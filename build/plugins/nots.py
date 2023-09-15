@@ -80,9 +80,17 @@ def _canonize_resource_name(name):
     return re.sub(r"\W+", "_", name).strip("_").upper()
 
 
-def _build_cmd_input_paths(paths, hide=False):
-    # type: (list[str], bool) -> str
-    return " ".join(["${{input{}:\"{}\"}}".format(";hide" if hide else "", p) for p in paths])
+def _build_cmd_input_paths(paths, hide=False, disable_include_processor=False):
+    # type: (list[str]|tuple[str], bool) -> str
+    input_part = "input"
+    hide_part = "hide" if hide else ""
+    disable_ip_part = "context=TEXT" if disable_include_processor else ""
+
+    parts = [p for p in [input_part, hide_part, disable_ip_part] if p]
+
+    input_expressions = ["${{{parts}:\"{path}\"}}".format(parts=";".join(parts), path=path) for path in paths]
+
+    return " ".join(input_expressions)
 
 
 def _create_pm(unit):
@@ -191,35 +199,58 @@ def on_peerdir_ts_resource(unit, *resources):
 
 
 @_with_report_configure_error
-def on_ts_configure(unit, tsconfig_path):
+def on_ts_configure(unit, *tsconfig_paths):
+    # type: (Unit, *str) -> None
     from lib.nots.package_manager.base import PackageJson
     from lib.nots.package_manager.base.utils import build_pj_path
     from lib.nots.typescript import TsConfig
 
-    abs_tsconfig_path = unit.resolve(unit.resolve_arc_path(tsconfig_path))
-    if not abs_tsconfig_path:
-        raise Exception("tsconfig not found: {}".format(tsconfig_path))
-
-    tsconfig = TsConfig.load(abs_tsconfig_path)
-    cur_dir = unit.get("TS_TEST_FOR_PATH") if unit.get("TS_TEST_FOR") else unit.get("MODDIR")
-    pj_path = build_pj_path(unit.resolve(unit.resolve_arc_path(cur_dir)))
-    dep_paths = PackageJson.load(pj_path).get_dep_paths_by_names()
-    config_files = tsconfig.inline_extend(dep_paths)
+    __set_append(unit, "TS_CONFIG_FILES", _build_cmd_input_paths(tsconfig_paths, hide=True, disable_include_processor=True))
 
     mod_dir = unit.get("MODDIR")
-    config_files = _resolve_module_files(unit, mod_dir, config_files)
-    tsconfig.validate()
+    cur_dir = unit.get("TS_TEST_FOR_PATH") if unit.get("TS_TEST_FOR") else mod_dir
+    pj_path = build_pj_path(unit.resolve(unit.resolve_arc_path(cur_dir)))
+    dep_paths = PackageJson.load(pj_path).get_dep_paths_by_names()
 
-    unit.set(["TS_CONFIG_FILES", _build_cmd_input_paths(config_files, hide=True)])
-    unit.set(["TS_CONFIG_ROOT_DIR", tsconfig.compiler_option("rootDir")])
-    unit.set(["TS_CONFIG_OUT_DIR", tsconfig.compiler_option("outDir")])
-    unit.set(["TS_CONFIG_SOURCE_MAP", to_yesno(tsconfig.compiler_option("sourceMap"))])
-    unit.set(["TS_CONFIG_DECLARATION", to_yesno(tsconfig.compiler_option("declaration"))])
-    unit.set(["TS_CONFIG_DECLARATION_MAP", to_yesno(tsconfig.compiler_option("declarationMap"))])
-    unit.set(["TS_CONFIG_PRESERVE_JSX", to_yesno(tsconfig.compiler_option("jsx") == "preserve")])
+    # reversed for using the first tsconfig as the config for include processor (legacy)
+    for tsconfig_path in reversed(tsconfig_paths):
+        abs_tsconfig_path = unit.resolve(unit.resolve_arc_path(tsconfig_path))
+        if not abs_tsconfig_path:
+            raise Exception("tsconfig not found: {}".format(tsconfig_path))
+
+        tsconfig = TsConfig.load(abs_tsconfig_path)
+        config_files = tsconfig.inline_extend(dep_paths)
+        config_files = _resolve_module_files(unit, mod_dir, config_files)
+        tsconfig.validate()
+
+        # for use in CMD as inputs
+        __set_append(unit, "TS_CONFIG_FILES", _build_cmd_input_paths(config_files, hide=True, disable_include_processor=True))
+
+        # region include processor
+        unit.set(["TS_CONFIG_ROOT_DIR", tsconfig.compiler_option("rootDir")])  # also for hermione
+        unit.set(["TS_CONFIG_OUT_DIR", tsconfig.compiler_option("outDir")])  # also for hermione
+
+        unit.set(["TS_CONFIG_SOURCE_MAP", to_yesno(tsconfig.compiler_option("sourceMap"))])
+        unit.set(["TS_CONFIG_DECLARATION", to_yesno(tsconfig.compiler_option("declaration"))])
+        unit.set(["TS_CONFIG_DECLARATION_MAP", to_yesno(tsconfig.compiler_option("declarationMap"))])
+        unit.set(["TS_CONFIG_PRESERVE_JSX", to_yesno(tsconfig.compiler_option("jsx") == "preserve")])
+        # endregion
+
+        _filter_inputs_by_rules_from_tsconfig(unit, tsconfig)
 
     _setup_eslint(unit)
-    _filter_inputs_by_rules_from_tsconfig(unit, tsconfig)
+
+
+def __set_append(unit, var_name, value):
+    # type: (Unit, str, str|list[str]|tuple[str]) -> None
+    """
+    SET_APPEND() python naive implementation - append value/values to the list of values
+    """
+    previous_value = unit.get(var_name) or ""
+    value_in_str = " ".join(value) if isinstance(value, list) or isinstance(value, tuple) else value
+    new_value = previous_value + " " + value_in_str
+
+    unit.set([var_name, new_value])
 
 
 def __strip_prefix(prefix, line):
@@ -241,7 +272,7 @@ def _filter_inputs_by_rules_from_tsconfig(unit, tsconfig):
     all_files = [__strip_prefix(target_path, f) for f in unit.get("TS_GLOB_FILES").split(" ")]
     filtered_files = tsconfig.filter_files(all_files)
 
-    unit.set(["TS_GLOB_FILES", ' '.join([target_path + f for f in filtered_files])])
+    __set_append(unit, "TS_INPUT_FILES", [target_path + f for f in filtered_files])
 
 
 def _get_ts_test_data_dirs(unit):

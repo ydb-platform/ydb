@@ -35,6 +35,7 @@
                                                 "ReadColumns": [
                                                     "f1"
                                                 ],
+                                                "ReadLimit": "1001",
                                                 "ReadRanges": [
                                                     "f1 (-\u221e, +\u221e)"
                                                 ],
@@ -70,6 +71,7 @@
                     "columns": [
                         "f1"
                     ],
+                    "limit": "1001",
                     "reverse": true,
                     "scan_by": [
                         "f1 (-\u221e, +\u221e)"

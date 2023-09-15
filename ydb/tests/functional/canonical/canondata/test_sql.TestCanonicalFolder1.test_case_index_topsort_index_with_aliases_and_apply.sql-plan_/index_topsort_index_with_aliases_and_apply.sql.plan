@@ -1,0 +1,41 @@
+{
+    "meta": {
+        "type": "query",
+        "version": "0.2"
+    },
+    "tables": [
+        {
+            "name": "/local/base_index_topsort_index_with_aliases_and_apply_sql_plan/NewTableWithIndex",
+            "reads": [
+                {
+                    "columns": [
+                        "Index1A",
+                        "Index1B",
+                        "Value"
+                    ],
+                    "type": "Lookup"
+                }
+            ]
+        },
+        {
+            "name": "/local/base_index_topsort_index_with_aliases_and_apply_sql_plan/NewTableWithIndex/NewIndex1/indexImplTable",
+            "reads": [
+                {
+                    "columns": [
+                        "Index1A",
+                        "Index1B",
+                        "Key1"
+                    ],
+                    "limit": "2",
+                    "reverse": true,
+                    "scan_by": [
+                        "Index1A (-\u221e, +\u221e)",
+                        "Index1B (-\u221e, +\u221e)",
+                        "Key1 (-\u221e, +\u221e)"
+                    ],
+                    "type": "FullScan"
+                }
+            ]
+        }
+    ]
+}

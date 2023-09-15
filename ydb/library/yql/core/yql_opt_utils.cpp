@@ -225,6 +225,46 @@ bool IsRenameFlatMapWithMapping(const NNodes::TCoFlatMapBase& node, TExprNode::T
     return true;
 }
 
+// Check if the flat map is a simple rename flat map or a flatmap that also computes some 
+// values in 1-1 fashion
+bool IsRenameOrApplyFlatMapWithMapping(const NNodes::TCoFlatMapBase& node, TExprNode::TPtr& structNode,
+    THashMap<TString, TString> & mapping, TSet<TString> & apply) {
+
+    auto lambda = node.Lambda();
+    if (!IsJustOrSingleAsList(lambda.Body().Ref())) {
+        return false;
+    }
+
+    structNode = lambda.Body().Ref().Child(0);
+
+    auto asStruct = TExprBase(structNode);
+    if (!asStruct.Maybe<TCoAsStruct>()) {
+        return false;
+    }
+
+    for (auto child : asStruct.Cast<TCoAsStruct>()) {
+
+        if (!child.Item(1).Maybe<TCoMember>()) {
+            apply.insert(child.Item(0).Cast<TCoAtom>().StringValue());
+            continue;
+        }
+
+        auto member = child.Item(1).Cast<TCoMember>();
+        if(member.Struct().Raw() != lambda.Args().Arg(0).Raw()) {
+            return false;
+        }
+
+        auto to = child.Item(0).Cast<TCoAtom>();
+        auto from = member.Name();
+
+        if (to != from){
+            mapping[to.StringValue()] = from.StringValue();
+        }
+    }
+
+    return true;
+}
+
 bool IsPassthroughFlatMap(const TCoFlatMapBase& flatmap, TMaybe<THashSet<TStringBuf>>* passthroughFields, bool analyzeJustMember) {
     return IsPassthroughLambda(flatmap.Lambda(), passthroughFields, analyzeJustMember);
 }

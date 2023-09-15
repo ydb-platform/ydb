@@ -116,6 +116,26 @@
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_index_select_using_index_only.sql-result_sets_/index_select_using_index_only.sql.results"
         }
     },
+    "test_sql.TestCanonicalFolder1.test_case[index/topsort_index_on_top_of_apply.sql-plan]": {
+        "plan": {
+            "uri": "file://test_sql.TestCanonicalFolder1.test_case_index_topsort_index_on_top_of_apply.sql-plan_/index_topsort_index_on_top_of_apply.sql.plan"
+        }
+    },
+    "test_sql.TestCanonicalFolder1.test_case[index/topsort_index_on_top_of_apply.sql-result_sets]": {
+        "result_sets": {
+            "uri": "file://test_sql.TestCanonicalFolder1.test_case_index_topsort_index_on_top_of_apply.sql-result_sets_/index_topsort_index_on_top_of_apply.sql.results"
+        }
+    },
+    "test_sql.TestCanonicalFolder1.test_case[index/topsort_index_with_aliases_and_apply.sql-plan]": {
+        "plan": {
+            "uri": "file://test_sql.TestCanonicalFolder1.test_case_index_topsort_index_with_aliases_and_apply.sql-plan_/index_topsort_index_with_aliases_and_apply.sql.plan"
+        }
+    },
+    "test_sql.TestCanonicalFolder1.test_case[index/topsort_index_with_aliases_and_apply.sql-result_sets]": {
+        "result_sets": {
+            "uri": "file://test_sql.TestCanonicalFolder1.test_case_index_topsort_index_with_aliases_and_apply.sql-result_sets_/index_topsort_index_with_aliases_and_apply.sql.results"
+        }
+    },
     "test_sql.TestCanonicalFolder1.test_case[index/topsort_index_with_nonselector_aliases.sql-plan]": {
         "plan": {
             "uri": "file://test_sql.TestCanonicalFolder1.test_case_index_topsort_index_with_nonselector_aliases.sql-plan_/index_topsort_index_with_nonselector_aliases.sql.plan"

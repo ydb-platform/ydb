@@ -432,34 +432,37 @@ bool CanPushFlatMap(const TCoFlatMapBase& flatMap, const TKikimrTableDescription
     return true;
 }
 
-// Check if the TopSort key selectors are a single member or members only list
-bool IsMemberOnlyKeySelector(const TCoLambda& lambda) {
-    // If its a single selector:
-    if (lambda.Body().Maybe<TCoMember>()) {
-        // Check that the member is applied to lambda argument
-        auto member = lambda.Body().Cast<TCoMember>();
-        if (member.Struct().Raw() != lambda.Args().Arg(0).Raw()) {
+// Check that the key selector doesn't include any columns from the applyColumns or other
+// complex expressions
+bool KeySelectorAllMembers(const TCoLambda& lambda, const TSet<TString> & applyColumns) {
+    if (auto body = lambda.Body().Maybe<TCoMember>()) {
+        auto attrRef = body.Cast().Name().StringValue();
+        if (applyColumns.contains(attrRef)){
             return false;
         }
-        return true;
-    } else if (lambda.Body().Maybe<TExprList>()) {
-        for (auto item : lambda.Body().Cast<TExprList>()) {
-            if (!item.Maybe<TCoMember>()) {
-                return false;
+    }
+    else if (auto body = lambda.Body().Maybe<TExprList>()) {
+        for (auto item : body.Cast()) {
+            if (auto member = item.Maybe<TCoMember>()) {
+                auto attrRef = member.Cast().Name().StringValue();
+                if (applyColumns.contains(attrRef)) {
+                    return false;
+                }
             }
-            // Check that the member is applied to lambda argument
-            auto member = item.Cast<TCoMember>();
-            if (member.Struct().Raw() != lambda.Args().Arg(0).Raw()) {
+            else {
                 return false;
             }
         }
-        return true;
     }
-
-    return false;
+    else {
+        return false;
+    }
+    return true;
 }
 
 // Construct a new lambda with renamed attributes based on the mapping
+// If we see a complex expression in the key selector, we just pass it on into 
+// the new lambda
 TCoLambda RenameKeySelector(const TCoLambda& lambda, TExprContext& ctx, const THashMap<TString,TString>& map) {
     // If its single member lambda body
     if (lambda.Body().Maybe<TCoMember>()) {
@@ -503,11 +506,11 @@ TCoLambda RenameKeySelector(const TCoLambda& lambda, TExprContext& ctx, const TH
 }
 
 
-// If we have a top-sort over rename, we can push it throught is, so that the 
+// If we have a top-sort over flatmap, we can push it throught is, so that the 
 // RewriteTopSortOverIndexRead rule can fire next. If the flatmap renames some of the sort 
 // attributes, we need to use the original names in the top-sort. When pushing TopSort below
 // FlatMap, we change FlatMap to OrderedFlatMap to preserve the order of its input.
-TExprBase KqpRewriteTopSortOverRename(const TExprBase& node, TExprContext& ctx) {
+TExprBase KqpRewriteTopSortOverFlatMap(const TExprBase& node, TExprContext& ctx) {
 
     // Check that we have a top-sort and a flat-map directly below it
     if(!node.Maybe<TCoTopBase>()) {
@@ -522,15 +525,18 @@ TExprBase KqpRewriteTopSortOverRename(const TExprBase& node, TExprContext& ctx) 
 
     auto flatMap = topBase.Input().Maybe<TCoFlatMap>().Cast();
 
-    // Check that the flat-map is a rename and compute the mapping
+    // Check that the flat-map is a rename or apply and compute the mapping
+    // Also compute the apply mapping, if we have a key selector that mentions
+    // apply columns, we cannot push the TopSort
     TExprNode::TPtr structNode;
     THashMap<TString, TString> renameMap;
-    if (!IsRenameFlatMapWithMapping(flatMap, structNode, renameMap)) {
+    TSet<TString> applyColumns;
+    if (!IsRenameOrApplyFlatMapWithMapping(flatMap, structNode, renameMap, applyColumns)) {
         return node;
     }
 
-    // Check that the TopSort selector list is member only
-    if (!IsMemberOnlyKeySelector(topBase.KeySelectorLambda())) {
+    // Check that the key selector doesn't contain apply columns or expressions
+    if (!KeySelectorAllMembers(topBase.KeySelectorLambda(), applyColumns)) {
         return node;
     }
 

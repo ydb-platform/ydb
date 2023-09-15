@@ -1742,3 +1742,967 @@ Convert Unix epoch (seconds since 1970-01-01 00:00:00+00) to timestamp with time
 to_timestamp(1284352323) → 2010-09-13 04:32:03+00
 ```||
 |#
+
+In addition to these functions, the SQL OVERLAPS operator is supported: (NOT SUPPORTED)
+
+```sql
+(start1, end1) OVERLAPS (start2, end2)
+(start1, length1) OVERLAPS (start2, length2)
+```
+
+This expression yields true when two time periods (defined by their endpoints) overlap, false when they do not overlap. The endpoints can be specified as pairs of dates, times, or time stamps; or as a date, time, or time stamp followed by an interval. When a pair of values is provided, either the start or the end can be written first; OVERLAPS automatically takes the earlier value of the pair as the start. Each time period is considered to represent the half-open interval start <= time < end, unless start and end are equal in which case it represents that single time instant. This means for instance that two time periods with only an endpoint in common do not overlap.
+
+```sql
+#(DATE '2001-02-16', DATE '2001-12-21') OVERLAPS (DATE '2001-10-30', DATE '2002-10-30') → true
+#(DATE '2001-02-16', INTERVAL '100 days') OVERLAPS (DATE '2001-10-30', DATE '2002-10-30') → false
+#(DATE '2001-10-29', DATE '2001-10-30') OVERLAPS (DATE '2001-10-30', DATE '2001-10-31') → false
+#(DATE '2001-10-30', DATE '2001-10-30') OVERLAPS (DATE '2001-10-30', DATE '2001-10-31') → true
+```
+
+When adding an interval value to (or subtracting an interval value from) a timestamp with time zone value, the days component advances or decrements the date of the timestamp with time zone by the indicated number of days, keeping the time of day the same. Across daylight saving time changes (when the session time zone is set to a time zone that recognizes DST), this means interval '1 day' does not necessarily equal interval '24 hours'. For example, with the session time zone set to America/Denver:
+
+```sql
+timestamp with time zone '2005-04-02 12:00:00-07' + interval '1 day' ~→ 2005-04-03 12:00:00-06
+timestamp with time zone '2005-04-02 12:00:00-07' + interval '24 hours' ~→ 2005-04-03 13:00:00-06
+```
+
+This happens because an hour was skipped due to a change in daylight saving time at 2005-04-03 02:00:00 in time zone America/Denver.
+
+Note there can be ambiguity in the months field returned by age because different months have different numbers of days. PostgreSQL's approach uses the month from the earlier of the two dates when calculating partial months. For example, age('2004-06-01', '2004-04-30') uses April to yield 1 mon 1 day, while using May would yield 1 mon 2 days because May has 31 days, while April has only 30.
+
+Subtraction of dates and timestamps can also be complex. One conceptually simple way to perform subtraction is to convert each value to a number of seconds using EXTRACT(EPOCH FROM ...), then subtract the results; this produces the number of seconds between the two values. This will adjust for the number of days in each month, timezone changes, and daylight saving time adjustments. Subtraction of date or timestamp values with the “-” operator returns the number of days (24-hours) and hours/minutes/seconds between the values, making the same adjustments. The age function returns years, months, days, and hours/minutes/seconds, performing field-by-field subtraction and then adjusting for negative field values. The following queries illustrate the differences in these approaches. The sample results were produced with timezone = 'US/Eastern'; there is a daylight saving time change between the two dates used:
+
+```sql
+EXTRACT(EPOCH FROM timestamptz '2013-07-01 12:00:00') - EXTRACT(EPOCH FROM timestamptz '2013-03-01 12:00:00') ~→ 10537200.000000
+(EXTRACT(EPOCH FROM timestamptz '2013-07-01 12:00:00') - EXTRACT(EPOCH FROM timestamptz '2013-03-01 12:00:00')) / 60 / 60 / 24 ~→ 121.9583333333333333
+timestamptz '2013-07-01 12:00:00' - timestamptz '2013-03-01 12:00:00' ~→ 121 days 23:00:00
+age(timestamptz '2013-07-01 12:00:00', timestamptz '2013-03-01 12:00:00') → 4 mons
+```
+
+9.9.1. EXTRACT, date_part
+
+```sql
+EXTRACT(field FROM source)
+```
+
+The extract function retrieves subfields such as year or hour from date/time values. source must be a value expression of type timestamp, time, or interval. (Expressions of type date are cast to timestamp and can therefore be used as well.) field is an identifier or string that selects what field to extract from the source value. The extract function returns values of type numeric. The following are valid field names:
+
+century
+The century
+
+```sql
+EXTRACT(CENTURY FROM TIMESTAMP '2000-12-16 12:21:13') → 20
+EXTRACT(CENTURY FROM TIMESTAMP '2001-02-16 20:38:40') → 21
+```
+
+The first century starts at 0001-01-01 00:00:00 AD, although they did not know it at the time. This definition applies to all Gregorian calendar countries. There is no century number 0, you go from -1 century to 1 century. If you disagree with this, please write your complaint to: Pope, Cathedral Saint-Peter of Roma, Vatican.
+
+day
+For timestamp values, the day (of the month) field (1–31) ; for interval values, the number of days
+
+```sql
+EXTRACT(DAY FROM TIMESTAMP '2001-02-16 20:38:40') → 16
+ EXTRACT(DAY FROM INTERVAL '40 days 1 minute') → 40
+```
+
+decade
+The year field divided by 10
+
+```sql
+EXTRACT(DECADE FROM TIMESTAMP '2001-02-16 20:38:40') → 200
+```
+
+dow
+The day of the week as Sunday (0) to Saturday (6)
+
+```sql
+EXTRACT(DOW FROM TIMESTAMP '2001-02-16 20:38:40') → 5
+```
+
+Note that extract's day of the week numbering differs from that of the to_char(..., 'D') function.
+
+doy
+The day of the year (1–365/366)
+
+```sql
+EXTRACT(DOY FROM TIMESTAMP '2001-02-16 20:38:40') → 47
+```
+
+epoch
+For timestamp with time zone values, the number of seconds since 1970-01-01 00:00:00 UTC (negative for timestamps before that); for date and timestamp values, the nominal number of seconds since 1970-01-01 00:00:00, without regard to timezone or daylight-savings rules; for interval values, the total number of seconds in the interval
+
+```sql
+EXTRACT(EPOCH FROM TIMESTAMP WITH TIME ZONE '2001-02-16 20:38:40.12-08') → 982384720.120000
+EXTRACT(EPOCH FROM TIMESTAMP '2001-02-16 20:38:40.12') → 982355920.120000
+EXTRACT(EPOCH FROM INTERVAL '5 days 3 hours') → 442800.000000
+```
+
+You can convert an epoch value back to a timestamp with time zone with to_timestamp:
+
+```sql
+to_timestamp(982384720.12) → 2001-02-17 04:38:40.12+00
+```
+Beware that applying to_timestamp to an epoch extracted from a date or timestamp value could produce a misleading result: the result will effectively assume that the original value had been given in UTC, which might not be the case.
+
+hour
+The hour field (0–23)
+
+```sql
+EXTRACT(HOUR FROM TIMESTAMP '2001-02-16 20:38:40') → 20
+```
+
+isodow
+The day of the week as Monday (1) to Sunday (7)
+
+```sql
+EXTRACT(ISODOW FROM TIMESTAMP '2001-02-18 20:38:40') → 7
+```
+
+This is identical to dow except for Sunday. This matches the ISO 8601 day of the week numbering.
+
+isoyear
+The ISO 8601 week-numbering year that the date falls in (not applicable to intervals)
+
+```sql
+EXTRACT(ISOYEAR FROM DATE '2006-01-01') → 2005
+EXTRACT(ISOYEAR FROM DATE '2006-01-02') → 2006
+```
+
+Each ISO 8601 week-numbering year begins with the Monday of the week containing the 4th of January, so in early January or late December the ISO year may be different from the Gregorian year. See the week field for more information.
+
+This field is not available in PostgreSQL releases prior to 8.3.
+
+julian
+The Julian Date corresponding to the date or timestamp (not applicable to intervals). Timestamps that are not local midnight result in a fractional value. See Section B.7 for more information.
+
+```sql
+EXTRACT(JULIAN FROM DATE '2006-01-01') → 2453737
+EXTRACT(JULIAN FROM TIMESTAMP '2006-01-01 12:00') → 2453737.50000000000000000000
+```
+
+microseconds
+The seconds field, including fractional parts, multiplied by 1 000 000; note that this includes full seconds
+
+```sql
+EXTRACT(MICROSECONDS FROM TIME '17:12:28.5') → 28500000
+```
+
+millennium
+The millennium
+
+```sql
+EXTRACT(MILLENNIUM FROM TIMESTAMP '2001-02-16 20:38:40') → 3
+```
+Years in the 1900s are in the second millennium. The third millennium started January 1, 2001.
+
+milliseconds
+The seconds field, including fractional parts, multiplied by 1000. Note that this includes full seconds.
+
+```sql
+EXTRACT(MILLISECONDS FROM TIME '17:12:28.5') → 28500.000
+```
+
+minute
+The minutes field (0–59)
+
+```sql
+EXTRACT(MINUTE FROM TIMESTAMP '2001-02-16 20:38:40') → 38
+```
+
+month
+For timestamp values, the number of the month within the year (1–12) ; for interval values, the number of months, modulo 12 (0–11)
+
+```sql
+SELECT EXTRACT(MONTH FROM TIMESTAMP '2001-02-16 20:38:40') → 2
+SELECT EXTRACT(MONTH FROM INTERVAL '2 years 3 months') → 3
+SELECT EXTRACT(MONTH FROM INTERVAL '2 years 13 months') → 1
+```
+
+quarter
+The quarter of the year (1–4) that the date is in
+
+```sql
+SELECT EXTRACT(QUARTER FROM TIMESTAMP '2001-02-16 20:38:40') → 1
+```
+
+second
+The seconds field, including any fractional seconds
+
+```sql
+SELECT EXTRACT(SECOND FROM TIMESTAMP '2001-02-16 20:38:40') → 40.000000
+SELECT EXTRACT(SECOND FROM TIME '17:12:28.5') → 28.500000
+```
+
+timezone
+The time zone offset from UTC, measured in seconds. Positive values correspond to time zones east of UTC, negative values to zones west of UTC. (Technically, PostgreSQL does not use UTC because leap seconds are not handled.)
+
+timezone_hour
+The hour component of the time zone offset
+
+timezone_minute
+The minute component of the time zone offset
+
+week
+The number of the ISO 8601 week-numbering week of the year. By definition, ISO weeks start on Mondays and the first week of a year contains January 4 of that year. In other words, the first Thursday of a year is in week 1 of that year.
+
+In the ISO week-numbering system, it is possible for early-January dates to be part of the 52nd or 53rd week of the previous year, and for late-December dates to be part of the first week of the next year. For example, 2005-01-01 is part of the 53rd week of year 2004, and 2006-01-01 is part of the 52nd week of year 2005, while 2012-12-31 is part of the first week of 2013. It's recommended to use the isoyear field together with week to get consistent results.
+
+```sql
+EXTRACT(WEEK FROM TIMESTAMP '2001-02-16 20:38:40') → 7
+```
+
+year
+The year field. Keep in mind there is no 0 AD, so subtracting BC years from AD years should be done with care.
+
+```sql
+EXTRACT(YEAR FROM TIMESTAMP '2001-02-16 20:38:40') → 2001
+```
+
+Note
+When the input value is +/-Infinity, extract returns +/-Infinity for monotonically-increasing fields (epoch, julian, year, isoyear, decade, century, and millennium). For other fields, NULL is returned. PostgreSQL versions before 9.6 returned zero for all cases of infinite input.
+
+The extract function is primarily intended for computational processing. For formatting date/time values for display, see Section 9.8.
+
+The date_part function is modeled on the traditional Ingres equivalent to the SQL-standard function extract:
+
+```sql
+date_part('field', source)
+```
+
+Note that here the field parameter needs to be a string value, not a name. The valid field names for date_part are the same as for extract. For historical reasons, the date_part function returns values of type double precision. This can result in a loss of precision in certain uses. Using extract is recommended instead.
+
+```sql
+date_part('day', TIMESTAMP '2001-02-16 20:38:40') → 16
+date_part('hour', INTERVAL '4 hours 3 minutes') → 4
+```
+
+9.9.2. date_trunc
+
+The function date_trunc is conceptually similar to the trunc function for numbers.
+
+```sql
+date_trunc(field, source [, time_zone ])
+```
+
+source is a value expression of type timestamp, timestamp with time zone, or interval. (Values of type date and time are cast automatically to timestamp or interval, respectively.) field selects to which precision to truncate the input value. The return value is likewise of type timestamp, timestamp with time zone, or interval, and it has all fields that are less significant than the selected one set to zero (or one, for day and month).
+
+Valid values for field are:
+
+microseconds
+milliseconds
+second
+minute
+hour
+day
+week
+month
+quarter
+year
+decade
+century
+millennium
+
+When the input value is of type timestamp with time zone, the truncation is performed with respect to a particular time zone; for example, truncation to day produces a value that is midnight in that zone. By default, truncation is done with respect to the current TimeZone setting, but the optional time_zone argument can be provided to specify a different time zone. The time zone name can be specified in any of the ways described in Section 8.5.3.
+
+A time zone cannot be specified when processing timestamp without time zone or interval inputs. These are always taken at face value.
+
+Examples (assuming the local time zone is America/New_York):
+
+```sql
+date_trunc('hour', TIMESTAMP '2001-02-16 20:38:40') ~→ 2001-02-16 20:00:00
+date_trunc('year', TIMESTAMP '2001-02-16 20:38:40') ~→ 2001-01-01 00:00:00
+date_trunc('day', TIMESTAMP WITH TIME ZONE '2001-02-16 20:38:40+00') ~→ 2001-02-16 00:00:00-05
+#date_trunc('day', TIMESTAMP WITH TIME ZONE '2001-02-16 20:38:40+00', 'Australia/Sydney') ~→ 2001-02-16 08:00:00-05
+date_trunc('hour', INTERVAL '3 days 02:47:33') → 3 days 02:00:00
+```
+
+9.9.3. date_bin
+
+The function date_bin “bins” the input timestamp into the specified interval (the stride) aligned with a specified origin.
+
+```sql
+date_bin(stride, source, origin)
+```
+
+source is a value expression of type timestamp or timestamp with time zone. (Values of type date are cast automatically to timestamp.) stride is a value expression of type interval. The return value is likewise of type timestamp or timestamp with time zone, and it marks the beginning of the bin into which the source is placed.
+
+Examples:
+
+```sql
+date_bin('15 minutes', TIMESTAMP '2020-02-11 15:44:17', TIMESTAMP '2001-01-01') → 2020-02-11 15:30:00
+date_bin('15 minutes', TIMESTAMP '2020-02-11 15:44:17', TIMESTAMP '2001-01-01 00:02:30') → 2020-02-11 15:32:30
+```
+
+In the case of full units (1 minute, 1 hour, etc.), it gives the same result as the analogous date_trunc call, but the difference is that date_bin can truncate to an arbitrary interval.
+
+The stride interval must be greater than zero and cannot contain units of month or larger.
+
+9.9.4. AT TIME ZONE
+
+The AT TIME ZONE operator converts time stamp without time zone to/from time stamp with time zone, and time with time zone values to different time zones. Table 9.33 shows its variants. (NOT SUPPORTED)
+
+Table 9.33. AT TIME ZONE Variants
+
+#|
+||Operator|Description|Example(s)|
+||timestamp without time zone AT TIME ZONE zone → timestamp with time zone|
+Converts given time stamp without time zone to time stamp with time zone, assuming the given value is in the named time zone.|
+```sql
+#timestamp '2001-02-16 20:38:40' at time zone 'America/Denver' → 2001-02-17 03:38:40+00
+```||
+||timestamp with time zone AT TIME ZONE zone → timestamp without time zone|
+Converts given time stamp with time zone to time stamp without time zone, as the time would appear in that zone.|
+```sql
+#timestamp with time zone '2001-02-16 20:38:40-05' at time zone 'America/Denver' → 2001-02-16 18:38:40
+```||
+||time with time zone AT TIME ZONE zone → time with time zone|
+Converts given time with time zone to a new time zone. Since no date is supplied, this uses the currently active UTC offset for the named destination zone.|
+```sql
+#time with time zone '05:34:17-05' at time zone 'UTC' → 10:34:17+00
+```||
+|#
+
+In these expressions, the desired time zone zone can be specified either as a text value (e.g., 'America/Los_Angeles') or as an interval (e.g., INTERVAL '-08:00'). In the text case, a time zone name can be specified in any of the ways described in Section 8.5.3. The interval case is only useful for zones that have fixed offsets from UTC, so it is not very common in practice.
+
+Examples (assuming the current TimeZone setting is America/Los_Angeles):
+
+```sql
+#TIMESTAMP '2001-02-16 20:38:40' AT TIME ZONE 'America/Denver' ~→ 2001-02-16 19:38:40-08
+#TIMESTAMP WITH TIME ZONE '2001-02-16 20:38:40-05' AT TIME ZONE 'America/Denver' ~→ 2001-02-16 18:38:40
+#TIMESTAMP '2001-02-16 20:38:40' AT TIME ZONE 'Asia/Tokyo' AT TIME ZONE 'America/Chicago' ~→ 2001-02-16 05:38:40
+```
+
+The first example adds a time zone to a value that lacks it, and displays the value using the current TimeZone setting. The second example shifts the time stamp with time zone value to the specified time zone, and returns the value without a time zone. This allows storage and display of values different from the current TimeZone setting. The third example converts Tokyo time to Chicago time.
+
+The function timezone(zone, timestamp) is equivalent to the SQL-conforming construct timestamp AT TIME ZONE zone.
+
+9.9.5. Current Date/Time
+
+PostgreSQL provides a number of functions that return values related to the current date and time. These SQL-standard functions all return values based on the start time of the current transaction:
+
+```sql
+CURRENT_DATE
+CURRENT_TIME
+CURRENT_TIMESTAMP
+CURRENT_TIME(precision)
+CURRENT_TIMESTAMP(precision)
+LOCALTIME
+LOCALTIMESTAMP
+LOCALTIME(precision)
+LOCALTIMESTAMP(precision)
+```
+
+CURRENT_TIME and CURRENT_TIMESTAMP deliver values with time zone; LOCALTIME and LOCALTIMESTAMP deliver values without time zone.
+
+CURRENT_TIME, CURRENT_TIMESTAMP, LOCALTIME, and LOCALTIMESTAMP can optionally take a precision parameter, which causes the result to be rounded to that many fractional digits in the seconds field. Without a precision parameter, the result is given to the full available precision.
+
+Some examples:
+
+```sql
+CURRENT_TIME ~→ 14:39:53.662522-05
+CURRENT_DATE ~→ 2019-12-23
+CURRENT_TIMESTAMP ~→ 2019-12-23 14:39:53.662522-05
+CURRENT_TIMESTAMP(2) ~→ 2019-12-23 14:39:53.66-05
+#LOCALTIMESTAMP ~→ 2019-12-23 14:39:53.662522
+```
+
+Since these functions return the start time of the current transaction, their values do not change during the transaction. This is considered a feature: the intent is to allow a single transaction to have a consistent notion of the “current” time, so that multiple modifications within the same transaction bear the same time stamp.
+
+Note
+Other database systems might advance these values more frequently.
+
+PostgreSQL also provides functions that return the start time of the current statement, as well as the actual current time at the instant the function is called. The complete list of non-SQL-standard time functions is:
+
+```sql
+transaction_timestamp()
+statement_timestamp()
+clock_timestamp()
+timeofday()
+now()
+```
+
+transaction_timestamp() is equivalent to CURRENT_TIMESTAMP, but is named to clearly reflect what it returns. statement_timestamp() returns the start time of the current statement (more specifically, the time of receipt of the latest command message from the client). statement_timestamp() and transaction_timestamp() return the same value during the first command of a transaction, but might differ during subsequent commands. clock_timestamp() returns the actual current time, and therefore its value changes even within a single SQL command. timeofday() is a historical PostgreSQL function. Like clock_timestamp(), it returns the actual current time, but as a formatted text string rather than a timestamp with time zone value. now() is a traditional PostgreSQL equivalent to transaction_timestamp().
+
+All the date/time data types also accept the special literal value now to specify the current date and time (again, interpreted as the transaction start time). Thus, the following three all return the same result:
+
+```sql
+SELECT CURRENT_TIMESTAMP;
+SELECT now();
+SELECT TIMESTAMP 'now';  -- but see tip below
+```
+
+Tip
+Do not use the third form when specifying a value to be evaluated later, for example in a DEFAULT clause for a table column. The system will convert now to a timestamp as soon as the constant is parsed, so that when the default value is needed, the time of the table creation would be used! The first two forms will not be evaluated until the default value is used, because they are function calls. Thus they will give the desired behavior of defaulting to the time of row insertion. (See also Section 8.5.1.4.)
+
+9.9.6. Delaying Execution
+
+The following functions are available to delay execution of the server process:
+
+```sql
+pg_sleep ( double precision )
+pg_sleep_for ( interval )
+pg_sleep_until ( timestamp with time zone )
+```
+
+pg_sleep makes the current session's process sleep until the given number of seconds have elapsed. Fractional-second delays can be specified. pg_sleep_for is a convenience function to allow the sleep time to be specified as an interval. pg_sleep_until is a convenience function for when a specific wake-up time is desired. For example:
+
+```sql
+SELECT pg_sleep(1.5);
+SELECT pg_sleep_for('5 minutes');
+SELECT pg_sleep_until('tomorrow 03:00');
+```
+
+Note
+The effective resolution of the sleep interval is platform-specific; 0.01 seconds is a common value. The sleep delay will be at least as long as specified. It might be longer depending on factors such as server load. In particular, pg_sleep_until is not guaranteed to wake up exactly at the specified time, but it will not wake up any earlier.
+
+Warning
+Make sure that your session does not hold more locks than necessary when calling pg_sleep or its variants. Otherwise other sessions might have to wait for your sleeping process, slowing down the entire system.
+
+# 9.10. Enum Support Functions (NOT SUPPORTED)
+
+# 9.11. Geometric Functions and Operators
+The geometric types point, box, lseg, line, path, polygon, and circle have a large set of native support functions and operators, shown in Table 9.35, Table 9.36, and Table 9.37.
+
+Table 9.35. Geometric Operators
+
+#|
+||Operator|Description|Example(s)||
+||geometric_type + point → geometric_type|
+Adds the coordinates of the second point to those of each point of the first argument, thus performing translation. Available for point, box, path, circle.|
+```sql
+box '(1,1),(0,0)' + point '(2,0)' → (3,1),(2,0)
+```||
+||path + path → path|
+Concatenates two open paths (returns NULL if either path is closed).|
+```sql
+path '[(0,0),(1,1)]' + path '[(2,2),(3,3),(4,4)]' → [(0,0),(1,1),(2,2),(3,3),(4,4)]
+```||
+||geometric_type - point → geometric_type|
+Subtracts the coordinates of the second point from those of each point of the first argument, thus performing translation. Available for point, box, path, circle.|
+```sql
+box '(1,1),(0,0)' - point '(2,0)' → (-1,1),(-2,0)
+```||
+||geometric_type * point → geometric_type|
+Multiplies each point of the first argument by the second point (treating a point as being a complex number represented by real and imaginary parts, and performing standard complex multiplication). If one interprets the second point as a vector, this is equivalent to scaling the object's size and distance from the origin by the length of the vector, and rotating it counterclockwise around the origin by the vector's angle from the x axis. Available for point, box,[a] path, circle.|
+```sql
+path '((0,0),(1,0),(1,1))' * point '(3.0,0)' → ((0,0),(3,0),(3,3))
+path '((0,0),(1,0),(1,1))' * point(cosd(45), sind(45)) → ((0,0),(0.7071067811865475,0.7071067811865475),(0,1.414213562373095))
+```||
+||geometric_type / point → geometric_type|
+Divides each point of the first argument by the second point (treating a point as being a complex number represented by real and imaginary parts, and performing standard complex division). If one interprets the second point as a vector, this is equivalent to scaling the object's size and distance from the origin down by the length of the vector, and rotating it clockwise around the origin by the vector's angle from the x axis. Available for point, box,[a] path, circle.|
+```sql
+path '((0,0),(1,0),(1,1))' / point '(2.0,0)' → ((0,0),(0.5,0),(0.5,0.5))
+path '((0,0),(1,0),(1,1))' / point(cosd(45), sind(45)) → ((0,0),(0.7071067811865476,-0.7071067811865476),(1.4142135623730951,0))
+```||
+||@-@ geometric_type → double precision|
+Computes the total length. Available for lseg, path.|
+```sql
+@-@ path '[(0,0),(1,0),(1,1)]' → 2
+```||
+||@@ geometric_type → point|
+Computes the center point. Available for box, lseg, polygon, circle.|
+```sql
+@@ box '(2,2),(0,0)' → (1,1)
+```||
+||\# geometric_type → integer|
+Returns the number of points. Available for path, polygon.|
+```sql
+# path '((1,0),(0,1),(-1,0))' → 3
+```||
+||geometric_type # geometric_type → point|
+Computes the point of intersection, or NULL if there is none. Available for lseg, line.|
+```sql
+lseg '[(0,0),(1,1)]' # lseg '[(1,0),(0,1)]' → (0.5,0.5)
+```||
+||box # box → box|
+Computes the intersection of two boxes, or NULL if there is none.|
+```sql
+box '(2,2),(-1,-1)' # box '(1,1),(-2,-2)' → (1,1),(-1,-1)
+```||
+||geometric_type ## geometric_type → point|
+Computes the closest point to the first object on the second object. Available for these pairs of types: (point, box), (point, lseg), (point, line), (lseg, box), (lseg, lseg), (line, lseg).|
+```sql
+point '(0,0)' ## lseg '[(2,0),(0,2)]' → (1,1)
+```||
+||geometric_type <-> geometric_type → double precision|
+Computes the distance between the objects. Available for all geometric types except polygon, for all combinations of point with another geometric type, and for these additional pairs of types: (box, lseg), (lseg, line), (polygon, circle) (and the commutator cases).|
+```sql
+circle '<(0,0),1>' <-> circle '<(5,0),1>' → 3
+```||
+||geometric_type @> geometric_type → boolean|
+Does first object contain second? Available for these pairs of types: (box, point), (box, box), (path, point), (polygon, point), (polygon, polygon), (circle, point), (circle, circle).|
+```sql
+circle '<(0,0),2>' @> point '(1,1)' → true
+```||
+||geometric_type <@ geometric_type → boolean|
+Is first object contained in or on second? Available for these pairs of types: (point, box), (point, lseg), (point, line), (point, path), (point, polygon), (point, circle), (box, box), (lseg, box), (lseg, line), (polygon, polygon), (circle, circle).|
+```sql
+point '(1,1)' <@ circle '<(0,0),2>' → true
+```||
+||geometric_type && geometric_type → boolean|
+Do these objects overlap? (One point in common makes this true.) Available for box, polygon, circle.|
+```sql
+box '(1,1),(0,0)' && box '(2,2),(0,0)' → true
+```||
+||geometric_type << geometric_type → boolean|
+Is first object strictly left of second? Available for point, box, polygon, circle.|
+```sql
+circle '<(0,0),1>' << circle '<(5,0),1>' → true
+```||
+||geometric_type >> geometric_type → boolean|
+Is first object strictly right of second? Available for point, box, polygon, circle.|
+```sql
+circle '<(5,0),1>' >> circle '<(0,0),1>' → true
+```||
+||geometric_type &< geometric_type → boolean|
+Does first object not extend to the right of second? Available for box, polygon, circle.|
+```sql
+box '(1,1),(0,0)' &< box '(2,2),(0,0)' → true
+```||
+||geometric_type &> geometric_type → boolean|
+Does first object not extend to the left of second? Available for box, polygon, circle.|
+```sql
+box '(3,3),(0,0)' &> box '(2,2),(0,0)' → true
+```||
+||geometric_type <<\| geometric_type → boolean|
+Is first object strictly below second? Available for point, box, polygon, circle.|
+```sql
+box '(3,3),(0,0)' <<| box '(5,5),(3,4)' → true
+```||
+||geometric_type \|>> geometric_type → boolean|
+Is first object strictly above second? Available for point, box, polygon, circle.|
+```sql
+box '(5,5),(3,4)' |>> box '(3,3),(0,0)' → true
+```||
+||geometric_type &<\| geometric_type → boolean|
+Does first object not extend above second? Available for box, polygon, circle.|
+```sql
+box '(1,1),(0,0)' &<| box '(2,2),(0,0)' → true
+```||
+||geometric_type \|&> geometric_type → boolean|
+Does first object not extend below second? Available for box, polygon, circle.|
+```sql
+box '(3,3),(0,0)' |&> box '(2,2),(0,0)' → true
+```||
+||box <^ box → boolean|
+Is first object below second (allows edges to touch)?|
+```sql
+box '((1,1),(0,0))' <^ box '((2,2),(1,1))' → true
+```||
+||box >^ box → boolean|
+Is first object above second (allows edges to touch)?|
+```sql
+box '((2,2),(1,1))' >^ box '((1,1),(0,0))' → true
+```||
+||geometric_type ?# geometric_type → boolean|
+Do these objects intersect? Available for these pairs of types: (box, box), (lseg, box), (lseg, lseg), (lseg, line), (line, box), (line, line), (path, path).|
+```sql
+lseg '[(-1,0),(1,0)]' ?# box '(2,2),(-2,-2)' → true
+```||
+||?- line → boolean  
+?- lseg → boolean|
+Is line horizontal?|
+```sql
+?- lseg '[(-1,0),(1,0)]' → true
+```||
+||point ?- point → boolean|
+Are points horizontally aligned (that is, have same y coordinate)?|
+```sql
+point '(1,0)' ?- point '(0,0)' → true
+```||
+||?\| line → boolean  
+?\| lseg → boolean|
+Is line vertical?|
+```sql
+?| lseg '[(-1,0),(1,0)]' → false
+```||
+||point ?\| point → boolean|
+Are points vertically aligned (that is, have same x coordinate)?|
+```sql
+point '(0,1)' ?| point '(0,0)' → true
+```||
+||line ?-\| line → boolean  
+lseg ?-\| lseg → boolean|
+Are lines perpendicular?|
+```sql
+lseg '[(0,0),(0,1)]' ?-| lseg '[(0,0),(1,0)]' → true
+```||
+||line ?\|\| line → boolean  
+lseg ?\|\| lseg → boolean|
+Are lines parallel?|
+```sql
+lseg '[(-1,0),(1,0)]' ?|| lseg '[(-1,2),(1,2)]' → true
+```||
+||geometric_type ~= geometric_type → boolean|
+Are these objects the same? Available for point, box, polygon, circle.|
+```sql
+polygon '((0,0),(1,1))' ~= polygon '((1,1),(0,0))' → true
+```||
+|#
+
+[a] “Rotating” a box with these operators only moves its corner points: the box is still considered to have sides parallel to the axes. Hence the box's size is not preserved, as a true rotation would do.
+
+Caution
+Note that the “same as” operator, ~=, represents the usual notion of equality for the point, box, polygon, and circle types. Some of the geometric types also have an = operator, but = compares for equal areas only. The other scalar comparison operators (<= and so on), where available for these types, likewise compare areas.
+
+Note
+Before PostgreSQL 14, the point is strictly below/above comparison operators point <<\| point and point \|>> point were respectively called <^ and >^. These names are still available, but are deprecated and will eventually be removed.
+
+Table 9.36. Geometric Functions
+
+#|
+||Function|Description|Example(s)||
+||area ( geometric_type ) → double precision|
+Computes area. Available for box, path, circle. A path input must be closed, else NULL is returned. Also, if the path is self-intersecting, the result may be meaningless.|
+```sql
+area(box '(2,2),(0,0)') → 4
+```||
+||center ( geometric_type ) → point|
+Computes center point. Available for box, circle.|
+```sql
+center(box '(1,2),(0,0)') → (0.5,1)
+```||
+||diagonal ( box ) → lseg|
+Extracts box's diagonal as a line segment (same as lseg(box)).|
+```sql
+diagonal(box '(1,2),(0,0)') → [(1,2),(0,0)]
+```||
+||diameter ( circle ) → double precision|
+Computes diameter of circle.|
+```sql
+diameter(circle '<(0,0),2>') → 4
+```||
+||height ( box ) → double precision|
+Computes vertical size of box.|
+```sql
+height(box '(1,2),(0,0)') → 2
+```||
+||isclosed ( path ) → boolean|
+Is path closed?|
+```sql
+isclosed(path '((0,0),(1,1),(2,0))') → true
+```||
+||isopen ( path ) → boolean|
+Is path open?|
+```sql
+isopen(path '[(0,0),(1,1),(2,0)]') → true
+```||
+||length ( geometric_type ) → double precision|
+Computes the total length. Available for lseg, path.|
+```sql
+length(path '((-1,0),(1,0))') → 4
+```||
+||npoints ( geometric_type ) → integer|
+Returns the number of points. Available for path, polygon.|
+```sql
+npoints(path '[(0,0),(1,1),(2,0)]') → 3
+```||
+||pclose ( path ) → path|
+Converts path to closed form.|
+```sql
+pclose(path '[(0,0),(1,1),(2,0)]') → ((0,0),(1,1),(2,0))
+```||
+||popen ( path ) → path|
+Converts path to open form.|
+```sql
+popen(path '((0,0),(1,1),(2,0))') → [(0,0),(1,1),(2,0)]
+```||
+||radius ( circle ) → double precision|
+Computes radius of circle.|
+```sql
+radius(circle '<(0,0),2>') → 2
+```||
+||slope ( point, point ) → double precision|
+Computes slope of a line drawn through the two points.|
+```sql
+slope(point '(0,0)', point '(2,1)') → 0.5
+```||
+||width ( box ) → double precision|
+Computes horizontal size of box.|
+```sql
+width(box '(1,2),(0,0)') → 1
+```||
+|#
+
+Table 9.37. Geometric Type Conversion Functions
+
+#|
+||Function|Description|Example(s)||
+||box ( circle ) → box|
+Computes box inscribed within the circle.|
+```sql
+box(circle '<(0,0),2>') → (1.414213562373095,1.414213562373095),(-1.414213562373095,-1.414213562373095)
+```||
+||box ( point ) → box|
+Converts point to empty box.|
+```sql
+box(point '(1,0)') → (1,0),(1,0)
+```||
+||box ( point, point ) → box|
+Converts any two corner points to box.|
+```sql
+box(point '(0,1)', point '(1,0)') → (1,1),(0,0)
+```||
+||box ( polygon ) → box|
+Computes bounding box of polygon.|
+```sql
+box(polygon '((0,0),(1,1),(2,0))') → (2,1),(0,0)
+```||
+||bound_box ( box, box ) → box|
+Computes bounding box of two boxes.|
+```sql
+bound_box(box '(1,1),(0,0)', box '(4,4),(3,3)') → (4,4),(0,0)
+```||
+||circle ( box ) → circle|
+Computes smallest circle enclosing box.|
+```sql
+circle(box '(1,1),(0,0)') → <(0.5,0.5),0.7071067811865476>
+```||
+||circle ( point, double precision ) → circle|
+Constructs circle from center and radius.|
+```sql
+circle(point '(0,0)', 2.0) → <(0,0),2>
+```||
+||circle ( polygon ) → circle|
+Converts polygon to circle. The circle's center is the mean of the positions of the polygon's points, and the radius is the average distance of the polygon's points from that center.|
+```sql
+circle(polygon '((0,0),(1,3),(2,0))') → <(1,1),1.6094757082487299>
+```||
+||line ( point, point ) → line|
+Converts two points to the line through them.|
+```sql
+line(point '(-1,0)', point '(1,0)') → {0,-1,0}
+```||
+||lseg ( box ) → lseg|
+Extracts box's diagonal as a line segment.|
+```sql
+lseg(box '(1,0),(-1,0)') → [(1,0),(-1,0)]
+```||
+||lseg ( point, point ) → lseg|
+Constructs line segment from two endpoints.|
+```sql
+lseg(point '(-1,0)', point '(1,0)') → [(-1,0),(1,0)]
+```||
+||path ( polygon ) → path|
+Converts polygon to a closed path with the same list of points.|
+```sql
+path(polygon '((0,0),(1,1),(2,0))') → ((0,0),(1,1),(2,0))
+```||
+||point ( double precision, double precision ) → point|
+Constructs point from its coordinates.|
+```sql
+point(23.4, -44.5) → (23.4,-44.5)
+```||
+||point ( box ) → point|
+Computes center of box.|
+```sql
+point(box '(1,0),(-1,0)') → (0,0)
+```||
+||point ( circle ) → point|
+Computes center of circle.|
+```sql
+point(circle '<(0,0),2>') → (0,0)
+```||
+||point ( lseg ) → point|
+Computes center of line segment.|
+```sql
+point(lseg '[(-1,0),(1,0)]') → (0,0)
+```||
+||point ( polygon ) → point|
+Computes center of polygon (the mean of the positions of the polygon's points).|
+```sql
+point(polygon '((0,0),(1,1),(2,0))') → (1,0.3333333333333333)
+```||
+||polygon ( box ) → polygon|
+Converts box to a 4-point polygon.|
+```sql
+polygon(box '(1,1),(0,0)') → ((0,0),(0,1),(1,1),(1,0))
+```||
+||polygon ( circle ) → polygon|
+Converts circle to a 12-point polygon. (NOT SUPPORTED)|
+```sql
+#polygon(circle '<(0,0),2>') → ((-2,0),​(-1.7320508075688774,0.9999999999999999),​(-1.0000000000000002,1.7320508075688772),​(-1.2246063538223773e-16,2),​(0.9999999999999996,1.7320508075688774),​(1.732050807568877,1.0000000000000007),​(2,2.4492127076447545e-16),​(1.7320508075688776,-0.9999999999999994),​(1.0000000000000009,-1.7320508075688767),​(3.673819061467132e-16,-2),​(-0.9999999999999987,-1.732050807568878),​(-1.7320508075688767,-1.0000000000000009))
+```||
+||polygon ( path ) → polygon|
+Converts closed path to a polygon with the same list of points.|
+```sql
+polygon(path '((0,0),(1,1),(2,0))') → ((0,0),(1,1),(2,0))
+```||
+|#
+
+# 9.12. Network Address Functions and Operators
+The IP network address types, cidr and inet, support the usual comparison operators shown in Table 9.1 as well as the specialized operators and functions shown in Table 9.38 and Table 9.39.
+
+Any cidr value can be cast to inet implicitly; therefore, the operators and functions shown below as operating on inet also work on cidr values. (Where there are separate functions for inet and cidr, it is because the behavior should be different for the two cases.) Also, it is permitted to cast an inet value to cidr. When this is done, any bits to the right of the netmask are silently zeroed to create a valid cidr value.
+
+Table 9.38. IP Address Operators
+
+#|
+||Operator|Description|Example(s)||
+||inet << inet → boolean|
+Is subnet strictly contained by subnet? This operator, and the next four, test for subnet inclusion. They consider only the network parts of the two addresses (ignoring any bits to the right of the netmasks) and determine whether one network is identical to or a subnet of the other.|
+```sql
+inet '192.168.1.5' << inet '192.168.1/24' → true
+inet '192.168.0.5' << inet '192.168.1/24' → false
+inet '192.168.1/24' << inet '192.168.1/24' → false
+```||
+||inet <<= inet → boolean|
+Is subnet contained by or equal to subnet?|
+```sql
+inet '192.168.1/24' <<= inet '192.168.1/24' → true
+```||
+||inet >> inet → boolean|
+Does subnet strictly contain subnet?|
+```sql
+inet '192.168.1/24' >> inet '192.168.1.5' → true
+```||
+||inet >>= inet → boolean|
+Does subnet contain or equal subnet?|
+```sql
+inet '192.168.1/24' >>= inet '192.168.1/24' → true
+```||
+||inet && inet → boolean|
+Does either subnet contain or equal the other?|
+```sql
+inet '192.168.1/24' && inet '192.168.1.80/28' → true
+inet '192.168.1/24' && inet '192.168.2.0/28' → false
+```||
+||~ inet → inet|
+Computes bitwise NOT.|
+```sql
+~ inet '192.168.1.6' → 63.87.254.249
+```||
+||inet & inet → inet|
+Computes bitwise AND.|
+```sql
+inet '192.168.1.6' & inet '0.0.0.255' → 0.0.0.6
+```||
+||inet \| inet → inet|
+Computes bitwise OR.|
+```sql
+inet '192.168.1.6' | inet '0.0.0.255' → 192.168.1.255
+```||
+||inet + bigint → inet|
+Adds an offset to an address.|
+```sql
+inet '192.168.1.6' + 25 → 192.168.1.31
+```||
+||bigint + inet → inet|
+Adds an offset to an address. (NOT SUPPORTED)|
+```sql
+#200 + inet '::ffff:fff0:1' → ::ffff:255.240.0.201
+```||
+||inet - bigint → inet|
+Subtracts an offset from an address.|
+```sql
+inet '192.168.1.43' - 36 → 192.168.1.7
+```||
+||inet - inet → bigint|
+Computes the difference of two addresses.|
+```sql
+inet '192.168.1.43' - inet '192.168.1.19' → 24
+inet '::1' - inet '::ffff:1' → -4294901760
+```||
+|#
+
+Table 9.39. IP Address Functions
+
+#|
+||Function|Description|Example(s)||
+||abbrev ( inet ) → text|
+Creates an abbreviated display format as text. (The result is the same as the inet output function produces; it is “abbreviated” only in comparison to the result of an explicit cast to text, which for historical reasons will never suppress the netmask part.)|
+```sql
+abbrev(inet '10.1.0.0/32') → 10.1.0.0
+```||
+||abbrev ( cidr ) → text|
+Creates an abbreviated display format as text. (The abbreviation consists of dropping all-zero octets to the right of the netmask; more examples are in Table 8.22.)|
+```sql
+abbrev(cidr '10.1.0.0/16') → 10.1/16
+```||
+||broadcast ( inet ) → inet|
+Computes the broadcast address for the address's network.|
+```sql
+broadcast(inet '192.168.1.5/24') → 192.168.1.255/24
+```||
+||family ( inet ) → integer|
+Returns the address's family: 4 for IPv4, 6 for IPv6.|
+```sql
+family(inet '::1') → 6
+```||
+||host ( inet ) → text|
+Returns the IP address as text, ignoring the netmask.|
+```sql
+host(inet '192.168.1.0/24') → 192.168.1.0
+```||
+||hostmask ( inet ) → inet|
+Computes the host mask for the address's network.|
+```sql
+hostmask(inet '192.168.23.20/30') → 0.0.0.3
+```||
+||inet_merge ( inet, inet ) → cidr|
+Computes the smallest network that includes both of the given networks.|
+```sql
+inet_merge(inet '192.168.1.5/24', inet '192.168.2.5/24') → 192.168.0.0/22
+```||
+||inet_same_family ( inet, inet ) → boolean|
+Tests whether the addresses belong to the same IP family.|
+```sql
+inet_same_family(inet '192.168.1.5/24', inet '::1') → false
+```||
+||masklen ( inet ) → integer|
+Returns the netmask length in bits.|
+```sql
+masklen(inet '192.168.1.5/24') → 24
+```||
+||netmask ( inet ) → inet|
+Computes the network mask for the address's network.|
+```sql
+netmask(inet '192.168.1.5/24') → 255.255.255.0
+```||
+||network ( inet ) → cidr|
+Returns the network part of the address, zeroing out whatever is to the right of the netmask. (This is equivalent to casting the value to cidr.)|
+```sql
+network(inet '192.168.1.5/24') → 192.168.1.0/24
+```||
+||set_masklen ( inet, integer ) → inet|
+Sets the netmask length for an inet value. The address part does not change.|
+```sql
+set_masklen(inet '192.168.1.5/24', 16) → 192.168.1.5/16
+```||
+||set_masklen ( cidr, integer ) → cidr|
+Sets the netmask length for a cidr value. Address bits to the right of the new netmask are set to zero.|
+```sql
+set_masklen(cidr '192.168.1.0/24', 16) → 192.168.0.0/16
+```||
+||text ( inet ) → text|
+Returns the unabbreviated IP address and netmask length as text. (This has the same result as an explicit cast to text.)|
+```sql
+text(inet '192.168.1.5') → 192.168.1.5/32
+```||
+|#
+
+Tip
+The abbrev, host, and text functions are primarily intended to offer alternative display formats for IP addresses.
+
+The MAC address types, macaddr and macaddr8, support the usual comparison operators shown in Table 9.1 as well as the specialized functions shown in Table 9.40. In addition, they support the bitwise logical operators ~, & and | (NOT, AND and OR), just as shown above for IP addresses.
+
+Table 9.40. MAC Address Functions
+
+#|
+||Function|Description|Example(s)||
+||trunc ( macaddr ) → macaddr|
+Sets the last 3 bytes of the address to zero. The remaining prefix can be associated with a particular manufacturer (using data not included in PostgreSQL).|
+```sql
+trunc(macaddr '12:34:56:78:90:ab') → 12:34:56:00:00:00
+```||
+||trunc ( macaddr8 ) → macaddr8|
+Sets the last 5 bytes of the address to zero. The remaining prefix can be associated with a particular manufacturer (using data not included in PostgreSQL).|
+```sql
+trunc(macaddr8 '12:34:56:78:90:ab:cd:ef') → 12:34:56:00:00:00:00:00
+```||
+||macaddr8_set7bit ( macaddr8 ) → macaddr8|
+Sets the 7th bit of the address to one, creating what is known as modified EUI-64, for inclusion in an IPv6 address.|
+```sql
+macaddr8_set7bit(macaddr8 '00:34:56:ab:cd:ef') → 02:34:56:ff:fe:ab:cd:ef
+```||
+|#

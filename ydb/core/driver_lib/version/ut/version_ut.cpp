@@ -22,6 +22,11 @@ using TCompatibilityRule = TCompatibilityInfo::TProtoConstructor::TCompatibility
 using TCurrentCompatibilityInfo = TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo;
 using TStoredCompatibilityInfo = TCompatibilityInfo::TProtoConstructor::TStoredCompatibilityInfo;
 
+constexpr bool PRINT_HUMAN_READABLE = false;
+constexpr bool PRINT_JSON = false;
+
+// #define HUMAN_READABLE_PRINT_TESTS
+
 Y_UNIT_TEST_SUITE(YdbVersion) {
 
     void Test(TCurrentCompatibilityInfo current, TCurrentCompatibilityInfo store, bool expected,
@@ -32,6 +37,13 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         auto storedPB = CompatibilityInfo.MakeStored(componentId, &storePB);
         UNIT_ASSERT_EQUAL_C(CompatibilityInfo.CheckCompatibility(&currentPB, &storedPB, 
             componentId, errorReason), expected, errorReason);
+
+        if (PRINT_HUMAN_READABLE) {
+            Cerr << CompatibilityInfo.PrintHumanReadable(&currentPB) << Endl << Endl;
+        }
+        if (PRINT_JSON) {
+            Cerr << CompatibilityInfo.PrintJson(&currentPB) << Endl << Endl;
+        }
     }
 
     Y_UNIT_TEST(DefaultSameVersion) {
@@ -699,11 +711,147 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         UNIT_ASSERT_C(CompatibilityInfo.CheckCompatibility(&stored, EComponentId::Test1, errorReason), errorReason);
     }
 
-    Y_UNIT_TEST(PrintCurrentVersion) {
-        TString str;
-        google::protobuf::TextFormat::PrintToString(*CompatibilityInfo.GetCurrent(), &str);
-        Cerr << str << Endl;
+    enum class EPrintAs {
+        Proto = 0,
+        HumanReadable,
+        Json,
+    };
+
+    void PrintCompatibilityInfo(const NKikimrConfig::TCurrentCompatibilityInfo& current, EPrintAs printAs = EPrintAs::Proto) {
+        switch (printAs) {
+        case EPrintAs::Proto: {
+            TString str;
+            google::protobuf::TextFormat::PrintToString(current, &str);
+            Cerr << str << Endl;
+            break;
+        }
+        case EPrintAs::HumanReadable: {
+            Cerr << CompatibilityInfo.PrintHumanReadable(&current) << Endl;
+            break;
+        }
+        case EPrintAs::Json: {
+            Cerr << CompatibilityInfo.PrintJson(&current) << Endl;
+            break;
+        }
+        }
     }
+
+    Y_UNIT_TEST(PrintCurrentVersionProto) {
+        PrintCompatibilityInfo(*CompatibilityInfo.GetCurrent());
+    }
+
+#ifdef HUMAN_READABLE_PRINT_TESTS
+    Y_UNIT_TEST(PrintTrunk) {
+        PrintCompatibilityInfo(
+            TCurrentCompatibilityInfo{
+                .Application = "ydb",
+            }.ToPB(),
+            EPrintAs::HumanReadable
+        );
+    }
+
+    Y_UNIT_TEST(PrintStable) {
+        PrintCompatibilityInfo(
+            TCurrentCompatibilityInfo{
+                .Application = "ydb",
+                .Version = TVersion{ .Year = 23, .Major = 3, .Minor = 8, .Hotfix = 4 },
+            }.ToPB(),
+            EPrintAs::HumanReadable
+        );
+    }
+
+    Y_UNIT_TEST(PrintYdbAndNbs) {
+        PrintCompatibilityInfo(
+            TCurrentCompatibilityInfo{
+                .Application = "ydb",
+                .Version = TVersion{ .Year = 24, .Major = 2, .Minor = 2, .Hotfix = 0 },
+                .CanConnectTo = {
+                    TCompatibilityRule{
+                        .Application = "nbs",
+                        .LowerLimit = TVersion{ .Year = 23, .Major = 3 },
+                        .UpperLimit = TVersion{ .Year = 24, .Major = 2 },
+                        .ComponentId = EComponentId::Interconnect,
+                    },
+                },
+            }.ToPB(),
+            EPrintAs::HumanReadable
+        );
+    }
+
+    Y_UNIT_TEST(PrintBadPDisk) {
+        PrintCompatibilityInfo(
+            TCurrentCompatibilityInfo{
+                .Application = "ydb",
+                .Version = TVersion{ .Year = 23, .Major = 4, .Minor = 5, .Hotfix = 1 },
+                .StoresReadableBy = {
+                    TCompatibilityRule{
+                        .Application = "ydb",
+                        .LowerLimit = TVersion{ .Year = 23, .Major = 4, .Minor = 5, .Hotfix = 0 },
+                        .UpperLimit = TVersion{ .Year = 23, .Major = 4, .Minor = 5, .Hotfix = 0 },
+                        .ComponentId = EComponentId::PDisk,
+                        .Forbidden = true,
+                    },
+                }
+            }.ToPB(),
+            EPrintAs::HumanReadable
+        );
+    }
+
+    Y_UNIT_TEST(PrintBadWholeMinorPDisk) {
+        PrintCompatibilityInfo(
+            TCurrentCompatibilityInfo{
+                .Application = "ydb",
+                .Version = TVersion{ .Year = 23, .Major = 4, .Minor = 5, .Hotfix = 1 },
+                .StoresReadableBy = {
+                    TCompatibilityRule{
+                        .Application = "ydb",
+                        .LowerLimit = TVersion{ .Year = 23, .Major = 4, .Minor = 5 },
+                        .UpperLimit = TVersion{ .Year = 23, .Major = 4, .Minor = 5 },
+                        .ComponentId = EComponentId::PDisk,
+                        .Forbidden = true,
+                    },
+                }
+            }.ToPB(),
+            EPrintAs::HumanReadable
+        );
+    }
+
+    Y_UNIT_TEST(PrintCanConnectToWMinor) {
+        PrintCompatibilityInfo(
+            TCurrentCompatibilityInfo{
+                .Application = "ydb",
+                .Version = TVersion{ .Year = 24, .Major = 4, .Minor = 2, .Hotfix = 0 },
+                .CanConnectTo = {
+                    TCompatibilityRule{
+                        .Application = "nbs",
+                        .LowerLimit = TVersion{ .Year = 23, .Major = 4, .Minor = 5 },
+                        .UpperLimit = TVersion{ .Year = 24, .Major = 4 },
+                        .ComponentId = EComponentId::Interconnect,
+                    },
+                }
+            }.ToPB(),
+            EPrintAs::HumanReadable
+        );
+    }
+
+    Y_UNIT_TEST(PrintCanConnectToWHotfix) {
+        PrintCompatibilityInfo(
+            TCurrentCompatibilityInfo{
+                .Application = "ydb",
+                .Version = TVersion{ .Year = 24, .Major = 4, .Minor = 2, .Hotfix = 0 },
+                .CanConnectTo = {
+                    TCompatibilityRule{
+                        .Application = "nbs",
+                        .LowerLimit = TVersion{ .Year = 23, .Major = 4, .Minor = 5, .Hotfix = 1 },
+                        .UpperLimit = TVersion{ .Year = 24, .Major = 4 },
+                        .ComponentId = EComponentId::Interconnect,
+                    },
+                }
+            }.ToPB(),
+            EPrintAs::HumanReadable
+        );
+    }
+#endif
 }
 
 Y_UNIT_TEST_SUITE(OldFormat) {

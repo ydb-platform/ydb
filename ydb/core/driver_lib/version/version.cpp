@@ -1,6 +1,8 @@
 #include <google/protobuf/text_format.h>
+#include <google/protobuf/util/message_differencer.h>
 #include <library/cpp/svnversion/svnversion.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/core/viewer/json/json.h>
 #include "version.h"
 
 namespace NKikimr {
@@ -22,6 +24,12 @@ TCompatibilityInfo::TCompatibilityInfo() {
     /////////////////////////////////////////////////////////
     // Current CompatibilityInfo
     /////////////////////////////////////////////////////////
+
+    using TCurrentConstructor = TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo;
+    using TStoredConstructor = TCompatibilityInfo::TProtoConstructor::TStoredCompatibilityInfo;
+    // using TCompatibilityRuleConstructor = TCompatibilityInfo::TProtoConstructor::TCompatibilityRule;
+    // using TVersionConstructor = TCompatibilityInfo::TProtoConstructor::TVersion;
+
     auto current = TCurrentConstructor{
         .Application = "ydb"
     }.ToPB();
@@ -204,6 +212,10 @@ i32 CompareVersions(const NKikimrConfig::TYdbVersion& left, const NKikimrConfig:
     }
 
     return 0;
+}
+
+bool IsVersionComplete(const NKikimrConfig::TYdbVersion& version) {
+    return version.HasYear() && version.HasMajor() && version.HasMinor() && version.HasHotfix();
 }
 
 // If stored CompatibilityInfo is not present, we:
@@ -650,4 +662,145 @@ bool TCompatibilityInfo::CheckCompatibility(const TOldFormat& peer, TComponentId
     return CheckCompatibility(GetCurrent(), peer, componentId, errorReason);
 }
 
+void PrintVersion(IOutputStream& out, const NKikimrConfig::TYdbVersion& version, bool printSuffix = false) {
+    if (!version.HasYear() || !version.HasMajor()) {
+        out << "invalid";
+    } else {
+        out << version.GetYear() << '-' << version.GetMajor();
+        if (version.HasMinor()) {
+            out << "-" << version.GetMinor();
+        } else if (printSuffix) {
+            out << "-*";
+            return;
+        }
+
+        if (version.HasHotfix()) {
+            const ui32 hotfix = version.GetHotfix();
+            if (hotfix == 1) {
+                out << "-hotfix";
+            } else if (hotfix > 1) {
+                out << "-hotfix-" << hotfix;
+            }
+        } else if (printSuffix) {
+            out << "-*";
+        }
+    }
 }
+
+void PrintCompatibilityRule(IOutputStream& out, const NKikimrConfig::TCompatibilityRule& rule) {
+    if (rule.HasForbidden() && rule.GetForbidden()) {
+        out << "Forbid";
+    } else {
+        out << "Allow";
+    }
+
+    if (rule.HasApplication()) {
+        out << " application: " << rule.GetApplication() << ",";
+    }
+
+    if (rule.HasComponentId()) {
+        out << " component: " << NKikimrConfig::TCompatibilityRule::EComponentId_Name(rule.GetComponentId()) << ",";
+    }
+
+    if (rule.HasLowerLimit() && rule.HasUpperLimit() && google::protobuf::util::MessageDifferencer::Equals(rule.GetLowerLimit(), rule.GetUpperLimit())) {
+        if (IsVersionComplete(rule.GetLowerLimit())) {
+            out << " version: ";
+        } else {
+            out << " versions: ";
+        }
+        PrintVersion(out, rule.GetLowerLimit(), true);
+    } else {
+        out << " bounds: ";
+        if (rule.HasLowerLimit()) {
+            out << "[";
+            PrintVersion(out, rule.GetLowerLimit(), true);
+        } else {
+            out << "(-inf";
+        }
+        out << "; ";
+        if (rule.HasUpperLimit()) {
+            PrintVersion(out, rule.GetUpperLimit(), true);
+            out << "]";
+        } else {
+            out << "+inf)";
+        }
+    }
+}
+
+TString TCompatibilityInfo::PrintHumanReadable(const NKikimrConfig::TCurrentCompatibilityInfo* current) const {
+    TStringStream str("Current compatibility info:\n");
+
+    // print application name
+    str << "    Application: " << current->GetApplication() << "\n";
+
+    // print version
+    str << "    Version: ";
+    if (current->HasVersion()) {
+        PrintVersion(str, current->GetVersion());
+    } else {
+        str << "trunk";
+    }
+    str << "\n";
+
+    // print common rule
+    if (current->HasVersion() && current->GetVersion().HasYear() && current->GetVersion().HasMajor()) {
+        const auto& version = current->GetVersion();
+        str << "    Compatible by default with versions in range ";
+        ui32 year = version.GetYear();
+        ui32 major = version.GetMajor();
+    
+        str << "[" << year << "-";
+        if (major > 1) {
+            str << major - 1;
+        } else {
+            str << major;
+        }
+        str << "-*; " << year << "-" << major + 1 << "-*]\n";
+    }
+
+    // print compatibility rules
+    if (current->StoresReadableBySize() > 0) {
+        str << "    Additional StoresReadableBy rules:\n";
+        for (const auto& rule : current->GetStoresReadableBy()) {
+            str << "        ";
+            PrintCompatibilityRule(str, rule);
+            str << "\n";
+        }
+    }
+
+    if (current->CanLoadFromSize() > 0) {
+        str << "    Additional CanLoadFrom rules:\n";
+        for (const auto& rule : current->GetCanLoadFrom()) {
+            str << "        ";
+            PrintCompatibilityRule(str, rule);
+            str << "\n";
+        }
+    }
+
+    if (current->CanConnectToSize() > 0) {
+        str << "    Additional CanConnectTo rules:\n";
+        for (const auto& rule : current->GetCanConnectTo()) {
+            str << "        ";
+            PrintCompatibilityRule(str, rule);
+            str << "\n";
+        }
+    }
+
+    return str.Str();
+}
+
+TString TCompatibilityInfo::PrintHumanReadable() const {
+    return PrintHumanReadable(GetCurrent());
+}
+
+TString TCompatibilityInfo::PrintJson(const NKikimrConfig::TCurrentCompatibilityInfo* current) const {
+    TStringStream str;
+    TProtoToJson::ProtoToJson(str, *current);
+    return str.Str();
+}
+
+TString TCompatibilityInfo::PrintJson() const {
+    return PrintJson(GetCurrent());
+}
+
+} // namespace NKikimr

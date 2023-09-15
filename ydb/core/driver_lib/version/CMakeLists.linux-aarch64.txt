@@ -15,8 +15,10 @@ target_link_libraries(version PUBLIC
   yutil
   contrib-libs-protobuf
   cpp-actors-interconnect
+  monlib-service-pages
   library-cpp-svnversion
   ydb-core-protos
+  core-viewer-json
 )
 target_sources(version PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/driver_lib/version/version.cpp

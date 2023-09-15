@@ -6,7 +6,6 @@
 #include <library/cpp/actors/core/probes.h>
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <library/cpp/mime/types/mime.h>
-#include <library/cpp/monlib/service/pages/version_mon_page.h>
 #include <library/cpp/monlib/service/pages/mon_page.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/dynamic_counters/page.h>
@@ -16,6 +15,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/monitoring_provider.h>
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/driver_lib/version/version_mon_page.h>
 
 #include "mon_impl.h"
 
@@ -36,7 +36,7 @@ namespace NActors {
 
     void TSyncHttpMon::Start(TActorSystem*) {
         TBase::Register(new TIndexRedirectMonPage(IndexMonPage));
-        TBase::Register(new NMonitoring::TVersionMonPage);
+        TBase::Register(new NMonitoring::TYdbVersionMonPage);
         TBase::Register(new NMonitoring::TTablesorterCssMonPage);
         TBase::Register(new NMonitoring::TTablesorterJsMonPage);
 

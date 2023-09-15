@@ -145,6 +145,12 @@ public:
     NKikimrConfig::TStoredCompatibilityInfo MakeStored(TComponentId componentId,
             const NKikimrConfig::TCurrentCompatibilityInfo* current) const;
 
+    TString PrintHumanReadable(const NKikimrConfig::TCurrentCompatibilityInfo* current) const;
+    TString PrintHumanReadable() const;
+
+    TString PrintJson(const NKikimrConfig::TCurrentCompatibilityInfo* current) const;
+    TString PrintJson() const;
+
 private:
     NKikimrConfig::TCurrentCompatibilityInfo CurrentCompatibilityInfo;
 

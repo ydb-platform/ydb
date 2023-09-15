@@ -9,7 +9,6 @@
 #include <library/cpp/actors/core/probes.h>
 #include <ydb/core/base/monitoring_provider.h>
 
-#include <library/cpp/monlib/service/pages/version_mon_page.h>
 #include <library/cpp/monlib/service/pages/mon_page.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/dynamic_counters/page.h>
@@ -18,6 +17,8 @@
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/protos/mon.pb.h>
+
+#include <ydb/core/driver_lib/version/version_mon_page.h>
 
 #include "mon_impl.h"
 
@@ -691,7 +692,7 @@ void TAsyncHttpMon::Start(TActorSystem* actorSystem) {
         TGuard<TMutex> g(Mutex);
         ActorSystem = actorSystem;
         Register(new TIndexRedirectMonPage(IndexMonPage));
-        Register(new NMonitoring::TVersionMonPage);
+        Register(new NMonitoring::TYdbVersionMonPage);
         Register(new NMonitoring::TTablesorterCssMonPage);
         Register(new NMonitoring::TTablesorterJsMonPage);
         NLwTraceMonPage::RegisterPages(IndexMonPage.Get());

@@ -770,7 +770,7 @@ size_t THeaders::Parse(TStringBuf headers) {
     return headers.begin() - start;
 }
 
-TStringBuf THeaders::operator [](TStringBuf name) const {
+const TStringBuf THeaders::operator [](TStringBuf name) const {
     return Get(name);
 }
 

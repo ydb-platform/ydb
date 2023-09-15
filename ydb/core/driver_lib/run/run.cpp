@@ -460,8 +460,8 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
 void TKikimrRunner::InitializeMonitoringLogin(const TKikimrRunConfig&)
 {
     if (Monitoring) {
-        Monitoring->Register(CreateLoginPage(ActorSystem.Get()));
-        Monitoring->Register(CreateLogoutPage(ActorSystem.Get()));
+        Monitoring->RegisterHandler("/login", MakeWebLoginServiceId());
+        Monitoring->RegisterHandler("/logout", MakeWebLoginServiceId());
     }
 }
 
@@ -1215,6 +1215,8 @@ void TKikimrRunner::InitializeActorSystem(
     serviceInitializers->InitializeServices(setup.Get(), AppData.Get());
 
     if (Monitoring) {
+        setup->LocalServices.emplace_back(MakeWebLoginServiceId(), TActorSetupCmd(CreateWebLoginService(),
+            TMailboxType::HTSwap, AppData->UserPoolId));
         setup->LocalServices.emplace_back(NCrossRef::MakeCrossRefActorId(), TActorSetupCmd(NCrossRef::CreateCrossRefActor(),
             TMailboxType::HTSwap, AppData->SystemPoolId));
         setup->LocalServices.emplace_back(MakeMonVDiskStreamId(), TActorSetupCmd(CreateMonVDiskStreamActor(),

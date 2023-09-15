@@ -731,7 +731,11 @@ void TAsyncHttpMon::Start(TActorSystem* actorSystem) {
         ActorSystem->Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/", HttpMonServiceActorId));
         ActorSystem->Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/node", NodeProxyServiceActorId));
         for (auto& pageInfo : ActorMonPages) {
-            RegisterActorMonPage(pageInfo);
+            if (pageInfo.Page) {
+                RegisterActorMonPage(pageInfo);
+            } else if (pageInfo.Handler) {
+                ActorSystem->Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler(pageInfo.Path, pageInfo.Handler));
+            }
         }
         ActorMonPages.clear();
     }
@@ -815,6 +819,18 @@ NMonitoring::IMonPage* TAsyncHttpMon::RegisterCountersPage(const TString& path, 
         page->SetUnknownGroupPolicy(EUnknownGroupPolicy::Ignore);
         Register(page);
         return page;
+}
+
+void TAsyncHttpMon::RegisterHandler(const TString& path, const TActorId& handler) {
+    if (ActorSystem) {
+        ActorSystem->Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler(path, handler));
+    } else {
+        TGuard<TMutex> g(Mutex);
+        ActorMonPages.emplace_back(TActorMonPageInfo{
+            .Handler = handler,
+            .Path = path,
+        });
+    }
 }
 
 NMonitoring::IMonPage* TAsyncHttpMon::FindPage(const TString& relPath) {

@@ -450,7 +450,7 @@ public:
         Become(&TThis::StateWork);
         LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
                     "actor# " << SelfId() <<
-                    " Become StateWork");
+                    " Become StateWork (SchemeCache " << Services.SchemeCache << ")");
     }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

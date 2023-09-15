@@ -25,6 +25,7 @@ public:
     NMonitoring::IMonPage* RegisterActorPage(TRegisterActorPageFields fields) override;
     NMonitoring::IMonPage* RegisterCountersPage(const TString& path, const TString& title, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) override;
     NMonitoring::IMonPage* FindPage(const TString& relPath) override;
+    void RegisterHandler(const TString& path, const TActorId& handler) override;
 
 protected:
     TConfig Config;
@@ -36,6 +37,7 @@ protected:
 
     struct TActorMonPageInfo {
         NMonitoring::TMonPagePtr Page;
+        TActorId Handler;
         TString Path;
     };
 

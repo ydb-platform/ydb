@@ -109,7 +109,7 @@ struct THeaders {
     THeaders() = default;
     THeaders(TStringBuf headers);
     THeaders(const THeaders&) = delete;
-    TStringBuf operator [](TStringBuf name) const;
+    const TStringBuf operator [](TStringBuf name) const;
     bool Has(TStringBuf name) const;
     TStringBuf Get(TStringBuf name) const; // raw
     size_t Parse(TStringBuf headers);

@@ -55,6 +55,7 @@ public:
         const TString& title, bool preTag, TActorSystem* actorSystem, const TActorId& actorId, bool useAuth = true, bool sortPages = true);
     virtual NMonitoring::IMonPage* RegisterCountersPage(const TString& path, const TString& title, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) = 0;
     virtual NMonitoring::IMonPage* FindPage(const TString& relPath) = 0;
+    virtual void RegisterHandler(const TString& path, const TActorId& handler) = 0;
 };
 
 } // NActors

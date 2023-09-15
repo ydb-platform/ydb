@@ -108,4 +108,8 @@ namespace NActors {
     IMonPage* TSyncHttpMon::FindPage(const TString& relPath) {
         return TBase::FindPage(relPath);
     }
+
+    void TSyncHttpMon::RegisterHandler(const TString& path, const TActorId& handler) {
+        ALOG_ERROR(NActorsServices::HTTP, "Cannot register actor handler " << handler << " in sync mon for " << path);
+    }
 } // NActors

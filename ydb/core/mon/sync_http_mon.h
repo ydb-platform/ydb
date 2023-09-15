@@ -24,6 +24,7 @@ public:
     NMonitoring::IMonPage* RegisterCountersPage(const TString& path, const TString& title, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) override;
     void OutputIndexPage(IOutputStream& out) override;
     NMonitoring::IMonPage* FindPage(const TString& relPath) override;
+    void RegisterHandler(const TString& path, const TActorId& handler) override;
 
 protected:
     typedef NMonitoring::TMonService2 TBase;

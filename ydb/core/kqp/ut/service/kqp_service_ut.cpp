@@ -266,11 +266,15 @@ Y_UNIT_TEST_SUITE(KqpService) {
 
         NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
 
-        static constexpr i64 AsyncPatternCompilationUniqueRequestsSize = UseCompiledCapacityBytesLimit ? 20 : 5;
+        static constexpr i64 AsyncPatternCompilationUniqueRequestsSize = 5;
 
         auto async_compilation_condition = [&]() {
-            if constexpr (UseCache && UseAsyncPatternCompilation) {
-                return *counters.CompiledComputationPatterns < AsyncPatternCompilationUniqueRequestsSize;
+            if constexpr (UseCache) {
+                if constexpr (AsyncPatternCompilation == AsyncPatternCompilationStrategy::On) {
+                    return *counters.CompiledComputationPatterns != AsyncPatternCompilationUniqueRequestsSize;
+                } else if constexpr (AsyncPatternCompilation == AsyncPatternCompilationStrategy::OnWithLimit) {
+                    return *counters.CompiledComputationPatterns < AsyncPatternCompilationUniqueRequestsSize * 4;
+                }
             }
 
             return false;
@@ -332,8 +336,12 @@ Y_UNIT_TEST_SUITE(KqpService) {
             }
         }, 0, InFlight, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
 
-        if constexpr (UseCache && UseAsyncPatternCompilation) {
-            UNIT_ASSERT(*counters.CompiledComputationPatterns >= AsyncPatternCompilationUniqueRequestsSize);
+        if constexpr (UseCache) {
+            if constexpr (AsyncPatternCompilation == AsyncPatternCompilationStrategy::On) {
+                UNIT_ASSERT(*counters.CompiledComputationPatterns == AsyncPatternCompilationUniqueRequestsSize);
+            } else if constexpr (AsyncPatternCompilation == AsyncPatternCompilationStrategy::OnWithLimit) {
+                UNIT_ASSERT(*counters.CompiledComputationPatterns >= AsyncPatternCompilationUniqueRequestsSize);
+            }
         }
     }
 

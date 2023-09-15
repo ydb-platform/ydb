@@ -182,7 +182,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         }
     }
 
-    Ydb::Monitoring::SelfCheckResult RequestHc(int const groupNumber, int const vdiscPerGroupNumber, bool const isMergeRecords = false, int const recordsLimit = 0) {
+    Ydb::Monitoring::SelfCheckResult RequestHc(int const groupNumber, int const vdiscPerGroupNumber, bool const isMergeRecords = false) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -228,12 +228,11 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
         auto *request = new NHealthCheck::TEvSelfCheckRequest;
         request->Request.set_merge_records(isMergeRecords);
-        request->Request.set_records_limit(recordsLimit);
         runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
         return runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
     }
 
-    void CheckHcResult(Ydb::Monitoring::SelfCheckResult& result, int const groupNumber, int const vdiscPerGroupNumber, bool const isMergeRecords = false, int const recordsLimit = 0) {
+    void CheckHcResult(Ydb::Monitoring::SelfCheckResult& result, int const groupNumber, int const vdiscPerGroupNumber, bool const isMergeRecords = false) {
         int groupIssuesCount = 0;
         int groupIssuesNumber = !isMergeRecords ? groupNumber : 1;
         for (const auto& issue_log : result.Getissue_log()) {
@@ -243,9 +242,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     UNIT_ASSERT_VALUES_EQUAL(issue_log.listed(), 0);
                     UNIT_ASSERT_VALUES_EQUAL(issue_log.count(), 0);
                 } else {
-                    int groupListed = recordsLimit == 0 ? groupNumber : std::min<int>(groupNumber, recordsLimit);
-                    UNIT_ASSERT_VALUES_EQUAL(issue_log.location().storage().pool().group().id_size(), groupListed);
-                    UNIT_ASSERT_VALUES_EQUAL(issue_log.listed(), groupListed);
+                    UNIT_ASSERT_VALUES_EQUAL(issue_log.location().storage().pool().group().id_size(), groupNumber);
+                    UNIT_ASSERT_VALUES_EQUAL(issue_log.listed(), groupNumber);
                     UNIT_ASSERT_VALUES_EQUAL(issue_log.count(), groupNumber);
                 }
                 groupIssuesCount++;
@@ -264,9 +262,9 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT_VALUES_EQUAL(issueVdiscCount, issueVdiscNumber);
     }
 
-    void ListingTest(int const groupNumber, int const vdiscPerGroupNumber, bool const isMergeRecords = false, int const recordsLimit = 0) {
-        auto result = RequestHc(groupNumber, vdiscPerGroupNumber, isMergeRecords, recordsLimit);
-        CheckHcResult(result, groupNumber, vdiscPerGroupNumber, isMergeRecords, recordsLimit);
+    void ListingTest(int const groupNumber, int const vdiscPerGroupNumber, bool const isMergeRecords = false) {
+        auto result = RequestHc(groupNumber, vdiscPerGroupNumber, isMergeRecords);
+        CheckHcResult(result, groupNumber, vdiscPerGroupNumber, isMergeRecords);
     }
 
     Ydb::Monitoring::SelfCheckResult RequestHcWithVdisks(TString erasurespecies, const TVector<Ydb::Monitoring::StatusFlag::Status>& vdiskStatuses) {
@@ -320,7 +318,6 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
         auto *request = new NHealthCheck::TEvSelfCheckRequest;
         request->Request.set_merge_records(true);
-        request->Request.set_records_limit(10);
 
         runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
         return runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
@@ -416,18 +413,6 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
     Y_UNIT_TEST(Issues100Groups100VCardMerging) {
         ListingTest(100, 100, true);
-    }
-
-    Y_UNIT_TEST(Issues100GroupsMergingAndLimiting) {
-        ListingTest(100, 1, true, 10);
-    }
-
-    Y_UNIT_TEST(Issues100VCardMergingAndLimiting) {
-        ListingTest(1, 100, true, 10);
-    }
-
-    Y_UNIT_TEST(Issues100Groups100VCardMergingAndLimiting) {
-        ListingTest(100, 100, true, 10);
     }
 
     Y_UNIT_TEST(NoneRedGroupWhenRedVdisk) {
@@ -555,16 +540,17 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT_VALUES_EQUAL(issuesCount, total);
     }
 
-    Y_UNIT_TEST(ProtobufUnderLimit50Mb) {
+    Y_UNIT_TEST(ProtobufUnderLimitFor5000Groups) {
         auto result = RequestHc(3000, 1);
         CheckHcProtobufSize(result, Ydb::Monitoring::StatusFlag::RED, 0);
         CheckHcProtobufSize(result, Ydb::Monitoring::StatusFlag::ORANGE, 0);
         CheckHcProtobufSize(result, Ydb::Monitoring::StatusFlag::YELLOW, 0);
     }
 
-    Y_UNIT_TEST(ProtobufBeyondLimit50Mb) {
+    Y_UNIT_TEST(ProtobufUnderLimitFor350000Groups) {
         auto result = RequestHc(350000, 1);
         CheckHcProtobufSize(result, Ydb::Monitoring::StatusFlag::RED, 1);
+        UNIT_ASSERT_LT(result.ByteSizeLong(), 50_MB);
     }
 }
 

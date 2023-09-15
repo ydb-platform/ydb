@@ -515,7 +515,6 @@ public:
     TTabletRequestsState TabletRequests;
 
     TDuration Timeout = TDuration::MilliSeconds(10000);
-    ui32 ChildrenRecordsLimit = 0;
     static constexpr TStringBuf STATIC_STORAGE_POOL_NAME = "static";
 
     bool IsSpecificDatabaseFilter() {
@@ -527,7 +526,6 @@ public:
         if (Request->Request.operation_params().has_operation_timeout()) {
             Timeout = GetDuration(Request->Request.operation_params().operation_timeout());
         }
-        ChildrenRecordsLimit = Request->Request.records_limit();
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
         TIntrusivePtr<TDomainsInfo::TDomain> domain = domains->Domains.begin()->second;
         DomainPath = "/" + domain->Name;
@@ -1990,80 +1988,6 @@ public:
         record.IssueLog.set_listed(value);
     }
 
-    void RemoveRecordsAboveLimit(TMergeIssuesContext& context, TList<TSelfCheckContext::TIssueRecord>& records) {
-        records.sort([](TSelfCheckContext::TIssueRecord& a, TSelfCheckContext::TIssueRecord& b) { return b.IssueLog.status() < a.IssueLog.status(); }); 
-        ui32 commonListed = 0;
-        for (auto it = records.begin(); it != records.end(); it++) {
-            if (commonListed == ChildrenRecordsLimit) {
-                auto removeIt = it;
-                it--;
-                SetIssueCount(*it, GetIssueCount(*it) + GetIssueCount(*removeIt));
-
-                auto reasons = removeIt->IssueLog.reason();
-                for (auto reasonIt = reasons.begin(); reasonIt != reasons.end(); reasonIt++) {
-                    context.removeIssuesIds.insert(*reasonIt);
-                }
-                context.removeIssuesIds.insert(removeIt->IssueLog.id());
-                records.erase(removeIt);
-            } else if (commonListed + GetIssueListed(*it) > ChildrenRecordsLimit) {
-                auto aboveLimit = commonListed + GetIssueListed(*it) - ChildrenRecordsLimit;
-                SetIssueListed(*it, GetIssueListed(*it) - aboveLimit);
-
-                switch (it->Tag) {
-                    case ETags::GroupState: {
-                        auto groupIds = it->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_id();
-                        while (aboveLimit > 0) {
-                            groupIds->RemoveLast();
-                            aboveLimit--;
-                        }
-                        break;
-                    }
-                    case ETags::VDiskState: {
-                        auto vdiscIds = it->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_id();
-                        while (aboveLimit > 0) {
-                            vdiscIds->RemoveLast();
-                            aboveLimit--;
-                        }
-                        break;
-                    }
-                    case ETags::PDiskState: {
-                        auto pdiscs = it->IssueLog.mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_pdisk();
-                        while (aboveLimit > 0) {
-                            pdiscs->RemoveLast();
-                            aboveLimit--;
-                        }
-                        break;
-                    }
-                    default: {}
-                }
-                commonListed = ChildrenRecordsLimit;
-            } else {
-                commonListed += GetIssueListed(*it);
-            }
-        }
-    }
-
-    void RemoveRecordsAboveLimit(TMergeIssuesContext& context, ETags levelTag) {
-        auto& records = context.GetRecords(levelTag);
-        if (records.size() > 0) {
-            RemoveRecordsAboveLimit(context, records);
-        }
-    }
-
-    void RemoveRecordsAboveLimit(TMergeIssuesContext& context, ETags levelTag, ETags upperTag) {
-        auto& levelRecords = context.GetRecords(levelTag);
-        auto& upperRecords = context.GetRecords(upperTag);
-
-        TList<TSelfCheckResult::TIssueRecord> handled;
-        for (auto it = upperRecords.begin(); it != upperRecords.end(); it++) {
-            auto children = FindChildrenRecords(levelRecords, *it);
-
-            RemoveRecordsAboveLimit(context, *children);
-            handled.splice(handled.end(), *children);
-        }
-        levelRecords.splice(levelRecords.end(), handled);
-    }
-
     void FillGroupStatus(TGroupId groupId, const NKikimrWhiteboard::TBSGroupStateInfo& groupInfo, Ydb::Monitoring::StorageGroupStatus& storageGroupStatus, TSelfCheckContext context) {
         if (context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_id()->empty()) {
             context.Location.mutable_storage()->mutable_pool()->mutable_group()->add_id();
@@ -2157,11 +2081,6 @@ public:
             MergeLevelRecords(mergeContext, ETags::GroupState);
             MergeLevelRecords(mergeContext, ETags::VDiskState, ETags::GroupState);
             MergeLevelRecords(mergeContext, ETags::PDiskState, ETags::VDiskState);
-        }
-        if (ChildrenRecordsLimit != 0) {
-            RemoveRecordsAboveLimit(mergeContext, ETags::PDiskState, ETags::VDiskState);
-            RemoveRecordsAboveLimit(mergeContext, ETags::VDiskState, ETags::GroupState);
-            RemoveRecordsAboveLimit(mergeContext, ETags::GroupState);
         }
         mergeContext.FillRecords(records);
     }
@@ -2405,6 +2324,43 @@ public:
         context.FillSelfCheckResult();
     }
 
+    bool TruncateIssuesWithStatusWhileBeyondLimit(Ydb::Monitoring::SelfCheckResult& result, ui64 byteLimit, Ydb::Monitoring::StatusFlag::Status status) {
+        auto byteResult = result.ByteSizeLong();
+        if (byteResult <= byteLimit) {
+            return true;
+        }
+
+        int totalIssues = result.issue_log_size();
+        TVector<int> indexesToRemove;
+        for (int i = 0; i < totalIssues && byteResult > byteLimit; ++i) {
+            if (result.issue_log(i).status() == status) {
+                byteResult -= result.issue_log(i).ByteSizeLong();
+                indexesToRemove.push_back(i);
+            }
+        }
+
+        for (auto it = indexesToRemove.rbegin(); it != indexesToRemove.rend(); ++it) {
+            result.mutable_issue_log()->SwapElements(*it, result.issue_log_size() - 1);
+            result.mutable_issue_log()->RemoveLast();
+        }
+
+        return byteResult <= byteLimit;
+    }
+
+    void TruncateIssuesIfBeyondLimit(Ydb::Monitoring::SelfCheckResult& result, ui64 byteLimit) {
+        auto truncateStatusPriority = {
+            Ydb::Monitoring::StatusFlag::BLUE, 
+            Ydb::Monitoring::StatusFlag::YELLOW, 
+            Ydb::Monitoring::StatusFlag::ORANGE, 
+            Ydb::Monitoring::StatusFlag::RED
+        };
+        for (Ydb::Monitoring::StatusFlag::Status truncateStatus: truncateStatusPriority) {
+            if (TruncateIssuesWithStatusWhileBeyondLimit(result, byteLimit, truncateStatus)) {
+                break;
+            }
+        }
+    }
+
     void ReplyAndPassAway() {
         THolder<TEvSelfCheckResult> response = MakeHolder<TEvSelfCheckResult>();
         Ydb::Monitoring::SelfCheckResult& result = response->Result;
@@ -2423,15 +2379,8 @@ public:
 
         auto byteSize = result.ByteSizeLong();
         auto byteLimit = 50_MB - 1_KB; // 1_KB - for HEALTHCHECK STATUS issue going last
-        if (byteSize > byteLimit) {
-            do {
-                ui32 total = result.issue_log_size();
-                ui32 to_remove = total / 20;
-                for (ui32 i = 0; i < to_remove; ++i) {
-                    result.mutable_issue_log()->RemoveLast();
-                }
-            } while (result.ByteSizeLong() > byteLimit); 
-        }
+        TruncateIssuesIfBeyondLimit(result, byteLimit);
+
         if (byteSize > 30_MB) {
             auto* issue = result.add_issue_log();
             issue->set_type("HEALTHCHECK_STATUS");

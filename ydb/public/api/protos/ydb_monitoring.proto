@@ -29,7 +29,6 @@ message SelfCheckRequest {
     uint32 maximum_level = 4; // maximum level of issues to return
     bool do_not_cache = 5; // by default database health state is taken from metadata cache; this option can be used to force bypassing that cache
     bool merge_records = 6; // combine similar records with similar status, message and level into one issue
-    uint32 records_limit = 7; // limit the number of records that have one parent record, default - without limit
 }
 
 message SelfCheckResponse {

@@ -720,11 +720,11 @@ public:
         dstPath.Base()->PathState = TPathElement::EPathState::EPathStateCreate;
         dstPath.Base()->PathType = TPathElement::EPathType::EPathTypeColumnTable;
 
-        NIceDb::TNiceDb db(context.GetDB());
-
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateColumnTable, pathId);
 
         if (storeInfo) {
+            NIceDb::TNiceDb db(context.GetDB());
+
             auto olapStorePath = parentPath.FindOlapStore();
 
             txState.State = TTxState::ConfigureParts;
@@ -798,6 +798,7 @@ public:
 
             context.SS->SetPartitioning(pathId, tableInfo);
 
+            NIceDb::TNiceDb db(context.GetDB());
             for (auto shard : txState.Shards) {
                 context.SS->PersistShardMapping(db, shard.Idx, InvalidTabletId, pathId, opTxId, shard.TabletType);
                 context.SS->PersistChannelsBinding(db, shard.Idx, channelsBindings);
@@ -818,6 +819,7 @@ public:
             }
         }
 
+        NIceDb::TNiceDb db(context.GetDB());
         context.SS->PersistTxState(db, OperationId);
         context.SS->PersistPath(db, dstPath.Base()->PathId);
 

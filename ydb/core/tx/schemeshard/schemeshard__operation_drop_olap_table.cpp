@@ -407,12 +407,11 @@ public:
         // Dirty hack: drop step must not be zero because 0 is treated as "hasn't been dropped"
         txState.MinStep = TStepId(1);
 
-        NIceDb::TNiceDb db(context.GetDB());
 
         Y_VERIFY(context.SS->ColumnTables.contains(path.Base()->PathId));
         auto tableInfo = context.SS->ColumnTables.GetVerified(path.Base()->PathId);
-
         if (tableInfo->IsStandalone()) {
+            NIceDb::TNiceDb db(context.GetDB());
             for (auto shardIdx : tableInfo->OwnedColumnShards) {
                 Y_VERIFY_S(context.SS->ShardInfos.contains(shardIdx), "Unknown shardIdx " << shardIdx);
                 txState.Shards.emplace_back(shardIdx, context.SS->ShardInfos[shardIdx].TabletType, TTxState::DropParts);
@@ -448,6 +447,8 @@ public:
                 context.OnComplete.Dependence(storePath.Base()->LastTxId, opTxId);
             }
             storePath.Base()->LastTxId = opTxId;
+
+            NIceDb::TNiceDb db(context.GetDB());
             context.SS->PersistLastTxId(db, storePath.Base());
 
             // TODO: we need to know all shards where this table has ever been created
@@ -468,8 +469,9 @@ public:
         path.Base()->PathState = TPathElement::EPathState::EPathStateDrop;
         path.Base()->DropTxId = opTxId;
         path.Base()->LastTxId = opTxId;
-        context.SS->PersistLastTxId(db, path.Base());
 
+        NIceDb::TNiceDb db(context.GetDB());
+        context.SS->PersistLastTxId(db, path.Base());
         context.SS->PersistTxState(db, OperationId);
 
         context.SS->TabletCounters->Simple()[COUNTER_COLUMN_TABLE_COUNT].Sub(1);

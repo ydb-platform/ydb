@@ -7,7 +7,6 @@
   ".github/config/muted_shard.txt":"ydb/github_toplevel/.github/config/muted_shard.txt",
   ".github/config/muted_test.txt":"ydb/github_toplevel/.github/config/muted_test.txt",
   ".github/docker/Dockerfile":"ydb/github_toplevel/.github/docker/Dockerfile",
-  ".github/docker/Dockerfile.dockerignore":"ydb/github_toplevel/.github/docker/Dockerfile.dockerignore",
   ".github/docker/files/LICENSE":"ydb/github_toplevel/.github/docker/files/LICENSE",
   ".github/docker/files/THIRD_PARTY_LICENSES":"ydb/github_toplevel/.github/docker/files/THIRD_PARTY_LICENSES",
   ".github/docker/files/health_check":"ydb/github_toplevel/.github/docker/files/health_check",

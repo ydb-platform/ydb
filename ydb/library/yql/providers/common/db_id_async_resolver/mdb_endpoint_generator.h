@@ -11,7 +11,10 @@ namespace NYql {
     public:
         using TPtr = std::shared_ptr<IMdbEndpointGenerator>;
 
-        virtual TString ToEndpoint(const NYql::EDatabaseType databaseType, const TString& mdbHost) const = 0;
+        virtual TString ToEndpoint(
+            const NYql::EDatabaseType databaseType,
+            const TString& mdbHost,
+            bool useTls) const = 0;
         virtual ~IMdbEndpointGenerator() = default;
     };
 }

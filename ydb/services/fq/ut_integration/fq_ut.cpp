@@ -861,25 +861,25 @@ Y_UNIT_TEST_SUITE(Yq_2) {
     Y_UNIT_TEST(Test_HostNameTrasformation) {
         {
             auto transformer = ::NFq::MakeMdbEndpointGeneratorLegacy();
-            UNIT_ASSERT_VALUES_EQUAL(transformer->ToEndpoint(NYql::EDatabaseType::ClickHouse, "rc1c-p5waby2y5y1kb5ue.db.yandex.net"),
+            UNIT_ASSERT_VALUES_EQUAL(transformer->ToEndpoint(NYql::EDatabaseType::ClickHouse, "rc1c-p5waby2y5y1kb5ue.db.yandex.net", true),
                                     "rc1c-p5waby2y5y1kb5ue.db.yandex.net:8443");
-            UNIT_ASSERT_VALUES_EQUAL(transformer->ToEndpoint(NYql::EDatabaseType::ClickHouse, "ya.ru"),
-                                    "ya.db.yandex.net:8443");
+            UNIT_ASSERT_VALUES_EQUAL(transformer->ToEndpoint(NYql::EDatabaseType::ClickHouse, "ya.ru", false),
+                                    "ya.db.yandex.net:8123");
         }
 
         {
             auto transformer = ::NFq::MakeMdbEndpointGeneratorGeneric(false);
-            UNIT_ASSERT_VALUES_EQUAL(transformer->ToEndpoint(NYql::EDatabaseType::ClickHouse, "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net"),
+            UNIT_ASSERT_VALUES_EQUAL(transformer->ToEndpoint(NYql::EDatabaseType::ClickHouse, "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net", true),
                                     "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net:8443");
-            UNIT_ASSERT_VALUES_EQUAL(transformer->ToEndpoint(NYql::EDatabaseType::PostgreSQL, "rc1b-eyt6dtobu96rwydq.mdb.yandexcloud.net"),
+            UNIT_ASSERT_VALUES_EQUAL(transformer->ToEndpoint(NYql::EDatabaseType::PostgreSQL, "rc1b-eyt6dtobu96rwydq.mdb.yandexcloud.net", false),
                                     "rc1b-eyt6dtobu96rwydq.mdb.yandexcloud.net:6432");
         }
 
         {
             auto transformer = ::NFq::MakeMdbEndpointGeneratorGeneric(true);
-            UNIT_ASSERT_VALUES_EQUAL(transformer->ToEndpoint(NYql::EDatabaseType::ClickHouse, "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net"),
-                                    "rc1a-d6dv17lv47v5mcop.db.yandex.net:8443");
-            UNIT_ASSERT_VALUES_EQUAL(transformer->ToEndpoint(NYql::EDatabaseType::PostgreSQL, "rc1b-eyt6dtobu96rwydq.mdb.yandexcloud.net"),
+            UNIT_ASSERT_VALUES_EQUAL(transformer->ToEndpoint(NYql::EDatabaseType::ClickHouse, "rc1a-d6dv17lv47v5mcop.mdb.yandexcloud.net", false),
+                                    "rc1a-d6dv17lv47v5mcop.db.yandex.net:8123");
+            UNIT_ASSERT_VALUES_EQUAL(transformer->ToEndpoint(NYql::EDatabaseType::PostgreSQL, "rc1b-eyt6dtobu96rwydq.mdb.yandexcloud.net", true),
                                     "rc1b-eyt6dtobu96rwydq.db.yandex.net:6432");
         }
     }

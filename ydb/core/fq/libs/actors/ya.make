@@ -49,6 +49,7 @@ PEERDIR(
     ydb/core/fq/libs/shared_resources
     ydb/core/fq/libs/signer
     ydb/core/protos
+    ydb/core/util
     ydb/library/mkql_proto
     ydb/library/security
     ydb/library/yql/ast

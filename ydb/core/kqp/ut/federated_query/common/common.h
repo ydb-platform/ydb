@@ -14,6 +14,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
     std::shared_ptr<TKikimrRunner> MakeKikimrRunner(
         NYql::IHTTPGateway::TPtr httpGateway = nullptr,
         NYql::NConnector::IClient::TPtr connectorClient = nullptr,
+        NYql::IDatabaseAsyncResolver::TPtr databaseAsyncResolver = nullptr,
         std::optional<NKikimrConfig::TAppConfig> appConfig = std::nullopt
         );
 }

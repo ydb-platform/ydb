@@ -24,7 +24,7 @@ namespace NYql {
             ythrow yexception() << "empty 'LOGIN' value";
         }
 
-        clusterConfig.mutable_credentials()->mutable_basic()->set_username(it->second);
+        clusterConfig.MutableCredentials()->Mutablebasic()->Setusername(it->second);
     }
 
     void ParsePassword(
@@ -39,14 +39,20 @@ namespace NYql {
             ythrow yexception() << "empty 'PASSWORD' value";
         }
 
-        clusterConfig.mutable_credentials()->mutable_basic()->set_password(it->second);
+        clusterConfig.MutableCredentials()->Mutablebasic()->Setpassword(it->second);
     }
 
     void ParseLocation(
         const THashMap<TString, TString>& properties,
         NYql::TGenericClusterConfig& clusterConfig) {
         auto it = properties.find("location");
+
         if (it == properties.cend()) {
+            return;
+        }
+
+        if (!it->second) {
+            // LOCATION is an optional field
             return;
         }
 
@@ -69,8 +75,8 @@ namespace NYql {
             ythrow yexception() << "invalid 'LOCATION' value: '" << it->second << "': invalid port";
         }
 
-        clusterConfig.mutable_endpoint()->set_host(host);
-        clusterConfig.mutable_endpoint()->set_port(port);
+        clusterConfig.MutableEndpoint()->Sethost(host);
+        clusterConfig.MutableEndpoint()->Setport(port);
     }
 
     void ParseUseTLS(const THashMap<TString, TString>& properties,
@@ -78,7 +84,7 @@ namespace NYql {
         // Disable secure connections if this wasn't explicitly specified
         auto it = properties.find("use_tls");
         if (it == properties.cend()) {
-            clusterConfig.set_usessl(false);
+            clusterConfig.SetUseSsl(false);
             return;
         }
 
@@ -86,11 +92,11 @@ namespace NYql {
         transformed.to_lower();
 
         if (transformed == "true") {
-            clusterConfig.set_usessl(true);
+            clusterConfig.SetUseSsl(true);
             return;
         }
         if (transformed == "false") {
-            clusterConfig.set_usessl(false);
+            clusterConfig.SetUseSsl(false);
             return;
         }
 
@@ -123,10 +129,15 @@ namespace NYql {
         }
 
         if (!it->second) {
+            // MDB_CLUSTER_ID is an optional field
+            return;
+        }
+
+        if (!it->second) {
             ythrow yexception() << "invalid 'MDB_CLUSTER_ID' value: '" << it->second << "'";
         }
 
-        clusterConfig.set_databaseid(it->second);
+        clusterConfig.SetDatabaseId(it->second);
     }
 
     static THashMap<EExternalDataSource, EDataSourceKind> DataSourceApiMapping = {
@@ -152,7 +163,7 @@ namespace NYql {
             ythrow yexception() << "cannot map 'SOURCE_TYPE' value: '" << it->second << "' into Connector API value";
         }
 
-        clusterConfig.set_kind(DataSourceApiMapping.at(externalDataSource));
+        clusterConfig.SetKind(DataSourceApiMapping.at(externalDataSource));
     }
 
     void ParseProtocol(const THashMap<TString, TString>& properties,
@@ -181,17 +192,59 @@ namespace NYql {
             ythrow yexception() << b;
         }
 
-        clusterConfig.set_protocol(protocol);
+        clusterConfig.SetProtocol(protocol);
+    }
+
+    void ParseServiceAccountId(const THashMap<TString, TString>& properties,
+                               NYql::TGenericClusterConfig& clusterConfig) {
+        auto it = properties.find("serviceAccountId");
+        if (it == properties.cend()) {
+            return;
+        }
+
+        if (!it->second) {
+            return;
+        }
+
+        clusterConfig.SetServiceAccountId(it->second);
+    }
+
+    void ParseServiceAccountIdSignature(const THashMap<TString, TString>& properties,
+                                        NYql::TGenericClusterConfig& clusterConfig) {
+        auto it = properties.find("serviceAccountIdSignature");
+        if (it == properties.cend()) {
+            return;
+        }
+
+        if (!it->second) {
+            return;
+        }
+
+        clusterConfig.SetServiceAccountIdSignature(it->second);
+    }
+
+    bool KeyIsSet(const THashMap<TString, TString>& properties, const TString& key) {
+        const auto iter = properties.find(key);
+        if (iter == properties.cend()) {
+            return false;
+        }
+
+        return !iter->second.Empty();
     }
 
     NYql::TGenericClusterConfig GenericClusterConfigFromProperties(const TString& clusterName, const THashMap<TString, TString>& properties) {
         // some cross-parameter validations
-        auto location = properties.find("location");
-        auto mdbClusterId = properties.find("mdb_cluster_id");
+        auto location = KeyIsSet(properties, "location");
+        auto mdbClusterId = KeyIsSet(properties, "mdb_cluster_id");
 
-        if ((location != properties.cend() && mdbClusterId != properties.cend()) ||
-            (location == properties.cend() && mdbClusterId == properties.cend())) {
+        if ((location && mdbClusterId) || (!location and !mdbClusterId)) {
             ythrow yexception() << "you must provide either 'LOCATION' or 'MDB_CLUSTER_ID' parameter";
+        }
+
+        auto serviceAccountId = KeyIsSet(properties, "serviceAccountId");
+        auto serviceAccountIdSignature = KeyIsSet(properties, "serviceAccountIdSignature");
+        if ((serviceAccountId && !serviceAccountIdSignature) || (!serviceAccountId && serviceAccountIdSignature)) {
+            ythrow yexception() << "you must provide either both 'SERVICE_ACCOUNT_ID' and 'SERVICE_ACCOUNT_ID_SIGNATURE' parameters or none of them";
         }
 
         NYql::TGenericClusterConfig clusterConfig;
@@ -204,6 +257,8 @@ namespace NYql {
         ParseMdbClusterId(properties, clusterConfig);
         ParseSourceType(properties, clusterConfig);
         ParseProtocol(properties, clusterConfig);
+        ParseServiceAccountId(properties, clusterConfig);
+        ParseServiceAccountIdSignature(properties, clusterConfig);
 
         return clusterConfig;
     }

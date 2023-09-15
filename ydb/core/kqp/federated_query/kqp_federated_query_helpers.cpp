@@ -77,21 +77,19 @@ namespace NKikimr::NKqp {
             }
 
             // Create actors required for MDB database resolving
-            if (CredentialsFactory) {
-                auto httpProxyActor = NHttp::CreateHttpProxy();
-                auto httpProxyActorId = NFq::MakeYqlAnalyticsHttpProxyId();
-                setup->LocalServices.push_back(
-                    std::make_pair(
-                        httpProxyActorId,
-                        TActorSetupCmd(httpProxyActor, TMailboxType::HTSwap, appData->UserPoolId)));
+            auto httpProxyActor = NHttp::CreateHttpProxy();
+            auto httpProxyActorId = NFq::MakeYqlAnalyticsHttpProxyId();
+            setup->LocalServices.push_back(
+                std::make_pair(
+                    httpProxyActorId,
+                    TActorSetupCmd(httpProxyActor, TMailboxType::HTSwap, appData->UserPoolId)));
 
-                // FIXME: how to choose appropriate ActorID?
-                DatabaseResolverActorId = NFq::MakeDatabaseResolverActorId();
-                auto databaseResolverActor = NFq::CreateDatabaseResolver(httpProxyActorId, CredentialsFactory);
-                setup->LocalServices.push_back(
-                    std::make_pair(DatabaseResolverActorId.value(),
-                                   TActorSetupCmd(databaseResolverActor, TMailboxType::HTSwap, appData->UserPoolId)));
-            }
+            DatabaseResolverActorId = NFq::MakeDatabaseResolverActorId();
+            // NOTE: it's ok for CredentialsFactory to be null
+            auto databaseResolverActor = NFq::CreateDatabaseResolver(httpProxyActorId, CredentialsFactory);
+            setup->LocalServices.push_back(
+                std::make_pair(DatabaseResolverActorId.value(),
+                               TActorSetupCmd(databaseResolverActor, TMailboxType::HTSwap, appData->UserPoolId)));
         }
     }
 

@@ -2,13 +2,14 @@
 
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/common/cache.h>
+#include <ydb/core/util/tuples.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 #include <ydb/library/yql/utils/url_builder.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/http/http.h>
 #include <library/cpp/actors/http/http_proxy.h>
 #include <library/cpp/json/json_reader.h>
-#include <ydb/library/services/services.pb.h>
 
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " << stream)
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_DATABASE_RESOLVER, "TraceId: " << TraceId << " " << stream)
@@ -19,11 +20,17 @@ using namespace NActors;
 using namespace NYql;
 
 using TEndpoint = NYql::TDatabaseResolverResponse::TEndpoint;
-
-using TParser = std::function<TEndpoint(NJson::TJsonValue& body, const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator)>;
+using TParser = std::function<TEndpoint(NJson::TJsonValue& body, const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator, bool useTls)>;
 using TParsers = THashMap<NYql::EDatabaseType, TParser>;
-using TCache = TTtlCache<std::tuple<TString, NYql::EDatabaseType, NYql::TDatabaseAuth>, std::variant<TEndpoint, TString>>;
 
+struct TDatabaseDescription {
+    TString Id;
+    NYql::EDatabaseType Type = NYql::EDatabaseType::Ydb;
+    NYql::TDatabaseAuth Auth;
+};
+
+using TCache = TTtlCache<std::tuple<TString, NYql::EDatabaseType, NYql::TDatabaseAuth>, std::variant<TEndpoint, TString>>;
+using TRequestMap = THashMap<NHttp::THttpOutgoingRequestPtr, TDatabaseDescription>;
 
 class TResponseProcessor : public TActorBootstrapped<TResponseProcessor>
 {
@@ -36,7 +43,7 @@ public:
         const TActorId sender,
         TCache& cache,
         const TDatabaseResolverResponse::TDatabaseEndpointsMap& ready,
-        const THashMap<NHttp::THttpOutgoingRequestPtr, std::tuple<TString, NYql::EDatabaseType, NYql::TDatabaseAuth>>& requests,
+        const TRequestMap& requests,
         const TString& traceId,
         const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator,
         const TParsers& parsers)
@@ -77,11 +84,9 @@ private:
 
         TString errorMsg = "Could not resolve database ids: ";
         bool firstUnresolvedDbId = true;
-        for (const auto& [_, info]: Requests) {
-            const auto& dbId = std::get<0>(info);
-            const auto& dbType = std::get<1>(info);
-            if (const auto it = DatabaseId2Endpoint.find(std::make_pair(dbId, dbType)); it == DatabaseId2Endpoint.end()) {
-                errorMsg += (firstUnresolvedDbId ? TString{""} : TString{", "}) + dbId;
+        for (const auto& [_, params]: Requests) {
+            if (const auto it = DatabaseId2Endpoint.find(std::make_pair(params.Id, params.Type)); it == DatabaseId2Endpoint.end()) {
+                errorMsg += (firstUnresolvedDbId ? TString{""} : TString{", "}) + params.Id;
                 if (firstUnresolvedDbId)
                     firstUnresolvedDbId = false;
             }
@@ -108,43 +113,41 @@ private:
     {
         TString status;
         TString errorMessage;
-        TString databaseId;
-        NYql::EDatabaseType databaseType = EDatabaseType::Ydb;
-        NYql::TDatabaseAuth info;
         TMaybe<TEndpoint> result;
+        auto requestIter = Requests.find(ev->Get()->Request);
         HandledIds++;
+
         if (ev->Get()->Error.empty() && (ev->Get()->Response && ((status = ev->Get()->Response->Status) == "200"))) {
             NJson::TJsonReaderConfig jsonConfig;
             NJson::TJsonValue databaseInfo;
-            auto it = Requests.find(ev->Get()->Request);
 
             LOG_D("Got databaseId response " << ev->Get()->Response->Body);
-            if (it == Requests.end()) {
+            if (requestIter == Requests.end()) {
                 errorMessage = "Unknown databaseId";
             } else {
-                std::tie(databaseId, databaseType, info) = it->second;
+                const auto& params = requestIter->second;
                 const bool parseJsonOk = NJson::ReadJsonTree(ev->Get()->Response->Body, &jsonConfig, &databaseInfo);
                 TParsers::const_iterator parserIt;
-                if (parseJsonOk && (parserIt = Parsers.find(databaseType)) != Parsers.end()) {
+                if (parseJsonOk && (parserIt = Parsers.find(params.Type)) != Parsers.end()) {
                     try {
-                        auto res = parserIt->second(databaseInfo, MdbEndpointGenerator);
-                        LOG_D("Got db_id: " << databaseId
-                            << ", db type: " << static_cast<std::underlying_type<NYql::EDatabaseType>::type>(databaseType)
+                        auto res = parserIt->second(databaseInfo, MdbEndpointGenerator, params.Auth.UseTls);
+                        LOG_D("Got db_id: " << params.Id
+                            << ", db type: " << static_cast<std::underlying_type<NYql::EDatabaseType>::type>(params.Type)
                             << ", endpoint: " << res.Endpoint
                             << ", database: " << res.Database);
-                        DatabaseId2Endpoint[std::make_pair(databaseId, databaseType)] = res;
+                        DatabaseId2Endpoint[std::make_pair(params.Id, params.Type)] = res;
                         result.ConstructInPlace(res);
                     } catch (...) {
                         errorMessage = TStringBuilder()
                             << " Couldn't resolve "
-                            << "databaseId: " << databaseId
-                            << ", db type: " << static_cast<std::underlying_type<NYql::EDatabaseType>::type>(databaseType) << "\n"
+                            << "databaseId: " << params.Id
+                            << ", db type: " << static_cast<std::underlying_type<NYql::EDatabaseType>::type>(params.Type) << "\n"
                             << CurrentExceptionMessage();
                     }
                 } else {
-                    errorMessage = TStringBuilder() << "Unable to parse database information."
-                        << "Database Id: " << databaseId
-                        << ", db type: " << static_cast<std::underlying_type<NYql::EDatabaseType>::type>(databaseType);
+                    errorMessage = TStringBuilder() << "Unable to parse database information. "
+                        << "Database Id: " << params.Id
+                        << ", db type: " << static_cast<std::underlying_type<NYql::EDatabaseType>::type>(params.Type);
                 }
             }
         } else {
@@ -161,10 +164,9 @@ private:
         if (errorMessage) {
             LOG_E("Error on response parsing: " << errorMessage);
             Success = false;
-        }
-
-        if (databaseId) {
-            auto key = std::make_tuple(databaseId, databaseType, info);
+        } else {
+            const auto& params = requestIter->second;
+            auto key = std::make_tuple(params.Id, params.Type, params.Auth);
             if (errorMessage) {
                 Cache.Put(key, errorMessage);
             } else {
@@ -182,7 +184,7 @@ private:
 private:
     const TActorId Sender;
     TCache& Cache;
-    const THashMap<NHttp::THttpOutgoingRequestPtr, std::tuple<TString, NYql::EDatabaseType, NYql::TDatabaseAuth>> Requests;
+    const TRequestMap Requests;
     const TString TraceId;
     const NYql::IMdbEndpointGenerator::TPtr MdbEndpointGenerator;
     TDatabaseResolverResponse::TDatabaseEndpointsMap DatabaseId2Endpoint;
@@ -205,7 +207,7 @@ public:
             .SetErrorTtl(TDuration::Minutes(1))
             .SetMaxSize(1000000))
     {
-        auto ydbParser = [](NJson::TJsonValue& databaseInfo, const NYql::IMdbEndpointGenerator::TPtr&) {
+        auto ydbParser = [](NJson::TJsonValue& databaseInfo, const NYql::IMdbEndpointGenerator::TPtr&, bool) {
             bool secure = false;
             TString endpoint = databaseInfo.GetMap().at("endpoint").GetStringRobust();
             TString prefix("/?database=");
@@ -227,9 +229,9 @@ public:
             return TEndpoint{endpoint, database, secure};
         };
         Parsers[NYql::EDatabaseType::Ydb] = ydbParser;
-        Parsers[NYql::EDatabaseType::DataStreams] = [ydbParser](NJson::TJsonValue& databaseInfo, const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator)
+        Parsers[NYql::EDatabaseType::DataStreams] = [ydbParser](NJson::TJsonValue& databaseInfo, const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator, bool useTls)
         {
-            auto ret = ydbParser(databaseInfo, mdbEndpointGenerator);
+            auto ret = ydbParser(databaseInfo, mdbEndpointGenerator, useTls);
             // TODO: Take explicit field from MVP
             if (ret.Endpoint.StartsWith("ydb.")) {
                 // Replace "ydb." -> "yds."
@@ -237,7 +239,7 @@ public:
             }
             return ret;
         };
-        Parsers[NYql::EDatabaseType::ClickHouse] = [](NJson::TJsonValue& databaseInfo, const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator) {
+        Parsers[NYql::EDatabaseType::ClickHouse] = [](NJson::TJsonValue& databaseInfo, const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator, bool useTls) {
             TString endpoint;
             TVector<TString> aliveHosts;
             for (const auto& host : databaseInfo.GetMap().at("hosts").GetArraySafe()) {
@@ -248,16 +250,17 @@ public:
             if (!aliveHosts.empty()) {
                 endpoint = mdbEndpointGenerator->ToEndpoint(
                     NYql::EDatabaseType::ClickHouse,
-                    aliveHosts[std::rand() % static_cast<int>(aliveHosts.size())]
+                    aliveHosts[std::rand() % static_cast<int>(aliveHosts.size())],
+                    useTls
                 );
             }
             if (!endpoint) {
                 ythrow yexception() << "No ALIVE ClickHouse hosts found";
             }
-            return TEndpoint{endpoint, "", true};
+            return TEndpoint{endpoint, "", useTls};
         };
 
-        Parsers[NYql::EDatabaseType::PostgreSQL] = [](NJson::TJsonValue& databaseInfo, const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator) {
+        Parsers[NYql::EDatabaseType::PostgreSQL] = [](NJson::TJsonValue& databaseInfo, const NYql::IMdbEndpointGenerator::TPtr& mdbEndpointGenerator, bool useTls) {
             TString endpoint;
             TVector<TString> aliveHosts;
             for (const auto& host : databaseInfo.GetMap().at("hosts").GetArraySafe()) {
@@ -277,7 +280,8 @@ public:
             if (!aliveHosts.empty()) {
                 endpoint = mdbEndpointGenerator->ToEndpoint(
                     NYql::EDatabaseType::PostgreSQL,
-                    aliveHosts[std::rand() % static_cast<int>(aliveHosts.size())]
+                    aliveHosts[std::rand() % static_cast<int>(aliveHosts.size())],
+                    useTls
                 );
             }
 
@@ -285,7 +289,7 @@ public:
                 ythrow yexception() << "No ALIVE PostgreSQL hosts found";
             }
 
-            return TEndpoint{endpoint, "", true};
+            return TEndpoint{endpoint, "", useTls};
         };
     }
 
@@ -315,12 +319,12 @@ private:
     {
         TraceId = ev->Get()->TraceId;
         LOG_D("Start databaseId resolver for " << ev->Get()->DatabaseIds.size() << " ids");
-        THashMap<NHttp::THttpOutgoingRequestPtr, std::tuple<TString, NYql::EDatabaseType, NYql::TDatabaseAuth>> requests; // request, (dbId, type, info)
+        TRequestMap requests; // request, (dbId, type, info)
         TDatabaseResolverResponse::TDatabaseEndpointsMap ready;
-        for (const auto& [p, info] : ev->Get()->DatabaseIds) {
-            const auto& [databaseId, type] = p;
+        for (const auto& [p, databaseAuth] : ev->Get()->DatabaseIds) {
+            const auto& [databaseId, databaseType] = p;
             TMaybe<std::variant<TEndpoint, TString>> cacheVal;
-            auto key = std::make_tuple(databaseId, type, info);
+            auto key = std::make_tuple(databaseId, databaseType, databaseAuth);
             if (Cache.Get(key, &cacheVal)) {
                 switch(cacheVal->index()) {
                     case 0U: {
@@ -340,14 +344,14 @@ private:
 
             try {
                 TString url;
-                if (IsIn({NYql::EDatabaseType::Ydb, NYql::EDatabaseType::DataStreams }, type)) {
+                if (IsIn({NYql::EDatabaseType::Ydb, NYql::EDatabaseType::DataStreams }, databaseType)) {
                     url = TUrlBuilder(ev->Get()->YdbMvpEndpoint + "/database")
                             .AddUrlParam("databaseId", databaseId)
                             .Build();
-                } else if (IsIn({NYql::EDatabaseType::ClickHouse, NYql::EDatabaseType::PostgreSQL }, type)) {
+                } else if (IsIn({NYql::EDatabaseType::ClickHouse, NYql::EDatabaseType::PostgreSQL }, databaseType)) {
                     YQL_ENSURE(ev->Get()->MdbGateway, "empty MDB Gateway");
                     url = TUrlBuilder(
-                        ev->Get()->MdbGateway + "/managed-" + NYql::DatabaseTypeToString(type) + "/v1/clusters/")
+                        ev->Get()->MdbGateway + "/managed-" + NYql::DatabaseTypeToString(databaseType) + "/v1/clusters/")
                             .AddPathComponent(databaseId)
                             .AddPathComponent("hosts")
                             .Build();
@@ -356,13 +360,13 @@ private:
 
                 NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet(url);
 
-                auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(CredentialsFactory, info.StructuredToken, info.AddBearerToToken);
+                auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(CredentialsFactory, databaseAuth.StructuredToken, databaseAuth.AddBearerToToken);
                 auto token = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
                 if (token) {
                     httpRequest->Set("Authorization", token);
                 }
 
-                requests[httpRequest] = key;
+                requests[httpRequest] = TDatabaseDescription{databaseId, databaseType, databaseAuth};
             } catch (const std::exception& e) {
                 const TString msg = TStringBuilder() << " Error while preparing to resolve databaseId: " << databaseId << ", details: " << e.what();
                 LOG_E(msg);

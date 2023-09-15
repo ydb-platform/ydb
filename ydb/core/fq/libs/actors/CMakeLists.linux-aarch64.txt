@@ -45,6 +45,7 @@ target_link_libraries(fq-libs-actors PUBLIC
   fq-libs-shared_resources
   fq-libs-signer
   ydb-core-protos
+  ydb-core-util
   ydb-library-mkql_proto
   ydb-library-security
   library-yql-ast

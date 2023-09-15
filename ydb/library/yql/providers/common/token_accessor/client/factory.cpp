@@ -91,7 +91,7 @@ std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateCredentialsProviderFact
         parser.GetServiceAccountIdAuth(id, signature);
 
         if (!factory) {
-            ythrow yexception() << "Service account id credentials are not supported, service account id: " << id;
+            ythrow yexception() << "You must provide credentials factory instance to transform service account credentials into IAM-token.";
         }
         return WrapWithBearerIfNeeded(factory->Create(id, signature), addBearerToToken);
     }

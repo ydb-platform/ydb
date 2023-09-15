@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/utils/log/log.h>
+#include <util/system/env.h>
 
 namespace NYql {
 
@@ -32,20 +33,23 @@ namespace NYql {
             << ", database id = " << databaseId
             << ", endpoint = " << endpoint;
 
-        // if cluster FQDN's is not known
-        if (databaseResolver && databaseId) {
+        if (databaseId) {
+            if (!databaseResolver) {
+                ythrow yexception() << "You're trying to access managed database, but database resolver is not configured.";
+            }
+
             const auto token = MakeStructuredToken(clusterConfig, credentials);
 
             databaseAuth[std::make_pair(databaseId, DataSourceKindToDatabaseType(clusterConfig.GetKind()))] =
-                NYql::TDatabaseAuth{token, /*AddBearer=*/true};
+                NYql::TDatabaseAuth{token, /*AddBearer=*/true, clusterConfig.GetUseSsl()};
 
             DatabaseIdsToClusterNames[databaseId].emplace_back(clusterName);
             YQL_CLOG(DEBUG, ProviderGeneric) << "database id '" << databaseId << "' added to mapping";
         }
 
-        // NOTE: Tokens map is filled just because it's required by YQL engine code.
+        // NOTE: Tokens map is filled just because it's required by DQ/KQP.
         // The only reason for provider to store these tokens is
-        // to keep compatibility with YQL engine.
+        // to keep compatibility with these engines.
         // Real credentials are stored in TGenericClusterConfig.
         Tokens[clusterConfig.GetName()] =
             TStructuredTokenBuilder()

@@ -16,10 +16,6 @@ constexpr uint32_t MAX_FIELD_SIZE = 1000;
 constexpr uint32_t MAX_PROTOBUF_SIZE = 2 * 1024 * 1024; // 2 MiB
 
 bool ValidateLocationAndInstallation(const TString& location, const TString& installation, TString& errStr) {
-    if (!location && !installation) {
-        errStr = "Location or installation must not be empty";
-        return false;
-    }
     if (location.Size() > MAX_FIELD_SIZE) {
         errStr = Sprintf("Maximum length of location must be less or equal equal to %u but got %lu", MAX_FIELD_SIZE, location.Size());
         return false;

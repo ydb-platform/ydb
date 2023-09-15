@@ -291,15 +291,6 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
         TestCreateExternalDataSource(runtime, ++txId, "/MyRoot/DirA",R"(
                 Name: "MyExternalDataSource"
                 SourceType: "ObjectStorage"
-                Location: ""
-                Auth {
-                    None {
-                    }
-                }
-            )", {{NKikimrScheme::StatusSchemeError, "Location or installation must not be empty"}});
-        TestCreateExternalDataSource(runtime, ++txId, "/MyRoot/DirA",R"(
-                Name: "MyExternalDataSource"
-                SourceType: "ObjectStorage"
                 Location: "https://s3.cloud.net/my_bucket"
             )", {{NKikimrScheme::StatusSchemeError, "Authorization method isn't specified"}});
         TestCreateExternalDataSource(runtime, ++txId, "/MyRoot/DirA", Sprintf(R"(

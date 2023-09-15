@@ -37,41 +37,53 @@ class MuteTestCheck:
         return False
 
 
-def mute_target(node):
+def mute_target(testcase):
+    err_text = []
+    err_msg = None
+    found = False
+
     for node_name in ('failure', 'error'):
-        failure = node.find(node_name)
-        # print('failure', node_name, node, failure)
+        while 1:
+            err_node = testcase.find(node_name)
+            if err_node is None:
+                break
 
-        if failure is not None:
-            break
-    else:
+            msg = err_node.get('message')
+            if msg:
+                if err_msg is None:
+                    err_msg = msg
+                else:
+                    err_text.append(msg)
+
+            if err_node.text:
+                err_text.append(err_node.text)
+
+            found = True
+            testcase.remove(err_node)
+
+    if not found:
         return False
-
-    msg = failure.get("message")
 
     skipped = ET.Element("skipped")
 
-    if msg:
-        skipped.set('message', msg)
+    if err_msg:
+        skipped.set('message', err_msg)
 
-    skipped.text = failure.text
+    if err_text:
+        skipped.text = '\n'.join(err_text)
+    testcase.append(skipped)
 
-    node.remove(failure)
-    node.append(skipped)
-
-    add_junit_property(node, "mute", "automatically muted based on rules")
+    add_junit_property(testcase, "mute", "automatically muted based on rules")
 
     return True
 
 
 def remove_failure(node):
-    failure = node.find("failure")
-
-    if failure is not None:
+    while 1:
+        failure = node.find("failure")
+        if failure is None:
+            break
         node.remove(failure)
-        return True
-
-    return False
 
 
 def op_attr(node, attr, op, value):

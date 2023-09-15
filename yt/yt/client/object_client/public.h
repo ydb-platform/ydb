@@ -315,6 +315,9 @@ DEFINE_ENUM(EObjectType,
     ((ChaosReplicatedTable)                        (1206))
     ((ReplicationCardCollocation)                  (1207))
 
+    // Maintenance tracker stuff
+    ((ClusterProxyNode)                            (1500))
+
     // Zookeeper stuff
     ((ZookeeperShard)                              (1400))
     ((ZookeeperShardMap)                           (1401))

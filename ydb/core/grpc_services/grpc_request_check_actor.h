@@ -99,6 +99,7 @@ public:
             TBase::SetPeerName(peerName);
             InitializeAttributes(schemeData);
             TBase::SetDatabase(CheckedDatabaseName_);
+            InitializeAuditSettings(schemeData);
         }
     }
 
@@ -346,8 +347,18 @@ private:
     }
 
 private:
+    void InitializeAuditSettings(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
+        const auto& auditSettings = schemeData.GetPathDescription().GetDomainDescription().GetAuditSettings();
+        DmlAuditEnabled_ = auditSettings.GetEnableDmlAudit();
+        DmlAuditExpectedSubjects_.insert(auditSettings.GetExpectedSubjects().begin(), auditSettings.GetExpectedSubjects().end());
+    }
+
+    bool IsAuditEnabledFor(const TString& userSID) const {
+        return DmlAuditEnabled_ && !DmlAuditExpectedSubjects_.contains(userSID);
+    };
+
     void AuditRequest(IRequestProxyCtx* requestBaseCtx, const TString& databaseName, const TString& userSID) const {
-        const bool dmlAuditEnabled = requestBaseCtx->IsAuditable();
+        const bool dmlAuditEnabled = requestBaseCtx->IsAuditable() && IsAuditEnabledFor(userSID);
 
         if (dmlAuditEnabled) {
             AuditContextStart(requestBaseCtx, databaseName, userSID);
@@ -495,6 +506,8 @@ private:
     bool SkipCheckConnectRigths_ = false;
     std::vector<std::pair<TString, TString>> Attributes_;
     const IFacilityProvider* FacilityProvider_;
+    bool DmlAuditEnabled_;
+    std::unordered_set<TString> DmlAuditExpectedSubjects_;
 };
 
 // default behavior - attributes in schema

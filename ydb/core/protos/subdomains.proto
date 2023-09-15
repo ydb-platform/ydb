@@ -65,6 +65,11 @@ message TDomainState {
     optional bool DiskQuotaExceeded = 1;
 }
 
+message TAuditSettings {
+    optional bool EnableDmlAudit = 1;
+    repeated string ExpectedSubjects = 2;
+}
+
 message TDomainDescription {
     optional fixed64 SchemeShardId_Depricated = 1;
     optional fixed64 PathId_Depricated = 2;
@@ -91,6 +96,8 @@ message TDomainDescription {
     optional TDomainState DomainState = 16;
 
     optional NLoginProto.TSecurityState SecurityState = 20;
+
+    optional TAuditSettings AuditSettings = 21;
 }
 
 message TSchemeQuotas {

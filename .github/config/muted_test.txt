@@ -36,3 +36,4 @@ ydb-library-yql-minikql-codegen-ut/*
 ydb-library-yql-minikql-computation-ut/ComputationPatternCache::Smoke
 ydb-tests-functional-kqp-kqp_indexes/ConsistentIndexRead::InteractiveTx
 ydb-services-ydb-ut/YdbTableBulkUpsertOlap::UpsertCSV
+ydb-core-tx-replication-ydb_proxy-ut/YdbProxyTests::ReadTopic

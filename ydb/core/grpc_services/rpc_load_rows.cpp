@@ -2,6 +2,7 @@
 
 #include "rpc_common/rpc_common.h"
 #include "service_table.h"
+#include "audit_dml_operations.h"
 
 #include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -135,6 +136,10 @@ private:
 
     bool ReportCostInfoEnabled() const {
         return GetProtoRequest(Request.get())->operation_params().report_cost_info() == Ydb::FeatureFlag::ENABLED;
+    }
+
+    void AuditContextStart() override {
+        NKikimr::NGRpcService::AuditContextAppend(Request.get(), *GetProtoRequest(Request.get()));
     }
 
     TString GetDatabase() override {
@@ -309,6 +314,10 @@ private:
             return EUploadSource::CSV;
         }
         Y_VERIFY(false, "unexpected format");
+    }
+
+    void AuditContextStart() override {
+        NKikimr::NGRpcService::AuditContextAppend(Request.get(), *GetProtoRequest(Request.get()));
     }
 
     TString GetDatabase() override {

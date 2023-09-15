@@ -15,6 +15,9 @@ namespace NKikimr {
 
 namespace NGRpcService {
 
+using TAuditLogParts = TVector<std::pair<TString, TString>>;
+using TAuditLogHook = std::function<void (ui32 status, const TAuditLogParts&)>;
+
 class IRequestCtxBaseMtSafe {
 public:
     virtual TMaybe<TString> GetTraceId() const = 0;

@@ -1,6 +1,7 @@
 #pragma once
 #include "defs.h"
 #include "audit_log.h"
+#include "audit_dml_operations.h"
 #include "service_ratelimiter_events.h"
 #include "grpc_request_proxy_handle_methods.h"
 #include "local_rate_limiter.h"
@@ -124,7 +125,8 @@ public:
         }
 
         if (AppData(ctx)->FeatureFlags.GetEnableGrpcAudit()) {
-            AuditLog(GrpcRequestBaseCtx_, CheckedDatabaseName_, TBase::GetUserSID());
+            // log info about input connection (remote address, basically)
+            AuditLogConn(GrpcRequestBaseCtx_, CheckedDatabaseName_, TBase::GetUserSID());
         }
 
         // Simple rps limitation
@@ -344,6 +346,19 @@ private:
     }
 
 private:
+    void AuditRequest(IRequestProxyCtx* requestBaseCtx, const TString& databaseName, const TString& userSID) const {
+        const bool dmlAuditEnabled = requestBaseCtx->IsAuditable();
+
+        if (dmlAuditEnabled) {
+            AuditContextStart(requestBaseCtx, databaseName, userSID);
+            requestBaseCtx->SetAuditLogHook([requestBaseCtx](ui32 status, const TAuditLogParts& parts) {
+                AuditContextEnd(requestBaseCtx);
+                AuditLog(status, parts);
+            });
+        }
+    }
+
+private:
     void ReplyUnauthorizedAndDie(const NYql::TIssue& issue) {
         GrpcRequestBaseCtx_->RaiseIssue(issue);
         GrpcRequestBaseCtx_->ReplyWithYdbStatus(Ydb::StatusIds::UNAUTHORIZED);
@@ -382,6 +397,9 @@ private:
     }
 
     void HandleAndDie(TAutoPtr<TEventHandle<TEvProxyRuntimeEvent>>& event) {
+        // Request audit happen after successfull authorization
+        AuditRequest(GrpcRequestBaseCtx_, CheckedDatabaseName_, TBase::GetUserSID());
+
         event->Release().Release()->Pass(*this);
         TBase::PassAway();
     }

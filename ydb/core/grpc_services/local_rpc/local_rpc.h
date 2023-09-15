@@ -223,6 +223,17 @@ public:
         return InternalCall;
     }
 
+    // IRequestCtx
+    //
+    void FinishRequest() override {}
+
+    // IRequestCtxBase
+    //
+    void AddAuditLogPart(const TStringBuf&, const TString&) override {}
+    const NGRpcService::TAuditLogParts& GetAuditLogParts() const override {
+        Y_FAIL("unimplemented for local rpc");
+    }
+
 private:
     void Reply(NProtoBuf::Message *r, ui32) override {
         TResp* resp = dynamic_cast<TResp*>(r);

@@ -5,6 +5,7 @@
 #include "rpc_kqp_base.h"
 #include "rpc_common/rpc_common.h"
 #include "service_table.h"
+#include "audit_dml_operations.h"
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
@@ -79,6 +80,9 @@ private:
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             const auto& kqpResponse = record.GetResponse();
             const auto& issueMessage = kqpResponse.GetQueryIssues();
+
+            // RollbackTransaction does not have specific Result, use RollbackTransactionResponse as no-op type substitute
+            AuditContextAppend(Request_.get(), *GetProtoRequest(), Ydb::Table::RollbackTransactionResponse());
 
             ReplyWithResult(Ydb::StatusIds::SUCCESS, issueMessage, ctx);
         } else {

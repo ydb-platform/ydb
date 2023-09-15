@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     audit_log.cpp
+    audit_dml_operations.cpp
     db_metadata_cache.h
     grpc_endpoint_publish_actor.cpp
     grpc_helper.cpp

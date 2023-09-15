@@ -272,6 +272,7 @@ private:
     virtual bool ExtractBatch(TString& errorMessage) = 0;
     virtual void RaiseIssue(const NYql::TIssue& issue) = 0;
     virtual void SendResult(const NActors::TActorContext& ctx, const ::Ydb::StatusIds::StatusCode& status) = 0;
+    virtual void AuditContextStart() {}
 
     virtual EUploadSource GetSourceType() const {
         return EUploadSource::ProtoValues;
@@ -515,6 +516,8 @@ private:
     void ResolveTable(const TString& table, const NActors::TActorContext& ctx) {
         // TODO: check all params;
         // Cerr << *Request->GetProtoRequest() << Endl;
+
+        AuditContextStart();
 
         TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;

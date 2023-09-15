@@ -1161,6 +1161,12 @@
       - contrib/libs/glog/sources/src/stacktrace_powerpc-inl.h
       - contrib/libs/glog/sources/src/stacktrace_generic-inl.h
 
+- source_filter: "^contrib/libs/harfbuzz"
+  includes:
+    - HB_STRING_ARRAY_LIST:
+      - contrib/libs/harfbuzz/src/hb-ot-cff1-std-str.hh
+      - contrib/libs/harfbuzz/src/hb-ot-post-macroman.hh
+
 - source_filter: "^contrib/libs/hdf5/src"
   includes:
     - H5_ZLIB_HEADER: contrib/libs/zlib/include/zlib.h

@@ -308,7 +308,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
             settings);
         TMap<TString, TString> expectedParamToType {
             {"$p1", "'int4"},
-            {"$p2", "'text"},
+            {"$p2", "'unknown"},
             {"$p3", "'int4"},
         };
         UNIT_ASSERT(res.Root);

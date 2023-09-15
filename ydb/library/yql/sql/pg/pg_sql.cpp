@@ -275,7 +275,7 @@ public:
             const auto paramName = PREPARED_PARAM_PREFIX + ToString(i + 1);
             const auto typeOid = Settings.PgParameterTypeOids[i];
             const auto& typeName =
-                typeOid != UNKNOWNOID ? NPg::LookupType(typeOid).Name : "text";
+                typeOid != UNKNOWNOID ? NPg::LookupType(typeOid).Name : DEFAULT_PARAM_TYPE;
             ParamNameToPgTypeName[paramName] = typeName;
         }
     }

@@ -239,9 +239,6 @@ struct TRpcServices {
 template <class T>
 void FillYdbStatus(T& resp, const NYql::TIssues& issues, Ydb::StatusIds::StatusCode status);
 
-// Returns true if given request type is subject to audit
-bool IsAuditableRequest(const ::google::protobuf::Message& req);
-
 class TProtoResponseHelper {
 public:
     template <typename T, typename C>
@@ -329,6 +326,11 @@ enum class TRateLimiterMode : ui8 {
 #define RLSWITCH(mode) \
     IsRlAllowed() ? mode : TRateLimiterMode::Off
 
+enum class TAuditMode : bool {
+    Off = false,
+    Auditable = true,
+};
+
 class ICheckerIface;
 
 // The way to pass some common data to request processing
@@ -342,6 +344,7 @@ public:
 struct TRequestAuxSettings {
     TRateLimiterMode RlMode = TRateLimiterMode::Off;
     void (*CustomAttributeProcessor)(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, ICheckerIface*) = nullptr;
+    TAuditMode AuditMode = TAuditMode::Off; 
 };
 
 // grpc_request_proxy part
@@ -1002,7 +1005,6 @@ public:
 
     TGRpcRequestWrapperImpl(NGrpc::IRequestContextBase* ctx)
         : Ctx_(ctx)
-        , IsAuditableType(!this->IsInternalCall() && IsAuditableRequest(*GetRequest()))
     { }
 
     const TMaybe<TString> GetYdbToken() const override {
@@ -1243,9 +1245,6 @@ public:
         Y_FAIL("unimplemented");
     }
 
-    bool IsAuditable() const override {
-        return IsAuditableType;
-    }
     void SetAuditLogHook(TAuditLogHook&& hook) override {
         AuditLogHook = std::move(hook);
     }
@@ -1307,7 +1306,6 @@ private:
     IGRpcProxyCounters::TPtr Counters;
     std::function<TFinishWrapper(std::function<void()>&&)> FinishWrapper = &GetStdFinishWrapper;
 
-    const bool IsAuditableType;
     TAuditLogParts AuditLogParts;
     TAuditLogHook AuditLogHook;
     bool RequestFinished = false;
@@ -1388,6 +1386,12 @@ public:
             AuxSettings.CustomAttributeProcessor(schemeData, iface);
             return true;
         }
+    }
+
+    // IRequestCtxBaseMtSafe
+    //
+    bool IsAuditable() const override {
+        return (AuxSettings.AuditMode == TAuditMode::Auditable) && !this->IsInternalCall();
     }
 
 private:

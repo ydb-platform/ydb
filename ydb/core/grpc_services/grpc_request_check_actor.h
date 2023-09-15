@@ -359,7 +359,7 @@ private:
 
     void AuditRequest(IRequestProxyCtx* requestBaseCtx, const TString& databaseName, const TString& userSID) const {
         const bool dmlAuditEnabled = requestBaseCtx->IsAuditable() && IsAuditEnabledFor(userSID);
-
+        
         if (dmlAuditEnabled) {
             AuditContextStart(requestBaseCtx, databaseName, userSID);
             requestBaseCtx->SetAuditLogHook([requestBaseCtx](ui32 status, const TAuditLogParts& parts) {

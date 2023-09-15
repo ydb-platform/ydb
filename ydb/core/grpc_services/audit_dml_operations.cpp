@@ -5,15 +5,6 @@
 #include "audit_dml_operations.h"
 
 namespace {
-    static const std::vector<TString> AuditableRequests{
-        "Ydb.Table.ExecuteDataQueryRequest",
-        "Ydb.Table.PrepareDataQueryRequest",
-        "Ydb.Table.BeginTransactionRequest",
-        "Ydb.Table.CommitTransactionRequest",
-        "Ydb.Table.RollbackTransactionRequest",
-        "Ydb.Table.BulkUpsertRequest",
-    };
-
     // Query text could be very large, multilined and formatted with indentations.
     // It should be prepared and somewhat limited before getting dumped into the logs.
     const size_t MAX_QUERY_TEXT_LEN = 1024;
@@ -30,12 +21,6 @@ namespace {
 }
 
 namespace NKikimr::NGRpcService {
-
-// Runtime filtration of requests by their type
-bool IsAuditableRequest(const ::google::protobuf::Message& req) {
-    auto found = std::find(AuditableRequests.begin(), AuditableRequests.end(), req.GetDescriptor()->full_name());
-    return (found != AuditableRequests.end());
-}
 
 void AuditContextStart(IRequestCtxBase* ctx, const TString& database, const TString& userSID) {
     ctx->AddAuditLogPart("remote_address", ctx->GetPeerName());

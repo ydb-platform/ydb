@@ -1242,8 +1242,15 @@ public:
     void RemoveCdcStreamScanShardStatus(NIceDb::TNiceDb& db, const TPathId& streamPathId, const TShardIdx& shardIdx);
     // } // NCdcStreamScan
 
-    // simple statistics
-    void Handle(NStat::TEvStatistics::TEvGetStatisticsFromSS::TPtr& ev, const TActorContext& ctx);
+    // statistics
+    TString PreSerializedStatisticsMapData;
+    std::unordered_map<ui32, size_t> StatNodes;
+    std::unordered_map<TActorId, ui32> StatNodePipes;
+
+    void Handle(TEvPrivate::TEvProcessStatistics::TPtr& ev, const TActorContext& ctx);
+    void Handle(NStat::TEvStatistics::TEvRegisterNode::TPtr& ev, const TActorContext& ctx);
+    void GenerateStatisticsMap();
+    void BroadcastStatistics();
 
 public:
     void ChangeStreamShardsCount(i64 delta) override;

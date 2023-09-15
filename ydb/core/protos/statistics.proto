@@ -4,18 +4,17 @@ package NKikimrStat;
 
 option java_package = "ru.yandex.kikimr.proto";
 
-message TEvGetStatisticsFromSS {
-    optional uint64 RequestId = 1;
-    repeated NKikimrProto.TPathID PathIds = 2;
-};
-
-message TEvGetStatisticsFromSSResult {
-    optional uint64 RequestId = 1;
+message TEvBroadcastStatistics {
     message TEntry {
         optional NKikimrProto.TPathID PathId = 1;
-        optional bool Success = 2;
-        optional uint64 RowCount = 3;
-        optional uint64 BytesSize = 4;
+        optional uint64 RowCount = 2;
+        optional uint64 BytesSize = 3;
     }
+    repeated uint32 NodeIds = 1;
     repeated TEntry Entries = 2;
-};
+}
+
+message TEvRegisterNode {
+    optional uint32 NodeId = 1;
+    optional bool HasStatistics = 2;
+}

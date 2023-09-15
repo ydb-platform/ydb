@@ -5,8 +5,9 @@
 namespace NKikimr {
 namespace NStat {
 
-inline NActors::TActorId MakeStatServiceID() {
-    return NActors::TActorId(0, TStringBuf("Statistics"));
+inline NActors::TActorId MakeStatServiceID(ui32 node) {
+    const char x[12] = "StatService";
+    return NActors::TActorId(node, TStringBuf(x, 12));
 }
 
 THolder<NActors::IActor> CreateStatService();

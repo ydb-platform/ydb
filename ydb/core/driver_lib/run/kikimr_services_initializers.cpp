@@ -2462,7 +2462,7 @@ void TStatServiceInitializer::InitializeServices(NActors::TActorSystemSetup* set
     auto actor = NStat::CreateStatService();
 
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
-        NStat::MakeStatServiceID(),
+        NStat::MakeStatServiceID(NodeId),
         TActorSetupCmd(actor.Release(), TMailboxType::HTSwap, appData->UserPoolId)));
 }
 

@@ -41,8 +41,11 @@ struct TEvStatistics {
         EvGetStatistics = EventSpaceBegin(TKikimrEvents::ES_STATISTICS),
         EvGetStatisticsResult,
 
-        EvGetStatisticsFromSS,
-        EvGetStatisticsFromSSResult,
+        EvGetStatisticsFromSS, // deprecated
+        EvGetStatisticsFromSSResult, // deprecated
+
+        EvBroadcastStatistics,
+        EvRegisterNode,
 
         EvEnd
     };
@@ -56,16 +59,16 @@ struct TEvStatistics {
         std::vector<TResponse> StatResponses;
     };
 
-    struct TEvGetStatisticsFromSS : public TEventPB<
-        TEvGetStatisticsFromSS,
-        NKikimrStat::TEvGetStatisticsFromSS,
-        EvGetStatisticsFromSS>
+    struct TEvBroadcastStatistics : public TEventPreSerializedPB<
+        TEvBroadcastStatistics,
+        NKikimrStat::TEvBroadcastStatistics,
+        EvBroadcastStatistics>
     {};
 
-    struct TEvGetStatisticsFromSSResult : public TEventPB<
-        TEvGetStatisticsFromSSResult,
-        NKikimrStat::TEvGetStatisticsFromSSResult,
-        EvGetStatisticsFromSSResult>
+    struct TEvRegisterNode : public TEventPB<
+        TEvRegisterNode,
+        NKikimrStat::TEvRegisterNode,
+        EvRegisterNode>
     {};
 };
 

@@ -813,7 +813,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
         auto event = MakeHolder<NStat::TEvStatistics::TEvGetStatistics>();
         event->StatRequests.push_back(t);
 
-        auto statServiceId = NStat::MakeStatServiceID();
+        auto statServiceId = NStat::MakeStatServiceID(actorSystem->NodeId);
 
         
         return SendActorRequest<NStat::TEvStatistics::TEvGetStatistics, NStat::TEvStatistics::TEvGetStatisticsResult, TResult>(

@@ -11,6 +11,7 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/sys_view/partition_stats/partition_stats.h>
 #include <ydb/core/statistics/events.h>
+#include <ydb/core/statistics/stat_service.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 
@@ -125,6 +126,9 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
     StartStopCompactionQueues();
 
     ctx.Send(TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(InitiateCachedTxIdsCount));
+
+    GenerateStatisticsMap();
+    ctx.Schedule(TDuration::Seconds(15), new TEvPrivate::TEvProcessStatistics());
 
     Become(&TThis::StateWork);
 }
@@ -4417,7 +4421,8 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         HFuncTraced(TEvPersQueue::TEvProposeTransactionAttachResult, Handle);
 
-        HFuncTraced(NStat::TEvStatistics::TEvGetStatisticsFromSS, Handle);
+        HFuncTraced(TEvPrivate::TEvProcessStatistics, Handle);
+        HFuncTraced(NStat::TEvStatistics::TEvRegisterNode, Handle);
 
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -5059,6 +5064,7 @@ void TSchemeShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TAc
 void TSchemeShard::Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActorContext &ctx) {
     Y_UNUSED(ev);
     Y_UNUSED(ctx);
+
     LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "Pipe server connected"
                     << ", at tablet: " << ev->Get()->TabletId);
@@ -5101,7 +5107,28 @@ void TSchemeShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TAc
 }
 
 void TSchemeShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TActorContext &ctx) {
-    Y_UNUSED(ev);
+    auto serverId = ev->Get()->ServerId;
+    auto itServer = StatNodePipes.find(serverId);
+
+    if (itServer != StatNodePipes.end()) {
+        auto nodeId = itServer->second;
+        StatNodePipes.erase(itServer);
+
+        auto itNode = StatNodes.find(nodeId);
+        if (itNode != StatNodes.end()) {
+            --itNode->second;
+            if (itNode->second == 0) {
+                StatNodes.erase(itNode);
+            }
+        }
+
+        LOG_DEBUG_S(ctx, NKikimrServices::STATISTICS,
+            "ServerDisconnected"
+            << ", node id = " << nodeId
+            << ", server id = " << serverId
+            << ", at schemeshard: " << TabletID());
+    }
+
     LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "Server pipe is reset"
                     << ", at schemeshard: " << TabletID());
@@ -6745,45 +6772,84 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvLogin::TPtr &ev, const TActorContex
     Execute(CreateTxLogin(ev), ctx);
 }
 
-void TSchemeShard::Handle(NStat::TEvStatistics::TEvGetStatisticsFromSS::TPtr& ev, const TActorContext& ctx) {
-    const auto& recordIn = ev->Get()->Record;
+void TSchemeShard::GenerateStatisticsMap() {
+    int count = 0;
 
-    auto result = MakeHolder<NStat::TEvStatistics::TEvGetStatisticsFromSSResult>();
-    auto& recordOut = result->Record;
-    recordOut.SetRequestId(recordIn.GetRequestId());
+    auto broadcast = std::make_unique<NStat::TEvStatistics::TEvBroadcastStatistics>();
+    auto* record = broadcast->MutableRecord();
 
-    for (const auto& pathIdIn : recordIn.GetPathIds()) {
-        TPathId pathId(pathIdIn.GetOwnerId(), pathIdIn.GetLocalId());
+    for (const auto& [pathId, tableInfo] : Tables) {
+        const auto& aggregated = tableInfo->GetStats().Aggregated;
+        auto* entry = record->AddEntries();
+        auto* entryPathId = entry->MutablePathId();
+        entryPathId->SetOwnerId(pathId.OwnerId);
+        entryPathId->SetLocalId(pathId.LocalPathId);
+        entry->SetRowCount(aggregated.RowCount);
+        entry->SetBytesSize(aggregated.DataSize);
+        ++count;
+    }
+    // TODO: column tables
 
-        auto& entryOut = *recordOut.AddEntries();
-        entryOut.MutablePathId()->CopyFrom(pathIdIn);
+    PreSerializedStatisticsMapData.clear();
+    Y_PROTOBUF_SUPPRESS_NODISCARD record->SerializeToString(&PreSerializedStatisticsMapData);
 
-        auto itTable = Tables.find(pathId);
-        if (itTable != Tables.end()) {
-            const auto& aggregated = itTable->second->GetStats().Aggregated;
-            entryOut.SetSuccess(true);
-            entryOut.SetRowCount(aggregated.RowCount);
-            entryOut.SetBytesSize(aggregated.DataSize);
-            continue;
-        }
+    LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+        "Generate statistics map"
+        << ", table count = " << count
+        << ", at schemeshard: " << TabletID());
+}
 
-        if (ColumnTables.contains(pathId)) {
-            auto columnTableInfo = ColumnTables.GetVerified(pathId);
-            if (columnTableInfo->IsStandalone()) {
-                const auto& aggregated = columnTableInfo->GetStats().Aggregated;
-                entryOut.SetSuccess(true);
-                entryOut.SetRowCount(aggregated.RowCount);
-                entryOut.SetBytesSize(aggregated.DataSize);
-                continue;
-            }
-        }
+void TSchemeShard::BroadcastStatistics() {
+    LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+        "Broadcast statistics"
+        << ", node count = " << StatNodes.size()
+        << ", at schemeshard: " << TabletID());
 
-        entryOut.SetSuccess(false);
-        entryOut.SetRowCount(0);
-        entryOut.SetBytesSize(0);
+    if (StatNodes.empty()) {
+        return;
     }
 
-    ctx.Send(ev->Sender, result.Release(), 0, ev->Cookie);
+    ui32 leadingNodeId = StatNodes.begin()->first;
+
+    auto broadcast = std::make_unique<NStat::TEvStatistics::TEvBroadcastStatistics>();
+    auto* record = broadcast->MutableRecord();
+    for (const auto& [nodeId, _] : StatNodes) {
+        if (nodeId == leadingNodeId) {
+            continue;
+        }
+        record->AddNodeIds(nodeId);
+    }
+
+    broadcast->PreSerializedData = PreSerializedStatisticsMapData;
+
+    Send(NStat::MakeStatServiceID(leadingNodeId), broadcast.release());
+}
+
+void TSchemeShard::Handle(TEvPrivate::TEvProcessStatistics::TPtr&, const TActorContext& ctx) {
+    GenerateStatisticsMap();
+    BroadcastStatistics();
+
+    ctx.Schedule(TDuration::Seconds(15), new TEvPrivate::TEvProcessStatistics());
+}
+
+void TSchemeShard::Handle(NStat::TEvStatistics::TEvRegisterNode::TPtr& ev, const TActorContext& ctx) {
+    const auto& record = ev->Get()->Record;
+    const ui32 nodeId = record.GetNodeId();
+    auto serverId = ev->Recipient;
+    const bool hasStatistics = record.GetHasStatistics();
+
+    if (StatNodePipes.find(serverId) == StatNodePipes.end()) {
+        StatNodePipes[serverId] = nodeId;
+        ++StatNodes[nodeId];
+    }
+
+    Y_UNUSED(hasStatistics);
+
+    LOG_DEBUG_S(ctx, NKikimrServices::STATISTICS,
+        "Register node"
+        << ", server id = " << serverId
+        << ", node id = " << nodeId
+        << ", at schemeshard: " << TabletID());
 }
 
 } // namespace NSchemeShard

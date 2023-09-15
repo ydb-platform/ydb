@@ -313,7 +313,7 @@ namespace NPDisk {
 
     void SetupStatService(TTestActorRuntime& runtime, ui32 nodeIndex)
     {
-        runtime.AddLocalService(NStat::MakeStatServiceID(),
+        runtime.AddLocalService(NStat::MakeStatServiceID(runtime.GetNodeId(nodeIndex)),
                 TActorSetupCmd(NStat::CreateStatService().Release(), TMailboxType::HTSwap, 0),
                 nodeIndex);
     }

@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(ydb-core-statistics)
 target_link_libraries(ydb-core-statistics PUBLIC

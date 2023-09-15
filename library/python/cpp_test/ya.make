@@ -12,8 +12,7 @@ TEST_SRCS(
 )
 
 RESOURCE(
-    devtools/ya/handlers/style/style_config /cpp_style/config/12
-    devtools/ya/handlers/style/style_config_14 /cpp_style/config/14
+    devtools/ya/handlers/style/style_config /cpp_style/config
 )
 
 END()

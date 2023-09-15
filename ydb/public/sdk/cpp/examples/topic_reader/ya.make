@@ -1,4 +1,5 @@
 RECURSE(
     eventloop
     simple
+    transaction
 )

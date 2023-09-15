@@ -1573,32 +1573,32 @@ Subtract argument from current_date (at midnight) (NOT SUPPORTED)|
 ||clock_timestamp ( ) → timestamp with time zone|
 Current date and time (changes during statement execution); see Section 9.9.5|
 ```sql
-clock_timestamp() → ~2019-12-23 14:39:53.662522-05
+clock_timestamp() ~→ 2019-12-23 14:39:53.662522-05
 ```||
 ||current_date → date|
 Current date; see Section 9.9.5|
 ```sql
-current_date → ~2019-12-23
+current_date ~→ 2019-12-23
 ```||
 ||current_time → time with time zone|
 Current time of day; see Section 9.9.5|
 ```sql
-current_time → ~14:39:53.662522-05
+current_time ~→ 14:39:53.662522-05
 ```||
 ||current_time ( integer ) → time with time zone|
 Current time of day, with limited precision; see Section 9.9.5|
 ```sql
-current_time(2) → ~14:39:53.66-05
+current_time(2) ~→ 14:39:53.66-05
 ```||
 ||current_timestamp → timestamp with time zone|
 Current date and time (start of current transaction); see Section 9.9.5|
 ```sql
-current_timestamp → ~2019-12-23 14:39:53.662522-05
+current_timestamp ~→ 2019-12-23 14:39:53.662522-05
 ```||
 ||current_timestamp ( integer ) → timestamp with time zone|
 Current date and time (start of current transaction), with limited precision; see Section 9.9.5|
 ```sql
-current_timestamp(0) → ~2019-12-23 14:39:53-05
+current_timestamp(0) ~→ 2019-12-23 14:39:53-05
 ```||
 ||date_bin ( interval, timestamp, timestamp ) → timestamp|
 Bin input into specified interval aligned with specified origin; see Section 9.9.3|
@@ -1673,22 +1673,22 @@ justify_interval(interval '1 mon -1 hour') → 29 days 23:00:00
 ||localtime → time|
 Current time of day; see Section 9.9.5 (NOT SUPPORTED)|
 ```sql
-#localtime → ~14:39:53.662522
+#localtime ~→ 14:39:53.662522
 ```||
 ||localtime ( integer ) → time|
 Current time of day, with limited precision; see Section 9.9.5 (NOT SUPPORTED)|
 ```sql
-#localtime(0) → ~14:39:53
+#localtime(0) ~→ 14:39:53
 ```||
 ||localtimestamp → timestamp|
 Current date and time (start of current transaction); see Section 9.9.5 (NOT SUPPORTED)|
 ```sql
-#localtimestamp → ~2019-12-23 14:39:53.662522
+#localtimestamp ~→ 2019-12-23 14:39:53.662522
 ```||
 ||localtimestamp ( integer ) → timestamp|
 Current date and time (start of current transaction), with limited precision; see Section 9.9.5 (NOT SUPPORTED)|
 ```sql
-#localtimestamp(2) → ~2019-12-23 14:39:53.66
+#localtimestamp(2) ~→ 2019-12-23 14:39:53.66
 ```||
 ||make_date ( year int, month int, day int ) → date|
 Create date from year, month and day fields (negative years signify BC)|
@@ -1713,28 +1713,28 @@ make_timestamp(2013, 7, 15, 8, 15, 23.5) → 2013-07-15 08:15:23.5
 ||make_timestamptz ( year int, month int, day int, hour int, min int, sec double precision [, timezone text ] ) → timestamp with time zone|
 Create timestamp with time zone from year, month, day, hour, minute and seconds fields (negative years signify BC). If timezone is not specified, the current time zone is used; the examples assume the session time zone is Europe/London|
 ```sql
-make_timestamptz(2013, 7, 15, 8, 15, 23.5) → ~2013-07-15 08:15:23.5+01
-#make_timestamptz(2013, 7, 15, 8, 15, 23.5, 'America/New_York') → ~2013-07-15 13:15:23.5+01
+make_timestamptz(2013, 7, 15, 8, 15, 23.5) ~→ 2013-07-15 08:15:23.5+01
+#make_timestamptz(2013, 7, 15, 8, 15, 23.5, 'America/New_York') ~→ 2013-07-15 13:15:23.5+01
 ```||
 ||now ( ) → timestamp with time zone|
 Current date and time (start of current transaction); see Section 9.9.5|
 ```sql
-now() → ~2019-12-23 14:39:53.662522-05
+now() ~→ 2019-12-23 14:39:53.662522-05
 ```||
 ||statement_timestamp ( ) → timestamp with time zone|
 Current date and time (start of current statement); see Section 9.9.5|
 ```sql
-statement_timestamp() → ~2019-12-23 14:39:53.662522-05
+statement_timestamp() ~→ 2019-12-23 14:39:53.662522-05
 ```||
 ||timeofday ( ) → text|
 Current date and time (like clock_timestamp, but as a text string); see Section 9.9.5|
 ```sql
-timeofday() → ~Mon Dec 23 14:39:53.662522 2019 EST
+timeofday() ~→ Mon Dec 23 14:39:53.662522 2019 EST
 ```||
 ||transaction_timestamp ( ) → timestamp with time zone|
 Current date and time (start of current transaction); see Section 9.9.5|
 ```sql
-transaction_timestamp() → ~2019-12-23 14:39:53.662522-05
+transaction_timestamp() ~→ 2019-12-23 14:39:53.662522-05
 ```||
 ||to_timestamp ( double precision ) → timestamp with time zone|
 Convert Unix epoch (seconds since 1970-01-01 00:00:00+00) to timestamp with time zone|

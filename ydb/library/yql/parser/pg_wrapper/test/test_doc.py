@@ -79,6 +79,7 @@ def test_doc():
         if "→" not in line:
             continue
         total += 1
+        line = line.replace("~→ ", "→ ~")
         input, output = [x.strip() for x in line.split("→")]
         if input.startswith("#"):
             skipped += 1

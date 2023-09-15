@@ -1,6 +1,9 @@
+from __future__ import print_function
+
 import os
 import re
 import sys
+import six
 import json
 import copy
 import base64
@@ -8,7 +11,10 @@ import shlex
 import _common
 import lib.test_const as consts
 import _requirements as reqs
-import StringIO
+try:
+    from StringIO import StringIO
+except ImportError:
+    from io import StringIO
 import subprocess
 import collections
 
@@ -227,7 +233,7 @@ def validate_test(unit, kw):
             errors.append("Error when parsing test timeout: [[bad]]{}[[rst]]".format(e))
 
         requirements_list = []
-        for req_name, req_value in requirements.iteritems():
+        for req_name, req_value in six.iteritems(requirements):
             requirements_list.append(req_name + ":" + req_value)
         valid_kw['REQUIREMENTS'] = serialize_list(requirements_list)
 
@@ -334,10 +340,10 @@ def dump_test(unit, kw):
         ymake.report_configure_error(e)
     if valid_kw is None:
         return None
-    string_handler = StringIO.StringIO()
-    for k, v in valid_kw.iteritems():
-        print >> string_handler, k + ': ' + v
-    print >> string_handler, BLOCK_SEPARATOR
+    string_handler = StringIO()
+    for k, v in six.iteritems(valid_kw):
+        print(k + ': ' + v, file=string_handler)
+    print(BLOCK_SEPARATOR, file=string_handler)
     data = string_handler.getvalue()
     string_handler.close()
     return data
@@ -1185,7 +1191,7 @@ def _load_canonical_file(filename, unit_path):
         with open(filename) as results_file:
             return json.load(results_file)
     except Exception as e:
-        print >> sys.stderr, "malformed canonical data in {}: {} ({})".format(unit_path, e, filename)
+        print("malformed canonical data in {}: {} ({})".format(unit_path, e, filename), file=sys.stderr)
         return {}
 
 
@@ -1220,7 +1226,7 @@ def _get_external_resources_from_canon_data(data):
             if resource:
                 res.add(resource)
         else:
-            for k, v in data.iteritems():
+            for k, v in six.iteritems(data):
                 res.update(_get_external_resources_from_canon_data(v))
     elif isinstance(data, list):
         for e in data:

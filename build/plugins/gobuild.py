@@ -1,7 +1,8 @@
 import base64
 import itertools
-import md5
+from hashlib import md5
 import os
+import six
 from _common import rootrel_arc_src, tobuilddir
 import ymake
 
@@ -44,7 +45,7 @@ def get_appended_values(unit, key):
     value = []
     raw_value = unit.get(key)
     if raw_value:
-        value = filter(lambda x: len(x) > 0, raw_value.split(' '))
+        value = list(filter(lambda x: len(x) > 0, raw_value.split(' ')))
         assert len(value) == 0 or value[0] == '$' + key
     return value[1:] if len(value) > 0 else value
 
@@ -289,7 +290,7 @@ def on_go_resource(unit, *args):
     args = list(args)
     files = args[::2]
     keys = args[1::2]
-    suffix_md5 = md5.new('@'.join(args)).hexdigest()
+    suffix_md5 = md5(six.ensure_binary('@'.join(args))).hexdigest()
     resource_go = os.path.join("resource.{}.res.go".format(suffix_md5))
 
     unit.onpeerdir(["library/go/core/resource"])

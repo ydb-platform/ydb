@@ -14,6 +14,7 @@ from collections import namedtuple, defaultdict
 from functools import partial
 import codecs
 import decimal
+from threading import Lock
 
 import pytest
 import yatest.common
@@ -626,6 +627,9 @@ def yson_to_csv(yson_content, columns=None, with_header=True, strict=False):
     return '\n'.join(csv_content)
 
 
+udfs_lock = Lock()
+
+
 def get_udfs_path(extra_paths=None):
     udfs_build_path = yatest.common.build_path('yql/udfs')
     ydb_udfs_build_path = yatest.common.build_path('ydb/library/yql/udfs')
@@ -644,30 +648,31 @@ def get_udfs_path(extra_paths=None):
         udfs_project_path = None
 
     merged_udfs_path = yql_output_path('yql_udfs')
-    if not os.path.isdir(merged_udfs_path):
-        os.mkdir(merged_udfs_path)
+    with udfs_lock:
+        if not os.path.isdir(merged_udfs_path):
+            os.mkdir(merged_udfs_path)
 
-    udfs_paths = [udfs_project_path, udfs_bin_path, udfs_build_path, ydb_udfs_build_path, contrib_ydb_udfs_build_path, rthub_udfs_build_path, kwyt_udfs_build_path]
-    if extra_paths is not None:
-        udfs_paths += extra_paths
+        udfs_paths = [udfs_project_path, udfs_bin_path, udfs_build_path, ydb_udfs_build_path, contrib_ydb_udfs_build_path, rthub_udfs_build_path, kwyt_udfs_build_path]
+        if extra_paths is not None:
+            udfs_paths += extra_paths
 
-    log('process search UDF in: %s, %s, %s' % (udfs_project_path, udfs_bin_path, udfs_build_path))
-    for _udfs_path in udfs_paths:
-        if _udfs_path:
-            for dirpath, dnames, fnames in os.walk(_udfs_path):
-                for f in fnames:
-                    if f.endswith('.so'):
-                        f = os.path.join(dirpath, f)
-                        if not os.path.exists(f) and os.path.lexists(f):  # seems like broken symlink
-                            try:
-                                os.unlink(f)
-                            except OSError:
-                                pass
-                        link_name = os.path.join(merged_udfs_path, os.path.basename(f))
-                        if not os.path.exists(link_name):
-                            os.symlink(f, link_name)
-                            log('Added UDF: ' + f)
-    return merged_udfs_path
+        log('process search UDF in: %s, %s, %s' % (udfs_project_path, udfs_bin_path, udfs_build_path))
+        for _udfs_path in udfs_paths:
+            if _udfs_path:
+                for dirpath, dnames, fnames in os.walk(_udfs_path):
+                    for f in fnames:
+                        if f.endswith('.so'):
+                            f = os.path.join(dirpath, f)
+                            if not os.path.exists(f) and os.path.lexists(f):  # seems like broken symlink
+                                try:
+                                    os.unlink(f)
+                                except OSError:
+                                    pass
+                            link_name = os.path.join(merged_udfs_path, os.path.basename(f))
+                            if not os.path.exists(link_name):
+                                os.symlink(f, link_name)
+                                log('Added UDF: ' + f)
+        return merged_udfs_path
 
 
 def get_test_prefix():

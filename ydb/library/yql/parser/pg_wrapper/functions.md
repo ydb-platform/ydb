@@ -620,7 +620,7 @@ quote_ident('Foo bar') → "Foo bar"
 ||quote_literal ( text ) → text|
 Returns the given string suitably quoted to be used as a string literal in an SQL statement string. Embedded single-quotes and backslashes are properly doubled. Note that quote_literal returns null on null input; if the argument might be null, quote_nullable is often more suitable. See also Example 43.1.|
 ```sql
-quote_literal(E'O\'Reilly') → 'O''Reilly'
+quote_literal(E'O\'Reilly') → ''O''Reilly''
 ```||
 ||quote_literal ( anyelement ) → text|
 Converts the given value to text and then quotes it as a literal. Embedded single-quotes and backslashes are properly doubled. (NOT SUPPORTED)|
@@ -1036,3 +1036,709 @@ cast(-44 as bit(12))           → 111111010100
 '1110'::bit(4)::integer        → 14
 ```
 Note that casting to just “bit” means casting to bit(1), and so will deliver only the least significant bit of the integer.
+
+# 9.7. Pattern Matching
+
+9.7.1. LIKE
+
+```sql
+string LIKE pattern [ESCAPE escape-character]
+string NOT LIKE pattern [ESCAPE escape-character]
+```
+The LIKE expression returns true if the string matches the supplied pattern. (As expected, the NOT LIKE expression returns false if LIKE returns true, and vice versa. An equivalent expression is NOT (string LIKE pattern).)
+
+If pattern does not contain percent signs or underscores, then the pattern only represents the string itself; in that case LIKE acts like the equals operator. An underscore (_) in pattern stands for (matches) any single character; a percent sign (%) matches any sequence of zero or more characters.
+
+Some examples:
+
+```sql
+'abc' LIKE 'abc'    → true
+'abc' LIKE 'a%'     → true
+'abc' LIKE '_b_'    → true
+'abc' LIKE 'c'      → false
+```
+
+LIKE pattern matching always covers the entire string. Therefore, if it's desired to match a sequence anywhere within a string, the pattern must start and end with a percent sign.
+
+To match a literal underscore or percent sign without matching other characters, the respective character in pattern must be preceded by the escape character. The default escape character is the backslash but a different one can be selected by using the ESCAPE clause. To match the escape character itself, write two escape characters.
+
+Note
+If you have standard_conforming_strings turned off, any backslashes you write in literal string constants will need to be doubled. See Section 4.1.2.1 for more information.
+
+It's also possible to select no escape character by writing ESCAPE ''. This effectively disables the escape mechanism, which makes it impossible to turn off the special meaning of underscore and percent signs in the pattern.
+
+According to the SQL standard, omitting ESCAPE means there is no escape character (rather than defaulting to a backslash), and a zero-length ESCAPE value is disallowed. PostgreSQL's behavior in this regard is therefore slightly nonstandard.
+
+The key word ILIKE can be used instead of LIKE to make the match case-insensitive according to the active locale. This is not in the SQL standard but is a PostgreSQL extension.
+
+The operator \~\~ is equivalent to LIKE, and \~\~* corresponds to ILIKE. There are also !\~\~ and !\~\~* operators that represent NOT LIKE and NOT ILIKE, respectively. All of these operators are PostgreSQL-specific. You may see these operator names in EXPLAIN output and similar places, since the parser actually translates LIKE et al. to these operators.
+
+The phrases LIKE, ILIKE, NOT LIKE, and NOT ILIKE are generally treated as operators in PostgreSQL syntax; for example they can be used in expression operator ANY (subquery) constructs, although an ESCAPE clause cannot be included there. In some obscure cases it may be necessary to use the underlying operator names instead.
+
+Also see the prefix operator ^@ and corresponding starts_with function, which are useful in cases where simply matching the beginning of a string is needed.
+
+9.7.2. SIMILAR TO Regular Expressions
+
+```sql
+string SIMILAR TO pattern [ESCAPE escape-character] (NOT SUPPORTED)
+string NOT SIMILAR TO pattern [ESCAPE escape-character] (NOT SUPPORTED)
+```
+
+The SIMILAR TO operator returns true or false depending on whether its pattern matches the given string. It is similar to LIKE, except that it interprets the pattern using the SQL standard's definition of a regular expression. SQL regular expressions are a curious cross between LIKE notation and common (POSIX) regular expression notation.
+
+Like LIKE, the SIMILAR TO operator succeeds only if its pattern matches the entire string; this is unlike common regular expression behavior where the pattern can match any part of the string. Also like LIKE, SIMILAR TO uses _ and % as wildcard characters denoting any single character and any string, respectively (these are comparable to . and .* in POSIX regular expressions).
+
+In addition to these facilities borrowed from LIKE, SIMILAR TO supports these pattern-matching metacharacters borrowed from POSIX regular expressions:
+
+| denotes alternation (either of two alternatives).
+
+* denotes repetition of the previous item zero or more times.
+
++ denotes repetition of the previous item one or more times.
+
+? denotes repetition of the previous item zero or one time.
+
+{m} denotes repetition of the previous item exactly m times.
+
+{m,} denotes repetition of the previous item m or more times.
+
+{m,n} denotes repetition of the previous item at least m and not more than n times.
+
+Parentheses () can be used to group items into a single logical item.
+
+A bracket expression [...] specifies a character class, just as in POSIX regular expressions.
+
+Notice that the period (.) is not a metacharacter for SIMILAR TO.
+
+As with LIKE, a backslash disables the special meaning of any of these metacharacters. A different escape character can be specified with ESCAPE, or the escape capability can be disabled by writing ESCAPE ''.
+
+According to the SQL standard, omitting ESCAPE means there is no escape character (rather than defaulting to a backslash), and a zero-length ESCAPE value is disallowed. PostgreSQL's behavior in this regard is therefore slightly nonstandard.
+
+Another nonstandard extension is that following the escape character with a letter or digit provides access to the escape sequences defined for POSIX regular expressions; see Table 9.20, Table 9.21, and Table 9.22 below.
+
+Some examples:
+
+```sql
+#'abc' SIMILAR TO 'abc'          → true
+#'abc' SIMILAR TO 'a'            → false
+#'abc' SIMILAR TO '%(b|d)%'      → true
+#'abc' SIMILAR TO '(b|c)%'       → false
+#'-abc-' SIMILAR TO '%\mabc\M%'  → true
+#'xabcy' SIMILAR TO '%\mabc\M%'  → false
+```
+
+The substring function with three parameters provides extraction of a substring that matches an SQL regular expression pattern. The function can be written according to standard SQL syntax:
+
+```sql
+substring(string similar pattern escape escape-character)
+```
+or using the now obsolete SQL:1999 syntax:
+```sql
+substring(string from pattern for escape-character)
+```
+
+or as a plain three-argument function:
+```sql
+substring(string, pattern, escape-character)
+```
+
+As with SIMILAR TO, the specified pattern must match the entire data string, or else the function fails and returns null. To indicate the part of the pattern for which the matching data sub-string is of interest, the pattern should contain two occurrences of the escape character followed by a double quote ("). The text matching the portion of the pattern between these separators is returned when the match is successful.
+
+The escape-double-quote separators actually divide substring's pattern into three independent regular expressions; for example, a vertical bar (|) in any of the three sections affects only that section. Also, the first and third of these regular expressions are defined to match the smallest possible amount of text, not the largest, when there is any ambiguity about how much of the data string matches which pattern. (In POSIX parlance, the first and third regular expressions are forced to be non-greedy.)
+
+As an extension to the SQL standard, PostgreSQL allows there to be just one escape-double-quote separator, in which case the third regular expression is taken as empty; or no separators, in which case the first and third regular expressions are taken as empty. (NOT SUPPORTED)
+
+Some examples, with #" delimiting the return string:
+
+```sql
+#substring('foobar' similar '%#"o_b#"%' escape '#')   → oob
+#substring('foobar' similar '#"o_b#"%' escape '#')    → NULL
+```
+
+9.7.3. POSIX Regular Expressions
+Table 9.16 lists the available operators for pattern matching using POSIX regular expressions.
+
+Table 9.16. Regular Expression Match Operators
+
+#|
+||Operator|Description|Example(s)||
+||ext ~ text → boolean|
+String matches regular expression, case sensitively|
+```sql
+'thomas' ~ 't.*ma' → true
+```||
+||text ~* text → boolean|
+String matches regular expression, case insensitively|
+```sql
+'thomas' ~* 'T.*ma' → true
+```||
+||text !~ text → boolean|
+String does not match regular expression, case sensitively|
+```sql
+'thomas' !~ 't.*max' → true
+```||
+||text !~* text → boolean|
+String does not match regular expression, case insensitively|
+```sql
+'thomas' !~* 'T.*ma' → false
+```||
+|#
+
+POSIX regular expressions provide a more powerful means for pattern matching than the LIKE and SIMILAR TO operators. Many Unix tools such as egrep, sed, or awk use a pattern matching language that is similar to the one described here.
+
+A regular expression is a character sequence that is an abbreviated definition of a set of strings (a regular set). A string is said to match a regular expression if it is a member of the regular set described by the regular expression. As with LIKE, pattern characters match string characters exactly unless they are special characters in the regular expression language — but regular expressions use different special characters than LIKE does. Unlike LIKE patterns, a regular expression is allowed to match anywhere within a string, unless the regular expression is explicitly anchored to the beginning or end of the string.
+
+Some examples:
+
+```sql
+'abcd' ~ 'bc'     → true
+'abcd' ~ 'a.c'    → true -- dot matches any character
+'abcd' ~ 'a.*d'   → true --* repeats the preceding pattern item
+'abcd' ~ '(b|x)'  → true --| means OR, parentheses group
+'abcd' ~ '^a'     → true -- ^ anchors to start of string
+'abcd' ~ '^(b|c)' → false --  would match except for anchoring
+```
+The POSIX pattern language is described in much greater detail below.
+
+The substring function with two parameters, substring(string from pattern), provides extraction of a substring that matches a POSIX regular expression pattern. It returns null if there is no match, otherwise the first portion of the text that matched the pattern. But if the pattern contains any parentheses, the portion of the text that matched the first parenthesized subexpression (the one whose left parenthesis comes first) is returned. You can put parentheses around the whole expression if you want to use parentheses within it without triggering this exception. If you need parentheses in the pattern before the subexpression you want to extract, see the non-capturing parentheses described below.
+
+Some examples:
+
+```sql
+substring('foobar' from 'o.b')      → oob
+substring('foobar' from 'o(.)b')    → o
+```
+
+The regexp_replace function provides substitution of new text for substrings that match POSIX regular expression patterns. It has the syntax regexp_replace(source, pattern, replacement [, flags ]). The source string is returned unchanged if there is no match to the pattern. If there is a match, the source string is returned with the replacement string substituted for the matching substring. The replacement string can contain \n, where n is 1 through 9, to indicate that the source substring matching the n'th parenthesized subexpression of the pattern should be inserted, and it can contain \& to indicate that the substring matching the entire pattern should be inserted. Write \\ if you need to put a literal backslash in the replacement text. The flags parameter is an optional text string containing zero or more single-letter flags that change the function's behavior. Flag i specifies case-insensitive matching, while flag g specifies replacement of each matching substring rather than only the first one. Supported flags (though not g) are described in Table 9.24.
+
+Some examples:
+
+```sql
+regexp_replace('foobarbaz', 'b..', 'X') → fooXbaz
+regexp_replace('foobarbaz', 'b..', 'X', 'g') → fooXX
+regexp_replace('foobarbaz', 'b(..)', 'X\1Y', 'g') → fooXarYXazY
+```
+
+The regexp_match function returns a text array of captured substring(s) resulting from the first match of a POSIX regular expression pattern to a string. It has the syntax regexp_match(string, pattern [, flags ]). If there is no match, the result is NULL. If a match is found, and the pattern contains no parenthesized subexpressions, then the result is a single-element text array containing the substring matching the whole pattern. If a match is found, and the pattern contains parenthesized subexpressions, then the result is a text array whose n'th element is the substring matching the n'th parenthesized subexpression of the pattern (not counting “non-capturing” parentheses; see below for details). The flags parameter is an optional text string containing zero or more single-letter flags that change the function's behavior. Supported flags are described in Table 9.24.
+
+Some examples:
+
+```sql
+regexp_match('foobarbequebaz', 'bar.*que') → {barbeque}
+regexp_match('foobarbequebaz', '(bar)(beque)') → {bar,beque}
+```
+
+In the common case where you just want the whole matching substring or NULL for no match, write something like
+
+```sql
+#(regexp_match('foobarbequebaz', 'bar.*que'))[1] → barbeque
+```
+
+The regexp_matches function returns a set of text arrays of captured substring(s) resulting from matching a POSIX regular expression pattern to a string. It has the same syntax as regexp_match. This function returns no rows if there is no match, one row if there is a match and the g flag is not given, or N rows if there are N matches and the g flag is given. Each returned row is a text array containing the whole matched substring or the substrings matching parenthesized subexpressions of the pattern, just as described above for regexp_match. regexp_matches accepts all the flags shown in Table 9.24, plus the g flag which commands it to return all matches, not just the first one.
+
+Some examples:
+
+```sql
+SELECT * FROM regexp_matches('foo', 'not there') a → [
+]
+```
+
+```sql
+SELECT * FROM regexp_matches('foobarbequebazilbarfbonk', '(b[^b]+)(b[^b]+)', 'g') a → [
+{bar,beque}
+{bazil,barf}
+]
+```
+
+Tip
+In most cases regexp_matches() should be used with the g flag, since if you only want the first match, it's easier and more efficient to use regexp_match(). However, regexp_match() only exists in PostgreSQL version 10 and up. When working in older versions, a common trick is to place a regexp_matches() call in a sub-select, for example:
+
+```sql
+SELECT col1, (SELECT regexp_matches(col2, '(bar)(beque)')) FROM tab;
+```
+
+This produces a text array if there's a match, or NULL if not, the same as regexp_match() would do. Without the sub-select, this query would produce no output at all for table rows without a match, which is typically not the desired behavior.
+
+The regexp_split_to_table function splits a string using a POSIX regular expression pattern as a delimiter. It has the syntax regexp_split_to_table(string, pattern [, flags ]). If there is no match to the pattern, the function returns the string. If there is at least one match, for each match it returns the text from the end of the last match (or the beginning of the string) to the beginning of the match. When there are no more matches, it returns the text from the end of the last match to the end of the string. The flags parameter is an optional text string containing zero or more single-letter flags that change the function's behavior. regexp_split_to_table supports the flags described in Table 9.24.
+
+The regexp_split_to_array function behaves the same as regexp_split_to_table, except that regexp_split_to_array returns its result as an array of text. It has the syntax regexp_split_to_array(string, pattern [, flags ]). The parameters are the same as for regexp_split_to_table.
+
+Some examples:
+
+```sql
+SELECT foo FROM regexp_split_to_table('the quick brown fox jumps over the lazy dog', '\s+') AS foo → [
+the
+quick
+brown
+fox
+jumps
+over
+the
+lazy
+dog
+]
+```
+
+```sql
+#SELECT regexp_split_to_array('the quick brown fox jumps over the lazy dog', '\s+') → {the,quick,brown,fox,jumps,over,the,lazy,dog}
+```
+
+```sql
+SELECT foo FROM regexp_split_to_table('the quick brown fox', '\s*') AS foo → [
+t
+h
+e
+q
+u
+i
+c
+k
+b
+r
+o
+w
+n
+f
+o
+x
+]
+```
+
+As the last example demonstrates, the regexp split functions ignore zero-length matches that occur at the start or end of the string or immediately after a previous match. This is contrary to the strict definition of regexp matching that is implemented by regexp_match and regexp_matches, but is usually the most convenient behavior in practice. Other software systems such as Perl use similar definitions.
+
+9.7.3.5. Regular Expression Matching Rules
+In the event that an RE could match more than one substring of a given string, the RE matches the one starting earliest in the string. If the RE could match more than one substring starting at that point, either the longest possible match or the shortest possible match will be taken, depending on whether the RE is greedy or non-greedy.
+
+Whether an RE is greedy or not is determined by the following rules:
+
+Most atoms, and all constraints, have no greediness attribute (because they cannot match variable amounts of text anyway).
+
+Adding parentheses around an RE does not change its greediness.
+
+A quantified atom with a fixed-repetition quantifier ({m} or {m}?) has the same greediness (possibly none) as the atom itself.
+
+A quantified atom with other normal quantifiers (including {m,n} with m equal to n) is greedy (prefers longest match).
+
+A quantified atom with a non-greedy quantifier (including {m,n}? with m equal to n) is non-greedy (prefers shortest match).
+
+A branch — that is, an RE that has no top-level | operator — has the same greediness as the first quantified atom in it that has a greediness attribute.
+
+An RE consisting of two or more branches connected by the | operator is always greedy.
+
+The above rules associate greediness attributes not only with individual quantified atoms, but with branches and entire REs that contain quantified atoms. What that means is that the matching is done in such a way that the branch, or whole RE, matches the longest or shortest possible substring as a whole. Once the length of the entire match is determined, the part of it that matches any particular subexpression is determined on the basis of the greediness attribute of that subexpression, with subexpressions starting earlier in the RE taking priority over ones starting later.
+
+An example of what this means:
+
+```sql
+SUBSTRING('XY1234Z', 'Y*([0-9]{1,3})')  → 123
+SUBSTRING('XY1234Z', 'Y*?([0-9]{1,3})') → 1
+```
+
+In the first case, the RE as a whole is greedy because Y* is greedy. It can match beginning at the Y, and it matches the longest possible string starting there, i.e., Y123. The output is the parenthesized part of that, or 123. In the second case, the RE as a whole is non-greedy because Y*? is non-greedy. It can match beginning at the Y, and it matches the shortest possible string starting there, i.e., Y1. The subexpression [0-9]{1,3} is greedy but it cannot change the decision as to the overall match length; so it is forced to match just 1.
+
+In short, when an RE contains both greedy and non-greedy subexpressions, the total match length is either as long as possible or as short as possible, according to the attribute assigned to the whole RE. The attributes assigned to the subexpressions only affect how much of that match they are allowed to “eat” relative to each other.
+
+The quantifiers {1,1} and {1,1}? can be used to force greediness or non-greediness, respectively, on a subexpression or a whole RE. This is useful when you need the whole RE to have a greediness attribute different from what's deduced from its elements. As an example, suppose that we are trying to separate a string containing some digits into the digits and the parts before and after them. We might try to do that like this:
+
+```sql
+regexp_match('abc01234xyz', '(.*)(\d+)(.*)') → {abc0123,4,xyz}
+```
+
+That didn't work: the first .* is greedy so it “eats” as much as it can, leaving the \d+ to match at the last possible place, the last digit. We might try to fix that by making it non-greedy:
+
+```sql
+regexp_match('abc01234xyz', '(.*?)(\d+)(.*)') → {abc,0,""}
+```
+
+That didn't work either, because now the RE as a whole is non-greedy and so it ends the overall match as soon as possible. We can get what we want by forcing the RE as a whole to be greedy:
+
+```sql
+regexp_match('abc01234xyz', '(?:(.*?)(\d+)(.*)){1,1}') → {abc,01234,xyz}
+```
+
+Controlling the RE's overall greediness separately from its components' greediness allows great flexibility in handling variable-length patterns.
+
+When deciding what is a longer or shorter match, match lengths are measured in characters, not collating elements. An empty string is considered longer than no match at all. For example: bb* matches the three middle characters of abbbc; (week|wee)(night|knights) matches all ten characters of weeknights; when (.*).* is matched against abc the parenthesized subexpression matches all three characters; and when (a*)* is matched against bc both the whole RE and the parenthesized subexpression match an empty string.
+
+If case-independent matching is specified, the effect is much as if all case distinctions had vanished from the alphabet. When an alphabetic that exists in multiple cases appears as an ordinary character outside a bracket expression, it is effectively transformed into a bracket expression containing both cases, e.g., x becomes [xX]. When it appears inside a bracket expression, all case counterparts of it are added to the bracket expression, e.g., [x] becomes [xX] and [^x] becomes [^xX].
+
+If newline-sensitive matching is specified, . and bracket expressions using ^ will never match the newline character (so that matches will not cross lines unless the RE explicitly includes a newline) and ^ and $ will match the empty string after and before a newline respectively, in addition to matching at beginning and end of string respectively. But the ARE escapes \A and \Z continue to match beginning or end of string only. Also, the character class shorthands \D and \W will match a newline regardless of this mode. (Before PostgreSQL 14, they did not match newlines when in newline-sensitive mode. Write [^[:digit:]] or [^[:word:]] to get the old behavior.)
+
+If partial newline-sensitive matching is specified, this affects . and bracket expressions as with newline-sensitive matching, but not ^ and $.
+
+If inverse partial newline-sensitive matching is specified, this affects ^ and $ as with newline-sensitive matching, but not . and bracket expressions. This isn't very useful but is provided for symmetry
+
+# 9.8. Data Type Formatting Functions
+
+The PostgreSQL formatting functions provide a powerful set of tools for converting various data types (date/time, integer, floating point, numeric) to formatted strings and for converting from formatted strings to specific data types. Table 9.25 lists them. These functions all follow a common calling convention: the first argument is the value to be formatted and the second argument is a template that defines the output or input format.
+
+Table 9.25. Formatting Functions
+
+#|
+||Function|Description|Example(s)||
+||to_char ( timestamp with time zone, text ) → text|
+Converts time stamp to string according to the given format.|
+```sql
+to_char(timestamp '2002-04-20 17:31:12.66', 'HH12:MI:SS') → 05:31:12
+```||
+||to_char ( interval, text ) → text|
+Converts interval to string according to the given format.|
+```sql
+to_char(interval '15h 2m 12s', 'HH24:MI:SS') → 15:02:12
+```||
+||to_char ( numeric_type, text ) → text|
+Converts number to string according to the given format; available for integer, bigint, numeric, real, double precision.|
+```sql
+to_char(125, '999') → ' 125'
+to_char(125.8::real, '999D9') → ' 125.8'
+to_char(-125.8, '999D99S') → '125.80-'
+```||
+||to_date ( text, text ) → date|
+Converts string to date according to the given format.|
+```sql
+to_date('05 Dec 2000', 'DD Mon YYYY') → '2000-12-05'
+```||
+||to_number ( text, text ) → numeric|
+Converts string to numeric according to the given format.|
+```sql
+to_number('12,454.8-', '99G999D9S') → '-12454.8'
+```||
+||to_timestamp ( text, text ) → timestamp with time zone|
+Converts string to time stamp according to the given format. (See also to_timestamp(double precision) in Table 9.32.)|
+```sql
+cast(to_timestamp('05 Dec 2000', 'DD Mon YYYY') as timestamp) → '2000-12-05 00:00:00'
+```||
+|#
+
+Table 9.30 shows some examples of the use of the to_char function.
+
+Table 9.30. to_char Examples
+
+```sql
+to_char('2000-06-06 05:39:18'::timestamp, 'Day, DD  HH12:MI:SS') → 'Tuesday  , 06  05:39:18'
+to_char('2000-06-06 05:39:18'::timestamp, 'FMDay, FMDD  HH12:MI:SS') → 'Tuesday, 6  05:39:18'
+to_char(-0.1, '99.99') → '  -.10'
+to_char(-0.1, 'FM9.99') → '-.1'
+to_char(-0.1, 'FM90.99') → '-0.1'
+to_char(0.1, '0.9') → ' 0.1'
+to_char(12, '9990999.9') → '    0012.0'
+to_char(12, 'FM9990999.9') → '0012.'
+to_char(485, '999') → ' 485'
+to_char(-485, '999') → '-485'
+to_char(485, '9 9 9') → ' 4 8 5'
+to_char(1485, '9,999') → ' 1,485'
+to_char(1485, '9G999') → ' 1,485'
+to_char(148.5, '999.999') → ' 148.500'
+to_char(148.5, 'FM999.999') → '148.5'
+to_char(148.5, 'FM999.990') → '148.500'
+to_char(148.5, '999D999') → ' 148.500'
+to_char(3148.5, '9G999D999') → ' 3,148.500'
+to_char(-485, '999S') → '485-'
+to_char(-485, '999MI') → '485-'
+to_char(485, '999MI') → '485 '
+to_char(485, 'FM999MI') → '485'
+to_char(485, 'PL999') → '+ 485'
+to_char(485, 'SG999') → '+485'
+to_char(-485, 'SG999') → '-485'
+to_char(-485, '9SG99') → '4-85'
+to_char(-485, '999PR') → '<485>'
+to_char(485, 'L999') → '  485'
+to_char(485, 'RN') → '        CDLXXXV'
+to_char(485, 'FMRN') → 'CDLXXXV'
+to_char(5.2, 'FMRN') → 'V'
+to_char(482, '999th') → ' 482nd'
+to_char(485, '"Good number:"999') → 'Good number: 485'
+to_char(485.8, '"Pre:"999" Post:" .999') → 'Pre: 485 Post: .800'
+to_char(12, '99V999') → ' 12000'
+to_char(12.4, '99V999') → ' 12400'
+to_char(12.45, '99V9') → ' 125'
+to_char(0.0004859, '9.99EEEE') → ' 4.86e-04'
+```
+
+# 9.9. Date/Time Functions and Operators
+
+Table 9.32 shows the available functions for date/time value processing, with details appearing in the following subsections. Table 9.31 illustrates the behaviors of the basic arithmetic operators (+, *, etc.). For formatting functions, refer to Section 9.8. You should be familiar with the background information on date/time data types from Section 8.5.
+
+In addition, the usual comparison operators shown in Table 9.1 are available for the date/time types. Dates and timestamps (with or without time zone) are all comparable, while times (with or without time zone) and intervals can only be compared to other values of the same data type. When comparing a timestamp without time zone to a timestamp with time zone, the former value is assumed to be given in the time zone specified by the TimeZone configuration parameter, and is rotated to UTC for comparison to the latter value (which is already in UTC internally). Similarly, a date value is assumed to represent midnight in the TimeZone zone when comparing it to a timestamp.
+
+All the functions and operators described below that take time or timestamp inputs actually come in two variants: one that takes time with time zone or timestamp with time zone, and one that takes time without time zone or timestamp without time zone. For brevity, these variants are not shown separately. Also, the + and * operators come in commutative pairs (for example both date + integer and integer + date); we show only one of each such pair.
+
+Table 9.31. Date/Time Operators
+
+#|
+||Operator|Description|Example(s)||
+||date + integer → date|
+Add a number of days to a date|
+```sql
+date '2001-09-28' + 7 → 2001-10-05
+```||
+||date + interval → timestamp|
+Add an interval to a date|
+```sql
+date '2001-09-28' + interval '1 hour' → 2001-09-28 01:00:00
+```||
+||date + time → timestamp|
+Add a time-of-day to a date|
+```sql
+date '2001-09-28' + time '03:00' → 2001-09-28 03:00:00
+```||
+||interval + interval → interval|
+Add intervals|
+```sql
+interval '1 day' + interval '1 hour' → 1 day 01:00:00
+```||
+||timestamp + interval → timestamp|
+Add an interval to a timestamp|
+```sql
+timestamp '2001-09-28 01:00' + interval '23 hours' → 2001-09-29 00:00:00
+```||
+||time + interval → time|
+Add an interval to a time|
+```sql
+time '01:00' + interval '3 hours' → 04:00:00
+```||
+||- interval → interval|
+Negate an interval|
+```sql
+- interval '23 hours' → -23:00:00
+```||
+||date - date → integer|
+Subtract dates, producing the number of days elapsed|
+```sql
+date '2001-10-01' - date '2001-09-28' → 3
+```||
+||date - integer → date|
+Subtract a number of days from a date|
+```sql
+date '2001-10-01' - 7 → 2001-09-24
+```||
+||date - interval → timestamp|
+Subtract an interval from a date|
+```sql
+date '2001-09-28' - interval '1 hour' → 2001-09-27 23:00:00
+```||
+||time - time → interval|
+Subtract times|
+```sql
+time '05:00' - time '03:00' → 02:00:00
+```||
+||time - interval → time|
+Subtract an interval from a time|
+```sql
+time '05:00' - interval '2 hours' → 03:00:00
+```||
+||timestamp - interval → timestamp|
+Subtract an interval from a timestamp|
+```sql
+timestamp '2001-09-28 23:00' - interval '23 hours' → 2001-09-28 00:00:00
+```||
+||interval - interval → interval|
+Subtract intervals|
+```sql
+interval '1 day' - interval '1 hour' → 1 day -01:00:00
+```||
+||timestamp - timestamp → interval|
+Subtract timestamps (converting 24-hour intervals into days, similarly to justify_hours())|
+```sql
+timestamp '2001-09-29 03:00' - timestamp '2001-07-27 12:00' → 63 days 15:00:00
+```||
+||interval * double precision → interval|
+Multiply an interval by a scalar|
+```sql
+interval '1 second' * 900 → 00:15:00
+interval '1 day' * 21 → 21 days
+interval '1 hour' * 3.5 → 03:30:00
+```||
+||interval / double precision → interval|
+Divide an interval by a scalar|
+```sql
+interval '1 hour' / 1.5 → 00:40:00
+```||
+|#
+
+Table 9.32. Date/Time Functions
+
+#|
+||Function|Description|Example(s)||
+||age ( timestamp, timestamp ) → interval|
+Subtract arguments, producing a “symbolic” result that uses years and months, rather than just days|
+```sql
+age(timestamp '2001-04-10', timestamp '1957-06-13') → 43 years 9 mons 27 days
+```||
+||age ( timestamp ) → interval|
+Subtract argument from current_date (at midnight) (NOT SUPPORTED)|
+```sql
+#age(timestamp '1957-06-13') → 62 years 6 mons 10 days
+```||
+||clock_timestamp ( ) → timestamp with time zone|
+Current date and time (changes during statement execution); see Section 9.9.5|
+```sql
+clock_timestamp() → ~2019-12-23 14:39:53.662522-05
+```||
+||current_date → date|
+Current date; see Section 9.9.5|
+```sql
+current_date → ~2019-12-23
+```||
+||current_time → time with time zone|
+Current time of day; see Section 9.9.5|
+```sql
+current_time → ~14:39:53.662522-05
+```||
+||current_time ( integer ) → time with time zone|
+Current time of day, with limited precision; see Section 9.9.5|
+```sql
+current_time(2) → ~14:39:53.66-05
+```||
+||current_timestamp → timestamp with time zone|
+Current date and time (start of current transaction); see Section 9.9.5|
+```sql
+current_timestamp → ~2019-12-23 14:39:53.662522-05
+```||
+||current_timestamp ( integer ) → timestamp with time zone|
+Current date and time (start of current transaction), with limited precision; see Section 9.9.5|
+```sql
+current_timestamp(0) → ~2019-12-23 14:39:53-05
+```||
+||date_bin ( interval, timestamp, timestamp ) → timestamp|
+Bin input into specified interval aligned with specified origin; see Section 9.9.3|
+```sql
+date_bin('15 minutes', timestamp '2001-02-16 20:38:40', timestamp '2001-02-16 20:05:00') → 2001-02-16 20:35:00
+```||
+||date_part ( text, timestamp ) → double precision|
+Get timestamp subfield (equivalent to extract); see Section 9.9.1|
+```sql
+date_part('hour', timestamp '2001-02-16 20:38:40') → 20
+```||
+||date_part ( text, interval ) → double precision|
+Get interval subfield (equivalent to extract); see Section 9.9.1|
+```sql
+date_part('month', interval '2 years 3 months') → 3
+```||
+||date_trunc ( text, timestamp ) → timestamp|
+Truncate to specified precision; see Section 9.9.2|
+```sql
+date_trunc('hour', timestamp '2001-02-16 20:38:40') → 2001-02-16 20:00:00
+```||
+||date_trunc ( text, timestamp with time zone, text ) → timestamp with time zone|
+Truncate to specified precision in the specified time zone; see Section 9.9.2 (NOT SUPPORTED)|
+```sql
+#date_trunc('day', timestamptz '2001-02-16 20:38:40+00', 'Australia/Sydney') → 2001-02-16 13:00:00+00
+```||
+||date_trunc ( text, interval ) → interval|
+Truncate to specified precision; see Section 9.9.2|
+```sql
+date_trunc('hour', interval '2 days 3 hours 40 minutes') → 2 days 03:00:00
+```||
+||extract ( field from timestamp ) → numeric|
+Get timestamp subfield; see Section 9.9.1|
+```sql
+extract(hour from timestamp '2001-02-16 20:38:40') → 20
+```||
+||extract ( field from interval ) → numeric|
+Get interval subfield; see Section 9.9.1|
+```sql
+extract(month from interval '2 years 3 months') → 3
+```||
+||isfinite ( date ) → boolean|
+Test for finite date (not +/-infinity)|
+```sql
+isfinite(date '2001-02-16') → true
+```||
+||isfinite ( timestamp ) → boolean|
+Test for finite timestamp (not +/-infinity)|
+```sql
+isfinite(timestamp 'infinity') → false
+```||
+||isfinite ( interval ) → boolean|
+Test for finite interval (currently always true)|
+```sql
+isfinite(interval '4 hours') → true
+```||
+||justify_days ( interval ) → interval|
+Adjust interval so 30-day time periods are represented as months|
+```sql
+justify_days(interval '35 days') → 1 mon 5 days
+```||
+||justify_hours ( interval ) → interval|
+Adjust interval so 24-hour time periods are represented as days|
+```sql
+justify_hours(interval '27 hours') → 1 day 03:00:00
+```||
+||justify_interval ( interval ) → interval|
+Adjust interval using justify_days and justify_hours, with additional sign adjustments|
+```sql
+justify_interval(interval '1 mon -1 hour') → 29 days 23:00:00
+```||
+||localtime → time|
+Current time of day; see Section 9.9.5 (NOT SUPPORTED)|
+```sql
+#localtime → ~14:39:53.662522
+```||
+||localtime ( integer ) → time|
+Current time of day, with limited precision; see Section 9.9.5 (NOT SUPPORTED)|
+```sql
+#localtime(0) → ~14:39:53
+```||
+||localtimestamp → timestamp|
+Current date and time (start of current transaction); see Section 9.9.5 (NOT SUPPORTED)|
+```sql
+#localtimestamp → ~2019-12-23 14:39:53.662522
+```||
+||localtimestamp ( integer ) → timestamp|
+Current date and time (start of current transaction), with limited precision; see Section 9.9.5 (NOT SUPPORTED)|
+```sql
+#localtimestamp(2) → ~2019-12-23 14:39:53.66
+```||
+||make_date ( year int, month int, day int ) → date|
+Create date from year, month and day fields (negative years signify BC)|
+```sql
+make_date(2013, 7, 15) → 2013-07-15
+```||
+||make_interval ( [ years int [, months int [, weeks int [, days int [, hours int [, mins int [, secs double precision ]]]]]]] ) → interval|
+Create interval from years, months, weeks, days, hours, minutes and seconds fields, each of which can default to zero (NOT SUPPORTED)|
+```sql
+#make_interval(days => 10) → 10 days
+```||
+||make_time ( hour int, min int, sec double precision ) → time|
+Create time from hour, minute and seconds fields|
+```sql
+make_time(8, 15, 23.5) → 08:15:23.5
+```||
+||make_timestamp ( year int, month int, day int, hour int, min int, sec double precision ) → timestamp|
+Create timestamp from year, month, day, hour, minute and seconds fields (negative years signify BC)|
+```sql
+make_timestamp(2013, 7, 15, 8, 15, 23.5) → 2013-07-15 08:15:23.5
+```||
+||make_timestamptz ( year int, month int, day int, hour int, min int, sec double precision [, timezone text ] ) → timestamp with time zone|
+Create timestamp with time zone from year, month, day, hour, minute and seconds fields (negative years signify BC). If timezone is not specified, the current time zone is used; the examples assume the session time zone is Europe/London|
+```sql
+make_timestamptz(2013, 7, 15, 8, 15, 23.5) → ~2013-07-15 08:15:23.5+01
+#make_timestamptz(2013, 7, 15, 8, 15, 23.5, 'America/New_York') → ~2013-07-15 13:15:23.5+01
+```||
+||now ( ) → timestamp with time zone|
+Current date and time (start of current transaction); see Section 9.9.5|
+```sql
+now() → ~2019-12-23 14:39:53.662522-05
+```||
+||statement_timestamp ( ) → timestamp with time zone|
+Current date and time (start of current statement); see Section 9.9.5|
+```sql
+statement_timestamp() → ~2019-12-23 14:39:53.662522-05
+```||
+||timeofday ( ) → text|
+Current date and time (like clock_timestamp, but as a text string); see Section 9.9.5|
+```sql
+timeofday() → ~Mon Dec 23 14:39:53.662522 2019 EST
+```||
+||transaction_timestamp ( ) → timestamp with time zone|
+Current date and time (start of current transaction); see Section 9.9.5|
+```sql
+transaction_timestamp() → ~2019-12-23 14:39:53.662522-05
+```||
+||to_timestamp ( double precision ) → timestamp with time zone|
+Convert Unix epoch (seconds since 1970-01-01 00:00:00+00) to timestamp with time zone|
+```sql
+to_timestamp(1284352323) → 2010-09-13 04:32:03+00
+```||
+|#

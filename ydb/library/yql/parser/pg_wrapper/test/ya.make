@@ -17,6 +17,11 @@ PEERDIR(
 
 DEPENDS(
     ydb/library/yql/tools/yqlrun
+    ydb/library/yql/udfs/common/re2
 )
+
+IF (SANITIZER_TYPE == "memory")
+    TAG(ya:not_autocheck) # YQL-15385
+ENDIF()
 
 END()

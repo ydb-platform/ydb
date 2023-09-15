@@ -9,8 +9,6 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-WITHOUT_LICENSE_TEXTS()
-
 PEERDIR(
     contrib/libs/liburing
 )

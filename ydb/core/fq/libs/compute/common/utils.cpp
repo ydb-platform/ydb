@@ -28,17 +28,10 @@ void WriteNamedNode(NYson::TYsonWriter& writer, NJson::TJsonValue& node, const T
             }
             break;
         case NJson::JSON_ARRAY:
-            if (name) {
-                writer.OnKeyedItem(name);
-                writer.OnBeginMap();
-            }
             for (auto item : node.GetArray()) {
                 if (auto* subNode = item.GetValueByPath("Name")) {
-                    WriteNamedNode(writer, item, subNode->GetStringRobust());
+                    WriteNamedNode(writer, item, name + "=" + subNode->GetStringRobust());
                 }
-            }
-            if (name) {
-                writer.OnEndMap();
             }
             break;
         case NJson::JSON_MAP:
@@ -90,30 +83,25 @@ void WriteNamedNode(NYson::TYsonWriter& writer, NJson::TJsonValue& node, const T
     }
 }
 
-void EnumeratePlans(NYson::TYsonWriter& writer, NJson::TJsonValue& value, const TString& prefix) {
+void EnumeratePlans(NYson::TYsonWriter& writer, NJson::TJsonValue& value) {
     if (auto* subNode = value.GetValueByPath("Plans")) {
-        ui32 index = 0;
-        TString nodeType = "Unknown";
-        if (auto* subNode = value.GetValueByPath("Node Type")) {
-            nodeType = subNode->GetStringRobust();
-        }
-        if (prefix) {
-            nodeType = prefix + "." + nodeType;
-        }
         for (auto plan : subNode->GetArray()) {
-            auto itemPrefix = nodeType + "[" + ToString(index++) + "]";
-            auto* statNode = plan.GetValueByPath("Stats");
-            if (statNode) {
-                writer.OnKeyedItem(itemPrefix);
-                writer.OnBeginMap();
-                itemPrefix = "";
-            }
-            EnumeratePlans(writer, plan, itemPrefix);
-            if (statNode) {
-                WriteNamedNode(writer, *statNode, "");
-                writer.OnEndMap();
-            }
+            EnumeratePlans(writer, plan);
         }
+    }
+    if (auto* statNode = value.GetValueByPath("Stats")) {
+        TString nodeType = "";
+        if (auto* typeNode = value.GetValueByPath("Node Type")) {
+            nodeType = TString("_") + typeNode->GetStringRobust();
+        }
+        ui64 nodeId = 0;
+        if (auto* idNode = value.GetValueByPath("PlanNodeId")) {
+            nodeId = idNode->GetIntegerRobust();
+        }
+        writer.OnKeyedItem("Stage_" + ToString(nodeId) + nodeType);
+        writer.OnBeginMap();
+            WriteNamedNode(writer, *statNode, "");
+        writer.OnEndMap();
     }
 }
 
@@ -125,13 +113,22 @@ TString GetV1StatFromV2Plan(const TString& plan) {
     NJson::TJsonReaderConfig jsonConfig;
     NJson::TJsonValue stat;
     if (NJson::ReadJsonTree(plan, &jsonConfig, &stat)) {
-        if (auto* subNode = stat.GetValueByPath("Plan")) {
-            EnumeratePlans(writer, *subNode, "");
+        if (auto* topNode = stat.GetValueByPath("Plan")) {
+            if (auto* subNode = topNode->GetValueByPath("Plans")) {
+                for (auto plan : subNode->GetArray()) {
+                    if (auto* typeNode = plan.GetValueByPath("Node Type")) {
+                        auto nodeType = typeNode->GetStringRobust();
+                        writer.OnKeyedItem(nodeType);
+                        writer.OnBeginMap();
+                        EnumeratePlans(writer, plan);
+                        writer.OnEndMap();
+                    }
+                }
+            }
         }
     }
     writer.OnEndMap();
-    auto s = NJson2Yson::ConvertYson2Json(out.Str());
-    return s;
+    return NJson2Yson::ConvertYson2Json(out.Str());
 }
 
 } // namespace NFq

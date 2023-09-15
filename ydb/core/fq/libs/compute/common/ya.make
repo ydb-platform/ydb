@@ -7,6 +7,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/json/yson
     ydb/core/fq/libs/config/protos
     ydb/core/fq/libs/db_id_async_resolver_impl
     ydb/core/fq/libs/grpc

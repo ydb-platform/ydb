@@ -201,12 +201,6 @@ void AggregateNode(const NJson::TJsonValue& node, const TString& path, ui64& min
                 }
             }
         }
-        for (const auto& p : node.GetMap()) {
-            if (p.first == "min" || p.first == "max" || p.first == "sum" || p.first == "count" || p.first == "avg") {
-                return;
-            }
-            AggregateNode(p.second, path, min, max, sum, count);
-        }
     }
 }
 
@@ -216,7 +210,11 @@ void AggregateNode(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, co
     ui64 sum = 0;
     ui64 count = 0;
 
-    AggregateNode(node, path, min, max, sum, count);
+    if (node.GetType() == NJson::JSON_MAP) {
+        for (const auto& p : node.GetMap()) {
+            AggregateNode(p.second, path, min, max, sum, count);
+        }
+    }
 
     if (count) {
         writer.OnKeyedItem(key);
@@ -261,13 +259,14 @@ TString GetPrettyStatistics(const TString& statistics) {
                 writer.OnEndMap();
             }
             // YQv2
-            if (p.first.StartsWith("Query[")) {
+            // if (p.first.StartsWith("Query")) 
+            else {
                 writer.OnKeyedItem(p.first);
                 writer.OnBeginMap();
-                    RemapNode(writer, p.second, "TotalTasks", "TasksCount");
-                    RemapNode(writer, p.second, "TotalCpuTimeUs", "CpuTimeUs");
-                    AggregateNode(writer, p.second, "IngressBytes.S3Source", "IngressObjectStorageBytes");
-                    AggregateNode(writer, p.second, "EgressBytes.S3Sink", "EgressObjectStorageBytes");
+                    AggregateNode(writer, p.second, "TotalTasks", "TasksCount");
+                    AggregateNode(writer, p.second, "TotalCpuTimeUs", "CpuTimeUs");
+                    AggregateNode(writer, p.second, "IngressBytes=S3Source", "IngressObjectStorageBytes");
+                    AggregateNode(writer, p.second, "EgressBytes=S3Sink", "EgressObjectStorageBytes");
                 writer.OnEndMap();
             }
         }

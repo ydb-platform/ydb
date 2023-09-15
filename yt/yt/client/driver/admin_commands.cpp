@@ -468,14 +468,14 @@ void TResurrectChunkLocationsCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TRequestRebootCommand::TRequestRebootCommand()
+TRequestRestartCommand::TRequestRestartCommand()
 {
     RegisterParameter("node_address", NodeAddress_);
 }
 
-void TRequestRebootCommand::DoExecute(ICommandContextPtr context)
+void TRequestRestartCommand::DoExecute(ICommandContextPtr context)
 {
-    WaitFor(context->GetClient()->RequestReboot(NodeAddress_, Options))
+    WaitFor(context->GetClient()->RequestRestart(NodeAddress_, Options))
         .ThrowOnError();
 }
 

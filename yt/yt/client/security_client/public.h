@@ -93,7 +93,7 @@ DEFINE_ENUM(EAccessControlObject,
     (ExitReadOnly)
     (MasterExitReadOnly)
     (SwitchLeader)
-    (RequestReboot)
+    (RequestRestart)
 );
 
 ////////////////////////////////////////////////////////////////////////////////

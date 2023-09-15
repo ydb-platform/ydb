@@ -1858,12 +1858,12 @@ message TRspResurrectChunkLocations
     repeated NYT.NProto.TGuid location_uuids = 1;
 }
 
-message TReqRequestReboot
+message TReqRequestRestart
 {
     required string node_address = 1;
 }
 
-message TRspRequestReboot
+message TRspRequestRestart
 { }
 
 ////////////////////////////////////////////////////////////////////////////////

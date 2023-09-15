@@ -892,11 +892,11 @@ TFuture<TResurrectChunkLocationsResult> TDelegatingClient::ResurrectChunkLocatio
     return Underlying_->ResurrectChunkLocations(nodeAddress, locationUuids, options);
 }
 
-TFuture<TRequestRebootResult> TDelegatingClient::RequestReboot(
+TFuture<TRequestRestartResult> TDelegatingClient::RequestRestart(
     const TString& nodeAddress,
-    const TRequestRebootOptions& options)
+    const TRequestRestartOptions& options)
 {
-    return Underlying_->RequestReboot(nodeAddress, options);
+    return Underlying_->RequestRestart(nodeAddress, options);
 }
 
 TFuture<void> TDelegatingClient::SetUserPassword(

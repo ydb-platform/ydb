@@ -334,7 +334,7 @@ public:
         REGISTER_ALL(TDisableChunkLocationsCommand,        "disable_chunk_locations",         Null,       Structured, false,  false);
         REGISTER_ALL(TDestroyChunkLocationsCommand,        "destroy_chunk_locations",         Null,       Structured, false,  false);
         REGISTER_ALL(TResurrectChunkLocationsCommand,      "resurrect_chunk_locations",       Null,       Structured, false,  false);
-        REGISTER_ALL(TRequestRebootCommand,                "request_reboot",             Null,       Structured, false,  false);
+        REGISTER_ALL(TRequestRestartCommand,               "request_restart",                 Null,       Structured, false,  false);
 
         REGISTER_ALL(TSetUserPasswordCommand,              "set_user_password",               Null,       Structured, false,  false);
         REGISTER_ALL(TIssueTokenCommand,                   "issue_token",                     Null,       Structured, false,  false);

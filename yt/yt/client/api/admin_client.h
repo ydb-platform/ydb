@@ -177,11 +177,11 @@ struct TRemoveMaintenanceOptions
     : public TTimeoutOptions
 { };
 
-struct TRequestRebootOptions
+struct TRequestRestartOptions
     : public TTimeoutOptions
 { };
 
-struct TRequestRebootResult
+struct TRequestRestartResult
 { };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -289,9 +289,9 @@ struct IAdminClient
         const std::vector<TGuid>& locationUuids,
         const TResurrectChunkLocationsOptions& options = {}) = 0;
 
-    virtual TFuture<TRequestRebootResult> RequestReboot(
+    virtual TFuture<TRequestRestartResult> RequestRestart(
         const TString& nodeAddress,
-        const TRequestRebootOptions& options = {}) = 0;
+        const TRequestRestartOptions& options = {}) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

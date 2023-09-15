@@ -557,9 +557,9 @@ public:
         const std::vector<TGuid>& locationUuids,
         const TResurrectChunkLocationsOptions& options), (override));
 
-    MOCK_METHOD(TFuture<TRequestRebootResult>, RequestReboot, (
+    MOCK_METHOD(TFuture<TRequestRestartResult>, RequestRestart, (
         const TString& nodeAddress,
-        const TRequestRebootOptions& options), (override));
+        const TRequestRestartOptions& options), (override));
 
     MOCK_METHOD(TFuture<void>, SetUserPassword, (
         const TString& user,

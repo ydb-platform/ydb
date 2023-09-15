@@ -282,11 +282,11 @@ private:
 
 // Endpoint is necessary for manual configuration regeneration, disk partitioning and node restart.
 // Important part of Hot Swap mechanic.
-class TRequestRebootCommand
-    : public TTypedCommand<NApi::TRequestRebootOptions>
+class TRequestRestartCommand
+    : public TTypedCommand<NApi::TRequestRestartOptions>
 {
 public:
-   TRequestRebootCommand();
+   TRequestRestartCommand();
 
 private:
     TString NodeAddress_;

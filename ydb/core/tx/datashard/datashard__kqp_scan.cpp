@@ -450,9 +450,6 @@ private:
                 << ", bytes: " << sendBytes << ", rows: " << Rows << ", page faults: " << Result->PageFaults
                 << ", finished: " << Result->Finished << ", pageFault: " << Result->PageFault);
 
-            Y_VERIFY(ChunksLimiter.Take(sendBytes));
-            Result->RequestedBytesLimitReached = !ChunksLimiter.HasMore();
-
             if (sendBytes >= 48_MB) {
                 LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Query size limit exceeded.");
                 if (finish) {
@@ -470,6 +467,11 @@ private:
                     ReportDatashardStats();
                     return false;
                 }
+            }
+
+            if (!finish) {
+                Y_VERIFY(ChunksLimiter.Take(sendBytes));
+                Result->RequestedBytesLimitReached = !ChunksLimiter.HasMore();
             }
 
             Send(ComputeActorId, Result.Release(), IEventHandle::FlagTrackDelivery);

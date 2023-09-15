@@ -312,6 +312,12 @@ message TAccountingConfig {
     TMetric Overshoot = 10;
 }
 
+message TReplicatedBucketSettings {
+    // Interval between syncs from kesus and between consumption reports in Ms
+    // Default value is inherited from parent or equals 5000 ms for root.
+    optional uint64 ReportIntervalMs = 1;
+}
+
 message THierarchicalDRRResourceConfig {
     // Resource consumption speed limit.
     // Value is required for root resource.
@@ -343,6 +349,16 @@ message THierarchicalDRRResourceConfig {
     // Must be nonnegative and less than or equal to 1.
     double PrefetchWatermark = 7;
 
+    // Prevents bucket from going too deep in negative values. If somebody reports value that will exceed
+    // this limit the final amount in bucket will be equal to this limit
+    // Should be negative value
+    // Zero means no limit
+    optional double ImmediatelyFillUpTo = 8;
+
+    oneof LeafBehavior {
+        TReplicatedBucketSettings ReplicatedBucket = 9;
+    }
+
     // deprecated settings {
     message TSpeedSettings {
         double MaxUnitsPerSecond = 1; // Max resource consuming speed (== quota).
@@ -364,6 +380,7 @@ message TStreamingQuoterResource {
         // For Hierarchical DRR algorithm.
         THierarchicalDRRResourceConfig HierarchicalDRRResourceConfig = 3;
     }
+
     TAccountingConfig AccountingConfig = 4;
 }
 

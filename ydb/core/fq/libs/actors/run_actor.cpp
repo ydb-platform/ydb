@@ -1558,6 +1558,11 @@ private:
         LOG_D("Executer: " << ExecuterId << ", Controller: " << ControlId << ", ResultIdActor: " << resultId);
     }
 
+    void SetupYqlCore(NYql::TYqlCoreConfig& yqlCore) const {
+        auto flags = yqlCore.MutableFlags();
+        *flags = Params.Config.GetGateways().GetYqlCore().GetFlags();
+    }
+
     void SetupDqSettings(NYql::TDqGatewayConfig& dqGatewaysConfig) const {
         ::google::protobuf::RepeatedPtrField<::NYql::TAttr>& dqSettings = *dqGatewaysConfig.MutableDefaultSettings();
 
@@ -1836,6 +1841,9 @@ private:
 
         LOG_D("Compiling query ...");
         NYql::TGatewaysConfig gatewaysConfig;
+
+        SetupYqlCore(*gatewaysConfig.MutableYqlCore());
+
         SetupDqSettings(*gatewaysConfig.MutableDq());
         // the main idea of having Params.GatewaysConfig is to copy clusters only
         // but in this case we have to copy S3 provider limits

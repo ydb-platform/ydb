@@ -31,8 +31,34 @@ class SchemeEntryType(enum.IntEnum):
     @staticmethod
     def is_table(entry):
         """
+        Deprecated, use is_row_table instead of this.
+
         :param entry: A scheme entry to check
-        :return: True if scheme entry is a table and False otherwise
+        :return: True if scheme entry is a row table and False otherwise  (same as is_row_table)
+        """
+        return entry == SchemeEntryType.TABLE
+
+    @staticmethod
+    def is_any_table(entry):
+        """
+        :param entry: A scheme entry to check
+        :return: True if scheme entry is table (independent of table type) and False otherwise
+        """
+        return entry in (SchemeEntryType.TABLE, SchemeEntryType.COLUMN_TABLE)
+
+    @staticmethod
+    def is_column_table(entry):
+        """
+        :param entry: A scheme entry to check
+        :return: True if scheme entry is a column table and False otherwise
+        """
+        return entry == SchemeEntryType.COLUMN_TABLE
+
+    @staticmethod
+    def is_row_table(entry):
+        """
+        :param entry: A scheme entry to check
+        :return: True if scheme entry is a row table and False otherwise (same as is_table)
         """
         return entry == SchemeEntryType.TABLE
 
@@ -104,9 +130,27 @@ class SchemeEntry(object):
 
     def is_table(self):
         """
-        :return: True if scheme entry is a table and False otherwise
+        :return: True if scheme entry is a row table and False otherwise (same as is_row_table)
         """
         return SchemeEntryType.is_table(self.type)
+
+    def is_column_table(self):
+        """
+        :return: True if scheme entry is a column table and False otherwise (same as is_row_table)
+        """
+        return SchemeEntryType.is_column_table(self.type)
+
+    def is_row_table(self):
+        """
+        :return: True if scheme entry is a row table and False otherwise (same as is_table)
+        """
+        return SchemeEntryType.is_table(self.type)
+
+    def is_any_table(self):
+        """
+        :return: True if scheme entry is table (independent of table type) and False otherwise
+        """
+        return SchemeEntryType.is_any_table(self.type)
 
     def is_database(self):
         """

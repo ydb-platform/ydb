@@ -68,7 +68,7 @@ async def wait_condition(
 
 
 async def wait_for_fast(
-    awaitable: typing.Awaitable,
+    awaitable: typing.Union[typing.Awaitable, typing.Coroutine],
     timeout: typing.Optional[typing.Union[float, int]] = None,
 ):
     fut = asyncio.ensure_future(awaitable)

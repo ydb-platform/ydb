@@ -58,6 +58,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"EnforceAnsiOrderByLimitInUnionAll", &TContext::EnforceAnsiOrderByLimitInUnionAll},
     {"EmitAggApply", &TContext::EmitAggApply},
     {"AnsiLike", &TContext::AnsiLike},
+    {"UseBlocks", &TContext::UseBlocks},
 };
 
 typedef TMaybe<bool> TContext::*TPragmaMaybeField;

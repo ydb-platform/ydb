@@ -108,12 +108,14 @@ namespace NYql {
         auto it = properties.find("database_name");
         if (it == properties.cend()) {
             // TODO: make this property required during https://st.yandex-team.ru/YQ-2184
-            // ythrow yexception() <<  "field 'DATABASE_NAME' is currently ignored";
+            // ythrow yexception() <<  "missing 'DATABASE_NAME' value";
             return;
         }
 
         if (!it->second) {
-            ythrow yexception() << "invalid 'DATABASE_NAME' value: '" << it->second << "'";
+            // TODO: make this property required during https://st.yandex-team.ru/YQ-2184
+            // ythrow yexception() << "invalid 'DATABASE_NAME' value: '" << it->second << "'";
+            return;
         }
 
         clusterConfig.SetDatabaseName(it->second);

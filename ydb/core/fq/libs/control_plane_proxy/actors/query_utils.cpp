@@ -213,8 +213,8 @@ TString MakeCreateExternalDataSourceQuery(
                     PROTOCOL="NATIVE",
                     USE_TLS="true"
                 )",
-                "mdb_cluster_id"_a = EncloseAndEscapeString(connectionContent.setting().clickhouse_cluster().database_id(), '"'),
-                "database_name"_a = EncloseAndEscapeString(connectionContent.setting().clickhouse_cluster().database_name(), '"'));
+                "mdb_cluster_id"_a = EncloseAndEscapeString(connectionContent.setting().postgresql_cluster().database_id(), '"'),
+                "database_name"_a = EncloseAndEscapeString(connectionContent.setting().postgresql_cluster().database_name(), '"'));
         break;
     }
 

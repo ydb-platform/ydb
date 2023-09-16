@@ -1223,7 +1223,10 @@ void TCms::EnqueueRequest(TAutoPtr<IEventHandle> ev, const TActorContext &ctx)
 
 void TCms::StartCollecting()
 {
-    Y_VERIFY(Queue.empty());
+    if (!Queue.empty()) {
+        return;
+    }
+
     std::swap(NextQueue, Queue);
 
     InfoCollectorStartTime = TActivationContext::Now();
@@ -1320,13 +1323,11 @@ void TCms::ProcessQueue()
         Queue.pop();
     }
 
-    // Process events received while collecting and processing queue
-    if (Queue.empty() && !NextQueue.empty()) {
-        StartCollecting();
-    }
-
     if (!Queue.empty()) {
         Send(SelfId(), new TEvPrivate::TEvProcessQueue);
+    } else if (!NextQueue.empty()) {
+        // Process events received while collecting and processing queue
+        StartCollecting();
     }
 }
 

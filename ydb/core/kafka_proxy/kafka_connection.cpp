@@ -57,7 +57,8 @@ public:
     THPTimer InactivityTimer;
 
     bool IsAuthRequired = true;
-    bool IsSslSupported = true;
+    bool IsSslRequired = true;
+    bool IsSslActive = false;
 
     bool ConnectionEstablished = false;
     bool CloseConnection = false;
@@ -89,7 +90,7 @@ public:
         , InflightSize(0)
         , Context(std::make_shared<TContext>(config)) {
         SetNonBlock();
-        IsSslSupported = IsSslSupported && Socket->IsSslSupported();
+        IsSslRequired = Socket->IsSslSupported();
     }
 
     void Bootstrap() {
@@ -98,7 +99,6 @@ public:
         Become(&TKafkaConnection::StateAccepting);
         Schedule(InactivityTimeout, InactivityEvent = new TEvPollerReady(nullptr, false, false));
         KAFKA_LOG_I("incoming connection opened " << Address);
-
         OnAccept();
     }
 
@@ -410,6 +410,17 @@ protected:
     }
 
     void DoRead(const TActorContext& ctx) {
+        if (IsSslRequired && !IsSslActive) {
+            int res = Socket->TryUpgradeToSecure();
+            if (res < 0) {
+                KAFKA_LOG_ERROR("connection closed - error in UpgradeToSecure: " << strerror(-res));
+                return PassAway();
+            }
+            RequestPoller();
+            IsSslActive = true;
+            return;
+        }
+
         KAFKA_LOG_T("DoRead: Demand=" << Demand.Length << ", Step=" << static_cast<i32>(Step));
         for (;;) {
             while (Demand) {

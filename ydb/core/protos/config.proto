@@ -1943,10 +1943,15 @@ message TKafkaProxyConfig {
     optional bool EnableKafkaProxy = 1 [default = false];
 
     optional int32 ListeningPort = 2 [default = 9092];
-    optional string SslCertificate = 3;
 
-    optional uint64 MaxMessageSize = 4 [default = 268435456];
-    optional uint64 MaxInflightSize = 5 [default = 268435456];
+    // You can either specify the path to the certificate, which will contain both the certificate and the private key,
+    // or specify them separately in parameters Cert and Key.
+    optional string SslCertificate = 3;
+    optional string Cert = 8;
+    optional string Key = 9;
+
+    optional uint64 MaxMessageSize = 4 [default = 16777216];
+    optional uint64 MaxInflightSize = 5 [default = 16777216];
     optional uint64 PacketSize = 6 [default = 1500];
 
     message TProxy {

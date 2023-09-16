@@ -60,6 +60,22 @@ public:
         return res;
     }
 
+    int TryUpgradeToSecure() {
+        for (;;) {
+            int res = UpgradeToSecure();
+            if (res >= 0) {
+                return 0;
+            } else if (-res == EINTR) {
+                continue;
+            } else if (-res == EAGAIN || -res == EWOULDBLOCK) {
+                return 0;
+            } else {
+                return res;
+            }
+        }
+    }
+
+
     void Shutdown() {
         ::shutdown(*Socket, SHUT_RDWR);
     }

@@ -2634,9 +2634,9 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
     if (Config.GetKafkaProxyConfig().GetEnableKafkaProxy()) {
         NKafka::TListenerSettings settings;
         settings.Port = Config.GetKafkaProxyConfig().GetListeningPort();
-        if (Config.GetKafkaProxyConfig().HasSslCertificate()) {
-            settings.SslCertificatePem = Config.GetKafkaProxyConfig().GetSslCertificate();
-        }
+        settings.SslCertificatePem = Config.GetKafkaProxyConfig().GetSslCertificate();
+        settings.CertificateFile = Config.GetKafkaProxyConfig().GetCert();
+        settings.PrivateKeyFile = Config.GetKafkaProxyConfig().GetKey();
 
         setup->LocalServices.emplace_back(
             TActorId(),

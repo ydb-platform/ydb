@@ -823,19 +823,11 @@ protected:
     }
 
     bool UpgradeToSecure() {
-        for (;;) {
-            int res = Socket->UpgradeToSecure();
-            if (res >= 0) {
-                break;
-            } else if (-res == EINTR) {
-                continue;
-            } else if (-res == EAGAIN || -res == EWOULDBLOCK) {
-                break;
-            } else {
-                BLOG_ERROR("connection closed - error in UpgradeToSecure: " << strerror(-res));
-                PassAway();
-                return false;
-            }
+        int res = Socket->TryUpgradeToSecure();
+        if (res < 0) {
+            BLOG_ERROR("connection closed - error in UpgradeToSecure: " << strerror(-res));
+            PassAway();
+            return false;
         }
         return true;
     }

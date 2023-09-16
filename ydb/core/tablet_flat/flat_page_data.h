@@ -177,12 +177,12 @@ namespace NPage {
 
         NPage::TLabel Label() const noexcept
         {
-            return ReadUnaligned<NPage::TLabel>(Raw.data());
+            return ReadUnaligned<NPage::TLabel>(Decoded.data());
         }
 
         explicit operator bool() const noexcept
         {
-            return bool(Raw);
+            return bool(Decoded);
         }
 
         const TBlock* operator->() const noexcept
@@ -192,16 +192,16 @@ namespace NPage {
 
         TRowId BaseRow() const noexcept
         {
-            return Raw ? BaseRow_ : Max<TRowId>();
+            return BaseRow_;
         }
 
         TDataPage& Set(const TSharedData *raw = nullptr) noexcept
         {
             Page = { };
 
-            if (Raw = raw ? *raw : TSharedData{ }) {
-                const void* base = Raw.data();
-                auto data = NPage::TLabelWrapper().Read(Raw, EPage::DataPage);
+            if (raw) {
+                const void* base = raw->data();
+                auto data = NPage::TLabelWrapper().Read(*raw, EPage::DataPage);
 
                 Y_VERIFY(data.Version == 1, "Unknown EPage::DataPage version");
 
@@ -216,15 +216,17 @@ namespace NPage {
                     // We expect original page had the same label size as a compressed page
                     size_t labelSize = reinterpret_cast<const char*>(data.Page.data()) - reinterpret_cast<const char*>(base);
 
-                    Decoded.Resize(labelSize + size);
+                    Decoded = TSharedData::Uninitialized(labelSize + size);
 
-                    size = Codec->Decompress(data.Page, Decoded.Begin() + labelSize);
+                    size = Codec->Decompress(data.Page, Decoded.mutable_begin() + labelSize);
 
-                    Decoded.Resize(labelSize + size);
-                    ::memset(Decoded.Begin(), 0, labelSize);
+                    Decoded.TrimBack(labelSize + size);
+                    ::memcpy(Decoded.mutable_begin(), base, labelSize);
 
-                    base = Decoded.Begin();
-                    data.Page = { Decoded.Begin() + labelSize, Decoded.End() };
+                    base = Decoded.begin();
+                    data.Page = { Decoded.begin() + labelSize, Decoded.end() };
+                } else {
+                    Decoded = *raw;
                 }
 
                 auto *recordsHeader = TDeref<TRecordsHeader>::At(data.Page.data(), 0);
@@ -235,9 +237,16 @@ namespace NPage {
                 auto offsetsOffset = data.Page.size() - count * sizeof(TPgSize);
                 Page.Offsets = TDeref<const TRecordsEntry>::At(recordsHeader, offsetsOffset);
                 Page.Count = count;
+            } else {
+                Decoded = {};
+                BaseRow_ = Max<TRowId>();
             }
 
             return *this;
+        }
+
+        const TSharedData& GetData() const noexcept {
+            return Decoded;
         }
 
         TIter LookupKey(TCells key, const TPartScheme::TGroupInfo &group,
@@ -321,8 +330,7 @@ namespace NPage {
     private:
         using ICodec = NBlockCodecs::ICodec;
 
-        TBuffer Decoded;
-        TSharedData Raw;
+        TSharedData Decoded;
         TBlock Page;
         TRowId BaseRow_ = Max<TRowId>();
         const ICodec *Codec = nullptr;

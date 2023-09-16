@@ -99,13 +99,12 @@ class TTableItBase : TNonCopyable {
 
                 if (!TOps::EndKey(NextEntry)) {
                     // We know that everything to +inf is erased
-                    It->Iterators.clear();
-                    It->Active = It->Iterators.end();
+                    It->Clear();
                     It->Ready = EReady::Gone;
                     return;
                 }
 
-                if (!It->SkipTo(TOps::EndKey(NextEntry), !TOps::EndInclusive(NextEntry))) {
+                if (!It->SkipErase(TOps::EndKey(NextEntry), TOps::EndInclusive(NextEntry))) {
                     // We've got some missing page, cannot iterate further
                     return;
                 }
@@ -149,7 +148,7 @@ class TTableItBase : TNonCopyable {
                 }
 
                 Cache.Touch(res.first);
-                if (!It->SkipTo(TOps::EndKey(res.first), !TOps::EndInclusive(res.first))) {
+                if (!It->SkipErase(TOps::EndKey(res.first), TOps::EndInclusive(res.first))) {
                     // We've got some missing page, cannot iterate further
                     return;
                 }
@@ -228,6 +227,20 @@ class TTableItBase : TNonCopyable {
         bool NextEntryValid = false;
         bool FutureEntryValid = false;
     };
+
+    bool SkipErase(TArrayRef<const TCell> endKey, bool inclusive = true) noexcept {
+        if (inclusive) {
+            // Pretend we saw endKey last, but the pointer correctness is very
+            // subtle. We only seek to the erased range end when we don't have
+            // a new cached range, so we would either reposition to a new key,
+            // or there would be a page fault after which this iterator is
+            // unusable, and Flush will not disturb erase cache records on the
+            // way out.
+            LastKey.assign(endKey.begin(), endKey.end());
+            LastKeyPage = {};
+        }
+        return SkipTo(endKey, !inclusive);
+    }
 
 public:
     TTableItBase(
@@ -328,6 +341,8 @@ private:
     ui64 Limit = 0;
 
     TRowState State;
+    TVector<TCell> LastKey;
+    TSharedData LastKeyPage;
 
     // RowVersion of a persistent snapshot that we are reading
     // By default iterator is initialized with the HEAD snapshot
@@ -392,6 +407,12 @@ private:
         Iterators.clear();
         Active = Iterators.end();
         Inactive = Active;
+        ClearKey();
+    }
+
+    void ClearKey() {
+        LastKey.clear();
+        LastKeyPage = {};
     }
 
     // ITERATORS STORAGE
@@ -557,6 +578,7 @@ inline EReady TTableItBase<TIteratorOps>::Start() noexcept
         Iterators.front().IteratorId.Type == EType::Stop ||
         Limit == 0)
     {
+        ClearKey();
         return EReady::Gone;
     }
 
@@ -588,6 +610,7 @@ inline EReady TTableItBase<TIteratorOps>::Turn() noexcept
 {
     if (!Limit) {
         // Optimization: avoid calling Next after returning the last row
+        ClearKey();
         return EReady::Gone;
     }
 
@@ -854,10 +877,10 @@ inline EReady TTableItBase<TIteratorOps>::Apply() noexcept
 {
     State.Reset(Remap.CellDefaults());
 
-    const TDbTupleRef key = GetKey();
+    TArrayRef<const TCell> key = Iterators.back().Key;
 
     for (auto &pin: Remap.KeyPins())
-        State.Set(pin.Pos, { ECellOp::Set, ELargeObj::Inline }, key.Columns[pin.Key]);
+        State.Set(pin.Pos, { ECellOp::Set, ELargeObj::Inline }, key[pin.Key]);
 
     // We must have at least one active iterator
     Y_VERIFY_DEBUG(Active != Inactive);
@@ -918,6 +941,28 @@ inline EReady TTableItBase<TIteratorOps>::Apply() noexcept
         return EReady::Page;
     }
 
+    LastKey.assign(key.begin(), key.end());
+
+    TIteratorId ai = Iterators.back().IteratorId;
+    switch (ai.Type) {
+        case EType::Mem: {
+            // We keep mem table snapshot in memory, no page reference needed
+            LastKeyPage = {};
+            break;
+        }
+        case EType::Run: {
+            auto& it = *RunIters[ai.Index];
+            const TSharedData& page = it.GetKeyPage();
+            if (LastKeyPage.data() != page.data()) {
+                LastKeyPage = page;
+            }
+            break;
+        }
+        default: {
+            Y_FAIL("Unexpected iterator type");
+        }
+    }
+
     Stage = EStage::Done;
     return EReady::Data;
 }
@@ -925,8 +970,7 @@ inline EReady TTableItBase<TIteratorOps>::Apply() noexcept
 template<class TIteratorOps>
 inline TDbTupleRef TTableItBase<TIteratorOps>::GetKey() const noexcept
 {
-    auto key = Iterators.back().Key;
-    return { Scheme->Keys->BasicTypes().data(), key.data(), static_cast<ui32>(key.size()) };
+    return { Scheme->Keys->BasicTypes().data(), LastKey.data(), static_cast<ui32>(LastKey.size()) };
 }
 
 template<class TIteratorOps>

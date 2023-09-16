@@ -409,6 +409,10 @@ namespace NTable {
             return RowId;
         }
 
+        const TSharedData& GetPageData() const noexcept {
+            return Page.GetData();
+        }
+
     private:
         Y_FORCE_INLINE EReady Exhausted() noexcept
         {
@@ -811,6 +815,11 @@ namespace NTable {
             InitKey();
 
             return TDbTupleRef(KeyCellDefaults->BasicTypes().begin(), Key.begin(), Key.size());
+        }
+
+        const TSharedData& GetKeyPage() const noexcept
+        {
+            return Main.GetPageData();
         }
 
         TCells GetRawKey() const noexcept
@@ -1593,6 +1602,12 @@ namespace NTable {
         {
             Y_VERIFY_DEBUG(CurrentIt);
             return CurrentIt->GetKey();
+        }
+
+        const TSharedData& GetKeyPage() const noexcept
+        {
+            Y_VERIFY_DEBUG(CurrentIt);
+            return CurrentIt->GetKeyPage();
         }
 
         void Apply(TRowState& row,

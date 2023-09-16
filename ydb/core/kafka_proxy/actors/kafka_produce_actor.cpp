@@ -4,7 +4,6 @@
 
 #include <contrib/libs/protobuf/src/google/protobuf/util/time_util.h>
 
-#include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/utils.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 
@@ -19,13 +18,6 @@ static constexpr TDuration WRITER_EXPIRATION_INTERVAL = TDuration::Minutes(5);
 
 NActors::IActor* CreateKafkaProduceActor(const TContext::TPtr context) {
     return new TKafkaProduceActor(context);
-}
-
-TString NormalizePath(const TString& database, const TString& topic) {
-    if (topic.Size() > database.Size() && topic.at(database.Size()) == '/' && topic.StartsWith(database)) {
-        return topic;
-    }
-    return CanonizePath(database + "/" + topic);
 }
 
 TString TKafkaProduceActor::LogPrefix() {

@@ -7,6 +7,9 @@ namespace NKafka {
 using namespace NKikimr::NGRpcProxy::V1;
 
 static constexpr int ProxyNodeId = 1;
+static constexpr char UnderlayPrefix[] = "u-";
+
+static_assert(sizeof(UnderlayPrefix) == 3);
 
 NActors::IActor* CreateKafkaMetadataActor(const TContext::TPtr context,
                                           const ui64 correlationId,
@@ -95,9 +98,14 @@ void TKafkaMetadataActor::AddTopicResponse(TMetadataResponseData::TMetadataRespo
         if (!withProxy) {
             auto ins = AllClusterNodes.insert(part.NodeId);
             if (ins.second) {
+                auto hostname = part.Hostname;
+                if (hostname.StartsWith(UnderlayPrefix)) {
+                    hostname = hostname.substr(sizeof(UnderlayPrefix) - 1);
+                }
+
                 auto broker = TMetadataResponseData::TMetadataResponseBroker{};
                 broker.NodeId = part.NodeId;
-                broker.Host = part.Hostname;
+                broker.Host = hostname;
                 broker.Port = Context->Config.GetListeningPort();
                 Response->Brokers.emplace_back(std::move(broker));
             }

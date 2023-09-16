@@ -13,7 +13,6 @@
 namespace NKafka {
 
 static constexpr char EmptyAuthBytes[] = "";
-static constexpr char DebugKafkaApiFlagValue[] = "2";
 
 NActors::IActor* CreateKafkaSaslAuthActor(const TContext::TPtr context, const ui64 correlationId, const NKikimr::NRawSocket::TSocketDescriptor::TSocketAddressType address, const TMessagePtr<TSaslAuthenticateRequestData>& message) {
     return new TKafkaSaslAuthActor(context, correlationId, address, message);
@@ -55,7 +54,7 @@ void TKafkaSaslAuthActor::Handle(NKikimr::TEvTicketParser::TEvAuthorizeTicketRes
     }
     UserToken = ev->Get()->Token;
 
-    if (KafkaApiFlag != DebugKafkaApiFlagValue) {
+    if (ClientAuthData.UserName.Empty()) {
         bool gotPermission = false;
         for (auto & sid : UserToken->GetGroupSIDs()) {
             if (sid == NKikimr::NGRpcProxy::V1::KafkaPlainAuthSid) {
@@ -212,7 +211,6 @@ void TKafkaSaslAuthActor::Handle(NKikimr::TEvTxProxySchemeCache::TEvNavigateKeyS
         else if (attr.first == "serverless_rt_base_resource_ru") ResourcePath = attr.second;
         else if (attr.first == "kafka_api") KafkaApiFlag = attr.second;
     }
-
 
     if (ClientAuthData.UserName.Empty()) {
         // ApiKey IAM authentification

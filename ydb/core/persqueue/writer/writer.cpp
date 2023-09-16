@@ -682,13 +682,13 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
             {
                 INFO("received TEvClientConnected with wrong generation. Expected: " << *ExpectedGeneration << ", received " << msg->Generation);
                 Disconnected(EErrorCode::PartitionNotLocal);
-                return PassAway();
+                return;
             }
             if (NActors::TActivationContext::ActorSystem()->NodeId != msg->ServerId.NodeId())
             {
                 INFO("received TEvClientConnected with wrong NodeId. Expected: " << NActors::TActivationContext::ActorSystem()->NodeId << ", received " << msg->ServerId.NodeId());
                 Disconnected(EErrorCode::PartitionNotLocal);
-                return PassAway();
+                return;
             }
         }
     }

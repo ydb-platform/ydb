@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/pq_rl_helpers.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/aclib/aclib.h>
@@ -81,6 +82,13 @@ inline EKafkaErrors ConvertErrorCode(Ydb::StatusIds::StatusCode status) {
         default:
             return EKafkaErrors::UNKNOWN_SERVER_ERROR;
     }
+}
+
+inline TString NormalizePath(const TString& database, const TString& topic) {
+    if (topic.Size() > database.Size() && topic.at(database.Size()) == '/' && topic.StartsWith(database)) {
+        return topic;
+    }
+    return NKikimr::CanonizePath(database + "/" + topic);
 }
 
 NActors::IActor* CreateKafkaApiVersionsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TApiVersionsRequestData>& message);

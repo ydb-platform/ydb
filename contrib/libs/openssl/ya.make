@@ -6,6 +6,15 @@ VERSION(1.1.1t)
 
 ORIGINAL_SOURCE(https://github.com/openssl/openssl/archive/OpenSSL_1_1_1t.tar.gz)
 
+# TODO(YMAKE-92) Move this information out of ya.make and allow per project configuration
+IF(OPENSOURCE_PROJECT == "CATBOOST")
+    OPENSOURCE_EXPORT_REPLACEMENT(
+        CMAKE OpenSSL
+        CMAKE_TARGET OpenSSL::OpenSSL
+        CONAN openssl/1.1.1t
+    )
+ENDIF()
+
 LICENSE(
     Apache-2.0 AND
     BSD-2-Clause AND
@@ -27,6 +36,9 @@ ADDINCL(
     GLOBAL contrib/libs/openssl/include
     contrib/libs/openssl
 )
+
+# TODO(YMAKE-92) Move this information out of ya.make and allow per project configuration
+IF (NOT EXPORT_CMAKE OR OPENSOURCE_PROJECT != "CATBOOST")
 
 IF (OS_LINUX)
     IF (ARCH_ARM64)
@@ -330,6 +342,8 @@ IF (OS_ANDROID AND ARCH_ARM64)
         -DKECCAK1600_ASM
         -DVPAES_ASM
     )
+ENDIF()
+
 ENDIF()
 
 END()

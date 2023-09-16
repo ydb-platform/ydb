@@ -10,6 +10,18 @@ VERSION(1.3)
 
 ORIGINAL_SOURCE(https://github.com/madler/zlib/archive/v1.3.tar.gz)
 
+# TODO(YMAKE-92) Move this information out of ya.make and allow per project configuration
+IF(OPENSOURCE_PROJECT == "CATBOOST")
+    OPENSOURCE_EXPORT_REPLACEMENT(
+        CMAKE
+        ZLIB
+        CMAKE_TARGET
+        ZLIB::ZLIB
+        CONAN
+        zlib/1.3
+    )
+ENDIF()
+
 ADDINCL(
     GLOBAL contrib/libs/zlib/include
 )

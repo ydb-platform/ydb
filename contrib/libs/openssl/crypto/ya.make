@@ -13,6 +13,16 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
+# TODO(YMAKE-92) Move this information out of ya.make and allow per project configuration
+IF(OPENSOURCE_PROJECT == "CATBOOST")
+    OPENSOURCE_EXPORT_REPLACEMENT(
+        CMAKE OpenSSL
+        CMAKE_PACKAGE_COMPONENT Crypto
+        CMAKE_TARGET OpenSSL::Crypto
+        CONAN openssl/1.1.1t
+    )
+ENDIF()
+
 PEERDIR(
     contrib/libs/zlib
     library/cpp/sanitizer/include
@@ -26,6 +36,9 @@ ADDINCL(
     contrib/libs/openssl/crypto/modes
     contrib/libs/openssl/include
 )
+
+# TODO(YMAKE-92) Move this information out of ya.make and allow per project configuration
+IF (NOT EXPORT_CMAKE OR OPENSOURCE_PROJECT != "CATBOOST")
 
 IF (OS_LINUX)
     IF (ARCH_ARM64)
@@ -1364,6 +1377,8 @@ IF (ARCADIA_OPENSSL_DISABLE_ARMV7_TICK)
     CFLAGS(
         -DARCADIA_OPENSSL_DISABLE_ARMV7_TICK
     )
+ENDIF()
+
 ENDIF()
 
 END()

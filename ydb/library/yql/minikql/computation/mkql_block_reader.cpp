@@ -106,7 +106,7 @@ public:
         }
 
         NUdf::TUnboxedValue* values;
-        auto result = Cache.NewArray(holderFactory, Children.size(), values);
+        auto result = holderFactory.CreateDirectArrayHolder(Children.size(), values);
         const TBlockItem* childItems = item.AsTuple();
         for (ui32 i = 0; i < Children.size(); ++i) {
             values[i] = Children[i]->MakeValue(childItems[i], holderFactory);
@@ -140,7 +140,6 @@ public:
 
 private:
     const TVector<std::unique_ptr<IBlockItemConverter>> Children;
-    mutable TPlainContainerCache Cache;
     mutable TVector<NUdf::TUnboxedValue> Unboxed;
     mutable TVector<TBlockItem> Items;
 };

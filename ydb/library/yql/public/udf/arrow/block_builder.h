@@ -843,6 +843,7 @@ public:
             if (!input.PopChar()) {
                 return DoAdd(TBlockItem{});
             }
+            NullBuilder->UnsafeAppend(1);
         }
 
         for (ui32 i = 0; i < Children.size(); ++i) {

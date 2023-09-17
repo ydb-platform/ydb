@@ -1096,6 +1096,70 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("year").GetUint32(), 1);
         UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("month").GetUint32(), 2);
     }
+
+    Y_UNIT_TEST(ExecuteScriptWithEmptyCustomPartitioning) {
+        using namespace fmt::literals;
+        const TString bucket = "test_bucket1";
+        const TString object = "year=2021/test_object";
+
+        CreateBucketWithObject(bucket, object, "");
+
+        auto kikimr = MakeKikimrRunner(NYql::IHTTPGateway::Make());
+
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        const TString query = fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `/Root/external_data_source` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{location}",
+                AUTH_METHOD="NONE"
+            );)",
+            "location"_a = GetBucketLocation(bucket)
+        );
+
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto db = kikimr->GetQueryClient();
+        const TString sql = R"(
+            $projection = @@ {
+                "projection.enabled" : "true",
+                "storage.location.template" : "/${date}",
+                "projection.date.type" : "date",
+                "projection.date.min" : "2022-11-02",
+                "projection.date.max" : "2023-12-02",
+                "projection.date.interval" : "1",
+                "projection.date.format" : "/year=%Y",
+                "projection.date.unit" : "YEARS"
+            } @@;
+
+            SELECT *
+            FROM `/Root/external_data_source`.`/`
+            WITH (
+                FORMAT="raw",
+
+                SCHEMA=(
+                    `data` String NOT NULL,
+                    `date` Date NOT NULL
+                ),
+
+                partitioned_by=(`date`),
+                projection=$projection
+            )
+        )";
+
+        auto scriptExecutionOperation = db.ExecuteScript(sql).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+       
+        NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
+        UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Completed);
+        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
+        UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
+
+        TResultSetParser resultSet(results.ExtractResultSet());
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 0);
+    }
 }
 
 } // namespace NKqp

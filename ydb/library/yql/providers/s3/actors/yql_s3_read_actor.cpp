@@ -818,6 +818,10 @@ private:
             std::make_move_iterator(objectPathBatch->Get()->ObjectPaths.begin()),
             std::make_move_iterator(objectPathBatch->Get()->ObjectPaths.end()));
         while (TryStartDownload()) {}
+
+        if (LastFileWasProcessed()) {
+            Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+        }
     }
     void HandleObjectPathReadError(TEvPrivate::TEvObjectPathReadError::TPtr& result) {
         IsObjectQueueEmpty = true;

@@ -392,6 +392,7 @@ private:
         } else {
             TEvViewer::TEvViewerResponse* response = new TEvViewer::TEvViewerResponse();
             response->Record.MutableQueryResponse()->CopyFrom(record);
+            response->Record.MutableQueryResponse()->MutableResponse()->MutableYdbResults()->Add(ResultSets.begin(), ResultSets.end());
             ReplyAndPassAway(response);
         }
     }
@@ -473,12 +474,16 @@ private:
     void MakeOkReply(TStringBuilder& out, NJson::TJsonValue& jsonResponse, NKikimrKqp::TEvQueryResponse& record) {
         const auto& response = record.GetResponse();
 
-        if (response.ResultsSize() > 0) {
+        if (response.ResultsSize() > 0 || response.YdbResultsSize() > 0) {
             try {
                 for (const auto& result : response.GetResults()) {
                     Ydb::ResultSet resultSet;
                     NKqp::ConvertKqpQueryResultToDbResult(result, &resultSet);
                     ResultSets.emplace_back(std::move(resultSet));
+                }
+
+                for (const auto& result : response.GetYdbResults()) {
+                    ResultSets.emplace_back(result);
                 }
             }
             catch (const std::exception& ex) {

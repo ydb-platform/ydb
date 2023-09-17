@@ -429,6 +429,13 @@ def is_xfail(cfg):
     return False
 
 
+def is_skip_forceblocks(cfg):
+    for item in cfg:
+        if item[0] == 'skip_forceblocks':
+            return True
+    return False
+
+
 def is_canonize_peephole(cfg):
     for item in cfg:
         if item[0] == 'canonize_peephole':

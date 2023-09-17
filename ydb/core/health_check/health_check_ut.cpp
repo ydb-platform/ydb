@@ -132,6 +132,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 state->mutable_vdiskid()->set_vdisk(slotId++);
                 state->mutable_vdiskid()->set_groupid(groupId);
                 state->set_vdiskstate(NKikimrWhiteboard::EVDiskState::SyncGuidRecovery);
+                state->set_nodeid(1);
             }
             groupId++;
         }
@@ -182,7 +183,15 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         }
     }
 
-    Ydb::Monitoring::SelfCheckResult RequestHc(int const groupNumber, int const vdiscPerGroupNumber, bool const isMergeRecords = false) {
+    void SetLongHostValue(TEvInterconnect::TEvNodesInfo::TPtr* ev) {
+        TString host(1000000, 'a');
+        auto& pbRecord = (*ev)->Get()->Nodes;
+        for (auto itIssue = pbRecord.begin(); itIssue != pbRecord.end(); ++itIssue) {
+            itIssue->Host = host;
+        }
+    }
+
+    Ydb::Monitoring::SelfCheckResult RequestHc(int const groupNumber, int const vdiscPerGroupNumber, bool const isMergeRecords = false, bool const largeSizeVdisksIssues = false) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -218,6 +227,13 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 case NNodeWhiteboard::TEvWhiteboard::EvVDiskStateResponse: {
                     auto *x = reinterpret_cast<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse::TPtr*>(&ev);
                     AddVSlotInVDiskStateResponse(x, groupNumber, vdiscPerGroupNumber);
+                    break;
+                }
+                case TEvInterconnect::EvNodesInfo: {
+                    if (largeSizeVdisksIssues) {
+                        auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                        SetLongHostValue(x);
+                    }
                     break;
                 }
             }
@@ -530,7 +546,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         StorageTest(100, 0, 0, Ydb::Monitoring::StatusFlag::GREEN);
     }
 
-    void CheckHcProtobufSize(Ydb::Monitoring::SelfCheckResult& result, const Ydb::Monitoring::StatusFlag::Status expectingStatus, ui32 total) {
+    void CheckHcProtobufSizeIssue(Ydb::Monitoring::SelfCheckResult& result, const Ydb::Monitoring::StatusFlag::Status expectingStatus, ui32 total) {
         int issuesCount = 0;
         for (const auto& issue_log : result.Getissue_log()) {
             if (issue_log.type() == "HEALTHCHECK_STATUS" && issue_log.status() == expectingStatus) {
@@ -538,19 +554,24 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             }
         }
         UNIT_ASSERT_VALUES_EQUAL(issuesCount, total);
-    }
-
-    Y_UNIT_TEST(ProtobufUnderLimitFor5000Groups) {
-        auto result = RequestHc(3000, 1);
-        CheckHcProtobufSize(result, Ydb::Monitoring::StatusFlag::RED, 0);
-        CheckHcProtobufSize(result, Ydb::Monitoring::StatusFlag::ORANGE, 0);
-        CheckHcProtobufSize(result, Ydb::Monitoring::StatusFlag::YELLOW, 0);
-    }
-
-    Y_UNIT_TEST(ProtobufUnderLimitFor350000Groups) {
-        auto result = RequestHc(350000, 1);
-        CheckHcProtobufSize(result, Ydb::Monitoring::StatusFlag::RED, 1);
         UNIT_ASSERT_LT(result.ByteSizeLong(), 50_MB);
+    }
+
+    Y_UNIT_TEST(ProtobufBelowLimitFor10VdisksIssues) {
+        auto result = RequestHc(1, 100);
+        CheckHcProtobufSizeIssue(result, Ydb::Monitoring::StatusFlag::YELLOW, 0);
+        CheckHcProtobufSizeIssue(result, Ydb::Monitoring::StatusFlag::ORANGE, 0);
+        CheckHcProtobufSizeIssue(result, Ydb::Monitoring::StatusFlag::RED, 0);
+    }
+
+    Y_UNIT_TEST(ProtobufUnderLimitFor70LargeVdisksIssues) {
+        auto result = RequestHc(1, 70, false, true);
+        CheckHcProtobufSizeIssue(result, Ydb::Monitoring::StatusFlag::RED, 1);
+    }
+
+    Y_UNIT_TEST(ProtobufUnderLimitFor100LargeVdisksIssues) {
+        auto result = RequestHc(1, 100, false, true);
+        CheckHcProtobufSizeIssue(result, Ydb::Monitoring::StatusFlag::RED, 1);
     }
 }
 

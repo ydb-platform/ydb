@@ -143,7 +143,7 @@ IComputationNode* WrapBlockCoalesce(TCallable& callable, const TComputationNodeF
 
     auto firstCompute = LocateNode(ctx.NodeLocator, callable, 0);
     auto secondCompute = LocateNode(ctx.NodeLocator, callable, 1);
-    TVector<IComputationNode*> argsNodes = { firstCompute, secondCompute };
+    TComputationNodePtrVector argsNodes = { firstCompute, secondCompute };
     TVector<TType*> argsTypes = { firstType, secondType };
 
     auto kernel = MakeBlockCoalesceKernel(argsTypes, secondType, needUnwrapFirst);

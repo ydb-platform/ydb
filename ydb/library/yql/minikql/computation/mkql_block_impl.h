@@ -26,7 +26,7 @@ arrow::compute::OutputType ConvertToOutputType(TType* output);
 class TBlockFuncNode : public TMutableComputationNode<TBlockFuncNode> {
 
 public:
-    TBlockFuncNode(TComputationMutables& mutables, TStringBuf name, TVector<IComputationNode*>&& argsNodes,
+    TBlockFuncNode(TComputationMutables& mutables, TStringBuf name, TComputationNodePtrVector&& argsNodes,
         const TVector<TType*>& argsTypes, const arrow::compute::ScalarKernel& kernel,
         std::shared_ptr<arrow::compute::ScalarKernel> kernelHolder = {},
         const arrow::compute::FunctionOptions* functionOptions = nullptr);
@@ -74,13 +74,86 @@ private:
 
 private:
     const ui32 StateIndex;
-    const TVector<IComputationNode*> ArgsNodes;
+    const TComputationNodePtrVector ArgsNodes;
     const std::vector<arrow::ValueDescr> ArgsValuesDescr;
     const arrow::compute::ScalarKernel& Kernel;
     const std::shared_ptr<arrow::compute::ScalarKernel> KernelHolder;
     const arrow::compute::FunctionOptions* const Options;
     const bool ScalarOutput;
     const TString Name;
+};
+
+struct TBlockState : public TComputationValue<TBlockState> {
+    using TBase = TComputationValue<TBlockState>;
+
+    ui64 Count = 0;
+    TUnboxedValueVector Values;
+    std::vector<std::deque<std::shared_ptr<arrow::ArrayData>>> Arrays;
+
+    TBlockState(TMemoryUsageInfo* memInfo, size_t width)
+        : TBase(memInfo), Values(width), Arrays(width - 1ULL)
+    {}
+
+    void FillArrays(NUdf::TUnboxedValue*const* output) {
+        auto& counterDatum = TArrowBlock::From(Values.back()).GetDatum();
+        MKQL_ENSURE(counterDatum.is_scalar(), "Unexpected block length type (expecting scalar)");
+        Count = counterDatum.scalar_as<arrow::UInt64Scalar>().value;
+        if (!Count) {
+            return;
+        }
+        for (size_t i = 0U; i < Arrays.size(); ++i) {
+            Arrays[i].clear();
+            if (!output[i]) {
+                return;
+            }
+            auto& datum = TArrowBlock::From(Values[i]).GetDatum();
+            if (datum.is_scalar()) {
+                return;
+            }
+            MKQL_ENSURE(datum.is_arraylike(), "Unexpected block type (expecting array or chunked array)");
+            if (datum.is_array()) {
+                Arrays[i].push_back(datum.array());
+            } else {
+                for (auto& chunk : datum.chunks()) {
+                    Arrays[i].push_back(chunk->data());
+                }
+            }
+        }
+    }
+
+    void FillOutputs(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
+        auto sliceSize = Count;
+        for (size_t i = 0; i < Arrays.size(); ++i) {
+            const auto& arr = Arrays[i];
+            if (arr.empty()) {
+                continue;
+            }
+
+            MKQL_ENSURE(ui64(arr.front()->length) <= Count, "Unexpected array length at column #" << i);
+            sliceSize = std::min<ui64>(sliceSize, arr.front()->length);
+        }
+
+        for (size_t i = 0; i < Arrays.size(); ++i) {
+            if (const auto out = output[i]) {
+                if (Arrays[i].empty()) {
+                    *out = Values[i];
+                    continue;
+                }
+
+                if (auto& array = Arrays[i].front(); ui64(array->length) == sliceSize) {
+                    *out = ctx.HolderFactory.CreateArrowBlock(std::move(array));
+                    Arrays[i].pop_front();
+                } else {
+                    *out = ctx.HolderFactory.CreateArrowBlock(Chop(array, sliceSize));
+                }
+            }
+        }
+
+        if (const auto out = output[Values.size() - 1U]) {
+            *out = ctx.HolderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(sliceSize)));
+        }
+        Count -= sliceSize;
+    }
 };
 
 template <typename TDerived>
@@ -90,109 +163,46 @@ protected:
     TStatefulWideFlowBlockComputationNode(TComputationMutables& mutables, const IComputationNode* source, ui32 width)
         : TWideFlowBaseComputationNode<TDerived>(source)
         , StateIndex(mutables.CurValueIndex++)
-        , StateKind(EValueRepresentation::Any)
+        , StateKind(EValueRepresentation::Boxed)
         , Width(width)
+        , WideFieldsIndex(mutables.IncrementWideFieldsIndex(width))
     {
         MKQL_ENSURE(width > 0, "Wide flow blocks should have at least one column (block length)");
     }
-
 private:
-    struct TState : public TComputationValue<TState> {
-        using TBase = TComputationValue<TState>;
-
-        TVector<NUdf::TUnboxedValue> Values;
-        TVector<NUdf::TUnboxedValue*> ValuePointers;
+    struct TState : public TBlockState {
         NUdf::TUnboxedValue ChildState;
-        TVector<TDeque<std::shared_ptr<arrow::ArrayData>>> Arrays;
-        ui64 Count = 0;
 
-        TState(TMemoryUsageInfo* memInfo, size_t width, NUdf::TUnboxedValue*const* values, TComputationContext&)
-            : TBase(memInfo)
-            , Values(width)
-            , ValuePointers(width)
-            , Arrays(width - 1)
+        TState(TMemoryUsageInfo* memInfo, size_t width, ui32 wideFieldsIndex, NUdf::TUnboxedValue*const* values, TComputationContext& ctx)
+            : TBlockState(memInfo, width)
         {
+            auto**const fields = ctx.WideFields.data() + wideFieldsIndex;
             for (size_t i = 0; i < width - 1; ++i) {
-                ValuePointers[i] = values[i] ? &Values[i] : nullptr;
+                fields[i] = values[i] ? &Values[i] : nullptr;
             }
-            ValuePointers.back() = &Values.back();
+            fields[width - 1] = &Values.back();
         }
     };
 
     TState& GetState(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
         auto& state = ctx.MutableValues[GetIndex()];
         if (!state.HasValue()) {
-            state = ctx.HolderFactory.Create<TState>(Width, output, ctx);
+            state = ctx.HolderFactory.Create<TState>(Width, WideFieldsIndex, output, ctx);
         }
         return *static_cast<TState*>(state.AsBoxed().Get());
     }
 
     EFetchResult FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const final {
-        TState& s = GetState(ctx, output);
+        auto& s = GetState(ctx, output);
+        const auto fields = ctx.WideFields.data() + WideFieldsIndex;
         while (s.Count == 0) {
-            auto result = static_cast<const TDerived*>(this)->DoCalculate(s.ChildState, ctx, s.ValuePointers.data());
-            if (result != EFetchResult::One) {
+            if (const auto result = static_cast<const TDerived*>(this)->DoCalculate(s.ChildState, ctx, fields); result != EFetchResult::One) {
                 return result;
             }
-
-            auto& counterDatum = TArrowBlock::From(s.Values.back()).GetDatum();
-            MKQL_ENSURE(counterDatum.is_scalar(), "Unexpected block length type (expecting scalar)");
-            s.Count = counterDatum.template scalar_as<arrow::UInt64Scalar>().value;
-            if (!s.Count) {
-                continue;
-            }
-            for (size_t i = 0; i < Width - 1; ++i) {
-                s.Arrays[i].clear();
-                if (!output[i]) {
-                    continue;
-                }
-                auto& datum = TArrowBlock::From(s.Values[i]).GetDatum();
-                if (datum.is_scalar()) {
-                    continue;
-                }
-                MKQL_ENSURE(datum.is_arraylike(), "Unexpected block type (expecting array or chunked array)");
-                if (datum.is_array()) {
-                    s.Arrays[i].push_back(datum.array());
-                } else {
-                    for (auto& chunk : datum.chunks()) {
-                        s.Arrays[i].push_back(chunk->data());
-                    }
-                }
-            }
-        }
-        ui64 sliceSize = s.Count;
-        for (size_t i = 0; i < s.Arrays.size(); ++i) {
-            const auto& arr = s.Arrays[i];
-            if (arr.empty()) {
-                continue;
-            }
-
-            MKQL_ENSURE(ui64(arr.front()->length) <= s.Count, "Unexpected array length at column #" << i);
-            sliceSize = std::min<ui64>(sliceSize, arr.front()->length);
+            s.FillArrays(output);
         }
 
-        for (size_t i = 0; i < s.Arrays.size(); ++i) {
-            if (!output[i]) {
-                continue;
-            }
-            if (s.Arrays[i].empty()) {
-                *(output[i]) = s.Values[i];
-                continue;
-            }
-
-            auto& array = s.Arrays[i].front();
-            if (ui64(array->length) == sliceSize) {
-                *(output[i]) = ctx.HolderFactory.CreateArrowBlock(std::move(array));
-                s.Arrays[i].pop_front();
-            } else {
-                *(output[i]) = ctx.HolderFactory.CreateArrowBlock(Chop(array, sliceSize));
-            }
-        }
-
-        if (output[Width - 1]) {
-            *(output[Width - 1]) = ctx.HolderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(sliceSize)));
-        }
-        s.Count -= sliceSize;
+        s.FillOutputs(ctx, output);
         return EFetchResult::One;
     }
 
@@ -209,10 +219,11 @@ private:
             this->Dependence->CollectDependentIndexes(owner, dependencies);
         }
     }
-
+protected:
     const ui32 StateIndex;
     const EValueRepresentation StateKind;
     const ui32 Width;
+    const ui32 WideFieldsIndex;
 };
 
 } //namespace NKikimr::NMiniKQL

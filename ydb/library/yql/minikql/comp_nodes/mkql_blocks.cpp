@@ -1,4 +1,5 @@
 #include "mkql_blocks.h"
+#include "mkql_llvm_base.h"
 
 #include <ydb/library/yql/minikql/computation/mkql_block_reader.h>
 #include <ydb/library/yql/minikql/computation/mkql_block_builder.h>
@@ -7,7 +8,7 @@
 #include <ydb/library/yql/minikql/arrow/arrow_defs.h>
 #include <ydb/library/yql/minikql/arrow/arrow_util.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 
@@ -16,6 +17,10 @@
 #include <arrow/scalar.h>
 #include <arrow/array.h>
 #include <arrow/datum.h>
+
+extern "C" size_t GetCount(const NYql::NUdf::TUnboxedValuePod data) {
+    return NKikimr::NMiniKQL::TArrowBlock::From(data).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+}
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -53,7 +58,6 @@ private:
     void RegisterDependencies() const final {
         FlowDependsOn(Flow_);
     }
-
 private:
     IComputationNode* const Flow_;
     TType* ItemType_;
@@ -112,7 +116,6 @@ public:
         s.Rows_ = 0;
         return EFetchResult::One;
     }
-
 private:
     struct TState : public TComputationValue<TState> {
         std::vector<NUdf::TUnboxedValue> Values_;
@@ -253,95 +256,269 @@ private:
     const ui32 StateIndex_;
 };
 
-class TWideFromBlocksWrapper : public TStatefulWideFlowComputationNode<TWideFromBlocksWrapper> {
+class TWideFromBlocksWrapper : public TStatefulWideFlowCodegeneratorNode<TWideFromBlocksWrapper> {
+using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideFromBlocksWrapper>;
 public:
     TWideFromBlocksWrapper(TComputationMutables& mutables,
         IComputationWideFlowNode* flow,
         TVector<TType*>&& types)
-        : TStatefulWideFlowComputationNode(mutables, flow, EValueRepresentation::Any)
+        : TBaseComputation(mutables, flow, EValueRepresentation::Boxed)
         , Flow_(flow)
         , Types_(std::move(types))
-        , Width_(Types_.size())
-    {
-    }
+        , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(Types_.size() + 1U))
+    {}
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state,
         TComputationContext& ctx,
         NUdf::TUnboxedValue*const* output) const
     {
         auto& s = GetState(state, ctx);
-        while (s.Index_ == s.Count_) {
-            auto result = Flow_->FetchValues(ctx, s.ValuePointers_.data());
-            if (result != EFetchResult::One) {
+        const auto fields = ctx.WideFields.data() + WideFieldsIndex_;
+        if (s.Index_ == s.Count_) do {
+            if (const auto result = Flow_->FetchValues(ctx, fields); result != EFetchResult::One)
                 return result;
-            }
 
             s.Index_ = 0;
-            s.Count_ = TArrowBlock::From(s.Values_[Width_]).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
-        }
+            s.Count_ = GetCount(s.Values_.back());
+        } while (!s.Count_);
 
-        for (size_t i = 0; i < Width_; ++i) {
-            if (!output[i]) {
-                continue;
-            }
-
-            const auto& datum = TArrowBlock::From(s.Values_[i]).GetDatum();
-            TBlockItem item;
-            if (datum.is_scalar()) {
-                item = s.Readers_[i]->GetScalarItem(*datum.scalar());
-            } else {
-                MKQL_ENSURE(datum.is_array(), "Expecting array");
-                item = s.Readers_[i]->GetItem(*datum.array(), s.Index_);
-            }
-
-            *(output[i]) = s.Converters_[i]->MakeValue(item, ctx.HolderFactory);
-        }
-
+        s.Current_ = s.Index_;
         ++s.Index_;
+        for (size_t i = 0; i < Types_.size(); ++i)
+            if (const auto out = output[i])
+                *out = s.Get(ctx.HolderFactory, i);
+
         return EFetchResult::One;
     }
+#ifndef MKQL_DISABLE_CODEGEN
+    ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+        auto& context = ctx.Codegen.GetContext();
 
+        const auto valueType = Type::getInt128Ty(context);
+        const auto ptrValueType = PointerType::getUnqual(valueType);
+        const auto statusType = Type::getInt32Ty(context);
+        const auto indexType = Type::getInt64Ty(context);
+
+        TLLVMFieldsStructureState stateFields(context);
+        const auto stateType = StructType::get(context, stateFields.GetFieldsArray());
+        const auto statePtrType = PointerType::getUnqual(stateType);
+
+        const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Get));
+        const auto getType = FunctionType::get(valueType, {statePtrType, ctx.GetFactory()->getType(), indexType}, false);
+        const auto getPtr = CastInst::Create(Instruction::IntToPtr, getFunc, PointerType::getUnqual(getType), "get", &ctx.Func->getEntryBlock().back());
+        const auto stateOnStack = new AllocaInst(statePtrType, 0U, "state_on_stack", &ctx.Func->getEntryBlock().back());
+        new StoreInst(ConstantPointerNull::get(statePtrType), stateOnStack, &ctx.Func->getEntryBlock().back());
+
+        const auto name = "GetCount";
+        ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&GetCount));
+        const auto getCountType = NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget() ?
+            FunctionType::get(indexType, { valueType }, false):
+            FunctionType::get(indexType, { ptrValueType }, false);
+        const auto getCount = ctx.Codegen.GetModule().getOrInsertFunction(name, getCountType);
+
+        const auto make = BasicBlock::Create(context, "make", ctx.Func);
+        const auto main = BasicBlock::Create(context, "main", ctx.Func);
+        const auto more = BasicBlock::Create(context, "more", ctx.Func);
+        const auto good = BasicBlock::Create(context, "good", ctx.Func);
+        const auto save = BasicBlock::Create(context, "save", ctx.Func);
+        const auto work = BasicBlock::Create(context, "work", ctx.Func);
+        const auto over = BasicBlock::Create(context, "over", ctx.Func);
+
+        BranchInst::Create(main, make, HasValue(statePtr, block), block);
+        block = make;
+
+        const auto ptrType = PointerType::getUnqual(StructType::get(context));
+        const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TWideFromBlocksWrapper::MakeState));
+        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
+        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
+        CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
+        BranchInst::Create(main, block);
+
+        block = main;
+
+        const auto state = new LoadInst(valueType, statePtr, "state", block);
+        const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
+        const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
+
+        const auto countPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetCount() }, "count_ptr", block);
+        const auto indexPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetIndex() }, "index_ptr", block);
+
+        const auto count = new LoadInst(indexType, countPtr, "count", block);
+        const auto index = new LoadInst(indexType, indexPtr, "index", block);
+
+        const auto next = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, count, index, "next", block);
+
+        BranchInst::Create(more, work, next, block);
+
+        block = more;
+
+        const auto pointerPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetPointer() }, "pointer_ptr", block);
+        const auto pointer = new LoadInst(ptrValueType, pointerPtr, "pointer", block);
+
+        std::vector<Value*> pointers(Types_.size());
+        for (size_t idx = 0U; idx < pointers.size(); ++idx) {
+            pointers[idx] = GetElementPtrInst::CreateInBounds(valueType, pointer, { ConstantInt::get(Type::getInt32Ty(context), idx) }, (TString("ptr_") += ToString(idx)).c_str(), block);
+            SafeUnRefUnboxed(pointers[idx], ctx, block);
+        }
+
+        const auto getres = GetNodeValues(Flow_, ctx, block);
+
+        const auto special = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLE, getres.first, ConstantInt::get(getres.first->getType(), static_cast<i32>(EFetchResult::Yield)), "special", block);
+
+        const auto result = PHINode::Create(statusType, 2U, "result", over);
+        result->addIncoming(getres.first, block);
+
+        BranchInst::Create(over, good, special, block);
+
+        block = good;
+
+        const auto countValue = getres.second.back()(ctx, block);
+        const auto height = CallInst::Create(getCount, { WrapArgumentForWindows(countValue, ctx, block) }, "height", block);
+        CleanupBoxed(countValue, ctx, block);
+
+        new StoreInst(height, countPtr, block);
+        new StoreInst(ConstantInt::get(indexType, 0), indexPtr, block);
+
+        const auto empty = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, ConstantInt::get(indexType, 0), height, "empty", block);
+
+        BranchInst::Create(more, save, empty, block);
+
+        block = save;
+
+        for (size_t idx = 0U; idx < pointers.size(); ++idx) {
+            const auto value = getres.second[idx](ctx, block);
+            AddRefBoxed(value, ctx, block);
+            new StoreInst(value, pointers[idx], block);
+        }
+
+        BranchInst::Create(work, block);
+
+        block = work;
+
+        const auto current = new LoadInst(indexType, indexPtr, "current", block);
+        const auto currentPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetCurrent() }, "current_ptr", block);
+        new StoreInst(current, currentPtr, block);
+        const auto increment = BinaryOperator::CreateAdd(current, ConstantInt::get(indexType, 1), "increment", block);
+        new StoreInst(increment, indexPtr, block);
+        new StoreInst(stateArg, stateOnStack, block);
+
+        result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::One)), block);
+
+        BranchInst::Create(over, block);
+
+        block = over;
+
+        ICodegeneratorInlineWideNode::TGettersList getters(Types_.size());
+        for (size_t idx = 0U; idx < getters.size(); ++idx) {
+            getters[idx] = [idx, getType, getPtr, indexType, statePtrType, stateOnStack](const TCodegenContext& ctx, BasicBlock*& block) {
+                const auto stateArg = new LoadInst(statePtrType, stateOnStack, "state", block);
+                return CallInst::Create(getType, getPtr, {stateArg, ctx.GetFactory(), ConstantInt::get(indexType, idx)}, "get", block);
+            };
+        }
+        return {result, std::move(getters)};
+    }
+#endif
 private:
     struct TState : public TComputationValue<TState> {
-        TVector<NUdf::TUnboxedValue> Values_;
-        TVector<NUdf::TUnboxedValue*> ValuePointers_;
-        TVector<std::unique_ptr<IBlockReader>> Readers_;
-        TVector<std::unique_ptr<IBlockItemConverter>> Converters_;
         size_t Count_ = 0;
         size_t Index_ = 0;
+        size_t Current_ = 0;
+        NUdf::TUnboxedValue* Pointer_ = nullptr;
+        TUnboxedValueVector Values_;
+        std::vector<std::unique_ptr<IBlockReader>> Readers_;
+        std::vector<std::unique_ptr<IBlockItemConverter>> Converters_;
 
-        TState(TMemoryUsageInfo* memInfo, const TVector<TType*>& types, const NUdf::IPgBuilder& pgBuilder)
+        TState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, size_t wideFieldsIndex, const TVector<TType*>& types)
             : TComputationValue(memInfo)
             , Values_(types.size() + 1)
-            , ValuePointers_(types.size() + 1)
         {
+            Pointer_ = Values_.data();
+            auto**const fields = ctx.WideFields.data() + wideFieldsIndex;
             for (size_t i = 0; i < types.size() + 1; ++i) {
-                ValuePointers_[i] = &Values_[i];
+                fields[i] = &Values_[i];
             }
 
+            const auto& pgBuilder = ctx.Builder->GetPgBuilder();
             for (size_t i = 0; i < types.size(); ++i) {
                 Readers_.push_back(MakeBlockReader(TTypeInfoHelper(), types[i]));
                 Converters_.push_back(MakeBlockItemConverter(TTypeInfoHelper(), types[i], pgBuilder));
             }
         }
-    };
 
-private:
+        NUdf::TUnboxedValuePod Get(const THolderFactory& holderFactory, size_t idx) const {
+            TBlockItem item;
+            if (const auto& datum = TArrowBlock::From(Values_[idx]).GetDatum(); datum.is_scalar()) {
+                item = Readers_[idx]->GetScalarItem(*datum.scalar());
+            } else {
+                MKQL_ENSURE(datum.is_array(), "Expecting array");
+                item = Readers_[idx]->GetItem(*datum.array(), Current_);
+            }
+            return Converters_[idx]->MakeValue(item, holderFactory);
+        }
+    };
+#ifndef MKQL_DISABLE_CODEGEN
+    class TLLVMFieldsStructureState: public TLLVMFieldsStructure<TComputationValue<TState>> {
+    private:
+        using TBase = TLLVMFieldsStructure<TComputationValue<TState>>;
+        llvm::IntegerType*const CountType;
+        llvm::IntegerType*const IndexType;
+        llvm::IntegerType*const CurrentType;
+        llvm::PointerType*const PointerType;
+    protected:
+        using TBase::Context;
+    public:
+        std::vector<llvm::Type*> GetFieldsArray() {
+            std::vector<llvm::Type*> result = TBase::GetFields();
+            result.emplace_back(CountType);
+            result.emplace_back(IndexType);
+            result.emplace_back(CurrentType);
+            result.emplace_back(PointerType);
+            return result;
+        }
+
+        llvm::Constant* GetCount() {
+            return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 0);
+        }
+
+        llvm::Constant* GetIndex() {
+            return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 1);
+        }
+
+        llvm::Constant* GetCurrent() {
+            return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 2);
+        }
+
+        llvm::Constant* GetPointer() {
+            return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 3);
+        }
+
+        TLLVMFieldsStructureState(llvm::LLVMContext& context)
+            : TBase(context)
+            , CountType(Type::getInt64Ty(Context))
+            , IndexType(Type::getInt64Ty(Context))
+            , CurrentType(Type::getInt64Ty(Context))
+            , PointerType(PointerType::getUnqual(Type::getInt128Ty(Context)))
+        {}
+    };
+#endif
     void RegisterDependencies() const final {
         FlowDependsOn(Flow_);
     }
 
+    void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
+        state = ctx.HolderFactory.Create<TState>(ctx, WideFieldsIndex_, Types_);
+    }
+
     TState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        if (!state.HasValue()) {
-            state = ctx.HolderFactory.Create<TState>(Types_, ctx.Builder->GetPgBuilder());
-        }
+        if (!state.HasValue())
+            MakeState(ctx, state);
         return *static_cast<TState*>(state.AsBoxed().Get());
     }
 
-private:
-    IComputationWideFlowNode* Flow_;
+    IComputationWideFlowNode* const Flow_;
     const TVector<TType*> Types_;
-    const size_t Width_;
+    const size_t WideFieldsIndex_;
 };
 
 class TPrecomputedArrowNode : public IArrowKernelComputationNode {
@@ -373,7 +550,6 @@ public:
         Y_UNUSED(index);
         ythrow yexception() << "No input arguments";
     }
-
 private:
     arrow::compute::ScalarKernel Kernel_;
     const TStringBuf KernelName_;
@@ -477,9 +653,8 @@ private:
         FlowDependsOn(Flow_);
     }
 
-    IComputationWideFlowNode* Flow_;
+    IComputationWideFlowNode* const Flow_;
 };
-
 
 } // namespace
 

@@ -71,7 +71,7 @@ IComputationNode* WrapBlockJust(TCallable& callable, const TComputationNodeFacto
 
     auto dataCompute = LocateNode(ctx.NodeLocator, callable, 0);
 
-    TVector<IComputationNode*> argsNodes = { dataCompute };
+    TComputationNodePtrVector argsNodes = { dataCompute };
     TVector<TType*> argsTypes = { dataType };
 
     std::shared_ptr<arrow::compute::ScalarKernel> kernel;

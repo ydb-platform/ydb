@@ -148,7 +148,7 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockNthKernel(const TVector<T
 } // namespace
 
 IComputationNode* WrapBlockAsTuple(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    TVector<IComputationNode*> argsNodes;
+    TComputationNodePtrVector argsNodes;
     TVector<TType*> argsTypes;
     for (ui32 i = 0; i < callable.GetInputsCount(); ++i) {
         argsNodes.push_back(LocateNode(ctx.NodeLocator, callable, i));
@@ -173,7 +173,7 @@ IComputationNode* WrapBlockNth(TCallable& callable, const TComputationNodeFactor
 
     auto tuple = LocateNode(ctx.NodeLocator, callable, 0);
 
-    TVector<IComputationNode*> argsNodes = { tuple };
+    TComputationNodePtrVector argsNodes = { tuple };
     TVector<TType*> argsTypes = { blockType };
     auto kernel = MakeBlockNthKernel(argsTypes, callable.GetType()->GetReturnType(), index, isOptional, needExternalOptional);
     return new TBlockFuncNode(ctx.Mutables, callable.GetType()->GetName(), std::move(argsNodes), argsTypes, *kernel, kernel);

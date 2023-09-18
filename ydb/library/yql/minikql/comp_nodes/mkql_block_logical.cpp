@@ -456,7 +456,7 @@ IComputationNode* WrapBlockLogical(std::string_view name, TCallable& callable, c
 
     auto compute1 = LocateNode(ctx.NodeLocator, callable, 0);
     auto compute2 = LocateNode(ctx.NodeLocator, callable, 1);
-    TVector<IComputationNode*> argsNodes = { compute1, compute2 };
+    TComputationNodePtrVector argsNodes = { compute1, compute2 };
     TVector<TType*> argsTypes = { callable.GetInput(0).GetStaticType(), callable.GetInput(1).GetStaticType() };
 
     std::shared_ptr<arrow::compute::ScalarKernel> kernel;
@@ -494,7 +494,7 @@ IComputationNode* WrapBlockNot(TCallable& callable, const TComputationNodeFactor
                 "Requires boolean args.");
 
     auto compute = LocateNode(ctx.NodeLocator, callable, 0);
-    TVector<IComputationNode*> argsNodes = { compute };
+    TComputationNodePtrVector argsNodes = { compute };
     TVector<TType*> argsTypes = { callable.GetInput(0).GetStaticType() };
 
     auto kernel = MakeKernel<TNotBlockExec>(argsTypes, argsTypes[0]);

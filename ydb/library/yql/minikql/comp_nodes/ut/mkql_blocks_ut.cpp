@@ -33,7 +33,7 @@ namespace NMiniKQL {
 namespace {
     arrow::Datum ExecuteOneKernel(const IArrowKernelComputationNode* kernelNode,
         const std::vector<arrow::Datum>& argDatums, arrow::compute::ExecContext& execContext) {
-        const auto& kernel = kernelNode->GetArrowKernel();        
+        const auto& kernel = kernelNode->GetArrowKernel();
         arrow::compute::KernelContext kernelContext(&execContext);
         std::unique_ptr<arrow::compute::KernelState> state;
         if (kernel.init) {
@@ -58,7 +58,7 @@ namespace {
 
             arrow::Datum output = ExecuteOneKernel(topology->Items[i].Node.get(), argDatums, execContext);
             datums[i + topology->InputArgsCount] = output;
-        }        
+        }
     }
 }
 
@@ -84,9 +84,10 @@ Y_UNIT_TEST(TestSimple) {
     TSetup<false> setup;
     auto& pb = *setup.PgmBuilder;
 
-    auto data = TVector<TRuntimeNode>(Reserve(dataCount));
-    for (size_t i = 0; i < dataCount; ++i) {
-        data.push_back(pb.NewDataLiteral<ui64>(i));
+    TRuntimeNode::TList data;
+    data.reserve(dataCount);
+    for (ui64 i = 0ULL; i < dataCount; ++i) {
+        data.push_back(pb.NewDataLiteral(i));
     }
     const auto type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
     const auto list = pb.NewList(type, data);
@@ -108,7 +109,7 @@ Y_UNIT_TEST(TestSimple) {
 
 Y_UNIT_TEST(TestWideToBlocks) {
     TSetup<false> setup;
-    auto& pb = *setup.PgmBuilder;
+    TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
     const auto tupleType = pb.NewTupleType({ui64Type, ui64Type});
@@ -156,7 +157,7 @@ void TestChunked(bool withBlockExpand) {
 
     const auto tupleType = pb.NewTupleType({ui64Type, boolType, stringType, utf8Type});
 
-    TVector<TRuntimeNode> items;
+    TRuntimeNode::TList items;
     const size_t bigStrSize = 1024 * 1024 + 100;
     const size_t smallStrSize = 256 * 1024;
     for (size_t i = 0; i < 20; ++i) {
@@ -513,7 +514,41 @@ Y_UNIT_TEST(TestBlockFuncWithScalar) {
     UNIT_ASSERT(!iterator.Next(item));
 }
 
-Y_UNIT_TEST(TestWideFromBlocks) {
+Y_UNIT_TEST_LLVM(TestWideFromBlocks) {
+    TSetup<LLVM> setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
+
+    const auto data1 = pb.NewDataLiteral<ui64>(10);
+    const auto data2 = pb.NewDataLiteral<ui64>(20);
+    const auto data3 = pb.NewDataLiteral<ui64>(30);
+
+    const auto list = pb.NewList(ui64Type, {data1, data2, data3});
+    const auto flow = pb.ToFlow(list);
+
+    const auto blocksFlow = pb.ToBlocks(flow);
+    const auto wideFlow = pb.ExpandMap(blocksFlow, [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item, pb.AsScalar(pb.NewDataLiteral<ui64>(3ULL))}; });
+    const auto wideFlow2 = pb.WideFromBlocks(wideFlow);
+    const auto narrowFlow = pb.NarrowMap(wideFlow2, [&](TRuntimeNode::TList items) -> TRuntimeNode { return items.front(); });
+
+    const auto pgmReturn = pb.Collect(narrowFlow);
+
+    const auto graph = setup.BuildGraph(pgmReturn);
+    const auto iterator = graph->GetValue().GetListIterator();
+
+    NUdf::TUnboxedValue item;
+    UNIT_ASSERT(iterator.Next(item));
+    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 10);
+
+    UNIT_ASSERT(iterator.Next(item));
+    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 20);
+
+    UNIT_ASSERT(iterator.Next(item));
+    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 30);
+}
+
+Y_UNIT_TEST(TestWideToAndFromBlocks) {
     TSetup<false> setup;
     auto& pb = *setup.PgmBuilder;
 

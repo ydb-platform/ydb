@@ -235,7 +235,7 @@ IComputationNode* WrapBlockIf(TCallable& callable, const TComputationNodeFactory
                                          thenIsScalar, elseIsScalar, argsTypes);
     }
 
-    TVector<IComputationNode*> argsNodes = { predCompute, thenCompute, elseCompute };
+    TComputationNodePtrVector argsNodes = { predCompute, thenCompute, elseCompute };
 
     std::shared_ptr<arrow::compute::ScalarKernel> kernel;
     if (thenIsScalar && elseIsScalar) {

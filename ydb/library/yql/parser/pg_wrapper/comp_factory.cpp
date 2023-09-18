@@ -1759,7 +1759,7 @@ TComputationNodeFactory GetPgFactory() {
                 const auto idData = AS_VALUE(TDataLiteral, callable.GetInput(1));
                 auto name = nameData->AsValue().AsStringRef();
                 auto id = idData->AsValue().Get<ui32>();
-                TVector<IComputationNode*> argNodes;
+                TComputationNodePtrVector argNodes;
                 TVector<TType*> argTypes;
                 for (ui32 i = 2; i < callable.GetInputsCount(); ++i) {
                     argNodes.emplace_back(LocateNode(ctx.NodeLocator, callable, i));

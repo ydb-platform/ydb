@@ -66,7 +66,7 @@ IComputationNode* WrapBlockFunc(TCallable& callable, const TComputationNodeFacto
     MKQL_ENSURE(callable.GetInputsCount() >= 1, "Expected at least 1 arg");
     const auto funcNameData = AS_VALUE(TDataLiteral, callable.GetInput(0));
     const auto funcName = TString(funcNameData->AsValue().AsStringRef());
-    TVector<IComputationNode*> argsNodes;
+    TComputationNodePtrVector argsNodes;
     TVector<TType*> argsTypes;
     const auto callableType = callable.GetType();
     for (ui32 i = 1; i < callable.GetInputsCount(); ++i) {

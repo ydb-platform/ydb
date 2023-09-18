@@ -151,7 +151,7 @@ arrow::compute::OutputType ConvertToOutputType(TType* output) {
     return arrow::compute::OutputType(ToValueDescr(output));
 }
 
-TBlockFuncNode::TBlockFuncNode(TComputationMutables& mutables, TStringBuf name, TVector<IComputationNode*>&& argsNodes,
+TBlockFuncNode::TBlockFuncNode(TComputationMutables& mutables, TStringBuf name, TComputationNodePtrVector&& argsNodes,
     const TVector<TType*>& argsTypes, const arrow::compute::ScalarKernel& kernel,
     std::shared_ptr<arrow::compute::ScalarKernel> kernelHolder,
     const arrow::compute::FunctionOptions* functionOptions)

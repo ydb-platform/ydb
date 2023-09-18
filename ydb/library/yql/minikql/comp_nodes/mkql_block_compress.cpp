@@ -152,7 +152,7 @@ private:
     }
 
 private:
-    IComputationWideFlowNode* Flow_;
+    IComputationWideFlowNode *const Flow_;
     const ui32 BitmapIndex_;
     const ui32 Width_;
 };

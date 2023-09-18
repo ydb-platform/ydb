@@ -432,8 +432,7 @@ public:
                     ValueAddRef(Representations[i], item, ctx, block);
                     new StoreInst(item, placeholders[i], block);
                 }
-
-                } else {
+            } else {
                 for (auto i = 0U; i < Keys.size(); ++i) {
                     const auto item = getres.second[Indexes[i]](ctx, block);
                     new StoreInst(item, placeholders[i], block);
@@ -462,7 +461,6 @@ public:
                     ValueAddRef(Representations[i], item, ctx, block);
                     new StoreInst(item, placeholders[i], block);
                 }
-
 
                 BranchInst::Create(loop, block);
 

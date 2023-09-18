@@ -1372,7 +1372,7 @@ public:
             }
 
             auto cmpKeys = CompareKey_->Compare(
-                static_cast<const NUdf::TUnboxedValuePod&>(lhsCurr->first), 
+                static_cast<const NUdf::TUnboxedValuePod&>(lhsCurr->first),
                 static_cast<const NUdf::TUnboxedValuePod&>(rhsCurr->first)
             );
 
@@ -1381,7 +1381,7 @@ public:
             }
 
             auto cmpPayloads = ComparePayload_->Compare(
-                static_cast<const NUdf::TUnboxedValuePod&>(lhsCurr->second), 
+                static_cast<const NUdf::TUnboxedValuePod&>(lhsCurr->second),
                 static_cast<const NUdf::TUnboxedValuePod&>(rhsCurr->second)
             );
 
@@ -2288,7 +2288,7 @@ NUdf::ICompare::TPtr MakeCompareImpl(const NMiniKQL::TType* type) {
         case NMiniKQL::TType::EKind::List:
             return new TCompare<NMiniKQL::TType::EKind::List>(type);
         case NMiniKQL::TType::EKind::Dict:
-            return new TCompare<NMiniKQL::TType::EKind::Dict>(type);            
+            return new TCompare<NMiniKQL::TType::EKind::Dict>(type);
         case NMiniKQL::TType::EKind::Pg:
             return MakePgCompare((const TPgType*)type);
         case NMiniKQL::TType::EKind::Tagged: {

@@ -7,7 +7,7 @@ VERSION(1.1.1t)
 ORIGINAL_SOURCE(https://github.com/openssl/openssl/archive/OpenSSL_1_1_1t.tar.gz)
 
 # TODO(YMAKE-92) Move this information out of ya.make and allow per project configuration
-IF(OPENSOURCE_PROJECT == "CATBOOST")
+IF (OPENSOURCE_PROJECT == "CATBOOST")
     OPENSOURCE_EXPORT_REPLACEMENT(
         CMAKE OpenSSL
         CMAKE_TARGET OpenSSL::OpenSSL

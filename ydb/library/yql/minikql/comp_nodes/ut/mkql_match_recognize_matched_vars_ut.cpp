@@ -3,7 +3,69 @@
 
 namespace NKikimr::NMiniKQL::NMatchRecognize {
 
-Y_UNIT_TEST_SUITE(MatchRecognizeMatchedVars) {
+Y_UNIT_TEST_SUITE(MatchRecognizeMatchedVarExtend) {
+    Y_UNIT_TEST(MatchedRangeSingleton) {
+        TMatchedRange r{10};
+        UNIT_ASSERT_VALUES_EQUAL(10, r.From());
+        UNIT_ASSERT_VALUES_EQUAL(10, r.To());
+        r.Extend();
+        UNIT_ASSERT_VALUES_EQUAL(10, r.From());
+        UNIT_ASSERT_VALUES_EQUAL(11, r.To());
+    }
+    Y_UNIT_TEST(MatchedRange) {
+        TMatchedRange r{10, 20};
+        UNIT_ASSERT_VALUES_EQUAL(10, r.From());
+        UNIT_ASSERT_VALUES_EQUAL(20, r.To());
+        r.Extend();
+        UNIT_ASSERT_VALUES_EQUAL(10, r.From());
+        UNIT_ASSERT_VALUES_EQUAL(21, r.To());
+    }
+    Y_UNIT_TEST(MatchedVarEmpty) {
+        TMatchedVar v{};
+        Extend(v, 10);
+        UNIT_ASSERT_VALUES_EQUAL(1, v.size());
+        UNIT_ASSERT_VALUES_EQUAL(10, v[0].From());
+        UNIT_ASSERT_VALUES_EQUAL(10, v[0].To());
+    }
+    Y_UNIT_TEST(MatchedVarExtendSingletonContiguous) {
+        TMatchedVar v{TMatchedRange{10}};
+        Extend(v, 11);
+        UNIT_ASSERT_VALUES_EQUAL(1, v.size());
+        UNIT_ASSERT_VALUES_EQUAL(10, v[0].From());
+        UNIT_ASSERT_VALUES_EQUAL(11, v[0].To());
+    }
+    Y_UNIT_TEST(MatchedVarExtendSingletonWithGap) {
+        TMatchedVar v{TMatchedRange{10}};
+        Extend(v, 20);
+        UNIT_ASSERT_VALUES_EQUAL(2, v.size());
+        UNIT_ASSERT_VALUES_EQUAL(10, v[0].From());
+        UNIT_ASSERT_VALUES_EQUAL(10, v[0].To());
+        UNIT_ASSERT_VALUES_EQUAL(20, v[1].From());
+        UNIT_ASSERT_VALUES_EQUAL(20, v[1].To());
+    }
+    Y_UNIT_TEST(MatchedVarExtendContiguous) {
+        TMatchedVar v{TMatchedRange{10, 20}, TMatchedRange{30, 40}};
+        Extend(v, 41);
+        UNIT_ASSERT_VALUES_EQUAL(2, v.size());
+        UNIT_ASSERT_VALUES_EQUAL(10, v[0].From());
+        UNIT_ASSERT_VALUES_EQUAL(20, v[0].To());
+        UNIT_ASSERT_VALUES_EQUAL(30, v[1].From());
+        UNIT_ASSERT_VALUES_EQUAL(41, v[1].To());
+    }
+    Y_UNIT_TEST(MatchedVarExtendWithGap) {
+        TMatchedVar v{TMatchedRange{10, 20}, TMatchedRange{30, 40}};
+        Extend(v, 50);
+        UNIT_ASSERT_VALUES_EQUAL(3, v.size());
+        UNIT_ASSERT_VALUES_EQUAL(10, v[0].From());
+        UNIT_ASSERT_VALUES_EQUAL(20, v[0].To());
+        UNIT_ASSERT_VALUES_EQUAL(30, v[1].From());
+        UNIT_ASSERT_VALUES_EQUAL(40, v[1].To());
+        UNIT_ASSERT_VALUES_EQUAL(50, v[2].From());
+        UNIT_ASSERT_VALUES_EQUAL(50, v[2].To());
+    }
+}
+
+Y_UNIT_TEST_SUITE(MatchRecognizeMatchedVarsToValue) {
     TMemoryUsageInfo memUsage("MatchedVars");
     Y_UNIT_TEST(MatchedRange) {
         TScopedAlloc alloc(__LOCATION__);
@@ -103,39 +165,39 @@ Y_UNIT_TEST_SUITE(MatchRecognizeMatchedVars) {
     }
 }
 
-Y_UNIT_TEST_SUITE(MatchRecognizeMatchedVarsByRef) {
-        TMemoryUsageInfo memUsage("MatchedVarsByRef");
-        Y_UNIT_TEST(MatchedVarsEmpty) {
-            TScopedAlloc alloc(__LOCATION__);
-            {
-                TMatchedVars vars{};
-                NUdf::TUnboxedValue value(NUdf::TUnboxedValuePod(new TMatchedVarsValue(&memUsage, vars)));
-                UNIT_ASSERT(value.HasValue());
-            }
+Y_UNIT_TEST_SUITE(MatchRecognizeMatchedVarsToValueByRef) {
+    TMemoryUsageInfo memUsage("MatchedVarsByRef");
+    Y_UNIT_TEST(MatchedVarsEmpty) {
+        TScopedAlloc alloc(__LOCATION__);
+        {
+            TMatchedVars vars{};
+            NUdf::TUnboxedValue value(NUdf::TUnboxedValuePod(new TMatchedVarsValue(&memUsage, vars)));
+            UNIT_ASSERT(value.HasValue());
         }
-        Y_UNIT_TEST(MatchedVars) {
-            TScopedAlloc alloc(__LOCATION__);
-            {
-                TMatchedVar A{{1, 4}, {7, 9}, {100, 200}};
-                TMatchedVar B{{1, 6}};
-                TMatchedVars vars{A, B};
-                NUdf::TUnboxedValue value(NUdf::TUnboxedValuePod(new TMatchedVarsValue(&memUsage, vars)));
-                UNIT_ASSERT(value.HasValue());
-                auto a = value.GetElement(0);
-                UNIT_ASSERT(a.HasValue());
-                UNIT_ASSERT_VALUES_EQUAL(3, a.GetListLength());
-                auto iter = a.GetListIterator();
-                UNIT_ASSERT(iter.HasValue());
-                NUdf::TUnboxedValue last;
-                while (iter.Next(last))
-                    ;
-                UNIT_ASSERT(last.HasValue());
-                UNIT_ASSERT_VALUES_EQUAL(100, last.GetElement(0).Get<ui64>());
-                UNIT_ASSERT_VALUES_EQUAL(200, last.GetElement(1).Get<ui64>());
-                auto b = value.GetElement(1);
-                UNIT_ASSERT(b.HasValue());
-                UNIT_ASSERT_VALUES_EQUAL(1, b.GetListLength());
-            }
+    }
+    Y_UNIT_TEST(MatchedVars) {
+        TScopedAlloc alloc(__LOCATION__);
+        {
+            TMatchedVar A{{1, 4}, {7, 9}, {100, 200}};
+            TMatchedVar B{{1, 6}};
+            TMatchedVars vars{A, B};
+            NUdf::TUnboxedValue value(NUdf::TUnboxedValuePod(new TMatchedVarsValue(&memUsage, vars)));
+            UNIT_ASSERT(value.HasValue());
+            auto a = value.GetElement(0);
+            UNIT_ASSERT(a.HasValue());
+            UNIT_ASSERT_VALUES_EQUAL(3, a.GetListLength());
+            auto iter = a.GetListIterator();
+            UNIT_ASSERT(iter.HasValue());
+            NUdf::TUnboxedValue last;
+            while (iter.Next(last))
+                ;
+            UNIT_ASSERT(last.HasValue());
+            UNIT_ASSERT_VALUES_EQUAL(100, last.GetElement(0).Get<ui64>());
+            UNIT_ASSERT_VALUES_EQUAL(200, last.GetElement(1).Get<ui64>());
+            auto b = value.GetElement(1);
+            UNIT_ASSERT(b.HasValue());
+            UNIT_ASSERT_VALUES_EQUAL(1, b.GetListLength());
         }
+    }
 }
 }//namespace NKikimr::NMiniKQL::TMatchRecognize

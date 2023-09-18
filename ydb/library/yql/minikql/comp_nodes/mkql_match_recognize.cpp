@@ -96,14 +96,7 @@ public:
             for (size_t v = 0; v != Parameters.Defines.size(); ++v) {
                 const auto &d = Parameters.Defines[v]->GetValue(ctx);
                 if (d && d.GetOptionalValue().Get<bool>()) {
-                    auto &var = CurMatchedVars[v];
-                    if (var.empty()) {
-                        var.emplace_back(i, i);
-                    } else if (var.back().From + 1 == i) {
-                        ++var.back().To;
-                    } else {
-                        var.emplace_back(i, i);
-                    }
+                    Extend(CurMatchedVars[v], i);
                 }
             }
             //for the sake of dummy usage assume non-overlapped matches at every 5th row of any partition
@@ -148,16 +141,7 @@ public:
         for (size_t i = 0; i != Parameters.Defines.size(); ++i) {
             const auto& d = Parameters.Defines[i]->GetValue(ctx);
             if (d && d.GetOptionalValue().Get<bool>()) {
-                auto& var = MatchedVars[i];
-                if (var.empty()) {
-                    var.emplace_back(RowCount, RowCount);
-                }
-                else if (var.back().To + 1 == RowCount) {
-                    ++var.back().To;
-                }
-                else {
-                    var.emplace_back(RowCount, RowCount);
-                }
+                Extend(MatchedVars[i], RowCount);
             }
         }
         ++RowCount;

@@ -5,25 +5,54 @@ namespace NKikimr::NMiniKQL::NMatchRecognize {
 
 ///Range that includes starting and ending points
 ///Can not be empty
-struct TMatchedRange {
+class TMatchedRange {
+public:
     TMatchedRange(ui64 index)
-        : From(index)
-        , To(index)
+        : FromIndex(index)
+        , ToIndex(index)
     {}
+
     TMatchedRange(ui64 from, ui64 to)
-        : From(from)
-        , To(to)
+        : FromIndex(from)
+        , ToIndex(to)
     {}
-    ui64 From;
-    ui64 To;
+
+    size_t From() const {
+        return FromIndex;
+    }
+
+    size_t To() const {
+        return ToIndex;
+    }
+
+    void Extend() {
+        ++ToIndex;
+    }
+
+private:
+    ui64 FromIndex;
+    ui64 ToIndex;
 };
 
 using TMatchedVar = std::vector<TMatchedRange>;
 
+inline void Extend(TMatchedVar& var, size_t index) {
+    if (var.empty()) {
+        var.emplace_back(index);
+    } else {
+        MKQL_ENSURE(index > var.back().To(), "Internal logic error");
+        if (var.back().To() + 1 == index) {
+            var.back().Extend();
+        } else {
+            var.emplace_back(index);
+        }
+    }
+}
+
 using TMatchedVars = std::vector<TMatchedVar>;
 
 inline NUdf::TUnboxedValue ToValue(const THolderFactory& holderFactory, const TMatchedRange& range) {
-    std::array<NUdf::TUnboxedValue, 2> array = {NUdf::TUnboxedValuePod{range.From}, NUdf::TUnboxedValuePod{range.To}};
+    std::array<NUdf::TUnboxedValue, 2> array = {NUdf::TUnboxedValuePod{range.From()}, NUdf::TUnboxedValuePod{range.To()}};
     return holderFactory.RangeAsArray(cbegin(array), cend(array));
 }
 
@@ -46,7 +75,7 @@ inline NUdf::TUnboxedValue ToValue(const THolderFactory& holderFactory, const TM
 }
 
 ///Optimized reference based implementation to be used as an argument
-///for strict(based on check performed on an optimization stage) lambdas
+///for lambdas which produce strict result(do not require lazy access to its arguments)
 class TMatchedVarsValue : public TComputationValue<TMatchedVarsValue> {
     class TRangeValue: public TComputationValue<TRangeValue> {
     public:
@@ -62,8 +91,8 @@ class TMatchedVarsValue : public TComputationValue<TMatchedVarsValue> {
         NUdf::TUnboxedValue GetElement(ui32 index) const override {
             MKQL_ENSURE(index < 2, "Index out of range");
             switch(index) {
-                case 0: return NUdf::TUnboxedValuePod(Range.From);
-                case 1: return NUdf::TUnboxedValuePod(Range.To);
+                case 0: return NUdf::TUnboxedValuePod(Range.From());
+                case 1: return NUdf::TUnboxedValuePod(Range.To());
             }
             return NUdf::TUnboxedValuePod();
         }
@@ -71,13 +100,7 @@ class TMatchedVarsValue : public TComputationValue<TMatchedVarsValue> {
         const TMatchedRange& Range;
     };
 
-    class TListRangeValue: public TComputationValue<TListRangeValue> {
-    public:
-        TListRangeValue(TMemoryUsageInfo* memInfo, const TMatchedVar& v)
-                : TComputationValue<TListRangeValue>(memInfo)
-                , Var(v)
-        {
-        }
+    class TRangeList: public TComputationValue<TRangeList> {
         class TIterator : public TComputationValue<TIterator> {
         public:
             TIterator(TMemoryUsageInfo *memInfo, const std::vector<TMatchedRange>& ranges)
@@ -98,6 +121,13 @@ class TMatchedVarsValue : public TComputationValue<TMatchedVarsValue> {
             const std::vector<TMatchedRange>& Ranges;
             size_t Index;
         };
+
+    public:
+        TRangeList(TMemoryUsageInfo* memInfo, const TMatchedVar& v)
+            : TComputationValue<TRangeList>(memInfo)
+            , Var(v)
+        {
+        }
 
         bool HasFastListLength() const override {
             return true;
@@ -125,7 +155,7 @@ public:
     }
 
     NUdf::TUnboxedValue GetElement(ui32 index) const override {
-        return NUdf::TUnboxedValuePod(new TListRangeValue(GetMemInfo(), Vars[index]));
+        return NUdf::TUnboxedValuePod(new TRangeList(GetMemInfo(), Vars[index]));
     }
 private:
     const std::vector<TMatchedVar>& Vars;

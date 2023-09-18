@@ -2967,14 +2967,6 @@ bool TokenAnnotator::spaceRequiredBeforeParens(const FormatToken &Right) const {
 bool TokenAnnotator::spaceRequiredBetween(const AnnotatedLine &Line,
                                           const FormatToken &Left,
                                           const FormatToken &Right) {
-  if (Left.TokenText.str() == "with_lock") {
-    auto p = Left.Previous;
-
-    if (!p || p->TokenText != "define") {
-      return true;
-    }
-  }
-
   if (Left.is(tok::kw_return) && Right.isNot(tok::semi))
     return true;
   if (Style.isJson() && Left.is(tok::string_literal) && Right.is(tok::colon))

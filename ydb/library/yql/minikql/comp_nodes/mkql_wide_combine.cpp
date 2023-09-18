@@ -555,6 +555,11 @@ public:
 
             block = next;
 
+            for (ui32 i = 0U; i < Nodes.KeyResultNodes.size(); ++i) {
+                if (Nodes.KeysOnItems[i] || Nodes.KeyResultNodes[i]->IsTemporaryValue())
+                    ValueCleanup(Nodes.KeyResultNodes[i]->GetRepresentation(), keyPointers[i], ctx, block);
+            }
+
             std::vector<Value*> stored(Nodes.StateNodes.size(), nullptr);
             for (ui32 i = 0U; i < stored.size(); ++i) {
                 const bool hasDependency = Nodes.StateNodes[i]->GetDependencesCount() > 0U;

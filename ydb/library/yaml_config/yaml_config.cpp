@@ -91,7 +91,7 @@ void ResolveAndParseYamlConfig(
 
     NKikimr::NYaml::TransformConfig(json, true);
 
-    NProtobufJson::MergeJson2Proto(json, appConfig, NYamlConfig::GetJsonToProtoConfig());
+    NProtobufJson::MergeJson2Proto(json, appConfig, NYamlConfig::GetJsonToProtoConfig().SetAllowUnknownFields(true));
 }
 
 void ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig::TAppConfig& to) {

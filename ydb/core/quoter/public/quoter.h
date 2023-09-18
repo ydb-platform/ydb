@@ -17,6 +17,7 @@ struct TEvQuota {
         EvRequest = EventSpaceBegin(EEventSpaceQuoter::ES_QUOTA),
         EvCancelRequest,
         EvClearance,
+        EvRpcTimeout,
 
         EvProxyRequest = EvRequest + 512,
         EvProxyStats,
@@ -96,6 +97,16 @@ struct TEvQuota {
 
         TEvClearance(EResult result)
             : Result(result)
+        {}
+    };
+
+    struct TEvRpcTimeout : public NActors::TEventLocal<TEvRpcTimeout, EvRpcTimeout> {
+        const TString Quoter;
+        const TString Resource;
+
+        TEvRpcTimeout(TString quoter, TString resource)
+            : Quoter(quoter)
+            , Resource(resource)
         {}
     };
 

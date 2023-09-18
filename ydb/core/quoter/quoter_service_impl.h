@@ -269,6 +269,7 @@ class TQuoterService : public TActorBootstrapped<TQuoterService> {
         ::NMonitoring::TDynamicCounters::TCounterPtr Requests;
         ::NMonitoring::TDynamicCounters::TCounterPtr ResultOk;
         ::NMonitoring::TDynamicCounters::TCounterPtr ResultDeadline;
+        ::NMonitoring::TDynamicCounters::TCounterPtr ResultRpcDeadline;
         ::NMonitoring::TDynamicCounters::TCounterPtr ResultError;
         NMonitoring::THistogramPtr RequestLatency;
     } Counters;
@@ -311,6 +312,7 @@ class TQuoterService : public TActorBootstrapped<TQuoterService> {
     void Handle(TEvQuota::TEvCancelRequest::TPtr &ev);
     void Handle(TEvQuota::TEvProxySession::TPtr &ev);
     void Handle(TEvQuota::TEvProxyUpdate::TPtr &ev);
+    void Handle(TEvQuota::TEvRpcTimeout::TPtr &ev);
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev);
     void HandleTick();
 
@@ -335,6 +337,7 @@ public:
             hFunc(TEvQuota::TEvCancelRequest, Handle);
             hFunc(TEvQuota::TEvProxySession, Handle);
             hFunc(TEvQuota::TEvProxyUpdate, Handle);
+            hFunc(TEvQuota::TEvRpcTimeout, Handle);
             cFunc(TEvents::TEvWakeup::EventType, HandleTick);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
         default:

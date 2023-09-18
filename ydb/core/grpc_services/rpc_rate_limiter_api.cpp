@@ -433,6 +433,11 @@ public:
         SendRequest();
     }
 
+    void OnOperationTimeout(const TActorContext& ctx) {
+        Send(MakeQuoterServiceID(), new TEvQuota::TEvRpcTimeout(GetProtoRequest()->coordination_node_path(), GetProtoRequest()->resource_path()), 0, 0);
+        TBase::OnOperationTimeout(ctx);
+    }
+
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvQuota::TEvClearance, Handle);

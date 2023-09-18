@@ -364,6 +364,7 @@ void TQuoterService::Bootstrap() {
     Counters.Requests = counters->GetCounter("Requests", true);
     Counters.ResultOk = counters->GetCounter("ResultOk", true);
     Counters.ResultDeadline = counters->GetCounter("ResultDeadline", true);
+    Counters.ResultRpcDeadline = counters->GetCounter("ResultRpcDeadline", true);
     Counters.ResultError = counters->GetCounter("ResultError", true);
     Counters.RequestLatency = counters->GetHistogram("RequestLatencyMs", GetLatencyHistogramBuckets());
 
@@ -1026,6 +1027,11 @@ void TQuoterService::Handle(TEvQuota::TEvProxyUpdate::TPtr &ev) {
         BLOG_I("closing quoter on ProxyUpdate as no activity left " << quoter.QuoterName);
         return BreakQuoter(quoterIt);
     }
+}
+
+void TQuoterService::Handle(TEvQuota::TEvRpcTimeout::TPtr &ev) {
+    Y_UNUSED(ev);
+    Counters.ResultRpcDeadline->Inc();
 }
 
 void TQuoterService::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev) {

@@ -22,7 +22,12 @@ struct TVolumeSpace {
     ui64 SSDSystem = 0;
 };
 
-struct TVolumeSpaceLimits {
+struct TFileStoreSpace {
+    ui64 SSD = 0;
+    ui64 HDD = 0;
+};
+
+struct TSpaceLimits {
     ui64 Allocated = 0;
     ui64 Limit = Max<ui64>();
 };
@@ -65,11 +70,13 @@ struct TPathElement : TSimpleRefCount<TPathElement> {
 
     TString ExtraPathSymbolsAllowed; // it's better to move it in TSubDomainInfo like SchemeLimits
 
-    TVolumeSpaceLimits VolumeSpaceRaw;
-    TVolumeSpaceLimits VolumeSpaceSSD;
-    TVolumeSpaceLimits VolumeSpaceHDD;
-    TVolumeSpaceLimits VolumeSpaceSSDNonrepl;
-    TVolumeSpaceLimits VolumeSpaceSSDSystem;
+    TSpaceLimits VolumeSpaceRaw;
+    TSpaceLimits VolumeSpaceSSD;
+    TSpaceLimits VolumeSpaceHDD;
+    TSpaceLimits VolumeSpaceSSDNonrepl;
+    TSpaceLimits VolumeSpaceSSDSystem;
+    TSpaceLimits FileStoreSpaceSSD;
+    TSpaceLimits FileStoreSpaceHDD;
     ui64 DocumentApiVersion = 0;
     NJson::TJsonValue AsyncReplication;
 
@@ -141,6 +148,9 @@ public:
     void ChangeVolumeSpaceBegin(TVolumeSpace newSpace, TVolumeSpace oldSpace);
     void ChangeVolumeSpaceCommit(TVolumeSpace newSpace, TVolumeSpace oldSpace);
     bool CheckVolumeSpaceChange(TVolumeSpace newSpace, TVolumeSpace oldSpace, TString& errStr);
+    void ChangeFileStoreSpaceBegin(TFileStoreSpace newSpace, TFileStoreSpace oldSpace);
+    void ChangeFileStoreSpaceCommit(TFileStoreSpace newSpace, TFileStoreSpace oldSpace);
+    bool CheckFileStoreSpaceChange(TFileStoreSpace newSpace, TFileStoreSpace oldSpace, TString& errStr);
     bool HasRuntimeAttrs() const;
     void SerializeRuntimeAttrs(google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TUserAttribute>* userAttrs) const;
 };

@@ -890,7 +890,6 @@ public:
     protected:
         virtual bool DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result) const override;
     };
-   
     TPtr AlterData;
 
     const NKikimrSchemeOp::TColumnStoreDescription& GetDescription() const {
@@ -939,7 +938,6 @@ public:
             shardInfoProto->SetLocalId(idx.GetLocalId().GetValue());
         }
     }
-    
     void SerializeDescription(NKikimrSchemeOp::TColumnStoreDescription& descriptionProto) const;
     void ParseFromLocalDB(const NKikimrSchemeOp::TColumnStoreDescription& descriptionProto);
     bool ParseFromRequest(const NKikimrSchemeOp::TColumnStoreDescription& descriptionProto, IErrorCollector& errors);
@@ -2339,6 +2337,11 @@ struct TFileStoreInfo : public TSimpleRefCount<TFileStoreInfo> {
         AlterVersion = Version + 1;
     }
 
+    void ForgetAlter() {
+        Y_VERIFY(AlterConfig);
+        AlterConfig.Reset();
+    }
+
     void FinishAlter() {
         Y_VERIFY(AlterConfig);
         Y_VERIFY(AlterVersion);
@@ -2349,6 +2352,37 @@ struct TFileStoreInfo : public TSimpleRefCount<TFileStoreInfo> {
 
         AlterConfig.Reset();
         AlterVersion = 0;
+    }
+
+    TFileStoreSpace GetFileStoreSpace() const {
+        auto space = GetFileStoreSpace(Config);
+
+        if (AlterConfig) {
+            const auto alterSpace = GetFileStoreSpace(*AlterConfig);
+            space.SSD = Max(space.SSD, alterSpace.SSD);
+            space.HDD = Max(space.HDD, alterSpace.HDD);
+        }
+
+        return space;
+    }
+
+private:
+    TFileStoreSpace GetFileStoreSpace(const NKikimrFileStore::TConfig& config) const {
+        const ui64 blockSize = config.GetBlockSize();
+        const ui64 blockCount = config.GetBlocksCount();
+
+        TFileStoreSpace space;
+        switch (config.GetStorageMediaKind()) {
+            case 1: // STORAGE_MEDIA_SSD
+                space.SSD += blockCount * blockSize;
+                break;
+            case 2: // STORAGE_MEDIA_HYBRID
+            case 3: // STORAGE_MEDIA_HDD
+                space.HDD += blockCount * blockSize;
+                break;
+        }
+
+        return space;
     }
 };
 

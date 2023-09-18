@@ -46,6 +46,103 @@ void InitAlterFileStoreConfig(NKikimrFileStore::TConfig& vc, bool channels = fal
     }
 }
 
+void CheckLimits(ui64 correctType, ui64 incorrectType) {
+    const TString typeStr = correctType == 1 ? "ssd" : "hdd";
+
+    TTestBasicRuntime runtime;
+    TTestEnv env(runtime);
+    ui64 txId = 100;
+
+    TestUserAttrs(
+        runtime,
+        ++txId,
+        "",
+        "MyRoot",
+        AlterUserAttrs({
+            {"__filestore_space_limit_" + typeStr, ToString(32 * 4_KB)}
+        })
+    );
+    env.TestWaitNotification(runtime, txId);
+
+    // Other pool kinds should not be affected
+    NKikimrSchemeOp::TFileStoreDescription vdescr;
+    auto& vc = *vdescr.MutableConfig();
+    vc.SetStorageMediaKind(incorrectType);
+    vc.SetBlockSize(4_KB);
+    vc.SetBlocksCount(100500);
+    vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+
+    vdescr.SetName("FSOther");
+    TestCreateFileStore(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+    env.TestWaitNotification(runtime, txId);
+
+    // Creating a correctType filestore
+    vdescr.SetName("FS1");
+    vc.SetStorageMediaKind(correctType);
+    vc.SetBlocksCount(16);
+    TestCreateFileStore(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+    env.TestWaitNotification(runtime, txId);
+
+    // Cannot have more than quota
+    vdescr.SetName("FS2");
+    vc.SetBlocksCount(17);
+    TestCreateFileStore(
+        runtime,
+        ++txId,
+        "/MyRoot",
+        vdescr.DebugString(),
+        {NKikimrScheme::StatusPreconditionFailed}
+    );
+    env.TestWaitNotification(runtime, txId);
+
+    // It's ok to use quota completely, but only the first create should succeed
+    vdescr.SetName("FS2");
+    vc.SetBlocksCount(16);
+    TestCreateFileStore(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+    env.TestWaitNotification(runtime, txId);
+
+    // We may drop a filestore and then use freed quota in an alter
+    TestDropFileStore(runtime, ++txId, "/MyRoot", "FS1");
+    env.TestWaitNotification(runtime, txId);
+
+    vc.ClearBlockSize();
+    vdescr.SetName("FS2");
+    vc.SetBlocksCount(32);
+    vc.SetVersion(1);
+    TestAlterFileStore(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+    env.TestWaitNotification(runtime, txId);
+
+    vc.ClearVersion();
+    vc.SetBlockSize(4_KB);
+
+    // Cannot have more than quota
+    vdescr.SetName("FS3");
+    vc.SetBlocksCount(1);
+    TestCreateFileStore(
+        runtime,
+        ++txId,
+        "/MyRoot",
+        vdescr.DebugString(),
+        {NKikimrScheme::StatusPreconditionFailed}
+    );
+
+    // It's possible to modify quota size
+    TestUserAttrs(
+        runtime,
+        ++txId,
+        "",
+        "MyRoot",
+        AlterUserAttrs({
+            {"__filestore_space_limit_" + typeStr, ToString(33 * 4_KB)}
+        })
+    );
+    env.TestWaitNotification(runtime, txId);
+
+    // Ok
+    TestCreateFileStore(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+    env.TestWaitNotification(runtime, txId);
+}
+
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TFileStoreWithReboots) {
@@ -212,7 +309,7 @@ Y_UNIT_TEST_SUITE(TFileStoreWithReboots) {
 
             InitAlterFileStoreConfig(vc);
             AsyncAlterFileStore(runtime, ++t.TxId, "/MyRoot", vdescr.DebugString());
-            
+
             t.TestEnv->ReliablePropose(runtime, DropFileStoreRequest(++t.TxId, "/MyRoot", "FS"), {NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusAccepted});
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
@@ -251,5 +348,15 @@ Y_UNIT_TEST_SUITE(TFileStoreWithReboots) {
                                 NLs::Finished,
                                 NLs::PathVersionEqual(3)});
         });
+    }
+
+    Y_UNIT_TEST(CheckFileStoreSSDLimits) {
+        CheckLimits(1, 3);  // ssd, hdd
+        CheckLimits(1, 2);  // ssd, hybrid
+    }
+
+    Y_UNIT_TEST(CheckFileStoreHDDLimits) {
+        CheckLimits(3, 1);  // hdd, ssd
+        CheckLimits(2, 1);  // hybrid, ssd
     }
 }

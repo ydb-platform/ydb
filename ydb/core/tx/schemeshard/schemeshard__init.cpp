@@ -3967,6 +3967,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             path->ApplySpecialAttributes();
         }
 
+        // Change allocated space for all blockstore volumes
         for (const auto& kv : Self->BlockStoreVolumes) {
             auto itPath = Self->PathsById.find(kv.first);
             if (itPath == Self->PathsById.end() || itPath->second->Dropped()) {
@@ -3975,6 +3976,17 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             auto volumeSpace = kv.second->GetVolumeSpace();
             auto domainDir = Self->PathsById.at(Self->ResolvePathIdForDomain(itPath->second));
             domainDir->ChangeVolumeSpaceBegin(volumeSpace, { });
+        }
+
+        // Change allocated space for all filestores
+        for (const auto& kv : Self->FileStoreInfos) {
+            auto itPath = Self->PathsById.find(kv.first);
+            if (itPath == Self->PathsById.end() || itPath->second->Dropped()) {
+                continue;
+            }
+            const auto newFileStoreSpace = kv.second->GetFileStoreSpace();
+            auto domainDir = Self->PathsById.at(Self->ResolvePathIdForDomain(itPath->second));
+            domainDir->ChangeFileStoreSpaceBegin(newFileStoreSpace, { });
         }
 
         // Find all operations that were in the process of execution

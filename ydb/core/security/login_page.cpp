@@ -100,15 +100,10 @@ public:
             const TDomainsInfo::TDomain& domain = *domainsInfo->Domains.begin()->second.Get();
             TString rootDatabase = "/" + domain.Name;
             ui64 rootSchemeShardTabletId = domain.SchemeRoot;
-            if (true /*!Database.empty() && Database != rootDatabase*/) {
+            if (!Database.empty() && Database != rootDatabase) {
                 Database = rootDatabase;
-
-                auto dest(MakeSchemeCacheID());
-                auto actr = TlsActivationContext->ExecutorThread.ActorSystem->LookupLocalService(dest);
-
-                ALOG_DEBUG(NActorsServices::HTTP, "Login: Requesting schemecache (" << dest << " -> " << actr << ") for database " << Database);
-
-                Send(dest, new TEvTxProxySchemeCache::TEvNavigateKeySet(CreateNavigateKeySetRequest(Database).Release()));
+                ALOG_DEBUG(NActorsServices::HTTP, "Login: Requesting schemecache for database " << Database);
+                Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(CreateNavigateKeySetRequest(Database).Release()));
             } else {
                 Database = rootDatabase;
                 RequestSchemeShard(rootSchemeShardTabletId);

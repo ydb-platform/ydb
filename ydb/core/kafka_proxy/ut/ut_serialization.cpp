@@ -176,18 +176,49 @@ Y_UNIT_TEST(ProduceRequest) {
     UNIT_ASSERT_EQUAL(result.TopicData[1].PartitionData[0].Records, std::nullopt);
 }
 
-Y_UNIT_TEST(UnsignedVarint) {
-    std::vector<ui32> values = {0, 1, 127, 128, 32191};
-
-    for(ui32 v : values) {
+template<class T>
+void CheckUnsignedVarint(const std::vector<T>& values)  {
+    for(T v : values) {
+        Cerr << ">>>>> Check value=" << v << Endl << Flush;
         TWritableBuf sb(nullptr, BUFFER_SIZE);
         TKafkaWritable writable(sb);
         TKafkaReadable readable(sb.GetBuffer());
 
         writable.writeUnsignedVarint(v);
-        ui32 r = readable.readUnsignedVarint();
-        UNIT_ASSERT_EQUAL(r, v);
+        T r = readable.readUnsignedVarint<T>();
+        UNIT_ASSERT_EQUAL_C(r, v, TStringBuilder() << r << " != " << v);
     }
+}
+
+Y_UNIT_TEST(UnsignedVarint32) {
+    CheckUnsignedVarint<ui32>({0, 1, 127, 128, 32191, Max<i32>(), Max<ui32>()});
+}
+
+Y_UNIT_TEST(UnsignedVarint64) {
+    CheckUnsignedVarint<ui64>({0, 1, 127, 128, 32191, Max<i32>(), static_cast<unsigned long>(Max<i32>()) + 1, Max<i64>(), Max<ui64>()});
+}
+
+template<class T>
+void CheckVarint(const std::vector<T>& values) {
+    for(T v : values) {
+        Cerr << ">>>>> Check value=" << v << Endl << Flush;
+        TWritableBuf sb(nullptr, BUFFER_SIZE);
+        TKafkaWritable writable(sb);
+        TKafkaReadable readable(sb.GetBuffer());
+
+        writable.writeVarint(v);
+        T r = readable.readVarint<T>();
+
+        UNIT_ASSERT_EQUAL_C(r, v, TStringBuilder() << r << " != " << v);
+    }
+}
+
+Y_UNIT_TEST(Varint32) {
+    CheckVarint<i32>({ Min<i32>(), -167966, -1, 0, 1, 127, 128, 32191, Max<i32>()});
+}
+
+Y_UNIT_TEST(Varint64) {
+    CheckVarint<i64>({Min<i64>(), Min<i32>(), -167966, -1, 0, 1, 127, 128, 32191, static_cast<unsigned long>(Max<i32>()) + 1, Max<i64>()});
 }
 
 #define SIMPLE_HEAD(Type_, Value)                   \
@@ -251,10 +282,10 @@ Y_UNIT_TEST(TKafkaInt8_PresentVersion_TaggedVersion) {
 
     NKafka::NPrivate::WriteTag<Meta_TKafkaInt8>(writable, 11, value);
 
-    i32 tag = readable.readUnsignedVarint();
+    i32 tag = readable.readUnsignedVarint<i32>();
     UNIT_ASSERT_EQUAL(tag, Meta_TKafkaInt8::Tag);
 
-    ui32 size = readable.readUnsignedVarint();
+    ui32 size = readable.readUnsignedVarint<i32>();
     UNIT_ASSERT_EQUAL(size, sizeof(TKafkaInt8));
 
     NKafka::NPrivate::ReadTag<Meta_TKafkaInt8>(readable, 11, result);
@@ -337,10 +368,10 @@ Y_UNIT_TEST(TKafkaString_PresentVersion_TaggedVersion) {
 
     NKafka::NPrivate::WriteTag<Meta_TKafkaString>(writable, 11, value);
 
-    i32 tag = readable.readUnsignedVarint();
+    i32 tag = readable.readUnsignedVarint<i32>();
     UNIT_ASSERT_EQUAL(tag, Meta_TKafkaString::Tag);
 
-    ui32 size = readable.readUnsignedVarint();
+    ui32 size = readable.readUnsignedVarint<i32>();
     UNIT_ASSERT_EQUAL(size, value->size() + NKafka::NPrivate::SizeOfUnsignedVarint(value->size() + 1)); // "+1" because serialized as unsigned int, and null serialized with size equals 0
 
     NKafka::NPrivate::ReadTag<Meta_TKafkaString>(readable, 11, result);
@@ -398,10 +429,10 @@ Y_UNIT_TEST(TKafkaArray_PresentVersion_TaggedVersion) {
 
     NKafka::NPrivate::WriteTag<Meta_TKafkaArray>(writable, 11, value);
 
-    i32 tag = readable.readUnsignedVarint();
+    i32 tag = readable.readUnsignedVarint<i32>();
     UNIT_ASSERT_EQUAL(tag, Meta_TKafkaArray::Tag);
 
-    ui32 size = readable.readUnsignedVarint();
+    ui32 size = readable.readUnsignedVarint<i32>();
     UNIT_ASSERT_EQUAL(size, v.length() // array element data
         + NKafka::NPrivate::SizeOfUnsignedVarint(value.size()) // array size
         + NKafka::NPrivate::SizeOfUnsignedVarint(v.length() + 1) // string size. +1 because null string serialize as 0-length
@@ -464,10 +495,10 @@ Y_UNIT_TEST(TKafkaBytes_PresentVersion_TaggedVersion) {
 
     NKafka::NPrivate::WriteTag<Meta_TKafkaBytes>(writable, 11, value);
 
-    i32 tag = readable.readUnsignedVarint();
+    i32 tag = readable.readUnsignedVarint<i32>();
     UNIT_ASSERT_EQUAL(tag, Meta_TKafkaArray::Tag);
 
-    ui32 size = readable.readUnsignedVarint();
+    ui32 size = readable.readUnsignedVarint<i32>();
     UNIT_ASSERT_EQUAL(size, value->size() // byffer data
         + NKafka::NPrivate::SizeOfUnsignedVarint(value->size() + 1) // buffer size. +1 because null value stored as size 0
     );

@@ -28,9 +28,9 @@ struct TSizeCollector {
 };
 
 
-constexpr i32 SizeOfUnsignedVarint(i32 value) {
-    int bytes = 1;
-    while ((value & 0xffffff80) != 0L) {
+constexpr size_t SizeOfUnsignedVarint(ui64 value) {
+    size_t bytes = 1;
+    while ((value & 0xffffffffffffff80L) != 0L) {
         bytes += 1;
         value >>= 7;
     }
@@ -106,7 +106,7 @@ inline void WriteStringSize(TKafkaWritable& writable, TKafkaVersion version, TKa
 template<typename Meta>
 inline TKafkaInt32 ReadStringSize(TKafkaReadable& readable, TKafkaVersion version) {
     if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
-        return readable.readUnsignedVarint() - 1;
+        return readable.readUnsignedVarint<TKafkaInt32>() - 1;
     } else {
         TKafkaInt16 v;
         readable >> v;
@@ -128,9 +128,9 @@ inline void WriteArraySize(TKafkaWritable& writable, TKafkaVersion version, TKaf
 template<typename Meta>
 inline TKafkaInt32 ReadArraySize(TKafkaReadable& readable, TKafkaVersion version) {
     if constexpr (SizeFormat<Meta>() == Varint) {
-        return readable.readVarint();
+        return readable.readVarint<TKafkaInt32>();
     } else if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
-        return readable.readUnsignedVarint() - 1;
+        return readable.readUnsignedVarint<TKafkaInt32>() - 1;
     } else {
         TKafkaInt32 v;
         readable >> v;
@@ -203,7 +203,7 @@ public:
 
     inline static void DoRead(TKafkaReadable& readable, TKafkaVersion version, TValueType& value) {
         if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
-            value = readable.readVarint();
+            value = readable.readVarint<TValueType>();
         } else {
             readable >> value;
         }
@@ -250,7 +250,7 @@ public:
 
     inline static void DoRead(TKafkaReadable& readable, TKafkaVersion version, TValueType& value) {
         if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
-            value = readable.readUnsignedVarint() - 1;
+            value = readable.readUnsignedVarint<TValueType>() - 1;
         } else {
             readable >> value;
         }

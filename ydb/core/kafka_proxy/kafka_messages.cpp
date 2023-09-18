@@ -196,10 +196,10 @@ void TRequestHeaderData::Read(TKafkaReadable& _readable, TKafkaVersion _version)
     NPrivate::Read<ClientIdMeta>(_readable, _version, ClientId);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -255,10 +255,10 @@ void TResponseHeaderData::Read(TKafkaReadable& _readable, TKafkaVersion _version
     NPrivate::Read<CorrelationIdMeta>(_readable, _version, CorrelationId);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -315,10 +315,10 @@ void TProduceRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _version
     NPrivate::Read<TopicDataMeta>(_readable, _version, TopicData);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -375,10 +375,10 @@ void TProduceRequestData::TTopicProduceData::Read(TKafkaReadable& _readable, TKa
     NPrivate::Read<PartitionDataMeta>(_readable, _version, PartitionData);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -431,10 +431,10 @@ void TProduceRequestData::TTopicProduceData::TPartitionProduceData::Read(TKafkaR
     NPrivate::Read<RecordsMeta>(_readable, _version, Records);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -487,10 +487,10 @@ void TProduceResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _versio
     NPrivate::Read<ThrottleTimeMsMeta>(_readable, _version, ThrottleTimeMs);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -543,10 +543,10 @@ void TProduceResponseData::TTopicProduceResponse::Read(TKafkaReadable& _readable
     NPrivate::Read<PartitionResponsesMeta>(_readable, _version, PartitionResponses);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -614,10 +614,10 @@ void TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::Rea
     NPrivate::Read<ErrorMessageMeta>(_readable, _version, ErrorMessage);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -682,10 +682,10 @@ void TProduceResponseData::TTopicProduceResponse::TPartitionProduceResponse::TBa
     NPrivate::Read<BatchIndexErrorMessageMeta>(_readable, _version, BatchIndexErrorMessage);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -763,10 +763,10 @@ void TFetchRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _version) 
     NPrivate::Read<RackIdMeta>(_readable, _version, RackId);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 case ClusterIdMeta::Tag:
                     NPrivate::ReadTag<ClusterIdMeta>(_readable, _version, ClusterId);
@@ -844,10 +844,10 @@ void TFetchRequestData::TFetchTopic::Read(TKafkaReadable& _readable, TKafkaVersi
     NPrivate::Read<PartitionsMeta>(_readable, _version, Partitions);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -916,10 +916,10 @@ void TFetchRequestData::TFetchTopic::TFetchPartition::Read(TKafkaReadable& _read
     NPrivate::Read<PartitionMaxBytesMeta>(_readable, _version, PartitionMaxBytes);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -983,10 +983,10 @@ void TFetchRequestData::TForgottenTopic::Read(TKafkaReadable& _readable, TKafkaV
     NPrivate::Read<PartitionsMeta>(_readable, _version, Partitions);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -1047,10 +1047,10 @@ void TFetchResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _version)
     NPrivate::Read<ResponsesMeta>(_readable, _version, Responses);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -1110,10 +1110,10 @@ void TFetchResponseData::TFetchableTopicResponse::Read(TKafkaReadable& _readable
     NPrivate::Read<PartitionsMeta>(_readable, _version, Partitions);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -1187,10 +1187,10 @@ void TFetchResponseData::TFetchableTopicResponse::TPartitionData::Read(TKafkaRea
     NPrivate::Read<RecordsMeta>(_readable, _version, Records);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 case DivergingEpochMeta::Tag:
                     NPrivate::ReadTag<DivergingEpochMeta>(_readable, _version, DivergingEpoch);
@@ -1275,10 +1275,10 @@ void TFetchResponseData::TFetchableTopicResponse::TPartitionData::TEpochEndOffse
     NPrivate::Read<EndOffsetMeta>(_readable, _version, EndOffset);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -1333,10 +1333,10 @@ void TFetchResponseData::TFetchableTopicResponse::TPartitionData::TLeaderIdAndEp
     NPrivate::Read<LeaderEpochMeta>(_readable, _version, LeaderEpoch);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -1391,10 +1391,10 @@ void TFetchResponseData::TFetchableTopicResponse::TPartitionData::TSnapshotId::R
     NPrivate::Read<EpochMeta>(_readable, _version, Epoch);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -1449,10 +1449,10 @@ void TFetchResponseData::TFetchableTopicResponse::TPartitionData::TAbortedTransa
     NPrivate::Read<FirstOffsetMeta>(_readable, _version, FirstOffset);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -1508,10 +1508,10 @@ void TListOffsetsRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _ver
     NPrivate::Read<TopicsMeta>(_readable, _version, Topics);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -1566,10 +1566,10 @@ void TListOffsetsRequestData::TListOffsetsTopic::Read(TKafkaReadable& _readable,
     NPrivate::Read<PartitionsMeta>(_readable, _version, Partitions);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -1630,10 +1630,10 @@ void TListOffsetsRequestData::TListOffsetsTopic::TListOffsetsPartition::Read(TKa
     NPrivate::Read<MaxNumOffsetsMeta>(_readable, _version, MaxNumOffsets);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -1690,10 +1690,10 @@ void TListOffsetsResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _ve
     NPrivate::Read<TopicsMeta>(_readable, _version, Topics);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -1746,10 +1746,10 @@ void TListOffsetsResponseData::TListOffsetsTopicResponse::Read(TKafkaReadable& _
     NPrivate::Read<PartitionsMeta>(_readable, _version, Partitions);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -1814,10 +1814,10 @@ void TListOffsetsResponseData::TListOffsetsTopicResponse::TListOffsetsPartitionR
     NPrivate::Read<LeaderEpochMeta>(_readable, _version, LeaderEpoch);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -1884,10 +1884,10 @@ void TMetadataRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _versio
     NPrivate::Read<IncludeTopicAuthorizedOperationsMeta>(_readable, _version, IncludeTopicAuthorizedOperations);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -1946,10 +1946,10 @@ void TMetadataRequestData::TMetadataRequestTopic::Read(TKafkaReadable& _readable
     NPrivate::Read<NameMeta>(_readable, _version, Name);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -2012,10 +2012,10 @@ void TMetadataResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _versi
     NPrivate::Read<ClusterAuthorizedOperationsMeta>(_readable, _version, ClusterAuthorizedOperations);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -2084,10 +2084,10 @@ void TMetadataResponseData::TMetadataResponseBroker::Read(TKafkaReadable& _reada
     NPrivate::Read<RackMeta>(_readable, _version, Rack);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -2156,10 +2156,10 @@ void TMetadataResponseData::TMetadataResponseTopic::Read(TKafkaReadable& _readab
     NPrivate::Read<TopicAuthorizedOperationsMeta>(_readable, _version, TopicAuthorizedOperations);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -2231,10 +2231,10 @@ void TMetadataResponseData::TMetadataResponseTopic::TMetadataResponsePartition::
     NPrivate::Read<OfflineReplicasMeta>(_readable, _version, OfflineReplicas);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -2296,10 +2296,10 @@ void TSaslHandshakeRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _v
     NPrivate::Read<MechanismMeta>(_readable, _version, Mechanism);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -2350,10 +2350,10 @@ void TSaslHandshakeResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _
     NPrivate::Read<MechanismsMeta>(_readable, _version, Mechanisms);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -2408,10 +2408,10 @@ void TApiVersionsRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _ver
     NPrivate::Read<ClientSoftwareVersionMeta>(_readable, _version, ClientSoftwareVersion);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -2475,10 +2475,10 @@ void TApiVersionsResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _ve
     NPrivate::Read<ZkMigrationReadyMeta>(_readable, _version, ZkMigrationReady);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 case SupportedFeaturesMeta::Tag:
                     NPrivate::ReadTag<SupportedFeaturesMeta>(_readable, _version, SupportedFeatures);
@@ -2562,10 +2562,10 @@ void TApiVersionsResponseData::TApiVersion::Read(TKafkaReadable& _readable, TKaf
     NPrivate::Read<MaxVersionMeta>(_readable, _version, MaxVersion);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -2625,10 +2625,10 @@ void TApiVersionsResponseData::TSupportedFeatureKey::Read(TKafkaReadable& _reada
     NPrivate::Read<MaxVersionMeta>(_readable, _version, MaxVersion);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -2688,10 +2688,10 @@ void TApiVersionsResponseData::TFinalizedFeatureKey::Read(TKafkaReadable& _reada
     NPrivate::Read<MinVersionLevelMeta>(_readable, _version, MinVersionLevel);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -2754,10 +2754,10 @@ void TInitProducerIdRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _
     NPrivate::Read<ProducerEpochMeta>(_readable, _version, ProducerEpoch);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -2822,10 +2822,10 @@ void TInitProducerIdResponseData::Read(TKafkaReadable& _readable, TKafkaVersion 
     NPrivate::Read<ProducerEpochMeta>(_readable, _version, ProducerEpoch);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -2879,10 +2879,10 @@ void TSaslAuthenticateRequestData::Read(TKafkaReadable& _readable, TKafkaVersion
     NPrivate::Read<AuthBytesMeta>(_readable, _version, AuthBytes);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag
@@ -2939,10 +2939,10 @@ void TSaslAuthenticateResponseData::Read(TKafkaReadable& _readable, TKafkaVersio
     NPrivate::Read<SessionLifetimeMsMeta>(_readable, _version, SessionLifetimeMs);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
-        int _numTaggedFields = _readable.readUnsignedVarint();
-        for (int _i = 0; _i < _numTaggedFields; ++_i) {
-            int _tag = _readable.readUnsignedVarint();
-            int _size = _readable.readUnsignedVarint();
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
             switch (_tag) {
                 default:
                     _readable.skip(_size); // skip unknown tag

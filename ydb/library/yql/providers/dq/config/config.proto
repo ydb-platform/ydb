@@ -117,6 +117,7 @@ message TDqConfig {
         optional int64 HeartbeatPeriodMs = 8 [default = 2000];
         repeated string ServiceNodeHostPort = 9; // for tests and debug only
         optional string Revision = 10; // for tests and debug only
+        optional string LockType = 11 [default = "yt"]; // for tests and debug only
     }
 
     optional TYtCoordinator YtCoordinator = 6;

@@ -5,10 +5,18 @@ namespace NKikimr::NStorage {
 
     TDistributedConfigKeeper::TDistributedConfigKeeper(TIntrusivePtr<TNodeWardenConfig> cfg)
         : Cfg(std::move(cfg))
-    {
-        StorageConfig.MutableBlobStorageConfig()->CopyFrom(Cfg->BlobStorageConfig);
+    {}
+
+    void TDistributedConfigKeeper::Bootstrap() {
+        STLOG(PRI_DEBUG, BS_NODE, NWDC00, "Bootstrap");
+
+        // TODO: maybe extract list of nodes from the initial storage config?
+        Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes(true));
+
+        // prepare initial storage config
+        InitialConfig.MutableBlobStorageConfig()->CopyFrom(Cfg->BlobStorageConfig);
         for (const auto& node : Cfg->NameserviceConfig.GetNode()) {
-            auto *r = StorageConfig.AddAllNodes();
+            auto *r = InitialConfig.AddAllNodes();
             r->SetHost(node.GetInterconnectHost());
             r->SetPort(node.GetPort());
             r->SetNodeId(node.GetNodeId());
@@ -18,23 +26,44 @@ namespace NKikimr::NStorage {
                 r->MutableLocation()->CopyFrom(node.GetWalleLocation());
             }
         }
-        StorageConfig.SetClusterUUID(Cfg->NameserviceConfig.GetClusterUUID());
-        StorageConfig.SetFingerprint(CalculateFingerprint(StorageConfig));
+        InitialConfig.SetClusterUUID(Cfg->NameserviceConfig.GetClusterUUID());
+        UpdateFingerprint(&InitialConfig);
 
-        std::vector<TString> paths;
-        InvokeForAllDrives(SelfId(), Cfg, [&paths](const TString& path) { paths.push_back(path); });
-        std::sort(paths.begin(), paths.end());
-        TStringStream s;
-        ::Save(&s, paths);
-        State = s.Str();
-    }
+        BaseConfig.CopyFrom(InitialConfig);
 
-    void TDistributedConfigKeeper::Bootstrap() {
-        STLOG(PRI_DEBUG, BS_NODE, NWDC00, "Bootstrap");
-        Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes(true));
-        auto query = std::bind(&TThis::ReadConfig, TActivationContext::ActorSystem(), SelfId(), Cfg, State);
+        // generate initial drive set
+        EnumerateConfigDrives(InitialConfig, SelfId().NodeId(), [&](const auto& /*node*/, const auto& drive) {
+            DrivesToRead.push_back(drive.GetPath());
+        });
+        std::sort(DrivesToRead.begin(), DrivesToRead.end());
+
+        auto query = std::bind(&TThis::ReadConfig, TActivationContext::ActorSystem(), SelfId(), DrivesToRead, Cfg, 0);
         Send(MakeIoDispatcherActorId(), new TEvInvokeQuery(std::move(query)));
         Become(&TThis::StateWaitForInit);
+    }
+
+    void TDistributedConfigKeeper::Halt() {
+        // TODO: implement
+    }
+
+    bool TDistributedConfigKeeper::ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config) {
+        if (!StorageConfig || StorageConfig->GetGeneration() < config.GetGeneration()) {
+            StorageConfig.emplace(config);
+            if (StorageConfig->HasBlobStorageConfig()) {
+                if (const auto& bsConfig = StorageConfig->GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
+                    Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvUpdateServiceSet(bsConfig.GetServiceSet()));
+                }
+            }
+            if (ProposedStorageConfig && ProposedStorageConfig->GetGeneration() <= StorageConfig->GetGeneration()) {
+                ProposedStorageConfig.reset();
+            }
+            PersistConfig({});
+            return true;
+        } else if (StorageConfig->GetGeneration() && StorageConfig->GetGeneration() == config.GetGeneration() &&
+                StorageConfig->GetFingerprint() != config.GetFingerprint()) {
+            // TODO: fingerprint mismatch, abort operation
+        }
+        return false;
     }
 
     void TDistributedConfigKeeper::SendEvent(ui32 nodeId, ui64 cookie, TActorId sessionId, std::unique_ptr<IEventBase> ev) {
@@ -117,6 +146,11 @@ namespace NKikimr::NStorage {
         for (const auto& [nodeId, info] : DirectBoundNodes) {
             Y_VERIFY(SubscribedSessions.contains(nodeId));
         }
+
+        Y_VERIFY(!StorageConfig || CheckFingerprint(*StorageConfig));
+        Y_VERIFY(!ProposedStorageConfig || CheckFingerprint(*ProposedStorageConfig));
+        Y_VERIFY(CheckFingerprint(BaseConfig));
+        Y_VERIFY(!InitialConfig.GetFingerprint() || CheckFingerprint(InitialConfig));
     }
 #endif
 
@@ -130,6 +164,7 @@ namespace NKikimr::NStorage {
         };
 
         bool change = false;
+        const bool wasStorageConfigLoaded = StorageConfigLoaded;
 
         switch (ev->GetTypeRewrite()) {
             case TEvInterconnect::TEvNodesInfo::EventType:
@@ -139,7 +174,7 @@ namespace NKikimr::NStorage {
 
             case TEvPrivate::EvStorageConfigLoaded:
                 Handle(reinterpret_cast<TEvPrivate::TEvStorageConfigLoaded::TPtr&>(ev));
-                StorageConfigLoaded = change = true;
+                change = wasStorageConfigLoaded < StorageConfigLoaded;
                 break;
 
             case TEvPrivate::EvProcessPendingEvent:
@@ -155,7 +190,8 @@ namespace NKikimr::NStorage {
         }
 
         if (NodeListObtained && StorageConfigLoaded && change) {
-            UpdateBound(SelfNode.NodeId(), SelfNode, StorageConfig, nullptr);
+            UpdateBound(SelfNode.NodeId(), SelfNode, *StorageConfig, nullptr);
+            IssueNextBindRequest();
             processPendingEvents();
         }
     }
@@ -200,7 +236,6 @@ void Out<NKikimr::NStorage::TDistributedConfigKeeper::ERootState>(IOutputStream&
         case E::INITIAL:                    s << "INITIAL";                    return;
         case E::COLLECT_CONFIG:             s << "COLLECT_CONFIG";             return;
         case E::PROPOSE_NEW_STORAGE_CONFIG: s << "PROPOSE_NEW_STORAGE_CONFIG"; return;
-        case E::COMMIT_CONFIG:              s << "COMMIT_CONFIG";              return;
         case E::ERROR_TIMEOUT:              s << "ERROR_TIMEOUT";              return;
     }
     Y_FAIL();

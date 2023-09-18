@@ -21,8 +21,11 @@ namespace NKikimr::NStorage {
     {
         TEvNodeConfigReversePush() = default;
 
-        TEvNodeConfigReversePush(ui32 rootNodeId) {
+        TEvNodeConfigReversePush(ui32 rootNodeId, const NKikimrBlobStorage::TStorageConfig *committedConfig) {
             Record.SetRootNodeId(rootNodeId);
+            if (committedConfig) {
+                Record.MutableCommittedStorageConfig()->CopyFrom(*committedConfig);
+            }
         }
 
         static std::unique_ptr<TEvNodeConfigReversePush> MakeRejected() {

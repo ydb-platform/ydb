@@ -22,18 +22,26 @@ message TStorageConfig { // contents of storage metadata
     bytes Fingerprint = 2; // hash for config validation (must be the same for all nodes with the same Generation)
     NKikimrConfig.TBlobStorageConfig BlobStorageConfig = 3; // NodeWardenServiceSet for static group is inside
     repeated TNodeIdentifier AllNodes = 5; // set of all known nodes
-    string ClusterUUID = 6;
-    repeated TNodeIdentifier AgreedNodes = 4; // node set that has agreed to this configuration
-}
-
-message TProposedStorageConfig {
-    bytes State = 1; // configuration state in which this config was proposed
-    TStorageConfig StorageConfig = 2; // the config itself
+    string ClusterUUID = 6; // cluster GUID as provided in nameservice config
+    string SelfAssemblyUUID = 7; // self-assembly UUID generated when config is first created
+    TStorageConfig PrevConfig = 8; // previous version of StorageConfig (if any)
 }
 
 message TPDiskMetadataRecord {
-    TStorageConfig StorageConfig = 1;
-    TProposedStorageConfig ProposedStorageConfig = 2;
+    TStorageConfig CommittedStorageConfig = 1; // currently active storage config
+    TStorageConfig ProposedStorageConfig = 2; // proposed storage config
+}
+
+message TStorageFileContent {
+    message TRecord {
+        string Path = 1;
+        fixed64 PDiskGuid = 2;
+        uint64 Timestamp = 3;
+        fixed64 Key = 4;
+        TPDiskMetadataRecord Meta = 5;
+    }
+
+    repeated TRecord Record = 1;
 }
 
 // Attach sender node to the recipient one; if already bound, then just update configuration.
@@ -51,6 +59,7 @@ message TEvNodeConfigPush {
 message TEvNodeConfigReversePush {
     uint32 RootNodeId = 1; // current tree root as known by the sender, always nonzero
     bool Rejected = 2; // is the request rejected due to cyclic graph?
+    TStorageConfig CommittedStorageConfig = 3; // last known committed storage configuration
 }
 
 // Remove node from bound list.
@@ -66,27 +75,32 @@ message TEvNodeConfigScatter {
         TStorageConfig Config = 1;
     }
 
-    message TCommitStorageConfig {
-        TStorageConfigMeta Meta = 1; // meta of config being committed
-    }
-
     optional uint64 Cookie = 1;
 
     oneof Request {
         TCollectConfigs CollectConfigs = 2;
         TProposeStorageConfig ProposeStorageConfig = 3;
-        TCommitStorageConfig CommitStorageConfig = 4;
     }
 }
 
 // Collected replies from the bottom.
 message TEvNodeConfigGather {
     message TCollectConfigs {
-        message TItem {
+        message TNode {
             repeated TNodeIdentifier NodeIds = 1; // nodes with the same config
-            TStorageConfig Config = 2; // the config itself
+            TStorageConfig BaseConfig = 2; // config from config.yaml
         }
-        repeated TItem Items = 1;
+        message TDiskIdentifier {
+            TNodeIdentifier NodeId = 1;
+            string Path = 2;
+        }
+        message TPersistentConfig {
+            repeated TDiskIdentifier Disks = 1; // disks with the same config
+            TStorageConfig Config = 2;
+        }
+        repeated TNode Nodes = 1;
+        repeated TPersistentConfig CommittedConfigs = 2;
+        repeated TPersistentConfig ProposedConfigs = 3;
     }
 
     message TProposeStorageConfig {
@@ -102,17 +116,7 @@ message TEvNodeConfigGather {
             TNodeIdentifier NodeId = 1;
             EStatus Status = 2;
             string Reason = 3;
-            repeated uint32 SuccessfulPDiskIds = 4;
-        }
-        repeated TStatus Status = 1;
-    }
-
-    message TCommitStorageConfig {
-        message TStatus {
-            TNodeIdentifier NodeId = 1;
-            bool Success = 2;
-            string Reason = 3; // in case of error
-            repeated uint32 SuccessfulPDiskIds = 4;
+            repeated string SuccessfulDrives = 4;
         }
         repeated TStatus Status = 1;
     }
@@ -122,6 +126,5 @@ message TEvNodeConfigGather {
     oneof Response {
         TCollectConfigs CollectConfigs = 2;
         TProposeStorageConfig ProposeStorageConfig = 3;
-        TCommitStorageConfig CommitStorageConfig = 4;
     }
 }

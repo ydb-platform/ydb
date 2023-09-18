@@ -2,124 +2,65 @@
 
 namespace NKikimr::NStorage {
 
-    void TDistributedConfigKeeper::InvokeForAllDrives(TActorId selfId, const TIntrusivePtr<TNodeWardenConfig>& cfg,
-            const TPerDriveCallback& callback) {
-        if (const auto& config = cfg->BlobStorageConfig; config.HasAutoconfigSettings()) {
-            if (const auto& autoconfigSettings = config.GetAutoconfigSettings(); autoconfigSettings.HasDefineBox()) {
-                const auto& defineBox = autoconfigSettings.GetDefineBox();
-                std::optional<ui64> hostConfigId;
-                for (const auto& host : defineBox.GetHost()) {
-                    if (host.GetEnforcedNodeId() == selfId.NodeId()) {
-                        hostConfigId.emplace(host.GetHostConfigId());
-                        break;
+    void TDistributedConfigKeeper::ReadConfig(TActorSystem *actorSystem, TActorId selfId,
+            const std::vector<TString>& drives, const TIntrusivePtr<TNodeWardenConfig>& cfg, ui64 cookie) {
+        auto ev = std::make_unique<TEvPrivate::TEvStorageConfigLoaded>();
+        for (const TString& path : drives) {
+            TRcBuf metadata;
+            switch (ReadPDiskMetadata(path, cfg->CreatePDiskKey(), metadata)) {
+                case NPDisk::EPDiskMetadataOutcome::OK:
+                    if (NKikimrBlobStorage::TPDiskMetadataRecord m; m.ParseFromString(metadata.ExtractUnderlyingContainerOrCopy<TString>())) {
+                        auto& [p, config] = ev->MetadataPerPath.emplace_back();
+                        p = path;
+                        config.Swap(&m);
                     }
-                }
-                if (hostConfigId) {
-                    for (const auto& hostConfig : autoconfigSettings.GetDefineHostConfig()) {
-                        if (hostConfigId == hostConfig.GetHostConfigId()) {
-                            for (const auto& drive : hostConfig.GetDrive()) {
-                                callback(drive.GetPath());
-                            }
-                            break;
-                        }
-                    }
-                }
+                    break;
+
+                default:
+                    break;
             }
         }
+        actorSystem->Send(new IEventHandle(selfId, {}, ev.release(), 0, cookie));
     }
 
-    void TDistributedConfigKeeper::ReadConfig(TActorSystem *actorSystem, TActorId selfId, const TIntrusivePtr<TNodeWardenConfig>& cfg,
-            const TString& state) {
-        auto ev = std::make_unique<TEvPrivate::TEvStorageConfigLoaded>();
-        InvokeForAllDrives(selfId, cfg, [&](const TString& path) { ReadConfigFromPDisk(*ev, path, cfg->CreatePDiskKey(), state); });
-        actorSystem->Send(new IEventHandle(selfId, {}, ev.release()));
-    }
-
-    void TDistributedConfigKeeper::ReadConfigFromPDisk(TEvPrivate::TEvStorageConfigLoaded& msg, const TString& path,
-            const NPDisk::TMainKey& key, const TString& state) {
-        TRcBuf metadata;
-        NKikimrBlobStorage::TPDiskMetadataRecord m;
-        switch (ReadPDiskMetadata(path, key, metadata)) {
-            case NPDisk::EPDiskMetadataOutcome::OK:
-                if (m.ParseFromString(metadata.ExtractUnderlyingContainerOrCopy<TString>())) {
-                    if (m.HasProposedStorageConfig()) { // clear incompatible propositions
-                        const auto& proposed = m.GetProposedStorageConfig();
-                        if (proposed.GetState() != state) {
-                            m.ClearProposedStorageConfig();
-                        }
-                    }
-
-                    if (!msg.Success) {
-                        msg.Record.Swap(&m);
-                        msg.Success = true;
-                    } else {
-                        MergeMetadataRecord(&msg.Record, &m);
-                    }
-                } else {
-                    // TODO: invalid record
-                }
-                break;
-
-            default:
-                break;
-        }
-    }
-
-    void TDistributedConfigKeeper::MergeMetadataRecord(NKikimrBlobStorage::TPDiskMetadataRecord *to,
-            NKikimrBlobStorage::TPDiskMetadataRecord *from) {
-        // update StorageConfig
-        if (!from->HasStorageConfig() || !CheckFingerprint(from->GetStorageConfig())) {
-            // can't update StorageConfig from this record
-        } else if (!to->HasStorageConfig() || to->GetStorageConfig().GetGeneration() < from->GetStorageConfig().GetGeneration()) {
-            to->MutableStorageConfig()->Swap(from->MutableStorageConfig());
-        }
-
-        // update ProposedStorageConfig
-        if (!from->HasProposedStorageConfig()) {
-
-        } else if (!to->HasProposedStorageConfig()) {
-            to->MutableProposedStorageConfig()->Swap(from->MutableProposedStorageConfig());
-        } else {
-            // TODO: quorum
-        }
-    }
-
-    void TDistributedConfigKeeper::WriteConfig(TActorSystem *actorSystem, TActorId selfId, const TIntrusivePtr<TNodeWardenConfig>& cfg,
+    void TDistributedConfigKeeper::WriteConfig(TActorSystem *actorSystem, TActorId selfId,
+            const std::vector<TString>& drives, const TIntrusivePtr<TNodeWardenConfig>& cfg,
             const NKikimrBlobStorage::TPDiskMetadataRecord& record) {
         THPTimer timer;
         auto ev = std::make_unique<TEvPrivate::TEvStorageConfigStored>();
-        InvokeForAllDrives(selfId, cfg, [&](const TString& path) { WriteConfigToPDisk(*ev, record, path, cfg->CreatePDiskKey()); });
-        actorSystem->Send(new IEventHandle(selfId, {}, ev.release()));
-        STLOGX(*actorSystem, PRI_DEBUG, BS_NODE, NWDC37, "WriteConfig", (Passed, TDuration::Seconds(timer.Passed())));
-    }
+        for (const TString& path : drives) {
+            TString data;
+            const bool success = record.SerializeToString(&data);
+            Y_VERIFY(success);
+            switch (WritePDiskMetadata(path, cfg->CreatePDiskKey(), TRcBuf(std::move(data)))) {
+                case NPDisk::EPDiskMetadataOutcome::OK:
+                    ev->StatusPerPath.emplace_back(path, true);
+                    break;
 
-    void TDistributedConfigKeeper::WriteConfigToPDisk(TEvPrivate::TEvStorageConfigStored& msg,
-            const NKikimrBlobStorage::TPDiskMetadataRecord& record, const TString& path, const NPDisk::TMainKey& key) {
-        TString data;
-        const bool success = record.SerializeToString(&data);
-        Y_VERIFY(success);
-        switch (WritePDiskMetadata(path, key, TRcBuf(std::move(data)))) {
-            case NPDisk::EPDiskMetadataOutcome::OK:
-                msg.StatusPerPath.emplace_back(path, true);
-                break;
-
-            default:
-                msg.StatusPerPath.emplace_back(path, false);
-                break;
+                default:
+                    ev->StatusPerPath.emplace_back(path, false);
+                    break;
+            }
         }
+        actorSystem->Send(new IEventHandle(selfId, {}, ev.release()));
     }
 
     TString TDistributedConfigKeeper::CalculateFingerprint(const NKikimrBlobStorage::TStorageConfig& config) {
         NKikimrBlobStorage::TStorageConfig temp;
         temp.CopyFrom(config);
-        temp.ClearFingerprint();
+        UpdateFingerprint(&temp);
+        return temp.GetFingerprint();
+    }
+
+    void TDistributedConfigKeeper::UpdateFingerprint(NKikimrBlobStorage::TStorageConfig *config) {
+        config->ClearFingerprint();
 
         TString s;
-        const bool success = temp.SerializeToString(&s);
+        const bool success = config->SerializeToString(&s);
         Y_VERIFY(success);
 
         auto digest = NOpenSsl::NSha1::Calc(s.data(), s.size());
-        return TString(reinterpret_cast<const char*>(digest.data()), digest.size());
+        config->SetFingerprint(digest.data(), digest.size());
     }
 
     bool TDistributedConfigKeeper::CheckFingerprint(const NKikimrBlobStorage::TStorageConfig& config) {
@@ -129,22 +70,35 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::PersistConfig(TPersistCallback callback) {
         TPersistQueueItem& item = PersistQ.emplace_back();
 
-        if (StorageConfig.GetGeneration()) {
-            auto *stored = item.Record.MutableStorageConfig();
-            stored->CopyFrom(StorageConfig);
+        if (StorageConfig && StorageConfig->GetGeneration()) {
+            item.Record.MutableCommittedStorageConfig()->CopyFrom(*StorageConfig);
         }
+
         if (ProposedStorageConfig) {
-            auto *proposed = item.Record.MutableProposedStorageConfig();
-            proposed->SetState(State);
-            proposed->MutableStorageConfig()->CopyFrom(*ProposedStorageConfig);
+            item.Record.MutableProposedStorageConfig()->CopyFrom(*ProposedStorageConfig);
         }
 
         STLOG(PRI_DEBUG, BS_NODE, NWDC35, "PersistConfig", (Record, item.Record));
 
+        std::vector<TString> drives;
+        if (item.Record.HasCommittedStorageConfig()) {
+            EnumerateConfigDrives(item.Record.GetCommittedStorageConfig(), 0, [&](const auto& /*node*/, const auto& drive) {
+                drives.push_back(drive.GetPath());
+            });
+        }
+        if (item.Record.HasProposedStorageConfig()) {
+            EnumerateConfigDrives(item.Record.GetProposedStorageConfig(), 0, [&](const auto& /*node*/, const auto& drive) {
+                drives.push_back(drive.GetPath());
+            });
+        }
+        std::sort(drives.begin(), drives.end());
+        drives.erase(std::unique(drives.begin(), drives.end()), drives.end());
+
+        item.Drives = std::move(drives);
         item.Callback = std::move(callback);
 
         if (PersistQ.size() == 1) {
-            auto query = std::bind(&TThis::WriteConfig, TActivationContext::ActorSystem(), SelfId(), Cfg, item.Record);
+            auto query = std::bind(&TThis::WriteConfig, TActivationContext::ActorSystem(), SelfId(), item.Drives, Cfg, item.Record);
             Send(MakeIoDispatcherActorId(), new TEvInvokeQuery(std::move(query)));
         }
     }
@@ -165,37 +119,97 @@ namespace NKikimr::NStorage {
         if (item.Callback) {
             item.Callback(*ev->Get());
         }
-        if (item.Record.HasStorageConfig()) {
-            if (const auto& config = item.Record.GetStorageConfig(); config.HasBlobStorageConfig()) {
-                if (const auto& bsConfig = config.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
-                    Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvUpdateServiceSet(bsConfig.GetServiceSet()));
-                }
-            }
-            const ui32 selfNodeId = SelfId().NodeId();
-            UpdateBound(selfNodeId, SelfNode, item.Record.GetStorageConfig(), nullptr);
-        }
         PersistQ.pop_front();
 
         if (!PersistQ.empty()) {
-            auto query = std::bind(&TThis::WriteConfig, TActivationContext::ActorSystem(), SelfId(), Cfg, PersistQ.front().Record);
+            auto& front = PersistQ.front();
+            auto query = std::bind(&TThis::WriteConfig, TActivationContext::ActorSystem(), SelfId(), front.Drives, Cfg,
+                front.Record);
             Send(MakeIoDispatcherActorId(), new TEvInvokeQuery(std::move(query)));
         }
     }
 
     void TDistributedConfigKeeper::Handle(TEvPrivate::TEvStorageConfigLoaded::TPtr ev) {
         auto& msg = *ev->Get();
-        STLOG(PRI_DEBUG, BS_NODE, NWDC32, "TEvStorageConfigLoaded", (Success, msg.Success), (Record, msg.Record));
-        if (msg.Success) {
-            if (msg.Record.HasStorageConfig()) {
-                StorageConfig.Swap(msg.Record.MutableStorageConfig());
-                Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvUpdateServiceSet(
-                    StorageConfig.GetBlobStorageConfig().GetServiceSet()));
+
+        STLOG(PRI_DEBUG, BS_NODE, NWDC32, "TEvStorageConfigLoaded");
+        if (ev->Cookie) {
+            if (const auto it = ScatterTasks.find(ev->Cookie); it != ScatterTasks.end()) {
+                TScatterTask& task = it->second;
+
+                THashMap<TStorageConfigMeta, TEvGather::TCollectConfigs::TPersistentConfig*> committed;
+                THashMap<TStorageConfigMeta, TEvGather::TCollectConfigs::TPersistentConfig*> proposed;
+
+                auto *res = task.Response.MutableCollectConfigs();
+                for (auto& item : *res->MutableCommittedConfigs()) {
+                    committed.try_emplace(item.GetConfig(), &item);
+                }
+                for (auto& item : *res->MutableProposedConfigs()) {
+                    proposed.try_emplace(item.GetConfig(), &item);
+                }
+
+                for (const auto& [path, m] : msg.MetadataPerPath) {
+                    auto addConfig = [&, path = path](const auto& config, auto func, auto& set) {
+                        auto& ptr = set[config];
+                        if (!ptr) {
+                            ptr = (res->*func)();
+                            ptr->MutableConfig()->CopyFrom(config);
+                        }
+                        auto *disk = ptr->AddDisks();
+                        SelfNode.Serialize(disk->MutableNodeId());
+                        disk->SetPath(path);
+                    };
+
+                    if (m.HasCommittedStorageConfig()) {
+                        addConfig(m.GetCommittedStorageConfig(), &TEvGather::TCollectConfigs::AddCommittedConfigs, committed);
+                    }
+                    if (m.HasProposedStorageConfig()) {
+                        addConfig(m.GetProposedStorageConfig(), &TEvGather::TCollectConfigs::AddProposedConfigs, proposed);
+                    }
+                }
+
+                FinishAsyncOperation(it->first);
             }
-            if (msg.Record.HasProposedStorageConfig()) {
-                ProposedStorageConfig.emplace();
-                ProposedStorageConfig->Swap(msg.Record.MutableProposedStorageConfig()->MutableStorageConfig());
+        } else { // just loaded the initial config, try to acquire newer configuration
+            for (const auto& [path, m] : msg.MetadataPerPath) {
+                if (m.HasCommittedStorageConfig()) {
+                    const auto& config = m.GetCommittedStorageConfig();
+                    if (InitialConfig.GetGeneration() < config.GetGeneration()) {
+                        InitialConfig.CopyFrom(config);
+                    } else if (InitialConfig.GetGeneration() && InitialConfig.GetGeneration() == config.GetGeneration() &&
+                            InitialConfig.GetFingerprint() != config.GetFingerprint()) {
+                        // TODO: error
+                    }
+                }
+                if (m.HasProposedStorageConfig()) {
+                    const auto& proposed = m.GetProposedStorageConfig();
+                    // TODO: more checks
+                    if (InitialConfig.GetGeneration() < proposed.GetGeneration()) {
+                        if (!ProposedStorageConfig) {
+                            ProposedStorageConfig.emplace(proposed);
+                        } else if (ProposedStorageConfig->GetGeneration() < proposed.GetGeneration()) {
+                            ProposedStorageConfig.emplace(proposed);
+                        }
+                    }
+                }
             }
-            PersistConfig({}); // recover incorrect replicas
+
+            // generate new list of drives to acquire
+            std::vector<TString> drivesToRead;
+            EnumerateConfigDrives(InitialConfig, SelfId().NodeId(), [&](const auto& /*node*/, const auto& drive) {
+                drivesToRead.push_back(drive.GetPath());
+            });
+            std::sort(drivesToRead.begin(), drivesToRead.end());
+
+            if (DrivesToRead != drivesToRead) { // re-read configuration as it may cover additional drives
+                auto query = std::bind(&TThis::ReadConfig, TActivationContext::ActorSystem(), SelfId(), DrivesToRead, Cfg, 0);
+                Send(MakeIoDispatcherActorId(), new TEvInvokeQuery(std::move(query)));
+            } else {
+                ApplyStorageConfig(InitialConfig);
+                Y_VERIFY(DirectBoundNodes.empty()); // ensure we don't have to spread this config
+                InitialConfig.Clear();
+                StorageConfigLoaded = true;
+            }
         }
     }
 
@@ -203,28 +217,19 @@ namespace NKikimr::NStorage {
 
 namespace NKikimr {
 
-    struct TVaultRecord {
-        TString Path;
-        ui64 PDiskGuid;
-        TInstant Timestamp;
-        NPDisk::TKey Key;
-        TString Record;
-    };
+    static const TString VaultPath = "/Berkanavt/kikimr/state/storage.txt";
 
-    static const TString VaultPath = "/Berkanavt/kikimr/state/storage.bin";
-
-    static bool ReadVault(TFile& file, std::vector<TVaultRecord>& vault) {
+    static bool ReadVault(TFile& file, NKikimrBlobStorage::TStorageFileContent& vault) {
+        TString buffer;
         try {
-            const TString buffer = TUnbufferedFileInput(file).ReadAll();
-            for (TMemoryInput stream(buffer); !stream.Exhausted(); ) {
-                TVaultRecord& record = vault.emplace_back();
-                ::LoadMany(&stream, record.Path, record.PDiskGuid, record.Timestamp, record.Key, record.Record);
-            }
+            buffer = TFileInput(file).ReadAll();
         } catch (...) {
             return false;
         }
-
-        return true;
+        if (!buffer) {
+            return true;
+        }
+        return google::protobuf::util::JsonStringToMessage(buffer, &vault).ok();
     }
 
     NPDisk::EPDiskMetadataOutcome ReadPDiskMetadata(const TString& path, const NPDisk::TMainKey& key, TRcBuf& metadata) {
@@ -236,29 +241,42 @@ namespace NKikimr {
         }
 
         TPDiskInfo info;
-        if (!ReadPDiskFormatInfo(path, key, info, false)) {
+        const bool pdiskSuccess = ReadPDiskFormatInfo(path, key, info, false);
+        if (!pdiskSuccess) {
             info.DiskGuid = 0;
             info.Timestamp = TInstant::Max();
         }
 
-        std::vector<TVaultRecord> vault;
+        NKikimrBlobStorage::TStorageFileContent vault;
         if (TFile file(fh.Release()); !ReadVault(file, vault)) {
             return NPDisk::EPDiskMetadataOutcome::ERROR;
         }
 
-        auto comp = [](const TVaultRecord& x, const TString& y) { return x.Path < y; };
-        auto it = std::lower_bound(vault.begin(), vault.end(), path, comp);
-
-        if (it != vault.end() && it->Path == path && !it->PDiskGuid && it->Timestamp == TInstant::Max() &&
-                info.DiskGuid && info.Timestamp != TInstant::Max()) {
-            it->PDiskGuid = info.DiskGuid;
-            it->Timestamp = info.Timestamp;
-            WritePDiskMetadata(path, key, TRcBuf(it->Record));
+        NKikimrBlobStorage::TStorageFileContent::TRecord *it = nullptr;
+        for (NKikimrBlobStorage::TStorageFileContent::TRecord& item : *vault.MutableRecord()) {
+            if (item.GetPath() == path) {
+                it = &item;
+                break;
+            }
         }
 
-        if (it != vault.end() && it->Path == path && it->PDiskGuid == info.DiskGuid && it->Timestamp == info.Timestamp &&
-                std::find(key.begin(), key.end(), it->Key) != key.end()) {
-            metadata = TRcBuf(std::move(it->Record));
+        if (it && !it->GetPDiskGuid() && !it->GetTimestamp() && pdiskSuccess) {
+            it->SetPDiskGuid(info.DiskGuid);
+            it->SetTimestamp(info.Timestamp.GetValue());
+
+            TString s;
+            const bool success = it->GetMeta().SerializeToString(&s);
+            Y_VERIFY(success);
+
+            WritePDiskMetadata(path, key, TRcBuf(std::move(s)));
+        }
+
+        if (it && it->GetPDiskGuid() == info.DiskGuid && it->GetTimestamp() == info.Timestamp.GetValue() &&
+                std::find(key.begin(), key.end(), it->GetKey()) != key.end()) {
+            TString s;
+            const bool success = it->GetMeta().SerializeToString(&s);
+            Y_VERIFY(success);
+            metadata = TRcBuf(std::move(s));
             return NPDisk::EPDiskMetadataOutcome::OK;
         }
 
@@ -273,31 +291,41 @@ namespace NKikimr {
         TFile file(fh.Release());
 
         TPDiskInfo info;
-        if (!ReadPDiskFormatInfo(path, key, info, false)) {
+        const bool pdiskSuccess = ReadPDiskFormatInfo(path, key, info, false);
+        if (!pdiskSuccess) {
             info.DiskGuid = 0;
             info.Timestamp = TInstant::Max();
         }
 
-        std::vector<TVaultRecord> vault;
+        NKikimrBlobStorage::TStorageFileContent vault;
         if (!ReadVault(file, vault)) {
             return NPDisk::EPDiskMetadataOutcome::ERROR;
         }
 
-        auto comp = [](const TVaultRecord& x, const TString& y) { return x.Path < y; };
-        auto it = std::lower_bound(vault.begin(), vault.end(), path, comp);
-        if (it == vault.end() || it->Path != path) {
-            it = vault.insert(it, TVaultRecord{.Path = path});
+        NKikimrBlobStorage::TStorageFileContent::TRecord *it = nullptr;
+        for (NKikimrBlobStorage::TStorageFileContent::TRecord& item : *vault.MutableRecord()) {
+            if (item.GetPath() == path) {
+                it = &item;
+                break;
+            }
         }
-        it->PDiskGuid = info.DiskGuid;
-        it->Timestamp = info.Timestamp;
-        it->Key = key.back();
-        it->Record = metadata.ExtractUnderlyingContainerOrCopy<TString>();
 
-        TStringStream stream;
-        for (const auto& item : vault) {
-            ::SaveMany(&stream, item.Path, item.PDiskGuid, item.Timestamp, item.Key, item.Record);
+        if (!it) {
+            it = vault.AddRecord();
+            it->SetPath(path);
         }
-        const TString buffer = stream.Str();
+
+        it->SetPDiskGuid(info.DiskGuid);
+        it->SetTimestamp(info.Timestamp.GetValue());
+        it->SetKey(key.back());
+        bool success = it->MutableMeta()->ParseFromString(metadata.ExtractUnderlyingContainerOrCopy<TString>());
+        Y_VERIFY(success);
+
+        TString buffer;
+        google::protobuf::util::JsonPrintOptions opts;
+        opts.add_whitespace = true;
+        success = google::protobuf::util::MessageToJsonString(vault, &buffer, opts).ok();
+        Y_VERIFY(success);
 
         const TString tempPath = VaultPath + ".tmp";
         TFileHandle fh1(tempPath, OpenAlways);

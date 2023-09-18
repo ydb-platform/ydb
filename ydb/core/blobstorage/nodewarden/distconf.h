@@ -76,8 +76,7 @@ namespace NKikimr::NStorage {
             };
 
             struct TEvStorageConfigLoaded : TEventLocal<TEvStorageConfigLoaded, EvStorageConfigLoaded> {
-                bool Success = false;
-                NKikimrBlobStorage::TPDiskMetadataRecord Record;
+                std::vector<std::tuple<TString, NKikimrBlobStorage::TPDiskMetadataRecord>> MetadataPerPath;
             };
 
             struct TEvStorageConfigStored : TEventLocal<TEvStorageConfigStored, EvStorageConfigStored> {
@@ -159,18 +158,26 @@ namespace NKikimr::NStorage {
         };
 
         TIntrusivePtr<TNodeWardenConfig> Cfg;
-        TString State; // configuration state
 
-        // current most relevant storage config
-        NKikimrBlobStorage::TStorageConfig StorageConfig;
+        // currently active storage config
+        std::optional<NKikimrBlobStorage::TStorageConfig> StorageConfig;
 
-        // most relevant proposed config
+        // base config from config file
+        NKikimrBlobStorage::TStorageConfig BaseConfig;
+
+        // initial config based on config file and stored committed configs
+        NKikimrBlobStorage::TStorageConfig InitialConfig;
+        std::vector<TString> DrivesToRead;
+
+        // proposed storage configuration being persisted right now
         std::optional<NKikimrBlobStorage::TStorageConfig> ProposedStorageConfig;
         std::optional<ui64> ProposedStorageConfigCookie;
-        std::optional<ui64> CommitStorageConfigCookie;
+
+        // most relevant proposed config
         using TPersistCallback = std::function<void(TEvPrivate::TEvStorageConfigStored&)>;
         struct TPersistQueueItem {
             THPTimer Timer;
+            std::vector<TString> Drives;
             NKikimrBlobStorage::TPDiskMetadataRecord Record; // what we are going to write
             TPersistCallback Callback; // what will be called upon completion
         };
@@ -208,7 +215,6 @@ namespace NKikimr::NStorage {
             INITIAL,
             COLLECT_CONFIG,
             PROPOSE_NEW_STORAGE_CONFIG,
-            COMMIT_CONFIG,
             ERROR_TIMEOUT,
         };
         static constexpr TDuration ErrorTimeout = TDuration::Seconds(3);
@@ -228,23 +234,17 @@ namespace NKikimr::NStorage {
         TDistributedConfigKeeper(TIntrusivePtr<TNodeWardenConfig> cfg);
 
         void Bootstrap();
+        void Halt(); // cease any distconf activity, unbind and reject any bindings
+        bool ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // PDisk configuration retrieval and storing
 
-        using TPerDriveCallback = std::function<void(const TString&)>;
-        static void InvokeForAllDrives(TActorId selfId, const TIntrusivePtr<TNodeWardenConfig>& cfg, const TPerDriveCallback& callback);
+        static void ReadConfig(TActorSystem *actorSystem, TActorId selfId, const std::vector<TString>& drives,
+            const TIntrusivePtr<TNodeWardenConfig>& cfg, ui64 cookie);
 
-        static void ReadConfig(TActorSystem *actorSystem, TActorId selfId, const TIntrusivePtr<TNodeWardenConfig>& cfg,
-            const TString& state);
-        static void ReadConfigFromPDisk(TEvPrivate::TEvStorageConfigLoaded& msg, const TString& path, const NPDisk::TMainKey& key,
-            const TString& state);
-        static void MergeMetadataRecord(NKikimrBlobStorage::TPDiskMetadataRecord *to, NKikimrBlobStorage::TPDiskMetadataRecord *from);
-
-        static void WriteConfig(TActorSystem *actorSystem, TActorId selfId, const TIntrusivePtr<TNodeWardenConfig>& cfg,
-            const NKikimrBlobStorage::TPDiskMetadataRecord& record);
-        static void WriteConfigToPDisk(TEvPrivate::TEvStorageConfigStored& msg,
-            const NKikimrBlobStorage::TPDiskMetadataRecord& record, const TString& path, const NPDisk::TMainKey& key);
+        static void WriteConfig(TActorSystem *actorSystem, TActorId selfId, const std::vector<TString>& drives,
+            const TIntrusivePtr<TNodeWardenConfig>& cfg, const NKikimrBlobStorage::TPDiskMetadataRecord& record);
 
         void PersistConfig(TPersistCallback callback);
         void Handle(TEvPrivate::TEvStorageConfigStored::TPtr ev);
@@ -252,6 +252,7 @@ namespace NKikimr::NStorage {
         void Handle(TEvPrivate::TEvStorageConfigLoaded::TPtr ev);
 
         static TString CalculateFingerprint(const NKikimrBlobStorage::TStorageConfig& config);
+        static void UpdateFingerprint(NKikimrBlobStorage::TStorageConfig *config);
         static bool CheckFingerprint(const NKikimrBlobStorage::TStorageConfig& config);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -291,20 +292,16 @@ namespace NKikimr::NStorage {
         bool HasQuorum() const;
         void ProcessCollectConfigs(TEvGather::TCollectConfigs *res);
         void ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res);
-        bool EnrichBlobStorageConfig(NKikimrConfig::TBlobStorageConfig *bsConfig,
-            const NKikimrBlobStorage::TStorageConfig& config);
+
+        bool GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config);
+        void AllocateStaticGroup(NKikimrBlobStorage::TStorageConfig *config);
+        bool UpdateConfig(NKikimrBlobStorage::TStorageConfig *config);
 
         void PrepareScatterTask(ui64 cookie, TScatterTask& task);
 
         void PerformScatterTask(TScatterTask& task);
         void Perform(TEvGather::TCollectConfigs *response, const TEvScatter::TCollectConfigs& request, TScatterTask& task);
         void Perform(TEvGather::TProposeStorageConfig *response, const TEvScatter::TProposeStorageConfig& request, TScatterTask& task);
-        void Perform(TEvGather::TCommitStorageConfig *response, const TEvScatter::TCommitStorageConfig& request, TScatterTask& task);
-
-        THashMap<TString, ui32> MakePDiskMap(const NKikimrBlobStorage::TStorageConfig& config);
-
-        bool HasNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config, const THashSet<TNodeIdentifier> *among,
-            const THashSet<TNodeIdentifier>& successful) const;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Scatter/gather logic
@@ -343,5 +340,130 @@ namespace NKikimr::NStorage {
         STFUNC(StateWaitForInit);
         STFUNC(StateFunc);
     };
+
+    template<typename T>
+    void EnumerateConfigDrives(const NKikimrBlobStorage::TStorageConfig& config, ui32 nodeId, T&& callback,
+            THashMap<ui32, const NKikimrBlobStorage::TNodeIdentifier*> *nodeMap = nullptr) {
+        if (!config.HasBlobStorageConfig()) {
+            return;
+        }
+        const auto& bsConfig = config.GetBlobStorageConfig();
+
+        if (!bsConfig.HasAutoconfigSettings()) {
+            return;
+        }
+        const auto& autoconfigSettings = bsConfig.GetAutoconfigSettings();
+
+        if (!autoconfigSettings.HasDefineBox()) {
+            return;
+        }
+        const auto& defineBox = autoconfigSettings.GetDefineBox();
+
+        THashMap<ui64, const NKikimrBlobStorage::TDefineHostConfig*> defineHostConfigMap;
+        for (const auto& defineHostConfig : autoconfigSettings.GetDefineHostConfig()) {
+            defineHostConfigMap.emplace(defineHostConfig.GetHostConfigId(), &defineHostConfig);
+        }
+
+        THashMap<ui32, const NKikimrBlobStorage::TNodeIdentifier*> tempNodeMap;
+        if (!nodeMap) {
+            nodeMap = &tempNodeMap;
+        }
+        for (const auto& node : config.GetAllNodes()) {
+            if (nodeId && nodeId != node.GetNodeId()) {
+                continue;
+            }
+            nodeMap->emplace(node.GetNodeId(), &node);
+        }
+
+        for (const auto& host : defineBox.GetHost()) {
+            if (nodeId && nodeId != host.GetEnforcedNodeId()) {
+                continue;
+            }
+            if (const auto it = nodeMap->find(host.GetEnforcedNodeId()); it != nodeMap->end()) {
+                const auto& node = *it->second;
+                if (const auto it = defineHostConfigMap.find(host.GetHostConfigId()); it != defineHostConfigMap.end()) {
+                    const auto& hostConfig = *it->second;
+                    for (const auto& drive : hostConfig.GetDrive()) {
+                        callback(node, drive);
+                    }
+                }
+            }
+        }
+    }
+
+    template<typename T>
+    bool HasDiskQuorum(const NKikimrBlobStorage::TStorageConfig& config, T&& generateSuccessful) {
+        // generate set of all required drives
+        THashMap<TString, std::tuple<ui32, ui32>> status; // dc -> {ok, err}
+        THashMap<ui32, const NKikimrBlobStorage::TNodeIdentifier*> nodeMap;
+        THashSet<std::tuple<TNodeIdentifier, TString>> allDrives;
+        auto cb = [&status, &allDrives](const auto& node, const auto& drive) {
+            auto& [ok, err] = status[TNodeLocation(node.GetLocation()).GetDataCenterId()];
+            ++err;
+            allDrives.emplace(node, drive.GetPath());
+        };
+        EnumerateConfigDrives(config, 0, cb, &nodeMap);
+
+        // process responses
+        generateSuccessful([&](const TNodeIdentifier& node, const TString& path) {
+            const auto it = nodeMap.find(node.NodeId());
+            if (it == nodeMap.end() || TNodeIdentifier(*it->second) != node) { // unexpected node answers
+                return;
+            }
+            if (!allDrives.erase(std::make_tuple(node, path))) { // unexpected drive
+                return;
+            }
+            auto& [ok, err] = status[TNodeLocation(it->second->GetLocation()).GetDataCenterId()];
+            Y_VERIFY(err);
+            ++ok;
+            --err;
+        });
+
+        // calculate number of good and bad datacenters
+        ui32 ok = 0;
+        ui32 err = 0;
+        for (const auto& [_, value] : status) {
+            const auto [dcOk, dcErr] = value;
+            ++(dcOk > dcErr ? ok : err);
+        }
+
+        // strict datacenter majority
+        return ok > err;
+    }
+
+    template<typename T>
+    bool HasNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config, T&& generateSuccessful) {
+        // generate set of all nodes
+        THashMap<TString, std::tuple<ui32, ui32>> status; // dc -> {ok, err}
+        THashMap<ui32, const NKikimrBlobStorage::TNodeIdentifier*> nodeMap;
+        for (const auto& node : config.GetAllNodes()) {
+            auto& [ok, err] = status[TNodeLocation(node.GetLocation()).GetDataCenterId()];
+            ++err;
+            nodeMap.emplace(node.GetNodeId(), &node);
+        }
+
+        // process responses
+        generateSuccessful([&](const TNodeIdentifier& node) {
+            const auto it = nodeMap.find(node.NodeId());
+            if (it == nodeMap.end() || TNodeIdentifier(*it->second) != node) { // unexpected node answers
+                return;
+            }
+            auto& [ok, err] = status[TNodeLocation(it->second->GetLocation()).GetDataCenterId()];
+            Y_VERIFY(err);
+            ++ok;
+            --err;
+        });
+
+        // calculate number of good and bad datacenters
+        ui32 ok = 0;
+        ui32 err = 0;
+        for (const auto& [_, value] : status) {
+            const auto [dcOk, dcErr] = value;
+            ++(dcOk > dcErr ? ok : err);
+        }
+
+        // strict datacenter majority
+        return ok > err;
+    }
 
 } // NKikimr::NStorage

@@ -187,10 +187,7 @@ public:
         }
 
         // request cost counters
-        {
-            auto group = PoolGroup->GetSubgroup("subsystem", "cost");
-            DSProxyDiskCostCounter = group->GetCounter("DSProxyDiskCostNs", true);
-        }
+        DSProxyDiskCostCounter = PoolGroup->GetCounter("DSProxyDiskCostNs", true);
     }
 
 public:

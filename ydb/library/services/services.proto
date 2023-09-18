@@ -377,6 +377,9 @@ enum EServiceKikimr {
     OBJECTS_MONITORING = 2300;
 
     STATISTICS = 2400;
+
+    // Distributed storage debugging
+    BS_REQUEST_COST = 2500;
 };
 
 message TActivity {

@@ -1193,7 +1193,10 @@ namespace NKikimr {
                    VCtx->VDiskLogPrefix.data(), msgName, NKikimrBlobStorage::EVDiskInternalQueueId_Name(intQueueId).data(),
                    NKikimrBlobStorage::EVDiskQueueId_Name(extQueueId).data());
 
-            DskOutOfSpaceGroup.EstimatedDiskTimeConsumptionNs() += cost;
+            LOG_TRACE_S(TActivationContext::AsActorContext(), NKikimrServices::BS_REQUEST_COST,
+                        "SkeletonFront Request Type# " << TypeName(*ev) << " Cost# " << cost <<
+                        " Sender# " << ev->Sender.ToString());
+
             TExtQueueClass &extQueue = GetExtQueue(extQueueId);
             NBackpressure::TQueueClientId clientId(msgQoS);
             std::unique_ptr<IEventHandle> event = extQueue.Enqueue(ctx, std::unique_ptr<IEventHandle>(
@@ -1207,6 +1210,7 @@ namespace NKikimr {
                 // good, enqueue it in intQueue
                 intQueue.Enqueue(ctx, recByteSize, std::move(event), msgId, cost,
                         deadline, extQueueId, *this, clientId, std::move(trace));
+                DskOutOfSpaceGroup.EstimatedDiskTimeConsumptionNs() += cost;
             }
 
             Sanitize(ctx);

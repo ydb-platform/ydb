@@ -24,6 +24,7 @@ SRCS(
     incorrect_queries.cpp
     main.cpp
     mirror3of4.cpp
+    monitoring.cpp
     recovery.cpp
     sanitize_groups.cpp
     scrub_fast.cpp

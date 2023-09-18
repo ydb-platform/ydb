@@ -273,6 +273,8 @@ struct TEnvironmentSetup {
         if (printActorNamesAndEvents) {
             Runtime->SetOwnLogPriority(NActors::NLog::EPrio::Info);
         }
+
+        // Runtime->SetLogPriority(NKikimrServices::BS_REQUEST_COST, NLog::PRI_TRACE);
     }
 
     void SetupStaticStorage() {

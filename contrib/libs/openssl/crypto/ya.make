@@ -14,7 +14,7 @@ LICENSE(
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 # TODO(YMAKE-92) Move this information out of ya.make and allow per project configuration
-IF (OPENSOURCE_PROJECT == "CATBOOST")
+IF (OPENSOURCE_PROJECT == "catboost")
     OPENSOURCE_EXPORT_REPLACEMENT(
         CMAKE OpenSSL
         CMAKE_PACKAGE_COMPONENT Crypto
@@ -38,7 +38,7 @@ ADDINCL(
 )
 
 # TODO(YMAKE-92) Move this information out of ya.make and allow per project configuration
-IF (NOT EXPORT_CMAKE OR OPENSOURCE_PROJECT != "CATBOOST")
+IF (NOT EXPORT_CMAKE OR OPENSOURCE_PROJECT != "catboost")
 
 IF (OS_LINUX)
     IF (ARCH_ARM64)

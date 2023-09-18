@@ -5,6 +5,12 @@ option go_package = "github.com/ydb-platform/ydb/yt/go/proto/core/yson";
 
 import "google/protobuf/descriptor.proto";
 
+enum EEnumYsonStorageType
+{
+    EYST_STRING = 0;
+    EYST_INT = 1;
+}
+
 extend google.protobuf.FieldOptions
 {
     optional string field_name = 3000;
@@ -12,6 +18,7 @@ extend google.protobuf.FieldOptions
     optional bool yson_string = 3001;
     optional bool yson_map = 3002;
     optional bool required = 3004;
+    optional EEnumYsonStorageType enum_yson_storage_type = 3005;
 }
 
 extend google.protobuf.EnumValueOptions

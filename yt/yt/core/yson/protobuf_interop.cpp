@@ -344,6 +344,7 @@ public:
         , YsonMap_(descriptor->options().GetExtension(NYT::NYson::NProto::yson_map))
         , Required_(descriptor->options().GetExtension(NYT::NYson::NProto::required))
         , Converter_(registry->FindMessageBytesFieldConverter(descriptor->containing_type(), descriptor->index()))
+        , EnumYsonStorageType_(descriptor->options().GetExtension(NYT::NYson::NProto::enum_yson_storage_type))
     {
         if (YsonMap_ && !descriptor->is_map()) {
             THROW_ERROR_EXCEPTION("Field %v is not a map and cannot be annotated with \"yson_map\" option",
@@ -454,6 +455,11 @@ public:
         return Converter_;
     }
 
+    const NYT::NYson::NProto::EEnumYsonStorageType& GetEnumYsonStorageType() const
+    {
+        return EnumYsonStorageType_;
+    }
+
 private:
     const FieldDescriptor* const Underlying_;
     const TStringBuf YsonName_;
@@ -464,6 +470,7 @@ private:
     const bool YsonMap_;
     const bool Required_;
     const std::optional<TProtobufMessageBytesFieldConverter> Converter_;
+    const NYT::NYson::NProto::EEnumYsonStorageType EnumYsonStorageType_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -773,7 +780,7 @@ int ConvertToProtobufEnumValueUntyped(
         case NYTree::ENodeType::Int64:
         case NYTree::ENodeType::Uint64: {
             int value = NYTree::ConvertTo<int>(node);
-            THROW_ERROR_EXCEPTION_UNLESS(type->GetUnderlying()->FindValueByNumber(value),
+            THROW_ERROR_EXCEPTION_UNLESS(type->FindLiteralByValue(value),
                 "Unknown value %v of enum %Qv",
                 value,
                 type->GetUnderlying()->name());
@@ -2276,6 +2283,31 @@ private:
         int tag,
         WireFormatLite::WireType wireType)
     {
+        auto storeEnumAsInt = [this, field] (auto value) {
+            const auto* enumType = field->GetEnumType();
+            if (!enumType->FindLiteralByValue(value)) {
+                THROW_ERROR_EXCEPTION("Unknown value %v for field %v",
+                    value,
+                    YPathStack_.GetHumanReadablePath())
+                    << TErrorAttribute("ypath", YPathStack_.GetPath())
+                    << TErrorAttribute("proto_field", field->GetFullName());
+            }
+            Consumer_->OnInt64Scalar(value);
+        };
+        auto storeEnumAsString = [this, field] (auto value) {
+            auto signedValue = static_cast<int>(value);
+            const auto* enumType = field->GetEnumType();
+            auto literal = enumType->FindLiteralByValue(signedValue);
+            if (!literal) {
+                THROW_ERROR_EXCEPTION("Unknown value %v for field %v",
+                    signedValue,
+                    YPathStack_.GetHumanReadablePath())
+                    << TErrorAttribute("ypath", YPathStack_.GetPath())
+                    << TErrorAttribute("proto_field", field->GetFullName());
+            }
+            Consumer_->OnStringScalar(literal);
+        };
+
         switch (wireType) {
             case WireFormatLite::WIRETYPE_VARINT: {
                 ui64 unsignedValue;
@@ -2294,18 +2326,16 @@ private:
                         break;
 
                     case FieldDescriptor::TYPE_ENUM: {
-                        auto signedValue = static_cast<int>(unsignedValue);
-                        const auto* enumType = field->GetEnumType();
-                        auto literal = enumType->FindLiteralByValue(signedValue);
-                        if (!literal) {
-                            THROW_ERROR_EXCEPTION("Unknown value %v for field %v",
-                                signedValue,
-                                YPathStack_.GetHumanReadablePath())
-                                << TErrorAttribute("ypath", YPathStack_.GetPath())
-                                << TErrorAttribute("proto_field", field->GetFullName());
-                        }
                         ParseScalar([&] {
-                            Consumer_->OnStringScalar(literal);
+                            using NYT::NYson::NProto::EEnumYsonStorageType;
+                            switch(field->GetEnumYsonStorageType()) {
+                                case EEnumYsonStorageType::EYST_INT:
+                                    storeEnumAsInt(unsignedValue);
+                                    break;
+                                case EEnumYsonStorageType::EYST_STRING:
+                                    storeEnumAsString(unsignedValue);
+                                    break;
+                            }
                         });
                         break;
                     }
@@ -2542,7 +2572,17 @@ private:
                     }
 
                     case FieldDescriptor::TYPE_ENUM: {
-                        ParseVarintPacked<ui32>(length, field, [&] (auto value) {Consumer_->OnInt64Scalar(value);});
+                        ParseVarintPacked<ui32>(length, field, [&] (auto value) {
+                            using NYT::NYson::NProto::EEnumYsonStorageType;
+                            switch(field->GetEnumYsonStorageType()) {
+                                case EEnumYsonStorageType::EYST_INT:
+                                    storeEnumAsInt(value);
+                                    break;
+                                case EEnumYsonStorageType::EYST_STRING:
+                                    storeEnumAsString(value);
+                                    break;
+                            }
+                        });
                         break;
                     }
 

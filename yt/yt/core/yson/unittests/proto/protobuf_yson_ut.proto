@@ -162,6 +162,21 @@ message TPackedRepeatedMessage
     repeated fixed64 fixed64_rep = 8 [packed = true];
     repeated sfixed32 sfixed32_rep = 9 [packed = true];
     repeated sfixed64 sfixed64_rep = 10 [packed = true];
-    repeated EEnum enum_rep = 11 [packed = true];
-    
+    repeated EEnum enum_rep = 11 [packed = true, (NYT.NYson.NProto.enum_yson_storage_type) = EYST_INT];
+}
+
+message TMessageWithEnums
+{
+    enum EEnum {
+        VALUE0 = 0;
+        VALUE1 = 1;
+    };
+
+    optional EEnum enum_int = 1                   [(NYT.NYson.NProto.enum_yson_storage_type) = EYST_INT];
+    repeated EEnum enum_rep_not_packed_int = 2    [(NYT.NYson.NProto.enum_yson_storage_type) = EYST_INT, packed = false];
+    repeated EEnum enum_rep_packed_int = 3        [(NYT.NYson.NProto.enum_yson_storage_type) = EYST_INT, packed = true];
+
+    optional EEnum enum_string = 4                [(NYT.NYson.NProto.enum_yson_storage_type) = EYST_STRING];
+    repeated EEnum enum_rep_not_packed_string = 5 [(NYT.NYson.NProto.enum_yson_storage_type) = EYST_STRING, packed = false];
+    repeated EEnum enum_rep_packed_string = 6     [(NYT.NYson.NProto.enum_yson_storage_type) = EYST_STRING, packed = true];
 }

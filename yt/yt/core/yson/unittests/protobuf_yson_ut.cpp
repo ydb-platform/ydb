@@ -16,6 +16,8 @@
 #include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 
+#include <google/protobuf/util/message_differencer.h>
+
 #include <google/protobuf/wire_format.h>
 
 namespace NYT {
@@ -2613,6 +2615,78 @@ TEST(TPackedRepeatedProtobufTest, TestSerializeDeserialize)
 
         EXPECT_TRUE(AreNodesEqual(ConvertToNode(TYsonString(newYsonString)), node));
     }
+}
+
+TEST(TEnumYsonStorageTypeTest, TestDeserializeSerialize)
+{
+    NProto::TMessageWithEnums message;
+    {
+        auto zero = NProto::TMessageWithEnums_EEnum::TMessageWithEnums_EEnum_VALUE0;
+        auto one = NProto::TMessageWithEnums_EEnum::TMessageWithEnums_EEnum_VALUE1;
+
+        message.set_enum_int(zero);
+        message.add_enum_rep_not_packed_int(zero);
+        message.add_enum_rep_not_packed_int(one);
+        message.add_enum_rep_packed_int(zero);
+        message.add_enum_rep_packed_int(one);
+
+        message.set_enum_string(one);
+        message.add_enum_rep_not_packed_string(one);
+        message.add_enum_rep_not_packed_string(zero);
+        message.add_enum_rep_packed_string(one);
+        message.add_enum_rep_packed_string(zero);
+    }
+
+    // Proto message to yson.
+    TString stringWithYson;
+    {
+        TString protobufString;
+        Y_UNUSED(message.SerializeToString(&protobufString));
+        TStringOutput ysonOutputStream(stringWithYson);
+        TYsonWriter ysonWriter(&ysonOutputStream, EYsonFormat::Pretty);
+        ArrayInputStream protobufInput(protobufString.data(), protobufString.length());
+
+        EXPECT_NO_THROW(ParseProtobuf(&ysonWriter, &protobufInput, ReflectProtobufMessageType<NProto::TMessageWithEnums>()));
+    }
+
+    // Check enum representation in yson.
+    auto resultedNode = ConvertToNode(TYsonString(stringWithYson));
+    {
+        auto expectedNode = BuildYsonNodeFluently()
+            .BeginMap()
+                .Item("enum_int").Value(0)
+                .Item("enum_rep_not_packed_int").BeginList()
+                    .Item().Value(0)
+                    .Item().Value(1)
+                .EndList()
+                .Item("enum_rep_packed_int").BeginList()
+                    .Item().Value(0)
+                    .Item().Value(1)
+                .EndList()
+                .Item("enum_string").Value("VALUE1")
+                .Item("enum_rep_not_packed_string").BeginList()
+                    .Item().Value("VALUE1")
+                    .Item().Value("VALUE0")
+                .EndList()
+                .Item("enum_rep_packed_string").BeginList()
+                    .Item().Value("VALUE1")
+                    .Item().Value("VALUE0")
+                .EndList()
+            .EndMap();
+
+        EXPECT_TRUE(AreNodesEqual(resultedNode, expectedNode));
+    }
+
+    // Yson to proto message.
+    NProto::TMessageWithEnums resultedMessage;
+    DeserializeProtobufMessage(
+        resultedMessage,
+        ReflectProtobufMessageType<NProto::TMessageWithEnums>(),
+        resultedNode,
+        TProtobufWriterOptions{});
+
+    // Check that original message is equal to its deserialized + serialized version
+    EXPECT_TRUE(google::protobuf::util::MessageDifferencer::Equals(message, resultedMessage));
 }
 
 } // namespace

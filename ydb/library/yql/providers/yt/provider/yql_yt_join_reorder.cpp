@@ -3,6 +3,7 @@
 
 #include <ydb/library/yql/parser/pg_wrapper/interface/optimizer.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <ydb/library/yql/utils/log/log.h>
 
 namespace NYql {
 
@@ -104,11 +105,9 @@ public:
 
         std::function<void(const TString& str)> log;
 
-        if (Debug) {
-            log = [](const TString& str) {
-                Cerr << str << "\n";
-            };
-        }
+        log = [](const TString& str) {
+            YQL_CLOG(INFO, ProviderYt) << str;
+        };
 
         std::unique_ptr<IOptimizer> opt = std::unique_ptr<IOptimizer>(MakePgOptimizer(input, log));
 

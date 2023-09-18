@@ -17,11 +17,12 @@ namespace {
     enum TPageIdFlags {
         IfIter = 1,
         IfFail = 2,
-        IfNoFail = 4
+        IfNoFail = 4,
+        IfSticky = 8
     };
     struct TFlaggedPageId {
         TPageId Page;
-        TPageIdFlags Flags = static_cast<TPageIdFlags>(TPageIdFlags::IfIter | TPageIdFlags::IfFail | TPageIdFlags::IfNoFail);
+        TPageIdFlags Flags = static_cast<TPageIdFlags>(TPageIdFlags::IfIter | TPageIdFlags::IfFail | TPageIdFlags::IfNoFail | TPageIdFlags::IfSticky);
 
         TFlaggedPageId(TPageId page)
             : Page(page) {}
@@ -46,21 +47,27 @@ namespace {
     }
 
     struct TTouchEnv : public NTest::TTestEnv {
-        TTouchEnv(bool fail) : Fail(fail) { }
+        TTouchEnv(bool fail, TSet<std::pair<TGroupId, TPageId>> sticky) 
+            : Fail(fail)
+            , Sticky(std::move(sticky))
+            { }
 
         const TSharedData* TryGetPage(const TPart *part, TPageId id, TGroupId groupId) override
         {
-            if (part->IndexPages.Has(groupId, id)) {
-                // TODO: delete after index precharge
+            Touched[groupId].insert(id);
+            
+            if (!Fail || Sticky.contains({groupId, id})) {
                 return NTest::TTestEnv::TryGetPage(part, id, groupId);
             }
-            
-            Touched[groupId].insert(id);
-            return Fail ? nullptr : NTest::TTestEnv::TryGetPage(part, id, groupId);
+
+            ToLoad[groupId].insert(id);
+            return nullptr;
         }
 
         const bool Fail = false;
+        TSet<std::pair<TGroupId, TPageId>> Sticky;
         TMap<TGroupId, TSet<TPageId>> Touched;
+        TMap<TGroupId, TSet<TPageId>> ToLoad;
     };
 
     struct TCooker {
@@ -141,29 +148,39 @@ namespace {
 
         void CheckByKeys(ui32 lower, ui32 upper, ui64 items, const TMap<TGroupId, TArr>& shouldPrecharge) const
         {
-            CheckPrechargeByKeys(lower, upper, items, false, shouldPrecharge, false);
-            CheckPrechargeByKeys(lower, upper, items, true, shouldPrecharge, false);
+            CheckPrechargeByKeys(lower, upper, items, TPageIdFlags::IfNoFail, shouldPrecharge, false, GetIndexPages());
+            CheckPrechargeByKeys(lower, upper, items, TPageIdFlags::IfFail, shouldPrecharge, false, GetIndexPages());
             CheckIterByKeys(lower, upper, items ? items : Max<ui32>(), shouldPrecharge);
         }
 
         void CheckByKeysReverse(ui32 lower, ui32 upper, ui64 items, const TMap<TGroupId, TArr>& shouldPrecharge) const
         {
-            CheckPrechargeByKeys(lower, upper, items, false, shouldPrecharge, true);
-            CheckPrechargeByKeys(lower, upper, items, true, shouldPrecharge, true);
+            CheckPrechargeByKeys(lower, upper, items, TPageIdFlags::IfNoFail, shouldPrecharge, true, GetIndexPages());
+            CheckPrechargeByKeys(lower, upper, items, TPageIdFlags::IfFail, shouldPrecharge, true, GetIndexPages());
             CheckIterByKeysReverse(lower, upper, items ? items : Max<ui32>(), shouldPrecharge);
         }
 
-        void CheckByRows(TPageId row1, TPageId row2, ui64 items, TMap<TGroupId, TArr> shouldPrecharge) const
+        void CheckByRows(TPageId row1, TPageId row2, ui64 items, const TMap<TGroupId, TArr>& shouldPrecharge) const
         {
             CheckPrechargeByRows(row1, row2, items, false, shouldPrecharge);
             CheckPrechargeByRows(row1, row2, items, true, shouldPrecharge);
         }
 
-        void CheckPrechargeByKeys(ui32 lower, ui32 upper, ui64 items, bool fail, const TMap<TGroupId, TArr>& shouldPrecharge, bool reverse) const
+        void CheckIndex(ui32 lower, ui32 upper, ui64 items, const TMap<TGroupId, TArr>& shouldPrecharge, TSet<TPageId> stickyIndex) const {
+            TSet<std::pair<TGroupId, TPageId>> sticky;
+            for (auto x : stickyIndex) {
+                sticky.insert({TGroupId{}, x});
+            }
+
+            CheckPrechargeByKeys(lower, upper, items, static_cast<TPageIdFlags>(TPageIdFlags::IfFail | TPageIdFlags::IfSticky), shouldPrecharge, false, sticky);
+        }
+
+        void CheckPrechargeByKeys(ui32 lower, ui32 upper, ui64 items, TPageIdFlags flags, const TMap<TGroupId, TArr>& shouldPrecharge, bool reverse, TSet<std::pair<TGroupId, TPageId>> sticky) const
         {
             Y_VERIFY(lower < Mass.Saved.Size() && upper < Mass.Saved.Size());
 
-            TTouchEnv env(fail);
+            bool fail(flags & TPageIdFlags::IfFail);
+            TTouchEnv env(fail, sticky);
 
             const auto &keyDefaults = *Tool.Scheme.Keys;
             const auto from = Tool.KeyCells(Mass.Saved[lower]);
@@ -184,16 +201,17 @@ namespace {
                 ? TCharge::Range(&env, from, to, run, keyDefaults, tags, items, Max<ui64>(), true)
                 : TCharge::RangeReverse(&env, from, to, run, keyDefaults, tags, items, Max<ui64>(), true);
 
-            UNIT_ASSERT_VALUES_EQUAL_C(!fail || env.Touched.empty(), ready, AssertMesage(fail));
+            UNIT_ASSERT_VALUES_EQUAL_C(!fail || env.ToLoad.empty(), ready, AssertMesage(fail));
 
-            AssertEqual(env.Touched, shouldPrecharge, fail ? TPageIdFlags::IfFail : TPageIdFlags::IfNoFail);
+            CheckPrecharged(env.Touched, shouldPrecharge, sticky, flags);
         }
 
         void CheckPrechargeByRows(TPageId row1, TPageId row2, ui64 items, bool fail, TMap<TGroupId, TArr> shouldPrecharge) const
         {
             Y_VERIFY(row1 <= row2 && row2 < 3 * 9);
 
-            TTouchEnv env(fail);
+            auto sticky = GetIndexPages();
+            TTouchEnv env(fail, sticky);
 
             const auto &keyDefaults = *Tool.Scheme.Keys;
             
@@ -213,14 +231,15 @@ namespace {
                 TCharge(&env, *run.begin()->Part, tags, false).Do(row1, row2, keyDefaults, items, Max<ui64>()),
                 AssertMesage(fail));
 
-            AssertEqual(env.Touched, shouldPrecharge, fail ? TPageIdFlags::IfFail : TPageIdFlags::IfNoFail);
+            CheckPrecharged(env.Touched, shouldPrecharge, sticky, fail ? TPageIdFlags::IfFail : TPageIdFlags::IfNoFail);
         }
 
         void CheckIterByKeys(ui32 lower, ui32 upper, ui64 items, const TMap<TGroupId, TArr>& precharged) const
         {
             Y_VERIFY(lower < Mass.Saved.Size() && upper < Mass.Saved.Size());
 
-            NTest::TCheckIt wrap(Eggs, { new TTouchEnv(false) });
+            auto sticky = GetIndexPages();
+            NTest::TCheckIt wrap(Eggs, { new TTouchEnv(false, sticky) });
 
             wrap.To(CurrentStep());
             wrap.StopAfter(Tool.KeyCells(Mass.Saved[upper]));
@@ -248,14 +267,15 @@ namespace {
 
             auto env = wrap.Displace<TTouchEnv>(nullptr);
 
-            AssertEqual(env->Touched, precharged, TPageIdFlags::IfIter);
+            CheckPrecharged(env->Touched, precharged, sticky, TPageIdFlags::IfIter);
         }
 
         void CheckIterByKeysReverse(ui32 lower, ui32 upper, ui64 items, const TMap<TGroupId, TArr>& precharged) const
         {
             Y_VERIFY(lower < Mass.Saved.Size() && upper < Mass.Saved.Size());
 
-            NTest::TCheckReverseIt wrap(Eggs, { new TTouchEnv(false) });
+            auto sticky = GetIndexPages();
+            NTest::TCheckReverseIt wrap(Eggs, { new TTouchEnv(false, sticky) });
 
             wrap.To(CurrentStep());
             wrap.StopAfter(Tool.KeyCells(Mass.Saved[upper]));
@@ -283,7 +303,7 @@ namespace {
 
             auto env = wrap.Displace<TTouchEnv>(nullptr);
 
-            AssertEqual(env->Touched, precharged, TPageIdFlags::IfIter);
+            CheckPrecharged(env->Touched, precharged, sticky, TPageIdFlags::IfIter);
         }
 
         const NTest::TMass Mass;
@@ -291,7 +311,23 @@ namespace {
         const NTest::TRowTool Tool;
 
     private:
-        void AssertEqual(const TMap<TGroupId, TSet<TPageId>>& actual, const TMap<TGroupId, TArr>& expected, TPageIdFlags flags) const {
+        TSet<std::pair<TGroupId, TPageId>> GetIndexPages() const {
+            TSet<std::pair<TGroupId, TPageId>> result;
+
+            auto &pages = Eggs.Lone()->IndexPages;
+            TGroupId mainGroupId{};
+            
+            for (auto x : pages.Groups) {
+                result.insert({mainGroupId, x});
+            }
+            for (auto x : pages.Historic) {
+                result.insert({mainGroupId, x});
+            }
+
+            return result;
+        }
+
+        void CheckPrecharged(const TMap<TGroupId, TSet<TPageId>>& actual, const TMap<TGroupId, TArr>& expected, TSet<std::pair<TGroupId, TPageId>> sticky, TPageIdFlags flags) const {
             for (auto [groupId, arr] : expected) {
                 if (groupId.IsHistoric() && flags == TPageIdFlags::IfIter) {
                     // isn't supported
@@ -304,11 +340,17 @@ namespace {
                     absoluteId[absoluteId.size()] = it->GetPageId();
                 }
 
-                auto actualValue = actual.Value(groupId, TSet<TPageId>());
+                TSet<TPageId> actualValue;
+                for (auto p : actual.Value(groupId, TSet<TPageId>())) {
+                    if (flags & TPageIdFlags::IfSticky || !sticky.contains({groupId, p})) {
+                        actualValue.insert(p);
+                    }
+                }
+
                 auto expectedValue = TSet<TPageId>{};
                 for (auto p  : arr) {
                     if (flags & p.Flags) {
-                        expectedValue.insert(absoluteId[p.Page]);
+                        expectedValue.insert(absoluteId.Value(p.Page, p.Page));
                     }
                 }
                 UNIT_ASSERT_VALUES_EQUAL_C(expectedValue, actualValue, AssertMesage(groupId, flags));
@@ -918,6 +960,191 @@ Y_UNIT_TEST_SUITE(Charge) {
         me.To(201).CheckByKeys(29, 34, 0, TMap<TGroupId, TArr>{
             {TGroupId{2, true}, {21_g, 22_g, 23_g, 24_g, 25_g}}
         });
+    }
+
+    Y_UNIT_TEST(ByKeysIndex)
+    {
+        { // index
+            TModel me(false, false);
+            auto &pages = me.Eggs.Lone()->IndexPages;
+
+            // no index => touch index
+            me.To(100).CheckIndex(6, 22, 0, TMap<TGroupId, TArr>{
+                {TGroupId{0}, {pages.Groups[0]}},
+            }, TSet<TPageId> {
+
+            });
+
+            // index => touch pages + index
+            me.To(101).CheckIndex(6, 22, 0, TMap<TGroupId, TArr>{
+                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.Groups[0]}}
+            },
+            TSet<TPageId> {
+                pages.Groups[0]
+            });
+        }
+
+        { // index + history index
+            TModel me(false, true);
+            auto &pages = me.Eggs.Lone()->IndexPages;
+
+            // no index => touch index
+            me.To(200).CheckIndex(6, 22, 0, TMap<TGroupId, TArr>{
+                {TGroupId{0}, {pages.Groups[0]}},
+                {TGroupId{0, true}, {}}
+            }, TSet<TPageId> {
+
+            });
+
+            // no history index => touch main pages + index + history index
+            me.To(201).CheckIndex(6, 22, 0, TMap<TGroupId, TArr>{
+                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.Groups[0], pages.Historic[0]}},
+                {TGroupId{0, true}, {}}
+            },
+            TSet<TPageId> {
+                pages.Groups[0]
+            });
+
+            // history index => touch main pages + history pages + index + history index
+            me.To(202).CheckIndex(6, 22, 0, TMap<TGroupId, TArr>{
+                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.Groups[0], pages.Historic[0]}},
+                {TGroupId{0, true}, {1, 2, 3, 4}}
+            },
+            TSet<TPageId> {
+                pages.Groups[0], pages.Historic[0]
+            });
+        }
+        
+        { // index + groups
+            TModel me(true, false);
+            auto &pages = me.Eggs.Lone()->IndexPages;
+
+            // no index => touch index
+            me.To(300).CheckIndex(6, 22, 0, TMap<TGroupId, TArr>{
+                {TGroupId{0}, {pages.Groups[0]}},
+                {TGroupId{1}, {}}
+            }, TSet<TPageId> {
+
+            });
+
+            // no groups index => touch main pages + index + all groups indexes
+            me.To(301).CheckIndex(6, 22, 0, TMap<TGroupId, TArr>{
+                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.Groups[0], pages.Groups[1], pages.Groups[2], pages.Groups[3]}},
+                {TGroupId{1}, {}}
+            },
+            TSet<TPageId> {
+                pages.Groups[0]
+            });
+
+            // groups index => touch all pages + index + all groups indexes
+            me.To(302).CheckIndex(6, 22, 0, TMap<TGroupId, TArr>{
+                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.Groups[0], pages.Groups[1], pages.Groups[2], pages.Groups[3]}},
+                {TGroupId{1}, {3, 4, 5, 6, 7}}
+            },
+            TSet<TPageId> {
+                pages.Groups[0], pages.Groups[1]
+            });
+        }
+
+        { // index + groups + history
+            TModel me(true, true);
+            auto &pages = me.Eggs.Lone()->IndexPages;
+
+            // no index => touch index
+            me.To(400).CheckIndex(6, 22, 0, TMap<TGroupId, TArr>{
+                {TGroupId{0}, {pages.Groups[0]}},
+                {TGroupId{0, true}, {}},
+                {TGroupId{1}, {}},
+                {TGroupId{1, true}, {}},
+                {TGroupId{2}, {}},
+                {TGroupId{2, true}, {}}
+            }, TSet<TPageId> {
+
+            });
+
+            // only index => touch main pages + index + all groups indexes + history index
+            me.To(401).CheckIndex(6, 22, 0, TMap<TGroupId, TArr>{
+                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.Groups[0], pages.Historic[0], pages.Groups[1], pages.Groups[2], pages.Groups[3]}},
+                {TGroupId{0, true}, {}},
+                {TGroupId{1}, {}},
+                {TGroupId{1, true}, {}},
+                {TGroupId{2}, {}},
+                {TGroupId{2, true}, {}}
+            },
+            TSet<TPageId> {
+                pages.Groups[0]
+            });
+
+            // history index => touch main pages + index + all groups indexes + main history pages
+            me.To(402).CheckIndex(6, 22, 0, TMap<TGroupId, TArr>{
+                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.Groups[0], 
+                    pages.Historic[0], pages.Historic[1], pages.Historic[2], pages.Historic[3], pages.Groups[1], pages.Groups[2], pages.Groups[3]}},
+                {TGroupId{0, true}, {1, 2, 3, 4}},
+                {TGroupId{1}, {}},
+                {TGroupId{1, true}, {}},
+                {TGroupId{2}, {}},
+                {TGroupId{2, true}, {}}
+            },
+            TSet<TPageId> {
+                pages.Groups[0], pages.Historic[0]
+            });
+
+            // main history and history => touch main pages + index + all groups indexes + history pages + history groups pages
+            me.To(403).CheckIndex(6, 22, 0, TMap<TGroupId, TArr>{
+                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.Groups[0], 
+                    pages.Historic[0], pages.Historic[1], pages.Historic[2], pages.Historic[3], pages.Groups[1], pages.Groups[2], pages.Groups[3]}},
+                {TGroupId{0, true}, {1, 2, 3, 4}},
+                {TGroupId{1}, {}},
+                {TGroupId{1, true}, {3, 4, 5}},
+                {TGroupId{2}, {}},
+                {TGroupId{2, true}, {}}
+            },
+            TSet<TPageId> {
+                pages.Groups[0], pages.Historic[0], pages.Historic[1] 
+            });
+
+            // groups index => touch main pages + index + history index + all groups indexes + groups pages
+            me.To(404).CheckIndex(6, 22, 0, TMap<TGroupId, TArr>{
+                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.Groups[0], 
+                    pages.Historic[0], pages.Groups[1], pages.Groups[2], pages.Groups[3]}},
+                {TGroupId{0, true}, {}},
+                {TGroupId{1}, {3, 4, 5, 6, 7}},
+                {TGroupId{1, true}, {}},
+                {TGroupId{2}, {}},
+                {TGroupId{2, true}, {}}
+            },
+            TSet<TPageId> {
+                pages.Groups[0], pages.Groups[1]
+            });
+
+            // main history and groups => touch main pages + index + all groups indexes + groups pages + history main pages
+            me.To(405).CheckIndex(6, 22, 0, TMap<TGroupId, TArr>{
+                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.Groups[0], 
+                    pages.Historic[0], pages.Historic[1], pages.Historic[2], pages.Historic[3], pages.Groups[1], pages.Groups[2], pages.Groups[3]}},
+                {TGroupId{0, true}, {1, 2, 3, 4}},
+                {TGroupId{1}, {3, 4, 5, 6, 7}},
+                {TGroupId{1, true}, {}},
+                {TGroupId{2}, {}},
+                {TGroupId{2, true}, {}}
+            },
+            TSet<TPageId> {
+                pages.Groups[0], pages.Historic[0], pages.Groups[1]
+            });
+
+            // all indexes
+            me.To(406).CheckIndex(6, 22, 0, TMap<TGroupId, TArr>{
+                {TGroupId{0}, {1, 2, 3, 4, 5, 6, pages.Groups[0], 
+                    pages.Historic[0], pages.Historic[1], pages.Historic[2], pages.Historic[3], pages.Groups[1], pages.Groups[2], pages.Groups[3]}},
+                {TGroupId{0, true}, {1, 2, 3, 4}},
+                {TGroupId{1}, {3, 4, 5, 6, 7}},
+                {TGroupId{1, true}, {3, 4, 5}},
+                {TGroupId{2}, {}},
+                {TGroupId{2, true}, {}}
+            },
+            TSet<TPageId> {
+                pages.Groups[0], pages.Historic[0], pages.Historic[1], pages.Groups[1]
+            });
+        }
     }
 
     Y_UNIT_TEST(ByRows)

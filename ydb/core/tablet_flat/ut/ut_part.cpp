@@ -59,11 +59,6 @@ namespace {
     struct TTouchEnv : public NTest::TTestEnv {
         const TSharedData* TryGetPage(const TPart *part, TPageId id, TGroupId groupId) override
         {
-            if (part->IndexPages.Has(groupId, id)) {
-                // TODO: delete after index precharge
-                return NTest::TTestEnv::TryGetPage(part, id, groupId);
-            }
-
             if (PrechargePhase) {
                 Precharged[groupId].insert(id);
                 return NTest::TTestEnv::TryGetPage(part, id, groupId);

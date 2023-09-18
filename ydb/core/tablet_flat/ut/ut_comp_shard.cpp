@@ -43,11 +43,6 @@ namespace {
             
             info.Touched.insert(token);
 
-            if (part->IndexPages.Has(groupId, ref)) {
-                // TODO: delete after index precharge
-                return NTest::TTestEnv::TryGetPage(part, ref, groupId);
-            }
-
             if (info.Loaded.contains(token)) {
                 return TTestEnv::TryGetPage(part, ref, groupId);
             }
@@ -286,12 +281,18 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
                             TSimpleConsumer consumer;
                             TSliceSplitOp op(&consumer, &table, pshards, partView.Part, slice);
 
+                            // load index
                             bool ok1 = op.Execute(&env);
                             UNIT_ASSERT_VALUES_EQUAL(ok1, false);
-
                             env.Load();
+
+                            // load data
                             bool ok2 = op.Execute(&env);
-                            UNIT_ASSERT_VALUES_EQUAL(ok2, true);
+                            UNIT_ASSERT_VALUES_EQUAL(ok2, false);
+                            env.Load();
+
+                            bool ok3 = op.Execute(&env);
+                            UNIT_ASSERT_VALUES_EQUAL(ok3, true);
 
                             auto& result = consumer.Result.value();
                             size_t pos = 0;
@@ -370,12 +371,18 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
         TSimpleConsumer consumer;
         TSliceSplitOp op(&consumer, &table, pshards, partView.Part, slice);
 
+        // load index
         bool ok1 = op.Execute(&env);
         UNIT_ASSERT_VALUES_EQUAL(ok1, false);
-
         env.Load();
+
+        // load data
         bool ok2 = op.Execute(&env);
-        UNIT_ASSERT_VALUES_EQUAL(ok2, true);
+        UNIT_ASSERT_VALUES_EQUAL(ok2, false);
+        env.Load();
+
+        bool ok3 = op.Execute(&env);
+        UNIT_ASSERT_VALUES_EQUAL(ok3, true);
 
         auto& result = consumer.Result.value();
         UNIT_ASSERT_VALUES_EQUAL(result.NewSlices.size(), 2u);
@@ -436,12 +443,18 @@ Y_UNIT_TEST_SUITE(TShardedCompaction) {
         TSimpleConsumer consumer;
         TSliceSplitOp op(&consumer, &table, pshards, partView.Part, slice);
 
+        // load index
         bool ok1 = op.Execute(&env);
         UNIT_ASSERT_VALUES_EQUAL(ok1, false);
-
         env.Load();
+
+        // load data
         bool ok2 = op.Execute(&env);
-        UNIT_ASSERT_VALUES_EQUAL(ok2, true);
+        UNIT_ASSERT_VALUES_EQUAL(ok2, false);
+        env.Load();
+
+        bool ok3 = op.Execute(&env);
+        UNIT_ASSERT_VALUES_EQUAL(ok3, true);
 
         auto& result = consumer.Result.value();
         UNIT_ASSERT_VALUES_EQUAL(result.NewSlices.size(), 2u);
@@ -1239,11 +1252,16 @@ Y_UNIT_TEST_SUITE(TShardedCompactionScenarios) {
         UNIT_ASSERT_VALUES_EQUAL(backend.PendingReads.size(), 2u);
         while (backend.PendingReads) {
             TStrictEnv env;
+            // load index
             auto first = backend.RunRead(&env);
             UNIT_ASSERT(!first.Completed);
             env.Load();
-            auto second = backend.RunRead(first.ReadId, &env);
-            UNIT_ASSERT(second.Completed);
+            // load data
+            auto second = backend.RunRead(&env);
+            UNIT_ASSERT(!second.Completed);
+            env.Load();
+            auto third = backend.RunRead(first.ReadId, &env);
+            UNIT_ASSERT(third.Completed);
         }
 
         UNIT_ASSERT(backend.CheckChangesFlag());

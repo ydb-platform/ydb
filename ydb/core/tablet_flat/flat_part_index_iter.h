@@ -67,6 +67,7 @@ public:
             return EReady::Page;
         }
         if (Iter.Off() == 0) {
+            Iter = { };
             return EReady::Gone;
         }
         Iter--;
@@ -75,6 +76,11 @@ public:
 
     bool IsValid() {
         return bool(Iter);
+    }
+
+    // for precharge only
+    TIndex* TryLoadRaw() {
+        return TryGetIndex();
     }
 
 public:
@@ -91,7 +97,7 @@ public:
         Y_VERIFY(Index);
         return Iter->GetRowId();
     }
-    
+
     TRowId GetNextRowId() {
         Y_VERIFY(Index);
         auto next = Iter + 1;

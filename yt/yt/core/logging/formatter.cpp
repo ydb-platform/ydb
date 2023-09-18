@@ -187,14 +187,14 @@ i64 TStructuredLogFormatter::WriteFormatted(IOutputStream* stream, const TLogEve
             .Item("category").Value(event.Category->Name)
             .DoIf(event.Family == ELogFamily::PlainText, [&] (auto fluent) {
                 if (event.FiberId != TFiberId()) {
-                    fluent.Item("fiberId").Value(Format("%x", event.FiberId));
+                    fluent.Item("fiber_id").Value(Format("%x", event.FiberId));
                 }
                 if (event.TraceId != TTraceId()) {
-                    fluent.Item("traceId").Value(event.TraceId);
+                    fluent.Item("trace_id").Value(event.TraceId);
                 }
                 if (EnableSourceLocation_ && event.SourceFile) {
                     auto sourceFile = event.SourceFile;
-                    fluent.Item("sourceFile").Value(Format("%v:%v", sourceFile.RNextTok(LOCSLASH_C), event.SourceLine));
+                    fluent.Item("source_file").Value(Format("%v:%v", sourceFile.RNextTok(LOCSLASH_C), event.SourceLine));
                 }
             })
         .EndMap();

@@ -539,13 +539,13 @@ TEST_F(TLoggingTest, PlainTextLoggingStructuredFormatter)
             EXPECT_EQ(message->GetChildOrThrow("message")->AsString()->GetValue(), "test_message");
             EXPECT_EQ(message->GetChildOrThrow("level")->AsString()->GetValue(), "debug");
             EXPECT_EQ(message->GetChildOrThrow("category")->AsString()->GetValue(), Logger.GetCategory()->Name);
-            EXPECT_EQ(message->GetChildOrThrow("fiberId")->AsString()->GetValue(), "1f");
-            EXPECT_EQ(message->GetChildOrThrow("traceId")->AsString()->GetValue(), "4-3-2-1");
+            EXPECT_EQ(message->GetChildOrThrow("fiber_id")->AsString()->GetValue(), "1f");
+            EXPECT_EQ(message->GetChildOrThrow("trace_id")->AsString()->GetValue(), "4-3-2-1");
 
             if (enableSourceLocation) {
-                EXPECT_EQ(message->GetChildOrThrow("sourceFile")->AsString()->GetValue(), "b.cpp:123");
+                EXPECT_EQ(message->GetChildOrThrow("source_file")->AsString()->GetValue(), "b.cpp:123");
             } else {
-                EXPECT_EQ(message->FindChild("sourceFile"), nullptr);
+                EXPECT_EQ(message->FindChild("source_file"), nullptr);
             }
         }
     }
@@ -589,8 +589,8 @@ TEST_F(TLoggingTest, StructuredLogging)
         EXPECT_EQ(message->GetChildOrThrow("level")->AsString()->GetValue(), "debug");
         EXPECT_EQ(message->GetChildOrThrow("category")->AsString()->GetValue(), Logger.GetCategory()->Name);
 
-        EXPECT_EQ(message->FindChild("fiberId"), nullptr);
-        EXPECT_EQ(message->FindChild("traceId"), nullptr);
+        EXPECT_EQ(message->FindChild("fiber_id"), nullptr);
+        EXPECT_EQ(message->FindChild("trace_id"), nullptr);
     }
 }
 

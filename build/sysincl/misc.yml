@@ -32,27 +32,12 @@
   includes:
   - Python.h:        contrib/libs/python/Include/Python.h
 
-# libunistring, libidn and libidn2
-# have its own libc header wrappers that are added to ADDINCL
-# and need to be added here for consistensy between ADDINCL and sysincl resolving.
-# Btw: we don't parse include_next, so we might lose real dependency to musl,
-# but sysincl resolving will save us here, as it will resolve to both of them.
-- source_filter: "^contrib/libs/libunistring"
-  includes:
-    - alloca.h:      contrib/libs/libunistring/alloca.h
-    - langinfo.h:    contrib/libs/libunistring/langinfo.h
-    - minmax.h:      contrib/libs/libunistring/minmax.h
-
+# libidn uses gnulib, allow overriding libc includes
 - source_filter: "^contrib/libs/libidn/"
   includes:
     - alloca.h:     contrib/libs/libidn/gl/alloca.h
     - error.h:      contrib/libs/libidn/gl/error.h
     - iconv.h:      contrib/libs/libidn/lib/gl/iconv.h
-
-- source_filter: "^contrib/libs/libidn2/"
-  includes:
-    - alloca.h:     contrib/libs/libidn2/gl/alloca.h
-    - error.h:      contrib/libs/libidn2/gl/error.h
 
 # Same as libunistring - lftp has own libc header wrappers/replacements.
 # However here we have GLOBAL ADDINCL to contrib/libs/lftp{,/trio,/lib}

@@ -392,6 +392,7 @@ public:
 
     const TPartOfConstraintNode* ExtractField(TExprContext& ctx, const std::string_view& field) const;
     const TPartOfConstraintNode* CompleteOnly(TExprContext& ctx) const;
+    const TPartOfConstraintNode* RemoveOriginal(TExprContext& ctx, const TMainConstraint* original) const;
 
     static const TPartOfConstraintNode* MakeCommon(const std::vector<const TConstraintSet*>& constraints, TExprContext& ctx);
 

@@ -360,6 +360,28 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         CheckConstraint<TSortedConstraintNode>(exprRoot, "LazyList", "Sorted(x[asc];z[asc])");
     }
 
+    Y_UNIT_TEST(SortedOverNestedOrderedFlatMapWithSort) {
+        const auto s = R"((
+            (let mr_sink (DataSink 'yt (quote plato)))
+            (let list (AsList
+                (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'u)))
+                (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
+                (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value (String 'w)))
+            ))
+            (let sorted (Sort list (Bool 'True) (lambda '(item) '((Member item 'key) (Member item 'value)))))
+            (let map (OrderedFlatMap sorted (lambda '(row) (OrderedFlatMap (Sort (ListFromRange (Uint8 '0) (Uint8 '5) (Uint8 '1)) (Bool 'True) (lambda '(item) item)) (lambda '(index)
+                (OptionalIf (AggrNotEquals index (Uint8 '3)) (AsStruct '('x (Member row 'key)) '('y (Concat (ToString index) (Member row 'subkey))) '('z (Member row 'value))))
+            )))))
+            (let world (Write! world mr_sink (Key '('table (String 'Output))) (LazyList map) '('('mode 'renew))))
+            (let world (Commit! world mr_sink))
+            (return world)
+        ))";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TSortedConstraintNode>(exprRoot, "LazyList", "Sorted(x[asc];z[asc])");
+    }
+
     Y_UNIT_TEST(TopSort) {
         const auto s = R"((
             (let mr_sink (DataSink 'yt (quote plato)))

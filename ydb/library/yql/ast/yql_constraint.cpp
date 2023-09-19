@@ -1442,6 +1442,14 @@ TPartOfConstraintNode<TOriginalConstraintNode>::CompleteOnly(TExprContext& ctx) 
 }
 
 template<class TOriginalConstraintNode>
+const TPartOfConstraintNode<TOriginalConstraintNode>*
+TPartOfConstraintNode<TOriginalConstraintNode>:: RemoveOriginal(TExprContext& ctx, const TMainConstraint* original) const {
+    TMapType mapping(Mapping_);
+    mapping.erase(original);
+    return mapping.empty() ? nullptr : ctx.MakeConstraint<TPartOfConstraintNode>(std::move(mapping));
+}
+
+template<class TOriginalConstraintNode>
 typename TPartOfConstraintNode<TOriginalConstraintNode>::TMapType
 TPartOfConstraintNode<TOriginalConstraintNode>::GetColumnMapping(const std::string_view& asField) const {
     auto mapping = Mapping_;

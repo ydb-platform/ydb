@@ -1,0 +1,6 @@
+import "library/cpp/protobuf/dynamic_prototype/ut/my_inner_message.proto";
+
+message TMyMessage {
+    required TMyInnerMessage InnerMessage = 1;
+    required float Float = 2;
+}

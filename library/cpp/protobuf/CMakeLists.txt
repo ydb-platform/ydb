@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(dynamic_prototype)
 add_subdirectory(interop)
 add_subdirectory(json)
 add_subdirectory(util)
+add_subdirectory(yql)

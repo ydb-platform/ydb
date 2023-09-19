@@ -1,0 +1,4 @@
+message TMyInnerMessage {
+    required int32 Int32 = 1;
+    required string String = 2;
+}

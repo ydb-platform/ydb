@@ -1,62 +1,38 @@
 #pragma once
+#include "mkql_match_recognize_list.h"
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+
 namespace NKikimr::NMiniKQL::NMatchRecognize {
 
-///Range that includes starting and ending points
-///Can not be empty
-class TMatchedRange {
-public:
-    TMatchedRange(ui64 index)
-        : FromIndex(index)
-        , ToIndex(index)
-    {}
 
-    TMatchedRange(ui64 from, ui64 to)
-        : FromIndex(from)
-        , ToIndex(to)
-    {}
-
-    size_t From() const {
-        return FromIndex;
-    }
-
-    size_t To() const {
-        return ToIndex;
-    }
-
-    void Extend() {
-        ++ToIndex;
-    }
-
-private:
-    ui64 FromIndex;
-    ui64 ToIndex;
-};
-
-using TMatchedVar = std::vector<TMatchedRange>;
-
-inline void Extend(TMatchedVar& var, size_t index) {
+template<class R>
+using TMatchedVar = std::vector<R>;
+template<class R>
+void Extend(TMatchedVar<R>& var, const R& r) {
     if (var.empty()) {
-        var.emplace_back(index);
+        var.emplace_back(r);
     } else {
-        MKQL_ENSURE(index > var.back().To(), "Internal logic error");
-        if (var.back().To() + 1 == index) {
+        MKQL_ENSURE(r.From() > var.back().To(), "Internal logic error");
+        if (var.back().To() + 1 == r.From()) {
             var.back().Extend();
         } else {
-            var.emplace_back(index);
+            var.emplace_back(r);
         }
     }
 }
 
-using TMatchedVars = std::vector<TMatchedVar>;
+template<class R>
+using TMatchedVars = std::vector<TMatchedVar<R>>;
 
-inline NUdf::TUnboxedValue ToValue(const THolderFactory& holderFactory, const TMatchedRange& range) {
+template<class R>
+NUdf::TUnboxedValue ToValue(const THolderFactory& holderFactory, const R& range) {
     std::array<NUdf::TUnboxedValue, 2> array = {NUdf::TUnboxedValuePod{range.From()}, NUdf::TUnboxedValuePod{range.To()}};
     return holderFactory.RangeAsArray(cbegin(array), cend(array));
 }
 
-inline NUdf::TUnboxedValue ToValue(const THolderFactory& holderFactory, const TMatchedVar& var) {
+template<class R>
+NUdf::TUnboxedValue ToValue(const THolderFactory& holderFactory, const TMatchedVar<R>& var) {
     TUnboxedValueVector data;
     data.reserve(var.size());
     for (const auto& r: var) {
@@ -65,7 +41,8 @@ inline NUdf::TUnboxedValue ToValue(const THolderFactory& holderFactory, const TM
     return holderFactory.VectorAsVectorHolder(std::move(data));
 }
 
-inline NUdf::TUnboxedValue ToValue(const THolderFactory& holderFactory, const TMatchedVars& vars) {
+template<class R>
+inline NUdf::TUnboxedValue ToValue(const THolderFactory& holderFactory, const TMatchedVars<R>& vars) {
     NUdf::TUnboxedValue* ptr;
     auto result = holderFactory.CreateDirectArrayHolder(vars.size(), ptr);
     for (const auto& v: vars) {
@@ -76,35 +53,14 @@ inline NUdf::TUnboxedValue ToValue(const THolderFactory& holderFactory, const TM
 
 ///Optimized reference based implementation to be used as an argument
 ///for lambdas which produce strict result(do not require lazy access to its arguments)
-class TMatchedVarsValue : public TComputationValue<TMatchedVarsValue> {
-    class TRangeValue: public TComputationValue<TRangeValue> {
-    public:
-        TRangeValue(TMemoryUsageInfo* memInfo, const TMatchedRange& r)
-                : TComputationValue<TRangeValue>(memInfo)
-                , Range(r)
-        {
-        }
-
-        NUdf::TUnboxedValue* GetElements() const override {
-            return nullptr;
-        }
-        NUdf::TUnboxedValue GetElement(ui32 index) const override {
-            MKQL_ENSURE(index < 2, "Index out of range");
-            switch(index) {
-                case 0: return NUdf::TUnboxedValuePod(Range.From());
-                case 1: return NUdf::TUnboxedValuePod(Range.To());
-            }
-            return NUdf::TUnboxedValuePod();
-        }
-    private:
-        const TMatchedRange& Range;
-    };
-
+template<class R>
+class TMatchedVarsValue : public TComputationValue<TMatchedVarsValue<R>> {
     class TRangeList: public TComputationValue<TRangeList> {
         class TIterator : public TComputationValue<TIterator> {
         public:
-            TIterator(TMemoryUsageInfo *memInfo, const std::vector<TMatchedRange>& ranges)
+            TIterator(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, const std::vector<R>& ranges)
                     : TComputationValue<TIterator>(memInfo)
+                    , HolderFactory(holderFactory)
                     , Ranges(ranges)
                     , Index(0)
             {}
@@ -114,17 +70,18 @@ class TMatchedVarsValue : public TComputationValue<TMatchedVarsValue> {
                 if (Ranges.size() == Index){
                     return false;
                 }
-                value = NUdf::TUnboxedValuePod(new TRangeValue(GetMemInfo(), Ranges[Index++]));
+                value = ToValue(HolderFactory, Ranges[Index++]);
                 return true;
             }
-
-            const std::vector<TMatchedRange>& Ranges;
+            const THolderFactory& HolderFactory;
+            const std::vector<R>& Ranges;
             size_t Index;
         };
 
     public:
-        TRangeList(TMemoryUsageInfo* memInfo, const TMatchedVar& v)
+        TRangeList(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, const TMatchedVar<R>& v)
             : TComputationValue<TRangeList>(memInfo)
+            , HolderFactory(holderFactory)
             , Var(v)
         {
         }
@@ -142,23 +99,26 @@ class TMatchedVarsValue : public TComputationValue<TMatchedVarsValue> {
         }
 
         NUdf::TUnboxedValue GetListIterator() const override {
-            return NUdf::TUnboxedValuePod(new TIterator(GetMemInfo(), Var));
+            return HolderFactory.Create<TIterator>(HolderFactory, Var);
         }
     private:
-        const TMatchedVar& Var;
+        const THolderFactory& HolderFactory;
+        const TMatchedVar<R>& Var;
     };
 public:
-    TMatchedVarsValue(TMemoryUsageInfo* memInfo, const std::vector<TMatchedVar>& vars)
-            : TComputationValue<TMatchedVarsValue>(memInfo)
-            , Vars(vars)
+    TMatchedVarsValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, const std::vector<TMatchedVar<R>>& vars)
+        : TComputationValue<TMatchedVarsValue>(memInfo)
+        , HolderFactory(holderFactory)
+        , Vars(vars)
     {
     }
 
     NUdf::TUnboxedValue GetElement(ui32 index) const override {
-        return NUdf::TUnboxedValuePod(new TRangeList(GetMemInfo(), Vars[index]));
+        return HolderFactory.Create<TRangeList>(HolderFactory, Vars[index]);
     }
 private:
-    const std::vector<TMatchedVar>& Vars;
+    const THolderFactory& HolderFactory;
+    const std::vector<TMatchedVar<R>>& Vars;
 };
 
 }//namespace NKikimr::NMiniKQL::NMatchRecognize

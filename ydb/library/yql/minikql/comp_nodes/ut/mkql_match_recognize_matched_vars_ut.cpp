@@ -1,60 +1,71 @@
 #include "../mkql_match_recognize_matched_vars.h"
+#include "../mkql_match_recognize_list.h"
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NMiniKQL::NMatchRecognize {
 
 Y_UNIT_TEST_SUITE(MatchRecognizeMatchedVarExtend) {
+    using TRange = TSimpleList::TRange;
+    using TMatchedVar = TMatchedVar<TRange>;
+    using TMatchedVars = TMatchedVars<TRange>;
+
     Y_UNIT_TEST(MatchedRangeSingleton) {
-        TMatchedRange r{10};
+        TRange r{10};
         UNIT_ASSERT_VALUES_EQUAL(10, r.From());
         UNIT_ASSERT_VALUES_EQUAL(10, r.To());
         r.Extend();
         UNIT_ASSERT_VALUES_EQUAL(10, r.From());
         UNIT_ASSERT_VALUES_EQUAL(11, r.To());
     }
+
     Y_UNIT_TEST(MatchedRange) {
-        TMatchedRange r{10, 20};
+        TRange r{10, 20};
         UNIT_ASSERT_VALUES_EQUAL(10, r.From());
         UNIT_ASSERT_VALUES_EQUAL(20, r.To());
         r.Extend();
         UNIT_ASSERT_VALUES_EQUAL(10, r.From());
         UNIT_ASSERT_VALUES_EQUAL(21, r.To());
     }
+
     Y_UNIT_TEST(MatchedVarEmpty) {
         TMatchedVar v{};
-        Extend(v, 10);
+        Extend(v, TRange{10});
         UNIT_ASSERT_VALUES_EQUAL(1, v.size());
         UNIT_ASSERT_VALUES_EQUAL(10, v[0].From());
         UNIT_ASSERT_VALUES_EQUAL(10, v[0].To());
     }
+
     Y_UNIT_TEST(MatchedVarExtendSingletonContiguous) {
-        TMatchedVar v{TMatchedRange{10}};
-        Extend(v, 11);
+        TMatchedVar v{TRange{10}};
+        Extend(v, TRange{11});
         UNIT_ASSERT_VALUES_EQUAL(1, v.size());
         UNIT_ASSERT_VALUES_EQUAL(10, v[0].From());
         UNIT_ASSERT_VALUES_EQUAL(11, v[0].To());
     }
+
     Y_UNIT_TEST(MatchedVarExtendSingletonWithGap) {
-        TMatchedVar v{TMatchedRange{10}};
-        Extend(v, 20);
+        TMatchedVar v{TRange{10}};
+        Extend(v, TRange{20});
         UNIT_ASSERT_VALUES_EQUAL(2, v.size());
         UNIT_ASSERT_VALUES_EQUAL(10, v[0].From());
         UNIT_ASSERT_VALUES_EQUAL(10, v[0].To());
         UNIT_ASSERT_VALUES_EQUAL(20, v[1].From());
         UNIT_ASSERT_VALUES_EQUAL(20, v[1].To());
     }
+
     Y_UNIT_TEST(MatchedVarExtendContiguous) {
-        TMatchedVar v{TMatchedRange{10, 20}, TMatchedRange{30, 40}};
-        Extend(v, 41);
+        TMatchedVar v{TRange{10, 20}, TRange{30, 40}};
+        Extend(v, TRange{41});
         UNIT_ASSERT_VALUES_EQUAL(2, v.size());
         UNIT_ASSERT_VALUES_EQUAL(10, v[0].From());
         UNIT_ASSERT_VALUES_EQUAL(20, v[0].To());
         UNIT_ASSERT_VALUES_EQUAL(30, v[1].From());
         UNIT_ASSERT_VALUES_EQUAL(41, v[1].To());
     }
+
     Y_UNIT_TEST(MatchedVarExtendWithGap) {
-        TMatchedVar v{TMatchedRange{10, 20}, TMatchedRange{30, 40}};
-        Extend(v, 50);
+        TMatchedVar v{TRange{10, 20}, TRange{30, 40}};
+        Extend(v, TRange{50});
         UNIT_ASSERT_VALUES_EQUAL(3, v.size());
         UNIT_ASSERT_VALUES_EQUAL(10, v[0].From());
         UNIT_ASSERT_VALUES_EQUAL(20, v[0].To());
@@ -66,12 +77,16 @@ Y_UNIT_TEST_SUITE(MatchRecognizeMatchedVarExtend) {
 }
 
 Y_UNIT_TEST_SUITE(MatchRecognizeMatchedVarsToValue) {
+    using TRange = TSimpleList::TRange;
+    using TMatchedVar = TMatchedVar<TRange>;
+    using TMatchedVars = TMatchedVars<TRange>;
     TMemoryUsageInfo memUsage("MatchedVars");
+
     Y_UNIT_TEST(MatchedRange) {
         TScopedAlloc alloc(__LOCATION__);
         THolderFactory holderFactory(alloc.Ref(), memUsage);
         {
-            TMatchedRange r{10, 20};
+            TRange r{10, 20};
             const auto value = ToValue(holderFactory, r);
             const auto elems = value.GetElements();
             UNIT_ASSERT(elems);
@@ -84,7 +99,7 @@ Y_UNIT_TEST_SUITE(MatchRecognizeMatchedVarsToValue) {
         TScopedAlloc alloc(__LOCATION__);
         THolderFactory holderFactory(alloc.Ref(), memUsage);
         {
-            const auto value = ToValue(holderFactory, std::vector<TMatchedRange>{});
+            const auto value = ToValue(holderFactory, TMatchedVar{});
             UNIT_ASSERT(value);
             UNIT_ASSERT(!value.HasListItems());
             UNIT_ASSERT(value.HasFastListLength());
@@ -101,9 +116,9 @@ Y_UNIT_TEST_SUITE(MatchRecognizeMatchedVarsToValue) {
         TScopedAlloc alloc(__LOCATION__);
         THolderFactory holderFactory(alloc.Ref(), memUsage);
         {
-            const auto value = ToValue(holderFactory, {
-                TMatchedRange{10, 30},
-                TMatchedRange{40, 45},
+            const auto value = ToValue(holderFactory, TMatchedVar{
+                TRange{10, 30},
+                TRange{40, 45},
 
             });
             UNIT_ASSERT(value);
@@ -132,10 +147,10 @@ Y_UNIT_TEST_SUITE(MatchRecognizeMatchedVarsToValue) {
         TScopedAlloc alloc(__LOCATION__);
         THolderFactory holderFactory(alloc.Ref(), memUsage);
         {
-            const auto value = ToValue(holderFactory, {
+            const auto value = ToValue(holderFactory, TMatchedVars {
                     {},
-                    {TMatchedRange{20, 25}},
-                    {TMatchedRange{10, 30}, TMatchedRange{40, 45}},
+                    {TRange{20, 25}},
+                    {TRange{10, 30}, TRange{40, 45}},
             });
             UNIT_ASSERT(value);
             const auto varElems = value.GetElements();
@@ -166,22 +181,30 @@ Y_UNIT_TEST_SUITE(MatchRecognizeMatchedVarsToValue) {
 }
 
 Y_UNIT_TEST_SUITE(MatchRecognizeMatchedVarsToValueByRef) {
+    using TRange = TSimpleList::TRange;
+    using TMatchedVar = TMatchedVar<TRange>;
+    using TMatchedVars = TMatchedVars<TRange>;
     TMemoryUsageInfo memUsage("MatchedVarsByRef");
+
     Y_UNIT_TEST(MatchedVarsEmpty) {
         TScopedAlloc alloc(__LOCATION__);
+        THolderFactory holderFactory(alloc.Ref(), memUsage);
         {
             TMatchedVars vars{};
-            NUdf::TUnboxedValue value(NUdf::TUnboxedValuePod(new TMatchedVarsValue(&memUsage, vars)));
+            NUdf::TUnboxedValue value = holderFactory.Create<TMatchedVarsValue<TRange>>(holderFactory, vars);
             UNIT_ASSERT(value.HasValue());
         }
     }
+
     Y_UNIT_TEST(MatchedVars) {
         TScopedAlloc alloc(__LOCATION__);
+        THolderFactory holderFactory(alloc.Ref(), memUsage);
         {
             TMatchedVar A{{1, 4}, {7, 9}, {100, 200}};
             TMatchedVar B{{1, 6}};
             TMatchedVars vars{A, B};
-            NUdf::TUnboxedValue value(NUdf::TUnboxedValuePod(new TMatchedVarsValue(&memUsage, vars)));
+            NUdf::TUnboxedValue value = holderFactory.Create<TMatchedVarsValue<TRange>>(holderFactory, vars);
+            Y_UNUSED(value);
             UNIT_ASSERT(value.HasValue());
             auto a = value.GetElement(0);
             UNIT_ASSERT(a.HasValue());

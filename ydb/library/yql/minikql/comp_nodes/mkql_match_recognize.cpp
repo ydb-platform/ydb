@@ -1,3 +1,4 @@
+#include "mkql_match_recognize_list.h"
 #include "mkql_match_recognize_matched_vars.h"
 #include "mkql_match_recognize_measure_arg.h"
 #include <ydb/library/yql/core/sql_types/match_recognize.h>
@@ -41,6 +42,9 @@ struct TMatchRecognizeProcessorParameters {
 };
 
 class TBackTrackingMatchRecognize: public IProcessMatchRecognize {
+    using TPartitionList = TSimpleList;
+    using TRange = TPartitionList::TRange;
+    using TMatchedVars = TMatchedVars<TRange>;
 public:
     TBackTrackingMatchRecognize(
         NUdf::TUnboxedValue&& partitionKey,
@@ -57,7 +61,7 @@ public:
 
     bool ProcessInputRow(NUdf::TUnboxedValue&& row, TComputationContext& ctx) override {
         Y_UNUSED(ctx);
-        Rows.push_back(std::move(row));
+        Rows.Append(std::move(row));
         return false;
     }
     NUdf::TUnboxedValue GetOutputIfReady(TComputationContext& ctx) override {
@@ -89,14 +93,14 @@ public:
     bool ProcessEndOfData(TComputationContext& ctx) override {
         //Assume, that data moved to IComputationExternalNode node, will not be modified or released
         //till the end of the current function
-        auto rowsSize = Rows.size();
-        Parameters.InputDataArg->SetValue(ctx, ctx.HolderFactory.VectorAsVectorHolder(std::move(Rows)));
+        auto rowsSize = Rows.Size();
+        Parameters.InputDataArg->SetValue(ctx, ctx.HolderFactory.Create<TListValue<TPartitionList>>(Rows));
         for (size_t i = 0; i != rowsSize; ++i) {
             Parameters.CurrentRowIndexArg->SetValue(ctx, NUdf::TUnboxedValuePod(static_cast<ui64>(i)));
             for (size_t v = 0; v != Parameters.Defines.size(); ++v) {
                 const auto &d = Parameters.Defines[v]->GetValue(ctx);
                 if (d && d.GetOptionalValue().Get<bool>()) {
-                    Extend(CurMatchedVars[v], i);
+                    Extend(CurMatchedVars[v], TRange{i});
                 }
             }
             //for the sake of dummy usage assume non-overlapped matches at every 5th row of any partition
@@ -113,13 +117,16 @@ private:
     const NUdf::TUnboxedValue PartitionKey;
     const TMatchRecognizeProcessorParameters& Parameters;
     const TContainerCacheOnContext& Cache;
-    TUnboxedValueVector Rows;
+    TSimpleList Rows;
     TMatchedVars CurMatchedVars;
     std::deque<TMatchedVars> Matches;
     ui64 MatchNumber;
 };
 
 class TStreamingMatchRecognize: public IProcessMatchRecognize {
+    using TPartitionList = TSparseList;
+    using TRange = TPartitionList::TRange;
+    using TMatchedVars = TMatchedVars<TRange>;
 public:
     TStreamingMatchRecognize(
             NUdf::TUnboxedValue&& partitionKey,
@@ -131,20 +138,19 @@ public:
         , Cache(cache)
         , MatchedVars(parameters.Defines.size())
         , HasMatch(false)
-        , RowCount(0)
     {
     }
 
     bool ProcessInputRow(NUdf::TUnboxedValue&& row, TComputationContext& ctx) override{
         Y_UNUSED(row);
-        Parameters.CurrentRowIndexArg->SetValue(ctx, NUdf::TUnboxedValuePod(RowCount));
+        Parameters.CurrentRowIndexArg->SetValue(ctx, NUdf::TUnboxedValuePod(Rows.Size()));
+        auto r = Rows.Append(std::move(row));
         for (size_t i = 0; i != Parameters.Defines.size(); ++i) {
             const auto& d = Parameters.Defines[i]->GetValue(ctx);
             if (d && d.GetOptionalValue().Get<bool>()) {
-                Extend(MatchedVars[i], RowCount);
+                Extend(MatchedVars[i], r);
             }
         }
-        ++RowCount;
         return HasMatch;
     }
     NUdf::TUnboxedValue GetOutputIfReady(TComputationContext& ctx) override {
@@ -177,7 +183,7 @@ private:
     const TContainerCacheOnContext& Cache;
     TMatchedVars MatchedVars;
     bool HasMatch;
-    size_t RowCount;
+    TSparseList Rows;
 };
 
 class TStateForNonInterleavedPartitions

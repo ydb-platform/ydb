@@ -16,6 +16,7 @@
 #if !defined(_msan_enabled_) and !defined(_asan_enabled_) and defined(_linux_) and defined(YT_ALLOC_ENABLED)
 
 namespace NYT {
+namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -23,8 +24,6 @@ namespace NYT {
 volatile const void* FakeSideEffectVolatileVariable = nullptr;
 
 ////////////////////////////////////////////////////////////////////////////////
-
-namespace {
 
 using namespace NConcurrency;
 using namespace ::testing;

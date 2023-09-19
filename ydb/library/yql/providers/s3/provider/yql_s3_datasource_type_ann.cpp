@@ -361,9 +361,16 @@ public:
 
         const TTypeAnnotationNode* itemType = nullptr;
         if (input->Content() == TS3ArrowSettings::CallableName()) {
+            std::unordered_set<TString> extraColumnNames(extraColumnsType->GetSize());
+            for (const auto& extraColumn : extraColumnsType->GetItems()) {
+                extraColumnNames.insert(TString{extraColumn->GetName()});
+            }
+
             TVector<const TItemExprType*> blockRowTypeItems;
             for (const auto& x : rowType->Cast<TStructExprType>()->GetItems()) {
-                blockRowTypeItems.push_back(ctx.MakeType<TItemExprType>(x->GetName(), ctx.MakeType<TBlockExprType>(x->GetItemType())));
+                if (!extraColumnNames.contains(TString{x->GetName()})) {
+                    blockRowTypeItems.push_back(ctx.MakeType<TItemExprType>(x->GetName(), ctx.MakeType<TBlockExprType>(x->GetItemType())));
+                }
             }
 
             blockRowTypeItems.push_back(ctx.MakeType<TItemExprType>(BlockLengthColumnName, ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64))));

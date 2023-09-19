@@ -308,6 +308,13 @@ void NormalizeNumber(T& value) {
 #endif
 }
 
+template<class T, typename S = std::make_signed_t<T>, typename U = std::make_unsigned_t<T>>
+U AsUnsigned(S value) {
+    static constexpr ui8 Shift = (sizeof(T) << 3) - 1;
+    return (value << 1) ^ (value >> Shift);
+}
+
+
 class TKafkaWritable {
 public:
     TKafkaWritable(TWritableBuf& buffer)
@@ -340,9 +347,7 @@ public:
 
     template<class T, typename U = std::make_unsigned_t<T>>
     void writeVarint(T value) {
-        static constexpr ui8 Shift = (sizeof(T) << 3) - 1;
-
-        writeUnsignedVarint<U>((value << 1) ^ (value >> Shift));
+        writeUnsignedVarint<U>(AsUnsigned<T>(value));
     }
 
     void write(const char* val, size_t length);
@@ -377,16 +382,16 @@ public:
 
         U value = 0;
         size_t i = 0;
-        ui8 b;
+        U b;
         while (((b = static_cast<ui8>(get())) & 0x80) != 0) {
             if (i > MaxLength) {
                 ythrow yexception() << "illegal varint length";
             }
-            value |= ((U)(b & 0x7f)) << i;
+            value |= (b & 0x7f) << i;
             i += 7;
         }
 
-        value |= ((U)b) << i;
+        value |= b << i;
         return value;
     }
 

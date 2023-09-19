@@ -185,6 +185,11 @@ void CheckUnsignedVarint(const std::vector<T>& values)  {
         TKafkaReadable readable(sb.GetBuffer());
 
         writable.writeUnsignedVarint(v);
+
+        UNIT_ASSERT_EQUAL_C(sb.Size(), NKafka::NPrivate::SizeOfUnsignedVarint<T>(v),
+            TStringBuilder() << "Size mismatch " << sb.Size() << " != " << NKafka::NPrivate::SizeOfUnsignedVarint<T>(v));
+
+
         T r = readable.readUnsignedVarint<T>();
         UNIT_ASSERT_EQUAL_C(r, v, TStringBuilder() << r << " != " << v);
     }
@@ -207,6 +212,10 @@ void CheckVarint(const std::vector<T>& values) {
         TKafkaReadable readable(sb.GetBuffer());
 
         writable.writeVarint(v);
+
+        UNIT_ASSERT_EQUAL_C(sb.Size(), NKafka::NPrivate::SizeOfVarint<T>(v),
+            TStringBuilder() << "Size mismatch " << sb.Size() << " != " << NKafka::NPrivate::SizeOfVarint<T>(v));
+
         T r = readable.readVarint<T>();
 
         UNIT_ASSERT_EQUAL_C(r, v, TStringBuilder() << r << " != " << v);

@@ -27,16 +27,23 @@ struct TSizeCollector {
     ui32 NumTaggedFields = 0;
 };
 
+template<class T, typename U = std::make_unsigned_t<T>>
+size_t SizeOfUnsignedVarint(T v) {
+    static constexpr T Mask = Max<U>() - 0x7F;
 
-constexpr size_t SizeOfUnsignedVarint(ui64 value) {
+    U value = v;
     size_t bytes = 1;
-    while ((value & 0xffffffffffffff80L) != 0L) {
+    while ((value & Mask) != 0L) {
         bytes += 1;
         value >>= 7;
     }
     return bytes;
 }
 
+template<class T>
+size_t SizeOfVarint(T value) {
+    return SizeOfUnsignedVarint(AsUnsigned<T>(value));
+}
 
 template<TKafkaVersion min, TKafkaVersion max>
 constexpr bool VersionAll() {
@@ -211,7 +218,7 @@ public:
 
     inline static i64 DoSize(TKafkaVersion version, const TValueType& value) {
         if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
-            return SizeOfUnsignedVarint(value);
+            return SizeOfVarint(value);
         } else {
             return sizeof(TValueType);
         }

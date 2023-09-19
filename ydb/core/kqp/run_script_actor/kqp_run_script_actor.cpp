@@ -259,7 +259,7 @@ private:
             std::vector<TString> serializedRows;
 
             for (const auto& row : ev->Get()->Record.GetResultSet().rows()) {
-                if (QueryServiceConfig.GetScriptResultRowsLimit() && rowCount > QueryServiceConfig.GetScriptResultRowsLimit()) {
+                if (QueryServiceConfig.GetScriptResultRowsLimit() && rowCount + 1 > QueryServiceConfig.GetScriptResultRowsLimit()) {
                     Truncated[resultSetIndex] = true;
                     break;
                 }

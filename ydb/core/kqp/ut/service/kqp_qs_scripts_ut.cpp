@@ -656,6 +656,45 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
             settings.FetchToken(results.GetNextFetchToken());
         }
     }
+
+    Y_UNIT_TEST(TestTruncatedByRows) {
+        constexpr size_t ROWS_LIMIT = 2000;
+
+        NKikimrConfig::TAppConfig appCfg;
+        appCfg.MutableQueryServiceConfig()->set_scriptresultrowslimit(ROWS_LIMIT);
+        appCfg.MutableTableServiceConfig()->MutableQueryLimits()->set_resultrowslimit(ROWS_LIMIT);
+
+        auto kikimr = DefaultKikimrRunner({}, appCfg);
+        auto db = kikimr.GetQueryClient();
+
+        auto scriptExecutionOperationTruncated = CreateScriptExecutionOperation(ROWS_LIMIT + 1, db, kikimr.GetDriver());
+        TFetchScriptResultsResult resultsTruncated = db.FetchScriptResults(scriptExecutionOperationTruncated.Id(), 0).ExtractValueSync();
+        UNIT_ASSERT_C(resultsTruncated.IsSuccess(), resultsTruncated.GetIssues().ToString());
+        UNIT_ASSERT(resultsTruncated.GetResultSet().Truncated());
+
+        auto scriptExecutionOperationNotTruncated = CreateScriptExecutionOperation(ROWS_LIMIT, db, kikimr.GetDriver());
+        TFetchScriptResultsResult resultsNotTruncated = db.FetchScriptResults(scriptExecutionOperationNotTruncated.Id(), 0).ExtractValueSync();
+        UNIT_ASSERT_C(resultsNotTruncated.IsSuccess(), resultsNotTruncated.GetIssues().ToString());
+        UNIT_ASSERT(!resultsNotTruncated.GetResultSet().Truncated());
+    }
+
+    Y_UNIT_TEST(TestTruncatedBySize) {
+        constexpr size_t NUMER_ROWS = 500;
+
+        NKikimrConfig::TAppConfig appCfg;
+        appCfg.MutableQueryServiceConfig()->set_scriptresultsizelimit(NUMER_ROWS / 2);
+        appCfg.MutableTableServiceConfig()->MutableQueryLimits()->set_resultrowslimit(NUMER_ROWS);
+
+        auto kikimr = DefaultKikimrRunner({}, appCfg);
+        auto db = kikimr.GetQueryClient();
+
+        auto scriptExecutionOperation = CreateScriptExecutionOperation(NUMER_ROWS, db, kikimr.GetDriver());
+
+        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
+        UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
+        
+        UNIT_ASSERT(results.GetResultSet().Truncated());
+    }
 }
 
 } // namespace NKqp

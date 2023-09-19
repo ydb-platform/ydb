@@ -25,7 +25,6 @@ enable_testing()
 # Can't set it in cuda.cmake because of CMake policy subdirectory stack rules
 cmake_policy(SET CMP0104 OLD)
 
-include(cmake/antlr.cmake)
 include(cmake/archive.cmake)
 include(cmake/bison.cmake)
 include(cmake/common.cmake)

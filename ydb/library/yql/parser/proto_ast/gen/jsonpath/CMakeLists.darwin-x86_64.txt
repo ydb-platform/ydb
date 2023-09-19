@@ -23,16 +23,16 @@ set(
   NJsonPathGenerated
 )
 set(
-  ANTLR_PACKAGE_NAME
-  NJsonPathGenerated
-)
-set(
   LEXER_PARSER_NAMESPACE
   NALP
 )
 set(
   PROTOBUF_HEADER_PATH
   ydb/library/yql/parser/proto_ast/gen/jsonpath
+)
+set(
+  ANTLR_PACKAGE_NAME
+  NJsonPathGenerated
 )
 
 add_library(proto_ast-gen-jsonpath)
@@ -55,48 +55,13 @@ target_sources(proto_ast-gen-jsonpath PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathParser.cpp
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathLexer.cpp
 )
-run_antlr(
-  OUTPUT
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathParser.proto
-  DEPENDS
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/JsonPath.g
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/org/antlr/codegen/templates/protobuf/protobuf.stg
-  WORKING_DIRECTORY
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath
-  ANTLER_ARGS
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/JsonPath.g
-  -lib
-  .
-  -fo
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath
-  -language
-  protobuf
-)
-configure_file(
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/protobuf/protobuf.stg.in
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/org/antlr/codegen/templates/protobuf/protobuf.stg
-)
 configure_file(
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/Cpp/Cpp.stg.in
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/org/antlr/codegen/templates/Cpp/Cpp.stg
 )
-run_antlr(
-  OUTPUT
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathParser.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathLexer.cpp
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathParser.h
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathLexer.h
-  DEPENDS
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/JsonPath.g
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/org/antlr/codegen/templates/Cpp/Cpp.stg
-  WORKING_DIRECTORY
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath
-  ANTLER_ARGS
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/jsonpath/JsonPath.g
-  -lib
-  .
-  -fo
-  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath
+configure_file(
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/protobuf/protobuf.stg.in
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/org/antlr/codegen/templates/protobuf/protobuf.stg
 )
 target_proto_addincls(proto_ast-gen-jsonpath
   ./

@@ -9,7 +9,7 @@ namespace NYT {
 TConstantBackoffOptions::operator TExponentialBackoffOptions() const
 {
     return TExponentialBackoffOptions{
-        .RetryCount = RetryCount,
+        .InvocationCount = InvocationCount,
         .MinBackoff = Backoff,
         .MaxBackoff = Backoff,
         .BackoffMultiplier = 1.0,
@@ -27,28 +27,28 @@ TBackoffStrategy::TBackoffStrategy(const TExponentialBackoffOptions& options)
 
 void TBackoffStrategy::Restart()
 {
-    RetryIndex_ = 0;
+    InvocationIndex_ = 0;
     Backoff_ = Options_.MinBackoff;
     ApplyJitter();
 }
 
 bool TBackoffStrategy::Next()
 {
-    if (RetryIndex_ > 0) {
+    if (InvocationIndex_ > 0) {
         Backoff_ = std::min(Backoff_ * Options_.BackoffMultiplier, Options_.MaxBackoff);
         ApplyJitter();
     }
-    return ++RetryIndex_ < Options_.RetryCount;
+    return ++InvocationIndex_ < Options_.InvocationCount;
 }
 
-int TBackoffStrategy::GetRetryIndex() const
+int TBackoffStrategy::GetInvocationIndex() const
 {
-    return RetryIndex_;
+    return InvocationIndex_;
 }
 
-int TBackoffStrategy::GetRetryCount() const
+int TBackoffStrategy::GetInvocationCount() const
 {
-    return Options_.RetryCount;
+    return Options_.InvocationCount;
 }
 
 TDuration TBackoffStrategy::GetBackoff() const

@@ -42,7 +42,7 @@ void TConnectionDynamicConfig::Register(TRegistrar registrar)
     registrar.Preprocessor([] (TThis* config) {
         // TODO(gritukan): Enable tablet retries by default one day.
         config->TabletWriteBackoff = New<TSerializableExponentialBackoffOptions>();
-        config->TabletWriteBackoff->RetryCount = 1;
+        config->TabletWriteBackoff->InvocationCount = 1;
     });
 }
 

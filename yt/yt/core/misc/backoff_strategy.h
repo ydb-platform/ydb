@@ -8,13 +8,13 @@ namespace NYT {
 
 struct TExponentialBackoffOptions
 {
-    static constexpr int DefaultRetryCount = 10;
+    static constexpr int DefaultInvocationCount = 10;
     static constexpr auto DefaultMinBackoff = TDuration::Seconds(1);
     static constexpr auto DefaultMaxBackoff = TDuration::Seconds(5);
     static constexpr double DefaultBackoffMultiplier = 1.5;
     static constexpr double DefaultBackoffJitter = 0.1;
 
-    int RetryCount = DefaultRetryCount;
+    int InvocationCount = DefaultInvocationCount;
     TDuration MinBackoff = DefaultMinBackoff;
     TDuration MaxBackoff = DefaultMaxBackoff;
     double BackoffMultiplier = DefaultBackoffMultiplier;
@@ -25,11 +25,11 @@ struct TExponentialBackoffOptions
 
 struct TConstantBackoffOptions
 {
-    static constexpr int DefaultRetryCount = 10;
+    static constexpr int DefaultInvocationCount = 10;
     static constexpr auto DefaultBackoff = TDuration::Seconds(3);
     static constexpr double DefaultBackoffJitter = 0.1;
 
-    int RetryCount = DefaultRetryCount;
+    int InvocationCount = DefaultInvocationCount;
     TDuration Backoff = DefaultBackoff;
     double BackoffJitter = DefaultBackoffJitter;
 
@@ -47,8 +47,8 @@ public:
     void Restart();
     bool Next();
 
-    int GetRetryIndex() const;
-    int GetRetryCount() const;
+    int GetInvocationIndex() const;
+    int GetInvocationCount() const;
 
     TDuration GetBackoff() const;
 
@@ -57,7 +57,7 @@ public:
 private:
     TExponentialBackoffOptions Options_;
 
-    int RetryIndex_;
+    int InvocationIndex_;
     TDuration Backoff_;
     TDuration BackoffWithJitter_;
 

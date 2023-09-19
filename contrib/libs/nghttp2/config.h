@@ -108,6 +108,9 @@
 /* Define to 1 if you have the <netinet/in.h> header file. */
 #define HAVE_NETINET_IN_H 1
 
+/* Define to 1 if you have the <netinet/ip.h> header file. */
+#define HAVE_NETINET_IP_H 1
+
 /* Define to 1 if you have `neverbleed` library. */
 /* #undef HAVE_NEVERBLEED */
 
@@ -247,7 +250,7 @@
 #define PACKAGE_NAME "nghttp2"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "nghttp2 1.55.1"
+#define PACKAGE_STRING "nghttp2 1.56.0"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "nghttp2"
@@ -256,7 +259,7 @@
 #define PACKAGE_URL ""
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "1.55.1"
+#define PACKAGE_VERSION "1.56.0"
 
 /* The size of `int *', as computed by sizeof. */
 #define SIZEOF_INT_P 8
@@ -361,7 +364,7 @@
 
 
 /* Version number of package */
-#define VERSION "1.55.1"
+#define VERSION "1.56.0"
 
 /* Define WORDS_BIGENDIAN to 1 if your processor stores words with the most
    significant byte first (like Motorola and SPARC, unlike Intel). */

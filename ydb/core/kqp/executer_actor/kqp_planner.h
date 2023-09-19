@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer_stats.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
@@ -43,7 +44,8 @@ public:
         const Ydb::Table::QueryStatsCollection::Mode& statsMode,
         bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& ExecuterSpan,
         TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot, const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
-        bool isDataQuery, ui64 mkqlMemoryLimit, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, bool doOptimization);
+        bool isDataQuery, ui64 mkqlMemoryLimit, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, bool doOptimization,
+        const TIntrusivePtr<TUserRequestContext>& userRequestContext);
 
     bool SendStartKqpTasksRequest(ui32 requestId, const TActorId& target);
     std::unique_ptr<IEventHandle> PlanExecution();
@@ -100,6 +102,7 @@ private:
     THashMap<TActorId, TProgressStat> PendingComputeActors; // Running compute actors (pure and DS)
     THashSet<ui64> PendingComputeTasks; // Not started yet, waiting resources
 
+    TIntrusivePtr<TUserRequestContext> UserRequestContext;
 
 };
 
@@ -110,6 +113,7 @@ std::unique_ptr<TKqpPlanner> CreateKqpPlanner(TKqpTasksGraph& tasksGraph, ui64 t
     bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& executerSpan,
     TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot,
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& ExecuterRetriesConfig, bool isDataQuery,
-    ui64 mkqlMemoryLimit, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, bool doOptimization);
+    ui64 mkqlMemoryLimit, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, bool doOptimization,
+    const TIntrusivePtr<TUserRequestContext>& userRequestContext);
 
 } // namespace NKikimr::NKqp

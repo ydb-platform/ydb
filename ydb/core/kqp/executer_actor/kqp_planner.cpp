@@ -60,7 +60,8 @@ TKqpPlanner::TKqpPlanner(TKqpTasksGraph& graph, ui64 txId, const TActorId& execu
     bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& executerSpan,
     TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot,
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
-    bool isDataQuery, ui64 mkqlMemoryLimit, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, bool doOptimization)
+    bool isDataQuery, ui64 mkqlMemoryLimit, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, bool doOptimization,
+    const TIntrusivePtr<TUserRequestContext>& userRequestContext)
     : TxId(txId)
     , ExecuterId(executer)
     , Snapshot(snapshot)
@@ -78,6 +79,7 @@ TKqpPlanner::TKqpPlanner(TKqpTasksGraph& graph, ui64 txId, const TActorId& execu
     , MkqlMemoryLimit(mkqlMemoryLimit)
     , AsyncIoFactory(asyncIoFactory)
     , DoOptimization(doOptimization)
+    , UserRequestContext(userRequestContext)
 {
     if (!Database) {
         // a piece of magic for tests
@@ -277,6 +279,10 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
 
         return nullptr;
     }  else {
+        // what is here?
+        Cerr << (*UserRequestContext);
+        Y_FAIL_S("Fail point 123#!");
+        // UserRequestContext->Out(Cerr);
         auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
             "Not enough resources to execute query");
         return std::make_unique<IEventHandle>(ExecuterId, ExecuterId, ev.Release());
@@ -475,11 +481,12 @@ std::unique_ptr<TKqpPlanner> CreateKqpPlanner(TKqpTasksGraph& tasksGraph, ui64 t
     const Ydb::Table::QueryStatsCollection::Mode& statsMode,
     bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TSpan& executerSpan,
     TVector<NKikimrKqp::TKqpNodeResources>&& resourcesSnapshot, const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
-    bool isDataQuery, ui64 mkqlMemoryLimit, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, bool doOptimization)
+    bool isDataQuery, ui64 mkqlMemoryLimit, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, bool doOptimization,
+    const TIntrusivePtr<TUserRequestContext>& userRequestContext)
 {
     return std::make_unique<TKqpPlanner>(tasksGraph, txId, executer, snapshot,
         database, userToken, deadline, statsMode, withSpilling, rlPath, executerSpan,
-        std::move(resourcesSnapshot), executerRetriesConfig, isDataQuery, mkqlMemoryLimit, asyncIoFactory, doOptimization);
+        std::move(resourcesSnapshot), executerRetriesConfig, isDataQuery, mkqlMemoryLimit, asyncIoFactory, doOptimization, userRequestContext);
 }
 
 } // namespace NKikimr::NKqp

@@ -62,8 +62,8 @@ public:
         const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
         TPreparedQueryHolder::TConstPtr preparedQuery,
         const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
-        TDuration maximalSecretsSnapshotWaitTime)
-        : TBase(std::move(request), database, userToken, counters, executerRetriesConfig, chanTransportVersion, maximalSecretsSnapshotWaitTime, TWilsonKqp::ScanExecuter, "ScanExecuter")
+        TDuration maximalSecretsSnapshotWaitTime, const TString& sessionId)
+        : TBase(std::move(request), database, userToken, counters, executerRetriesConfig, chanTransportVersion, maximalSecretsSnapshotWaitTime, sessionId, TWilsonKqp::ScanExecuter, "ScanExecuter")
         , PreparedQuery(preparedQuery)
         , AggregationSettings(aggregation)
     {
@@ -653,7 +653,7 @@ private:
 
         Planner = CreateKqpPlanner(TasksGraph, TxId, SelfId(), GetSnapshot(),
             Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode, AppData()->EnableKqpSpilling,
-            Request.RlPath, ExecuterSpan, std::move(snapshot), ExecuterRetriesConfig, false /* isDataQuery */, Request.MkqlMemoryLimit, nullptr, false);
+            Request.RlPath, ExecuterSpan, std::move(snapshot), ExecuterRetriesConfig, false /* isDataQuery */, Request.MkqlMemoryLimit, nullptr, false, UserRequestContext);
 
         LOG_D("Execute scan tx, PendingComputeTasks: " << TasksGraph.GetTasks().size());
         auto err = Planner->PlanExecution();
@@ -703,10 +703,10 @@ IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
     TPreparedQueryHolder::TConstPtr preparedQuery, const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
-    TDuration maximalSecretsSnapshotWaitTime)
+    TDuration maximalSecretsSnapshotWaitTime, const TString& sessionId)
 {
     return new TKqpScanExecuter(std::move(request), database, userToken, counters, aggregation, executerRetriesConfig,
-        preparedQuery, chanTransportVersion, maximalSecretsSnapshotWaitTime);
+        preparedQuery, chanTransportVersion, maximalSecretsSnapshotWaitTime, sessionId);
 }
 
 } // namespace NKqp

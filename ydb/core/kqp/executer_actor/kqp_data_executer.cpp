@@ -128,8 +128,8 @@ public:
         const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
-        const TActorId& creator, TDuration maximalSecretsSnapshotWaitTime)
-        : TBase(std::move(request), database, userToken, counters, executerRetriesConfig, chanTransportVersion, maximalSecretsSnapshotWaitTime, TWilsonKqp::DataExecuter, "DataExecuter")
+        const TActorId& creator, TDuration maximalSecretsSnapshotWaitTime, const TString& sessionId)
+        : TBase(std::move(request), database, userToken, counters, executerRetriesConfig, chanTransportVersion, maximalSecretsSnapshotWaitTime, sessionId, TWilsonKqp::DataExecuter, "DataExecuter")
         , AsyncIoFactory(std::move(asyncIoFactory))
         , StreamResult(streamResult)
     {
@@ -2176,7 +2176,7 @@ private:
 
         Planner = CreateKqpPlanner(TasksGraph, TxId, SelfId(), GetSnapshot(),
             Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode, false, Nothing(),
-            ExecuterSpan, std::move(ResourceSnapshot), ExecuterRetriesConfig, dataQueryPool /* isDataQuery */, Request.MkqlMemoryLimit, AsyncIoFactory, enableOptForTasks);
+            ExecuterSpan, std::move(ResourceSnapshot), ExecuterRetriesConfig, dataQueryPool /* isDataQuery */, Request.MkqlMemoryLimit, AsyncIoFactory, enableOptForTasks, UserRequestContext);
 
         auto err = Planner->PlanExecution();
         if (err) {
@@ -2418,10 +2418,10 @@ private:
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
     TKqpRequestCounters::TPtr counters, bool streamResult, const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
-    const TActorId& creator, TDuration maximalSecretsSnapshotWaitTime)
+    const TActorId& creator, TDuration maximalSecretsSnapshotWaitTime, const TString& sessionId)
 {
     return new TKqpDataExecuter(std::move(request), database, userToken, counters, streamResult, executerRetriesConfig,
-        std::move(asyncIoFactory), chanTransportVersion, creator, maximalSecretsSnapshotWaitTime);
+        std::move(asyncIoFactory), chanTransportVersion, creator, maximalSecretsSnapshotWaitTime, sessionId);
 }
 
 } // namespace NKqp

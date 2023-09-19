@@ -2339,7 +2339,10 @@ struct TFileStoreInfo : public TSimpleRefCount<TFileStoreInfo> {
 
     void ForgetAlter() {
         Y_VERIFY(AlterConfig);
+        Y_VERIFY(AlterVersion);
+
         AlterConfig.Reset();
+        AlterVersion = 0;
     }
 
     void FinishAlter() {
@@ -2350,8 +2353,7 @@ struct TFileStoreInfo : public TSimpleRefCount<TFileStoreInfo> {
         ++Version;
         Y_VERIFY(Version == AlterVersion);
 
-        AlterConfig.Reset();
-        AlterVersion = 0;
+        ForgetAlter();
     }
 
     TFileStoreSpace GetFileStoreSpace() const {

@@ -359,4 +359,69 @@ Y_UNIT_TEST_SUITE(TFileStoreWithReboots) {
         CheckLimits(3, 1);  // hdd, ssd
         CheckLimits(2, 1);  // hybrid, ssd
     }
+
+    Y_UNIT_TEST(CheckMultipleAlterWithStorageLimitsError) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestUserAttrs(
+            runtime,
+            ++txId,
+            "",
+            "MyRoot",
+            AlterUserAttrs({
+                {"__filestore_space_limit_ssd", ToString(32 * 4_KB)}
+            })
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        NKikimrSchemeOp::TFileStoreDescription vdescr;
+        auto& vc = *vdescr.MutableConfig();
+        vc.SetStorageMediaKind(1);
+        vc.SetBlockSize(4_KB);
+        vc.SetBlocksCount(32);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+
+        vdescr.SetName("FS");
+        TestCreateFileStore(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+
+        vc.ClearBlockSize();
+        vc.SetBlocksCount(33);
+        vc.SetVersion(1);
+        TestAlterFileStore(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            vdescr.DebugString(),
+            {NKikimrScheme::StatusPreconditionFailed}
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterFileStore(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            vdescr.DebugString(),
+            {NKikimrScheme::StatusPreconditionFailed}
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        // It's possible to modify quota size
+        TestUserAttrs(
+            runtime,
+            ++txId,
+            "",
+            "MyRoot",
+            AlterUserAttrs({
+                {"__filestore_space_limit_ssd", ToString(33 * 4_KB)}
+            })
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        // Ok
+        TestAlterFileStore(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+    }
 }

@@ -3,6 +3,7 @@
 #include "flat_part_iface.h"
 #include "flat_page_index.h"
 #include "flat_table_part.h"
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 
 namespace NKikimr::NTable {
@@ -19,7 +20,8 @@ public:
         : Part(part)
         , Env(env)
         , GroupId(groupId)
-        , EndRowId(part->GetGroupIndex(groupId).GetEndRowId())
+        // Note: EndRowId may be Max<TRowId>() for legacy TParts
+        , EndRowId(groupId.IsMain() && part->Stat.Rows ? part->Stat.Rows : Max<TRowId>())
     { }
     
     EReady Seek(TRowId rowId, bool restart = false) {
@@ -123,6 +125,7 @@ private:
         auto page = Env->TryGetPage(Part, pageId);
         if (page) {
             Index = TIndex(*page);
+            Y_VERIFY_DEBUG_S(EndRowId == Index->GetEndRowId(), "EndRowId mismatch " << EndRowId << " != " << Index->GetEndRowId() << " (group " << GroupId.Historic << "/" << GroupId.Index <<")");
             return &*Index;
         }
         return { };

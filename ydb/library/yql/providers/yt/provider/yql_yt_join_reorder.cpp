@@ -99,9 +99,7 @@ public:
         input.Right = std::move(Right);
         input.Rels = std::move(Rels);
         input.Normalize();
-        if (Debug) {
-            Cerr << "Input: " << input.ToString();
-        }
+        YQL_CLOG(INFO, ProviderYt) << "Input: " << input.ToString();
 
         std::function<void(const TString& str)> log;
 
@@ -111,11 +109,14 @@ public:
 
         std::unique_ptr<IOptimizer> opt = std::unique_ptr<IOptimizer>(MakePgOptimizer(input, log));
 
-        Result = opt->JoinSearch();
-
-        if (Debug) {
-            Cerr << "Result: " << Result.ToString() << "\n";
+        try {
+            Result = opt->JoinSearch();
+        } catch (...) {
+            YQL_CLOG(ERROR, ProviderYt) << "Cannot do join search " << CurrentExceptionMessage();
+            return Root;
         }
+
+        YQL_CLOG(INFO, ProviderYt) << "Result: " << Result.ToString();
 
         TVector<TString> scope;
         TYtJoinNodeOp::TPtr res = dynamic_cast<TYtJoinNodeOp*>(Convert(0, scope).Get());

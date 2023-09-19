@@ -191,15 +191,13 @@ private:
         auto& rel = Rels[relId - 1];
 
         TYtSection section{leaf->Section};
-        if (Y_UNLIKELY(!section.Settings().Empty())) {
+        if (Y_UNLIKELY(!section.Settings().Empty()) && Y_UNLIKELY(section.Settings().Item(0).Name() == "Test")) {
             // ut
-            if (Y_UNLIKELY(section.Settings().Item(0).Name() == "Test")) {
-                for (const auto& setting : section.Settings()) {
-                    if (setting.Name() == "Rows") {
-                        rel.Rows += FromString<ui64>(setting.Value().Ref().Content());
-                    } else if (setting.Name() == "Size") {
-                        rel.TotalCost += FromString<ui64>(setting.Value().Ref().Content());
-                    }
+            for (const auto& setting : section.Settings()) {
+                if (setting.Name() == "Rows") {
+                    rel.Rows += FromString<ui64>(setting.Value().Ref().Content());
+                } else if (setting.Name() == "Size") {
+                    rel.TotalCost += FromString<ui64>(setting.Value().Ref().Content());
                 }
             }
         } else {
@@ -207,6 +205,9 @@ private:
                 auto stat = TYtTableBaseInfo::GetStat(path.Table());
                 rel.TotalCost += stat->DataSize;
                 rel.Rows += stat->RecordsCount;
+            }
+            if (!(rel.Rows > 0)) {
+                YQL_CLOG(INFO, ProviderYt) << "Cannot read stats from: " << NCommon::ExprToPrettyString(Ctx, *section.Ptr());
             }
         }
 

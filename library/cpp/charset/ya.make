@@ -5,19 +5,15 @@ IF (NOT OPENSOURCE)
 ENDIF()
 
 SRCS(
-    generated/cp_data.cpp
-    generated/encrec_data.cpp
-    codepage.cpp
-    cp_encrec.cpp
-    doccodes.cpp
+    decodeunknownplane.cpp
     iconv.cpp
     recyr.hh
     recyr_int.hh
-    ci_string.cpp
     wide.cpp
 )
 
 PEERDIR(
+    library/cpp/charset/lite
     contrib/libs/libiconv
 )
 
@@ -25,4 +21,5 @@ END()
 
 RECURSE_FOR_TESTS(
     ut
+    lite/ut
 )

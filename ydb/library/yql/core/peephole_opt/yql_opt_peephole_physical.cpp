@@ -7368,7 +7368,7 @@ struct TPeepHoleRules {
         {"CheckedMinus", &ExpandCheckedMinus},
         {"JsonValue", &ExpandJsonValue},
         {"JsonExists", &ExpandJsonExists},
-        {"MatchRecognize", &ExpandMatchRecognize}
+        //TODO(zverevgeny): add me {"MatchRecognize", &ExpandMatchRecognize}
     };
 
     static constexpr std::initializer_list<TExtPeepHoleOptimizerMap::value_type> CommonStageExtRulesInit = {

@@ -146,8 +146,10 @@ protected:
     }
 
     TMaybeNode<TExprBase> ExpandMatchRecognize(TExprBase node, TExprContext& ctx) {
-        if (node.Cast<TCoInputBase>().Input().Maybe<TDqConnection>()) {
-            return DqExpandMatchRecognize(node, ctx);
+        if (node.Maybe<TCoMatchRecognize>() &&
+            node.Cast<TCoInputBase>().Input().Maybe<TDqConnection>()
+        ) {
+            return DqExpandMatchRecognize(node, ctx, TypesCtx);
         }
         return node;
     }

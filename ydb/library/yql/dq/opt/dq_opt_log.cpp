@@ -293,10 +293,9 @@ IGraphTransformer::TStatus DqWrapRead(const TExprNode::TPtr& input, TExprNode::T
     return status;
 }
 
-TExprBase DqExpandMatchRecognize(TExprBase node, TExprContext& ctx) {
-    if (node.Maybe<TCoMatchRecognize>())
-        return TExprBase(ExpandMatchRecognize(node.Ptr(), ctx));
-    return node;
+TExprBase DqExpandMatchRecognize(TExprBase node, TExprContext& ctx, const TTypeAnnotationContext& typeAnnCtx) {
+    YQL_ENSURE(node.Maybe<TCoMatchRecognize>(), "Expected MatchRecognize");
+    return TExprBase(ExpandMatchRecognize(node.Ptr(), ctx, typeAnnCtx));
 }
 
 }

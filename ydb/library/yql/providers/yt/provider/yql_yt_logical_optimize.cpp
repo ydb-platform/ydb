@@ -2660,7 +2660,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> MatchRecognize(TExprBase node, TExprContext& ctx) {
-        return ExpandMatchRecognize(node.Ptr(), ctx);
+        return ExpandMatchRecognize(node.Ptr(), ctx, *Types);
     }
 private:
     TYtState::TPtr State_;

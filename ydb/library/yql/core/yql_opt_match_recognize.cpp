@@ -1,5 +1,6 @@
 #include "yql_opt_match_recognize.h"
 #include "yql_opt_utils.h"
+#include <ydb/library/yql/core/sql_types/time_order_recover.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/utils/log/log.h>
 
@@ -21,7 +22,7 @@ bool IsStreaming(const TExprNode::TPtr& input) {
 }
 } //namespace
 
-TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& ctx) {
+TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeAnnCtx) {
     YQL_ENSURE(node->IsCallable({"MatchRecognize"}));
     const auto& input = node->ChildRef(0);
     const auto& partitionKeySelector = node->ChildRef(1);
@@ -56,18 +57,75 @@ TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& 
     ExtractSortKeyAndOrder(pos, sortTraits, sortKey, sortOrder, ctx);
     TExprNode::TPtr result;
     if (isStreaming) {
-        //TODO use TimeOrderRecover
+        YQL_ENSURE(sortOrder->ChildrenSize() == 1, "Expect ORDER BY timestamp for MATCH_RECOGNIZE on streams");
+        const auto reordered = ctx.Builder(pos)
+            .Lambda()
+            .Param("partition")
+                .Callable("ForwardList")
+                    .Callable(0, "OrderedMap")
+                        .Callable(0, "TimeOrderRecover")
+                            .Callable(0, "ToFlow").
+                                Arg(0, "partition")
+                            .Seal()
+                            .Add(1, sortKey)
+                            .Callable(2, "Interval")
+                                .Add(0, ctx.NewAtom(pos, ToString(typeAnnCtx.TimeOrderRecoverDelay)))
+                            .Seal()
+                            .Callable(3, "Interval")
+                                .Add(0,  ctx.NewAtom(pos, ToString(typeAnnCtx.TimeOrderRecoverAhead)))
+                            .Seal()
+                            .Callable(4, "Uint32")
+                                .Add(0,  ctx.NewAtom(pos, ToString(typeAnnCtx.TimeOrderRecoverRowLimit)))
+                            .Seal()
+                        .Seal()
+                        .Lambda(1)
+                            .Param("row")
+                            .Callable("RemoveMember")
+                                .Arg(0, "row")
+                                .Add(1, ctx.NewAtom(pos, NYql::NTimeOrderRecover::OUT_OF_ORDER_MARKER))
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Build();
+
+        const auto matchRecognizeOnReorderedPartition = ctx.Builder(pos)
+            .Lambda()
+                .Param("partition")
+                .Apply(matchRecognize)
+                    .With(0)
+                        .Apply(reordered)
+                            .With(0)
+                                .Arg("partition")
+                            .Done()
+                        .Seal()
+                    .Done()
+                .Seal()
+            .Seal()
+        .Build();
+        TExprNode::TPtr keySelector;
         if (partitionColumns->ChildrenSize() != 0) {
-            result = ctx.Builder(pos)
-                .Callable("ShuffleByKeys")
-                    .Add(0, input)
-                    .Add(1, partitionKeySelector)
-                    .Add(2, matchRecognize)
+            keySelector = partitionKeySelector;
+        } else {
+            //Use pseudo partitioning with constant lambda to wrap TimeOrderRecover into DQ stage
+            //TODO(zverevgeny): fixme
+            keySelector = ctx.Builder(pos)
+                .Lambda()
+                    .Param("row")
+                    .Callable("Bool")
+                        .Add(0, ctx.NewAtom(pos, "true"))
+                    .Seal()
                 .Seal()
             .Build();
-        } else {
-            result = matchRecognize;
         }
+        result = ctx.Builder(pos)
+            .Callable("ShuffleByKeys")
+                .Add(0, input)
+                .Add(1, keySelector)
+                .Add(2, matchRecognizeOnReorderedPartition)
+            .Seal()
+        .Build();
     } else { //non-streaming
         if (partitionColumns->ChildrenSize() != 0) {
             result = ctx.Builder(pos)

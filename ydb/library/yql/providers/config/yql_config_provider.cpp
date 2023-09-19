@@ -828,6 +828,48 @@ namespace {
                 }
                 Types.MatchRecognize = name == "_EnableMatchRecognize";
             }
+            else if (name == "TimeOrderRecoverDelay") {
+                if (args.size() != 1) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected one argument, but got " << args.size()));
+                    return false;
+                }
+                if (!TryFromString(args[0], Types.TimeOrderRecoverDelay)) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected integer, but got: " << args[0]));
+                    return false;
+                }
+                if (Types.TimeOrderRecoverDelay >= 0) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected negative value, but got: " << args[0]));
+                    return false;
+                }
+            }
+            else if (name == "TimeOrderRecoverAhead") {
+                if (args.size() != 1) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected one argument, but got " << args.size()));
+                    return false;
+                }
+                if (!TryFromString(args[0], Types.TimeOrderRecoverAhead)) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected integer, but got: " << args[0]));
+                    return false;
+                }
+                if (Types.TimeOrderRecoverAhead <= 0) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected positive value, but got: " << args[0]));
+                    return false;
+                }
+            }
+            else if (name == "TimeOrderRecoverRowLimit") {
+                if (args.size() != 1) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected one argument, but got " << args.size()));
+                    return false;
+                }
+                if (!TryFromString(args[0], Types.TimeOrderRecoverRowLimit)) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected integer, but got: " << args[0]));
+                    return false;
+                }
+                if (Types.TimeOrderRecoverRowLimit == 0) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected positive value, but got: " << args[0]));
+                    return false;
+                }
+            }
             else {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Unsupported command: " << name));
                 return false;

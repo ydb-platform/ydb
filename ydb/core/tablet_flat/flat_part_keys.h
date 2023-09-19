@@ -1,5 +1,6 @@
 #pragma once
 #include "flat_part_iface.h"
+#include "flat_part_index_iter.h"
 #include "flat_part_slice.h"
 #include "flat_sausage_fetch.h"
 #include "flat_sausagecache.h"
@@ -81,8 +82,8 @@ namespace NTable {
         explicit TKeysLoader(const TPart* part, IPages* env)
             : Part(part)
             , Env(env)
+            , Index(Part, Env, {})
         {
-
         }
 
         TIntrusivePtr<TSlices> Do(TIntrusiveConstPtr<TScreen> screen)
@@ -149,7 +150,14 @@ namespace NTable {
                     Key = { };
                     return true;
                 }
-                if (const auto* lastKey = Part->Index.GetLastKeyRecord()) {
+
+                auto hasLast = Index.SeekLast();
+                if (hasLast == EReady::Page) {
+                    return false;
+                }
+                Y_VERIFY(hasLast != EReady::Gone, "Unexpected failure to find the last index record");
+
+                if (const auto* lastKey = Index.TryGetLastRecord()) {
                     if (lastKey->GetRowId() == rowId) {
                         LoadIndexKey(*lastKey);
                         return true;
@@ -160,16 +168,19 @@ namespace NTable {
                         return true;
                     }
                 }
-                SeekIndex(rowId);
-                if (Index->GetRowId() == rowId) {
-                    LoadIndexKey(*Index);
-                    return true;
-                }
-                Y_VERIFY(Index->GetRowId() < rowId, "SeekIndex invariant failure");
-                if (!LoadPage(Index->GetPageId())) {
+
+                if (!SeekIndex(rowId)) {
                     return false;
                 }
-                Y_VERIFY(Page.BaseRow() == Index->GetRowId(), "Index and data are out of sync");
+                if (Index.GetRowId() == rowId) {
+                    LoadIndexKey(*Index.GetRecord());
+                    return true;
+                }
+                Y_VERIFY(Index.GetRowId() < rowId, "SeekIndex invariant failure");
+                if (!LoadPage(Index.GetPageId())) {
+                    return false;
+                }
+                Y_VERIFY(Page.BaseRow() == Index.GetRowId(), "Index and data are out of sync");
                 auto lastRowId = Page.BaseRow() + (Page->Count - 1);
                 if (lastRowId < rowId) {
                     // Row is out of range for this page
@@ -184,25 +195,31 @@ namespace NTable {
 
         bool SeekLastRow() noexcept
         {
-            if (const auto* lastKey = Part->Index.GetLastKeyRecord()) {
+            auto hasLast = Index.SeekLast();
+            if (hasLast == EReady::Page) {
+                return false;
+            }
+            Y_VERIFY(hasLast != EReady::Gone, "Unexpected failure to find the last index record");
+
+            if (const auto* lastKey = Index.TryGetLastRecord()) {
                 LoadIndexKey(*lastKey);
                 return true;
             }
-            auto it = Part->Index->End();
-            Y_VERIFY(--it, "Unexpected failure to find the last index record");
-            if (!LoadPage(it->GetPageId())) {
+
+            if (!LoadPage(Index.GetPageId())) {
                 return false;
             }
-            Y_VERIFY(Page.BaseRow() == it->GetRowId(), "Index and data are out of sync");
+            Y_VERIFY(Page.BaseRow() == Index.GetRowId(), "Index and data are out of sync");
             auto lastRowId = Page.BaseRow() + (Page->Count - 1);
             LoadRow(lastRowId);
             return true;
         }
 
-        void SeekIndex(TRowId rowId) noexcept
+        bool SeekIndex(TRowId rowId) noexcept
         {
-            Index = Part->Index.LookupRow(rowId, Index);
-            Y_VERIFY(Index, "SeekIndex called with an out of bounds row");
+            auto ready = Index.Seek(rowId);
+            Y_VERIFY(ready != EReady::Gone, "SeekIndex called with an out of bounds row");
+            return ready == EReady::Data;
         }
 
         bool LoadPage(TPageId pageId) noexcept
@@ -248,7 +265,7 @@ namespace NTable {
         IPages* Env;
         TRowId RowId = Max<TRowId>();
         TPageId PageId = Max<TPageId>();
-        NPage::TIndex::TIter Index;
+        TPartIndexIt Index;
         NPage::TDataPage Page;
         TSmallVec<TCell> Key;
     };

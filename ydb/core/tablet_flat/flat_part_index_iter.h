@@ -76,6 +76,19 @@ public:
         return DataOrGone();
     }
 
+    EReady SeekLast() {
+        auto index = TryGetIndex();
+        if (!index) {
+            return EReady::Page;
+        }
+        Iter = (*index)->End();
+        if (Iter.Off() == 0) {
+            return EReady::Gone;
+        }
+        Iter--;
+        return DataOrGone();
+    }
+
     bool IsValid() {
         return bool(Iter);
     }
@@ -92,11 +105,13 @@ public:
 
     TPageId GetPageId() {
         Y_VERIFY(Index);
+        Y_VERIFY(Iter);
         return Iter->GetPageId();
     }
 
     TRowId GetRowId() {
         Y_VERIFY(Index);
+        Y_VERIFY(Iter);
         return Iter->GetRowId();
     }
 
@@ -107,9 +122,16 @@ public:
             ? next->GetRowId()
             : Max<TRowId>();
     }
+
     const TRecord * GetRecord() {
         Y_VERIFY(Index);
+        Y_VERIFY(Iter);
         return Iter.GetRecord();
+    }
+
+    const TRecord * TryGetLastRecord() {
+        Y_VERIFY(Index);
+        return Index->GetLastKeyRecord();
     }
 
 private:

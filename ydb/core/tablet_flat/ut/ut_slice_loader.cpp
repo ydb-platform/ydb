@@ -103,7 +103,7 @@ namespace {
     };
 
     struct TCheckResult {
-        size_t Pages;
+        size_t Pages = 0;
         TIntrusivePtr<TSlices> Run;
     };
 
@@ -131,28 +131,24 @@ namespace {
         TKeysEnv env(part.Get(), new TCache(pageCollection));
         TKeysLoader loader(part.Get(), &env);
 
-        if (result.Run = loader.Do(screen)) {
-            env.Check(false); /* On success there shouldn't be left loads */
-            result.Pages = 0;
-        } else  if (auto fetch = env.GetFetches()) {
-            UNIT_ASSERT_C(fetch->PageCollection.Get() == pageCollection.Get(),
-                "TLoader wants to fetch from an unexpected pageCollection");
-            UNIT_ASSERT_C(fetch->Pages, "TLoader wants a fetch, but there are no pages");
-            result.Pages = fetch->Pages.size();
+        while (!(result.Run = loader.Do(screen))) {
+            if (auto fetch = env.GetFetches()) {
+                UNIT_ASSERT_C(fetch->PageCollection.Get() == pageCollection.Get(),
+                    "TLoader wants to fetch from an unexpected pageCollection");
+                UNIT_ASSERT_C(fetch->Pages, "TLoader wants a fetch, but there are no pages");
+                result.Pages += fetch->Pages.size();
 
-            for (auto pageId : fetch->Pages) {
-                auto* page = part->Store->GetPage(0, pageId);
-                UNIT_ASSERT_C(page, "TLoader wants a missing page " << pageId);
+                for (auto pageId : fetch->Pages) {
+                    auto* page = part->Store->GetPage(0, pageId);
+                    UNIT_ASSERT_C(page, "TLoader wants a missing page " << pageId);
 
-                env.Save(fetch->Cookie, { pageId, TSharedPageRef::MakePrivate(*page) });
+                    env.Save(fetch->Cookie, { pageId, TSharedPageRef::MakePrivate(*page) });
+                }
+            } else {
+                UNIT_ASSERT_C(false, "TKeysLoader was stalled");
             }
-
-            result.Run = loader.Do(screen);
-            UNIT_ASSERT_C(result.Run, "TKeysLoader wants to do unexpected fetches");
-            env.Check(false); /* On success there shouldn't be left loads */
-        } else {
-            UNIT_ASSERT_C(false, "TKeysLoader was stalled");
         }
+        env.Check(false); /* On success there shouldn't be left loads */
 
         const auto scrSize = screen ? screen->Size() : 1;
 
@@ -170,8 +166,26 @@ Y_UNIT_TEST_SUITE(TPartSliceLoader) {
 
     Y_UNIT_TEST(RestoreMissingSlice) {
         auto result = RunLoaderTest(Part0(), nullptr);
-        UNIT_ASSERT_C(result.Pages == 0,
+        UNIT_ASSERT_C(result.Pages == 1, // index page
             "Restoring slice bounds needed " << result.Pages << " extra pages");
+    }
+
+    Y_UNIT_TEST(RestoreOneSlice) {
+        for (int startOff = 0; startOff < 5; startOff++) {
+            for (int endOff = -5; endOff < 5; endOff++) {
+                TVector<TScreen::THole> holes;
+                holes.emplace_back(Part0()->Index->Begin()->GetRowId() + startOff, Part0()->Index.GetEndRowId() + endOff);
+                TIntrusiveConstPtr<TScreen> screen = new TScreen(std::move(holes));
+                auto result = RunLoaderTest(Part0(), screen);
+
+                size_t expected = 1; // index page
+                if (startOff != 0) expected++;
+                if (endOff < -1) expected++;
+                UNIT_ASSERT_C(result.Pages == expected, // index page
+                    "Restoring slice [" << startOff << ", " << Part0()->Index.GetEndRowId() + endOff << "] bounds needed " << 
+                        result.Pages << " extra pages but expected " << expected);
+            }
+        }
     }
 
     Y_UNIT_TEST(RestoreMissingSliceFullScreen) {
@@ -194,7 +208,7 @@ Y_UNIT_TEST_SUITE(TPartSliceLoader) {
             screen = new TScreen(std::move(holes));
         }
         auto result = RunLoaderTest(Part0(), screen);
-        UNIT_ASSERT_C(result.Pages == 0,
+        UNIT_ASSERT_C(result.Pages == 1, // index page
             "Restoring slice bounds needed " << result.Pages << " extra pages");
     }
 
@@ -219,7 +233,7 @@ Y_UNIT_TEST_SUITE(TPartSliceLoader) {
             screen = new TScreen(std::move(holes));
         }
         auto result = RunLoaderTest(Part0(), screen);
-        UNIT_ASSERT_C(result.Pages == 0,
+        UNIT_ASSERT_C(result.Pages == 1, // index page
             "Restoring slice bounds needed " << result.Pages << " extra pages");
     }
 
@@ -247,7 +261,7 @@ Y_UNIT_TEST_SUITE(TPartSliceLoader) {
             screen = new TScreen(std::move(holes));
         }
         auto result = RunLoaderTest(Part0(), screen);
-        UNIT_ASSERT_C(result.Pages == screen->Size(),
+        UNIT_ASSERT_C(result.Pages == screen->Size() + 1,  // with index page
             "Restoring slice bounds needed " << result.Pages <<
             " extra pages, expected " << screen->Size());
     }

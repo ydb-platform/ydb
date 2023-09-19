@@ -69,13 +69,9 @@ namespace NTable {
                     if (!fetch->Pages) {
                         Y_Fail("TLoader is trying to fetch 0 pages");
                     }
-                    if (++FetchAttempts > 1) {
-                        Y_Fail("TLoader needs multiple fetches in " << Stage << " stage");
-                    }
                     return { fetch };
                 }
 
-                FetchAttempts = 0;
                 Stage = EStage(ui8(Stage) + 1);
             }
 
@@ -169,7 +165,6 @@ namespace NTable {
         const TVector<TString> Deltas;
         const TEpoch Epoch;
         EStage Stage = EStage::Meta;
-        ui8 FetchAttempts = 0;
         bool Rooted = false; /* Has full topology metablob */
         TPageId SchemeId = Max<TPageId>();
         TPageId IndexId = Max<TPageId>();

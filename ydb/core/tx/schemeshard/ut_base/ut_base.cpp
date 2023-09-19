@@ -8179,7 +8179,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        auto createVolume = [&](const TString& volumeName) {
+        auto createVolume = [&](const TString& volumeName, bool isFillFinished = false) {
             // Create volume with fill generation 713
             NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
             vdescr.SetName(volumeName);
@@ -8191,6 +8191,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
             vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
             vc.SetFillGeneration(713);
+            vc.SetIsFillFinished(isFillFinished);
 
             TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
             env.TestWaitNotification(runtime, txId);
@@ -8233,6 +8234,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         createVolume("BSVolume_4");
         // Drop the volume using zero fill generation (should be successful)
         successfullyDropVolume("BSVolume_4", 0);
+
+        createVolume("BSVolume_5", true /* isFillFinished */);
+        // Can't drop the volume if filling is finished.
+        failToDropVolume("BSVolume_5", 100500);
     }
 
     Y_UNIT_TEST(AssignBlockStoreVolume) { //+

@@ -187,14 +187,20 @@ public:
 
             ui64 proposedFillGeneration = dropParams.GetFillGeneration();
             ui64 actualFillGeneration = volume->VolumeConfig.GetFillGeneration();
+            const bool isFillFinished = volume->VolumeConfig.GetIsFillFinished();
 
-            if (proposedFillGeneration > 0 &&
-                    proposedFillGeneration < actualFillGeneration) {
-                result->SetError(NKikimrScheme::StatusSuccess,
-                                 TStringBuilder() << "Proposed fill generation "
-                                    << "is less than fill generation of the volume: "
-                                    << proposedFillGeneration << " < " << actualFillGeneration);
-                return result;
+            if (proposedFillGeneration > 0) {
+                if (isFillFinished) {
+                    result->SetError(NKikimrScheme::StatusSuccess,
+                                     TStringBuilder() << "Filling is finished, deletion is no-op");
+                    return result;
+                } else if (proposedFillGeneration < actualFillGeneration) {
+                    result->SetError(NKikimrScheme::StatusSuccess,
+                                     TStringBuilder() << "Proposed fill generation "
+                                        << "is less than fill generation of the volume: "
+                                        << proposedFillGeneration << " < " << actualFillGeneration);
+                    return result;
+                }
             }
         }
 

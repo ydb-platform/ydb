@@ -20,7 +20,6 @@ items:
 - { name: Управление кластером,                    include: { mode: link, path: cluster/toc_p.yaml } }
 # References
 - { name: YQL,                                     include: { mode: link, path: yql/toc_p.yaml } }
-- { name: Совместимость с PostgreSQL,              include: { mode: link, path: postgres/toc_p.yaml } }
 - { name: Работа с YDB CLI,                        include: { mode: link, path: reference/ydb-cli/toc_p.yaml } }
 - { name: Работа с YDB SDK,                        include: { mode: link, path: reference/ydb-sdk/toc_p.yaml } }
 - name: Разработка

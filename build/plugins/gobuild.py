@@ -42,12 +42,13 @@ def get_import_path(unit):
 
 
 def get_appended_values(unit, key):
-    value = []
+    values = []
     raw_value = unit.get(key)
     if raw_value:
-        value = list(filter(lambda x: len(x) > 0, raw_value.split(' ')))
-        assert len(value) == 0 or value[0] == '$' + key
-    return value[1:] if len(value) > 0 else value
+        values = [x for x in raw_value.split(' ') if x]
+        if len(values) > 0 and values[0] == '$' + key:
+            values.pop(0)
+    return values
 
 
 def compare_versions(version1, version2):

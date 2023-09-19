@@ -9,7 +9,16 @@ namespace NYql {
 using namespace NNodes;
 
 namespace {
-bool IsStreaming(const TExprNode::TPtr& input) {
+bool IsStreaming(const TExprNode::TPtr& input, const TTypeAnnotationContext& typeAnnCtx) {
+    if (TTypeAnnotationContext::EMatchRecognizeStreamingMode::Disable == typeAnnCtx.MatchRecognizeStreaming){
+        return false;
+    }
+    if (TTypeAnnotationContext::EMatchRecognizeStreamingMode::Force == typeAnnCtx.MatchRecognizeStreaming){
+        return true;
+    }
+
+    YQL_ENSURE(TTypeAnnotationContext::EMatchRecognizeStreamingMode::Auto == typeAnnCtx.MatchRecognizeStreaming, "Internal logic error");
+
     bool hasPq = false;
     NYql::VisitExpr(input, [&hasPq](const TExprNode::TPtr& node){
         if (node->IsCallable("DataSource")) {
@@ -31,7 +40,8 @@ TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& 
     const auto& params = node->ChildRef(4);
     const auto pos = node->Pos();
 
-    const bool isStreaming = IsStreaming(input);
+    const bool isStreaming = IsStreaming(input, typeAnnCtx);
+
     TExprNode::TPtr settings = AddSetting(*ctx.NewList(pos, {}), pos,
           "Streaming", ctx.NewAtom(pos, ToString(isStreaming)), ctx);
 

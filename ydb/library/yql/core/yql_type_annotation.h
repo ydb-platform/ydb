@@ -238,6 +238,12 @@ struct TTypeAnnotationContext: public TThrRefBase {
     IArrowResolver::TPtr ArrowResolver;
     TString CostBasedOptimizerType;
     bool MatchRecognize = false;
+    enum class EMatchRecognizeStreamingMode {
+        Disable,
+        Auto,
+        Force,
+    };
+    EMatchRecognizeStreamingMode MatchRecognizeStreaming = EMatchRecognizeStreamingMode::Auto;
     i64 TimeOrderRecoverDelay = -10'000'000; //microseconds
     i64 TimeOrderRecoverAhead = 10'000'000; //microseconds
     ui32 TimeOrderRecoverRowLimit = 1'000'000;

@@ -870,6 +870,23 @@ namespace {
                     return false;
                 }
             }
+            else if (name == "MatchRecognizeStream") {
+                if (args.size() != 1) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
+                    return false;
+                }
+                const auto& arg = args[0];
+                if (arg == "disable") {
+                    Types.MatchRecognizeStreaming = TTypeAnnotationContext::EMatchRecognizeStreamingMode::Disable;
+                } else if (arg == "auto") {
+                    Types.MatchRecognizeStreaming = TTypeAnnotationContext::EMatchRecognizeStreamingMode::Auto;
+                } else if (arg == "force") {
+                    Types.MatchRecognizeStreaming = TTypeAnnotationContext::EMatchRecognizeStreamingMode::Force;
+                } else {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected `disable|auto|force', but got: " << args[0]));
+                    return false;
+                }
+            }
             else {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Unsupported command: " << name));
                 return false;

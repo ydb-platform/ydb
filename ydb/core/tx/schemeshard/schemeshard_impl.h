@@ -1247,10 +1247,18 @@ public:
     std::unordered_map<ui32, size_t> StatNodes;
     std::unordered_map<TActorId, ui32> StatNodePipes;
 
+    static constexpr size_t STAT_OPTIMIZE_N_FIRST_NODES = 2;
+    size_t StatFastBroadcastCounter = STAT_OPTIMIZE_N_FIRST_NODES;
+    bool StatFastCheckInFlight = false;
+    std::unordered_set<ui32> StatFastBroadcastNodes;
+
     void Handle(TEvPrivate::TEvProcessStatistics::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvStatFastBroadcastCheck::TPtr& ev, const TActorContext& ctx);
     void Handle(NStat::TEvStatistics::TEvRegisterNode::TPtr& ev, const TActorContext& ctx);
     void GenerateStatisticsMap();
     void BroadcastStatistics();
+    void BroadcastStatisticsFast();
+    void SendStatisticsToNode(ui32 nodeId);
 
 public:
     void ChangeStreamShardsCount(i64 delta) override;

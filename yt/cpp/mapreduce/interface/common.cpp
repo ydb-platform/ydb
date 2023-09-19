@@ -15,7 +15,6 @@
 
 namespace NYT {
 
-using ::google::protobuf::FieldDescriptor;
 using ::google::protobuf::Descriptor;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -497,6 +496,11 @@ bool operator==(const TTableSchema& lhs, const TTableSchema& rhs)
         lhs.Columns() == rhs.Columns() &&
         lhs.Strict() == rhs.Strict() &&
         lhs.UniqueKeys() == rhs.UniqueKeys();
+}
+
+void PrintTo(const TTableSchema& schema, std::ostream* out)
+{
+    (*out) << NodeToYsonString(schema.ToNode(), NYson::EYsonFormat::Pretty);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

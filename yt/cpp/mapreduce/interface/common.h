@@ -762,6 +762,9 @@ public:
 /// Check for equality of all columns and all schema attributes
 bool operator==(const TTableSchema& lhs, const TTableSchema& rhs);
 
+// Pretty printer for unittests
+void PrintTo(const TTableSchema& schema, std::ostream* out);
+
 /// Create table schema by protobuf message descriptor
 TTableSchema CreateTableSchema(
     const ::google::protobuf::Descriptor& messageDescriptor,

@@ -4,13 +4,14 @@ LICENSE(
     Apache-2.0 AND
     Apache-2.0 WITH LLVM-exception AND
     BSD-2-Clause AND
+    BSL-1.0 AND
     MIT AND
     NCSA
 )
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2022-02-20)
+VERSION(2022-02-18)
 
 ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/34313583331e5c8cb0d3df28efb6c34c428fd235.tar.gz)
 
@@ -41,8 +42,8 @@ IF (OS_ANDROID)
     CFLAGS(
         -DLIBCXX_BUILDING_LIBCXXABI
     )
+# Take cxxabi implementation from system.
 ELSEIF (OS_IOS)
-    # Take cxxabi implementation from system.
     LDFLAGS(-lc++abi)
     CFLAGS(
         -DLIBCXX_BUILDING_LIBCXXABI
@@ -113,6 +114,7 @@ ENDIF()
 DEFAULT(CXX_RT "default")
 
 DISABLE(NEED_GLIBCXX_CXX17_SHIMS)
+
 DISABLE(NEED_CXX_RT_ADDINCL)
 
 IF (CXX_RT == "libcxxrt")
@@ -178,7 +180,7 @@ IF (NEED_CXX_RT_ADDINCL)
     # This looks extremely weird and we have to use cxxabi.h from libsupc++ instead.
     # This ADDINCL is placed here just to fix the status quo
     ADDINCL(
-         GLOBAL contrib/libs/cxxsupp/libcxxrt/include
+        GLOBAL contrib/libs/cxxsupp/libcxxrt/include
     )
 ENDIF()
 

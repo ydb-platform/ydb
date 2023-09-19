@@ -351,6 +351,12 @@ struct TEvYdbCompute {
             , Status(status)
         {}
 
+        TEvSynchronizeResponse(const TString& scope, NYql::TIssues issues)
+            : Scope(scope)
+            , Issues(std::move(issues))
+            , Status(NYdb::EStatus::SUCCESS)
+        {}
+
         TString Scope;
         NYql::TIssues Issues;
         NYdb::EStatus Status;

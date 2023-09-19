@@ -183,6 +183,7 @@ PEERDIR(
     yt/yt/client/query_tracker_client
     yt/yt/core
     yt/yt/core/http
+    yt/yt/core/https
     yt/yt/library/auth
     yt/yt/library/decimal
     yt/yt/library/re2

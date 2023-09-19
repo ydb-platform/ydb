@@ -6,6 +6,8 @@
 
 #include <yt/yt/core/http/public.h>
 
+#include <yt/yt/core/https/public.h>
+
 #include <yt/yt/core/rpc/public.h>
 
 #include <yt/yt/library/re2/public.h>
@@ -54,6 +56,7 @@ public:
     TDuration IdleChannelTtl;
 
     NHttp::TClientConfigPtr HttpClient;
+    NHttps::TClientConfigPtr HttpsClient;
 
     NCompression::ECodec RequestCodec;
     NCompression::ECodec ResponseCodec;

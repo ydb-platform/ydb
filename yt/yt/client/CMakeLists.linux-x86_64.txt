@@ -40,6 +40,7 @@ target_link_libraries(yt-yt-client PUBLIC
   yt-client-query_tracker_client
   yt-yt-core
   yt-core-http
+  yt-core-https
   yt-library-auth
   yt-library-decimal
   yt-library-re2

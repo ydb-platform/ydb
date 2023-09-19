@@ -8,6 +8,8 @@
 
 #include <yt/yt/core/http/config.h>
 
+#include <yt/yt/core/https/config.h>
+
 #include <yt/yt/core/rpc/config.h>
 
 namespace NYT::NApi::NRpcProxy {
@@ -77,6 +79,8 @@ void TConnectionConfig::Register(TRegistrar registrar)
         .Default(TDuration::Minutes(5));
 
     registrar.Parameter("http_client", &TThis::HttpClient)
+        .DefaultNew();
+    registrar.Parameter("https_client", &TThis::HttpsClient)
         .DefaultNew();
 
     registrar.Parameter("request_codec", &TThis::RequestCodec)

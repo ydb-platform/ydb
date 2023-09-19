@@ -18,6 +18,9 @@
 #include <yt/yt/core/http/http.h>
 #include <yt/yt/core/http/helpers.h>
 
+#include <yt/yt/core/https/client.h>
+#include <yt/yt/core/https/config.h>
+
 #include <yt/yt/core/ytree/convert.h>
 
 #include <yt/yt/core/rpc/bus/channel.h>
@@ -40,10 +43,17 @@ using namespace NBus;
 using namespace NRpc;
 using namespace NNet;
 using namespace NHttp;
+using namespace NHttps;
 using namespace NYson;
 using namespace NYTree;
 using namespace NConcurrency;
 using namespace NServiceDiscovery;
+
+////////////////////////////////////////////////////////////////////////////////
+
+const TStringBuf ProxyUrlCanonicalHttpPrefix = "http://";
+const TStringBuf ProxyUrlCanonicalHttpsPrefix = "https://";
+const TStringBuf ProxyUrlCanonicalSuffix = ".yt.yandex.net";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -71,8 +81,6 @@ void ApplyProxyUrlAliasingRules(TString& url, const std::optional<THashMap<TStri
 
 TString NormalizeHttpProxyUrl(TString url, const std::optional<THashMap<TString, TString>>& proxyUrlAliasingRules)
 {
-    const TStringBuf CanonicalPrefix = "http://";
-    const TStringBuf CanonicalSuffix = ".yt.yandex.net";
 
     ApplyProxyUrlAliasingRules(url, proxyUrlAliasingRules);
 
@@ -80,14 +88,19 @@ TString NormalizeHttpProxyUrl(TString url, const std::optional<THashMap<TString,
         url.find(':') == TString::npos &&
         url.find("localhost") == TString::npos)
     {
-        url.append(CanonicalSuffix);
+        url.append(ProxyUrlCanonicalSuffix);
     }
 
-    if (!url.StartsWith(CanonicalPrefix)) {
-        url.prepend(CanonicalPrefix);
+    if (!url.StartsWith(ProxyUrlCanonicalHttpPrefix) && !url.StartsWith(ProxyUrlCanonicalHttpsPrefix)) {
+        url.prepend(ProxyUrlCanonicalHttpPrefix);
     }
 
     return url;
+}
+
+bool IsProxyUrlSecure(const TString& url)
+{
+    return url.StartsWith(ProxyUrlCanonicalHttpsPrefix);
 }
 
 namespace {
@@ -360,7 +373,6 @@ std::vector<TString> TConnection::DiscoverProxiesViaHttp()
         YT_LOG_DEBUG("Updating proxy list via HTTP (CorrelationId: %v)", correlationId);
 
         auto poller = TTcpDispatcher::Get()->GetXferPoller();
-        auto client = NHttp::CreateClient(Config_->HttpClient, std::move(poller));
         auto headers = New<THeaders>();
         SetUserAgent(headers, GetRpcUserAgent());
         if (auto token = DiscoveryToken_.Load()) {
@@ -383,6 +395,9 @@ std::vector<TString> TConnection::DiscoverProxiesViaHttp()
                 .EndMap().ToString());
 
         auto url = NormalizeHttpProxyUrl(*Config_->ClusterUrl) + "/api/v4/discover_proxies";
+        auto client = IsProxyUrlSecure(*Config_->ClusterUrl)
+            ? NHttps::CreateClient(Config_->HttpsClient, std::move(poller))
+            : NHttp::CreateClient(Config_->HttpClient, std::move(poller));
         auto rsp = WaitFor(client->Get(url, headers))
             .ValueOrThrow();
 

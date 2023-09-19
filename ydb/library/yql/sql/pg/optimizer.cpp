@@ -210,39 +210,42 @@ int TPgOptimizer::MakeOutputJoin(TOutput& output, Path* path) {
             break;
         }
 
-        YQL_ENSURE(list_length(jpath->joinrestrictinfo) == 1, "Unsupported joinrestrictinfo len");
-        RestrictInfo* rinfo = (RestrictInfo*)jpath->joinrestrictinfo->elements[0].ptr_value;
-        Var* left;
-        Var* right;
+       YQL_ENSURE(list_length(jpath->joinrestrictinfo) >= 1, "Unsupported joinrestrictinfo len");
 
-        if (jpath->jointype == JOIN_INNER) {
-            YQL_ENSURE(rinfo->left_em->em_expr->type == T_Var, "Unsupported left em type");
-            YQL_ENSURE(rinfo->right_em->em_expr->type == T_Var, "Unsupported right em type");
+        for (int i = 0; i < list_length(jpath->joinrestrictinfo); i++) {
+            RestrictInfo* rinfo = (RestrictInfo*)jpath->joinrestrictinfo->elements[i].ptr_value;
+            Var* left;
+            Var* right;
 
-            left = (Var*)rinfo->left_em->em_expr;
-            right = (Var*)rinfo->right_em->em_expr;
-        } else if (jpath->jointype == JOIN_LEFT || jpath->jointype == JOIN_RIGHT) {
-            YQL_ENSURE(rinfo->clause->type == T_OpExpr);
-            OpExpr* expr = (OpExpr*)rinfo->clause;
-            YQL_ENSURE(list_length(expr->args) == 2);
-            Expr* a1 = (Expr*)list_nth(expr->args, 0);
-            Expr* a2 = (Expr*)list_nth(expr->args, 1);
-            YQL_ENSURE(a1->type == T_Var, "Unsupported left arg type");
-            YQL_ENSURE(a2->type == T_Var, "Unsupported right arg type");
+            if (jpath->jointype == JOIN_INNER) {
+                YQL_ENSURE(rinfo->left_em->em_expr->type == T_Var, "Unsupported left em type");
+                YQL_ENSURE(rinfo->right_em->em_expr->type == T_Var, "Unsupported right em type");
 
-            left = (Var*)a1;
-            right = (Var*)a2;
+                left = (Var*)rinfo->left_em->em_expr;
+                right = (Var*)rinfo->right_em->em_expr;
+            } else if (jpath->jointype == JOIN_LEFT || jpath->jointype == JOIN_RIGHT) {
+                YQL_ENSURE(rinfo->clause->type == T_OpExpr);
+                OpExpr* expr = (OpExpr*)rinfo->clause;
+                YQL_ENSURE(list_length(expr->args) == 2);
+                Expr* a1 = (Expr*)list_nth(expr->args, 0);
+                Expr* a2 = (Expr*)list_nth(expr->args, 1);
+                YQL_ENSURE(a1->type == T_Var, "Unsupported left arg type");
+                YQL_ENSURE(a2->type == T_Var, "Unsupported right arg type");
+
+                left = (Var*)a1;
+                right = (Var*)a2;
+            }
+
+            node.LeftVars.emplace_back(std::make_tuple(left->varno, left->varattno));
+            node.RightVars.emplace_back(std::make_tuple(right->varno, right->varattno));
+
+            if (!bms_is_member(left->varno, jpath->outerjoinpath->parent->relids)) {
+                std::swap(node.LeftVars.back(), node.RightVars.back());
+            }
         }
-
-        node.LeftVar = std::make_tuple(left->varno, left->varattno);
-        node.RightVar = std::make_tuple(right->varno, right->varattno);
 
         node.Inner = MakeOutputJoin(output, jpath->innerjoinpath);
         node.Outer = MakeOutputJoin(output, jpath->outerjoinpath);
-
-        if (!bms_is_member(left->varno, jpath->outerjoinpath->parent->relids)) {
-            std::swap(node.LeftVar, node.RightVar);
-        }
     }
 
     output.Nodes[id] = node;

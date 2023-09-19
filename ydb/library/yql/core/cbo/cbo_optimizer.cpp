@@ -39,6 +39,15 @@ void PrettyPrintVar(TStringBuilder& b, const IOptimizer::TInput* input, IOptimiz
     }
 }
 
+void PrettyPrintVars(TStringBuilder& b, const IOptimizer::TInput* input, const std::vector<IOptimizer::TVarId>& vars) {
+    for (ui32 j = 0; j < vars.size(); ++j) {
+        PrettyPrintVar(b, input, vars[j]);
+        if (j != vars.size() - 1) {
+            b << ",";
+        }
+    } 
+}
+
 void PrettyPrintNode(int level, TStringBuilder& b, const IOptimizer::TOutput& output, int id) {
     TStringBuf prefix = Prefix(level);
     const auto& node = output.Nodes[id];
@@ -65,16 +74,11 @@ void PrettyPrintNode(int level, TStringBuilder& b, const IOptimizer::TOutput& ou
     }
 
     {
-        auto isEmpty = [](IOptimizer::TVarId id) -> bool {
-            auto& [a, b] = id;
-            return a<=0 || b<=0;
-        };
-
-        if (!isEmpty(node.LeftVar) && !isEmpty(node.RightVar)) {
+        if (!node.LeftVars.empty() && !node.RightVars.empty()) {
             b << prefix << " Op: ";
-            PrettyPrintVar(b, output.Input, node.LeftVar);
+            PrettyPrintVars(b, output.Input, node.LeftVars);
             b << " = ";
-            PrettyPrintVar(b, output.Input, node.RightVar);
+            PrettyPrintVars(b, output.Input, node.RightVars);
             b << "\n";
         }
     }
@@ -130,12 +134,7 @@ TString IOptimizer::TInput::ToString() const {
     b << "EqClasses: [";
     for (ui32 i = 0; i < EqClasses.size(); ++i) {
         b << "[";
-        for (ui32 j = 0; j < EqClasses[i].Vars.size(); ++j) {
-            PrettyPrintVar(b, this, EqClasses[i].Vars[j]);
-            if (j != EqClasses[i].Vars.size() - 1) {
-                b << ",";
-            }
-        }
+        PrettyPrintVars(b, this, EqClasses[i].Vars);
         b << "]";
         if (i != EqClasses.size() - 1) {
             b << ",";

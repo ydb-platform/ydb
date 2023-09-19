@@ -301,14 +301,15 @@ private:
         }
     }
 
-    TExprNode::TPtr MakeLabel(IOptimizer::TVarId var) const {
-        auto [relId, varId] = var;
-        auto [table, column] = Var2TableCol[relId - 1][varId - 1];
+    TExprNode::TPtr MakeLabel(const std::vector<IOptimizer::TVarId>& vars) const {
+        TVector<TExprNodePtr> label; label.reserve(vars.size() * 2);
+ 
+        for (auto [relId, varId] : vars) {
+            auto [table, column] = Var2TableCol[relId - 1][varId - 1];
 
-        TVector<TExprNodePtr> label = {
-            Ctx.NewAtom(Root->JoinKind->Pos(), table),
-            Ctx.NewAtom(Root->JoinKind->Pos(), column)
-        };
+            label.emplace_back(Ctx.NewAtom(Root->JoinKind->Pos(), table));
+            label.emplace_back(Ctx.NewAtom(Root->JoinKind->Pos(), column));
+        }
 
         return Build<TCoAtomList>(Ctx, Root->JoinKind->Pos())
                 .Add(label)
@@ -344,8 +345,8 @@ private:
                 break;
             }
             ret->JoinKind = Ctx.NewAtom(Root->JoinKind->Pos(), joinKind);
-            ret->LeftLabel = MakeLabel(node->LeftVar);
-            ret->RightLabel = MakeLabel(node->RightVar);
+            ret->LeftLabel = MakeLabel(node->LeftVars);
+            ret->RightLabel = MakeLabel(node->RightVars);
             int index = scope.size();
             ret->Left = Convert(node->Outer, scope);
             ret->Right = Convert(node->Inner, scope);

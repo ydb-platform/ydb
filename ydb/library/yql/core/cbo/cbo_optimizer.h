@@ -51,9 +51,9 @@ struct IOptimizer {
     struct TJoinNode {
         EJoinType Mode = EJoinType::Unknown;
         EJoinStrategy Strategy = EJoinStrategy::Unknown;
-        // only a = b supported yet
-        TVarId LeftVar = {};
-        TVarId RightVar = {};
+        // only a = b && c = d ...  supported yet
+        std::vector<TVarId> LeftVars = {};
+        std::vector<TVarId> RightVars = {};
         std::vector<int> Rels = {};
         int Outer = -1; // index in Nodes
         int Inner = -1; // index in Nodes

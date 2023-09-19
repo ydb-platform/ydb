@@ -5,14 +5,14 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/ydb-platform/ydb/library/go/core/log"
 	api_common "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/api/common"
-	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/rdbms"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
 )
 
-var _ rdbms.Connection = (*connection)(nil)
+var _ utils.Connection = (*Connection)(nil)
 
 type rows struct {
 	pgx.Rows
@@ -23,20 +23,20 @@ func (r rows) Close() error {
 	return nil
 }
 
-type connection struct {
+type Connection struct {
 	*pgx.Conn
 }
 
-func (c connection) Close() error {
+func (c Connection) Close() error {
 	return c.Conn.Close(context.TODO())
 }
 
-func (c connection) Query(ctx context.Context, query string, args ...any) (rdbms.Rows, error) {
+func (c Connection) Query(ctx context.Context, query string, args ...any) (utils.Rows, error) {
 	out, err := c.Conn.Query(ctx, query, args...)
 	return rows{Rows: out}, err
 }
 
-var _ rdbms.ConnectionManager = (*connectionManager)(nil)
+var _ utils.ConnectionManager[*Connection] = (*connectionManager)(nil)
 
 type connectionManager struct {
 	// TODO: cache of connections, remove unused connections with TTL
@@ -46,41 +46,48 @@ func (c *connectionManager) Make(
 	ctx context.Context,
 	_ log.Logger,
 	dsi *api_common.TDataSourceInstance,
-) (rdbms.Connection, error) {
+) (*Connection, error) {
 	if dsi.GetCredentials().GetBasic() == nil {
 		return nil, fmt.Errorf("currently only basic auth is supported")
 	}
 
 	if dsi.Protocol != api_common.EProtocol_NATIVE {
-		return nil, fmt.Errorf("can not run PostgreSQL connection with protocol '%v'", dsi.Protocol)
+		return nil, fmt.Errorf("can not create PostgreSQL connection with protocol '%v'", dsi.Protocol)
 	}
 
-	connStr := fmt.Sprintf("dbname=%s user=%s password=%s host=%s port=%d",
-		dsi.Database,
-		dsi.Credentials.GetBasic().Username,
-		dsi.Credentials.GetBasic().Password,
-		dsi.GetEndpoint().GetHost(),
-		dsi.GetEndpoint().GetPort(),
-	)
+	if socketType, _ := pgconn.NetworkAddress(dsi.GetEndpoint().GetHost(), uint16(dsi.GetEndpoint().GetPort())); socketType != "tcp" {
+		return nil, fmt.Errorf("can not create PostgreSQL connection with socket type '%s'", socketType)
+	}
 
+	connStr := "dbname=DBNAME user=USER password=PASSWORD host=HOST port=5432"
 	if dsi.UseTls {
 		connStr += " sslmode=verify-full"
 	} else {
 		connStr += " sslmode=disable"
 	}
 
-	conn, err := pgx.Connect(ctx, connStr)
+	connCfg, err := pgx.ParseConfig(connStr)
+	if err != nil {
+		return nil, fmt.Errorf("parse connection config template: %w", err)
+	}
+	connCfg.Database = dsi.Database
+	connCfg.Host = dsi.GetEndpoint().GetHost()
+	connCfg.Port = uint16(dsi.GetEndpoint().GetPort())
+	connCfg.User = dsi.Credentials.GetBasic().GetUsername()
+	connCfg.Password = dsi.Credentials.GetBasic().GetPassword()
+
+	conn, err := pgx.ConnectConfig(ctx, connCfg)
 	if err != nil {
 		return nil, fmt.Errorf("open connection: %w", err)
 	}
 
-	return &connection{Conn: conn}, nil
+	return &Connection{conn}, nil
 }
 
-func (c *connectionManager) Release(logger log.Logger, conn rdbms.Connection) {
-	utils.LogCloserError(logger, conn, "close connection to PostgreSQL")
+func (c *connectionManager) Release(logger log.Logger, conn *Connection) {
+	utils.LogCloserError(logger, conn, "close posgresql connection")
 }
 
-func NewConnectionManager() rdbms.ConnectionManager {
+func NewConnectionManager() utils.ConnectionManager[*Connection] {
 	return &connectionManager{}
 }

@@ -11,20 +11,36 @@ import (
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 )
 
-type Handler struct {
+type Handler interface {
+	DescribeTable(
+		ctx context.Context,
+		logger log.Logger,
+		request *api_service_protos.TDescribeTableRequest,
+	) (*api_service_protos.TDescribeTableResponse, error)
+
+	ReadSplit(
+		ctx context.Context,
+		logger log.Logger,
+		dataSourceInstance *api_common.TDataSourceInstance,
+		split *api_service_protos.TSplit,
+		pagingWriter *utils.PagingWriter,
+	) error
+
+	TypeMapper() utils.TypeMapper
+}
+
+type handlerImpl[CONN utils.Connection] struct {
 	typeMapper        utils.TypeMapper
-	queryBuilder      QueryBuilder
-	connectionManager ConnectionManager
+	queryBuilder      utils.QueryExecutor[CONN]
+	connectionManager utils.ConnectionManager[CONN]
 	logger            log.Logger
 }
 
-func (h *Handler) DescribeTable(
+func (h *handlerImpl[CONN]) DescribeTable(
 	ctx context.Context,
 	logger log.Logger,
 	request *api_service_protos.TDescribeTableRequest,
 ) (*api_service_protos.TDescribeTableResponse, error) {
-	query := h.queryBuilder.DescribeTable(request)
-
 	conn, err := h.connectionManager.Make(ctx, logger, request.DataSourceInstance)
 	if err != nil {
 		return nil, fmt.Errorf("make connection: %w", err)
@@ -32,13 +48,12 @@ func (h *Handler) DescribeTable(
 
 	defer h.connectionManager.Release(logger, conn)
 
-	logger.Debug("execute query", log.String("query", query))
-
-	rows, err := conn.Query(ctx, query)
+	rows, err := h.queryBuilder.DescribeTable(ctx, conn, request)
 	if err != nil {
-		return nil, fmt.Errorf("query '%s' error: %w", query, err)
+		return nil, fmt.Errorf("query builder error: %w", err)
 	}
 
+	// logger.Debug("execute query", log.String("query", query))
 	defer func() { utils.LogCloserError(logger, rows, "close rows") }()
 
 	var (
@@ -71,7 +86,7 @@ func (h *Handler) DescribeTable(
 	return &api_service_protos.TDescribeTableResponse{Schema: &schema}, nil
 }
 
-func (h *Handler) ReadSplit(
+func (h *handlerImpl[CONN]) ReadSplit(
 	ctx context.Context,
 	logger log.Logger,
 	dataSourceInstance *api_common.TDataSourceInstance,
@@ -156,8 +171,16 @@ func (h *Handler) ReadSplit(
 	return nil
 }
 
-func (h *Handler) TypeMapper() utils.TypeMapper { return h.typeMapper }
+func (h *handlerImpl[CONN]) TypeMapper() utils.TypeMapper { return h.typeMapper }
 
-func NewHandler(logger log.Logger, queryBuilder QueryBuilder, connectionManager ConnectionManager, typeMapper utils.TypeMapper) *Handler {
-	return &Handler{logger: logger, queryBuilder: queryBuilder, connectionManager: connectionManager, typeMapper: typeMapper}
+func newHandler[CONN utils.Connection](
+	logger log.Logger,
+	preset *preset[CONN],
+) Handler {
+	return &handlerImpl[CONN]{
+		logger:            logger,
+		queryBuilder:      preset.queryExecutor,
+		connectionManager: preset.connectionManager,
+		typeMapper:        preset.typeMapper,
+	}
 }

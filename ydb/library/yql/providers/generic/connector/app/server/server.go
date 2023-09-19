@@ -8,10 +8,7 @@ import (
 	"github.com/apache/arrow/go/v13/arrow/memory"
 	"github.com/spf13/cobra"
 	"github.com/ydb-platform/ydb/library/go/core/log"
-	api_common "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/api/common"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/config"
-	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/clickhouse"
-	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/postgresql"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/rdbms"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
 	api_service "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service"
@@ -22,7 +19,7 @@ import (
 
 type Server struct {
 	api_service.UnimplementedConnectorServer
-	handlers              map[api_common.EDataSourceKind]*rdbms.Handler
+	handlerFactory        *rdbms.HandlerFactory
 	columnarBufferFactory *utils.ColumnarBufferFactory
 	cfg                   *config.ServerConfig
 	logger                log.Logger
@@ -47,7 +44,7 @@ func (s *Server) DescribeTable(
 		}, nil
 	}
 
-	handler, err := s.getHandler(request.DataSourceInstance.Kind)
+	handler, err := s.handlerFactory.Make(logger, request.DataSourceInstance.Kind)
 	if err != nil {
 		logger.Error("request handling failed", log.Error(err))
 
@@ -181,7 +178,7 @@ func (s *Server) readSplit(
 ) error {
 	logger.Debug("reading split", log.String("split", split.String()))
 
-	handler, err := s.getHandler(request.DataSourceInstance.Kind)
+	handler, err := s.handlerFactory.Make(logger, request.DataSourceInstance.Kind)
 	if err != nil {
 		return fmt.Errorf("get handler: %w", err)
 	}
@@ -261,25 +258,12 @@ func (s *Server) makeOptions() ([]grpc.ServerOption, error) {
 	return opts, nil
 }
 
-func (s *Server) getHandler(dataSourceType api_common.EDataSourceKind) (*rdbms.Handler, error) {
-	if h, ok := s.handlers[dataSourceType]; ok {
-		return h, nil
-	}
-
-	return nil, fmt.Errorf("pick handler for data source type '%v': %w", dataSourceType, utils.ErrDataSourceNotSupported)
-}
-
 func newServer(
 	logger log.Logger,
 	cfg *config.ServerConfig,
 ) (*Server, error) {
 	return &Server{
-		handlers: map[api_common.EDataSourceKind]*rdbms.Handler{
-			api_common.EDataSourceKind_CLICKHOUSE: rdbms.NewHandler(
-				logger, clickhouse.NewQueryBuilder(), clickhouse.NewConnectionManager(), clickhouse.NewTypeMapper()),
-			api_common.EDataSourceKind_POSTGRESQL: rdbms.NewHandler(
-				logger, postgresql.NewQueryBuilder(), postgresql.NewConnectionManager(), postgresql.NewTypeMapper()),
-		},
+		handlerFactory: rdbms.NewHandlerFactory(),
 		columnarBufferFactory: utils.NewColumnarBufferFactory(
 			memory.DefaultAllocator,
 			utils.NewReadLimiterFactory(cfg.ReadLimit),

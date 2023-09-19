@@ -1,4 +1,4 @@
-package rdbms
+package utils
 
 import (
 	"context"
@@ -19,7 +19,7 @@ type Rows interface {
 	Scan(dest ...any) error
 }
 
-type ConnectionManager interface {
-	Make(ctx context.Context, logger log.Logger, dataSourceInstance *api_common.TDataSourceInstance) (Connection, error)
-	Release(logger log.Logger, conn Connection)
+type ConnectionManager[CONN any] interface {
+	Make(ctx context.Context, logger log.Logger, dataSourceInstance *api_common.TDataSourceInstance) (CONN, error)
+	Release(logger log.Logger, conn CONN)
 }

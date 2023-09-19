@@ -11,21 +11,20 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ydb-platform/ydb/library/go/core/log"
 	api_common "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/api/common"
-	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/rdbms"
 	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/server/utils"
 )
 
-var _ rdbms.Connection = (*connection)(nil)
+var _ utils.Connection = (*Connection)(nil)
 
-type connection struct {
+type Connection struct {
 	*sql.DB
 }
 
-func (c connection) Query(ctx context.Context, query string, args ...any) (rdbms.Rows, error) {
+func (c Connection) Query(ctx context.Context, query string, args ...any) (utils.Rows, error) {
 	return c.DB.QueryContext(ctx, query, args...)
 }
 
-var _ rdbms.ConnectionManager = (*connectionManager)(nil)
+var _ utils.ConnectionManager[*Connection] = (*connectionManager)(nil)
 
 type connectionManager struct {
 	// TODO: cache of connections, remove unused connections with TTL
@@ -35,7 +34,7 @@ func (c *connectionManager) Make(
 	ctx context.Context,
 	logger log.Logger,
 	dsi *api_common.TDataSourceInstance,
-) (rdbms.Connection, error) {
+) (*Connection, error) {
 	if dsi.GetCredentials().GetBasic() == nil {
 		return nil, fmt.Errorf("currently only basic auth is supported")
 	}
@@ -93,13 +92,13 @@ func (c *connectionManager) Make(
 	conn.SetMaxOpenConns(maxOpenConns)
 	conn.SetConnMaxLifetime(time.Hour)
 
-	return &connection{DB: conn}, nil
+	return &Connection{DB: conn}, nil
 }
 
-func (c *connectionManager) Release(logger log.Logger, conn rdbms.Connection) {
+func (c *connectionManager) Release(logger log.Logger, conn *Connection) {
 	utils.LogCloserError(logger, conn, "close clickhouse connection")
 }
 
-func NewConnectionManager() rdbms.ConnectionManager {
+func NewConnectionManager() utils.ConnectionManager[*Connection] {
 	return &connectionManager{}
 }

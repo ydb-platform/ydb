@@ -262,7 +262,7 @@ func (typeMapper) appendValueToBuilder(
 func NewTypeMapper() utils.TypeMapper {
 	return typeMapper{
 		isFixedString: regexp.MustCompile(`FixedString\([0-9]+\)`),
-		isDateTime64:  regexp.MustCompile(`DateTime64\(\d\)`),
+		isDateTime64:  regexp.MustCompile(`DateTime64\(\d{1}\)`),
 		isNullable:    regexp.MustCompile(`Nullable\((?P<Internal>\w+)\)`),
 	}
 }

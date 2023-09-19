@@ -468,7 +468,7 @@ bool CheckYamlMarkedForMergeOverwriteRepeated(NFyaml::TNodeRef &node) {
                 return false;
             }
         } else if (value.Type() == NFyaml::ENodeType::Sequence) {
-            if (value.Tag() != "") {
+            if (value.Tag() && value.Tag() != "") {
                 return false;
             }
         }
@@ -501,11 +501,14 @@ bool CheckYamlMarkedForOverwrite(NFyaml::TNodeRef &node) {
     for (auto &child : rootMap) {
         auto value = child.Value();
         if (value.Type() == NFyaml::ENodeType::Mapping) {
-            if (value.Tag() != "") {
+            if (value.Tag() && value.Tag() != "") {
+                return false;
+            }
+            if (!CheckYamlMarkedForOverwrite(value)) {
                 return false;
             }
         } else if (value.Type() == NFyaml::ENodeType::Sequence) {
-            if (value.Tag() != "") {
+            if (value.Tag() && value.Tag() != "") {
                 return false;
             }
         }

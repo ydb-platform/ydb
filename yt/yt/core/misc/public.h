@@ -172,4 +172,12 @@ DECLARE_REFCOUNTED_STRUCT(IMemoryReferenceTracker)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class TObject, class TScalar>
+concept CScalable = requires (TObject object, TScalar scalar)
+{
+    { object * scalar } -> std::same_as<TObject>;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT

@@ -1,4 +1,5 @@
 #include "backoff_strategy.h"
+#include "jitter.h"
 
 #include <util/random/normal.h>
 
@@ -58,10 +59,12 @@ TDuration TBackoffStrategy::GetBackoff() const
 
 void TBackoffStrategy::ApplyJitter()
 {
-    auto rnd = StdNormalRandom<double>();
-    bool isNegative = rnd < 0;
-    auto jitter = std::abs(rnd) * Options_.BackoffJitter * Backoff_;
-    BackoffWithJitter_ = isNegative ? Backoff_ - jitter : Backoff_ + jitter;
+    BackoffWithJitter_ = ::NYT::ApplyJitter(Backoff_, Options_.BackoffJitter, +[]{
+        //! StdNormalRandom produces [-6.660, 6.660] according to Wiki
+        const double StdNormalRandomMaxValue = 7.0;
+
+        return StdNormalRandom<double>() / StdNormalRandomMaxValue;
+    });
 }
 
 

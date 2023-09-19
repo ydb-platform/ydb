@@ -12,7 +12,7 @@ namespace {
 struct TRandomCharGenerator
 {
     std::default_random_engine Engine;
-    std::uniform_int_distribution<char> Uniform;
+    std::uniform_int_distribution<int> Uniform;
 
     explicit TRandomCharGenerator(size_t seed)
         : Engine(seed)

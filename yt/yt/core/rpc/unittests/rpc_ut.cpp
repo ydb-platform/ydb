@@ -158,7 +158,7 @@ TYPED_TEST(TNotGrpcTest, StreamingEcho)
     const ssize_t AttachmentSize = 2_MB;
 
     std::mt19937 randomGenerator;
-    std::uniform_int_distribution<char> distribution(std::numeric_limits<char>::min(), std::numeric_limits<char>::max());
+    std::uniform_int_distribution<int> distribution(std::numeric_limits<char>::min(), std::numeric_limits<char>::max());
 
     std::vector<TSharedRef> attachments;
 

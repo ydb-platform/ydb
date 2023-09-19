@@ -44,7 +44,7 @@
             os.Getenv("YDB_CONNECTION_STRING"),
             ydbZap.WithTraces(
                 log,
-                ydbZap.WithDetails(trace.DetailsAll),
+                trace.DetailsAll,
             ),
         )
         if err != nil {
@@ -78,8 +78,8 @@
         db, err := ydb.Open(ctx,
             os.Getenv("YDB_CONNECTION_STRING"),
             ydbZerolog.WithTraces(
-                log,
-                ydbZerolog.WithDetails(trace.DetailsAll),
+                &log,
+                trace.DetailsAll,
             ),
         )
         if err != nil {
@@ -113,8 +113,8 @@
         db, err := ydb.Open(ctx,
             os.Getenv("YDB_CONNECTION_STRING"),
             ydb.WithLogger(
+                logger,
                 trace.DetailsAll,
-                ydb.WithExternalLogger(logger),
             ),
         )
         if err != nil {
@@ -171,7 +171,7 @@
             os.Getenv("YDB_CONNECTION_STRING"),
             ydbZap.WithTraces(
                 log,
-                ydbZap.WithDetails(trace.DetailsAll),
+                trace.DetailsAll,
             ),
         )
         if err != nil {
@@ -183,8 +183,9 @@
         if err != nil {
             panic(err)
         }
+        defer connector.Close()
 
-        db := sql.OpnDB(connector)
+        db := sql.OpenDB(connector)
         defer db.Close()
         ...
     }
@@ -214,8 +215,8 @@
         nativeDriver, err := ydb.Open(ctx,
             os.Getenv("YDB_CONNECTION_STRING"),
             ydbZerolog.WithTraces(
-                log,
-                ydbZerolog.WithDetails(trace.DetailsAll),
+                &log,
+                trace.DetailsAll,
             ),
         )
         if err != nil {
@@ -227,8 +228,9 @@
         if err != nil {
             panic(err)
         }
+        defer connector.Close()
 
-        db := sql.OpnDB(connector)
+        db := sql.OpenDB(connector)
         defer db.Close()
         ...
     }
@@ -258,8 +260,8 @@
         nativeDriver, err := ydb.Open(ctx,
             os.Getenv("YDB_CONNECTION_STRING"),
             ydb.WithLogger(
+                logger,
                 trace.DetailsAll,
-                ydb.WithExternalLogger(logger),
             ),
         )
         if err != nil {
@@ -271,8 +273,9 @@
         if err != nil {
             panic(err)
         }
+        defer connector.Close()
 
-        db := sql.OpnDB(connector)
+        db := sql.OpenDB(connector)
         defer db.Close()
         ...
     }

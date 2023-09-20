@@ -76,6 +76,10 @@ func (c *connectionManager) Make(
 	connCfg.User = dsi.Credentials.GetBasic().GetUsername()
 	connCfg.Password = dsi.Credentials.GetBasic().GetPassword()
 
+	if dsi.UseTls {
+		connCfg.TLSConfig.ServerName = dsi.GetEndpoint().GetHost()
+	}
+
 	conn, err := pgx.ConnectConfig(ctx, connCfg)
 	if err != nil {
 		return nil, fmt.Errorf("open connection: %w", err)

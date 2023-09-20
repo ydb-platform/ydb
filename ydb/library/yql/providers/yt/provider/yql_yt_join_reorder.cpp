@@ -229,6 +229,22 @@ private:
         return eqClass;
     }
 
+    void MakeEqClasses(std::vector<IOptimizer::TEq>& res, const auto& leftVars, const auto& rightVars) {
+        for (int i = 0; i < (int)leftVars.size(); i++) {
+            auto& [lrelId, lvarId, ltable, lcolumn] = leftVars[i];
+            auto& [rrelId, rvarId, rtable, rcolumn] = rightVars[i];
+
+            IOptimizer::TEq eqClass; eqClass.Vars.reserve(2);
+            eqClass.Vars.emplace_back(std::make_tuple(lrelId, lvarId));
+            eqClass.Vars.emplace_back(std::make_tuple(rrelId, rvarId));
+
+            Var2TableCol[lrelId - 1][lvarId - 1] = std::make_tuple(ltable, lcolumn);
+            Var2TableCol[rrelId - 1][rvarId - 1] = std::make_tuple(rtable, rcolumn);
+
+            res.emplace_back(std::move(eqClass));
+        }
+    }
+
     bool OnOp(TYtJoinNodeOp* op) {
 #define CHECK(A, B) \
         if (Y_UNLIKELY(!(A))) { \
@@ -241,21 +257,23 @@ private:
         CHECK(!op->Output, "Non empty output");
         CHECK(op->StarOptions.empty(), "Non empty StarOptions");
 
-        CHECK(op->LeftLabel->ChildrenSize() == 2, "Only 1 var per join supported");
-        CHECK(op->RightLabel->ChildrenSize() == 2, "Only 1 var per join supported");
-
         const auto& joinKind = op->JoinKind->Content();
 
         if (joinKind == "Inner") {
             // relId, varId, table, column
-            std::vector<std::tuple<int,int,TStringBuf,TStringBuf>> vars;
-            ExtractVars(vars, op->LeftLabel);
-            ExtractVars(vars, op->RightLabel);
+            std::vector<std::tuple<int,int,TStringBuf,TStringBuf>> leftVars;
+            std::vector<std::tuple<int,int,TStringBuf,TStringBuf>> rightVars;
+ 
+            ExtractVars(leftVars, op->LeftLabel);
+            ExtractVars(rightVars, op->RightLabel);
 
-            IOptimizer::TEq eqClass = MakeEqClass(vars);
+            CHECK(leftVars.size() == rightVars.size(), "Left and right labels must have the same size");
 
-            EqClasses.emplace_back(std::move(eqClass));
+            MakeEqClasses(EqClasses, leftVars, rightVars);
         } else if (joinKind == "Left" || joinKind == "Right") {
+            CHECK(op->LeftLabel->ChildrenSize() == 2, "Only 1 var per join supported");
+            CHECK(op->RightLabel->ChildrenSize() == 2, "Only 1 var per join supported");
+
             std::vector<std::tuple<int,int,TStringBuf,TStringBuf>> leftVars, rightVars;
             ExtractVars(leftVars, op->LeftLabel);
             ExtractVars(rightVars, op->RightLabel);

@@ -33,8 +33,9 @@ public:
     TTxType GetTxType() const override { return TXTYPE_CDC_STREAM_EMIT_HEARTBEATS; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_I("Emit change records till version"
-            << ": " << Edge);
+        LOG_I("Emit change records"
+            << ": edge# " << Edge
+            << ", at tablet# " << Self->TabletID());
 
         NIceDb::TNiceDb db(txc.DB);
         const auto heartbeats = Self->GetCdcStreamHeartbeatManager().EmitHeartbeats(txc.DB, Edge);
@@ -68,7 +69,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_I("Enqueue " << ChangeRecords.size() << " change record(s)");
+        LOG_I("Enqueue " << ChangeRecords.size() << " change record(s)"
+            << ": at tablet# " << Self->TabletID());
         Self->EnqueueChangeRecords(std::move(ChangeRecords));
         Self->EmitHeartbeats(ctx);
     }
@@ -76,6 +78,9 @@ public:
 }; // TTxCdcStreamEmitHeartbeats
 
 void TDataShard::EmitHeartbeats(const TActorContext& ctx) {
+    LOG_D("Emit heartbeats"
+        << ": at tablet# " << TabletID());
+
     if (State != TShardState::Ready) {
         return;
     }

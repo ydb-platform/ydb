@@ -30,6 +30,7 @@ static constexpr char TMP_REQUEST_MARKER[] = "__TMP__REQUEST__MARKER__";
 static constexpr ui32 CACHE_SIZE = 100_MB;
 static constexpr ui32 MAX_BYTES = 25_MB;
 static constexpr ui32 MAX_SOURCE_ID_LENGTH = 2048;
+static constexpr ui32 MAX_HEARTBEAT_SIZE = 2_KB;
 
 struct TPartitionInfo {
     TPartitionInfo(const TActorId& actor, TMaybe<TPartitionKeyRange>&& keyRange,
@@ -1757,7 +1758,9 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
         TString errorStr = "";
         if (!cmd.HasSeqNo() && !req.GetIsDirectWrite()) {
             errorStr = "no SeqNo";
-        } else if (!cmd.HasData() || cmd.GetData().empty()){
+        } else if (cmd.HasData() && cmd.HasHeartbeat()) {
+            errorStr = "Data and Heartbeat are mutually exclusive";
+        } else if (cmd.GetData().empty() && cmd.GetHeartbeat().GetData().empty()) {
             errorStr = "empty Data";
         } else if ((!cmd.HasSourceId() || cmd.GetSourceId().empty()) && !req.GetIsDirectWrite() && !cmd.GetDisableDeduplication()) {
             errorStr = "empty SourceId";
@@ -1779,6 +1782,10 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
             errorStr = "Too big SourceId";
         } else if (mirroredPartition && !cmd.GetDisableDeduplication()) {
             errorStr = "Write to mirrored topic is forbiden";
+        } else if (cmd.HasHeartbeat() && cmd.GetHeartbeat().GetData().size() > MAX_HEARTBEAT_SIZE) {
+            errorStr = "Too big Heartbeat";
+        } else if (cmd.HasHeartbeat() && cmd.HasTotalParts() && cmd.GetTotalParts() != 1) {
+            errorStr = "Heartbeat must be a single-part message";
         }
         ui64 createTimestampMs = 0, writeTimestampMs = 0;
         if (cmd.HasCreateTimeMS() && cmd.GetCreateTimeMS() >= 0)
@@ -1798,6 +1805,12 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
         Y_VERIFY(mSize > 204800);
         ui64 receiveTimestampMs = TAppData::TimeProvider->Now().MilliSeconds();
         bool disableDeduplication = cmd.GetDisableDeduplication();
+
+        std::optional<TRowVersion> heartbeatVersion;
+        if (cmd.HasHeartbeat()) {
+            heartbeatVersion.emplace(cmd.GetHeartbeat().GetStep(), cmd.GetHeartbeat().GetTxId());
+        }
+
         if (cmd.GetData().size() > mSize) {
             if (cmd.HasPartNo()) {
                 ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
@@ -1826,7 +1839,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
                     totalParts, totalSize, createTimestampMs, receiveTimestampMs,
                     disableDeduplication, writeTimestampMs, data, uncompressedSize,
                     cmd.GetPartitionKey(), cmd.GetExplicitHash(), cmd.GetExternalOperation(),
-                    cmd.GetIgnoreQuotaDeadline()
+                    cmd.GetIgnoreQuotaDeadline(), heartbeatVersion
                 });
                 partNo++;
                 uncompressedSize = 0;
@@ -1840,13 +1853,29 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
                 );
             }
             Y_VERIFY(partNo == totalParts);
+        } else if (cmd.GetHeartbeat().GetData().size() > mSize) {
+            Y_VERIFY_DEBUG(false, "This should never happen");
+            ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, TStringBuilder()
+                << "Too big heartbeat message, must be at most " << mSize << ", but got " << cmd.GetHeartbeat().GetData().size());
+            return;
         } else {
+            ui32 totalSize = cmd.GetData().Size();
+            if (cmd.HasHeartbeat()) {
+                totalSize = cmd.GetHeartbeat().GetData().Size();
+            }
+            if (cmd.HasTotalSize()) {
+                totalSize = cmd.GetTotalSize();
+            }
+
+            const auto& data = cmd.HasHeartbeat()
+                ? cmd.GetHeartbeat().GetData()
+                : cmd.GetData();
+
             msgs.push_back({cmd.GetSourceId(), static_cast<ui64>(cmd.GetSeqNo()), static_cast<ui16>(cmd.HasPartNo() ? cmd.GetPartNo() : 0),
-                static_cast<ui16>(cmd.HasPartNo() ? cmd.GetTotalParts() : 1),
-                static_cast<ui32>(cmd.HasTotalSize() ? cmd.GetTotalSize() : cmd.GetData().Size()),
-                createTimestampMs, receiveTimestampMs, disableDeduplication, writeTimestampMs, cmd.GetData(),
+                static_cast<ui16>(cmd.HasPartNo() ? cmd.GetTotalParts() : 1), totalSize,
+                createTimestampMs, receiveTimestampMs, disableDeduplication, writeTimestampMs, data,
                 cmd.HasUncompressedSize() ? cmd.GetUncompressedSize() : 0u, cmd.GetPartitionKey(), cmd.GetExplicitHash(),
-                cmd.GetExternalOperation(), cmd.GetIgnoreQuotaDeadline()
+                cmd.GetExternalOperation(), cmd.GetIgnoreQuotaDeadline(), heartbeatVersion
             });
         }
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,

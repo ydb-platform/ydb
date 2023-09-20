@@ -198,7 +198,8 @@ private:
     void UpdateWriteBufferIsFullState(const TInstant& now);
 
     TInstant GetWriteTimeEstimate(ui64 offset) const;
-    bool AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx, TSourceIdWriter& sourceIdWriter);
+    bool AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx,
+        TSourceIdWriter& sourceIdWriter, THeartbeatEmitter& heartbeatEmitter);
     bool CleanUp(TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
     bool CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorContext& ctx);
     bool IsQuotingEnabled() const;

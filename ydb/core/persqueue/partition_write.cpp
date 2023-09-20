@@ -9,6 +9,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/quoter/public/quoter.h>
+#include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/counters_pq.pb.h>
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
@@ -306,10 +307,15 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             }
             if (!already && partNo + 1 == totalParts) {
                 if (it == SourceIdStorage.GetInMemorySourceIds().end()) {
+                    Y_VERIFY(!writeResponse.Msg.HeartbeatVersion);
                     TabletCounters.Cumulative()[COUNTER_PQ_SID_CREATED].Increment(1);
-                    SourceIdStorage.RegisterSourceId(s, writeResponse.Msg.SeqNo, offset, CurrentTimestamp);
+                    SourceIdStorage.RegisterSourceId(s, seqNo, offset, CurrentTimestamp);
+                } else if (const auto& hbVersion = writeResponse.Msg.HeartbeatVersion) {
+                    SourceIdStorage.RegisterSourceId(s, it->second.Updated(
+                        seqNo, offset, CurrentTimestamp, THeartbeat{*hbVersion, writeResponse.Msg.Data}
+                    ));
                 } else {
-                    SourceIdStorage.RegisterSourceId(s, it->second.Updated(writeResponse.Msg.SeqNo, offset, CurrentTimestamp));
+                    SourceIdStorage.RegisterSourceId(s, it->second.Updated(seqNo, offset, CurrentTimestamp));
                 }
 
                 TabletCounters.Cumulative()[COUNTER_PQ_WRITE_OK].Increment(1);
@@ -332,7 +338,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                 PartitionWriteQuotaWaitCounter->IncFor(quotedTime.MilliSeconds());
             }
 
-            if (!already && partNo + 1 == totalParts)
+            if (!already && partNo + 1 == totalParts && !writeResponse.Msg.HeartbeatVersion)
                 ++offset;
         } else if (response.IsOwnership()) {
             const TString& ownerCookie = response.GetOwnership().OwnerCookie;
@@ -795,7 +801,8 @@ void TPartition::CancelAllWritesOnWrite(const TActorContext& ctx, TEvKeyValue::T
 }
 
 bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx,
-                                         TSourceIdWriter& sourceIdWriter) {
+                                         TSourceIdWriter& sourceIdWriter, THeartbeatEmitter& heartbeatEmitter)
+{
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "TPartition::AppendHeadWithNewWrites. Partition: " << Partition);
 
     ui64 curOffset = PartitionedBlob.IsInited() ? PartitionedBlob.GetOffset() : EndOffset;
@@ -895,6 +902,39 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
             }
 
             TString().swap(p.Msg.Data);
+            EmplaceResponse(std::move(pp), ctx);
+            continue;
+        }
+
+        if (const auto& hbVersion = p.Msg.HeartbeatVersion) {
+            if (it_inMemory == SourceIdStorage.GetInMemorySourceIds().end()) {
+                CancelAllWritesOnWrite(ctx, request, TStringBuilder()
+                    << "Cannot apply heartbeat on unknown sourceId: " << EscapeC(p.Msg.SourceId), p, sourceIdWriter);
+                return false;
+            }
+            if (!it_inMemory->second.Explicit) {
+                CancelAllWritesOnWrite(ctx, request, TStringBuilder()
+                    << "Cannot apply heartbeat on implcit sourceId: " << EscapeC(p.Msg.SourceId), p, sourceIdWriter);
+                return false;
+            }
+
+            LOG_DEBUG_S(
+                    ctx, NKikimrServices::PERSQUEUE,
+                    "Topic '" << TopicName() << "' partition " << Partition
+                        << " process heartbeat sourceId '" << EscapeC(p.Msg.SourceId) << "'"
+                        << " version " << *hbVersion
+            );
+
+            auto heartbeat = THeartbeat{
+                .Version = *hbVersion,
+                .Data = p.Msg.Data,
+            };
+
+            heartbeatEmitter.Process(p.Msg.SourceId, heartbeat);
+            sourceIdWriter.RegisterSourceId(p.Msg.SourceId, it_inMemory->second.Updated(
+                p.Msg.SeqNo, curOffset, CurrentTimestamp, std::move(heartbeat)
+            ));
+
             EmplaceResponse(std::move(pp), ctx);
             continue;
         }
@@ -1296,18 +1336,48 @@ bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, TInstant now, c
     Y_VERIFY(request->Record.CmdWriteSize() == 0);
     Y_VERIFY(request->Record.CmdRenameSize() == 0);
     Y_VERIFY(request->Record.CmdDeleteRangeSize() == 0);
+
     const auto format = AppData(ctx)->PQConfig.GetEnableProtoSourceIdInfo()
         ? ESourceIdFormat::Proto
         : ESourceIdFormat::Raw;
     TSourceIdWriter sourceIdWriter(format);
+    THeartbeatEmitter heartbeatEmitter(SourceIdStorage);
 
-    bool headCleared = AppendHeadWithNewWrites(request, ctx, sourceIdWriter);
+    bool headCleared = AppendHeadWithNewWrites(request, ctx, sourceIdWriter, heartbeatEmitter);
 
     if (headCleared) {
         Y_VERIFY(!CompactedKeys.empty() || Head.PackedSize == 0);
         for (ui32 i = 0; i < TotalLevels; ++i) {
             DataKeysHead[i].Clear();
         }
+    }
+
+    if (const auto heartbeat = heartbeatEmitter.CanEmit()) {
+        LOG_INFO_S(
+                ctx, NKikimrServices::PERSQUEUE,
+                "Topic '" << TopicName() << "' partition " << Partition
+                    << " emit heartbeat " << heartbeat->Version
+        );
+
+        EmplaceRequest(TWriteMsg{Max<ui64>() /* cookie */, Nothing(), TEvPQ::TEvWrite::TMsg{
+            .SourceId = NSourceIdEncoding::EncodeSimple(ToString(TabletID)),
+            .SeqNo = 0,
+            .PartNo = 0,
+            .TotalParts = 1,
+            .TotalSize = static_cast<ui32>(heartbeat->Data.size()),
+            .CreateTimestamp = CurrentTimestamp.MilliSeconds(),
+            .ReceiveTimestamp = CurrentTimestamp.MilliSeconds(),
+            .DisableDeduplication = true,
+            .WriteTimestamp = CurrentTimestamp.MilliSeconds(),
+            .Data = heartbeat->Data,
+            .UncompressedSize = 0,
+            .PartitionKey = {},
+            .ExplicitHashKey = {},
+            .External = false,
+            .IgnoreQuotaDeadline = true,
+            .HeartbeatVersion = std::nullopt,
+        }}, ctx);
+        WriteInflightSize += heartbeat->Data.size();
     }
 
     if (NewHead.PackedSize == 0) { //nothing added to head - just compaction or tmp part blobs writed

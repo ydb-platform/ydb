@@ -201,6 +201,7 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                         TABLEH() {out << "CreateTimestamp";}
                         TABLEH() {out << "Explicit";}
                         TABLEH() {out << "State";}
+                        TABLEH() {out << "LastHeartbeat";}
                     }
                 }
                 TABLEBODY() {
@@ -213,6 +214,11 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                             TABLED() {out << ToStringLocalTimeUpToSeconds(sourceIdInfo.CreateTimestamp);}
                             TABLED() {out << (sourceIdInfo.Explicit ? "true" : "false");}
                             TABLED() {out << sourceIdInfo.State;}
+                            if (const auto& hb = sourceIdInfo.LastHeartbeat) {
+                                TABLED() {out << hb->Version;}
+                            } else {
+                                TABLED() {out << "null";}
+                            }
                         }
                     }
                 }

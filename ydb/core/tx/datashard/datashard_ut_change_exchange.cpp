@@ -2751,7 +2751,6 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"update":{"value":30},"key":[3]})",
             R"({"resolved":"***"})",
             R"({"resolved":"***"})",
-            R"({"resolved":"***"})",
         });
 
         // disable stream
@@ -2763,7 +2762,6 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"update":{"value":10},"key":[1]})",
             R"({"update":{"value":20},"key":[2]})",
             R"({"update":{"value":30},"key":[3]})",
-            R"({"resolved":"***"})",
             R"({"resolved":"***"})",
             R"({"resolved":"***"})",
         });

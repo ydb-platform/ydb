@@ -2,11 +2,13 @@
 
 #include "global.h"
 
-#include <ydb/library/persqueue/topic_parser/topic_parser.h>
+#include <ydb/core/base/row_version.h>
 #include <ydb/core/protos/pqconfig.pb.h>
-#include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/persqueue/key.h>
 #include <ydb/core/persqueue/metering_sink.h>
+#include <ydb/core/tablet/tablet_counters.h>
+#include <ydb/library/persqueue/topic_parser/topic_parser.h>
+
 #include <library/cpp/actors/core/event_local.h>
 #include <library/cpp/actors/core/actorid.h>
 
@@ -161,6 +163,8 @@ struct TEvPQ {
             TString ExplicitHashKey;
             bool External;
             bool IgnoreQuotaDeadline;
+            // If specified, Data will contain heartbeat's data
+            std::optional<TRowVersion> HeartbeatVersion;
         };
 
         TEvWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, TVector<TMsg> &&msgs, bool isDirectWrite)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/keyvalue/keyvalue_events.h>
+#include <ydb/core/persqueue/heartbeat.h>
 #include <ydb/core/persqueue/key.h>
 #include <ydb/core/persqueue/ownerinfo.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
@@ -8,8 +9,7 @@
 
 #include <util/generic/set.h>
 
-namespace NKikimr {
-namespace NPQ {
+namespace NKikimr::NPQ {
 
 enum class ESourceIdFormat: ui8 {
     Raw = 0,
@@ -29,6 +29,7 @@ struct TSourceIdInfo {
     TInstant CreateTimestamp;
     bool Explicit = false;
     TMaybe<TPartitionKeyRange> KeyRange;
+    TMaybe<THeartbeat> LastHeartbeat;
     EState State = EState::Registered;
 
     TSourceIdInfo() = default;
@@ -36,6 +37,7 @@ struct TSourceIdInfo {
     TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs, TMaybe<TPartitionKeyRange>&& keyRange, bool isInSplit = false);
 
     TSourceIdInfo Updated(ui64 seqNo, ui64 offset, TInstant writeTs) const;
+    TSourceIdInfo Updated(ui64 seqNo, ui64 offset, TInstant writeTs, THeartbeat&& heartbeat) const;
 
     static EState ConvertState(NKikimrPQ::TMessageGroupInfo::EState value);
     static NKikimrPQ::TMessageGroupInfo::EState ConvertState(EState value);
@@ -55,9 +57,29 @@ struct TSourceIdInfo {
 
 }; // TSourceIdInfo
 
-using TSourceIdMap = THashMap<TString, TSourceIdInfo>;
+class THeartbeatProcessor {
+public:
+    THeartbeatProcessor() = default;
+    explicit THeartbeatProcessor(
+        const THashSet<TString>& sourceIdsWithHeartbeat,
+        const TMap<TRowVersion, THashSet<TString>>& sourceIdsByHeartbeat);
 
-class TSourceIdStorage {
+    void ApplyHeartbeat(const TString& sourceId, const TRowVersion& version);
+    void ForgetHeartbeat(const TString& sourceId, const TRowVersion& version);
+    void ForgetSourceId(const TString& sourceId);
+
+protected:
+    THashSet<TString> SourceIdsWithHeartbeat;
+    TMap<TRowVersion, THashSet<TString>> SourceIdsByHeartbeat;
+
+}; // THeartbeatProcessor
+
+using TSourceIdMap = THashMap<TString, TSourceIdInfo>;
+class THeartbeatEmitter;
+
+class TSourceIdStorage: private THeartbeatProcessor {
+    friend class THeartbeatEmitter;
+
 public:
     const TSourceIdMap& GetInMemorySourceIds() const {
         return InMemorySourceIds;
@@ -88,6 +110,8 @@ private:
     THashMap<TString, TString> SourceIdOwners;
     TVector<TString> OwnersToDrop;
     TSet<std::pair<ui64, TString>> SourceIdsByOffset;
+    // used to track heartbeats
+    THashSet<TString> ExplicitSourceIds;
 
 }; // TSourceIdStorage
 
@@ -122,8 +146,20 @@ private:
 
 }; // TSourceIdWriter
 
-} // NPQ
-} // NKikimr
+class THeartbeatEmitter: private THeartbeatProcessor {
+public:
+    explicit THeartbeatEmitter(const TSourceIdStorage& storage);
+
+    void Process(const TString& sourceId, const THeartbeat& heartbeat);
+    TMaybe<THeartbeat> CanEmit() const;
+
+private:
+    const TSourceIdStorage& Storage;
+    THashMap<TString, THeartbeat> LastHeartbeats;
+
+}; // THeartbeatEmitter
+
+}
 
 Y_DECLARE_OUT_SPEC(inline, NKikimr::NPQ::TSourceIdInfo, out, value) {
     return value.Out(out);

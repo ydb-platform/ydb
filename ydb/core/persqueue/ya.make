@@ -7,6 +7,7 @@ SRCS(
     event_helpers.cpp
     fetch_request_actor.cpp
     header.cpp
+    heartbeat.cpp
     metering_sink.cpp
     mirrorer.cpp
     mirrorer.h

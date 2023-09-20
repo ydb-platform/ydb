@@ -107,6 +107,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
                     NKikimrChangeExchange::TChangeRecord protoRecord;
                     record.SerializeToProto(protoRecord);
                     data.SetData(protoRecord.SerializeAsString());
+                    cmd.SetData(data.SerializeAsString());
                     break;
                 }
 
@@ -124,9 +125,20 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
                     jsonConfig.ValidateUtf8 = false;
                     jsonConfig.WriteNanAsString = true;
                     WriteJson(&str, &json, jsonConfig);
-
                     data.SetData(str.Str());
-                    cmd.SetPartitionKey(record.GetPartitionKey());
+
+                    if (record.GetKind() == TChangeRecord::EKind::CdcDataChange) {
+                        cmd.SetData(data.SerializeAsString());
+                        cmd.SetPartitionKey(record.GetPartitionKey());
+                    } else if (record.GetKind() == TChangeRecord::EKind::CdcHeartbeat) {
+                        auto& heartbeat = *cmd.MutableHeartbeat();
+                        heartbeat.SetStep(record.GetStep());
+                        heartbeat.SetTxId(record.GetTxId());
+                        heartbeat.SetData(data.SerializeAsString());
+                    } else {
+                        Y_FAIL_S("Unexpected cdc record"
+                            << ": kind# " << record.GetKind());
+                    }
                     break;
                 }
 
@@ -137,7 +149,6 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
                 }
             }
 
-            cmd.SetData(data.SerializeAsString());
             Pending.push_back(record.GetSeqNo());
         }
 

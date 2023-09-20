@@ -51,6 +51,7 @@ target_sources(ydb-core-persqueue PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/event_helpers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/fetch_request_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/header.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/heartbeat.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/metering_sink.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/mirrorer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ownerinfo.cpp

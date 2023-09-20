@@ -359,6 +359,12 @@ message TPQTabletConfig {
     optional TPartitionStrategy PartitionStrategy = 35;
 }
 
+message THeartbeat {
+    optional uint64 Step = 1;
+    optional uint64 TxId = 2;
+    optional bytes Data = 3;
+}
+
 message TMessageGroupInfo {
     enum EState {
         STATE_UNKNOWN = 0;
@@ -373,6 +379,7 @@ message TMessageGroupInfo {
     optional bool Explicit = 5;
     optional TPartitionKeyRange KeyRange = 6;
     optional EState State = 7;
+    optional THeartbeat LastHeartbeat = 8;
 }
 
 message TBootstrapConfig {

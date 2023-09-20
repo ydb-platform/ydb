@@ -390,10 +390,7 @@ TString TChangeRecord::GetPartitionKey() const {
             break;
         }
 
-        case EKind::CdcHeartbeat: {
-            return {}; // not used
-        }
-
+        case EKind::CdcHeartbeat:
         case EKind::AsyncIndex: {
             Y_FAIL("Not supported");
         }

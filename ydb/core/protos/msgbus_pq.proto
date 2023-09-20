@@ -74,6 +74,8 @@ message TPersQueuePartitionRequest {
 
         // Do not reject request when quota exceeded
         optional bool IgnoreQuotaDeadline = 16 [ default = false ];
+
+        optional NKikimrPQ.THeartbeat Heartbeat = 17; // mutually exclusive with Data & related fields
     }
 
     message TCmdUpdateWriteTimestamp {

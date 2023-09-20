@@ -7,8 +7,7 @@
 
 #include <algorithm>
 
-namespace NKikimr {
-namespace NPQ {
+namespace NKikimr::NPQ {
 
 static constexpr ui64 MAX_DELETE_COMMAND_SIZE = 10_MB;
 static constexpr ui64 MAX_DELETE_COMMAND_COUNT = 1000;
@@ -80,6 +79,34 @@ void FillDelete(ui32 partition, const TString& sourceId, TKeyPrefix::EMark mark,
 void FillDelete(ui32 partition, const TString& sourceId, NKikimrClient::TKeyValueRequest::TCmdDeleteRange& cmd) {
     FillDelete(partition, sourceId, TKeyPrefix::MarkProtoSourceId, cmd);
 }
+THeartbeatProcessor::THeartbeatProcessor(
+        const THashSet<TString>& sourceIdsWithHeartbeat,
+        const TMap<TRowVersion, THashSet<TString>>& sourceIdsByHeartbeat)
+    : SourceIdsWithHeartbeat(sourceIdsWithHeartbeat)
+    , SourceIdsByHeartbeat(sourceIdsByHeartbeat)
+{
+}
+
+void THeartbeatProcessor::ApplyHeartbeat(const TString& sourceId, const TRowVersion& version) {
+    SourceIdsWithHeartbeat.insert(sourceId);
+    SourceIdsByHeartbeat[version].insert(sourceId);
+}
+
+void THeartbeatProcessor::ForgetHeartbeat(const TString& sourceId, const TRowVersion& version) {
+    auto it = SourceIdsByHeartbeat.find(version);
+    if (it == SourceIdsByHeartbeat.end()) {
+        return;
+    }
+
+    it->second.erase(sourceId);
+    if (it->second.empty()) {
+        SourceIdsByHeartbeat.erase(it);
+    }
+}
+
+void THeartbeatProcessor::ForgetSourceId(const TString& sourceId) {
+    SourceIdsWithHeartbeat.erase(sourceId);
+}
 
 TSourceIdInfo::TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs)
     : SeqNo(seqNo)
@@ -106,6 +133,13 @@ TSourceIdInfo TSourceIdInfo::Updated(ui64 seqNo, ui64 offset, TInstant writeTs) 
     copy.SeqNo = seqNo;
     copy.Offset = offset;
     copy.WriteTimestamp = writeTs;
+
+    return copy;
+}
+
+TSourceIdInfo TSourceIdInfo::Updated(ui64 seqNo, ui64 offset, TInstant writeTs, THeartbeat&& heartbeat) const {
+    auto copy = Updated(seqNo, offset, writeTs);
+    copy.LastHeartbeat = std::move(heartbeat);
 
     return copy;
 }
@@ -152,6 +186,9 @@ TSourceIdInfo TSourceIdInfo::Parse(const NKikimrPQ::TMessageGroupInfo& proto) {
     if (proto.HasKeyRange()) {
         result.KeyRange = TPartitionKeyRange::Parse(proto.GetKeyRange());
     }
+    if (proto.HasLastHeartbeat()) {
+        result.LastHeartbeat = THeartbeat::Parse(proto.GetLastHeartbeat());
+    }
 
     return result;
 }
@@ -167,6 +204,9 @@ void TSourceIdInfo::Serialize(NKikimrPQ::TMessageGroupInfo& proto) const {
     }
     if (KeyRange) {
         KeyRange->Serialize(*proto.MutableKeyRange());
+    }
+    if (LastHeartbeat) {
+        LastHeartbeat->Serialize(*proto.MutableLastHeartbeat());
     }
 }
 
@@ -200,6 +240,15 @@ void TSourceIdStorage::DeregisterSourceId(const TString& sourceId) {
     auto it = InMemorySourceIds.find(sourceId);
     if (it == InMemorySourceIds.end()) {
         return;
+    }
+
+    ForgetSourceId(sourceId);
+    if (const auto& heartbeat = it->second.LastHeartbeat) {
+        ForgetHeartbeat(sourceId, heartbeat->Version);
+    }
+
+    if (it->second.Explicit) {
+        ExplicitSourceIds.erase(sourceId);
     }
 
     SourceIdsByOffset.erase(std::make_pair(it->second.Offset, sourceId));
@@ -328,11 +377,24 @@ void TSourceIdStorage::RegisterSourceIdInfo(const TString& sourceId, TSourceIdIn
         }
     }
 
-    const auto offset = sourceIdInfo.Offset;
-    InMemorySourceIds[sourceId] = std::move(sourceIdInfo);
-
-    const bool res = SourceIdsByOffset.emplace(offset, sourceId).second;
+    const bool res = SourceIdsByOffset.emplace(sourceIdInfo.Offset, sourceId).second;
     Y_VERIFY(res);
+
+    if (sourceIdInfo.Explicit) {
+        ExplicitSourceIds.insert(sourceId);
+    }
+
+    if (const auto& heartbeat = sourceIdInfo.LastHeartbeat) {
+        Y_VERIFY(sourceIdInfo.Explicit);
+
+        if (it != InMemorySourceIds.end() && it->second.LastHeartbeat) {
+            ForgetHeartbeat(sourceId, it->second.LastHeartbeat->Version);
+        }
+
+        ApplyHeartbeat(sourceId, heartbeat->Version);
+    }
+
+    InMemorySourceIds[sourceId] = std::move(sourceIdInfo);
 }
 
 void TSourceIdStorage::RegisterSourceIdOwner(const TString& sourceId, const TStringBuf& ownerCookie) {
@@ -428,5 +490,51 @@ void TSourceIdWriter::FillRequest(TEvKeyValue::TEvRequest* request, ui32 partiti
     }
 }
 
-} // NPQ
-} // NKikimr
+/// THeartbeatEmitter
+THeartbeatEmitter::THeartbeatEmitter(const TSourceIdStorage& storage)
+    : THeartbeatProcessor(storage.SourceIdsWithHeartbeat, storage.SourceIdsByHeartbeat)
+    , Storage(storage)
+{
+}
+
+void THeartbeatEmitter::Process(const TString& sourceId, const THeartbeat& heartbeat) {
+    Y_VERIFY(Storage.InMemorySourceIds.contains(sourceId));
+    const auto& sourceIdInfo = Storage.InMemorySourceIds.at(sourceId);
+
+    if (const auto& lastHeartbeat = sourceIdInfo.LastHeartbeat) {
+        ForgetHeartbeat(sourceId, lastHeartbeat->Version);
+    }
+
+    if (LastHeartbeats.contains(sourceId)) {
+        ForgetHeartbeat(sourceId, LastHeartbeats.at(sourceId).Version);
+    }
+
+    ApplyHeartbeat(sourceId, heartbeat.Version);
+    LastHeartbeats[sourceId] = heartbeat;
+}
+
+TMaybe<THeartbeat> THeartbeatEmitter::CanEmit() const {
+    if (SourceIdsWithHeartbeat.size() != Storage.ExplicitSourceIds.size()) {
+        return Nothing();
+    }
+
+    if (SourceIdsByHeartbeat.empty()) {
+        return Nothing();
+    }
+
+    auto it = SourceIdsByHeartbeat.begin();
+    if (Storage.SourceIdsByHeartbeat.empty() || it->first > Storage.SourceIdsByHeartbeat.begin()->first) {
+        Y_VERIFY(!it->second.empty());
+        const auto& someSourceId = *it->second.begin();
+
+        if (LastHeartbeats.contains(someSourceId)) {
+            return LastHeartbeats.at(someSourceId);
+        } else if (Storage.InMemorySourceIds.contains(someSourceId)) {
+            return Storage.InMemorySourceIds.at(someSourceId).LastHeartbeat;
+        }
+    }
+
+    return Nothing();
+}
+
+}

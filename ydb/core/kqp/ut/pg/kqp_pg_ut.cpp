@@ -1429,6 +1429,48 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
+    Y_UNIT_TEST(CreateIndex) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                CREATE TABLE test(
+                    id int8,
+                    fk int8,
+                    value char,
+                    primary key(id)
+                );
+                CREATE INDEX "test_fk_idx" ON test (fk);
+                CREATE INDEX "test_fk_idx_cover" ON test (fk) INCLUDE(value);
+                )");
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                CREATE INDEX "test_fk_idx" ON test (fk);
+                )");
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        }
+/*
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                CREATE INDEX IF NOT EXISTS "test_fk_idx" ON test (fk);
+                )");
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+*/
+    }
+
     Y_UNIT_TEST(CreateUniqPgColumn) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
         auto client = kikimr.GetTableClient();

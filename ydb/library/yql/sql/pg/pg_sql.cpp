@@ -155,6 +155,11 @@ const Node* ListNodeNth(const List* list, int index) {
     return static_cast<const Node*>(list_nth(list, index));
 }
 
+const IndexElem* IndexElement(const Node* node) {
+    Y_ENSURE(node->type == T_IndexElem);
+    return ((const IndexElem*)node);
+}
+
 #define AT_LOCATION(node) \
     TLocationGuard guard(this, node->location);
 
@@ -390,6 +395,8 @@ public:
             return ParseVariableShowStmt(CAST_NODE(VariableShowStmt, node)) != nullptr;
         case T_TransactionStmt:
             return true;
+        case T_IndexStmt:
+            return ParseIndexStmt(CAST_NODE(IndexStmt, node)) != nullptr;
         default:
             NodeNotImplemented(value, node);
             return false;
@@ -2106,6 +2113,26 @@ public:
         return {};
     }
 
+    TMaybe<std::vector<TAstNode*>> ParseIndexElements(List* list) {
+        const auto length = ListLength(list);
+        std::vector<TAstNode*> columns;
+        columns.reserve(length);
+
+        for (auto i = 0; i < length; ++i) {
+            auto node = ListNodeNth(list, i);
+            auto indexElem = IndexElement(node);
+            if (indexElem->expr || indexElem->indexcolname) {
+                AddError("index expression is not supported yet");
+                return {};
+            }
+
+            columns.push_back(QA(indexElem->name));
+        }
+
+        return columns;
+    }
+
+
     [[nodiscard]]
     TAstNode* ParseVariableShowStmt(const VariableShowStmt* value) {
         const auto varName = to_lower(TString(value->name));
@@ -2137,6 +2164,83 @@ public:
             A("world"), A("result_sink"), L(A("Key")), A("output"), resOptions)));
         Statements.push_back(L(A("let"), A("world"), L(A("Commit!"),
             A("world"), A("result_sink"))));
+        return Statements.back();
+    }
+
+    [[nodiscard]]
+    TAstNode* ParseIndexStmt(const IndexStmt* value) {
+        if (value->unique) {
+            AddError("unique index creation is not supported yet");
+            return nullptr;
+        }
+
+        if (value->primary) {
+            AddError("primary key creation is not supported yet");
+            return nullptr;
+        }
+
+        if (value->isconstraint || value->deferrable || value->initdeferred) {
+            AddError("constraint modification is not supported yet");
+            return nullptr;
+        }
+
+        if (value->whereClause) {
+            AddError("partial index is not supported yet");
+            return nullptr;
+        }
+
+        if (value->options) {
+            AddError("storage parameters for index is not supported yet");
+            return nullptr;
+        }
+
+        auto columns = ParseIndexElements(value->indexParams);
+        if (!columns)
+            return nullptr;
+
+        auto coverColumns = ParseIndexElements(value->indexIncludingParams);
+        if (!coverColumns)
+            return nullptr;
+
+        const auto [sink, key] = ParseWriteRangeVar(value->relation, true);
+        if (!sink || !key) {
+            return nullptr;
+        }
+
+        //std::vector<TAstNode*> flags;
+        //flags.emplace_back(QA("pg"));
+        //if (value->if_not_exists) {
+        //    flags.emplace_back(QA("ifNotExists"));
+        //}
+
+        std::vector<TAstNode*> desc;
+        auto indexNameAtom = QA("indexName");
+        if (value->idxname) {
+            desc.emplace_back(QL(indexNameAtom, QA(value->idxname)));
+        } else {
+            desc.emplace_back(QL(indexNameAtom));
+        }
+        desc.emplace_back(QL(QA("indexType"), QA(value->unique ? "syncGlobalUnique" : "syncGlobal")));
+        desc.emplace_back(QL(QA("indexColumns"), QVL(columns->data(), columns->size())));
+        desc.emplace_back(QL(QA("dataColumns"), QVL(coverColumns->data(), coverColumns->size())));
+        //desc.emplace_back(QL(QA("flags"), QVL(flags.data(), flags.size())));
+
+        Statements.push_back(L(
+            A("let"),
+            A("world"),
+            L(
+                A("Write!"),
+                A("world"),
+                sink,
+                key,
+                L(A("Void")),
+                QL(
+                    QL(QA("mode"), QA("alter")),
+                    QL(QA("actions"), QL(QL(QA("addIndex"), QVL(desc.data(), desc.size()))))
+                )
+            )
+        ));
+
         return Statements.back();
     }
 

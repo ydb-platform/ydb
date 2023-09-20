@@ -69,14 +69,24 @@ Y_UNIT_TEST(OrderJoinsDoesNothingWhenCBODisabled) {
     UNIT_ASSERT_VALUES_EQUAL(tree, optimizedTree);
 }
 
-Y_UNIT_TEST(OrderJoins2Tables) {
+#define ADD_TEST(Name) \
+    Y_UNIT_TEST(Name ## _PG) { \
+        Name(ECostBasedOptimizer::PG); \
+    } \
+    Y_UNIT_TEST(Name ## _Native) { \
+        Name(ECostBasedOptimizer::Native); \
+    }
+
+
+void OrderJoins2Tables(ECostBasedOptimizer optimizerType) {
     TExprContext exprCtx;
     auto tree = MakeOp({"c", "c_nationkey"}, {"n", "n_nationkey"}, {"c", "n"}, exprCtx);
-    tree->Left = MakeLeaf({"c"}, {"c"}, 1000000, 1233333, exprCtx);
-    tree->Right = MakeLeaf({"n"}, {"n"}, 10000, 12333, exprCtx);
+    // TODO: check join order with different table sizes
+    tree->Left = MakeLeaf({"c"}, {"c"},  100000, 12333, exprCtx);
+    tree->Right = MakeLeaf({"n"}, {"n"}, 100000, 12333, exprCtx);
 
     TYtState::TPtr state = MakeIntrusive<TYtState>();
-    state->Configuration->CostBasedOptimizer = ECostBasedOptimizer::PG;
+    state->Configuration->CostBasedOptimizer = optimizerType;
     auto optimizedTree = OrderJoins(tree, state, exprCtx, true);
     UNIT_ASSERT(optimizedTree != tree);
     UNIT_ASSERT(optimizedTree->Left);
@@ -92,7 +102,9 @@ Y_UNIT_TEST(OrderJoins2Tables) {
     UNIT_ASSERT_VALUES_EQUAL("n_nationkey", optimizedTree->RightLabel->Child(1)->Content());
 }
 
-Y_UNIT_TEST(OrderJoins2TablesComplexLabel)
+ADD_TEST(OrderJoins2Tables)
+
+void OrderJoins2TablesComplexLabel(ECostBasedOptimizer optimizerType)
 {
     TExprContext exprCtx;
     auto tree = MakeOp({"c", "c_nationkey"}, {"n", "n_nationkey"}, {"c", "n", "e"}, exprCtx);
@@ -100,12 +112,14 @@ Y_UNIT_TEST(OrderJoins2TablesComplexLabel)
     tree->Right = MakeLeaf({"n"}, {"n", "e"}, 10000, 12333, exprCtx);
 
     TYtState::TPtr state = MakeIntrusive<TYtState>();
-    state->Configuration->CostBasedOptimizer = ECostBasedOptimizer::PG;
+    state->Configuration->CostBasedOptimizer = optimizerType;
     auto optimizedTree = OrderJoins(tree, state, exprCtx, true);
     UNIT_ASSERT(optimizedTree != tree);
 }
 
-Y_UNIT_TEST(OrderJoins2TablesTableIn2Rels)
+ADD_TEST(OrderJoins2TablesComplexLabel)
+
+void OrderJoins2TablesTableIn2Rels(ECostBasedOptimizer optimizerType)
 {
     TExprContext exprCtx;
     auto tree = MakeOp({"c", "c_nationkey"}, {"n", "n_nationkey"}, {"c", "n", "e"}, exprCtx);
@@ -113,10 +127,12 @@ Y_UNIT_TEST(OrderJoins2TablesTableIn2Rels)
     tree->Right = MakeLeaf({"n"}, {"n", "c"}, 10000, 12333, exprCtx);
 
     TYtState::TPtr state = MakeIntrusive<TYtState>();
-    state->Configuration->CostBasedOptimizer = ECostBasedOptimizer::PG;
+    state->Configuration->CostBasedOptimizer = optimizerType;
     auto optimizedTree = OrderJoins(tree, state, exprCtx, true);
     UNIT_ASSERT(optimizedTree != tree);
 }
+
+ADD_TEST(OrderJoins2TablesTableIn2Rels)
 
 Y_UNIT_TEST(OrderLeftJoin)
 {

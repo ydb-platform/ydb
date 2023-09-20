@@ -568,11 +568,31 @@ private:
         Cleanup(ctx, true);
     }
 
+    IKqpHost::TExecScriptSettings ParseExecScriptSettings() {
+        IKqpHost::TExecScriptSettings execSettings;
+        execSettings.Deadlines = QueryState->QueryDeadlines;
+        execSettings.RpcCtx = QueryState->RequestEv->GetRequestCtx();
+        auto statsMode = GetStatsMode(QueryState->RequestEv.get(), EKikimrStatsMode::Basic);
+        execSettings.StatsMode = statsMode;
+
+        switch (QueryState->RequestEv->GetSyntax()) {
+            case Ydb::Query::Syntax::SYNTAX_YQL_V1:
+                execSettings.UsePgParser = false;
+                execSettings.SyntaxVersion = 1;
+                break;
+            case Ydb::Query::Syntax::SYNTAX_PG:
+                execSettings.UsePgParser = true;
+                break;
+            default:
+                break;
+        }
+
+        return execSettings;
+    }
+
     bool ExecuteQuery(const TString& query, const ::google::protobuf::Map<TProtoStringType, ::Ydb::TypedValue>& parameters,
         NKikimrKqp::EQueryType type, const TActorId& requestActorId)
     {
-        auto statsMode = GetStatsMode(QueryState->RequestEv.get(), EKikimrStatsMode::Basic);
-
         switch (type) {
             case NKikimrKqp::QUERY_TYPE_SQL_DDL: {
                 IKqpHost::TExecSettings execSettings;
@@ -594,19 +614,13 @@ private:
             }
 
             case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT: {
-                IKqpHost::TExecScriptSettings execSettings;
-                execSettings.Deadlines = QueryState->QueryDeadlines;
-                execSettings.RpcCtx = QueryState->RequestEv->GetRequestCtx();
-                execSettings.StatsMode = statsMode;
+                IKqpHost::TExecScriptSettings execSettings = ParseExecScriptSettings();
                 QueryState->AsyncQueryResult = KqpHost->ExecuteYqlScript(query, parameters, execSettings);
                 break;
             }
 
             case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING: {
-                IKqpHost::TExecScriptSettings execSettings;
-                execSettings.Deadlines = QueryState->QueryDeadlines;
-                execSettings.RpcCtx = QueryState->RequestEv->GetRequestCtx();
-                execSettings.StatsMode = statsMode;
+                IKqpHost::TExecScriptSettings execSettings = ParseExecScriptSettings();
                 QueryState->AsyncQueryResult = KqpHost->StreamExecuteYqlScript(query, parameters,
                     requestActorId, execSettings);
                 break;

@@ -157,6 +157,7 @@ public:
         request.set_script(script);
         SetParams(params, &request);
         request.set_collect_stats(GetStatsCollectionMode(settings.CollectQueryStats_));
+        request.set_syntax(settings.Syntax_);
 
         auto promise = NewPromise<TExecuteYqlResult>();
 
@@ -202,6 +203,7 @@ public:
         request.set_script(script);
         SetParams(params, &request);
         request.set_collect_stats(GetStatsCollectionMode(settings.CollectQueryStats_));
+        request.set_syntax(settings.Syntax_);
 
         auto promise = NewPromise<std::pair<TPlainStatus, TYqlScriptProcessorPtr>>();
 

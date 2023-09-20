@@ -1415,7 +1415,7 @@ private:
         SessionCtx->Query().PreparedQuery.reset();
 
         TMaybe<TSqlVersion> sqlVersion;
-        auto scriptExpr = CompileYqlQuery(script, true, true, ctx, sqlVersion, {});
+        auto scriptExpr = CompileYqlQuery(script, true, true, ctx, sqlVersion, settings.UsePgParser);
         if (!scriptExpr) {
             return nullptr;
         }
@@ -1439,7 +1439,7 @@ private:
         SessionCtx->Query().PreparedQuery.reset();
 
         TMaybe<TSqlVersion> sqlVersion;
-        auto scriptExpr = CompileYqlQuery(script, true, true, ctx, sqlVersion, {});
+        auto scriptExpr = CompileYqlQuery(script, true, true, ctx, sqlVersion, settings.UsePgParser);
         if (!scriptExpr) {
             return nullptr;
         }

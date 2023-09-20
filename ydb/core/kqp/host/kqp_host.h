@@ -55,6 +55,8 @@ public:
         NYql::TKikimrQueryDeadlines Deadlines;
         NYql::EKikimrStatsMode StatsMode = NYql::EKikimrStatsMode::None;
         std::shared_ptr<NGRpcService::IRequestCtxMtSafe> RpcCtx;
+        TMaybe<bool> UsePgParser;
+        TMaybe<TSqlVersion> SyntaxVersion;
     };
 
     virtual ~IKqpHost() {}

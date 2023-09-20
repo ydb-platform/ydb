@@ -2,6 +2,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
+#include <ydb/public/api/protos/ydb_query.pb.h>
 
 namespace NYdb {
 namespace NScripting {
@@ -101,6 +102,7 @@ using TAsyncExplainYqlResult = NThreading::TFuture<TExplainYqlResult>;
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TExecuteYqlRequestSettings : public TOperationRequestSettings<TExecuteYqlRequestSettings> {
+    FLUENT_SETTING_DEFAULT(Ydb::Query::Syntax, Syntax, Ydb::Query::SYNTAX_YQL_V1);
     FLUENT_SETTING_DEFAULT(NTable::ECollectQueryStatsMode, CollectQueryStats, NTable::ECollectQueryStatsMode::None);
 };
 

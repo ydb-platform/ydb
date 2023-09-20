@@ -13,12 +13,14 @@ import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_query_stats.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
+import "ydb/public/api/protos/ydb_query.proto";
 
 message ExecuteYqlRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     string script = 2;
     map<string, TypedValue> parameters = 3;
     Ydb.Table.QueryStatsCollection.Mode collect_stats = 4;
+    Ydb.Query.Syntax syntax = 5;
 }
 
 message ExecuteYqlResponse {

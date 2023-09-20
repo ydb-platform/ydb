@@ -69,7 +69,8 @@ public:
             nullptr, // query_cache_policy
             req->has_operation_params() ? &req->operation_params() : nullptr,
             false, // keep session
-            false // use cancelAfter
+            false, // use cancelAfter
+            req->syntax()
         );
 
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());

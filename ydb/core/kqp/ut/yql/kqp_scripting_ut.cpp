@@ -1101,6 +1101,53 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
             [[1];["Value21"]]
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
+
+    Y_UNIT_TEST(ExecuteYqlScriptPg) {
+        TKikimrRunner kikimr;
+
+        auto settings = TExecuteYqlRequestSettings()
+            .Syntax(Ydb::Query::SYNTAX_PG);
+
+        TScriptingClient client(kikimr.GetDriver());
+        auto result = client.ExecuteYqlScript(R"(
+            SELECT * FROM (VALUES
+                (1::int8, 'one'),
+                (2::int8, 'two'),
+                (3::int8, 'three')
+            ) AS t;
+        )", settings).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            ["1";"one"];
+            ["2";"two"];
+            ["3";"three"]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(StreamExecuteYqlScriptPg) {
+        TKikimrRunner kikimr;
+        
+        auto settings = TExecuteYqlRequestSettings()
+            .Syntax(Ydb::Query::SYNTAX_PG);
+
+        TScriptingClient client(kikimr.GetDriver());
+
+        auto result = client.StreamExecuteYqlScript(R"(
+            SELECT * FROM (VALUES
+                (1::int8, 'one'),
+                (2::int8, 'two'),
+                (3::int8, 'three')
+            ) AS t;
+        )", settings).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([[
+            ["1";"one"];
+            ["2";"two"];
+            ["3";"three"]
+        ]])", StreamResultToYson(result));
+    }
 }
 
 } // namespace NKqp

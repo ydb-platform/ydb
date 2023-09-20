@@ -135,9 +135,9 @@ def on_from_npm_lockfiles(unit, *args):
             ymake.report_configure_error("lockfile not found: {}".format(lf_path))
 
     try:
-        for pkg in pm.extract_packages_meta_from_lockfiles(lf_paths):
+        for pkg in pm.extract_packages_meta_from_lockfiles(lf_paths, no_files=True):
             unit.on_from_npm(
-                [pkg.name, pkg.version, pkg.sky_id, pkg.integrity, pkg.integrity_algorithm, pkg.tarball_path]
+                [pkg.tarball_url, pkg.sky_id, pkg.integrity, pkg.integrity_algorithm, pkg.tarball_path]
             )
     except Exception as e:
         if unit.get("TS_RAISE") == "yes":

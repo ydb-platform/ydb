@@ -9,22 +9,24 @@ class LockfilePackageMeta(object):
     Basic struct representing package meta from lockfile.
     """
 
-    __slots__ = ("name", "version", "sky_id", "integrity", "integrity_algorithm", "tarball_path")
+    __slots__ = ("tarball_url", "sky_id", "integrity", "integrity_algorithm", "tarball_path")
 
     @staticmethod
     def from_str(s):
         return LockfilePackageMeta(*s.strip().split(" "))
 
-    def __init__(self, name, version, sky_id, integrity, integrity_algorithm):
-        self.name = name
-        self.version = version
+    def __init__(self, tarball_url, sky_id, integrity, integrity_algorithm):
+        # http://npm.yandex-team.ru/@scope%2fname/-/name-0.0.1.tgz
+        parts = tarball_url.split("/")
+
+        self.tarball_url = tarball_url
         self.sky_id = sky_id
         self.integrity = integrity
         self.integrity_algorithm = integrity_algorithm
-        self.tarball_path = "{}-{}.tgz".format(name, version)
+        self.tarball_path = "/".join(parts[-3:])  # @scope%2fname/-/name-0.0.1.tgz
 
     def to_str(self):
-        return " ".join([self.name, self.version, self.sky_id, self.integrity, self.integrity_algorithm])
+        return " ".join([self.tarball_url, self.sky_id, self.integrity, self.integrity_algorithm])
 
 
 class LockfilePackageMetaInvalidError(RuntimeError):
@@ -61,7 +63,7 @@ class BaseLockfile(object):
         pass
 
     @abstractmethod
-    def get_packages_meta(self):
+    def get_packages_meta(self, no_files):
         pass
 
     @abstractmethod

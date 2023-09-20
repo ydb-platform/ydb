@@ -9,15 +9,14 @@ import sky
 import fetch_from
 
 
-NPM_BASEURL = "http://npm.yandex-team.ru/"
+NPM_BASEURL = "http://npm.yandex-team.ru"
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
     fetch_from.add_common_arguments(parser)
 
-    parser.add_argument("--name", required=True)
-    parser.add_argument("--version", required=True)
+    parser.add_argument("--tarball-url", required=True)
     parser.add_argument("--sky-id", required=True)
     parser.add_argument("--integrity", required=True)
     parser.add_argument("--integrity-algorithm", required=True)
@@ -25,7 +24,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def fetch(name, version, sky_id, integrity, integrity_algorithm, file_name, tries=5):
+def fetch(tarball_url, sky_id, integrity, integrity_algorithm, file_name, tries=5):
     """
     :param name: package name
     :type name: str
@@ -50,7 +49,7 @@ def fetch(name, version, sky_id, integrity, integrity_algorithm, file_name, trie
     if 'NOTS_FETCH_FROM_SKY' in os.environ and sky.is_avaliable():
         fetcher = lambda: sky.fetch(sky_id, file_name)
     else:
-        fetcher = lambda: _fetch_via_http(name, version, integrity, integrity_algorithm, file_name)
+        fetcher = lambda: _fetch_via_http(tarball_url, integrity, integrity_algorithm, file_name)
 
     fetched_file = None
     exc_info = None
@@ -71,9 +70,10 @@ def fetch(name, version, sky_id, integrity, integrity_algorithm, file_name, trie
     return fetched_file
 
 
-def _fetch_via_http(name, version, integrity, integrity_algorithm, file_name):
-    # Example: "http://npm.yandex-team.ru/@scope/name/-/name-0.0.1.tgz" for @scope/name v0.0.1.
-    url = NPM_BASEURL + "/".join([name, "-", "{}-{}.tgz".format(name.split("/").pop(), version)])
+def _fetch_via_http(tarball_url, integrity, integrity_algorithm, file_name):
+    is_abs_url = tarball_url.startswith("https://") or tarball_url.startswith("http://")
+    url_delim = "" if tarball_url.startswith("/") else "/"
+    url = tarball_url if is_abs_url else NPM_BASEURL + url_delim + tarball_url
 
     hashobj = hashlib.new(integrity_algorithm)
     fetched_file = fetch_from.fetch_url(url, False, file_name, tries=1, writers=[hashobj.update])
@@ -90,7 +90,7 @@ def _fetch_via_http(name, version, integrity, integrity_algorithm, file_name):
 
 def main(args):
     file_name = os.path.basename(args.copy_to)
-    fetched_file = fetch(args.name, args.version, args.sky_id, args.integrity, args.integrity_algorithm, file_name)
+    fetched_file = fetch(args.tarball_url, args.sky_id, args.integrity, args.integrity_algorithm, file_name)
     fetch_from.process(fetched_file, file_name, args)
 
 

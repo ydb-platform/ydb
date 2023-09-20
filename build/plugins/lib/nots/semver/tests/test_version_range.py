@@ -98,7 +98,6 @@ def test_is_satisfied():
     ]
 
     for range_provided, version_provided, expected_result in checklist:
-
         version = Version.from_str(version_provided)
         range = VersionRange.from_str(range_provided)
 

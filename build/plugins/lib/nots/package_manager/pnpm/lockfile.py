@@ -27,14 +27,14 @@ class PnpmLockfile(BaseLockfile):
         with open(path, "w") as f:
             yaml.dump(self.data, f, Dumper=yaml.CSafeDumper)
 
-    def get_packages_meta(self):
+    def get_packages_meta(self, no_files):
         """
         Extracts packages meta from lockfile.
         :rtype: list of LockfilePackageMeta
         """
         packages = self.data.get("packages", {})
 
-        return map(lambda x: _parse_package_meta(*x), iteritems(packages))
+        return map(lambda x: _parse_package_meta(x[0], x[1], no_files), iteritems(packages))
 
     def update_tarball_resolutions(self, fn):
         """
@@ -44,7 +44,7 @@ class PnpmLockfile(BaseLockfile):
         packages = self.data.get("packages", {})
 
         for key, meta in iteritems(packages):
-            meta["resolution"]["tarball"] = fn(_parse_package_meta(key, meta))
+            meta["resolution"]["tarball"] = fn(_parse_package_meta(key, meta, no_files=False))
             packages[key] = meta
 
     def get_importers(self):
@@ -89,7 +89,7 @@ class PnpmLockfile(BaseLockfile):
         self.data["packages"] = packages
 
 
-def _parse_package_meta(key, meta):
+def _parse_package_meta(key, meta, no_files):
     """
     :param key: uniq package key from lockfile
     :type key: string
@@ -98,7 +98,7 @@ def _parse_package_meta(key, meta):
     :rtype: LockfilePackageMetaInvalidError
     """
     try:
-        name, version = _parse_package_key(key)
+        tarball_url = _parse_tarball_url(meta["resolution"]["tarball"], no_files)
         sky_id = _parse_sky_id_from_tarball_url(meta["resolution"]["tarball"])
         integrity_algorithm, integrity = _parse_package_integrity(meta["resolution"]["integrity"])
     except KeyError as e:
@@ -106,26 +106,13 @@ def _parse_package_meta(key, meta):
     except LockfilePackageMetaInvalidError as e:
         raise TypeError("Invalid package meta for key {}, parse error: {}".format(key, e))
 
-    return LockfilePackageMeta(name, version, sky_id, integrity, integrity_algorithm)
+    return LockfilePackageMeta(tarball_url, sky_id, integrity, integrity_algorithm)
 
 
-def _parse_package_key(key):
-    """
-    Returns tuple of scoped package name and version.
-    :param key: package key in format "/({scope}/)?{package_name}/{package_version}(_{peer_dependencies})?"
-    :type key: string
-    :rtype: (str, str)
-    """
-    try:
-        tokens = key.split("/")[1:]
-        version = tokens.pop().split("_", 1)[0]
-
-        if len(tokens) < 1 or len(tokens) > 2:
-            raise TypeError()
-    except (IndexError, TypeError):
-        raise LockfilePackageMetaInvalidError("Invalid package key")
-
-    return ("/".join(tokens), version)
+def _parse_tarball_url(tarball_url, no_files):
+    if tarball_url.startswith("file:") and no_files:
+        raise LockfilePackageMetaInvalidError("tarball cannot point to a file, got {}".format(tarball_url))
+    return tarball_url.split("?")[0]
 
 
 def _parse_sky_id_from_tarball_url(tarball_url):

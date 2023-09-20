@@ -120,21 +120,25 @@ class PnpmPackageManager(BasePackageManager):
 
         return (errors, ins, outs)
 
-    def extract_packages_meta_from_lockfiles(self, lf_paths):
+    def extract_packages_meta_from_lockfiles(self, lf_paths, no_files=False):
         """
         :type lf_paths: iterable of BaseLockfile
         :rtype: iterable of LockfilePackageMeta
         """
         tarballs = set()
+        errors = []
 
         for lf_path in lf_paths:
             try:
-                for pkg in self.load_lockfile(lf_path).get_packages_meta():
+                for pkg in self.load_lockfile(lf_path).get_packages_meta(no_files):
                     if pkg.tarball_path not in tarballs:
                         tarballs.add(pkg.tarball_path)
                         yield pkg
             except Exception as e:
-                raise PackageManagerError("Unable to process lockfile {}: {}".format(lf_path, e))
+                errors.append("{}: {}".format(lf_path, e))
+
+        if errors:
+            raise PackageManagerError("Unable to process some lockfiles:\n{}".format("\n".join(errors)))
 
     def _prepare_workspace(self):
         """

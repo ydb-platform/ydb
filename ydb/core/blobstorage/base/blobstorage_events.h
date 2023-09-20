@@ -258,6 +258,7 @@ namespace NKikimr {
         NKikimrBlobStorage::TEvControllerConfigRequest, TEvBlobStorage::EvControllerConfigRequest>
     {
         bool SelfHeal = false;
+        bool GroupLayoutSanitizer = false;
 
         TEvControllerConfigRequest() = default;
     };

@@ -80,6 +80,10 @@ enum ECumulativeCounters {
     COUNTER_CONFIGCMD_ALLOCATE_VIRTUAL_GROUP_USEC = 42 [(CounterOpts) = {Name: "AllocateVirtualGroup"}];
     COUNTER_CONFIGCMD_DECOMMIT_GROUPS_USEC = 43 [(CounterOpts) = {Name: "DecommitGroups"}];
     COUNTER_CONFIGCMD_CANCEL_VIRTUAL_GROUP_USEC = 44 [(CounterOpts) = {Name: "CancelVirtualGroup"}];
+
+    COUNTER_GROUP_LAYOUT_SANITIZER_BSC_REQUESTS = 45 [(CounterOpts) = {Name: "GroupLayoutSanitizerBscRequests"}];
+    COUNTER_GROUP_LAYOUT_SANITIZER_BSC_OK = 46 [(CounterOpts) = {Name: "GroupLayoutSanitizerBscOk"}];
+    COUNTER_GROUP_LAYOUT_SANITIZER_BSC_ERR = 47 [(CounterOpts) = {Name: "GroupLayoutSanitizerBscErr"}];
 }
 
 enum EPercentileCounters {

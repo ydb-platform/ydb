@@ -11,6 +11,7 @@ namespace NKikimr::NBsController {
             const ui64 Cookie;
             const NKikimrBlobStorage::TConfigRequest Cmd;
             const bool SelfHeal;
+            const bool GroupLayoutSanitizer;
             THolder<TEvBlobStorage::TEvControllerConfigResponse> Ev;
             NKikimrBlobStorage::TConfigResponse *Response;
             std::optional<TConfigState> State;
@@ -19,12 +20,13 @@ namespace NKikimr::NBsController {
 
         public:
             TTxConfigCmd(const NKikimrBlobStorage::TConfigRequest &cmd, const TActorId &notifyId, ui64 cookie,
-                    bool selfHeal, TBlobStorageController *controller)
+                    bool selfHeal, bool groupLayoutSanitizer, TBlobStorageController *controller)
                 : TTransactionBase(controller)
                 , NotifyId(notifyId)
                 , Cookie(cookie)
                 , Cmd(cmd)
                 , SelfHeal(selfHeal)
+                , GroupLayoutSanitizer(groupLayoutSanitizer)
                 , Ev(new TEvBlobStorage::TEvControllerConfigResponse())
                 , Response(Ev->Record.MutableResponse())
             {}
@@ -270,6 +272,12 @@ namespace NKikimr::NBsController {
                         : NBlobStorageController::COUNTER_SELFHEAL_REASSIGN_BSC_ERR;
                     Self->TabletCounters->Cumulative()[counter].Increment(1);
                 }
+                if (GroupLayoutSanitizer) {
+                    const auto counter = Success
+                        ? NBlobStorageController::COUNTER_GROUP_LAYOUT_SANITIZER_BSC_OK
+                        : NBlobStorageController::COUNTER_GROUP_LAYOUT_SANITIZER_BSC_ERR;
+                    Self->TabletCounters->Cumulative()[counter].Increment(1);
+                }
 
                 if (!Success) {
                     // rollback transaction
@@ -365,11 +373,14 @@ namespace NKikimr::NBsController {
             if (ev->Get()->SelfHeal) {
                 TabletCounters->Cumulative()[NBlobStorageController::COUNTER_SELFHEAL_REASSIGN_BSC_REQUESTS].Increment(1);
             }
+            if (ev->Get()->GroupLayoutSanitizer) {
+                TabletCounters->Cumulative()[NBlobStorageController::COUNTER_GROUP_LAYOUT_SANITIZER_BSC_REQUESTS].Increment(1);
+            }
 
             NKikimrBlobStorage::TEvControllerConfigRequest& record(ev->Get()->Record);
             const NKikimrBlobStorage::TConfigRequest& request = record.GetRequest();
             STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXCC01, "Execute TEvControllerConfigRequest", (Request, request));
-            Execute(new TTxConfigCmd(request, ev->Sender, ev->Cookie, ev->Get()->SelfHeal, this));
+            Execute(new TTxConfigCmd(request, ev->Sender, ev->Cookie, ev->Get()->SelfHeal, ev->Get()->GroupLayoutSanitizer, this));
         }
 
 } // NKikimr::NBsController

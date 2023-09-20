@@ -147,13 +147,13 @@ namespace NKikimr::NBsController {
             }
 
             auto ev = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
-            ev->SelfHeal = true;
             auto& record = ev->Record;
             auto *request = record.MutableRequest();
             request->SetIgnoreGroupReserve(true);
             request->SetSettleOnlyOnOperationalDisks(true);
             request->SetIsSelfHealReasonDecommit(IsSelfHealReasonDecommit);
             if (VDiskToReplace) {
+                ev->SelfHeal = true;
                 auto *cmd = request->AddCommand()->MutableReassignGroupDisk();
                 cmd->SetGroupId(VDiskToReplace->GroupID);
                 cmd->SetGroupGeneration(VDiskToReplace->GroupGeneration);
@@ -161,6 +161,7 @@ namespace NKikimr::NBsController {
                 cmd->SetFailDomainIdx(VDiskToReplace->FailDomain);
                 cmd->SetVDiskIdx(VDiskToReplace->VDisk);
             } else {
+                ev->GroupLayoutSanitizer = true;
                 auto *cmd = request->AddCommand()->MutableSanitizeGroup();
                 cmd->SetGroupId(GroupId);
             }

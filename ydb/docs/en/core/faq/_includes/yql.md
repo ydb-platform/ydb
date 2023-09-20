@@ -37,6 +37,21 @@ WHERE Key LIKE "some_prefix%";
 
 1000 rows is the response size limit per YQL query. If a response is shortened, it is flagged as `Truncated`. To output more table rows, you can use [paginated output](../../best_practices/paging.md) or the `ReadTable` operation.
 
+#### How to escape quotes of JSON strings when adding them to a table? {#escaping-quotes}
+
+Consider an example with two possible options for adding a JSON string to a table:
+
+```sql
+UPSERT INTO test_json(id, json_string)
+VALUES
+    (1, Json(@@[{"name":"Peter \"strong cat\" Kourbatov"}]@@)),
+    (2, Json('[{"name":"Peter \\\"strong cat\\\" Kourbatov"}]'))
+;
+```
+To insert a value in the first line, use `raw string` and the escape method using `\"`. To insert the second line, escaping through `\\\"` is used.
+
+We recommend using `raw string` and the escape method using `\"`, as it is more visual.
+
 #### How do I update only those values whose keys are not in the table? {#update-non-existent}
 
 You can use the `LEFT JOIN` operator to identify the keys a table is missing and update their values:

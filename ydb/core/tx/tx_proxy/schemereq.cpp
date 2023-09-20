@@ -215,8 +215,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpUpgradeSubDomainDecision:
             return *modifyScheme.MutableUpgradeSubDomain()->MutableName();
 
+        case NKikimrSchemeOp::ESchemeOpCreateColumnBuild:
         case NKikimrSchemeOp::ESchemeOpCreateIndexBuild:
-            Y_FAIL("no implementation for ESchemeOpCreateIndexBuild");
+            Y_FAIL("no implementation for ESchemeOpCreateIndexBuild/ESchemeOpCreateColumnBuild");
 
         case NKikimrSchemeOp::ESchemeOpInitiateBuildIndexMainTable:
             Y_FAIL("no implementation for ESchemeOpInitiateBuildIndexMainTable");
@@ -746,6 +747,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateTableIndex:
         case NKikimrSchemeOp::ESchemeOpDropTableIndex:
         case NKikimrSchemeOp::ESchemeOp_DEPRECATED_35:
+        case NKikimrSchemeOp::ESchemeOpCreateColumnBuild:
         case NKikimrSchemeOp::ESchemeOpCreateIndexBuild:
         case NKikimrSchemeOp::ESchemeOpInitiateBuildIndexMainTable:
         case NKikimrSchemeOp::ESchemeOpCreateLock:

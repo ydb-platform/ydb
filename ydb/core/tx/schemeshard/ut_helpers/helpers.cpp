@@ -1663,6 +1663,19 @@ namespace NSchemeShardUT_Private {
         return new TEvIndexBuilder::TEvCreateRequest(id, dbName, std::move(settings));
     }
 
+    std::unique_ptr<TEvIndexBuilder::TEvCreateRequest> CreateBuildColumnRequest(ui64 id, const TString& dbName, const TString& src, const TString& columnName, const Ydb::TypedValue& literal) {
+        NKikimrIndexBuilder::TIndexBuildSettings settings;
+        settings.set_source_path(src);
+        settings.set_max_batch_rows(2);
+        settings.set_max_shards_in_flight(2);
+
+        auto* col = settings.mutable_column_build_operation()->add_column();
+        col->SetColumnName(columnName);
+        col->mutable_default_from_literal()->CopyFrom(literal);
+
+        return std::make_unique<TEvIndexBuilder::TEvCreateRequest>(id, dbName, std::move(settings));
+    }
+
     TStringBuilder PrintIssues(const ::google::protobuf::RepeatedPtrField< ::Ydb::Issue::IssueMessage >& issues) {
         TStringBuilder result;
         for (const auto& x: issues) {
@@ -1678,12 +1691,36 @@ namespace NSchemeShardUT_Private {
         ForwardToTablet(runtime, schemeShard, sender, request);
     }
 
+    void AsyncBuildColumn(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TString& columnName, const Ydb::TypedValue& literal) {
+        auto sender = runtime.AllocateEdgeActor();
+        auto request = CreateBuildColumnRequest(id, dbName, src, columnName, literal);
+
+        ForwardToTablet(runtime, schemeShard, sender, request.release());
+    }
+
     void AsyncBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
                        const TString &src, const TString &name, TVector<TString> columns, TVector<TString> dataColumns)
     {
         AsyncBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
             name, NKikimrSchemeOp::EIndexTypeGlobal, columns, dataColumns
         });
+    }
+
+    void TestBuildColumn(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
+        const TString &src, const TString& columnName, const Ydb::TypedValue& literal, Ydb::StatusIds::StatusCode expectedStatus) 
+    {
+        AsyncBuildColumn(runtime, id, schemeShard, dbName, src, columnName, literal);
+
+        TAutoPtr<IEventHandle> handle;
+        TEvIndexBuilder::TEvCreateResponse* event = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
+        UNIT_ASSERT(event);
+
+        Cerr << "BUILDINDEX RESPONSE CREATE: " << event->ToString() << Endl;
+        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), expectedStatus,
+                            "status mismatch"
+                                << " got " << Ydb::StatusIds::StatusCode_Name(event->Record.GetStatus())
+                                << " expected "  << Ydb::StatusIds::StatusCode_Name(expectedStatus)
+                                << " issues was " << PrintIssues(event->Record.GetIssues()));
     }
 
     void TestBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,

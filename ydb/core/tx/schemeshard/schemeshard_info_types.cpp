@@ -1795,11 +1795,11 @@ TIndexBuildInfo::TShardStatus::TShardStatus(TSerializedTableRange range, TString
     , LastKeyAck(std::move(lastKeyAck))
 {}
 
-NKikimrSchemeOp::TIndexBuildConfig TIndexBuildInfo::SerializeToProto(TSchemeShard* ss) const {
-    NKikimrSchemeOp::TIndexBuildConfig result;
-    result.SetTable(TPath::Init(TablePathId, ss).PathString());
+void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndexBuildConfig* result) const {
+    Y_VERIFY(IsBuildIndex());
+    result->SetTable(TPath::Init(TablePathId, ss).PathString());
 
-    auto& index = *result.MutableIndex();
+    auto& index = *result->MutableIndex();
     index.SetName(IndexName);
     index.SetType(IndexType);
 
@@ -1810,8 +1810,14 @@ NKikimrSchemeOp::TIndexBuildConfig TIndexBuildInfo::SerializeToProto(TSchemeShar
     for (const auto& x : DataColumns) {
         *index.AddDataColumnNames() = x;
     }
+}
 
-    return result;
+void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* result) const {
+    Y_VERIFY(IsBuildColumn());
+    result->SetTable(TPath::Init(TablePathId, ss).PathString());
+    for(const auto& column : BuildColumns) {
+        column.SerializeToProto(result->add_column());
+    }
 }
 
 TColumnFamiliesMerger::TColumnFamiliesMerger(NKikimrSchemeOp::TPartitionConfig &container)

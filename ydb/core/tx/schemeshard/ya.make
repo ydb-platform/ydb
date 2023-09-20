@@ -6,6 +6,7 @@ RECURSE_FOR_TESTS(
     ut_bsvolume_reboots
     ut_cdc_stream
     ut_cdc_stream_reboots
+    ut_column_build
     ut_compaction
     ut_export
     ut_export_reboots_s3

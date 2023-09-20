@@ -2,13 +2,19 @@
 
 #include "schemeshard_impl.h"
 
+#include <ydb/public/api/protos/ydb_issue_message.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+
 namespace NKikimr {
 namespace NSchemeShard {
 
 class TSchemeShard::TIndexBuilder::TTxBase: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
 private:
     TSideEffects SideEffects;
-
+    const NKikimr::NSchemeShard::ETxTypes TxType;
+public:
+    const TString LogPrefix;
+private:
     using TChangeStateRec = std::tuple<TIndexBuildId, TIndexBuildInfo::EState>;
     TDeque<TChangeStateRec> StateChanges;
     using TBillingEventSchedule = std::tuple<TIndexBuildId, TDuration>;
@@ -41,9 +47,13 @@ protected:
     bool GotScheduledBilling(const TIndexBuildInfo::TPtr& indexBuildInfo);
 
 public:
-    explicit TTxBase(TSelf* self)
+    explicit TTxBase(TSelf* self, NKikimr::NSchemeShard::ETxTypes txType)
         : TBase(self)
+        , TxType(txType)
+        , LogPrefix(TStringBuilder() << "TIndexBuilder::" << NKikimr::NSchemeShard::ETxTypes_Name(txType) << ": ")
     { }
+
+    TTxType GetTxType() const override { return TxType; }
 
     virtual ~TTxBase() = default;
 
@@ -52,6 +62,39 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
+};
+
+template<typename TRequest, typename TResponse>
+class TSchemeShard::TIndexBuilder::TTxSimple : public TSchemeShard::TIndexBuilder::TTxBase {
+public:
+    typename TRequest::TPtr Request;
+    THolder<TResponse> Response;
+    const bool IsMutableOperation;
+
+    explicit TTxSimple(TSelf* self, typename TRequest::TPtr& ev, NKikimr::NSchemeShard::ETxTypes txType, bool isMutableOperation = true)
+        : TTxBase(self, txType)
+        , Request(ev)
+        , IsMutableOperation(isMutableOperation)
+    { }
+
+    bool Reply(const Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, const TString& errorMessage = TString())
+    {
+        Y_VERIFY(Response);
+        auto& record = Response->Record;
+        record.SetStatus(status);
+        if (errorMessage) {
+            AddIssue(record.MutableIssues(), errorMessage);
+        }
+
+        if (IsMutableOperation) {
+            LOG_N("Reply " << Response->Record.ShortDebugString());
+        } else {
+            LOG_D("Reply " << Response->Record.ShortDebugString());
+        }
+
+        Send(Request->Sender, std::move(Response), 0, Request->Cookie);
+        return true;
+    }
 };
 
 } // NSchemeShard

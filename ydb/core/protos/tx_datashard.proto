@@ -19,6 +19,7 @@ import "ydb/library/yql/dq/actors/protos/dq_events.proto";
 import "ydb/library/yql/dq/actors/protos/dq_stats.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
 import "google/protobuf/empty.proto";
+import "ydb/core/protos/index_builder.proto";
 
 package NKikimrTxDataShard;
 option java_package = "ru.yandex.kikimr.proto";
@@ -1410,6 +1411,8 @@ message TEvBuildIndexCreateRequest {
     optional uint64 MaxRetries = 14;
 
     repeated string DataColumns = 15;
+
+    optional NKikimrIndexBuilder.TColumnBuildSettings ColumnBuildSettings = 16;
 }
 
 message TEvBuildIndexProgressResponse {

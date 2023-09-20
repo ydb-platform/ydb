@@ -1266,6 +1266,12 @@ struct Schema : NIceDb::Schema {
         struct RowsBilled : Column<28, NScheme::NTypeIds::Uint64> {};
         struct BytesBilled : Column<29, NScheme::NTypeIds::Uint64> {};
 
+        struct BuildKind : Column<30, NScheme::NTypeIds::Uint32> {};
+
+        struct AlterMainTableTxId : Column<31, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
+        struct AlterMainTableTxStatus : Column<32, NScheme::NTypeIds::Uint32> { using Type = NKikimrScheme::EStatus; };
+        struct AlterMainTableTxDone : Column<33, NScheme::NTypeIds::Bool> {};
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
@@ -1296,7 +1302,11 @@ struct Schema : NIceDb::Schema {
             CancelRequest,
             MaxRetries,
             RowsBilled,
-            BytesBilled
+            BytesBilled,
+            BuildKind,
+            AlterMainTableTxId,
+            AlterMainTableTxStatus,
+            AlterMainTableTxDone
         >;
     };
 
@@ -1699,6 +1709,21 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<PathId, SeqNoGeneration, SeqNoRound, DataSize, UsedReserveSize>;
     };
 
+    struct BuildColumnOperationSettings : Table<107> {
+        struct Id : Column<1, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
+        struct ColumnNo : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct ColumnName : Column<3, NScheme::NTypeIds::Utf8> {};
+        struct DefaultFromLiteral : Column<4, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<Id, ColumnNo>;
+        using TColumns = TableColumns<
+            Id,
+            ColumnNo,
+            ColumnName,
+            DefaultFromLiteral
+        >;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -1804,7 +1829,8 @@ struct Schema : NIceDb::Schema {
         CdcStreamScanShardStatus,
         ExternalTable,
         ExternalDataSource,
-        PersQueueGroupStats
+        PersQueueGroupStats,
+        BuildColumnOperationSettings
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

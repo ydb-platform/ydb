@@ -6,8 +6,32 @@
 
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/ydb_convert/table_description.h>
 
 namespace NKikimr::NSchemeShard {
+
+TVector<ISubOperation::TPtr> CreateBuildColumn(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
+    Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild);
+
+    const auto& op = tx.GetInitiateColumnBuild();
+
+    const auto table = TPath::Resolve(op.GetTable(), context.SS);
+    TVector<ISubOperation::TPtr> result;
+
+    // altering version of the table.
+    {
+        auto outTx = TransactionTemplate(table.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexMainTable);
+        *outTx.MutableLockGuard() = tx.GetLockGuard();
+
+        auto& snapshot = *outTx.MutableInitiateBuildIndexMainTable();
+        snapshot.SetTableName(table.LeafName());
+
+        result.push_back(CreateInitializeBuildIndexMainTable(NextPartId(opId, result), outTx));
+    }
+
+    return result;
+
+}
 
 TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     Y_VERIFY(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexBuild);

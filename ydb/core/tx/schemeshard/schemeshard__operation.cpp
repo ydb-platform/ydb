@@ -1162,6 +1162,7 @@ ISubOperation::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType op
         return CreateUpgradeSubDomain(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpUpgradeSubDomainDecision:
         return CreateUpgradeSubDomainDecision(NextPartId(), tx);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild:
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexBuild:
         Y_FAIL("multipart operations are handled before, also they require transaction details");
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock:
@@ -1301,6 +1302,8 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
         return CreateDropIndexedTable(NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpForceDropSubDomain:
         return {CreateCompatibleSubdomainDrop(context.SS, NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild:
+        return CreateBuildColumn(NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexBuild:
         return CreateBuildIndex(NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpApplyIndexBuild:

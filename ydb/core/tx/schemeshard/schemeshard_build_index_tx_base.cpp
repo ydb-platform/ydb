@@ -199,6 +199,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
     }
 
     switch (indexInfo->State) {
+    case TIndexBuildInfo::EState::AlterMainTable:
     case TIndexBuildInfo::EState::Locking:
     case TIndexBuildInfo::EState::GatheringStatistics:
     case TIndexBuildInfo::EState::Initiating:
@@ -247,39 +248,49 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
     Fill(*index.MutableSettings(), indexInfo);
 }
 
-void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuildSettings& settings, const TIndexBuildInfo::TPtr indexInfo) {
-    TPath table = TPath::Init(indexInfo->TablePathId, Self);
+void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuildSettings& settings, const TIndexBuildInfo::TPtr info) {
+    TPath table = TPath::Init(info->TablePathId, Self);
     settings.set_source_path(table.PathString());
 
-    Ydb::Table::TableIndex& index = *settings.mutable_index();
-    index.set_name(indexInfo->IndexName);
+    if (info->IsBuildIndex()) {
+        Ydb::Table::TableIndex& index = *settings.mutable_index();
+        index.set_name(info->IndexName);
 
-    *index.mutable_index_columns() = {
-        indexInfo->IndexColumns.begin(),
-        indexInfo->IndexColumns.end()
-    };
+        *index.mutable_index_columns() = {
+            info->IndexColumns.begin(),
+            info->IndexColumns.end()
+        };
 
-    *index.mutable_data_columns() = {
-        indexInfo->DataColumns.begin(),
-        indexInfo->DataColumns.end()
-    };
+        *index.mutable_data_columns() = {
+            info->DataColumns.begin(),
+            info->DataColumns.end()
+        };
 
-    switch (indexInfo->IndexType) {
-    case NKikimrSchemeOp::EIndexType::EIndexTypeGlobal:
-    case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique:
-        *index.mutable_global_index() = Ydb::Table::GlobalIndex();
-        break;
-    case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync:
-        *index.mutable_global_async_index() = Ydb::Table::GlobalAsyncIndex();
-        break;
-    case NKikimrSchemeOp::EIndexType::EIndexTypeInvalid:
-        Y_FAIL("Unreachable");
-    };
+        switch (info->IndexType) {
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobal:
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique:
+            *index.mutable_global_index() = Ydb::Table::GlobalIndex();
+            break;
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync:
+            *index.mutable_global_async_index() = Ydb::Table::GlobalAsyncIndex();
+            break;
+        case NKikimrSchemeOp::EIndexType::EIndexTypeInvalid:
+            Y_FAIL("Unreachable");
+        };
+    }
 
-    settings.set_max_batch_bytes(indexInfo->Limits.MaxBatchBytes);
-    settings.set_max_batch_rows(indexInfo->Limits.MaxBatchRows);
-    settings.set_max_shards_in_flight(indexInfo->Limits.MaxShards);
-    settings.set_max_retries_upload_batch(indexInfo->Limits.MaxRetries);
+    if (info->IsBuildColumn()) {
+        for(const auto& column : info->BuildColumns) {
+            auto* columnProto = settings.mutable_column_build_operation()->add_column();
+            columnProto->SetColumnName(column.ColumnName);
+            columnProto->mutable_default_from_literal()->CopyFrom(column.DefaultFromLiteral);
+        }
+    }
+
+    settings.set_max_batch_bytes(info->Limits.MaxBatchBytes);
+    settings.set_max_batch_rows(info->Limits.MaxBatchRows);
+    settings.set_max_shards_in_flight(info->Limits.MaxShards);
+    settings.set_max_retries_upload_batch(info->Limits.MaxRetries);
 }
 
 void TSchemeShard::TIndexBuilder::TTxBase::AddIssue(::google::protobuf::RepeatedPtrField<::Ydb::Issue::IssueMessage>* issues,
@@ -315,6 +326,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::EraseBuildInfo(const TIndexBuildInfo:
     Self->TxIdToIndexBuilds.erase(indexBuildInfo->InitiateTxId);
     Self->TxIdToIndexBuilds.erase(indexBuildInfo->ApplyTxId);
     Self->TxIdToIndexBuilds.erase(indexBuildInfo->UnlockTxId);
+    Self->TxIdToIndexBuilds.erase(indexBuildInfo->AlterMainTableTxId);
 }
 
 Ydb::StatusIds::StatusCode TSchemeShard::TIndexBuilder::TTxBase::TranslateStatusCode(NKikimrScheme::EStatus status) {

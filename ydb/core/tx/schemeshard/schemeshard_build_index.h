@@ -34,8 +34,8 @@ struct TEvIndexBuilder {
         explicit TEvCreateRequest(
             const ui64 txId,
             const TString& dbName,
-            NKikimrIndexBuilder::TIndexBuildSettings settings
-            ) {
+            NKikimrIndexBuilder::TIndexBuildSettings settings)
+        {
             Record.SetTxId(txId);
             Record.SetDatabaseName(dbName);
             *Record.MutableSettings() = std::move(settings);
@@ -69,8 +69,7 @@ struct TEvIndexBuilder {
         explicit TEvCancelRequest(
             const ui64 txId,
             const TString& dbName,
-             ui64 buildIndexId
-            )
+            ui64 buildIndexId)
         {
             Record.SetTxId(txId);
             Record.SetDatabaseName(dbName);

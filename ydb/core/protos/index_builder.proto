@@ -2,13 +2,25 @@ import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_table.proto";
+import "ydb/public/api/protos/ydb_value.proto";
 
 package NKikimrIndexBuilder;
 option java_package = "ru.yandex.kikimr.proto";
 
+message TColumnBuildSetting {
+    optional string ColumnName = 1;
+    optional Ydb.TypedValue default_from_literal = 2;
+}
+
+message TColumnBuildSettings {
+    repeated TColumnBuildSetting column = 1;
+    optional string Table = 2;
+}
+
 message TIndexBuildSettings {
     optional string source_path = 1;
     optional Ydb.Table.TableIndex index = 2;
+    optional TColumnBuildSettings column_build_operation = 7;
 
     optional uint32 max_batch_rows = 3 [ default = 500 ];
     optional uint64 max_batch_bytes = 4 [ default = 8388608 ];

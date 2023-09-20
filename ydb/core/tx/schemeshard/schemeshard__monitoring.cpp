@@ -736,6 +736,10 @@ private:
 
                 str << "Subscribers.size:             " << info->Subscribers.size() << Endl
 
+                    << "AlterMainTableTxId:            " << info->AlterMainTableTxId << Endl
+                    << "AlterMainTableTxStatus:        " << NKikimrScheme::EStatus_Name(info->AlterMainTableTxStatus) << Endl
+                    << "AlterMainTableTxDone:          " << (info->AlterMainTableTxDone ? "DONE": "not done") << Endl
+
                     << "LockTxId:                      " << info->LockTxId << Endl
                     << "LockTxStatus:                  " << NKikimrScheme::EStatus_Name(info->LockTxStatus) << Endl
                     << "LockTxDone                     " << (info->LockTxDone ? "DONE" : "not done") << Endl

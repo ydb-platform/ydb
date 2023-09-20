@@ -4277,6 +4277,15 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     indexInfo->UnlockTxStatus = rowset.GetValueOrDefault<Schema::IndexBuild::UnlockTxStatus>(indexInfo->UnlockTxStatus);
                     indexInfo->UnlockTxDone = rowset.GetValueOrDefault<Schema::IndexBuild::UnlockTxDone>(indexInfo->UnlockTxDone);
 
+                    // note: please note that here we specify BuildIndex as operation default,
+                    // because previosly this table was dedicated for build index operations only.
+                    indexInfo->BuildKind = TIndexBuildInfo::EBuildKind(
+                        rowset.GetValueOrDefault<Schema::IndexBuild::BuildKind>(ui32(TIndexBuildInfo::EBuildKind::BuildIndex)));
+
+                    indexInfo->AlterMainTableTxId = rowset.GetValueOrDefault<Schema::IndexBuild::AlterMainTableTxId>(indexInfo->AlterMainTableTxId);
+                    indexInfo->AlterMainTableTxStatus = rowset.GetValueOrDefault<Schema::IndexBuild::AlterMainTableTxStatus>(indexInfo->AlterMainTableTxStatus);
+                    indexInfo->AlterMainTableTxDone = rowset.GetValueOrDefault<Schema::IndexBuild::AlterMainTableTxDone>(indexInfo->AlterMainTableTxDone);
+
                     indexInfo->Billed = TBillingStats(
                         rowset.GetValueOrDefault<Schema::IndexBuild::RowsBilled>(0),
                         rowset.GetValueOrDefault<Schema::IndexBuild::BytesBilled>(0));
@@ -4334,6 +4343,30 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             Y_FAIL_S("Unknown column kind# " << (int)columnKind);
                         break;
                     }
+
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                }
+            }
+
+            {
+                auto rowset = db.Table<Schema::BuildColumnOperationSettings>().Range().Select();
+                if (!rowset.IsReady()) {
+                    return false;
+                }
+
+                while (!rowset.EndOfSet()) {
+                    TIndexBuildId id = rowset.GetValue<Schema::BuildColumnOperationSettings::Id>();
+                    Y_VERIFY_S(Self->IndexBuilds.contains(id), "BuildIndex not found"
+                                   << ": id# " << id);
+
+                    TIndexBuildInfo::TPtr buildInfo = Self->IndexBuilds.at(id);
+
+                    TString columnName = rowset.GetValue<Schema::BuildColumnOperationSettings::ColumnName>();
+                    TString defaultFromLiteral = rowset.GetValue<Schema::BuildColumnOperationSettings::DefaultFromLiteral>();
+
+                    buildInfo->BuildColumns.push_back(TIndexBuildInfo::TColumnBuildInfo(columnName, defaultFromLiteral));
 
                     if (!rowset.Next()) {
                         return false;

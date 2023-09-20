@@ -2922,6 +2922,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     enum class EState: ui32 {
         Invalid = 0,
+        AlterMainTable = 5,
         Locking = 10,
         GatheringStatistics = 20,
         Initiating = 30,
@@ -2939,6 +2940,34 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         Rejected = 550
     };
 
+    struct TColumnBuildInfo {
+        TString ColumnName;
+        Ydb::TypedValue DefaultFromLiteral;
+
+        TColumnBuildInfo(const TString& name, const TString& serializedLiteral)
+            : ColumnName(name)
+        {
+            Y_VERIFY(DefaultFromLiteral.ParseFromString(serializedLiteral));
+        }
+
+        TColumnBuildInfo(const TString& name, const Ydb::TypedValue& defaultFromLiteral)
+            : ColumnName(name)
+            , DefaultFromLiteral(defaultFromLiteral)
+        {
+        }
+
+        void SerializeToProto(NKikimrIndexBuilder::TColumnBuildSetting* setting) const {
+            setting->SetColumnName(ColumnName);
+            setting->mutable_default_from_literal()->CopyFrom(DefaultFromLiteral);
+        }
+    };
+
+    enum class EBuildKind : ui32 {
+        BuildKindUnspecified = 0,
+        BuildIndex = 10,
+        BuildColumn = 20
+    };
+
     TActorId CreateSender;
     ui64 SenderCookie = 0;
 
@@ -2949,9 +2978,13 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     TPathId TablePathId;
     NKikimrSchemeOp::EIndexType IndexType = NKikimrSchemeOp::EIndexTypeInvalid;
 
+    EBuildKind BuildKind = EBuildKind::BuildKindUnspecified;
+
     TString IndexName;
     TVector<TString> IndexColumns;
     TVector<TString> DataColumns;
+    
+    TVector<TColumnBuildInfo> BuildColumns;
 
     TString ImplTablePath;
     NTableIndex::TTableColumns ImplTableColumns;
@@ -2962,6 +2995,10 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     TSet<TActorId> Subscribers;
 
     bool CancelRequested = false;
+
+    TTxId AlterMainTableTxId = TTxId();
+    NKikimrScheme::EStatus AlterMainTableTxStatus = NKikimrScheme::StatusSuccess;
+    bool AlterMainTableTxDone = false;
 
     TTxId LockTxId = TTxId();
     NKikimrScheme::EStatus LockTxStatus = NKikimrScheme::StatusSuccess;
@@ -3030,7 +3067,6 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     TBillingStats Processed;
     TBillingStats Billed;
 
-
     TIndexBuildInfo(TIndexBuildId id, TString uid)
         : Id(id)
         , Uid(uid)
@@ -3038,6 +3074,14 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     bool IsCancellationRequested() const {
         return CancelRequested;
+    }
+
+    bool IsBuildIndex() const {
+        return BuildKind == EBuildKind::BuildIndex;
+    }
+
+    bool IsBuildColumn() const {
+        return BuildKind == EBuildKind::BuildColumn;
     }
 
     bool IsDone() const {
@@ -3066,7 +3110,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         return 0.0;
     }
 
-    NKikimrSchemeOp::TIndexBuildConfig SerializeToProto(TSchemeShard* ss) const;
+    void SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* to) const;
+    void SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndexBuildConfig* to) const;
+
 };
 
 struct TExternalTableInfo: TSimpleRefCount<TExternalTableInfo> {
@@ -3141,6 +3187,10 @@ inline void Out<NKikimr::NSchemeShard::TIndexBuildInfo>
     o << ", SubscribersCount: " << info.Subscribers.size();
 
     o << ", CreateSender: " << info.CreateSender.ToString();
+
+    o << ", AlterMainTableTxId: " << info.AlterMainTableTxId;
+    o << ", AlterMainTableTxStatus: " <<  NKikimrScheme::EStatus_Name(info.AlterMainTableTxStatus);
+    o << ", AlterMainTableTxDone: " << info.AlterMainTableTxDone;
 
     o << ", LockTxId: " << info.LockTxId;
     o << ", LockTxStatus: " << NKikimrScheme::EStatus_Name(info.LockTxStatus);

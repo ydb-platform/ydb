@@ -9,6 +9,7 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <ydb/core/ydb_convert/table_description.h>
 
 
 namespace NKikimr {
@@ -30,7 +31,13 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose(
     auto& lockConfig = *modifyScheme.MutableLockConfig();
     lockConfig.SetName(path.LeafName());
 
-    *modifyScheme.MutableInitiateIndexBuild() = buildInfo->SerializeToProto(ss);
+    if (buildInfo->IsBuildIndex()) {
+        buildInfo->SerializeToProto(ss, modifyScheme.MutableInitiateIndexBuild());
+    } else if (buildInfo->IsBuildColumn()) {
+        buildInfo->SerializeToProto(ss, modifyScheme.MutableInitiateColumnBuild());
+    } else {
+        Y_FAIL("Unknown operation kind while building LockPropose");
+    }
 
     return propose;
 }
@@ -42,14 +49,59 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> InitiatePropose(
     propose->Record.SetFailOnExist(true);
 
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
-    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexBuild);
-    modifyScheme.SetInternal(true);
+    if (buildInfo->IsBuildIndex()) {
+        modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexBuild);
+        modifyScheme.SetInternal(true);
 
-    modifyScheme.SetWorkingDir(TPath::Init(buildInfo->DomainPathId, ss).PathString());
+        modifyScheme.SetWorkingDir(TPath::Init(buildInfo->DomainPathId, ss).PathString());
 
-    modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo->LockTxId));
+        modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo->LockTxId));
 
-    *modifyScheme.MutableInitiateIndexBuild() = buildInfo->SerializeToProto(ss);
+        buildInfo->SerializeToProto(ss, modifyScheme.MutableInitiateIndexBuild());
+    } else if (buildInfo->IsBuildColumn()) {
+        modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateColumnBuild);
+        modifyScheme.SetInternal(true);
+        modifyScheme.SetWorkingDir(TPath::Init(buildInfo->DomainPathId, ss).PathString());
+        modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo->LockTxId));
+
+        buildInfo->SerializeToProto(ss, modifyScheme.MutableInitiateColumnBuild());
+    } else {
+        Y_FAIL("Unknown operation kind while building InitiatePropose");
+    }
+
+    return propose;
+}
+
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
+    TSchemeShard* ss, const TIndexBuildInfo::TPtr buildInfo)
+{
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo->AlterMainTableTxId), ss->TabletID());
+    propose->Record.SetFailOnExist(true);
+
+    NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
+    if (buildInfo->IsBuildColumn()) {
+        modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+        modifyScheme.SetInternal(true);
+        modifyScheme.SetWorkingDir(TPath::Init(buildInfo->TablePathId, ss).Parent().PathString());
+        modifyScheme.MutableAlterTable()->SetName(TPath::Init(buildInfo->TablePathId, ss).LeafName());
+        for(auto& colInfo : buildInfo->BuildColumns) {
+            auto col = modifyScheme.MutableAlterTable()->AddColumns();
+            NScheme::TTypeInfo typeInfo;
+            TString typeMod;
+            Ydb::StatusIds::StatusCode status;
+            TString error;
+            if (!ExtractColumnTypeInfo(typeInfo, typeMod, colInfo.DefaultFromLiteral.type(), status, error)) {
+                // todo gvit fix that
+                Y_FAIL("failed to extract column type info");
+            }
+
+            col->SetType(NScheme::TypeName(typeInfo, typeMod));
+            col->SetName(colInfo.ColumnName);
+        }
+
+    } else {
+        Y_FAIL("Unknown operation kind while building AlterMainTablePropose");
+    }
 
     return propose;
 }
@@ -70,7 +122,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> ApplyPropose(
 
     auto& indexBuild = *modifyScheme.MutableApplyIndexBuild();
     indexBuild.SetTablePath(TPath::Init(buildInfo->TablePathId, ss).PathString());
-    indexBuild.SetIndexName(buildInfo->IndexName);
+
+    if (buildInfo->IsBuildIndex()) {
+        indexBuild.SetIndexName(buildInfo->IndexName);
+    }
+
     indexBuild.SetSnaphotTxId(ui64(buildInfo->InitiateTxId));
     indexBuild.SetBuildIndexId(ui64(buildInfo->Id));
 
@@ -131,14 +187,9 @@ private:
 
 public:
     explicit TTxProgress(TSelf* self, TIndexBuildId id)
-        : TSchemeShard::TIndexBuilder::TTxBase(self)
+        : TTxBase(self, TXTYPE_PROGRESS_INDEX_BUILD)
         , BuildId(id)
-    {
-    }
-
-    TTxType GetTxType() const override {
-        return TXTYPE_PROGRESS_INDEX_BUILD;
-    }
+    {}
 
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         Y_VERIFY(Self->IndexBuilds.contains(BuildId));
@@ -152,6 +203,19 @@ public:
         switch (buildInfo->State) {
         case TIndexBuildInfo::EState::Invalid:
             Y_FAIL("Unreachable");
+
+        case TIndexBuildInfo::EState::AlterMainTable:
+            if (buildInfo->AlterMainTableTxId == InvalidTxId) {
+                Send(Self->TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(), 0, ui64(BuildId));
+            } else if (buildInfo->AlterMainTableTxStatus == NKikimrScheme::StatusSuccess) {
+                Send(Self->SelfId(), AlterMainTablePropose(Self, buildInfo), 0, ui64(BuildId));
+            } else if (!buildInfo->AlterMainTableTxDone) {
+                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo->AlterMainTableTxId)));
+            } else {
+                ChangeState(BuildId, TIndexBuildInfo::EState::Locking);
+                Progress(BuildId);
+            }
+            break;
 
         case TIndexBuildInfo::EState::Locking:
             if (buildInfo->LockTxId == InvalidTxId) {
@@ -238,7 +302,7 @@ public:
                 Y_VERIFY(buildInfo->SnapshotStep);
             }
 
-            if (buildInfo->ImplTablePath.Empty()) {
+            if (buildInfo->ImplTablePath.Empty() && buildInfo->IsBuildIndex()) {
                 TPath implTable = TPath::Init(buildInfo->TablePathId, Self).Dive(buildInfo->IndexName).Dive("indexImplTable");
                 buildInfo->ImplTablePath = implTable.PathString();
 
@@ -262,15 +326,23 @@ public:
                 ev->Record.SetOwnerId(buildInfo->TablePathId.OwnerId);
                 ev->Record.SetPathId(buildInfo->TablePathId.LocalPathId);
 
-                ev->Record.SetTargetName(buildInfo->ImplTablePath);
-
-                THashSet<TString> columns = buildInfo->ImplTableColumns.Columns;
-                for (const auto& x: buildInfo->ImplTableColumns.Keys) {
-                    *ev->Record.AddIndexColumns() = x;
-                    columns.erase(x);
+                if (buildInfo->IsBuildColumn()) {
+                    ev->Record.SetTargetName(TPath::Init(buildInfo->TablePathId, Self).PathString());
+                } else if (buildInfo->IsBuildIndex()) {
+                    ev->Record.SetTargetName(buildInfo->ImplTablePath);
                 }
-                for (const auto& x: columns) {
-                    *ev->Record.AddDataColumns() = x;
+
+                if (buildInfo->IsBuildIndex()) {
+                    THashSet<TString> columns = buildInfo->ImplTableColumns.Columns;
+                    for (const auto& x: buildInfo->ImplTableColumns.Keys) {
+                        *ev->Record.AddIndexColumns() = x;
+                        columns.erase(x);
+                    }
+                    for (const auto& x: columns) {
+                        *ev->Record.AddDataColumns() = x;
+                    }
+                } else if (buildInfo->IsBuildColumn()) {
+                    buildInfo->SerializeToProto(Self, ev->Record.MutableColumnBuildSettings());
                 }
 
                 TIndexBuildInfo::TShardStatus& shardStatus = buildInfo->Shards.at(shardIdx);
@@ -442,14 +514,10 @@ private:
 
 public:
     explicit TTxBilling(TSelf* self, TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev)
-        : TSchemeShard::TIndexBuilder::TTxBase(self)
+        : TTxBase(self, TXTYPE_PROGRESS_INDEX_BUILD)
         , BuildIndexId(ev->Get()->BuildId)
         , ScheduledAt(ev->Get()->SendAt)
     {
-    }
-
-    TTxType GetTxType() const override {
-        return TXTYPE_MAKEBILL_INDEX_BUILD;
     }
 
     bool DoExecute(TTransactionContext& , const TActorContext& ctx) override {
@@ -491,38 +559,33 @@ private:
 
 public:
     explicit TTxReply(TSelf* self, TEvTxAllocatorClient::TEvAllocateResult::TPtr& allocateResult)
-        : TSchemeShard::TIndexBuilder::TTxBase(self)
+        : TTxBase(self, TXTYPE_PROGRESS_INDEX_BUILD)
         , AllocateResult(allocateResult)
     {
     }
 
     explicit TTxReply(TSelf* self, TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& modifyResult)
-        : TSchemeShard::TIndexBuilder::TTxBase(self)
+        : TTxBase(self, TXTYPE_PROGRESS_INDEX_BUILD)
         , ModifyResult(modifyResult)
     {
     }
 
     explicit TTxReply(TSelf* self, TTxId completedTxId)
-        : TSchemeShard::TIndexBuilder::TTxBase(self)
+        : TTxBase(self, TXTYPE_PROGRESS_INDEX_BUILD)
         , CompletedTxId(completedTxId)
     {
     }
 
     explicit TTxReply(TSelf* self, TEvDataShard::TEvBuildIndexProgressResponse::TPtr& shardProgress)
-        : TSchemeShard::TIndexBuilder::TTxBase(self)
+        : TTxBase(self, TXTYPE_PROGRESS_INDEX_BUILD)
         , ShardProgress(shardProgress)
     {
     }
 
     explicit TTxReply(TSelf* self, TIndexBuildId buildId, TTabletId tabletId)
-        : TSchemeShard::TIndexBuilder::TTxBase(self)
+        : TSchemeShard::TIndexBuilder::TTxBase(self, TXTYPE_PROGRESS_INDEX_BUILD)
         , PipeRetry({buildId, tabletId})
     {
-    }
-
-
-    TTxType GetTxType() const override {
-        return TXTYPE_PROGRESS_INDEX_BUILD;
     }
 
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
@@ -565,6 +628,7 @@ public:
               << ", TIndexBuildInfo: " << *buildInfo);
 
         switch (buildInfo->State) {
+        case TIndexBuildInfo::EState::AlterMainTable:
         case TIndexBuildInfo::EState::Invalid:
         case TIndexBuildInfo::EState::Locking:
         case TIndexBuildInfo::EState::GatheringStatistics:
@@ -632,6 +696,7 @@ public:
         }
 
         switch (buildInfo->State) {
+        case TIndexBuildInfo::EState::AlterMainTable:
         case TIndexBuildInfo::EState::Invalid:
         case TIndexBuildInfo::EState::Locking:
         case TIndexBuildInfo::EState::GatheringStatistics:
@@ -796,6 +861,16 @@ public:
         case TIndexBuildInfo::EState::Invalid:
             Y_FAIL("Unreachable");
 
+        case TIndexBuildInfo::EState::AlterMainTable:
+        {
+            Y_VERIFY(txId == buildInfo->AlterMainTableTxId);
+
+            buildInfo->AlterMainTableTxDone = true;
+            NIceDb::TNiceDb db(txc.DB);
+            Self->PersistBuildIndexAlterMainTableTxDone(db, buildInfo);
+            break;
+        }
+
         case TIndexBuildInfo::EState::Locking:
         {
             Y_VERIFY(txId == buildInfo->LockTxId);
@@ -949,6 +1024,31 @@ public:
         switch (buildInfo->State) {
         case TIndexBuildInfo::EState::Invalid:
             Y_FAIL("Unreachable");
+
+        case TIndexBuildInfo::EState::AlterMainTable:
+        {
+            Y_VERIFY(txId == buildInfo->AlterMainTableTxId);
+
+            buildInfo->AlterMainTableTxStatus = record.GetStatus();
+            NIceDb::TNiceDb db(txc.DB);
+            Self->PersistBuildIndexAlterMainTableTxStatus(db, buildInfo);
+
+            auto statusCode = TranslateStatusCode(record.GetStatus());
+
+            if (statusCode != Ydb::StatusIds::SUCCESS) {
+                buildInfo->Issue += TStringBuilder()
+                    << "At alter main table state got unsuccess propose result"
+                    << ", status: " << NKikimrScheme::EStatus_Name(buildInfo->AlterMainTableTxStatus)
+                    << ", reason: " << record.GetReason();
+                Self->PersistBuildIndexIssue(db, buildInfo);
+                NIceDb::TNiceDb db(txc.DB);
+                Self->PersistBuildIndexForget(db, buildInfo);
+                EraseBuildInfo(buildInfo);
+            }
+
+            ReplyOnCreation(buildInfo, statusCode);
+            break;            
+        }
 
         case TIndexBuildInfo::EState::Locking:
         {
@@ -1180,6 +1280,15 @@ public:
         switch (buildInfo->State) {
         case TIndexBuildInfo::EState::Invalid:
             Y_FAIL("Unreachable");
+
+        case TIndexBuildInfo::EState::AlterMainTable:
+            if (!buildInfo->AlterMainTableTxId) {
+                buildInfo->AlterMainTableTxId = txId;
+                NIceDb::TNiceDb db(txc.DB);
+                Self->PersistBuildIndexAlterMainTableTxId(db, buildInfo);
+        
+            }
+            break;
 
         case TIndexBuildInfo::EState::Locking:
             if (!buildInfo->LockTxId) {

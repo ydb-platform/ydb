@@ -218,6 +218,8 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "DROP EXTERNAL DATA SOURCE";
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExternalDataSource:
         return "ALTER EXTERNAL DATA SOURCE";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild:
+        return "ALTER TABLE ADD COLUMN DEFAULT";
     }
     Y_FAIL("switch should cover all operation types");
 }
@@ -495,6 +497,8 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterExternalDataSource:
         // TODO: unimplemented
         break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild:
+        result.emplace_back(tx.GetInitiateColumnBuild().GetTable());
     }
 
     return result;

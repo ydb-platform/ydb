@@ -22,18 +22,7 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
     TString indexName = config.GetIndexName();
 
     TPath table = TPath::Resolve(tablePath, context.SS);
-    TPath index = table.Child(indexName);
-    TPath implIndexTable = index.Child("indexImplTable");
-
-
-    TTableInfo::TPtr implIndexTableInfo = context.SS->Tables.at(implIndexTable.Base()->PathId);
-
-    //check idempotence
-
-    //check limits
-
     TVector<ISubOperation::TPtr> result;
-
     {
         auto finalize = TransactionTemplate(table.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexMainTable);
         *finalize.MutableLockGuard() = tx.GetLockGuard();
@@ -46,7 +35,9 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
         result.push_back(CreateFinalizeBuildIndexMainTable(NextPartId(nextId, result), finalize));
     }
 
+    if (!indexName.empty())
     {
+        TPath index = table.Child(indexName);
         auto tableIndexAltering = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
         *tableIndexAltering.MutableLockGuard() = tx.GetLockGuard();
         auto alterIndex = tableIndexAltering.MutableAlterTableIndex();
@@ -56,7 +47,11 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
         result.push_back(CreateAlterTableIndex(NextPartId(nextId, result), tableIndexAltering));
     }
 
+    if (!indexName.empty())
     {
+        TPath index = table.Child(indexName);
+        TPath implIndexTable = index.Child("indexImplTable");
+        TTableInfo::TPtr implIndexTableInfo = context.SS->Tables.at(implIndexTable.Base()->PathId);
         auto indexImplTableAltering = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexImplTable);
         auto alterTable = indexImplTableAltering.MutableAlterTable();
         alterTable->SetName(implIndexTable.LeafName());

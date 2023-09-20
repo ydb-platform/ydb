@@ -1,5 +1,6 @@
-import os
 import collections
+import os
+import six
 from hashlib import md5
 
 import ymake
@@ -528,7 +529,7 @@ def onpy_srcs(unit, *args):
         if py3:
             mod_list_md5 = md5()
             for path, mod in pys:
-                mod_list_md5.update(mod)
+                mod_list_md5.update(six.ensure_binary(mod))
                 if not (venv and is_extended_source_search_enabled(path, unit)):
                     dest = 'py/' + mod.replace('.', '/') + '.py'
                     if with_py:

@@ -1,3 +1,4 @@
+import six
 import sys
 import hashlib
 import base64
@@ -22,7 +23,7 @@ def lazy(func):
 
 
 def pathid(path):
-    return base64.b32encode(hashlib.md5(path).digest()).lower().strip('=')
+    return six.ensure_str(base64.b32encode(hashlib.md5(six.ensure_binary(path)).digest()).lower().strip(b'='))
 
 
 def listid(l):

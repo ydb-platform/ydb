@@ -359,7 +359,7 @@ def deserialize_list(val):
 
 
 def get_correct_expression_for_group_var(varname):
-    return "\"${join=\;:" + varname + "}\""
+    return r"\"${join=\;:" + varname + "}\""
 
 
 def count_entries(x):

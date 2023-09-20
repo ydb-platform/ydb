@@ -118,7 +118,8 @@ class TBufferedWriter {
 public:
     TBufferedWriter(TSocketDescriptor* socket, size_t size)
         : Socket(socket)
-        , Buffer(size) {
+        , Buffer(size)
+        , BufferSize(size) {
     }
 
     void write(const char* src, size_t length) {
@@ -130,18 +131,39 @@ public:
             flush();
         }
         size_t left = length - possible;
-        if (left > Buffer.Size()) {
-            Socket->Send(src + possible, left);
+        if (left >= BufferSize) {
+            Buffer.Reserve(left);
+            Buffer.Append(src + possible, left);
+            flush();
         } else if (left > 0) {
             Buffer.Append(src + possible, left);
         }
     }
 
-    void flush() {
-        if (Buffer.Size() > 0) {
-            Socket->Send(Buffer.Data(), Buffer.Size());
-            Buffer.Clear();
+    ssize_t flush() {
+        if (!Buffer.Empty()) {
+            Chunks.emplace_back(std::move(Buffer));
+            Buffer.Reserve(BufferSize);
         }
+        while(!Chunks.empty()) {
+            auto& chunk = Chunks.front();
+            ssize_t res = Socket->Send(chunk.Data(), chunk.Size());
+            if (res > 0) {
+                if (static_cast<size_t>(res) == chunk.Size()) {
+                    Chunks.pop_front();
+                } else {
+                    chunk.Shift(res);
+                }
+            } else if (-res == EINTR) {
+                continue;
+            } else if (-res == EAGAIN || -res == EWOULDBLOCK) {
+                return 0;
+            } else {
+                return res;
+            }
+        }
+
+        return 0;
     }
 
     const char* Data() {
@@ -156,9 +178,30 @@ public:
         return Buffer.Size();
     }
 
+    bool Empty() {
+        return Buffer.Empty() && Chunks.empty();
+    }
+
 private:
     TSocketDescriptor* Socket;
     TBuffer Buffer;
+    size_t BufferSize; 
+
+    struct Chunk {
+        Chunk(TBuffer&& buffer)
+            : Buffer(std::move(buffer))
+            , Position(0) {
+        }
+
+        TBuffer Buffer;
+        size_t Position;
+
+        const char* Data() { return Buffer.Data() + Position; }
+        size_t Size() { return Buffer.Size() - Position; }
+        void Shift(size_t size) { Position += size; }
+    };
+    std::deque<Chunk> Chunks;
+
 };
 
 } // namespace NKikimr::NRawSocket

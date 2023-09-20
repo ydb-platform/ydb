@@ -594,12 +594,14 @@ public:
 //
 template<typename Meta>
 inline void Write(TWriteCollector& collector, TKafkaWritable& writable, TKafkaInt16 version, const typename Meta::Type& value) {
-    if (VersionCheck<Meta::TaggedVersions.Min, Meta::TaggedVersions.Max>(version)) {
-        if (!IsDefaultValue<Meta>(value)) {
-            ++collector.NumTaggedFields;
+    if (VersionCheck<Meta::PresentVersions.Min, Meta::PresentVersions.Max>(version)) { 
+        if (VersionCheck<Meta::TaggedVersions.Min, Meta::TaggedVersions.Max>(version)) {
+            if (!IsDefaultValue<Meta>(value)) {
+                ++collector.NumTaggedFields;
+            }
+        } else  {
+            TypeStrategy<Meta, typename Meta::Type>::DoWrite(writable, version, value);
         }
-    } else if (VersionCheck<Meta::PresentVersions.Min, Meta::PresentVersions.Max>(version)) {
-        TypeStrategy<Meta, typename Meta::Type>::DoWrite(writable, version, value);
     }
 }
 
@@ -625,21 +627,23 @@ inline void Read(TKafkaReadable& readable, TKafkaInt16 version, typename Meta::T
 template<typename Meta>
 inline void Size(TSizeCollector& collector, TKafkaInt16 version, const typename Meta::Type& value) {
     if constexpr (!VersionNone<Meta::TaggedVersions.Min, Meta::TaggedVersions.Max>()) {
-        if (VersionCheck<Meta::TaggedVersions.Min, Meta::TaggedVersions.Max>(version)) {
-            if (!IsDefaultValue<Meta>(value)) {
-                ++collector.NumTaggedFields;
+        if (VersionCheck<Meta::PresentVersions.Min, Meta::PresentVersions.Max>(version)) {
+            if (VersionCheck<Meta::TaggedVersions.Min, Meta::TaggedVersions.Max>(version)) {
+                if (!IsDefaultValue<Meta>(value)) {
+                    ++collector.NumTaggedFields;
 
-                i64 size = TypeStrategy<Meta, typename Meta::Type>::DoSize(version, value);
-                collector.Size += size + SizeOfUnsignedVarint(Meta::Tag) + SizeOfUnsignedVarint(size); 
-                if constexpr (DEBUG_ENABLED) {
-                    Cerr << "Size of field '" << Meta::Name << "' " << size << " + " << SizeOfUnsignedVarint(Meta::Tag) << " + " << SizeOfUnsignedVarint(size) << Endl;                    
+                    i64 size = TypeStrategy<Meta, typename Meta::Type>::DoSize(version, value);
+                    collector.Size += size + SizeOfUnsignedVarint(Meta::Tag) + SizeOfUnsignedVarint(size); 
+                    if constexpr (DEBUG_ENABLED) {
+                        Cerr << "Size of field '" << Meta::Name << "' " << size << " + " << SizeOfUnsignedVarint(Meta::Tag) << " + " << SizeOfUnsignedVarint(size) << Endl;                    
+                    }
                 }
-            }
-        } else if (VersionCheck<Meta::PresentVersions.Min, Meta::PresentVersions.Max>(version)) {
-            i64 size = TypeStrategy<Meta, typename Meta::Type>::DoSize(version, value);
-            collector.Size += size;
-            if constexpr (DEBUG_ENABLED) {
-                Cerr << "Size of field '" << Meta::Name << "' " << size << Endl;                    
+            } else {
+                i64 size = TypeStrategy<Meta, typename Meta::Type>::DoSize(version, value);
+                collector.Size += size;
+                if constexpr (DEBUG_ENABLED) {
+                    Cerr << "Size of field '" << Meta::Name << "' " << size << Endl;                    
+                }
             }
         }
     } else {
@@ -656,7 +660,8 @@ inline void Size(TSizeCollector& collector, TKafkaInt16 version, const typename 
 template<typename Meta>
 inline void WriteTag(TKafkaWritable& writable, TKafkaInt16 version, const typename Meta::Type& value) {
     if constexpr (!VersionNone<Meta::TaggedVersions.Min, Meta::TaggedVersions.Max>()) {
-        if (VersionCheck<Meta::TaggedVersions.Min, Meta::TaggedVersions.Max>(version)) {
+        if (VersionCheck<Meta::PresentVersions.Min, Meta::PresentVersions.Max>(version) &&
+            VersionCheck<Meta::TaggedVersions.Min, Meta::TaggedVersions.Max>(version)) {
             if (!IsDefaultValue<Meta>(value)) {
                 writable.writeUnsignedVarint(Meta::Tag);
                 writable.writeUnsignedVarint(TypeStrategy<Meta, typename Meta::Type>::DoSize(version, value));

@@ -53,6 +53,7 @@ public:
 
     TIntrusivePtr<TSocketDescriptor> Socket;
     TSocketAddressType Address;
+    TBufferedWriter Buffer;
 
     THPTimer InactivityTimer;
 
@@ -85,6 +86,7 @@ public:
                      const NKikimrConfig::TKafkaProxyConfig& config)
         : Socket(std::move(socket))
         , Address(address)
+        , Buffer(Socket.Get(), config.GetPacketSize())
         , Step(SIZE_READ)
         , Demand(NoDemand)
         , InflightSize(0)
@@ -313,8 +315,8 @@ protected:
         auto authStep = event->AuthStep;
         if (authStep == EAuthSteps::FAILED) {
             KAFKA_LOG_ERROR(event->Error);
-            Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, event->ClientResponse->ErrorCode, ctx, true);
-            PassAway();
+            Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, event->ClientResponse->ErrorCode, ctx);
+            CloseConnection = true;
             return;
         }
 
@@ -338,7 +340,7 @@ protected:
         auto authStep = event->AuthStep;
         if (authStep == EAuthSteps::FAILED) {
             KAFKA_LOG_ERROR(event->Error);
-            PassAway();
+            CloseConnection = true;
             return;
         }
 
@@ -346,7 +348,7 @@ protected:
         Context->AuthenticationStep = authStep;
     }
 
-    void Reply(const ui64 correlationId, TApiMessage::TPtr response, EKafkaErrors errorCode, const TActorContext& ctx, bool lastMessage = false) {
+    void Reply(const ui64 correlationId, TApiMessage::TPtr response, EKafkaErrors errorCode, const TActorContext& ctx) {
         auto it = PendingRequests.find(correlationId);
         if (it == PendingRequests.end()) {
             KAFKA_LOG_ERROR("Unexpected correlationId " << correlationId);
@@ -358,10 +360,7 @@ protected:
         request->ResponseErrorCode = errorCode;
 
         ProcessReplyQueue(ctx);
-
-        if (!lastMessage) {
-            DoRead(ctx);
-        }
+        RequestPoller();
     }
 
     void ProcessReplyQueue(const TActorContext& ctx) {
@@ -389,15 +388,14 @@ protected:
 
         TKafkaInt32 size = responseHeader.Size(headerVersion) + reply->Size(version);
 
-        TBufferedWriter buffer(Socket.Get(), Context->Config.GetPacketSize());
-        TKafkaWritable writable(buffer);
+        TKafkaWritable writable(Buffer);
         SendResponseMetrics(method, requestStartTime, size, errorCode, ctx);
         try {
             writable << size;
             responseHeader.Write(writable, headerVersion);
             reply->Write(writable, version);
 
-            buffer.flush();
+            Buffer.flush();
 
             KAFKA_LOG_D("Sent reply: ApiKey=" << header->RequestApiKey << ", Version=" << version << ", Correlation=" << responseHeader.CorrelationId <<  ", Size=" << size);
         } catch(const yexception& e) {
@@ -550,7 +548,9 @@ protected:
 
     void HandleConnected(TEvPollerReady::TPtr event, const TActorContext& ctx) {
         if (event->Get()->Read) {
-            DoRead(ctx);
+            if (!CloseConnection) {
+                DoRead(ctx);
+            }
 
             if (event->Get() == InactivityEvent) {
                 const TDuration passed = TDuration::Seconds(std::abs(InactivityTimer.Passed()));
@@ -561,6 +561,19 @@ protected:
                     Schedule(InactivityTimeout - passed, InactivityEvent = new TEvPollerReady(nullptr, false, false));
                 }
             }
+        }
+        if (event->Get()->Write) {
+            ssize_t res = Buffer.flush();
+            if (res < 0) {
+                KAFKA_LOG_ERROR("connection closed - error in FlushOutput: " << strerror(-res));
+                PassAway();
+                return;
+            }
+        }
+
+        if (CloseConnection && Buffer.Empty()) {
+            KAFKA_LOG_D("connection closed");
+            return PassAway();
         }
 
         RequestPoller();

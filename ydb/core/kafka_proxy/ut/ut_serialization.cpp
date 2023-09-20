@@ -132,6 +132,20 @@ Y_UNIT_TEST(ApiVersionsResponse) {
     UNIT_ASSERT_EQUAL(result.ZkMigrationReady, true);
 }
 
+Y_UNIT_TEST(ApiVersion_WithoutSupportedFeatures) {
+    TWritableBuf sb(nullptr, BUFFER_SIZE);
+
+    TApiVersionsResponseData value;
+    size_t expectedSize = value.Size(2);
+
+    value.SupportedFeatures.resize(1);
+    value.SupportedFeatures[0].Name = "Feature name";
+
+    size_t size = value.Size(2);
+
+    UNIT_ASSERT_VALUES_EQUAL_C(expectedSize, size, "SupportedFeatures is not presents for 2 version");
+}
+
 Y_UNIT_TEST(ProduceRequest) {
     TWritableBuf sb(nullptr, BUFFER_SIZE);
 

@@ -63,6 +63,10 @@ namespace NMonitoring {
         TMtHttpServer(const TOptions& options, THandler handler, IThreadFactory* pool = nullptr);
         TMtHttpServer(const TOptions& options, THandler handler, TSimpleSharedPtr<IThreadPool> pool);
 
+        ~TMtHttpServer() override {
+            Stop();
+        }
+
         /**
          * This will cause the server start to accept incoming connections.
          *

@@ -41,5 +41,9 @@ enum class ECollectQueryStatsMode {
 
 using TQueryStats = NQuery::TExecStats;
 
+std::optional<ECollectQueryStatsMode> ParseQueryStatsMode(std::string_view statsMode);
+
+std::string_view QueryStatsModeToString(ECollectQueryStatsMode statsMode);
+
 } // namespace NTable
 } // namespace NYdb

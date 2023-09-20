@@ -5,7 +5,7 @@
 namespace NYdb {
 namespace NConsoleClient {
 
-NTable::ECollectQueryStatsMode ParseQueryStatsMode(const TString& statsMode,
+NTable::ECollectQueryStatsMode ParseQueryStatsModeOrThrow(const TString& statsMode,
     NTable::ECollectQueryStatsMode defaultMode);
 
 } // namespace NConsoleClient

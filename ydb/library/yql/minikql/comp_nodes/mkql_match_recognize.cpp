@@ -142,7 +142,7 @@ public:
     }
 
     bool ProcessInputRow(NUdf::TUnboxedValue&& row, TComputationContext& ctx) override{
-        Y_UNUSED(row);
+        Parameters.InputDataArg->SetValue(ctx, ctx.HolderFactory.Create<TListValue<TSparseList>>(Rows));
         Parameters.CurrentRowIndexArg->SetValue(ctx, NUdf::TUnboxedValuePod(Rows.Size()));
         auto r = Rows.Append(std::move(row));
         for (size_t i = 0; i != Parameters.Defines.size(); ++i) {
@@ -174,7 +174,6 @@ public:
     }
     bool ProcessEndOfData(TComputationContext& ctx) override {
         Y_UNUSED(ctx);
-        MKQL_ENSURE(false, "Internal logic error. End of partition is not expected for a stream");
         return false;
     }
 private:
@@ -573,7 +572,7 @@ IComputationNode* WrapMatchRecognizeCore(TCallable& callable, const TComputation
             , GetOutputColumnOrder(partitionColumnIndexes, measureColumnIndexes)
     };
     if (AS_VALUE(TDataLiteral, streamingMode)->AsValue().Get<bool>()) {
-        return new TMatchRecognizeWrapper<TStateForNonInterleavedPartitions>(ctx.Mutables
+        return new TMatchRecognizeWrapper<TStateForInterleavedPartitions>(ctx.Mutables
                 , GetValueRepresentation(inputFlow.GetStaticType())
                 , LocateNode(ctx.NodeLocator, *inputFlow.GetNode())
                 , static_cast<IComputationExternalNode*>(LocateNode(ctx.NodeLocator, *inputRowArg.GetNode()))

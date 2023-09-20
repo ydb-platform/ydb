@@ -14,7 +14,7 @@ IF(NOT OPENSOURCE)
         custom_encoder.cpp
     )
     PEERDIR(
-        library/cpp/charset
+        library/cpp/charset/lite
     )
     GENERATE_ENUM_SERIALIZATION(normalization.h)
 ENDIF()

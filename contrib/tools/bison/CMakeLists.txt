@@ -7,5 +7,3 @@
 
 
 add_subdirectory(bison)
-add_subdirectory(flatc)
-add_subdirectory(protoc)

@@ -1,9 +1,13 @@
 PROGRAM()
 
+VERSION(3.0)
+
 LICENSE(
-    GPL-3.0-or-later AND
-    GPL-3.0-or-later WITH Bison-exception-2.2
+    GPL-3.0-only AND
+    GPL-3.0-or-later
 )
+
+ORIGINAL_SOURCE(git://git.sv.gnu.org/bison)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 

@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(bison)
-add_subdirectory(flatc)
-add_subdirectory(protoc)
+
+add_library(bison-bison-induced INTERFACE)
+target_link_libraries(bison-bison-induced INTERFACE
+  contrib-libs-linux-headers
+)

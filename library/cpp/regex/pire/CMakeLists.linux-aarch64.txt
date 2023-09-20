@@ -19,6 +19,7 @@ target_link_libraries(cpp-regex-pire PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-charset
+  bison-bison-induced
 )
 target_sources(cpp-regex-pire PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/regex/pire/pcre2pire.cpp

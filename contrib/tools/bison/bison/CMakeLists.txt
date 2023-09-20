@@ -6,6 +6,4 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(bison)
-add_subdirectory(flatc)
-add_subdirectory(protoc)
+add_subdirectory(induced)

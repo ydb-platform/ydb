@@ -179,6 +179,7 @@ struct TKqpCompileRequest {
     TKqpCompileRequest(const TActorId& sender, const TString& uid, TKqpQueryId query, bool keepInCache,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TInstant& deadline, TKqpDbCountersPtr dbCounters,
         ui64 cookie, std::shared_ptr<std::atomic<bool>> intrestedInResult,
+        const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         NLWTrace::TOrbit orbit = {}, NWilson::TSpan span = {},
         TKqpTempTablesState::TConstPtr tempTablesState = {})
         : Sender(sender)
@@ -188,6 +189,7 @@ struct TKqpCompileRequest {
         , UserToken(userToken)
         , Deadline(deadline)
         , DbCounters(dbCounters)
+        , UserRequestContext(userRequestContext)
         , Orbit(std::move(orbit))
         , CompileServiceSpan(std::move(span))
         , Cookie(cookie)
@@ -204,6 +206,7 @@ struct TKqpCompileRequest {
     TKqpDbCountersPtr DbCounters;
     TActorId CompileActor;
 
+    TIntrusivePtr<TUserRequestContext> UserRequestContext;
     NLWTrace::TOrbit Orbit;
     NWilson::TSpan CompileServiceSpan;
     ui64 Cookie;
@@ -479,7 +482,8 @@ private:
             << ", sender: " << ev->Sender
             << ", queryUid: " << (request.Uid ? *request.Uid : "<empty>")
             << ", queryText: \"" << (request.Query ? EscapeC(request.Query->Text) : "<empty>") << "\""
-            << ", keepInCache: " << request.KeepInCache);
+            << ", keepInCache: " << request.KeepInCache
+            << *request.UserRequestContext);
 
         *Counters->CompileQueryCacheSize = QueryCache.Size();
         *Counters->CompileQueryCacheBytes = QueryCache.Bytes();
@@ -554,7 +558,7 @@ private:
 
         TKqpCompileRequest compileRequest(ev->Sender, CreateGuidAsString(), std::move(*request.Query),
             request.KeepInCache, request.UserToken, request.Deadline, dbCounters,
-            ev->Cookie, std::move(ev->Get()->IntrestedInResult),
+            ev->Cookie, std::move(ev->Get()->IntrestedInResult), ev->Get()->UserRequestContext,
             std::move(ev->Get()->Orbit), std::move(CompileServiceSpan), std::move(ev->Get()->TempTablesState));
 
         if (!RequestsQueue.Enqueue(std::move(compileRequest))) {
@@ -605,6 +609,7 @@ private:
             TKqpCompileRequest compileRequest(ev->Sender, request.Uid, compileResult ? *compileResult->Query : *request.Query,
                 true, request.UserToken, request.Deadline, dbCounters,
                 ev->Cookie, std::move(ev->Get()->IntrestedInResult),
+                ev->Get()->UserRequestContext,
                 ev->Get() ? std::move(ev->Get()->Orbit) : NLWTrace::TOrbit(),
                 std::move(CompileServiceSpan), std::move(ev->Get()->TempTablesState));
 
@@ -762,8 +767,8 @@ private:
 
     void StartCompilation(TKqpCompileRequest&& request, const TActorContext& ctx) {
         auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, Config, MetadataProviderConfig, ModuleResolverState, Counters, 
-             request.Uid, request.Query, request.UserToken, FederatedQuerySetup, request.DbCounters, request.CompileServiceSpan.GetTraceId(),
-             std::move(request.TempTablesState));
+             request.Uid, request.Query, request.UserToken, FederatedQuerySetup, request.DbCounters, request.UserRequestContext,
+             request.CompileServiceSpan.GetTraceId(), std::move(request.TempTablesState));
         auto compileActorId = ctx.ExecutorThread.RegisterActor(compileActor, TMailboxType::HTSwap,
             AppData(ctx)->UserPoolId);
 

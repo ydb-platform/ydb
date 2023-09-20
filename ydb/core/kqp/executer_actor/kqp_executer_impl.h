@@ -22,8 +22,8 @@
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/grpc_services/local_rate_limiter.h>
-#include <ydb/core/util/ulid.h>
 
 #include <ydb/services/metadata/secret/fetcher.h>
 #include <ydb/services/metadata/secret/snapshot.h>
@@ -117,7 +117,8 @@ public:
         TKqpRequestCounters::TPtr counters,
         const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
         const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
-        TDuration maximalSecretsSnapshotWaitTime, const TString& sessionId, ui64 spanVerbosity = 0, TString spanName = "no_name")
+        TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
+        ui64 spanVerbosity = 0, TString spanName = "no_name")
         : Request(std::move(request))
         , Database(database)
         , UserToken(userToken)
@@ -126,6 +127,7 @@ public:
         , Planner(nullptr)
         , ExecuterRetriesConfig(executerRetriesConfig)
         , MaximalSecretsSnapshotWaitTime(maximalSecretsSnapshotWaitTime)
+        , UserRequestContext(userRequestContext)
     {
         TasksGraph.GetMeta().Snapshot = IKqpGateway::TKqpSnapshot(Request.Snapshot.Step, Request.Snapshot.TxId);
         TasksGraph.GetMeta().Arena = MakeIntrusive<NActors::TProtoArenaHolder>();
@@ -135,7 +137,6 @@ public:
         ResponseEv->Orbit = std::move(Request.Orbit);
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats());
-        UserRequestContext = MakeIntrusive<TUserRequestContext>(TUserRequestContext(UlidGen.Next().ToString(), Database, sessionId));  // here is no SessionId
     }
 
     void Bootstrap() {
@@ -1299,7 +1300,6 @@ protected:
     TDuration MaximalSecretsSnapshotWaitTime;
     bool SubscribedOnSecrets = false;
 
-    TULIDGenerator UlidGen;
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
 
 private:
@@ -1312,14 +1312,14 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters, bool streamResult,
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, const TActorId& creator,
-    TDuration maximalSecretsSnapshotWaitTime, const TString& sessionId);
+    TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
     TPreparedQueryHolder::TConstPtr preparedQuery, const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
-    TDuration maximalSecretsSnapshotWaitTime, const TString& sessionId);
+    TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext);
 
 } // namespace NKqp
 } // namespace NKikimr

@@ -198,7 +198,7 @@ public:
             << "ActorId: " << SelfId() << ", "
             << "ActorState: " << CurrentStateFuncName() << ", ";
         if (Y_LIKELY(QueryState)) {
-            result << "TraceId: " << QueryState->TraceId << ", ";
+            result << "TraceId: " << QueryState->UserRequestContext->TraceId << ", ";
         }
         return result;
     }
@@ -216,7 +216,7 @@ public:
         ev->Get()->SetClientLostAction(selfId, as);
         QueryState = std::make_shared<TKqpQueryState>(
             ev, QueryId, Settings.Database, Settings.Cluster, Settings.DbCounters, Settings.LongSession,
-            Settings.TableService, Settings.QueryService, std::move(id));
+            Settings.TableService, Settings.QueryService, std::move(id), SessionId);
     }
 
     void ForwardRequest(TEvKqp::TEvQueryRequest::TPtr& ev) {
@@ -1070,7 +1070,7 @@ public:
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             RequestCounters, Settings.TableService.GetAggregationConfig(), Settings.TableService.GetExecuterRetriesConfig(),
             AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr, Settings.TableService.GetChannelTransportVersion(), SelfId(), 2 * TDuration::Seconds(MetadataProviderConfig.GetRefreshPeriodSeconds()),
-            SessionId);
+            QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId));
 
         auto exId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);
@@ -1318,7 +1318,7 @@ public:
             stats->MutableCompilation()->Swap(&QueryState->CompileStats);
         }
 
-        auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
+        auto requestInfo = TKqpRequestInfo(QueryState->UserRequestContext->TraceId, SessionId);
         YQL_ENSURE(QueryState);
         if (IsExecuteAction(QueryState->GetAction())) {
             auto ru = NRuCalc::CalcRequestUnit(*stats);

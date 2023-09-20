@@ -12,6 +12,7 @@
 #include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/session_actor/kqp_tx.h>
 
 #include <util/generic/noncopyable.h>
@@ -32,7 +33,7 @@ public:
     TKqpQueryState(TEvKqp::TEvQueryRequest::TPtr& ev, ui64 queryId, const TString& database,
         const TString& cluster, TKqpDbCountersPtr dbCounters, bool longSession,
         const NKikimrConfig::TTableServiceConfig& tableServiceConfig, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
-        NWilson::TTraceId&& traceId)
+        NWilson::TTraceId&& traceId, const TString& sessionId)
         : QueryId(queryId)
         , Database(database)
         , Cluster(cluster)
@@ -41,7 +42,6 @@ public:
         , ProxyRequestId(ev->Cookie)
         , ParametersSize(ev->Get()->GetParametersSize())
         , RequestActorId(ev->Get()->GetRequestActorId())
-        , TraceId(ev->Get()->GetTraceId())
         , IsDocumentApiRestricted_(IsDocumentApiRestricted(ev->Get()->GetRequestType()))
         , StartTime(TInstant::Now())
         , KeepSession(ev->Get()->GetKeepSession() || longSession)
@@ -61,6 +61,8 @@ public:
         KqpSessionSpan = NWilson::TSpan(
             TWilsonKqp::KqpSession, std::move(traceId),
             "Session.query." + NKikimrKqp::EQueryAction_Name(action), NWilson::EFlags::AUTO_END);
+
+        UserRequestContext = MakeIntrusive<TUserRequestContext>(ev->Get()->GetTraceId(), Database, sessionId);
     }
 
     // the monotonously growing counter, the ordinal number of the query,
@@ -84,7 +86,7 @@ public:
     TActorId RequestActorId;
 
     ui64 CurrentTx = 0;
-    TString TraceId;
+    TIntrusivePtr<TUserRequestContext> UserRequestContext;
     bool IsDocumentApiRestricted_ = false;
 
     TInstant StartTime;

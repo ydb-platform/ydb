@@ -63,8 +63,8 @@ public:
         TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
         const TString& uid, const TKqpQueryId& queryId,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-        TKqpDbCountersPtr dbCounters, 
-        std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
+        TKqpDbCountersPtr dbCounters, std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
+        const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState)
         : Owner(owner)
         , ModuleResolverState(moduleResolverState)
@@ -78,6 +78,7 @@ public:
         , Config(MakeIntrusive<TKikimrConfiguration>())
         , MetadataProviderConfig(metadataProviderConfig)
         , CompilationTimeout(TDuration::MilliSeconds(serviceConfig.GetCompileTimeoutMs()))
+        , UserRequestContext(userRequestContext)
         , CompileActorSpan(TWilsonKqp::CompileActor, std::move(traceId), "CompileActor")
         , TempTablesState(std::move(tempTablesState))
     {
@@ -111,7 +112,7 @@ public:
         TimeoutTimerActorId = CreateLongTimer(ctx, CompilationTimeout, new IEventHandle(SelfId(), SelfId(),
             new TEvents::TEvWakeup()));
 
-        TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, YqlName, "");
+        TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, YqlName, UserRequestContext->TraceId);
 
         TKqpRequestCounters::TPtr counters = new TKqpRequestCounters;
         counters->Counters = Counters;
@@ -303,7 +304,7 @@ private:
     void Handle(TEvKqp::TEvContinueProcess::TPtr &ev, const TActorContext &ctx) {
         Y_ENSURE(!ev->Get()->QueryId);
 
-        TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, YqlName, "");
+        TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, YqlName, UserRequestContext->TraceId);
 
         if (!ev->Get()->Finished) {
             NCpuTime::TCpuTimer timer(CompileCpuTime);
@@ -392,6 +393,7 @@ private:
     std::shared_ptr<TKqpCompileResult> KqpCompileResult;
     std::optional<TString> ReplayMessage;
 
+    TIntrusivePtr<TUserRequestContext> UserRequestContext;
     NWilson::TSpan CompileActorSpan;
 
     TKqpTempTablesState::TConstPtr TempTablesState;
@@ -427,12 +429,13 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
     const TString& uid, const TKqpQueryId& query, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
-    TKqpDbCountersPtr dbCounters, NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState)
+    TKqpDbCountersPtr dbCounters, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
+    NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState)
 {
     return new TKqpCompileActor(owner, kqpSettings, serviceConfig, metadataProviderConfig,
                                 moduleResolverState, counters,  
                                 uid, query, userToken, dbCounters,
-                                federatedQuerySetup,
+                                federatedQuerySetup, userRequestContext,
                                 std::move(traceId), std::move(tempTablesState));
 }
 

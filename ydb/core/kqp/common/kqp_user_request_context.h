@@ -1,3 +1,5 @@
+#pragma once
+
 #include <util/stream/output.h>
 #include <util/generic/fwd.h>
 

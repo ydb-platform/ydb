@@ -9,6 +9,8 @@
 #include <ydb/library/yql/core/yql_type_helpers.h>
 #include <ydb/library/yql/core/yql_statistics.h>
 
+#include <ydb/library/yql/core/cbo/cbo_optimizer.h> //interface
+
 #include <library/cpp/disjoint_sets/disjoint_sets.h>
 
 
@@ -1001,4 +1003,103 @@ TExprBase DqOptimizeEquiJoinWithCosts(const TExprBase& node, TExprContext& ctx, 
     return res;
 }
 
+class TOptimizerNative: public IOptimizer {
+public:
+    TOptimizerNative(const IOptimizer::TInput& input, const std::function<void(const TString&)>& log)
+        : Input(input)
+        , Log(log)
+    {
+        Prepare();
+    }
+
+    TOutput JoinSearch() override {
+        TDPccpSolver<64> solver(JoinGraph, Rels);
+        std::shared_ptr<TJoinOptimizerNode> result = solver.Solve();
+        TOutput output;
+        output.Input = &Input;
+        BuildOutput(&output, result.get());
+        return output;
+    }
+
+private:
+    int BuildOutput(TOutput* output, IBaseOptimizerNode* node) {
+        int index = (int)output->Nodes.size();
+        TJoinNode& r = output->Nodes.emplace_back();
+        switch (node->Kind) {
+        case EOptimizerNodeKind::RelNodeType: {
+            // leaf
+            TRelOptimizerNode* n = static_cast<TRelOptimizerNode*>(node);
+            r.Rels.emplace_back(FromString<int>(n->Label));
+            break;
+        }
+        case EOptimizerNodeKind::JoinNodeType: {
+            // node
+            r.Mode = IOptimizer::EJoinType::Inner;
+            TJoinOptimizerNode* n = static_cast<TJoinOptimizerNode*>(node);
+            r.Outer = BuildOutput(output, n->LeftArg.get());
+            r.Inner = BuildOutput(output, n->RightArg.get());
+
+            std::set<int> rels;
+            for (auto& [col1, col2] : n->JoinConditions) {
+                int relId1 = FromString<int>(col1.RelName);
+                int colId1 = FromString<int>(col1.AttributeName);
+                int relId2 = FromString<int>(col2.RelName);
+                int colId2 = FromString<int>(col2.AttributeName);
+
+                r.LeftVars.emplace_back(std::make_tuple(relId1, colId1));
+                r.RightVars.emplace_back(std::make_tuple(relId2, colId2));
+
+                rels.emplace(relId1);
+                rels.emplace(relId2);
+            }
+
+            r.Rels.reserve(rels.size());
+            r.Rels.insert(r.Rels.end(), rels.begin(), rels.end());
+            break;
+        }
+        default:
+            Y_VERIFY(false);
+        };
+        return index;
+    }
+
+    void Prepare() {
+        int index = 1;
+        for (const auto& r : Input.Rels) {
+            auto label = ToString(index++);
+            auto stats = std::make_shared<TOptimizerStatistics>(r.Rows, r.TargetVars.size(), r.TotalCost);
+            Rels.push_back(std::shared_ptr<TRelOptimizerNode>(new TRelOptimizerNode(label, stats)));
+        }
+
+        std::set<std::pair<TJoinColumn, TJoinColumn>> joinConditions;
+        for (const auto& clazz : Input.EqClasses) {
+            auto [relId, varId] = clazz.Vars[0];
+            auto c1 = TJoinColumn(ToString(relId), ToString(varId));
+            for (int i = 1; i < (int)clazz.Vars.size(); i++) {
+                auto [crelId, cvarId] = clazz.Vars[i];
+                auto c2 = TJoinColumn(ToString(crelId), ToString(cvarId));
+                joinConditions.emplace(std::make_pair(c1, c2));
+            }
+        }
+
+        for (auto cond : joinConditions) {
+            int fromNode = JoinGraph.FindNode(cond.first.RelName);
+            int toNode = JoinGraph.FindNode(cond.second.RelName);
+            JoinGraph.AddEdge(TEdge(fromNode, toNode, cond));
+        }
+        JoinGraph.ComputeTransitiveClosure(joinConditions);
+    }
+
+    TInput Input;
+    const std::function<void(const TString&)> Log;
+
+    TVector<std::shared_ptr<TRelOptimizerNode>> Rels;
+    TGraph<64> JoinGraph;
+};
+
+IOptimizer* MakeNativeOptimizer(const IOptimizer::TInput& input, const std::function<void(const TString&)>& log) {
+    return new TOptimizerNative(input, log);
 }
+
+} // namespace NYql::NDq
+

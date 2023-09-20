@@ -4,6 +4,7 @@
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.h>
 #include <ydb/library/yql/core/yql_graph_transformer.h>
+#include <ydb/library/yql/core/cbo/cbo_optimizer.h>
 
 #include <functional>
 
@@ -35,5 +36,7 @@ NNodes::TExprBase DqSqlInDropCompact(NNodes::TExprBase node, TExprContext& ctx);
 IGraphTransformer::TStatus DqWrapRead(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, TTypeAnnotationContext& typesCtx, const TDqSettings& config);
 
 NNodes::TExprBase DqExpandMatchRecognize(NNodes::TExprBase node, TExprContext& ctx, TTypeAnnotationContext& typeAnnCtx);
+
+IOptimizer* MakeNativeOptimizer(const IOptimizer::TInput& input, const std::function<void(const TString&)>& log);
 
 } // namespace NYql::NDq

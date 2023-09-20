@@ -151,32 +151,17 @@ namespace NTable {
                     return true;
                 }
 
-                auto hasLast = Index.SeekLast();
-                if (hasLast == EReady::Page) {
+                auto ready = Index.Seek(rowId);
+                if (ready == EReady::Page) {
                     return false;
-                }
-                Y_VERIFY(hasLast != EReady::Gone, "Unexpected failure to find the last index record");
-
-                if (const auto* lastKey = Index.TryGetLastRecord()) {
-                    if (lastKey->GetRowId() == rowId) {
-                        LoadIndexKey(*lastKey);
-                        return true;
-                    } else if (lastKey->GetRowId() < rowId) {
-                        // Row is out of range for this part
-                        RowId = Max<TRowId>();
-                        Key = { };
-                        return true;
-                    }
-                }
-
-                if (!SeekIndex(rowId)) {
-                    return false;
-                }
-                if (Index.GetRowId() == rowId) {
-                    LoadIndexKey(*Index.GetRecord());
+                } else if (ready == EReady::Gone) {
+                    // Row is out of range for this part
+                    RowId = Max<TRowId>();
+                    Key = { };
                     return true;
                 }
-                Y_VERIFY(Index.GetRowId() < rowId, "SeekIndex invariant failure");
+
+                Y_VERIFY(Index.GetRowId() <= rowId, "SeekIndex invariant failure");
                 if (!LoadPage(Index.GetPageId())) {
                     return false;
                 }
@@ -201,11 +186,6 @@ namespace NTable {
             }
             Y_VERIFY(hasLast != EReady::Gone, "Unexpected failure to find the last index record");
 
-            if (const auto* lastKey = Index.TryGetLastRecord()) {
-                LoadIndexKey(*lastKey);
-                return true;
-            }
-
             if (!LoadPage(Index.GetPageId())) {
                 return false;
             }
@@ -213,13 +193,6 @@ namespace NTable {
             auto lastRowId = Page.BaseRow() + (Page->Count - 1);
             LoadRow(lastRowId);
             return true;
-        }
-
-        bool SeekIndex(TRowId rowId) noexcept
-        {
-            auto ready = Index.Seek(rowId);
-            Y_VERIFY(ready != EReady::Gone, "SeekIndex called with an out of bounds row");
-            return ready == EReady::Data;
         }
 
         bool LoadPage(TPageId pageId) noexcept
@@ -246,17 +219,6 @@ namespace NTable {
                     Key.push_back(it->Cell(info));
                 }
                 RowId = rowId;
-            }
-        }
-
-        void LoadIndexKey(const NPage::TIndex::TRecord& record) noexcept
-        {
-            if (RowId != record.GetRowId()) {
-                Key.clear();
-                for (const auto& info : Part->Scheme->Groups[0].ColsKeyIdx) {
-                    Key.push_back(record.Cell(info));
-                }
-                RowId = record.GetRowId();
             }
         }
 

@@ -129,11 +129,6 @@ public:
         return Iter.GetRecord();
     }
 
-    const TRecord * TryGetLastRecord() {
-        Y_VERIFY(Index);
-        return Index->GetLastKeyRecord();
-    }
-
 private:
     EReady DataOrGone() {
         return Iter ? EReady::Data : EReady::Gone;

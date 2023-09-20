@@ -123,6 +123,13 @@ namespace {
         }
     }
 
+    void VerifyKey(const NTest::TMass& mass, TSerializedCellVec& actual, TRowId rowId) {
+        auto tool = NTest::TRowTool(*mass.Model->Scheme);
+        auto expected = tool.KeyCells(mass.Saved[rowId]);
+        UNIT_ASSERT_VALUES_EQUAL_C(TSerializedCellVec::Serialize(expected), TSerializedCellVec::Serialize(actual.GetCells()),
+            "row " << rowId << " mismatch");
+    }
+
     TCheckResult RunLoaderTest(TIntrusiveConstPtr<NTest::TPartStore> part, TIntrusiveConstPtr<TScreen> screen)
     {
         TCheckResult result;
@@ -155,6 +162,19 @@ namespace {
         UNIT_ASSERT_C(result.Run->size() == scrSize,
             "Restored slice bounds have " << result.Run->size() <<
             " slices, expected to have " << scrSize);
+
+        auto& mass = Mass0();
+        for (size_t i = 0; i < scrSize; i++) {
+            auto &sliceItem = *(result.Run->begin() + i);
+            auto screenItem = screen ? *(screen->begin() + i) : TScreen::THole(0, mass.Saved.Size());
+            UNIT_ASSERT_VALUES_EQUAL(sliceItem.FirstRowId, screenItem.Begin);
+            UNIT_ASSERT_VALUES_EQUAL(sliceItem.LastRowId, Min(screenItem.End, mass.Saved.Size() - 1));
+            UNIT_ASSERT_VALUES_EQUAL(sliceItem.FirstInclusive, true);
+            UNIT_ASSERT_VALUES_EQUAL(sliceItem.LastInclusive, screenItem.End >= mass.Saved.Size());
+            VerifyKey(mass, sliceItem.FirstKey, sliceItem.FirstRowId);
+            VerifyKey(mass, sliceItem.LastKey, sliceItem.LastRowId);
+        }
+
         VerifyRunOrder(result.Run, *Eggs0().Scheme->Keys);
 
         return result;
@@ -166,7 +186,7 @@ Y_UNIT_TEST_SUITE(TPartSliceLoader) {
 
     Y_UNIT_TEST(RestoreMissingSlice) {
         auto result = RunLoaderTest(Part0(), nullptr);
-        UNIT_ASSERT_C(result.Pages == 1, // index page
+        UNIT_ASSERT_C(result.Pages == 3, // index + first + last
             "Restoring slice bounds needed " << result.Pages << " extra pages");
     }
 
@@ -178,12 +198,9 @@ Y_UNIT_TEST_SUITE(TPartSliceLoader) {
                 TIntrusiveConstPtr<TScreen> screen = new TScreen(std::move(holes));
                 auto result = RunLoaderTest(Part0(), screen);
 
-                size_t expected = 1; // index page
-                if (startOff != 0) expected++;
-                if (endOff < -1) expected++;
-                UNIT_ASSERT_C(result.Pages == expected, // index page
-                    "Restoring slice [" << startOff << ", " << Part0()->Index.GetEndRowId() + endOff << "] bounds needed " << 
-                        result.Pages << " extra pages but expected " << expected);
+                UNIT_ASSERT_VALUES_EQUAL_C(result.Pages, 3, // index + first + last
+                    "Restoring slice [" << startOff << ", " << Part0()->Index.GetEndRowId() + endOff << "] bounds needed "
+                        << result.Pages << " extra pages");
             }
         }
     }
@@ -208,7 +225,7 @@ Y_UNIT_TEST_SUITE(TPartSliceLoader) {
             screen = new TScreen(std::move(holes));
         }
         auto result = RunLoaderTest(Part0(), screen);
-        UNIT_ASSERT_C(result.Pages == 1, // index page
+        UNIT_ASSERT_VALUES_EQUAL_C(result.Pages, 1 + Part0()->Index->End().End(), // index + all data pages
             "Restoring slice bounds needed " << result.Pages << " extra pages");
     }
 
@@ -233,7 +250,7 @@ Y_UNIT_TEST_SUITE(TPartSliceLoader) {
             screen = new TScreen(std::move(holes));
         }
         auto result = RunLoaderTest(Part0(), screen);
-        UNIT_ASSERT_C(result.Pages == 1, // index page
+        UNIT_ASSERT_VALUES_EQUAL_C(result.Pages, 1 + Part0()->Index->End().End(), // index + all data pages
             "Restoring slice bounds needed " << result.Pages << " extra pages");
     }
 
@@ -261,7 +278,7 @@ Y_UNIT_TEST_SUITE(TPartSliceLoader) {
             screen = new TScreen(std::move(holes));
         }
         auto result = RunLoaderTest(Part0(), screen);
-        UNIT_ASSERT_C(result.Pages == screen->Size() + 1,  // with index page
+        UNIT_ASSERT_VALUES_EQUAL_C(result.Pages, screen->Size() + 1, // index + data pages
             "Restoring slice bounds needed " << result.Pages <<
             " extra pages, expected " << screen->Size());
     }

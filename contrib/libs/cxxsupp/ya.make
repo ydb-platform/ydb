@@ -8,9 +8,15 @@ LICENSE(Not-Applicable)
 NO_PLATFORM()
 
 IF (NOT USE_STL_SYSTEM)
-    PEERDIR(
-        contrib/libs/cxxsupp/libcxx
-    )
+    IF (MSVC)
+        PEERDIR(
+            contrib/libs/cxxsupp/libcxxmsvc
+        )
+    ELSE()
+        PEERDIR(
+            contrib/libs/cxxsupp/libcxx
+        )
+    ENDIF()
 ELSE()
     PEERDIR(
         contrib/libs/cxxsupp/system_stl
@@ -22,6 +28,7 @@ END()
 RECURSE(
     libcxx
     libcxxabi
+    libcxxmsvc
     libcxxrt
     openmp
 )

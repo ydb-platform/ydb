@@ -961,6 +961,54 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         UNIT_ASSERT_EQUAL(GetObjectKeys(writeBucket).size(), 3);
     }
 
+    Y_UNIT_TEST(UpdateExternalTable) {
+        using namespace fmt::literals;
+        const TString readDataSourceName = "/Root/read_data_source";
+        const TString readTableName = "/Root/read_binding";
+        const TString readBucket = "test_bucket_read";
+        const TString readObject = "test_object_read";
+
+        auto kikimr = MakeKikimrRunner(NYql::IHTTPGateway::Make());
+
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        const TString query = fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `{read_source}` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{read_location}",
+                AUTH_METHOD="NONE"
+            );
+            CREATE EXTERNAL TABLE `{read_table}` (
+                key Utf8 NOT NULL,
+                value Utf8 NOT NULL
+            ) WITH (
+                DATA_SOURCE="{read_source}",
+                LOCATION="{read_object}",
+                FORMAT="json_each_row"
+            );
+            )",
+            "read_source"_a = readDataSourceName,
+            "read_table"_a = readTableName,
+            "read_location"_a = GetBucketLocation(readBucket),
+            "read_object"_a = readObject
+            );
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        const TString sql = R"(
+                UPDATE `/Root/read_binding`
+                SET key = "abc"u
+            )";
+
+        auto db = kikimr->GetQueryClient();
+        auto resultFuture = db.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx());
+        resultFuture.Wait();
+        UNIT_ASSERT_C(!resultFuture.GetValueSync().IsSuccess(), resultFuture.GetValueSync().GetIssues().ToString());
+        
+        UNIT_ASSERT_NO_DIFF(resultFuture.GetValueSync().GetIssues().ToString(), "<main>: Error: Pre type annotation, code: 1020\n"
+        "    <main>:3:27: Error: Write mode 'update' is not supported for external entities\n");
+    }
+
     Y_UNIT_TEST(JoinTwoSources) {
         using namespace fmt::literals;
         const TString dataSource = "/Root/data_source";

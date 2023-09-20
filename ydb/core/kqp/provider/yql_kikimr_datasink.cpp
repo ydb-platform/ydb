@@ -507,18 +507,23 @@ public:
             .Ptr();
     }
 
-    TExprNode::TPtr RewriteIOExternal(const TKikimrKey& key, const TExprNode::TPtr& node, TExprContext& ctx) {
+    bool RewriteIOExternal(const TKikimrKey& key, const TExprNode::TPtr& node, const TCoAtom& mode, TExprContext& ctx, TExprNode::TPtr& resultNode) {
         TKiDataSink dataSink(node->ChildPtr(1));
         auto& tableDesc = SessionCtx->Tables().GetTable(TString{dataSink.Cluster()}, key.GetTablePath());
         if (!tableDesc.Metadata || tableDesc.Metadata->Kind != EKikimrTableKind::External) {
-            return nullptr;
+            return true;
         }
 
         if (tableDesc.Metadata->ExternalSource.SourceType != ESourceType::ExternalDataSource && tableDesc.Metadata->ExternalSource.SourceType != ESourceType::ExternalTable) {
             YQL_CVLOG(NLog::ELevel::ERROR, NLog::EComponent::ProviderKikimr) << "Skip RewriteIO for external entity: unknown entity type: " << (int)tableDesc.Metadata->ExternalSource.SourceType;
-            return nullptr;
+            return true;
         }
         
+        if (mode != "insert_abort") {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Write mode '" << static_cast<TStringBuf>(mode) << "' is not supported for external entities"));
+            return false;
+        }
+
         ctx.Step.Repeat(TExprStep::DiscoveryIO)
                 .Repeat(TExprStep::Epochs)
                 .Repeat(TExprStep::Intents)
@@ -534,28 +539,29 @@ public:
                                 .Add(writeArgs[1]->ChildrenList()[1])
                             .Build()
                             .Done().Ptr();
-            return ctx.ChangeChildren(*node, std::move(writeArgs));
-        } else { // tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalTable
-            TExprNode::TPtr path = ctx.NewCallable(node->Pos(), "String", { ctx.NewAtom(node->Pos(), tableDesc.Metadata->ExternalSource.TableLocation) });
-            auto table = ctx.NewList(node->Pos(), {ctx.NewAtom(node->Pos(), "table"), path});
-            auto keyNode = ctx.NewCallable(node->Pos(), "Key", {table});
-            auto r = Build<TCoWrite>(ctx, node->Pos())
-                .World(node->Child(0))
-                .DataSink()
-                    .Category(ctx.NewAtom(node->Pos(), externalSource->GetName()))
-                    .FreeArgs()
-                        .Add(ctx.NewAtom(node->Pos(), tableDesc.Metadata->ExternalSource.DataSourcePath))
-                        .Build()
-                    .Build()
-                .FreeArgs()
-                    .Add(keyNode)
-                    .Add(node->Child(3))
-                    .Add(BuildExternalTableSettings(node->Pos(), ctx, tableDesc.Metadata->Columns, externalSource, tableDesc.Metadata->ExternalSource.TableContent))
-                .Build()
-                .Done().Ptr();
-            return r;
+            resultNode = ctx.ChangeChildren(*node, std::move(writeArgs));
+            return true;
         }
-        return nullptr;
+
+        // tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalTable
+        TExprNode::TPtr path = ctx.NewCallable(node->Pos(), "String", { ctx.NewAtom(node->Pos(), tableDesc.Metadata->ExternalSource.TableLocation) });
+        auto table = ctx.NewList(node->Pos(), {ctx.NewAtom(node->Pos(), "table"), path});
+        auto keyNode = ctx.NewCallable(node->Pos(), "Key", {table});
+        resultNode = Build<TCoWrite>(ctx, node->Pos())
+            .World(node->Child(0))
+            .DataSink()
+                .Category(ctx.NewAtom(node->Pos(), externalSource->GetName()))
+                .FreeArgs()
+                    .Add(ctx.NewAtom(node->Pos(), tableDesc.Metadata->ExternalSource.DataSourcePath))
+                    .Build()
+                .Build()
+            .FreeArgs()
+                .Add(keyNode)
+                .Add(node->Child(3))
+                .Add(BuildExternalTableSettings(node->Pos(), ctx, tableDesc.Metadata->Columns, externalSource, tableDesc.Metadata->ExternalSource.TableContent))
+            .Build()
+            .Done().Ptr();
+        return true;
     }
 
     TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override {
@@ -566,13 +572,19 @@ public:
 
         switch (key.GetKeyType()) {
             case TKikimrKey::Type::Table: {
-                if (TExprNode::TPtr resultNode = RewriteIOExternal(key, node, ctx)) {
-                    return resultNode;
-                }
-
                 NCommon::TWriteTableSettings settings = NCommon::ParseWriteTableSettings(TExprList(node->Child(4)), ctx);
                 YQL_ENSURE(settings.Mode);
                 auto mode = settings.Mode.Cast();
+
+                TExprNode::TPtr resultNode;
+                if (!RewriteIOExternal(key, node, mode, ctx, resultNode)) {
+                    return nullptr;
+                }
+
+                if (resultNode) {
+                    return resultNode;
+                }
+                
                 if (mode == "drop" || mode == "drop_if_exists") {
                     return MakeKiDropTable(node, settings, key, ctx);
                 } else if (mode == "update") {

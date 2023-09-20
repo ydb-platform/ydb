@@ -234,6 +234,10 @@ class KikimrConfigGenerator(object):
         if os.getenv('YDB_TABLE_ENABLE_PREPARED_DDL', 'false').lower() == 'true':
             self.yaml_config["table_service_config"]["enable_prepared_ddl"] = True
 
+        if os.getenv('PGWIRE_LISTENING_PORT', ''):
+            self.yaml_config["local_pg_wire_config"] = {}
+            self.yaml_config["local_pg_wire_config"]["listening_port"] = os.getenv('PGWIRE_LISTENING_PORT')
+
         if disable_iterator_reads:
             self.yaml_config["table_service_config"]["enable_kqp_scan_query_source_read"] = False
             self.yaml_config["table_service_config"]["enable_kqp_data_query_source_read"] = False

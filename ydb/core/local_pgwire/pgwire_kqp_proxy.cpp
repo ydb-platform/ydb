@@ -238,7 +238,7 @@ public:
         BLOG_D(this->SelfId() << " Send stream data ack to " << ev->Sender);
         auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
         resp->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
-        resp->Record.SetFreeSpace(std::numeric_limits<ui64>::max());
+        resp->Record.SetFreeSpace(std::numeric_limits<i64>::max());
         Send(ev->Sender, resp.Release());
     }
 

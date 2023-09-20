@@ -22,7 +22,7 @@ private:
 
 inline void ThrowOnError(NYdb::TStatus status) {
     if (!status.IsSuccess()) {
-        throw TYdbErrorException(std::move(status));
+        throw TYdbErrorException(status) << status;
     } else if (status.GetIssues()) {
         Cerr << status;
     }

@@ -9,7 +9,7 @@ import platform
 RETRIES = 5
 HASH_PREFIX = 10
 
-REGISTRY_ENDPOINT = os.environ.get("YA_REGISTRY_ENDPOINT", "https://s3.mds.yandex.net/devtools-registry")
+REGISTRY_ENDPOINT = os.environ.get("YA_REGISTRY_ENDPOINT", "https://devtools-registry.s3.yandex.net/")
 
 # Please do not change this dict, it is updated automatically
 # Start of mapping

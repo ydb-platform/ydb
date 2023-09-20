@@ -4057,6 +4057,11 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map[TCoMerge::CallableName()] = std::bind(&OptimizeMerge, _1, _2, _3);
 
     map["ForwardList"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        if (node->Head().IsCallable("EmptyIterator")) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
+            return ctx.NewCallable(node->Pos(), "List", {ExpandType(node->Pos(), *node->GetTypeAnn(), ctx)});
+        }
+
         if (node->Head().IsCallable("Iterator")) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
             return node->Head().HeadPtr();
@@ -4070,6 +4075,15 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         if (node->Head().IsCallable("ToStream") && node->Head().Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
             return ctx.NewCallable(node->Pos(), "ToList", {node->Head().HeadPtr()});
+        }
+
+        return node;
+    };
+
+    map["FromFlow"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        if (node->Head().IsCallable("EmptyIterator")) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
+            return ctx.ChangeChildren(node->Head(), {ExpandType(node->Pos(), *node->GetTypeAnn(), ctx)});
         }
 
         return node;

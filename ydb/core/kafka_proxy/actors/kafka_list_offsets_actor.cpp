@@ -63,7 +63,7 @@ void TKafkaListOffsetsActor::HandleMissingTopicName(const TListOffsetsRequestDat
 }
 
 TActorId TKafkaListOffsetsActor::SendOffsetsRequest(const TListOffsetsRequestData::TListOffsetsTopic& topic, const NActors::TActorContext&) {
-    KAFKA_LOG_D("Get offsets for topic '" << topic.Name << "' for user '" << Context->UserToken->GetUserSID() << "'");
+    KAFKA_LOG_D("ListOffsets actor: Get offsets for topic '" << topic.Name << "' for user '" << Context->UserToken->GetUserSID() << "'");
     
     TEvKafka::TGetOffsetsRequest offsetsRequest;
     offsetsRequest.Topic = topic.Name.value();
@@ -81,6 +81,9 @@ TActorId TKafkaListOffsetsActor::SendOffsetsRequest(const TListOffsetsRequestDat
 void TKafkaListOffsetsActor::Handle(TEvKafka::TEvTopicOffsetsResponse::TPtr& ev, const TActorContext& ctx) {
     --PendingResponses;
     auto it = TopicsRequestsInfo.find(ev->Sender);
+
+    Y_VERIFY_DEBUG(it != TopicsRequestsInfo.end()); 
+
     if (it == TopicsRequestsInfo.end()) {
         KAFKA_LOG_CRIT("ListOffsets actor: received unexpected TEvTopicOffsetsResponse. Ignoring.");
         return RespondIfRequired(ctx);

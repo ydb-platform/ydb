@@ -72,7 +72,7 @@ void TKafkaMetadataActor::AddTopicResponse(TMetadataResponseData::TMetadataRespo
     bool withProxy = Context->Config.HasProxy() && !Context->Config.GetProxy().GetHostname().Empty();
 
     topic.ErrorCode = NONE_ERROR;
-    topic.TopicId = TKafkaUuid(response->SchemeShardId, response->PathId);
+    //topic.TopicId = TKafkaUuid(response->SchemeShardId, response->PathId);
     if (withProxy) {
         auto broker = TMetadataResponseData::TMetadataResponseBroker{};
         broker.NodeId = ProxyNodeId;

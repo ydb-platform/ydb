@@ -11,7 +11,7 @@ NActors::IActor* CreateKafkaApiVersionsActor(const TContext::TPtr context, const
 TApiVersionsResponseData::TPtr GetApiVersions() {
     TApiVersionsResponseData::TPtr response = std::make_shared<TApiVersionsResponseData>();
     response->ErrorCode = EKafkaErrors::NONE_ERROR;
-    response->ApiKeys.resize(6);
+    response->ApiKeys.resize(8);
 
     response->ApiKeys[0].ApiKey = PRODUCE;
     response->ApiKeys[0].MinVersion = 3; // From version 3 record batch format is 2. Supported only 2th batch format.
@@ -36,6 +36,14 @@ TApiVersionsResponseData::TPtr GetApiVersions() {
     response->ApiKeys[5].ApiKey = SASL_AUTHENTICATE;
     response->ApiKeys[5].MinVersion = TSaslAuthenticateRequestData::MessageMeta::PresentVersions.Min;
     response->ApiKeys[5].MaxVersion = TSaslAuthenticateRequestData::MessageMeta::PresentVersions.Max;
+
+    response->ApiKeys[6].ApiKey = LIST_OFFSETS;
+    response->ApiKeys[6].MinVersion = TListOffsetsRequestData::MessageMeta::PresentVersions.Min;
+    response->ApiKeys[6].MaxVersion = TListOffsetsRequestData::MessageMeta::PresentVersions.Max;
+    //savnik: feature flag
+    response->ApiKeys[7].ApiKey = FETCH;
+    response->ApiKeys[7].MinVersion = TFetchRequestData::MessageMeta::PresentVersions.Min;
+    response->ApiKeys[7].MaxVersion = 3;
 
     return response;
 }

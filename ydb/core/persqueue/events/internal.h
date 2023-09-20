@@ -135,6 +135,7 @@ struct TEvPQ {
         EvAccountQuotaCountersUpdated,
         EvQuotaCountersUpdated,
         EvConsumerRemoved,
+        EvFetchResponse,
         EvEnd
     };
 
@@ -840,6 +841,14 @@ struct TEvPQ {
         {}
 
         TString Consumer;
+    };
+
+    struct TEvFetchResponse : public TEventLocal<TEvFetchResponse, EvFetchResponse> {
+        TEvFetchResponse()
+        {}
+        Ydb::StatusIds::StatusCode Status;
+        TString Message;
+        NKikimrClient::TPersQueueFetchResponse Response;
     };
 };
 

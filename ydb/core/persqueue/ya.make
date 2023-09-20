@@ -5,6 +5,7 @@ SRCS(
     blob.cpp
     cluster_tracker.cpp
     event_helpers.cpp
+    fetch_request_actor.cpp
     header.cpp
     metering_sink.cpp
     mirrorer.cpp

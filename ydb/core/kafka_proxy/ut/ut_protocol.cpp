@@ -385,6 +385,32 @@ public:
         return WriteAndRead<TListOffsetsResponseData>(header, request);
     }
 
+    TFetchResponseData::TPtr Fetch(const TString& topic) {
+        Cerr << ">>>>> TFetchResponseData\n";
+
+        TRequestHeaderData header = Header(NKafka::EApiKey::FETCH, 3);
+
+        TFetchRequestData request;
+        request.MaxBytes = 1024;
+        request.MinBytes = 1;
+
+        NKafka::TFetchRequestData::TFetchTopic topicReq {};
+        topicReq.Topic = topic;
+
+        NKafka::TFetchRequestData::TFetchTopic::TFetchPartition partitionReq {};
+        partitionReq.FetchOffset = 0;
+        partitionReq.Partition = 0;
+        partitionReq.PartitionMaxBytes = 1024;
+
+        topicReq.Partitions.push_back(partitionReq);
+
+        request.Topics.push_back(topicReq);
+
+
+
+        return WriteAndRead<TFetchResponseData>(header, request);
+    }
+
     void UnknownApiKey() {
         Cerr << ">>>>> Unknown apiKey\n";
 
@@ -465,7 +491,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.ApiVersions();
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 6u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 8u);
         }
 
         {
@@ -489,6 +515,10 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                     UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
                 }
             }
+        }
+
+        {
+            
         }
 
         {
@@ -520,6 +550,25 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].PartitionResponses[0].Index, 0);
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].PartitionResponses[0].ErrorCode,
                                      static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+
+            {
+                auto msg = client.Fetch(topicName);
+                UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+                auto record = msg->Responses[0].Partitions[0].Records->Records[0];
+              
+                auto data = record.Value.value();
+                auto dataStr = TString(data.data(), data.size());
+                UNIT_ASSERT_VALUES_EQUAL(dataStr, value);
+                
+                auto headerKey = record.Headers[0].Key.value();
+                auto headerKeyStr = TString(headerKey.data(), headerKey.size());
+                UNIT_ASSERT_VALUES_EQUAL(dataStr, value);
+
+                auto headerValue = record.Headers[0].Value.value();
+                auto headerValueStr = TString(headerValue.data(), headerValue.size());
+                UNIT_ASSERT_VALUES_EQUAL(dataStr, value);
+
+            }
 
             auto m = Read(topicReader);
             UNIT_ASSERT_EQUAL(m.size(), 1);
@@ -675,7 +724,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto msg = client.ApiVersions();
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 6u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 8u);
         }
 
         {

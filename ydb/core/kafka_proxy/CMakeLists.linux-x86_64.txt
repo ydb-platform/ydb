@@ -37,6 +37,7 @@ target_sources(ydb-core-kafka_proxy PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_metrics_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_list_offsets_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_topic_offsets_actor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_fetch_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_connection.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_messages.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_messages_int.cpp

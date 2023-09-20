@@ -62,6 +62,7 @@ target_sources(ydb-core-persqueue-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/user_info_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/pqrb_describes_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/microseconds_sliding_window_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/persqueue/ut/fetch_request_ut.cpp
   ${CMAKE_BINARY_DIR}/ydb/core/persqueue/ut/20fb34d39c23be7518eb4226481d815e.cpp
 )
 set_property(

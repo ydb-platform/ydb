@@ -61,7 +61,7 @@ void TTopicOffsetsActor::ApplyResponse(TTabletInfo& tablet, NKikimr::TEvPersQueu
         TEvKafka::TPartitionOffsetsInfo resultPartititon;
         resultPartititon.PartitionId = part.GetPartition();
         resultPartititon.StartOffset = part.GetStartOffset();
-        resultPartititon.StartOffset = part.GetEndOffset();
+        resultPartititon.EndOffset = part.GetEndOffset();
         resultPartititon.Generation = tablet.Generation;
         Response->Partitions.emplace_back(std::move(resultPartititon));
     }

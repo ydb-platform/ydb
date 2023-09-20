@@ -3217,4 +3217,4 @@ public:
     bool operator==(const TSaslAuthenticateResponseData& other) const = default;
 };
 
-} // namespace NKafka 
+} // namespace NKafka

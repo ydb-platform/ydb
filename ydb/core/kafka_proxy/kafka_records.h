@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ydb/core/protos/grpc_pq_old.pb.h"
+
 #include "kafka.h"
 
 namespace NKafka {
@@ -190,6 +192,8 @@ public:
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
         
     bool operator==(const TKafkaRecord& other) const = default;
+
+    NKikimrPQClient::TDataChunk DataChunk;
 };
 
 

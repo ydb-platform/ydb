@@ -248,6 +248,10 @@ protected:
         Register(CreateKafkaListOffsetsActor(Context, header->CorrelationId, message));
     }
 
+    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TFetchRequestData>& message) {
+        Register(CreateKafkaFetchActor(Context, header->CorrelationId, message));
+    }
+
     template<class T>
     TMessagePtr<T> Cast(std::shared_ptr<Msg>& request) {
         return TMessagePtr<T>(request->Buffer, request->Message);
@@ -290,6 +294,10 @@ protected:
 
             case LIST_OFFSETS:
                 HandleMessage(&Request->Header, Cast<TListOffsetsRequestData>(Request));
+                return;
+
+            case FETCH:
+                HandleMessage(&Request->Header, Cast<TFetchRequestData>(Request));
                 return;
 
             default:

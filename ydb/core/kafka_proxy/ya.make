@@ -10,6 +10,7 @@ SRCS(
     actors/kafka_metrics_actor.cpp
     actors/kafka_list_offsets_actor.cpp
     actors/kafka_topic_offsets_actor.cpp
+    actors/kafka_fetch_actor.cpp
     kafka_connection.cpp
     kafka_connection.h
     kafka_listener.h

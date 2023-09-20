@@ -61,6 +61,7 @@ enum class EStoredConstraint : ui64 {
 enum class ECostBasedOptimizer {
     Disable,
     PG,
+    Native,
 };
 
 enum class EInferSchemaMode {

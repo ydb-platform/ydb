@@ -5,6 +5,8 @@
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/utils/log/log.h>
 
+#include <ydb/library/yql/dq/opt/dq_opt_log.h>
+
 namespace NYql {
 
 namespace {
@@ -74,10 +76,12 @@ public:
         TYtJoinNodeOp::TPtr op,
         const TYtState::TPtr& state,
         TExprContext& ctx,
+        ECostBasedOptimizer optimizerType,
         bool debug = false)
         : Root(op)
         , State(state)
         , Ctx(ctx)
+        , OptimizerType(optimizerType)
         , Debug(debug)
     {
         Y_UNUSED(State);
@@ -107,7 +111,20 @@ public:
             YQL_CLOG(INFO, ProviderYt) << str;
         };
 
-        std::unique_ptr<IOptimizer> opt = std::unique_ptr<IOptimizer>(MakePgOptimizer(input, log));
+        std::unique_ptr<IOptimizer> opt;
+
+        switch (OptimizerType) {
+        case ECostBasedOptimizer::PG:
+            opt = std::unique_ptr<IOptimizer>(MakePgOptimizer(input, log));
+            break;
+        case ECostBasedOptimizer::Native:
+            opt = std::unique_ptr<IOptimizer>(NDq::MakeNativeOptimizer(input, log));
+            break;
+        default:
+            YQL_CLOG(ERROR, ProviderYt) << "Unknown optimizer type";
+            return Root;
+            break;
+        }
 
         try {
             Result = opt->JoinSearch();
@@ -379,6 +396,7 @@ private:
     TYtJoinNodeOp::TPtr Root;
     const TYtState::TPtr& State;
     TExprContext& Ctx;
+    ECostBasedOptimizer OptimizerType;
     bool Debug;
 
     THashMap<TStringBuf, std::vector<int>> Table2RelIds;
@@ -400,11 +418,12 @@ private:
 
 TYtJoinNodeOp::TPtr OrderJoins(TYtJoinNodeOp::TPtr op, const TYtState::TPtr& state, TExprContext& ctx, bool debug)
 {
-    if (state->Configuration->CostBasedOptimizer.Get().GetOrElse(ECostBasedOptimizer::Disable) == ECostBasedOptimizer::Disable) {
+    auto optimizerType = state->Configuration->CostBasedOptimizer.Get().GetOrElse(ECostBasedOptimizer::Disable);
+    if (optimizerType == ECostBasedOptimizer::Disable) {
         return op;
     }
 
-    auto result = TJoinReorderer(op, state, ctx, debug).Do();
+    auto result = TJoinReorderer(op, state, ctx, optimizerType, debug).Do();
     if (!debug && AreSimilarTrees(result, op)) {
         return op;
     }

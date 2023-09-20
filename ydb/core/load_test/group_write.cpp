@@ -193,7 +193,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             , MegabytesPerSecondST(TDuration::Seconds(3)) // average speed at last 3 seconds
             , MegabytesPerSecondQT(ExposePeriod, Counters->GetSubgroup("metric", "writeSpeed"),
                     "bytesPerSecond", Percentiles)
-            , ResponseQT()
+            , ResponseQT(new TLatencyTrackerUs())
             , GetHandleClass(getHandleClass)
             , ReadSizeGen(readSizeGen)
             , ReadIntervalGen(readIntervalGen)
@@ -202,7 +202,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             , ReadMegabytesPerSecondST(TDuration::Seconds(3))
             , ReadMegabytesPerSecondQT(ExposePeriod, Counters->GetSubgroup("metric", "readSpeed"),
                     "bytesPerSecond", Percentiles)
-            , ReadResponseQT()
+            , ReadResponseQT(new TLatencyTrackerUs())
             , WritesInFlightQT(ExposePeriod, Counters->GetSubgroup("metric", "writesInFlight"),
                     "items", Percentiles)
             , WriteBytesInFlightQT(ExposePeriod, Counters->GetSubgroup("metric", "writeBytesInFlight"),

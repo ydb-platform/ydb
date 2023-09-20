@@ -260,15 +260,14 @@ Y_UNIT_TEST_SUITE(KqpService) {
         OnWithLimit,
     };
 
-    template <bool UseCache, AsyncPatternCompilationStrategy AsyncPatternCompilation>
-    void PatternCacheImpl() {
-        constexpr bool UseAsyncPatternCompilation = AsyncPatternCompilation == AsyncPatternCompilationStrategy::On ||
-            AsyncPatternCompilation == AsyncPatternCompilationStrategy::OnWithLimit;
-        constexpr bool UseCompiledCapacityBytesLimit = AsyncPatternCompilation == AsyncPatternCompilationStrategy::OnWithLimit;
+    void PatternCacheImpl(bool useCache, AsyncPatternCompilationStrategy asyncPatternCompilationStrategy) {
+        bool useAsyncPatternCompilation = asyncPatternCompilationStrategy == AsyncPatternCompilationStrategy::On ||
+            asyncPatternCompilationStrategy == AsyncPatternCompilationStrategy::OnWithLimit;
+        bool useCompiledCapacityBytesLimit = asyncPatternCompilationStrategy == AsyncPatternCompilationStrategy::OnWithLimit;
 
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
-        ConfigureSettings(settings, UseCache, UseAsyncPatternCompilation, UseCompiledCapacityBytesLimit);
+        ConfigureSettings(settings, useCache, useAsyncPatternCompilation, useCompiledCapacityBytesLimit);
 
         auto kikimr = TKikimrRunner{settings};
         auto driver = kikimr.GetDriver();
@@ -278,10 +277,10 @@ Y_UNIT_TEST_SUITE(KqpService) {
         static constexpr i64 AsyncPatternCompilationUniqueRequestsSize = 5;
 
         auto async_compilation_condition = [&]() {
-            if constexpr (UseCache) {
-                if constexpr (AsyncPatternCompilation == AsyncPatternCompilationStrategy::On) {
+            if (useCache) {
+                if (asyncPatternCompilationStrategy == AsyncPatternCompilationStrategy::On) {
                     return *counters.CompiledComputationPatterns != AsyncPatternCompilationUniqueRequestsSize;
-                } else if constexpr (AsyncPatternCompilation == AsyncPatternCompilationStrategy::OnWithLimit) {
+                } else if (asyncPatternCompilationStrategy == AsyncPatternCompilationStrategy::OnWithLimit) {
                     return *counters.CompiledComputationPatterns < AsyncPatternCompilationUniqueRequestsSize * 4;
                 }
             }
@@ -296,7 +295,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
             auto session = db.CreateSession().GetValueSync().GetSession();
 
             for (ui32 i = 0; i < 500 || async_compilation_condition(); ++i) {
-                ui32 value = UseCache && UseAsyncPatternCompilation ? i % AsyncPatternCompilationUniqueRequestsSize : i / 5;
+                ui32 value = useCache && useAsyncPatternCompilation ? i % AsyncPatternCompilationUniqueRequestsSize : i / 5;
                 ui64 total = 100500;
                 TString request = (TStringBuilder() << R"_(
                     $data = AsList(
@@ -345,22 +344,22 @@ Y_UNIT_TEST_SUITE(KqpService) {
             }
         }, 0, InFlight, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
 
-        if constexpr (UseCache) {
-            if constexpr (AsyncPatternCompilation == AsyncPatternCompilationStrategy::On) {
+        if (useCache) {
+            if (asyncPatternCompilationStrategy == AsyncPatternCompilationStrategy::On) {
                 UNIT_ASSERT(*counters.CompiledComputationPatterns == AsyncPatternCompilationUniqueRequestsSize);
-            } else if constexpr (AsyncPatternCompilation == AsyncPatternCompilationStrategy::OnWithLimit) {
+            } else if (asyncPatternCompilationStrategy == AsyncPatternCompilationStrategy::OnWithLimit) {
                 UNIT_ASSERT(*counters.CompiledComputationPatterns >= AsyncPatternCompilationUniqueRequestsSize);
             }
         }
     }
 
     Y_UNIT_TEST(PatternCache) {
-        PatternCacheImpl<false, AsyncPatternCompilationStrategy::Off>();
-        PatternCacheImpl<false, AsyncPatternCompilationStrategy::On>();
-        PatternCacheImpl<false, AsyncPatternCompilationStrategy::OnWithLimit>();
-        PatternCacheImpl<true, AsyncPatternCompilationStrategy::Off>();
-        PatternCacheImpl<true, AsyncPatternCompilationStrategy::On>();
-        PatternCacheImpl<true, AsyncPatternCompilationStrategy::OnWithLimit>();
+        PatternCacheImpl(false, AsyncPatternCompilationStrategy::Off);
+        PatternCacheImpl(false, AsyncPatternCompilationStrategy::On);
+        PatternCacheImpl(false, AsyncPatternCompilationStrategy::OnWithLimit);
+        PatternCacheImpl(true, AsyncPatternCompilationStrategy::Off);
+        PatternCacheImpl(true, AsyncPatternCompilationStrategy::On);
+        PatternCacheImpl(true, AsyncPatternCompilationStrategy::OnWithLimit);
     }
 
     // YQL-15582

@@ -1015,16 +1015,26 @@ public:
     TOutput JoinSearch() override {
         TDPccpSolver<64> solver(JoinGraph, Rels);
         std::shared_ptr<TJoinOptimizerNode> result = solver.Solve();
+        if (Log) {
+            std::stringstream str;
+            str << "Join tree after cost based optimization:\n";
+            result->Print(str);
+            Log(str.str());
+        }
+
         TOutput output;
         output.Input = &Input;
         BuildOutput(&output, result.get());
+        if (Log) {
+            Log(output.ToString());
+        }
         return output;
     }
 
 private:
     int BuildOutput(TOutput* output, IBaseOptimizerNode* node) {
         int index = (int)output->Nodes.size();
-        TJoinNode& r = output->Nodes.emplace_back();
+        TJoinNode r = output->Nodes.emplace_back();
         switch (node->Kind) {
         case EOptimizerNodeKind::RelNodeType: {
             // leaf
@@ -1060,6 +1070,7 @@ private:
         default:
             Y_VERIFY(false);
         };
+        output->Nodes[index] = r;
         return index;
     }
 
@@ -1069,6 +1080,10 @@ private:
             auto label = ToString(index++);
             auto stats = std::make_shared<TOptimizerStatistics>(r.Rows, r.TargetVars.size(), r.TotalCost);
             Rels.push_back(std::shared_ptr<TRelOptimizerNode>(new TRelOptimizerNode(label, stats)));
+        }
+
+        for (size_t i = 0; i < Rels.size(); i++) {
+            JoinGraph.AddNode(i, Rels[i]->Label);
         }
 
         std::set<std::pair<TJoinColumn, TJoinColumn>> joinConditions;
@@ -1088,6 +1103,13 @@ private:
             JoinGraph.AddEdge(TEdge(fromNode, toNode, cond));
         }
         JoinGraph.ComputeTransitiveClosure(joinConditions);
+
+        if (Log) {
+            std::stringstream str;
+            str << "Join graph after transitive closure:\n";
+            JoinGraph.PrintGraph(str);
+            Log(str.str());
+        }
     }
 
     TInput Input;

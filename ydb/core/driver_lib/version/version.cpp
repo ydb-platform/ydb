@@ -19,16 +19,12 @@ using TComponentId = NKikimrConfig::TCompatibilityRule::EComponentId;
 TCompatibilityInfo::TCompatibilityInfo() {
     using TCurrentConstructor = TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo;
     using TStoredConstructor = TCompatibilityInfo::TProtoConstructor::TStoredCompatibilityInfo;
+    // using TCompatibilityRuleConstructor = TCompatibilityInfo::TProtoConstructor::TCompatibilityRule;
     using TVersionConstructor = TCompatibilityInfo::TProtoConstructor::TVersion;
 
     /////////////////////////////////////////////////////////
     // Current CompatibilityInfo
     /////////////////////////////////////////////////////////
-
-    using TCurrentConstructor = TCompatibilityInfo::TProtoConstructor::TCurrentCompatibilityInfo;
-    using TStoredConstructor = TCompatibilityInfo::TProtoConstructor::TStoredCompatibilityInfo;
-    // using TCompatibilityRuleConstructor = TCompatibilityInfo::TProtoConstructor::TCompatibilityRule;
-    // using TVersionConstructor = TCompatibilityInfo::TProtoConstructor::TVersion;
 
     auto current = TCurrentConstructor{
         .Application = "ydb"

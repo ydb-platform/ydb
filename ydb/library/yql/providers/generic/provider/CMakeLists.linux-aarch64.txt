@@ -15,6 +15,7 @@ target_link_libraries(providers-generic-provider PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  contrib-libs-fmt
   library-cpp-json
   library-cpp-random_provider
   library-cpp-time_provider

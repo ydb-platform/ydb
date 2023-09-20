@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/generic/connector/api/common/data_source.pb.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_cluster_config.h>
 #include <ydb/library/yql/utils/url_builder.h>
 
 #include <util/generic/hash.h>
@@ -89,38 +90,40 @@ void FillSolomonClusterConfig(NYql::TSolomonClusterConfig& clusterConfig,
 
 template <typename TConnection>
 void FillGenericClusterConfig(
-    NYql::TGenericClusterConfig& clusterCfg,
+    TGenericClusterConfig& clusterCfg,
     const TConnection& connection,
     const TString& connectionName,
     NConnector::NApi::EDataSourceKind dataSourceKind,
     const TString& authToken,
     const THashMap<TString, TString>& accountIdSignatures
 ){
-        clusterCfg.SetKind(dataSourceKind);
-        clusterCfg.SetName(connectionName);
-        clusterCfg.SetDatabaseId(connection.database_id());
-        clusterCfg.mutable_credentials()->mutable_basic()->set_username(connection.login());
-        clusterCfg.mutable_credentials()->mutable_basic()->set_password(connection.password());
-        FillClusterAuth(clusterCfg, connection.auth(), authToken, accountIdSignatures);
+    clusterCfg.SetKind(dataSourceKind);
+    clusterCfg.SetName(connectionName);
+    clusterCfg.SetDatabaseId(connection.database_id());
+    clusterCfg.mutable_credentials()->mutable_basic()->set_username(connection.login());
+    clusterCfg.mutable_credentials()->mutable_basic()->set_password(connection.password());
+    FillClusterAuth(clusterCfg, connection.auth(), authToken, accountIdSignatures);
 
-        // Since resolver always returns secure ports, we'll always ask for secure connections
-        // between remote Connector and the data source:
-        // https://a.yandex-team.ru/arcadia/ydb/core/fq/libs/db_id_async_resolver_impl/mdb_host_transformer.cpp#L24
-        clusterCfg.SetUseSsl(true);
+    // Since resolver always returns secure ports, we'll always ask for secure connections
+    // between remote Connector and the data source:
+    // https://a.yandex-team.ru/arcadia/ydb/core/fq/libs/db_id_async_resolver_impl/mdb_host_transformer.cpp#L24
+    clusterCfg.SetUseSsl(true);
 
-        // In YQv1 we just hardcode desired protocols here.
-        // In YQv2 protocol can be configured via `CREATE EXTERNAL DATA SOURCE` params.
-        switch (dataSourceKind) {
-            case NYql::NConnector::NApi::CLICKHOUSE:
-                clusterCfg.SetProtocol(NYql::NConnector::NApi::EProtocol::HTTP);
-                break;
-            case NYql::NConnector::NApi::POSTGRESQL:
-                clusterCfg.SetProtocol(NYql::NConnector::NApi::EProtocol::NATIVE);
-                break;
-            default:
-                ythrow yexception() << "Unexpected data source kind: '" 
-                                    << NYql::NConnector::NApi::EDataSourceKind_Name(dataSourceKind) << "'";
-        }
+    // In YQv1 we just hardcode desired protocols here.
+    // In YQv2 protocol can be configured via `CREATE EXTERNAL DATA SOURCE` params.
+    switch (dataSourceKind) {
+        case NYql::NConnector::NApi::CLICKHOUSE:
+            clusterCfg.SetProtocol(NYql::NConnector::NApi::EProtocol::HTTP);
+            break;
+        case NYql::NConnector::NApi::POSTGRESQL:
+            clusterCfg.SetProtocol(NYql::NConnector::NApi::EProtocol::NATIVE);
+            break;
+        default:
+            ythrow yexception() << "Unexpected data source kind: '" 
+                                << NYql::NConnector::NApi::EDataSourceKind_Name(dataSourceKind) << "'";
+    }
+
+    ValidateGenericClusterConfig(clusterCfg, "NFq::FillGenericClusterFromConfig");
 }
 
 } //namespace

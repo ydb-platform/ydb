@@ -1,16 +1,19 @@
-#include "yql_generic_cluster_config.h"
-
-#include <ydb/library/yql/providers/generic/connector/api/common/data_source.pb.h>
-#include <ydb/library/yql/providers/generic/connector/libcpp/external_data_source.h>
+#include <fmt/format.h>
 
 #include <util/generic/serialized_enum.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/generic/yexception.h>
 
+#include <ydb/library/yql/providers/generic/connector/api/common/data_source.pb.h>
+#include <ydb/library/yql/providers/generic/connector/libcpp/external_data_source.h>
+
+#include "yql_generic_cluster_config.h"
+
 namespace NYql {
     using namespace NConnector;
     using namespace NConnector::NApi;
+    using namespace fmt::literals;
 
     void ParseLogin(
         const THashMap<TString, TString>& properties,
@@ -234,7 +237,7 @@ namespace NYql {
         return !iter->second.Empty();
     }
 
-    NYql::TGenericClusterConfig GenericClusterConfigFromProperties(const TString& clusterName, const THashMap<TString, TString>& properties) {
+    TGenericClusterConfig GenericClusterConfigFromProperties(const TString& clusterName, const THashMap<TString, TString>& properties) {
         // some cross-parameter validations
         auto location = KeyIsSet(properties, "location");
         auto mdbClusterId = KeyIsSet(properties, "mdb_cluster_id");
@@ -263,5 +266,112 @@ namespace NYql {
         ParseServiceAccountIdSignature(properties, clusterConfig);
 
         return clusterConfig;
+    }
+
+    void ValidationError(const NYql::TGenericClusterConfig& clusterConfig,
+                         const TString& context,
+                         const TString& msg) {
+        ythrow yexception() << fmt::format(
+            R"(
+            {context}: invalid cluster config: {msg}.
+
+            Full config dump: 
+            Name={name},
+            Kind={kind},
+            Location.Endpoint.host={host},
+            Location.Endpoint.port={port},
+            Location.DatabaseId={database_id},
+            Credentials.basic.username={username},
+            Credentials.basic.password=[{password} char(s)],
+            ServiceAccountId={service_account_id},
+            ServiceAccountIdSignature=[{service_account_id_signature} char(s)],
+            Token=[{token} char(s)]
+            UseSsl={use_ssl},
+            DatabaseName={database_name},
+            Protocol={protocol}
+        )",
+            "context"_a = context,
+            "msg"_a = msg,
+            "name"_a = clusterConfig.GetName(),
+            "kind"_a = NConnector::NApi::EDataSourceKind_Name(clusterConfig.GetKind()),
+            "host"_a = clusterConfig.GetEndpoint().Gethost(),
+            "port"_a = clusterConfig.GetEndpoint().Getport(),
+            "database_id"_a = clusterConfig.GetDatabaseId(),
+            "username"_a = clusterConfig.GetCredentials().Getbasic().Getusername(),
+            "password"_a = ToString(clusterConfig.GetCredentials().Getbasic().Getpassword().size()),
+            "service_account_id"_a = clusterConfig.GetServiceAccountId(),
+            "service_account_id_signature"_a = ToString(clusterConfig.GetServiceAccountIdSignature().size()),
+            "token"_a = ToString(clusterConfig.GetToken().size()),
+            "use_ssl"_a = clusterConfig.GetUseSsl() ? "TRUE" : "FALSE",
+            "database_name"_a = clusterConfig.GetDatabaseName(),
+            "protocol"_a = NConnector::NApi::EProtocol_Name(clusterConfig.GetProtocol()));
+    }
+
+    void ValidateGenericClusterConfig(
+        const NYql::TGenericClusterConfig& clusterConfig,
+        const TString& context) {
+        // cross-parameter validations for optional fields
+        auto hasEndpoint = clusterConfig.HasEndpoint();
+        auto databaseId = clusterConfig.GetDatabaseId();
+
+        if ((hasEndpoint && databaseId)) {
+            return ValidationError(
+                clusterConfig,
+                context,
+                "both 'Endpoint' and 'DatabaseId' fields are set; you must set only one of them");
+        }
+
+        if (!hasEndpoint and !databaseId) {
+            return ValidationError(
+                clusterConfig,
+                context,
+                "none of 'Endpoint' and 'DatabaseId' fields are set; you must set one of them");
+        }
+
+        auto serviceAccountId = clusterConfig.GetServiceAccountId();
+        auto serviceAccountIdSignature = clusterConfig.GetServiceAccountIdSignature();
+        if (serviceAccountId && !serviceAccountIdSignature) {
+            return ValidationError(
+                clusterConfig,
+                context,
+                "'ServiceAccountId' field is set, but 'ServiceAccountIdSignature' field is not set; "
+                "you must set either both 'ServiceAccountId' and 'ServiceAccountIdSignature' fields or none of them");
+        }
+
+        if (!serviceAccountId && serviceAccountIdSignature) {
+            return ValidationError(
+                clusterConfig,
+                context,
+                "'ServiceAccountIdSignature' field is set, but 'ServiceAccountId' field is not set; "
+                "you must set either both 'ServiceAccountId' and 'ServiceAccountIdSignature' fields or none of them");
+        }
+
+        auto token = clusterConfig.GetToken();
+        if ((serviceAccountId && serviceAccountIdSignature) && token) {
+            return ValidationError(
+                clusterConfig,
+                context,
+                "you must set either ('ServiceAccountId', 'ServiceAccountIdSignature') fields or 'Token' field or none of them");
+        }
+
+        // check required fields
+        if (!clusterConfig.GetName()) {
+            return ValidationError(clusterConfig, context, "empty field 'Name'");
+        }
+
+        if (clusterConfig.GetKind() == EDataSourceKind::DATA_SOURCE_KIND_UNSPECIFIED) {
+            return ValidationError(clusterConfig, context, "empty field 'Kind'");
+        }
+
+        if (!clusterConfig.GetCredentials().Getbasic().Getusername()) {
+            return ValidationError(clusterConfig, context, "empty field 'Credentials.basic.username'");
+        }
+
+        // TODO: validate Credentials.basic.password after ClickHouse recipe fix
+        // TODO: validate DatabaseName field when it is supported on frontend
+
+        if (clusterConfig.GetProtocol() == EProtocol::PROTOCOL_UNSPECIFIED) {
+            return ValidationError(clusterConfig, context, "empty field 'Protocol'");
+        }
     }
 }

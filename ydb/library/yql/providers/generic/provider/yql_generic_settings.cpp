@@ -1,3 +1,4 @@
+#include "yql_generic_cluster_config.h"
 #include "yql_generic_settings.h"
 
 #include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
@@ -23,6 +24,8 @@ namespace NYql {
                                            const std::shared_ptr<NYql::IDatabaseAsyncResolver> databaseResolver,
                                            NYql::IDatabaseAsyncResolver::TDatabaseAuthMap& databaseAuth,
                                            const TCredentials::TPtr& credentials) {
+        ValidateGenericClusterConfig(clusterConfig, "TGenericConfiguration::AddCluster");
+
         const auto& clusterName = clusterConfig.GetName();
         const auto& databaseId = clusterConfig.GetDatabaseId();
         const auto& endpoint = clusterConfig.GetEndpoint();

@@ -14,6 +14,7 @@ target_compile_options(providers-generic-provider PRIVATE
 target_link_libraries(providers-generic-provider PUBLIC
   contrib-libs-cxxsupp
   yutil
+  contrib-libs-fmt
   library-cpp-json
   library-cpp-random_provider
   library-cpp-time_provider

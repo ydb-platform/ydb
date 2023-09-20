@@ -25,6 +25,7 @@ SRCS(
 YQL_LAST_ABI_VERSION()
 
 PEERDIR(
+    contrib/libs/fmt
     library/cpp/json
     library/cpp/random_provider
     library/cpp/time_provider

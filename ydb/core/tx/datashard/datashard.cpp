@@ -2295,22 +2295,20 @@ void TDataShard::CheckMediatorStateRestored() {
     }
 
     // CoordinatorPrevReadStepMax shows us what is the next minimum step that
-    // may be acquired as a snapshot. This tells as that no previous read
-    // could have happened after this step, even if it has been acquired.
+    // may be acquired as a snapshot. This tells us that no previous read
+    // could have happened after this step, even if it was acquired, since it
+    // would have been waiting until mediator time advances to that step.
     // CoordinatorPrevReadStepMin shows us the maximum step that could have
-    // been acquired before we subscribed. Even if the next step is very
-    // large it may be used to infer an erlier step, as previous generation
-    // could not have read any step that was not acquired.
-    // When some coordinators are still pending we use CoordinatorPrevReadStepMax
-    // as a worst case read step in the future, hoping to make a tighter
-    // prediction while we wait for that.
-    // Note we always need to wait for CoordinatorPrevReadStepMax because
-    // previous generation may have observed it and may have replied to
-    // immediate writes at that step.
+    // been acquired at coordinators before we subscribed, however this does
+    // not include possible local snapshots that could have been acquired by a
+    // previous generation during iterator reads, so we have to always use
+    // CoordinatorPrevReadStepMax as a worst case possible readStep.
+    // Note we always need to wait for CoordinatorPrevReadStepMax even without
+    // local snapshots, because previous generation may have observed it and
+    // may have replied to immediate writes at that step, and new immediate
+    // HEAD reads must include that in their results.
     const ui64 waitStep = CoordinatorPrevReadStepMax;
-    const ui64 readStep = CoordinatorSubscriptionsPending == 0
-        ? Min(CoordinatorPrevReadStepMax, CoordinatorPrevReadStepMin)
-        : CoordinatorPrevReadStepMax;
+    const ui64 readStep = CoordinatorPrevReadStepMax;
 
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "CheckMediatorStateRestored: waitStep# " << waitStep << " readStep# " << readStep);
 
@@ -3106,7 +3104,7 @@ void TDataShard::Handle(TEvMediatorTimecast::TEvSubscribeReadStepResult::TPtr& e
                 "Got TEvMediatorTimecast::TEvSubscribeReadStepResult at " << TabletID()
                 << " coordinator " << msg->CoordinatorId
                 << " last step " << msg->LastReadStep
-                << " next step " << msg->ReadStep->Get());
+                << " next step " << msg->NextReadStep);
     auto it = CoordinatorSubscriptionById.find(msg->CoordinatorId);
     Y_VERIFY_S(it != CoordinatorSubscriptionById.end(),
         "Unexpected TEvSubscribeReadStepResult for coordinator " << msg->CoordinatorId);

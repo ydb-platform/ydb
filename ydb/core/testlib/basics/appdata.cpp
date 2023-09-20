@@ -43,7 +43,6 @@ namespace NKikimr {
         app->PQConfig.SetBalancerMetadataRetryTimeoutSec(1);
         app->PQConfig.SetClustersUpdateTimeoutSec(1);
         app->PQConfig.SetCheckACL(true);
-        app->StaticBlobStorageConfig->CopyFrom(BSConf);
         if (NetDataSourceUrl) {
             auto& updaterConfig = *app->NetClassifierConfig.MutableUpdaterConfig();
             updaterConfig.SetNetDataSourceUrl(NetDataSourceUrl);

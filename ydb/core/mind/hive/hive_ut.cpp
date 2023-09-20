@@ -280,13 +280,6 @@ namespace {
 
         runtime.Initialize(app.Unwrap());
 
-        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
-            auto it = NodeWardenConfigs.find(nodeIndex);
-            if (it != NodeWardenConfigs.end()) {
-                runtime.GetAppData(nodeIndex).StaticBlobStorageConfig = MakeHolder<NKikimrBlobStorage::TNodeWardenServiceSet>(it->second->BlobStorageConfig.GetServiceSet());
-            }
-        }
-
         EnableSchedule(runtime, isLocalEnabled);
 
         const ui32 domainsNum = 1;

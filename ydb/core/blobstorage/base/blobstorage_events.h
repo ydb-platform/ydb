@@ -8,6 +8,10 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_defs.h>
 #include <ydb/core/blobstorage/pdisk/drivedata_serializer.h>
 
+namespace NKikimrBlobStorage {
+    class TStorageConfig;
+}
+
 namespace NKikimr {
 
     struct TEvBlobStorage::TEvControllerUpdateDiskStatus : TEventPB<
@@ -579,6 +583,25 @@ namespace NKikimr {
             , Status(status)
             , OnlyPhantomsRemain(onlyPhantomsRemain)
         {}
+    };
+
+    struct TEvNodeWardenQueryStorageConfig
+        : TEventLocal<TEvNodeWardenQueryStorageConfig, TEvBlobStorage::EvNodeWardenQueryStorageConfig>
+    {
+        bool Subscribe = false;
+
+        TEvNodeWardenQueryStorageConfig(bool subscribe)
+            : Subscribe(subscribe)
+        {}
+    };
+
+    struct TEvNodeWardenStorageConfig
+        : TEventLocal<TEvNodeWardenStorageConfig, TEvBlobStorage::EvNodeWardenStorageConfig>
+    {
+        std::unique_ptr<NKikimrBlobStorage::TStorageConfig> Config;
+
+        TEvNodeWardenStorageConfig(const NKikimrBlobStorage::TStorageConfig& config);
+        ~TEvNodeWardenStorageConfig();
     };
 
 } // NKikimr

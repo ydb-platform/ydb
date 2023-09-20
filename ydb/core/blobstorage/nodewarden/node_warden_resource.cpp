@@ -83,8 +83,27 @@ void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSe
     }
 }
 
-void TNodeWarden::Handle(TEvUpdateServiceSet::TPtr ev) {
-    ApplyServiceSet(ev->Get()->ServiceSet, true, false, true);
+void TNodeWarden::Handle(TEvNodeWardenQueryStorageConfig::TPtr ev) {
+    Send(ev->Sender, new TEvNodeWardenStorageConfig(StorageConfig));
+    if (ev->Get()->Subscribe) {
+        StorageConfigSubscribers.insert(ev->Sender);
+    }
+}
+
+void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
+    ev->Get()->Config->Swap(&StorageConfig);
+    if (StorageConfig.HasBlobStorageConfig()) {
+        if (const auto& bsConfig = StorageConfig.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
+            ApplyServiceSet(bsConfig.GetServiceSet(), true, false, true);
+        }
+    }
+    for (const TActorId& subscriber : StorageConfigSubscribers) {
+        Send(subscriber, new TEvNodeWardenStorageConfig(StorageConfig));
+    }
+}
+
+void TNodeWarden::HandleUnsubscribe(STATEFN_SIG) {
+    StorageConfigSubscribers.erase(ev->Sender);
 }
 
 void TNodeWarden::HandleIncrHugeInit(NIncrHuge::TEvIncrHugeInit::TPtr ev) {

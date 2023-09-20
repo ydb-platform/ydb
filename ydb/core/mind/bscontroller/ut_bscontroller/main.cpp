@@ -7,6 +7,7 @@
 #include <ydb/core/mind/bscontroller/ut_helpers.h>
 #include <ydb/core/mind/bscontroller/vdisk_status_tracker.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
+#include <ydb/core/protos/blobstorage_distributed_config.pb.h>
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -226,6 +227,25 @@ struct TEnvironmentSetup {
     void SetupStorage() {
         const TActorId proxyId = MakeBlobStorageProxyID(GroupId);
         Runtime->RegisterService(proxyId, Runtime->Register(CreateBlobStorageGroupProxyMockActor(GroupId), NodeId), NodeId);
+
+        class TMock : public TActor<TMock> {
+        public:
+            TMock()
+                : TActor(&TThis::StateFunc)
+            {}
+
+            void Handle(TEvNodeWardenQueryStorageConfig::TPtr ev) {
+                Send(ev->Sender, new TEvNodeWardenStorageConfig(NKikimrBlobStorage::TStorageConfig()));
+            }
+
+            STATEFN(StateFunc) {
+                switch (ev->GetTypeRewrite()) {
+                    hFunc(TEvNodeWardenQueryStorageConfig, Handle);
+                }
+            }
+        };
+
+        Runtime->RegisterService(MakeBlobStorageNodeWardenID(Runtime->GetNodeId(NodeId)), Runtime->Register(new TMock, NodeId), NodeId);
     }
 
     void SetupTablet() {

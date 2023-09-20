@@ -16,6 +16,7 @@
 #include <ydb/core/mind/local.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/mind/tenant_node_enumeration.h>
+#include <ydb/core/protos/blobstorage_distributed_config.pb.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/tx/coordinator/coordinator.h>
 #include <ydb/core/tx/tx_allocator/txallocator.h>

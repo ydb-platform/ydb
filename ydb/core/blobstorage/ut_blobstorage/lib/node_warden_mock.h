@@ -103,6 +103,8 @@ public:
     void SendUpdateVDiskStatus(TVDiskState *vdisk);
 
     void Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr ev);
+    void Handle(TEvNodeWardenQueryStorageConfig::TPtr ev);
+    void HandleUnsubscribe(STATEFN_SIG);
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Pipe management code
@@ -124,5 +126,7 @@ public:
         hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
         cFunc(TEvents::TSystem::Wakeup, Connect);
         IgnoreFunc(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate);
+        hFunc(TEvNodeWardenQueryStorageConfig, Handle);
+        fFunc(TEvents::TSystem::Unsubscribe, HandleUnsubscribe);
     )
 };

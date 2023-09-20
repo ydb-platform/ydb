@@ -125,7 +125,6 @@ struct TAppData {
 
     TIntrusivePtr<NInterconnect::TPollerThreads> PollerThreads;
 
-    THolder<NKikimrBlobStorage::TNodeWardenServiceSet> StaticBlobStorageConfig;
     THolder<NKikimrCms::TCmsConfig> DefaultCmsConfig;
 
     NKikimrStream::TStreamingConfig StreamingConfig;

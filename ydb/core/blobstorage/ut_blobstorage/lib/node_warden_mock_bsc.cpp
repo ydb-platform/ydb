@@ -224,3 +224,11 @@ void TNodeWardenMockActor::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpd
 
     SendUpdateDiskStatus();
 }
+
+void TNodeWardenMockActor::Handle(TEvNodeWardenQueryStorageConfig::TPtr ev) {
+    Send(ev->Sender, new TEvNodeWardenStorageConfig(NKikimrBlobStorage::TStorageConfig()));
+}
+
+void TNodeWardenMockActor::HandleUnsubscribe(STATEFN_SIG) {
+    Y_UNUSED(ev);
+}

@@ -563,17 +563,20 @@ namespace NKikimr::NBsController {
                 }
                 x->SetStatus(NKikimrBlobStorage::EVDiskStatus_Name(vslot.VDiskStatus));
             }
-            if (const auto& ss = AppData()->StaticBlobStorageConfig) {
-                for (const auto& group : ss->GetGroups()) {
-                    auto *x = pb->AddGroup();
-                    x->SetGroupId(group.GetGroupID());
-                    x->SetGroupGeneration(group.GetGroupGeneration());
-                    x->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(group.GetErasureSpecies()));
-                    for (const auto& realm : group.GetRings()) {
-                        for (const auto& domain : realm.GetFailDomains()) {
-                            for (const auto& location : domain.GetVDiskLocations()) {
-                                const TVSlotId vslotId(location.GetNodeID(), location.GetPDiskID(), location.GetVDiskSlotID());
-                                vslotId.Serialize(x->AddVSlotId());
+            if (const auto& s = Self.StorageConfig; s.HasBlobStorageConfig()) {
+                if (const auto& bsConfig = s.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
+                    const auto& ss = bsConfig.GetServiceSet();
+                    for (const auto& group : ss.GetGroups()) {
+                        auto *x = pb->AddGroup();
+                        x->SetGroupId(group.GetGroupID());
+                        x->SetGroupGeneration(group.GetGroupGeneration());
+                        x->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(group.GetErasureSpecies()));
+                        for (const auto& realm : group.GetRings()) {
+                            for (const auto& domain : realm.GetFailDomains()) {
+                                for (const auto& location : domain.GetVDiskLocations()) {
+                                    const TVSlotId vslotId(location.GetNodeID(), location.GetPDiskID(), location.GetVDiskSlotID());
+                                    vslotId.Serialize(x->AddVSlotId());
+                                }
                             }
                         }
                     }

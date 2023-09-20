@@ -164,8 +164,6 @@ namespace NKikimr::NStorage {
         void ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet &serviceSet,
             bool isStatic, bool comprehensive, bool updateCache);
 
-        void Handle(TEvUpdateServiceSet::TPtr ev);
-
         void ConfigureLocalProxy(TIntrusivePtr<TBlobStorageGroupInfo> bsInfo);
         TActorId StartEjectedProxy(ui32 groupId);
         void StartInvalidGroupProxy();
@@ -487,6 +485,13 @@ namespace NKikimr::NStorage {
         void StartDistributedConfigKeeper();
         void ForwardToDistributedConfigKeeper(STATEFN_SIG);
 
+        NKikimrBlobStorage::TStorageConfig StorageConfig;
+        THashSet<TActorId> StorageConfigSubscribers;
+
+        void Handle(TEvNodeWardenQueryStorageConfig::TPtr ev);
+        void Handle(TEvNodeWardenStorageConfig::TPtr ev);
+        void HandleUnsubscribe(STATEFN_SIG);
+
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         struct TGroupResolverContext : TThrRefBase {
@@ -536,7 +541,6 @@ namespace NKikimr::NStorage {
 
                 hFunc(TEvBlobStorage::TEvControllerNodeServiceSetUpdate, Handle);
                 hFunc(TEvBlobStorage::TEvUpdateGroupInfo, Handle);
-                hFunc(TEvUpdateServiceSet, Handle);
                 hFunc(TEvBlobStorage::TEvControllerUpdateDiskStatus, Handle);
                 hFunc(TEvBlobStorage::TEvControllerGroupMetricsExchange, Handle);
                 hFunc(TEvPrivate::TEvSendDiskMetrics, Handle);
@@ -551,6 +555,9 @@ namespace NKikimr::NStorage {
                 hFunc(TEvents::TEvInvokeResult, Handle);
 
                 hFunc(TEvNodeWardenQueryGroupInfo, Handle);
+                hFunc(TEvNodeWardenQueryStorageConfig, Handle);
+                hFunc(TEvNodeWardenStorageConfig, Handle);
+                fFunc(TEvents::TSystem::Unsubscribe, HandleUnsubscribe);
 
                 // proxy requests for the NodeWhiteboard to prevent races
                 hFunc(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate, Handle);

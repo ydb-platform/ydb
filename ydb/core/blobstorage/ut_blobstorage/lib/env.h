@@ -146,8 +146,8 @@ struct TEnvironmentSetup {
             Runtime->SetupTabletRuntime(GetNumDataCenters(), Settings.ControllerNodeId);
         }
         SetupStaticStorage();
-        SetupTablet();
         SetupStorage();
+        SetupTablet();
     }
 
     void StopNode(ui32 nodeId) {

@@ -25,6 +25,8 @@
 #include <ydb/core/util/proto_duration.h>
 #include <ydb/core/util/tuples.h>
 
+#include <ydb/core/protos/blobstorage_distributed_config.pb.h>
+
 #include <ydb/public/api/grpc/ydb_monitoring_v1.grpc.pb.h>
 #include <regex>
 
@@ -572,52 +574,63 @@ public:
             RequestConfig();
         }
 
-        const NKikimrBlobStorage::TNodeWardenServiceSet& staticConfig = *AppData()->StaticBlobStorageConfig.Get();
-        for (const NKikimrBlobStorage::TNodeWardenServiceSet_TPDisk& pDisk : staticConfig.pdisks()) {
-            auto pDiskId = GetPDiskId(pDisk);
-            ValidPDisks.emplace(pDiskId);
-            auto itPDisk = MergedPDiskState.find(pDiskId);
-            if (itPDisk == MergedPDiskState.end()) {
-                PDisksAppended.emplace_back();
-                NKikimrWhiteboard::TPDiskStateInfo& pbPDisk = PDisksAppended.back();
-                itPDisk = MergedPDiskState.emplace(pDiskId, &pbPDisk).first;
-                pbPDisk.SetNodeId(pDisk.GetNodeID());
-                pbPDisk.SetPDiskId(pDisk.GetPDiskID());
-                pbPDisk.SetPath(pDisk.GetPath());
-                pbPDisk.SetGuid(pDisk.GetPDiskGuid());
-                pbPDisk.SetCategory(static_cast<ui64>(pDisk.GetPDiskCategory()));
-                RequestStorageNode(pDisk.GetNodeID());
-            }
-        }
-        for (const NKikimrBlobStorage::TNodeWardenServiceSet_TVDisk& vDisk : staticConfig.vdisks()) {
-            auto vDiskId = GetVDiskId(vDisk);
-            ValidVDisks.emplace(vDiskId);
-            auto itVDisk = MergedVDiskState.find(vDiskId);
-            if (itVDisk == MergedVDiskState.end()) {
-                VDisksAppended.emplace_back();
-                NKikimrWhiteboard::TVDiskStateInfo& pbVDisk = VDisksAppended.back();
-                itVDisk = MergedVDiskState.emplace(vDiskId, &pbVDisk).first;
-                pbVDisk.MutableVDiskId()->CopyFrom(vDisk.vdiskid());
-                pbVDisk.SetNodeId(vDisk.GetVDiskLocation().GetNodeID());
-                pbVDisk.SetPDiskId(vDisk.GetVDiskLocation().GetPDiskID());
-            }
-        }
-        for (const NKikimrBlobStorage::TGroupInfo& group : staticConfig.groups()) {
-            ValidGroups.emplace(group.GetGroupID());
-            TString storagePoolName = group.GetStoragePoolName();
-            if (!storagePoolName) {
-                storagePoolName = STATIC_STORAGE_POOL_NAME;
-            }
-            StoragePoolState[storagePoolName].Groups.emplace(group.groupid());
-
-            if (!IsSpecificDatabaseFilter()) {
-                DatabaseState[DomainPath].StoragePoolNames.emplace_back(storagePoolName);
-            }
-        }
         Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
+        ++Requests;
+        Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(false));
         ++Requests;
 
         Become(&TThis::StateWait, Timeout, new TEvents::TEvWakeup());
+    }
+
+    void Handle(TEvNodeWardenStorageConfig::TPtr ev) {
+        if (const NKikimrBlobStorage::TStorageConfig& config = *ev->Get()->Config; config.HasBlobStorageConfig()) {
+            if (const auto& bsConfig = config.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
+                const auto& staticConfig = bsConfig.GetServiceSet();
+                for (const NKikimrBlobStorage::TNodeWardenServiceSet_TPDisk& pDisk : staticConfig.pdisks()) {
+                    auto pDiskId = GetPDiskId(pDisk);
+                    ValidPDisks.emplace(pDiskId);
+                    auto itPDisk = MergedPDiskState.find(pDiskId);
+                    if (itPDisk == MergedPDiskState.end()) {
+                        PDisksAppended.emplace_back();
+                        NKikimrWhiteboard::TPDiskStateInfo& pbPDisk = PDisksAppended.back();
+                        itPDisk = MergedPDiskState.emplace(pDiskId, &pbPDisk).first;
+                        pbPDisk.SetNodeId(pDisk.GetNodeID());
+                        pbPDisk.SetPDiskId(pDisk.GetPDiskID());
+                        pbPDisk.SetPath(pDisk.GetPath());
+                        pbPDisk.SetGuid(pDisk.GetPDiskGuid());
+                        pbPDisk.SetCategory(static_cast<ui64>(pDisk.GetPDiskCategory()));
+                        RequestStorageNode(pDisk.GetNodeID());
+                    }
+                }
+                for (const NKikimrBlobStorage::TNodeWardenServiceSet_TVDisk& vDisk : staticConfig.vdisks()) {
+                    auto vDiskId = GetVDiskId(vDisk);
+                    ValidVDisks.emplace(vDiskId);
+                    auto itVDisk = MergedVDiskState.find(vDiskId);
+                    if (itVDisk == MergedVDiskState.end()) {
+                        VDisksAppended.emplace_back();
+                        NKikimrWhiteboard::TVDiskStateInfo& pbVDisk = VDisksAppended.back();
+                        itVDisk = MergedVDiskState.emplace(vDiskId, &pbVDisk).first;
+                        pbVDisk.MutableVDiskId()->CopyFrom(vDisk.vdiskid());
+                        pbVDisk.SetNodeId(vDisk.GetVDiskLocation().GetNodeID());
+                        pbVDisk.SetPDiskId(vDisk.GetVDiskLocation().GetPDiskID());
+                    }
+                }
+                for (const NKikimrBlobStorage::TGroupInfo& group : staticConfig.groups()) {
+                    ValidGroups.emplace(group.GetGroupID());
+                    TString storagePoolName = group.GetStoragePoolName();
+                    if (!storagePoolName) {
+                        storagePoolName = STATIC_STORAGE_POOL_NAME;
+                    }
+                    StoragePoolState[storagePoolName].Groups.emplace(group.groupid());
+
+                    if (!IsSpecificDatabaseFilter()) {
+                        DatabaseState[DomainPath].StoragePoolNames.emplace_back(storagePoolName);
+                    }
+                }
+            }
+        }
+
+        RequestDone("TEvNodeWardenStorageConfig");
     }
 
     STATEFN(StateWait) {
@@ -643,6 +656,7 @@ public:
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvPrivate::TEvRetryNodeWhiteboard, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            hFunc(TEvNodeWardenStorageConfig, Handle);
         }
     }
 

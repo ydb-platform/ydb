@@ -94,27 +94,6 @@ void TBlobStorageController::TGroupInfo::CalculateGroupStatus() {
 }
 
 void TBlobStorageController::OnActivateExecutor(const TActorContext&) {
-    // fill in static disks
-    if (const auto& ss = AppData()->StaticBlobStorageConfig) {
-        for (const auto& pdisk : ss->GetPDisks()) {
-            const TPDiskId pdiskId(pdisk.GetNodeID(), pdisk.GetPDiskID());
-            StaticPDisks.emplace(pdiskId, pdisk);
-            SysViewChangedPDisks.insert(pdiskId);
-        }
-        for (const auto& vslot : ss->GetVDisks()) {
-            const auto& location = vslot.GetVDiskLocation();
-            const TPDiskId pdiskId(location.GetNodeID(), location.GetPDiskID());
-            const TVSlotId vslotId(pdiskId, location.GetVDiskSlotID());
-            StaticVSlots.emplace(vslotId, vslot);
-            const TVDiskID& vdiskId = VDiskIDFromVDiskID(vslot.GetVDiskID());
-            StaticVDiskMap.emplace(vdiskId, vslotId);
-            StaticVDiskMap.emplace(TVDiskID(vdiskId.GroupID, 0, vdiskId), vslotId);
-            ++StaticPDisks.at(pdiskId).StaticSlotUsage;
-            SysViewChangedVSlots.insert(vslotId);
-            SysViewChangedGroups.insert(vdiskId.GroupID);
-        }
-    }
-
     // create stat processor
     StatProcessorActorId = Register(CreateStatProcessorActor());
 
@@ -138,6 +117,50 @@ void TBlobStorageController::OnActivateExecutor(const TActorContext&) {
 
     // initialize not-ready histograms
     VSlotNotReadyHistogramUpdate();
+
+    // request static group configuration
+    Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(true), IEventHandle::FlagTrackDelivery);
+}
+
+void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
+    ev->Get()->Config->Swap(&StorageConfig);
+
+    StaticPDisks.clear();
+    StaticVSlots.clear();
+    StaticVDiskMap.clear();
+
+    if (StorageConfig.HasBlobStorageConfig()) {
+        if (const auto& bsConfig = StorageConfig.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
+            const auto& ss = bsConfig.GetServiceSet();
+            for (const auto& pdisk : ss.GetPDisks()) {
+                const TPDiskId pdiskId(pdisk.GetNodeID(), pdisk.GetPDiskID());
+                StaticPDisks.emplace(pdiskId, pdisk);
+                SysViewChangedPDisks.insert(pdiskId);
+            }
+            for (const auto& vslot : ss.GetVDisks()) {
+                const auto& location = vslot.GetVDiskLocation();
+                const TPDiskId pdiskId(location.GetNodeID(), location.GetPDiskID());
+                const TVSlotId vslotId(pdiskId, location.GetVDiskSlotID());
+                StaticVSlots.emplace(vslotId, vslot);
+                const TVDiskID& vdiskId = VDiskIDFromVDiskID(vslot.GetVDiskID());
+                StaticVDiskMap.emplace(vdiskId, vslotId);
+                StaticVDiskMap.emplace(TVDiskID(vdiskId.GroupID, 0, vdiskId), vslotId);
+                ++StaticPDisks.at(pdiskId).StaticSlotUsage;
+                SysViewChangedVSlots.insert(vslotId);
+                SysViewChangedGroups.insert(vdiskId.GroupID);
+            }
+        }
+    }
+
+    if (!std::exchange(StorageConfigObtained, true) && HostRecords) {
+        Execute(CreateTxInitScheme());
+    }
+}
+
+void TBlobStorageController::Handle(TEvents::TEvUndelivered::TPtr ev) {
+    if (ev->Get()->SourceType == TEvNodeWardenQueryStorageConfig::EventType) {
+        Y_VERIFY_DEBUG(false);
+    }
 }
 
 void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateGroupStat::TPtr& ev) {
@@ -149,9 +172,10 @@ void TBlobStorageController::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev) {
     const bool initial = !HostRecords;
     HostRecords = std::make_shared<THostRecordMap::element_type>(ev->Get());
     if (initial) {
-        // create self-heal actor
         SelfHealId = Register(CreateSelfHealActor());
-        Execute(CreateTxInitScheme());
+        if (StorageConfigObtained) {
+            Execute(CreateTxInitScheme());
+        }
     }
     Send(SelfHealId, new TEvPrivate::TEvUpdateHostRecords(HostRecords));
 }

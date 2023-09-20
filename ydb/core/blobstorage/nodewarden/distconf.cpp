@@ -3,9 +3,15 @@
 
 namespace NKikimr::NStorage {
 
-    TDistributedConfigKeeper::TDistributedConfigKeeper(TIntrusivePtr<TNodeWardenConfig> cfg)
+    TDistributedConfigKeeper::TDistributedConfigKeeper(TIntrusivePtr<TNodeWardenConfig> cfg,
+            const NKikimrBlobStorage::TStorageConfig& baseConfig)
         : Cfg(std::move(cfg))
-    {}
+        , BaseConfig(baseConfig)
+        , InitialConfig(baseConfig)
+    {
+        UpdateFingerprint(&BaseConfig);
+        InitialConfig.SetFingerprint(BaseConfig.GetFingerprint());
+    }
 
     void TDistributedConfigKeeper::Bootstrap() {
         STLOG(PRI_DEBUG, BS_NODE, NWDC00, "Bootstrap");
@@ -13,25 +19,7 @@ namespace NKikimr::NStorage {
         // TODO: maybe extract list of nodes from the initial storage config?
         Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes(true));
 
-        // prepare initial storage config
-        InitialConfig.MutableBlobStorageConfig()->CopyFrom(Cfg->BlobStorageConfig);
-        for (const auto& node : Cfg->NameserviceConfig.GetNode()) {
-            auto *r = InitialConfig.AddAllNodes();
-            r->SetHost(node.GetInterconnectHost());
-            r->SetPort(node.GetPort());
-            r->SetNodeId(node.GetNodeId());
-            if (node.HasLocation()) {
-                r->MutableLocation()->CopyFrom(node.GetLocation());
-            } else if (node.HasWalleLocation()) {
-                r->MutableLocation()->CopyFrom(node.GetWalleLocation());
-            }
-        }
-        InitialConfig.SetClusterUUID(Cfg->NameserviceConfig.GetClusterUUID());
-        UpdateFingerprint(&InitialConfig);
-
-        BaseConfig.CopyFrom(InitialConfig);
-
-        // generate initial drive set
+        // generate initial drive set and query stored configuration
         EnumerateConfigDrives(InitialConfig, SelfId().NodeId(), [&](const auto& /*node*/, const auto& drive) {
             DrivesToRead.push_back(drive.GetPath());
         });
@@ -49,11 +37,7 @@ namespace NKikimr::NStorage {
     bool TDistributedConfigKeeper::ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config) {
         if (!StorageConfig || StorageConfig->GetGeneration() < config.GetGeneration()) {
             StorageConfig.emplace(config);
-            if (StorageConfig->HasBlobStorageConfig()) {
-                if (const auto& bsConfig = StorageConfig->GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
-                    Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvUpdateServiceSet(bsConfig.GetServiceSet()));
-                }
-            }
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenStorageConfig(*StorageConfig));
             if (ProposedStorageConfig && ProposedStorageConfig->GetGeneration() <= StorageConfig->GetGeneration()) {
                 ProposedStorageConfig.reset();
             }
@@ -219,7 +203,7 @@ namespace NKikimr::NStorage {
 
     void TNodeWarden::StartDistributedConfigKeeper() {
         return;
-        DistributedConfigKeeperId = Register(new TDistributedConfigKeeper(Cfg));
+        DistributedConfigKeeperId = Register(new TDistributedConfigKeeper(Cfg, StorageConfig));
     }
 
     void TNodeWarden::ForwardToDistributedConfigKeeper(STATEFN_SIG) {

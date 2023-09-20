@@ -194,6 +194,21 @@ void TNodeWarden::Bootstrap() {
     // determine if we are running in 'mock' mode
     EnableProxyMock = Cfg->BlobStorageConfig.GetServiceSet().GetEnableProxyMock();
 
+    // fill in a storage config
+    StorageConfig.MutableBlobStorageConfig()->CopyFrom(Cfg->BlobStorageConfig);
+    for (const auto& node : Cfg->NameserviceConfig.GetNode()) {
+        auto *r = StorageConfig.AddAllNodes();
+        r->SetHost(node.GetInterconnectHost());
+        r->SetPort(node.GetPort());
+        r->SetNodeId(node.GetNodeId());
+        if (node.HasLocation()) {
+            r->MutableLocation()->CopyFrom(node.GetLocation());
+        } else if (node.HasWalleLocation()) {
+            r->MutableLocation()->CopyFrom(node.GetWalleLocation());
+        }
+    }
+    StorageConfig.SetClusterUUID(Cfg->NameserviceConfig.GetClusterUUID());
+
     // Start a statically configured set
     if (Cfg->BlobStorageConfig.HasServiceSet()) {
         const auto& serviceSet = Cfg->BlobStorageConfig.GetServiceSet();

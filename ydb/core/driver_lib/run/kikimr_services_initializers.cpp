@@ -916,7 +916,6 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
     TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(new TNodeWardenConfig(new TRealPDiskServiceFactory()));
     if (Config.HasBlobStorageConfig()) {
         const auto& bsc = Config.GetBlobStorageConfig();
-        appData->StaticBlobStorageConfig->MergeFrom(bsc.GetServiceSet());
         nodeWardenConfig->FeatureFlags = Config.GetFeatureFlags();
         nodeWardenConfig->BlobStorageConfig.CopyFrom(bsc);
         if (Config.HasNameserviceConfig()) {

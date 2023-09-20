@@ -27,7 +27,6 @@ TAppData::TAppData(
     , Mon(nullptr)
     , Icb(new TControlBoard())
     , InFlightLimiterRegistry(new NGRpcService::TInFlightLimiterRegistry(Icb))
-    , StaticBlobStorageConfig(new NKikimrBlobStorage::TNodeWardenServiceSet)
     , KikimrShouldContinue(kikimrShouldContinue)
 {}
 

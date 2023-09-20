@@ -231,7 +231,7 @@ namespace NKikimr::NStorage {
             return NKikimrServices::TActivity::NODEWARDEN_DISTRIBUTED_CONFIG;
         }
 
-        TDistributedConfigKeeper(TIntrusivePtr<TNodeWardenConfig> cfg);
+        TDistributedConfigKeeper(TIntrusivePtr<TNodeWardenConfig> cfg, const NKikimrBlobStorage::TStorageConfig& baseConfig);
 
         void Bootstrap();
         void Halt(); // cease any distconf activity, unbind and reject any bindings

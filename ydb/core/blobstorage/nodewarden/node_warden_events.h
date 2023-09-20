@@ -49,12 +49,4 @@ namespace NKikimr::NStorage {
         : TEventPB<TEvNodeConfigGather, NKikimrBlobStorage::TEvNodeConfigGather, TEvBlobStorage::EvNodeConfigGather>
     {};
 
-    struct TEvUpdateServiceSet : TEventLocal<TEvUpdateServiceSet, TEvBlobStorage::EvUpdateServiceSet> {
-        NKikimrBlobStorage::TNodeWardenServiceSet ServiceSet;
-
-        TEvUpdateServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet)
-            : ServiceSet(serviceSet)
-        {}
-    };
-
 } // NKikimr::NStorage

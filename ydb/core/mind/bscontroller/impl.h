@@ -1465,12 +1465,14 @@ private:
     bool SelfHealEnable = false;
     bool DonorMode = false;
     TDuration ScrubPeriodicity;
+    NKikimrBlobStorage::TStorageConfig StorageConfig;
     THashMap<TPDiskId, std::reference_wrapper<const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk>> StaticPDiskMap;
     THashMap<TPDiskId, ui32> StaticPDiskSlotUsage;
     std::unique_ptr<TStoragePoolStat> StoragePoolStat;
     bool StopGivingGroups = false;
     bool GroupLayoutSanitizerEnabled = false;
     bool AllowMultipleRealmsOccupation = true;
+    bool StorageConfigObtained = false;
 
     std::set<std::tuple<TGroupId, TNodeId>> GroupToNode;
 
@@ -1681,6 +1683,8 @@ private:
         }
         TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0, GetNameserviceActorId(), SelfId(),
             nullptr, 0));
+        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0, MakeBlobStorageNodeWardenID(SelfId().NodeId()),
+            SelfId(), nullptr, 0));
         return TActor::PassAway();
     }
 
@@ -1703,6 +1707,9 @@ private:
     }
 
     void OnActivateExecutor(const TActorContext&) override;
+
+    void Handle(TEvNodeWardenStorageConfig::TPtr ev);
+    void Handle(TEvents::TEvUndelivered::TPtr ev);
 
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext&) override;
     void ProcessPostQuery(const NActorsProto::TRemoteHttpInfo& query, TActorId sender);
@@ -1901,6 +1908,8 @@ public:
             (Event, ev->ToString()));
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
+            hFunc(TEvNodeWardenStorageConfig, Handle);
+            hFunc(TEvents::TEvUndelivered, Handle);
             default:
                 StateInitImpl(ev, SelfId());
         }
@@ -2004,6 +2013,7 @@ public:
             fFunc(TEvPrivate::EvVSlotReadyUpdate, EnqueueIncomingEvent);
             cFunc(TEvPrivate::EvVSlotNotReadyHistogramUpdate, VSlotNotReadyHistogramUpdate);
             cFunc(TEvPrivate::EvProcessIncomingEvent, ProcessIncomingEvent);
+            hFunc(TEvNodeWardenStorageConfig, Handle);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
                     STLOG(PRI_ERROR, BS_CONTROLLER, BSC06, "StateWork unexpected event", (Type, type),

@@ -48,6 +48,10 @@ public:
             header.SetToken(context.Token);
         }
 
+        if (context.ImpersonationUser) {
+            header.SetImpersonationUser(*context.ImpersonationUser);
+        }
+
         TString requestId = CreateGuidAsString();
 
         auto hostName = GetProxyForHeavyRequest(context);

@@ -154,6 +154,11 @@ void TClientReader::CreateRequest(const TMaybe<ui32>& rangeIndex, const TMaybe<u
         } else {
             header.SetToken(Context_.Token);
         }
+
+        if (Context_.ImpersonationUser) {
+            header.SetImpersonationUser(*Context_.ImpersonationUser);
+        }
+
         auto transactionId = (ReadTransaction_ ? ReadTransaction_->GetId() : ParentTransactionId_);
         header.AddTransactionId(transactionId);
 

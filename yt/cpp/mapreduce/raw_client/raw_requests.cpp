@@ -657,6 +657,10 @@ public:
             header.SetToken(context.Token);
         }
 
+        if (context.ImpersonationUser) {
+            header.SetImpersonationUser(*context.ImpersonationUser);
+        }
+
         auto hostName = GetProxyForHeavyRequest(context);
         auto requestId = CreateGuidAsString();
 

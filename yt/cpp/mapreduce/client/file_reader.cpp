@@ -144,6 +144,11 @@ NHttpClient::IHttpResponsePtr TFileReader::Request(const TClientContext& context
     } else {
         header.SetToken(context.Token);
     }
+
+    if (context.ImpersonationUser) {
+        header.SetImpersonationUser(*context.ImpersonationUser);
+    }
+
     header.AddTransactionId(transactionId);
     header.SetOutputFormat(TMaybe<TFormat>()); // Binary format
 
@@ -198,6 +203,11 @@ NHttpClient::IHttpResponsePtr TBlobTableReader::Request(const TClientContext& co
     } else {
         header.SetToken(context.Token);
     }
+
+    if (context.ImpersonationUser) {
+        header.SetImpersonationUser(*context.ImpersonationUser);
+    }
+
     header.AddTransactionId(transactionId);
     header.SetOutputFormat(TMaybe<TFormat>()); // Binary format
 

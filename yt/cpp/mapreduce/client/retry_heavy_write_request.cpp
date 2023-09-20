@@ -37,6 +37,10 @@ void RetryHeavyWriteRequest(
         header.SetToken(context.Token);
     }
 
+    if (context.ImpersonationUser) {
+        header.SetImpersonationUser(*context.ImpersonationUser);
+    }
+
     for (int attempt = 0; attempt < retryCount; ++attempt) {
         TPingableTransaction attemptTx(clientRetryPolicy, context, parentId, transactionPinger->GetChildTxPinger(), TStartTransactionOptions());
 

@@ -277,8 +277,36 @@ IGraphTransformer::TStatus SyncTransform(IGraphTransformer& transformer, TExprNo
     return IGraphTransformer::TStatus::Error;
 }
 
-IGraphTransformer::TStatus InstantTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx, bool breakOnRestart) {
+IGraphTransformer::TStatus AsyncTransformStepImpl(IGraphTransformer& transformer, TExprNode::TPtr& root,
+                                            TExprContext& ctx, bool applyAsyncChanges, bool breakOnRestart,
+                                            const TStringBuf& name)
+{
     try {
+        if (applyAsyncChanges) {
+            TExprNode::TPtr newRoot;
+            auto status = transformer.ApplyAsyncChanges(root, newRoot, ctx);
+            if (newRoot) {
+                root = newRoot;
+            }
+
+            switch (status.Level) {
+            case IGraphTransformer::TStatus::Ok:
+            case IGraphTransformer::TStatus::Error:
+                break;
+            case IGraphTransformer::TStatus::Repeat:
+                if (breakOnRestart && status.HasRestart) {
+                    return status;
+                }
+                return AsyncTransformStepImpl(transformer, root, ctx, false /* no async changes */, breakOnRestart, name);
+            case IGraphTransformer::TStatus::Async:
+                YQL_ENSURE(false, "Async status is forbidden for ApplyAsyncChanges");
+                break;
+            default:
+                YQL_ENSURE(false, "Unknown status");
+                break;
+            }
+            return status;
+        }
         for (; ctx.RepeatTransformCounter < ctx.RepeatTransformLimit; ++ctx.RepeatTransformCounter) {
             TExprNode::TPtr newRoot;
             auto status = transformer.Transform(root, newRoot, ctx);
@@ -294,60 +322,6 @@ IGraphTransformer::TStatus InstantTransform(IGraphTransformer& transformer, TExp
                 if (breakOnRestart && status.HasRestart) {
                     return status;
                 }
-
-                continue;
-            case IGraphTransformer::TStatus::Async:
-                ctx.AddError(TIssue(ctx.GetPosition(root->Pos()), "Instant transform can not be delayed"));
-                return IGraphTransformer::TStatus::Error;
-            default:
-                YQL_ENSURE(false, "Unknown status");
-            }
-        }
-        AddTooManyTransformationsError(root->Pos(), "InstantTransform", ctx);
-    }
-    catch (const std::exception& e) {
-        ctx.AddError(ExceptionToIssue(e));
-    }
-    return IGraphTransformer::TStatus::Error;
-}
-
-NThreading::TFuture<IGraphTransformer::TStatus> AsyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx,
-                                                                bool applyAsyncChanges) {
-    try {
-        if (applyAsyncChanges) {
-            TExprNode::TPtr newRoot;
-            auto status = transformer.ApplyAsyncChanges(root, newRoot, ctx);
-            if (newRoot) {
-                root = newRoot;
-            }
-
-            switch (status.Level) {
-            case IGraphTransformer::TStatus::Ok:
-            case IGraphTransformer::TStatus::Error:
-                break;
-            case IGraphTransformer::TStatus::Repeat:
-                return AsyncTransform(transformer, root, ctx, false /* no async changes */);
-            case IGraphTransformer::TStatus::Async:
-                YQL_ENSURE(false, "Async status is forbidden for ApplyAsyncChanges");
-                break;
-            default:
-                YQL_ENSURE(false, "Unknown status");
-                break;
-            }
-            return NThreading::MakeFuture(status);
-        }
-        for (; ctx.RepeatTransformCounter < ctx.RepeatTransformLimit; ++ctx.RepeatTransformCounter) {
-            TExprNode::TPtr newRoot;
-            auto status = transformer.Transform(root, newRoot, ctx);
-            if (newRoot) {
-                root = newRoot;
-            }
-
-            switch (status.Level) {
-            case IGraphTransformer::TStatus::Ok:
-            case IGraphTransformer::TStatus::Error:
-                return NThreading::MakeFuture(status);
-            case IGraphTransformer::TStatus::Repeat:
                 // if (currentTime - startTime >= threshold) return NThreading::MakeFuture(IGraphTransformer::TStatus::Yield);
                 continue;
             case IGraphTransformer::TStatus::Async:
@@ -358,20 +332,44 @@ NThreading::TFuture<IGraphTransformer::TStatus> AsyncTransform(IGraphTransformer
             break;
         }
         if (ctx.RepeatTransformCounter >= ctx.RepeatTransformLimit) {
-            AddTooManyTransformationsError(root->Pos(), "AsyncTransform", ctx);
-            return NThreading::MakeFuture(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Error));
+            AddTooManyTransformationsError(root->Pos(), name, ctx);
+            return IGraphTransformer::TStatus::Error;
         }
     }
     catch (const std::exception& e) {
         ctx.AddError(ExceptionToIssue(e));
-        return NThreading::MakeFuture(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Error));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    return IGraphTransformer::TStatus::Async;
+}
+
+IGraphTransformer::TStatus InstantTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx, bool breakOnRestart) {
+    IGraphTransformer::TStatus status = AsyncTransformStepImpl(transformer, root, ctx, false, breakOnRestart, "InstantTransform");
+    if (status.Level == IGraphTransformer::TStatus::Async) {
+        ctx.AddError(TIssue(ctx.GetPosition(root->Pos()), "Instant transform can not be delayed"));
+        return IGraphTransformer::TStatus::Error;
+    }
+    return status;
+}
+
+IGraphTransformer::TStatus AsyncTransformStep(IGraphTransformer& transformer, TExprNode::TPtr& root,
+                                            TExprContext& ctx, bool applyAsyncChanges)
+{
+    return AsyncTransformStepImpl(transformer, root, ctx, applyAsyncChanges, false, "AsyncTransformStep");
+}
+
+NThreading::TFuture<IGraphTransformer::TStatus> AsyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx,
+                                                                bool applyAsyncChanges) {
+    IGraphTransformer::TStatus status = AsyncTransformStepImpl(transformer, root, ctx, applyAsyncChanges, false, "AsyncTransform");
+    if (status.Level != IGraphTransformer::TStatus::Async) {
+        return NThreading::MakeFuture(status);
     }
 
     return transformer.GetAsyncFuture(*root).Apply(
         [] (const NThreading::TFuture<void>&) mutable -> NThreading::TFuture<IGraphTransformer::TStatus> {
             return NThreading::MakeFuture(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Async));
         });
-
 }
 
 void AsyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx, bool applyAsyncChanges,

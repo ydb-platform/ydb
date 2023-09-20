@@ -30,6 +30,7 @@ public:
     {}
 
     void AddCluster(const TString& name, const THashMap<TString, TString>& properties) override {
+        State_->Configuration->AddValidCluster(name);
         auto& settings = State_->Configuration->Clusters[name];
         settings.Url = properties.Value("location", "");
         auto signReference = properties.Value("serviceAccountIdSignatureReference", "");

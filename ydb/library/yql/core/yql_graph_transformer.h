@@ -233,6 +233,9 @@ NThreading::TFuture<IGraphTransformer::TStatus> AsyncTransform(IGraphTransformer
 void AsyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx, bool applyAsyncChanges,
                     std::function<void(const IGraphTransformer::TStatus&)> asyncCallback);
 
+IGraphTransformer::TStatus AsyncTransformStep(IGraphTransformer& transformer, TExprNode::TPtr& root,
+                                            TExprContext& ctx, bool applyAsyncChanges);
+
 class TSyncTransformerBase : public TGraphTransformerBase {
 public:
     NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final {

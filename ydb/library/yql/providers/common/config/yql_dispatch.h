@@ -313,6 +313,10 @@ public:
         ValidClusters.insert(validClusters.begin(), validClusters.end());
     }
 
+    void AddValidCluster(const TString& cluster) {
+        ValidClusters.insert(cluster);
+    }
+
     template <typename TType, bool RUNTIME>
     TSettingHandlerImpl<TType, RUNTIME>& AddSetting(const TString& name, TConfSetting<TType, RUNTIME>& setting) {
         TIntrusivePtr<TSettingHandlerImpl<TType, RUNTIME>> handler = new TSettingHandlerImpl<TType, RUNTIME>(name, setting);

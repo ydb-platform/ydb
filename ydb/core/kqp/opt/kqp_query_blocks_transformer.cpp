@@ -2,6 +2,8 @@
 
 #include <ydb/library/yql/core/yql_graph_transformer.h>
 
+#include <util/generic/yexception.h>
+
 namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
@@ -29,38 +31,54 @@ public:
         TKqlQueryList queryBlocks(input);
         TVector<TKqlQuery> transformedQueryBlocks;
         transformedQueryBlocks.reserve(queryBlocks.Size());
-        for (auto queryBlock : queryBlocks) {
-            auto transformed = queryBlock.Ptr();
-            auto status = InstantTransform(*QueryBlockTransformer, transformed, ctx);
-            transformedQueryBlocks.emplace_back(std::move(transformed));
 
-            if (status.Level != IGraphTransformer::TStatus::Ok) {
+        // Already transformed previous time
+        for (size_t transformedBlock = 0; transformedBlock < CurrentBlock; ++transformedBlock) {
+            transformedQueryBlocks.emplace_back(queryBlocks.Item(transformedBlock));
+        }
+
+        // Current
+        TStatus status = TStatus::Ok;
+        for (; CurrentBlock < queryBlocks.Size(); ++CurrentBlock) {
+            TExprNode::TPtr transformed = queryBlocks.Item(CurrentBlock).Ptr();
+            status = AsyncTransformStep(*QueryBlockTransformer, transformed, ctx, false);
+            transformedQueryBlocks.emplace_back(std::move(transformed));
+            YQL_ENSURE(status.Level != TStatus::Repeat);
+            if (status.Level == TStatus::Ok) {
+                QueryBlockTransformer->Rewind();
+                continue;
+            }
+            if (status.Level == TStatus::Error) {
                 return status;
             }
+            // Async
+            break;
+        }
 
-            QueryBlockTransformer->Rewind();
+        // Not yet transformed
+        for (size_t nonTransformed = CurrentBlock + 1; nonTransformed < queryBlocks.Size(); ++nonTransformed) {
+            transformedQueryBlocks.emplace_back(queryBlocks.Item(nonTransformed).Ptr());
         }
 
         output = Build<TKqlQueryList>(ctx, queryBlocks.Pos())
             .Add(transformedQueryBlocks)
             .Done().Ptr();
 
-        return TStatus::Ok;
+        return status;
     }
 
     NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) override {
-        Y_UNUSED(input);
-        return NThreading::MakeFuture();
+        YQL_ENSURE(CurrentBlock < input.ChildrenSize());
+        return QueryBlockTransformer->GetAsyncFuture(*input.Child(CurrentBlock));
     }
 
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
-        Y_UNUSED(ctx);
-        output = input;
-        return TStatus::Ok;
+        return QueryBlockTransformer->ApplyAsyncChanges(input, output, ctx);
     }
 
 private:
     TAutoPtr<IGraphTransformer> QueryBlockTransformer;
+    size_t CurrentBlock = 0;
 };
 
 } // namespace
@@ -70,5 +88,3 @@ TAutoPtr<IGraphTransformer> CreateKqpQueryBlocksTransformer(TAutoPtr<IGraphTrans
 }
 
 } // namespace NKikimr::NKqp::NOpt
-
-

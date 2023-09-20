@@ -5,6 +5,7 @@
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
 
+#include <ydb/public/lib/ydb_cli/common/query_stats.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/line_reader.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_scheme.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_table.h>
@@ -15,6 +16,48 @@ namespace NConsoleClient {
 
 
 namespace {
+
+std::string ToLower(std::string_view value) {
+    size_t value_size = value.size();
+    std::string result;
+    result.resize(value_size);
+
+    for (size_t i = 0; i < value_size; ++i) {
+        result[i] = std::tolower(value[i]);
+    }
+
+    return result;
+}
+
+template <typename Predicate>
+void TrimRight(std::string & value, Predicate predicate) {
+    while (!value.empty() && predicate(value.back()))
+        value.pop_back();
+}
+
+template <typename Predicate>
+void TrimLeft(std::string & value, Predicate predicate) {
+    size_t value_size = value.size();
+    size_t i = 0;
+
+    for (; i < value_size; ++i) {
+        if (!predicate(value[i])) {
+            break;
+        }
+    }
+
+    if (i != 0) {
+        value = value.substr(i);
+    }
+}
+
+void TrimSpacesRight(std::string & value) {
+    TrimRight(value, [](char character) { return std::isspace(character); });
+}
+
+void TrimSpacesLeft(std::string & value) {
+    TrimLeft(value, [](char character) { return std::isspace(character); });
+}
 
 struct Token {
     std::string_view data;
@@ -68,8 +111,45 @@ std::vector<Token> Tokenize(std::string_view input) {
 }
 
 struct InteractiveCLIState {
-    std::string CollectStatsMode = "none";
+    NTable::ECollectQueryStatsMode CollectStatsMode = NTable::ECollectQueryStatsMode::None;
 };
+
+std::optional<NTable::ECollectQueryStatsMode> TryParseCollectStatsMode(const std::vector<Token> & tokens) {
+    size_t tokensSize = tokens.size();
+    if (tokensSize < 2) {
+        return {};
+    }
+
+    if (ToLower(tokens[0].data) != "set") {
+        return {};
+    }
+
+    std::string setQuery;
+    for (size_t i = 1; i < tokensSize; ++i) {
+        setQuery += tokens[i].data;
+    }
+
+    auto position = setQuery.find_first_of('=');
+    if (position == std::string::npos) {
+        return {};
+    }
+
+    std::string name = setQuery.substr(0, position);
+    std::string value = setQuery.substr(position + 1);
+
+    TrimSpacesLeft(name);
+    TrimSpacesRight(name);
+    if (name != "stats") {
+        return {};
+    }
+
+    TrimSpacesLeft(value);
+    TrimRight(value, [](char character) {
+        return std::isspace(character) || character == ';';
+    });
+
+    return NTable::ParseQueryStatsMode(value);
+}
 
 }
 
@@ -79,15 +159,11 @@ TInteractiveCLI::TInteractiveCLI(TClientCommand::TConfig & config, std::string p
 {}
 
 void TInteractiveCLI::Run() {
-    std::vector<std::string> SQLWords = {"SELECT", "FROM", "WHERE", "GROUP", "ORDER" , "BY", "LIMIT", "OFFSET"};
+    std::vector<std::string> SQLWords = {"SELECT", "FROM", "WHERE", "GROUP", "ORDER" , "BY", "LIMIT", "OFFSET", "EXPLAIN", "AST"};
     std::vector<std::string> Words;
     for (auto & word : SQLWords) {
         Words.push_back(word);
-        for (auto & character : word) {
-            character = std::tolower(character);
-        }
-
-        Words.push_back(word);
+        Words.push_back(ToLower(word));
     }
 
     TFsPath homeDirPath(HomeDir);
@@ -107,15 +183,13 @@ void TInteractiveCLI::Run() {
             auto tokens = Tokenize(line);
             size_t tokensSize = tokens.size();
 
-            if (tokensSize == 4 && tokens[0].data == "SET" && tokens[1].data == "stats" && tokens[2].data == "=") {
-                interactiveCLIState.CollectStatsMode = tokens[3].data;
-                while (!interactiveCLIState.CollectStatsMode.empty() && interactiveCLIState.CollectStatsMode.back() == ';')
-                    interactiveCLIState.CollectStatsMode.pop_back();
+            if (auto collectStatsMode = TryParseCollectStatsMode(tokens)) {
+                interactiveCLIState.CollectStatsMode = *collectStatsMode;
                 continue;
             }
 
-            if (!tokens.empty() && tokens.front().data == "EXPLAIN") {
-                bool printAst = tokensSize >= 2 && tokens[1].data == "AST";
+            if (!tokens.empty() && ToLower(tokens.front().data) == "explain") {
+                bool printAst = tokensSize >= 2 && ToLower(tokens[1].data) == "ast";
                 size_t skipTokens = 1 + printAst;
                 TString explainQuery;
 
@@ -129,10 +203,15 @@ void TInteractiveCLI::Run() {
                 continue;
             }
 
-            TCommandYql yqlCommand(TString(line), TString(interactiveCLIState.CollectStatsMode));
+            TString queryStatsMode(NTable::QueryStatsModeToString(interactiveCLIState.CollectStatsMode));
+            TCommandYql yqlCommand(TString(line), queryStatsMode);
             yqlCommand.Run(Config);
         } catch (TYdbErrorException &error) {
             Cerr << error;
+        } catch (yexception & error) {
+            Cerr << error;
+        } catch (std::exception & error) {
+            Cerr << error.what();
         }
     }
 

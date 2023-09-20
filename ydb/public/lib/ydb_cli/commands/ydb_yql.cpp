@@ -93,7 +93,7 @@ int TCommandYql::RunCommand(TConfig& config, const TString& script) {
     NScripting::TScriptingClient client(driver);
 
     NScripting::TExecuteYqlRequestSettings settings;
-    settings.CollectQueryStats(ParseQueryStatsMode(CollectStatsMode, NTable::ECollectQueryStatsMode::None));
+    settings.CollectQueryStats(ParseQueryStatsModeOrThrow(CollectStatsMode, NTable::ECollectQueryStatsMode::None));
 
     if (FlameGraphPath && (settings.CollectQueryStats_ != NTable::ECollectQueryStatsMode::Full
                            && settings.CollectQueryStats_ != NTable::ECollectQueryStatsMode::Profile)) {

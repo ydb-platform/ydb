@@ -113,7 +113,7 @@ int TCommandExecuteYqlScript::Run(TConfig& config) {
         PrintExplainResult(result);
     } else {
         NScripting::TExecuteYqlRequestSettings settings;
-        settings.CollectQueryStats(ParseQueryStatsMode(CollectStatsMode, NTable::ECollectQueryStatsMode::None));
+        settings.CollectQueryStats(ParseQueryStatsModeOrThrow(CollectStatsMode, NTable::ECollectQueryStatsMode::None));
 
         if (FlameGraphPath && (settings.CollectQueryStats_ != NTable::ECollectQueryStatsMode::Full
                                && settings.CollectQueryStats_ != NTable::ECollectQueryStatsMode::Profile)) {

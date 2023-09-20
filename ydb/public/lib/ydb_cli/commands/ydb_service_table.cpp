@@ -429,7 +429,7 @@ int TCommandExecuteQuery::ExecuteDataQuery(TConfig& config) {
     auto defaultStatsMode = BasicStats ? NTable::ECollectQueryStatsMode::Basic : NTable::ECollectQueryStatsMode::None;
     NTable::TExecDataQuerySettings settings;
     settings.KeepInQueryCache(true);
-    settings.CollectQueryStats(ParseQueryStatsMode(CollectStatsMode, defaultStatsMode));
+    settings.CollectQueryStats(ParseQueryStatsModeOrThrow(CollectStatsMode, defaultStatsMode));
 
     NTable::TTxSettings txSettings;
     if (TxMode) {
@@ -535,7 +535,7 @@ int TCommandExecuteQuery::ExecuteScanQuery(TConfig& config) {
 
     auto defaultStatsMode = BasicStats ? NTable::ECollectQueryStatsMode::Basic : NTable::ECollectQueryStatsMode::None;
     NTable::TStreamExecScanQuerySettings settings;
-    settings.CollectQueryStats(ParseQueryStatsMode(CollectStatsMode, defaultStatsMode));
+    settings.CollectQueryStats(ParseQueryStatsModeOrThrow(CollectStatsMode, defaultStatsMode));
 
     NTable::TAsyncScanQueryPartIterator asyncResult;
     SetInterruptHandlers();

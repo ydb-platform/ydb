@@ -2555,6 +2555,7 @@ THashSet<TStringBuf> TYtPhysicalFinalizingTransformer::OPS_WITH_SORTED_OUTPUT = 
     TYtSort::CallableName(),
     TYtReduce::CallableName(),
     TYtFill::CallableName(),
+    TYtDqProcessWrite::CallableName(),
 };
 
 }

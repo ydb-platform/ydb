@@ -96,6 +96,7 @@ struct TSelectRowsResult
 
 struct TTableReaderOptions
     : public TTransactionalOptions
+    , public TSuppressableAccessTrackingOptions
 {
     bool Unordered = false;
     bool OmitInaccessibleColumns = false;

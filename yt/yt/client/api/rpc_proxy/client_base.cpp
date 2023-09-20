@@ -723,6 +723,7 @@ TFuture<ITableReaderPtr> TClientBase::CreateTableReader(
     }
 
     ToProto(req->mutable_transactional_options(), options);
+    ToProto(req->mutable_suppressable_access_tracking_options(), options);
 
     return NRpcProxy::CreateTableReader(std::move(req));
 }

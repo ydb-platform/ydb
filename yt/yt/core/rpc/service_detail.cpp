@@ -1299,12 +1299,16 @@ void TRequestQueue::ScheduleRequestsFromQueue()
     while (QueueSize_.load() > 0 && Concurrency_.load() < concurrencyLimit) {
         if (AreThrottlersOverdrafted()) {
             SubscribeToThrottlers();
-            break;
+            return;
         }
 
         TServiceBase::TServiceContextPtr context;
-        if (!Queue_.try_dequeue(context)) {
-            break;
+        while (!Queue_.try_dequeue(context)) {
+            // False negatives are possible in Moody Camel.
+            if (QueueSize_.load() > 0) {
+                continue;
+            }
+            return;
         }
 
         DecrementQueueSize();

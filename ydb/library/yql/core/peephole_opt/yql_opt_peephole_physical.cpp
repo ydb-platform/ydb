@@ -7301,7 +7301,7 @@ ui64 ToDatetime(ui64 now)  { return std::min<ui64>(NUdf::MAX_DATETIME - 1U, now 
 ui64 ToTimestamp(ui64 now) { return std::min<ui64>(NUdf::MAX_TIMESTAMP - 1ULL, now); }
 
 struct TPeepHoleRules {
-    static constexpr std::initializer_list<TPeepHoleOptimizerMap::value_type> CommonStageRulesInit = {
+    const TPeepHoleOptimizerMap CommonStageRules = {
         {"EquiJoin", &ExpandEquiJoin},
         {"SafeCast", &ExpandCast<false>},
         {"StrictCast", &ExpandCast<true>},
@@ -7368,10 +7368,9 @@ struct TPeepHoleRules {
         {"CheckedMinus", &ExpandCheckedMinus},
         {"JsonValue", &ExpandJsonValue},
         {"JsonExists", &ExpandJsonExists},
-        //TODO(zverevgeny): add me {"MatchRecognize", &ExpandMatchRecognize}
     };
 
-    static constexpr std::initializer_list<TExtPeepHoleOptimizerMap::value_type> CommonStageExtRulesInit = {
+    const TExtPeepHoleOptimizerMap CommonStageExtRules = {
         {"Aggregate", &ExpandAggregatePeephole},
         {"AggregateCombine", &ExpandAggregatePeephole},
         {"AggregateCombineState", &ExpandAggregatePeephole},
@@ -7381,9 +7380,10 @@ struct TPeepHoleRules {
         {"AggregateFinalize", &ExpandAggregatePeephole},
         {"CostsOf", &ExpandCostsOf},
         {"JsonQuery", &ExpandJsonQuery},
+        {"MatchRecognize", &ExpandMatchRecognize}
     };
 
-    static constexpr std::initializer_list<TPeepHoleOptimizerMap::value_type> SimplifyStageRulesInit = {
+    const TPeepHoleOptimizerMap SimplifyStageRules = {
         {"Map", &OptimizeMap<false>},
         {"OrderedMap", &OptimizeMap<true>},
         {"FlatMap", &ExpandFlatMap<false>},
@@ -7395,7 +7395,7 @@ struct TPeepHoleRules {
         {"IfPresent", &OptimizeIfPresent<false>}
     };
 
-    static constexpr std::initializer_list<TPeepHoleOptimizerMap::value_type> FinalStageRulesInit = {
+    const TPeepHoleOptimizerMap FinalStageRules = {
         {"Take", &OptimizeTake},
         {"Skip", &OptimizeSkip},
         {"Likely", &ReplaceWithFirstArg},
@@ -7417,8 +7417,8 @@ struct TPeepHoleRules {
         {"FlattenStructs", &ExpandFlattenStructs},
         {"FlattenByColumns", &ExpandFlattenByColumns},
         {"CastStruct", &ExpandCastStruct},
-        {"Filter", &ExpandFilter},
-        {"OrderedFilter", &ExpandFilter},
+        {"Filter", &ExpandFilter<>},
+        {"OrderedFilter", &ExpandFilter<>},
         {"TakeWhile", &ExpandFilter<false>},
         {"SkipWhile", &ExpandFilter<true>},
         {"LMap", &ExpandLMapOrShuffleByKeys},
@@ -7459,9 +7459,9 @@ struct TPeepHoleRules {
         {"AggrGreaterOrEqual", &ExpandAggrCompare<false, true>},
     };
 
-    static constexpr std::initializer_list<TExtPeepHoleOptimizerMap::value_type> FinalStageExtRulesInit = {};
+    const TExtPeepHoleOptimizerMap FinalStageExtRules = {};
 
-    static constexpr std::initializer_list<TExtPeepHoleOptimizerMap::value_type> FinalStageNonDetRulesInit = {
+    const TExtPeepHoleOptimizerMap FinalStageNonDetRules = {
         {"Random", &Random0Arg<double>},
         {"RandomNumber", &Random0Arg<ui64>},
         {"RandomUuid", &Random0Arg<TGUID>},
@@ -7471,7 +7471,7 @@ struct TPeepHoleRules {
         {"CurrentUtcTimestamp", &Now0Arg<&ToTimestamp>}
     };
 
-    static constexpr std::initializer_list<TExtPeepHoleOptimizerMap::value_type> BlockStageExtRulesInit = {
+    const TExtPeepHoleOptimizerMap BlockStageExtRules = {
         {"NarrowFlatMap", &OptimizeWideMapBlocks},
         {"NarrowMultiMap", &OptimizeWideMapBlocks},
         {"WideMap", &OptimizeWideMapBlocks},
@@ -7487,27 +7487,9 @@ struct TPeepHoleRules {
         {"WideSort", &OptimizeTopOrSortBlocks},
     };
 
-    TPeepHoleRules()
-        : CommonStageRules(CommonStageRulesInit)
-        , CommonStageExtRules(CommonStageExtRulesInit)
-        , FinalStageRules(FinalStageRulesInit)
-        , FinalStageExtRules(FinalStageExtRulesInit)
-        , SimplifyStageRules(SimplifyStageRulesInit)
-        , FinalStageNonDetRules(FinalStageNonDetRulesInit)
-        , BlockStageExtRules(BlockStageExtRulesInit)
-    {}
-
     static const TPeepHoleRules& Instance() {
         return *Singleton<TPeepHoleRules>();
     }
-
-    const TPeepHoleOptimizerMap CommonStageRules;
-    const TExtPeepHoleOptimizerMap CommonStageExtRules;
-    const TPeepHoleOptimizerMap FinalStageRules;
-    const TExtPeepHoleOptimizerMap FinalStageExtRules;
-    const TPeepHoleOptimizerMap SimplifyStageRules;
-    const TExtPeepHoleOptimizerMap FinalStageNonDetRules;
-    const TExtPeepHoleOptimizerMap BlockStageExtRules;
 };
 
 THolder<IGraphTransformer> CreatePeepHoleCommonStageTransformer(TTypeAnnotationContext& types,

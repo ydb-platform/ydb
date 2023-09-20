@@ -31,7 +31,7 @@ bool IsStreaming(const TExprNode::TPtr& input, const TTypeAnnotationContext& typ
 }
 } //namespace
 
-TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeAnnCtx) {
+TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typeAnnCtx) {
     YQL_ENSURE(node->IsCallable({"MatchRecognize"}));
     const auto& input = node->ChildRef(0);
     const auto& partitionKeySelector = node->ChildRef(1);

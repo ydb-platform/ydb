@@ -30,10 +30,6 @@ class TS3Wrapper: public TActor<TS3Wrapper> {
     }
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::S3_WRAPPER_ACTOR;
-    }
-
     explicit TS3Wrapper(IExternalStorageOperator::TPtr storageOperator)
         : TActor(&TThis::StateWork)
         , StorageOperator(storageOperator)

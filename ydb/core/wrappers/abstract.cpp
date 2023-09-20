@@ -14,7 +14,7 @@ IExternalStorageConfig::TPtr IExternalStorageConfig::Construct(const NKikimrSche
     if (settings.GetEndpoint() == "fake") {
         return std::make_shared<TFakeExternalStorageConfig>(settings.GetBucket(), settings.GetSecretKey());
     } else {
-        return std::make_shared <TS3ExternalStorageConfig>(settings);
+        return std::make_shared<TS3ExternalStorageConfig>(settings);
     }
 }
 }

@@ -48,7 +48,7 @@ private:
         using TCtx = TContext<TEvRequest, TEvResponse>;
         ev->Get()->MutableRequest().WithBucket(Bucket);
 
-        auto ctx = std::make_shared<TCtx>(TlsActivationContext->ActorSystem(), ev->Sender, ev->Get()->GetRequestContext(), StorageClass);
+        auto ctx = std::make_shared<TCtx>(TlsActivationContext->ActorSystem(), ev->Sender, ev->Get()->GetRequestContext(), StorageClass, ReplyAdapter);
         bool verbose = Verbose;
         auto callback = [verbose](
             const Aws::S3::S3Client*,

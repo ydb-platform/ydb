@@ -18,6 +18,7 @@ namespace NKikimr {
         TPDiskCtxPtr PDiskCtx;
         const TDuration DskTrackerInterval;
         NMonGroup::TDskOutOfSpaceGroup MonGroup;
+        NMonGroup::TCostGroup CostGroup;
         // how many 'wait intervals' we spent in 'bad' zones
         ui64 YellowZonePeriods = 0;
         ui64 OrangeZonePeriods = 0;
@@ -91,7 +92,7 @@ namespace NKikimr {
             MonGroup.DskTotalBytes() = msg->TotalChunks * PDiskCtx->Dsk->ChunkSize;
             MonGroup.DskFreeBytes() = msg->FreeChunks * PDiskCtx->Dsk->ChunkSize;
             if (msg->NumSlots > 0) {
-                MonGroup.DiskTimeAvailableNs() = 1'000'000'000ull / msg->NumSlots;
+                CostGroup.DiskTimeAvailableNs() = 1'000'000'000ull / msg->NumSlots;
             }
 
             Become(&TThis::WaitFunc);
@@ -201,6 +202,7 @@ namespace NKikimr {
             , PDiskCtx(pdiskCtx)
             , DskTrackerInterval(dskTrackerInterval)
             , MonGroup(VCtx->VDiskCounters, "subsystem", "outofspace")
+            , CostGroup(VCtx->VDiskCounters, "subsystem", "cost")
         {}
     };
 

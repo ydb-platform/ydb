@@ -146,8 +146,6 @@ public:                                                                         
                 COUNTER_INIT(HugeUsedChunks, false);
                 COUNTER_INIT(HugeCanBeFreedChunks, false);
                 COUNTER_INIT(HugeLockedChunks, false);
-                COUNTER_INIT(DiskTimeAvailableNs, false);
-                COUNTER_INIT(EstimatedDiskTimeConsumptionNs, true);
             }
 
             COUNTER_DEF(DskOutOfSpace);
@@ -158,9 +156,22 @@ public:                                                                         
             COUNTER_DEF(HugeUsedChunks);       // chunks used by huge heap
             COUNTER_DEF(HugeCanBeFreedChunks); // number of chunks that can be freed after defragmentation
             COUNTER_DEF(HugeLockedChunks);
-            // PDisk time
+        };
+
+        ///////////////////////////////////////////////////////////////////////////////////
+        // TCostGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TCostGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TCostGroup)
+            {
+                COUNTER_INIT(DiskTimeAvailableNs, false);
+                COUNTER_INIT(VDiskUserCostNs, true);
+                COUNTER_INIT(VDiskInternalCostNs, true);
+            }
             COUNTER_DEF(DiskTimeAvailableNs);
-            COUNTER_DEF(EstimatedDiskTimeConsumptionNs);
+            COUNTER_DEF(VDiskUserCostNs);
+            COUNTER_DEF(VDiskInternalCostNs);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////

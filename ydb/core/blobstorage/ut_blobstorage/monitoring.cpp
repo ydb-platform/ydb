@@ -1,7 +1,7 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 
-constexpr bool VERBOSE = true;
+constexpr bool VERBOSE = false;
 
 TString MakeData(ui32 dataSize) {
     TString data(dataSize, '\0');
@@ -88,8 +88,6 @@ void Test(const TBlobStorageGroupInfo::TTopology& topology, TInflightActor* acto
 
     ui64 dsproxyCost = 0;
     ui64 vdiskCost = 0;
-    ui64 hugePuts = 0;
-    ui64 logPuts = 0;
 
     auto* appData = env.Runtime->GetAppData();
     Y_VERIFY(appData);
@@ -114,9 +112,7 @@ void Test(const TBlobStorageGroupInfo::TTopology& topology, TInflightActor* acto
                 GetSubgroup("subsystem", "request")->
                 GetSubgroup("storagePool", env.StoragePoolName)->
                 GetCounter("DSProxyDiskCostNs")->Val();
-        vdiskCost = vdisksTotal("outofspace", "EstimatedDiskTimeConsumptionNs");
-        logPuts = vdisksTotal("skeletonfront", "SkeletonFront/LogPuts/CostProcessed");
-        hugePuts = vdisksTotal("skeletonfront", "SkeletonFront/HugePutsForeground/CostProcessed");
+        vdiskCost = vdisksTotal("cost", "VDiskUserCostNs");
     };
 
     updateCounters();
@@ -133,7 +129,7 @@ void Test(const TBlobStorageGroupInfo::TTopology& topology, TInflightActor* acto
     i64 diff = (i64)dsproxyCost - vdiskCost;
     str << "OKs# " << actor->OKs << ", Fails# " << actor->Fails << ", Cost on dsproxy# "
             << dsproxyCost << ", Cost on vdisks# " << vdiskCost << ", proportion# " << proportion
-            << " diff# " << diff << " hugePuts# " << hugePuts << " logPuts# " << logPuts;
+            << " diff# " << diff;
 
     if constexpr(VERBOSE) {
         Cerr << str.Str() << Endl;
@@ -234,6 +230,62 @@ private:
     ui32 DataSize;
 };
 
+class TInflightActorPatch : public TInflightActor {
+public:
+    TInflightActorPatch(ui32 requests, ui32 inflight, ui32 dataSize = 1024)
+        : TInflightActor(requests, inflight)
+        , DataSize(dataSize)
+    {}
+
+    STRICT_STFUNC(StateWork,
+        hFunc(TEvBlobStorage::TEvPatchResult, Handle);
+        hFunc(TEvBlobStorage::TEvPutResult, Handle);
+    )
+
+    virtual void BootstrapImpl(const TActorContext&/* ctx*/) override {
+        TString data = MakeData(DataSize);
+        for (ui32 i = 0; i < RequestInflight; ++i) {
+            TLogoBlobID blobId(1, 1, 1, 10, DataSize, 1 + i);
+            auto ev = new TEvBlobStorage::TEvPut(blobId, data, TInstant::Max());
+            SendToBSProxy(SelfId(), GroupId, ev, 0);
+        }
+        Become(&TInflightActorPatch::StateWork);
+    }
+
+protected:
+    virtual void SendRequest() override {
+        TLogoBlobID oldId = Blobs.front();
+        Blobs.pop_front();
+        TLogoBlobID newId(1, 1, oldId.Step() + 1, 10, DataSize, oldId.Cookie());
+        Y_VERIFY(TEvBlobStorage::TEvPatch::GetBlobIdWithSamePlacement(oldId, &newId, BlobIdMask, GroupId, GroupId));
+        TArrayHolder<TEvBlobStorage::TEvPatch::TDiff> diffs(new TEvBlobStorage::TEvPatch::TDiff[1]);
+        char c = 'a' + RequestCount % 26;
+        diffs[0].Set(TString(DataSize, c), 0);
+        auto ev = new TEvBlobStorage::TEvPatch(GroupId, oldId, newId, BlobIdMask, std::move(diffs), 1, TInstant::Max());
+        SendToBSProxy(SelfId(), GroupId, ev, 0);
+    }
+
+
+    void Handle(TEvBlobStorage::TEvPatchResult::TPtr res) {
+        Blobs.push_back(res->Get()->Id);
+        HandleReply(res->Get()->Status);
+    }
+
+    void Handle(TEvBlobStorage::TEvPutResult::TPtr res) {
+        Blobs.push_back(res->Get()->Id);
+        if (++BlobsWritten == RequestInflight) {
+            SendRequests();
+        }
+    }
+
+protected:
+    std::deque<TLogoBlobID> Blobs;
+    ui32 BlobIdMask = TLogoBlobID::MaxCookie & 0xfffff000;
+    ui32 BlobsWritten = 0;
+    std::string Data;
+    ui32 DataSize;
+};
+
 Y_UNIT_TEST_SUITE(CostMetricsPutMirror3dc) {
     MAKE_TEST_W_DATASIZE(Mirror3dc, Put, 1, 1, 1000);
     MAKE_TEST_W_DATASIZE(Mirror3dc, Put, 10, 1, 1000);
@@ -291,4 +343,24 @@ Y_UNIT_TEST_SUITE(CostMetricsGetHugeMirror3dc) {
     MAKE_TEST_W_DATASIZE(Mirror3dc, Get, 10, 10, 2000000);
     MAKE_TEST_W_DATASIZE(Mirror3dc, Get, 100, 10, 2000000);
     MAKE_TEST_W_DATASIZE(Mirror3dc, Get, 10000, 100, 2000000);
+}
+
+Y_UNIT_TEST_SUITE(CostMetricsPatchMirror3dc) {
+    MAKE_TEST_W_DATASIZE(Mirror3dc, Patch, 1, 1, 1000);
+    MAKE_TEST_W_DATASIZE(Mirror3dc, Patch, 10, 1, 1000);
+    MAKE_TEST_W_DATASIZE(Mirror3dc, Patch, 100, 1, 1000);
+    MAKE_TEST_W_DATASIZE(Mirror3dc, Patch, 2, 2, 1000);
+    MAKE_TEST_W_DATASIZE(Mirror3dc, Patch, 10, 10, 1000);
+    MAKE_TEST_W_DATASIZE(Mirror3dc, Patch, 100, 10, 1000);
+    MAKE_TEST_W_DATASIZE(Mirror3dc, Patch, 10000, 100, 1000);
+}
+
+Y_UNIT_TEST_SUITE(CostMetricsPatchBlock4Plus2) {
+    MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 1, 1, 1000);
+    MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 10, 1, 1000);
+    MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 100, 1, 1000);
+    MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 2, 2, 1000);
+    MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 10, 10, 1000);
+    MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 100, 10, 1000);
+    MAKE_TEST_W_DATASIZE(4Plus2Block, Patch, 10000, 100, 1000);
 }

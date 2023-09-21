@@ -3,12 +3,14 @@ package utils
 import (
 	"fmt"
 	"io"
+	"testing"
 
 	"github.com/ydb-platform/ydb/library/go/core/log"
 	"github.com/ydb-platform/ydb/library/go/core/log/zap"
 	api_common "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/api/common"
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest"
 )
 
 // TODO: it's better to do this in GRPC middleware
@@ -47,6 +49,8 @@ func NewDevelopmentLogger() (log.Logger, error) {
 
 	return &zap.Logger{L: zapLogger}, nil
 }
+
+func NewTestLogger(t *testing.T) log.Logger { return &zap.Logger{L: zaptest.NewLogger(t)} }
 
 func DumpReadSplitsResponse(logger log.Logger, resp *api_service_protos.TReadSplitsResponse) {
 	if columnSet := resp.GetColumnSet(); columnSet != nil {

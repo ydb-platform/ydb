@@ -53,37 +53,35 @@ func (h *handlerImpl[CONN]) DescribeTable(
 		return nil, fmt.Errorf("query builder error: %w", err)
 	}
 
-	// logger.Debug("execute query", log.String("query", query))
 	defer func() { utils.LogCloserError(logger, rows, "close rows") }()
 
 	var (
 		columnName string
 		typeName   string
-		schema     api_service_protos.TSchema
 	)
+
+	sb := &schemaBuilder{typeMapper: h.typeMapper}
 
 	for rows.Next() {
 		if err := rows.Scan(&columnName, &typeName); err != nil {
 			return nil, fmt.Errorf("rows scan: %w", err)
 		}
 
-		column, err := h.typeMapper.SQLTypeToYDBColumn(columnName, typeName)
-		if err != nil {
-			return nil, fmt.Errorf("sql type to ydb column (%s, %s): %w", columnName, typeName, err)
+		if err := sb.addColumn(columnName, typeName); err != nil {
+			return nil, fmt.Errorf("add column to schema builder: %w", err)
 		}
-
-		schema.Columns = append(schema.Columns, column)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("rows error: %w", err)
+		return nil, fmt.Errorf("rows iteration: %w", err)
 	}
 
-	if len(schema.Columns) == 0 {
-		return nil, utils.ErrTableDoesNotExist
+	schema, err := sb.build(logger)
+	if err != nil {
+		return nil, fmt.Errorf("build schema: %w", err)
 	}
 
-	return &api_service_protos.TDescribeTableResponse{Schema: &schema}, nil
+	return &api_service_protos.TDescribeTableResponse{Schema: schema}, nil
 }
 
 func (h *handlerImpl[CONN]) ReadSplit(

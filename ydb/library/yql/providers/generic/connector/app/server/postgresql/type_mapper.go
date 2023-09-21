@@ -76,7 +76,10 @@ func (tm typeMapper) YDBTypeToAcceptor(ydbType *Ydb.Type) (any, error) {
 			return nil, fmt.Errorf("make acceptor from optional YDB type: %w", err)
 		}
 	default:
-		return nil, fmt.Errorf("only primitive types are supported, got '%v' instead", ydbType)
+		return nil, fmt.Errorf(
+			"only primitive types are supported, got '%v' instead: %w",
+			ydbType,
+			utils.ErrDataTypeNotSupported)
 	}
 
 	return acceptor, nil

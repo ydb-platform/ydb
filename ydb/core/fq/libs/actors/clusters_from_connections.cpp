@@ -85,6 +85,7 @@ void FillSolomonClusterConfig(NYql::TSolomonClusterConfig& clusterConfig,
     clusterConfig.SetClusterType(TSolomonClusterConfig::SCT_MONITORING);
     clusterConfig.MutablePath()->SetProject(monitoring.project());
     clusterConfig.MutablePath()->SetCluster(monitoring.cluster());
+    clusterConfig.SetUseSsl(true);
     FillClusterAuth(clusterConfig, monitoring.auth(), authToken, accountIdSignatures);
 }
 

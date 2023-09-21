@@ -61,8 +61,7 @@ public:
         KqpSessionSpan = NWilson::TSpan(
             TWilsonKqp::KqpSession, std::move(traceId),
             "Session.query." + NKikimrKqp::EQueryAction_Name(action), NWilson::EFlags::AUTO_END);
-
-        UserRequestContext = MakeIntrusive<TUserRequestContext>(ev->Get()->GetTraceId(), Database, sessionId);
+        UserRequestContext = MakeIntrusive<TUserRequestContext>(RequestEv->GetTraceId(), Database, sessionId);
     }
 
     // the monotonously growing counter, the ordinal number of the query,

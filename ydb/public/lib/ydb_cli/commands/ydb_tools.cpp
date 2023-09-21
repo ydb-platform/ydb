@@ -8,6 +8,9 @@
 #include <util/stream/format.h>
 #include <util/string/split.h>
 
+#include <algorithm>
+#include <queue>
+
 namespace NYdb::NConsoleClient {
 
 TCommandTools::TCommandTools()
@@ -17,6 +20,7 @@ TCommandTools::TCommandTools()
     AddCommand(std::make_unique<TCommandRestore>());
     AddCommand(std::make_unique<TCommandCopy>());
     AddCommand(std::make_unique<TCommandRename>());
+    AddCommand(std::make_unique<TCommandPgConvert>());
 }
 
 TToolsCommand::TToolsCommand(const TString& name, const std::initializer_list<TString>& aliases, const TString& description)
@@ -374,6 +378,265 @@ int TCommandRename::Run(TConfig& config) {
             FillSettings(NTable::TRenameTablesSettings())
         ).GetValueSync()
     );
+    return EXIT_SUCCESS;
+}
+
+TCommandPgConvert::TCommandPgConvert()
+    : TToolsCommand("pg-convert", {}, "Convert pg_dump result SQL file for YDB postgres layer")
+{}
+
+void TCommandPgConvert::Config(TConfig& config) {
+    TToolsCommand::Config(config);
+    config.NeedToConnect = false;
+    config.SetFreeArgsNum(0);
+
+    config.Opts->AddLongOption('i', "input",
+        "Path to input SQL file. Read from stdin if not specified").StoreResult(&FilePath);
+}
+
+void TCommandPgConvert::Parse(TConfig& config) {
+    TToolsCommand::Parse(config);
+    AdjustPath(config);
+}
+
+namespace {
+
+class TPgDumpParser {
+    class TSQLCommandNode {
+        using TSelfPtr = std::unique_ptr<TSQLCommandNode>;
+
+        struct TEdge {
+            TSelfPtr NodePtr;
+            std::function<void()> Callback;
+        };
+
+    public:
+        TSQLCommandNode* AddCommand(const TString& commandName, TSelfPtr node, const std::function<void()>& callback = []{}) {
+            ChildNodes.insert({commandName, TEdge{std::move(node), callback}});
+            return ChildNodes.at(commandName).NodePtr.get();
+        }
+
+        TSQLCommandNode* AddCommand(const TString& commandName, const std::function<void()>& callback = []{}) {
+            ChildNodes.insert({commandName, TEdge{std::make_unique<TSQLCommandNode>(), callback}});
+            return ChildNodes.at(commandName).NodePtr.get();
+        }
+
+        TSQLCommandNode* AddOptionalCommand(const TString& commandName, const std::function<void()>& callback = []{}) {
+            CycleCommands.insert({commandName, callback});
+            return this;
+        }
+
+        TSQLCommandNode* AddOptionalCommands(const TVector<TString>& commandNames) {
+            for (const auto& name : commandNames) {
+                CycleCommands.insert({name, []{}});
+            }
+            return this;
+        }
+
+        TSQLCommandNode* GetNextCommand(const TString& commandName) {
+            if (ChildNodes.find(commandName) != ChildNodes.end()) {
+                return ChildNodes.at(commandName).NodePtr.get();
+            }
+            if (CycleCommands.find(commandName) != CycleCommands.end()) {
+                return this;
+            }
+            return nullptr;
+        }
+
+    private:
+        std::map<TString, TEdge> ChildNodes;
+        std::map<TString, std::function<void()>> CycleCommands;
+    };
+
+public:
+    TPgDumpParser() {
+        auto searchPrimaryKeyNode = Root->AddCommand("CREATE")->
+            AddOptionalCommands({"GLOBAL", "LOCAL", "TEMP", "TEMPORARY", "UNLOGGED"})->
+            AddCommand("TABLE")->AddOptionalCommands({"IF", "NOT", "EXISTS"})->
+            AddCommand("", [this]{TableName = LastToken;});
+        searchPrimaryKeyNode->AddCommand("PRIMARY")->AddCommand("KEY",
+            [this] {
+                IsCreateTable = false; 
+                BracesCount = 0;
+            });
+        searchPrimaryKeyNode->AddOptionalCommand("(", [this]{++BracesCount;});
+        searchPrimaryKeyNode->AddOptionalCommand(")", [this]{--BracesCount;});
+        searchPrimaryKeyNode->AddOptionalCommand("");
+
+        Root->AddCommand("INSERT")->AddCommand("INTO")->AddCommand("", [this]{IsInsert = true;});
+        Root->AddCommand("SELECT")->AddCommand("", [this]{TableName = LastToken;})->AddCommand(";", [this]{IsSelect = true;});
+        Root->AddCommand("ALTER")->AddCommand("TABLE", [this]{IsAlterTable = true;})->AddCommand("ONLY")->
+            AddCommand("", [this]{TableName = LastToken;})->AddCommand("ADD")->AddCommand("CONSTRAINT")->
+            AddCommand("", [this]{ConstraintName = LastToken;})->AddCommand("PRIMARY")->AddCommand("KEY")->
+            AddCommand("(")->AddCommand("", [this]{PrimaryKeyName=LastToken;})->
+            AddCommand(")", [this]{IsPrimaryKey=true;})->AddCommand(";");
+    }
+
+    void AddChar(char c) {
+        if (std::isspace(c) || IsNewTokenSymbol(c) ||
+            (!Buffers.back().empty() && IsNewTokenSymbol(Buffers.back().back()))) {
+            EndToken();
+            if (std::isspace(c)) {
+                Buffers.back().push_back(c);
+                return;
+            }
+        }
+
+        LastToken += c;
+        Buffers.back() += c;
+    }
+
+    void WritePgDump() {
+        EndToken();
+        for (const auto& buffer : Buffers) {
+            Cout << buffer;
+        }
+        Buffers.clear();
+    }
+
+private:
+    static bool IsNewTokenSymbol(char c) {
+        return c == '(' || c == ')' || c == ',' || c == ';';
+    }
+
+    void ApplyToken() {
+        auto next = CurrentNode->GetNextCommand(LastToken);
+        if (next != nullptr) {
+            CurrentNode = next;
+            return;
+        }
+        next = CurrentNode->GetNextCommand("");
+        if (next != nullptr) {
+            CurrentNode = next;
+            return;
+        }
+        if (CurrentNode != Root.get()) {
+            CurrentNode = Root.get();
+            if (IsAlterTable) {
+                IsCommentAlterTable = true;
+                IsAlterTable = false;
+            }
+            ApplyToken();
+        }
+    }
+
+    void EndToken() {
+        ApplyToken();
+        PublicSchemeCheck();
+        PgCatalogCheck();
+        CreateTableCheck();
+        AlterTableCheck();
+        LastToken.clear();
+    }
+
+    void PublicSchemeCheck() {
+        if (IsInsert) {
+            IsInsert = false;
+            if (LastToken.StartsWith("public.")) {
+                Buffers.back().remove(LastToken.size());
+                TStringBuf token = LastToken;
+                token.remove_prefix(TString("public.").size());
+                Buffers.back() += token;
+            }
+        }
+    }
+
+    TString ExtractToken(TString& result, const std::function<bool(char)>& pred) {
+        auto pos = Buffers.back().size();
+        while (pos > 0 && pred(Buffers.back()[pos - 1])) {
+            --pos;
+        }
+        TString token = Buffers.back().substr(pos, Buffers.back().size() - pos);
+        result += token;
+        Buffers.back().remove(pos);
+        std::reverse(token.begin(), token.vend());
+        return token;
+    }
+
+    void PgCatalogCheck() {
+        if (IsSelect) {
+            IsSelect = false;
+            if (TableName.StartsWith("pg_catalog.set_config.")) {
+                TString tmpBuffer;
+                ExtractToken(tmpBuffer, [](char c){return !std::isspace(c);}); // ;
+                ExtractToken(tmpBuffer, [](char c){return std::isspace(c);});
+                ExtractToken(tmpBuffer, [](char c){return !std::isspace(c);}); // pg_catalog.set_config.*
+                ExtractToken(tmpBuffer, [](char c){return std::isspace(c);});
+                ExtractToken(tmpBuffer, [](char c){return !std::isspace(c);}); // SELECT
+                std::reverse(tmpBuffer.begin(), tmpBuffer.vend());
+                Buffers.back() += TStringBuilder() << "\n-- " << tmpBuffer << "\n";
+            }
+        }
+    }
+
+    void AlterTableCheck() {
+        if (IsCommentAlterTable) {
+            IsCommentAlterTable = false;
+            TString tmpBuffer;
+            while (!Buffers.back().empty()) {
+                auto token = ExtractToken(tmpBuffer, [](char c){return !std::isspace(c);});
+                if (token == "ALTER") {
+                    break;
+                }
+                ExtractToken(tmpBuffer, [](char c){return std::isspace(c);});
+            }
+            std::reverse(tmpBuffer.begin(), tmpBuffer.vend());
+            Buffers.back() += TStringBuilder() << "\n-- " << tmpBuffer << "\n";
+        }
+
+        if (IsPrimaryKey) {
+            IsPrimaryKey = false;
+            if (BufferIdByTableName.find(PrimaryKeyName) != BufferIdByTableName.end()) {
+                TString& createTableBuffer = Buffers[BufferIdByTableName[PrimaryKeyName]];
+                createTableBuffer.pop_back();
+                createTableBuffer += TStringBuilder() << ",\nCONSTRAINT " << ConstraintName 
+                    << " PRIMARY KEY(" + PrimaryKeyName + ")\n)";
+            }
+        }
+    }
+
+    void CreateTableCheck() {
+        if (!IsCreateTable && BracesCount > 0) {
+            IsCreateTable = true;
+        }
+        if (IsCreateTable && BracesCount == 0) {
+            IsCreateTable = false;
+            BufferIdByTableName[TableName] = Buffers.size();
+            Buffers.push_back("");
+            CurrentNode = Root.get();
+        }
+    }
+
+    std::vector<TString> Buffers{""};
+    std::map<TString, size_t> BufferIdByTableName;
+    TString LastToken, TableName, ConstraintName, PrimaryKeyName;
+    bool IsCreateTable = false;
+    bool IsInsert = false;
+    bool IsSelect = false;
+    bool IsAlterTable = false;
+    bool IsCommentAlterTable = false;
+    bool IsPrimaryKey = false;
+    size_t BracesCount = 0;
+    std::unique_ptr<TSQLCommandNode> Root = std::make_unique<TSQLCommandNode>();
+    TSQLCommandNode* CurrentNode = Root.get();
+};
+
+};
+
+int TCommandPgConvert::Run(TConfig& config) {
+    Y_UNUSED(config);
+    std::unique_ptr<TFileInput> fileInput;
+    if (FilePath) {
+        fileInput = std::make_unique<TFileInput>(FilePath);
+    }
+    IInputStream& input = fileInput ? *fileInput : Cin;
+    TPgDumpParser parser;
+    char c;
+
+    while (input.ReadChar(c)) {
+        parser.AddChar(c);
+    }
+    parser.WritePgDump();
     return EXIT_SUCCESS;
 }
 

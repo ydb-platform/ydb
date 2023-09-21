@@ -16,7 +16,12 @@ using TEpsilonTransitions = std::vector<TEpsilonTransition>;
 using TMatchedVarTransition = std::pair<ui32, size_t>; //{varIndex, to}
 using TQuantityEnterTransition = size_t; //to
 using TQuantityExitTransition = std::pair<std::pair<ui64, ui64>, std::pair<size_t, size_t>>; //{{min, max}, {foFindMore, toMatched}}
-using TNfaTransition = std::variant<TMatchedVarTransition, TEpsilonTransitions, TQuantityEnterTransition, TQuantityExitTransition>;
+using TNfaTransition = std::variant<
+    TMatchedVarTransition,
+    TEpsilonTransitions,
+    TQuantityEnterTransition,
+    TQuantityExitTransition
+>;
 
 class TNfaTransitionGraph {
 public:
@@ -97,8 +102,8 @@ private:
 class TNfa {
     using TRange = TSparseList::TRange;
     using TMatchedVars = TMatchedVars<TRange>;
-    struct State {
-        State(size_t index, const TMatchedVars& vars, std::stack<ui64>&& quantifiers)
+    struct TState {
+        TState(size_t index, const TMatchedVars& vars, std::stack<ui64>&& quantifiers)
             : Index(index)
             , Vars(vars)
             , Quantifiers(quantifiers)
@@ -107,10 +112,10 @@ class TNfa {
         TMatchedVars Vars;
         std::stack<ui64> Quantifiers; //get rid of this
 
-        friend inline bool operator < (const State& lhs, const State& rhs) {
+        friend inline bool operator < (const TState& lhs, const TState& rhs) {
             return std::tie(lhs.Index, lhs.Quantifiers, lhs.Vars) < std::tie(rhs.Index, rhs.Quantifiers, rhs.Vars);
         }
-        friend inline bool operator == (const State& lhs, const State& rhs) {
+        friend inline bool operator == (const TState& lhs, const TState& rhs) {
             return std::tie(lhs.Index, lhs.Quantifiers, lhs.Vars) == std::tie(rhs.Index, rhs.Quantifiers, rhs.Vars);
         }
     };
@@ -125,11 +130,11 @@ public:
     void ProcessRow(TSparseList::TRange&& currentRowLock, TComputationContext& ctx){
         ActiveStates.emplace(TransitionGraph->Input, TMatchedVars(Defines.size()), std::stack<ui64>{});
         MakeEpsilonTransitions();
-        std::set<State> newStates;
-        std::set<State> deletedStates;
+        std::set<TState> newStates;
+        std::set<TState> deletedStates;
         for (const auto& s: ActiveStates) {
             const auto& t = TransitionGraph->Transitions[s.Index];
-            if (t.index() == 0) {
+            if (t.index() == 0) { //Here we handle only transitions of TMatchedVarTransition type, all other transtitions are handled in MakeEpsilonTransitions
                 MatchedRangesArg->SetValue(ctx, ctx.HolderFactory.Create<TMatchedVarsValue<TRange>>(ctx.HolderFactory, s.Vars));
                 const auto& matchedVarTransition = std::get<0>(t);
                 const auto varIndex = matchedVarTransition.first;
@@ -171,40 +176,55 @@ public:
     }
 
 private:
+    //TODO (zverevgeny): Consider to change to std::vector for the sake of perf
+    using TStateSet = std::set<TState>;
+    struct TTransitionVisitor {
+        TTransitionVisitor(const TState& state,  TStateSet& newStates, TStateSet& deletedStates)
+            : State(state)
+            , NewStates(newStates)
+            , DeletedStates(deletedStates)
+        {}
+        void operator()(const TMatchedVarTransition& var) {
+            //Transitions of TMatchedVarTransition type are handled in ProcessRow method
+            Y_UNUSED(var);
+        }
+        void operator()(const TEpsilonTransitions& epsilonTransitions) {
+            for (const auto& i: epsilonTransitions) {
+                NewStates.emplace(i, TMatchedVars(State.Vars), std::stack<ui64>(State.Quantifiers));
+            }
+        }
+        void operator()(const TQuantityEnterTransition& quantityEnterTransition) {
+            DeletedStates.insert(State);
+            auto quantifiers = State.Quantifiers; //TODO get rid of this copy
+            quantifiers.push(0);
+            NewStates.emplace(quantityEnterTransition, TMatchedVars(State.Vars), std::move(quantifiers));
+        }
+        void operator()(const TQuantityExitTransition& quantityExitTransition) {
+            DeletedStates.insert(State);
+            auto minQuantity = quantityExitTransition.first.first;
+            auto maxQuantity = quantityExitTransition.first.second;
+            if (State.Quantifiers.top() + 1 < quantityExitTransition.first.second) {
+                auto q = State.Quantifiers;
+                q.top()++;
+                NewStates.emplace(quantityExitTransition.second.first, TMatchedVars(State.Vars), std::move(q));
+            }
+            if (State.Quantifiers.top() + 1 >= minQuantity && State.Quantifiers.top() + 1 <= maxQuantity) {
+                auto q = State.Quantifiers;
+                q.pop();
+                NewStates.emplace(quantityExitTransition.second.second, TMatchedVars(State.Vars), std::move(q));
+            }
+
+        }
+        const TState& State;
+        TStateSet& NewStates;
+        TStateSet& DeletedStates;
+    };
     bool MakeEpsilonTransitionsImpl() {
-        std::set<State> newStates;
-        std::set<State> deletedStates;
+        TStateSet newStates;
+        TStateSet deletedStates;
         for (const auto& s: ActiveStates) {
             ++EpsilonTransitionsLastRow;
-            const auto& t = TransitionGraph->Transitions[s.Index];
-            if (t.index() == 1) {
-                const auto& epsilonTransitions = std::get<1>(t);
-                for (const auto& i: epsilonTransitions) {
-                    newStates.emplace(i, TMatchedVars(s.Vars), std::stack<ui64>(s.Quantifiers));
-                }
-                deletedStates.insert(s);
-            } else if (t.index() == 2) {
-                const auto quantityEnterTransition = std::get<2>(t);
-                deletedStates.insert(s);
-                auto quantifiers = s.Quantifiers; //TODO get rid of this copy
-                quantifiers.push(0);
-                newStates.emplace(quantityEnterTransition, TMatchedVars(s.Vars), std::move(quantifiers));
-            } else if (t.index() == 3) {
-                const auto quantityExitTransition = std::get<3>(t);
-                deletedStates.insert(s);
-                auto minQuantity = quantityExitTransition.first.first;
-                auto maxQuantity = quantityExitTransition.first.second;
-                if (s.Quantifiers.top() + 1 < quantityExitTransition.first.second) {
-                    auto q = s.Quantifiers;
-                    q.top()++;
-                    newStates.emplace(quantityExitTransition.second.first, TMatchedVars(s.Vars), std::move(q));
-                }
-                if (s.Quantifiers.top() + 1 >= minQuantity && s.Quantifiers.top() + 1 <= maxQuantity) {
-                    auto q = s.Quantifiers;
-                    q.pop();
-                    newStates.emplace(quantityExitTransition.second.second, TMatchedVars(s.Vars), std::move(q));
-                }
-            }
+            std::visit(TTransitionVisitor(s, newStates, deletedStates), TransitionGraph->Transitions[s.Index]);
         }
         bool result = newStates != deletedStates;
         for (auto& s: deletedStates) {
@@ -222,7 +242,7 @@ private:
     TNfaTransitionGraph::TPtr TransitionGraph;
     IComputationExternalNode* const MatchedRangesArg;
     const TComputationNodePtrVector Defines;
-    std::set<State> ActiveStates; //NFA state
+    TStateSet ActiveStates; //NFA state
     size_t EpsilonTransitionsLastRow = 0;
 };
 

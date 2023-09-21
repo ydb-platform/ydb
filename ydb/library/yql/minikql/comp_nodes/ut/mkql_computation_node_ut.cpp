@@ -27,7 +27,7 @@ constexpr auto TotalSambles =
 
 std::vector<std::pair<i8, double>> MakeSamples() {
     std::default_random_engine eng;
-    std::uniform_int_distribution<i8> keys(-100, +100);
+    std::uniform_int_distribution<int> keys(-100, +100);
     std::uniform_real_distribution<double> unif(-999.0, +999.0);
 
     std::vector<std::pair<i8, double>> samples(TotalSambles);

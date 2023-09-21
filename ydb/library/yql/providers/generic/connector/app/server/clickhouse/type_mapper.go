@@ -1,6 +1,7 @@
 package clickhouse
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"time"
@@ -19,10 +20,15 @@ type typeMapper struct {
 }
 
 func (tm typeMapper) SQLTypeToYDBColumn(columnName, typeName string) (*Ydb.Column, error) {
-	var (
-		ydbType  *Ydb.Type
-		nullable bool
-	)
+	var ydbType *Ydb.Type
+
+	// By default all columns in CH are non-nullable, so
+	// we wrap YDB types into Optional type only in such cases:
+	//
+	// 1. The column is explicitly defined as nullable;
+	// 2. The column type is a date/time. CH value ranges for date/time are much wider than YQL value ranges,
+	// so every time we encounter a value that is out of YQL ranges, we have to return NULL.
+	nullable := false
 
 	if matches := tm.isNullable.FindStringSubmatch(typeName); len(matches) > 0 {
 		nullable = true
@@ -61,15 +67,19 @@ func (tm typeMapper) SQLTypeToYDBColumn(columnName, typeName string) (*Ydb.Colum
 	case tm.isFixedString.MatchString(typeName):
 		ydbType = &Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_STRING}}
 	case typeName == "Date":
+		nullable = true
 		ydbType = &Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_DATE}}
 	// FIXME: https://st.yandex-team.ru/YQ-2295
 	// Date32 is not displayed correctly.
 	// case typeName == "Date32":
+	//  nullable = true
 	// 	ydbType = &Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_DATE}}
 	case typeName == "DateTime":
+		nullable = true
 		ydbType = &Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_DATETIME}}
 	case tm.isDateTime64.MatchString(typeName):
 		// NOTE: ClickHouse's DateTime64 value range is much more wide than YDB's Timestamp value range
+		nullable = true
 		ydbType = &Ydb.Type{Type: &Ydb.Type_TypeId{TypeId: Ydb.Type_TIMESTAMP}}
 	default:
 		return nil, fmt.Errorf("convert type '%s': %w", typeName, utils.ErrDataTypeNotSupported)
@@ -207,6 +217,12 @@ func appendValueToArrowBuilder[IN utils.ValueType, OUT utils.ValueType, AB utils
 	var converter CONV
 	out, err := converter.Convert(value)
 	if err != nil {
+		if errors.Is(err, utils.ErrValueOutOfTypeBounds) {
+			// TODO: write warning to logger
+			builder.AppendNull()
+			return nil
+		}
+
 		return fmt.Errorf("convert value %v: %w", value, err)
 	}
 

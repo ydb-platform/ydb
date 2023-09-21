@@ -1,6 +1,7 @@
 package postgresql
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -117,16 +118,26 @@ func appendValueToArrowBuilder[IN utils.ValueType, OUT utils.ValueType, AB utils
 	builder array.Builder,
 	valid bool,
 ) error {
-	if valid {
-		var converter CONV
-		out, err := converter.Convert(value)
-		if err != nil {
-			return fmt.Errorf("convert value: %w", err)
-		}
-		builder.(AB).Append(out)
-	} else {
+	if !valid {
 		builder.AppendNull()
+		return nil
 	}
+
+	var converter CONV
+
+	out, err := converter.Convert(value)
+	if err != nil {
+		if errors.Is(err, utils.ErrValueOutOfTypeBounds) {
+			// TODO: logger ?
+			builder.AppendNull()
+			return nil
+		}
+
+		return fmt.Errorf("convert value: %w", err)
+	}
+
+	builder.(AB).Append(out)
+
 	return nil
 }
 

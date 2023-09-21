@@ -52,7 +52,7 @@ std::vector<std::pair<ui16, double>> MakeOtherSamples() {
 std::vector<std::tuple<ui64, std::string, std::string, double, double, double, double>> MakeTpchSamples() {
     std::default_random_engine eng;
     std::uniform_int_distribution<ui64> dates(694303200000000ULL, 9124596000000005ULL);
-    std::uniform_int_distribution<ui8> keys(0U, 3U);
+    std::uniform_int_distribution<int> keys(0U, 3U);
     std::uniform_real_distribution<double> prices(900., 105000.0);
     std::uniform_real_distribution<double> taxes(0., 0.08);
     std::uniform_real_distribution<double> discs(0., 0.1);

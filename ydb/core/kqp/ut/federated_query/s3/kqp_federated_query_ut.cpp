@@ -922,7 +922,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
                 "write_object"_a = writeObject,
                 "read_table"_a = readTableName);
 
-            
+
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         }
@@ -1004,7 +1004,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         auto resultFuture = db.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx());
         resultFuture.Wait();
         UNIT_ASSERT_C(!resultFuture.GetValueSync().IsSuccess(), resultFuture.GetValueSync().GetIssues().ToString());
-        
+
         UNIT_ASSERT_NO_DIFF(resultFuture.GetValueSync().GetIssues().ToString(), "<main>: Error: Pre type annotation, code: 1020\n"
         "    <main>:3:27: Error: Write mode 'update' is not supported for external entities\n");
     }
@@ -1129,7 +1129,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
         auto scriptExecutionOperation = db.ExecuteScript(sql).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
-       
+
         NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Completed);
         TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
@@ -1198,7 +1198,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
         auto scriptExecutionOperation = db.ExecuteScript(sql).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
-       
+
         NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Completed);
         TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
@@ -1259,7 +1259,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
         auto scriptExecutionOperation = db.ExecuteScript(sql).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
-       
+
         NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
         UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Completed);
         TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
@@ -1272,6 +1272,113 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         for (size_t i = 0; i < ROWS_LIMIT; ++i) {
             resultSet.TryNextRow();
             UNIT_ASSERT_VALUES_EQUAL(resultSet.GetValue(0).GetProto().bytes_value(), content);
+        }
+    }
+
+    Y_UNIT_TEST(ForbiddenCallablesForYdbTables) {
+        using namespace fmt::literals;
+        const TString readDataSourceName = "/Root/read_data_source";
+        const TString readTableName = "/Root/read_table";
+        const TString readBucket = "test_read_bucket_forbidden_callables";
+        const TString readObject = "test_object_forbidden_callables";
+        const TString writeDataSourceName = "/Root/write_data_source";
+        const TString writeTableName = "/Root/write_table";
+        const TString writeBucket = "test_write_bucket_forbidden_callables";
+        const TString writeObject = "test_object_forbidden_callables/";
+        const TString writeYdbTable = "/Root/test_ydb_table";
+
+        {
+            Aws::S3::S3Client s3Client = MakeS3Client();
+            CreateBucketWithObject(readBucket, readObject, TEST_CONTENT, s3Client);
+            CreateBucket(writeBucket, s3Client);
+        }
+
+        auto kikimr = MakeKikimrRunner(NYql::IHTTPGateway::Make());
+
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        const TString query = fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `{read_source}` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{read_location}",
+                AUTH_METHOD="NONE"
+            );
+            CREATE EXTERNAL TABLE `{read_table}` (
+                key Utf8, -- Nullable
+                value Utf8 -- Nullable
+            ) WITH (
+                DATA_SOURCE="{read_source}",
+                LOCATION="{read_object}",
+                FORMAT="json_each_row"
+            );
+
+            CREATE EXTERNAL DATA SOURCE `{write_source}` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{write_location}",
+                AUTH_METHOD="NONE"
+            );
+            CREATE EXTERNAL TABLE `{write_table}` (
+                key Utf8 NOT NULL,
+                value Utf8 NOT NULL
+            ) WITH (
+                DATA_SOURCE="{write_source}",
+                LOCATION="{write_object}",
+                FORMAT="json_each_row"
+            );
+
+            CREATE TABLE `{write_ydb_table}` (
+                key Utf8 NOT NULL,
+                value Utf8 NOT NULL,
+                PRIMARY KEY (key)
+            );
+            )",
+            "read_source"_a = readDataSourceName,
+            "read_table"_a = readTableName,
+            "read_location"_a = GetBucketLocation(readBucket),
+            "read_object"_a = readObject,
+            "write_source"_a = writeDataSourceName,
+            "write_table"_a = writeTableName,
+            "write_location"_a = GetBucketLocation(writeBucket),
+            "write_object"_a = writeObject,
+            "write_ydb_table"_a = writeYdbTable
+            );
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        // Forbidden callable like Unwrap is allowed in S3-only queries,
+        // but not allowed in mixed queries.
+        {
+            const TString sql = fmt::format(R"(
+                    INSERT INTO `{write_table}`
+                    SELECT Unwrap(key) AS key, Unwrap(value) AS value FROM `{read_table}`
+                )",
+                "read_table"_a=readTableName,
+                "write_table"_a = writeTableName);
+
+            auto db = kikimr->GetQueryClient();
+            auto resultFuture = db.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx());
+            resultFuture.Wait();
+            UNIT_ASSERT_C(resultFuture.GetValueSync().IsSuccess(), resultFuture.GetValueSync().GetIssues().ToString());
+        }
+
+        // Unwrap is used in query with effect applied to YDB table.
+        {
+            const TString sql = fmt::format(R"(
+                    INSERT INTO `{write_table}`
+                    SELECT Unwrap(key) AS key, Unwrap(value) AS value FROM `{read_table}`;
+
+                    DELETE FROM `{write_ydb_table}`
+                    WHERE key = "42";
+                )",
+                "read_table"_a=readTableName,
+                "write_table"_a = writeTableName,
+                "write_ydb_table"_a = writeYdbTable);
+
+            auto db = kikimr->GetQueryClient();
+            auto resultFuture = db.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx());
+            resultFuture.Wait();
+            UNIT_ASSERT_C(!resultFuture.GetValueSync().IsSuccess(), resultFuture.GetValueSync().GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(resultFuture.GetValueSync().GetIssues().ToString(), "Callable not expected in effects tx: Unwrap");
         }
     }
 }

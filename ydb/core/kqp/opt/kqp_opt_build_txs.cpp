@@ -527,7 +527,7 @@ public:
                 return TStatus::Error;
             }
 
-            if (!CheckEffectsTx(tx.Cast(), ctx)) {
+            if (!CheckEffectsTx(tx.Cast(), query, ctx)) {
                 return TStatus::Error;
             }
 
@@ -543,7 +543,34 @@ public:
     }
 
 private:
-    bool CheckEffectsTx(TKqpPhysicalTx tx, TExprContext& ctx) const {
+    bool HasTableEffects(const TKqlQuery& query) const {
+        for (const TExprBase& effect : query.Effects()) {
+            if (auto maybeSinkEffect = effect.Maybe<TKqpSinkEffect>()) {
+                // (KqpSinkEffect (DqStage (... ((DqSink '0 (DataSink '"kikimr") ...)))) '0)
+                auto sinkEffect = maybeSinkEffect.Cast();
+                const size_t sinkIndex = FromString(TStringBuf(sinkEffect.SinkIndex()));
+                auto stageExpr = sinkEffect.Stage();
+                auto maybeStageBase = stageExpr.Maybe<TDqStageBase>();
+                YQL_ENSURE(maybeStageBase);
+                auto stage = maybeStageBase.Cast();
+                YQL_ENSURE(stage.Outputs());
+                auto outputs = stage.Outputs().Cast();
+                YQL_ENSURE(sinkIndex < outputs.Size());
+                auto maybeSink = outputs.Item(sinkIndex);
+                YQL_ENSURE(maybeSink.Maybe<TDqSink>());
+                auto sink = maybeSink.Cast<TDqSink>();
+                auto dataSink = TCoDataSink(sink.DataSink().Ptr());
+                if (dataSink.Category() == YdbProviderName || dataSink.Category() == KikimrProviderName) {
+                    return true;
+                }
+            } else { // Not a SinkEffect, => a YDB table effect
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool CheckEffectsTx(TKqpPhysicalTx tx, const TKqlQuery& query, TExprContext& ctx) const {
         TMaybeNode<TExprBase> blackistedNode;
         VisitExpr(tx.Ptr(), [&blackistedNode](const TExprNode::TPtr& exprNode) {
             if (blackistedNode) {
@@ -565,7 +592,7 @@ private:
             return true;
         });
 
-        if (blackistedNode) {
+        if (blackistedNode && HasTableEffects(query)) {
             ctx.AddError(TIssue(ctx.GetPosition(blackistedNode.Cast().Pos()), TStringBuilder()
                 << "Callable not expected in effects tx: " << blackistedNode.Cast<TCallable>().CallableName()));
             return false;

@@ -26,8 +26,8 @@ def pathid(path):
     return six.ensure_str(base64.b32encode(hashlib.md5(six.ensure_binary(path)).digest()).lower().strip(b'='))
 
 
-def listid(l):
-    return pathid(str(sorted(l)))
+def listid(items):
+    return pathid(str(sorted(items)))
 
 
 def unpair(lst):

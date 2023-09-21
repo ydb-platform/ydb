@@ -23,7 +23,9 @@ class SSQLSParser(object):
 
     @staticmethod
     def parse_doc(doc):
-        paths = lambda nodes: filter(None, (e.get('path') for e in nodes))
+        def paths(nodes):
+            return [x for x in (e.get('path') for e in nodes) if x]
+
         includes = doc.findall('include')
         ancestors = paths(doc.findall('ancestors/ancestor'))
         headers = [e.text.strip('<>""') for e in includes]

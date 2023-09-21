@@ -1082,23 +1082,28 @@ private:
             JoinGraph.AddNode(i, Rels[i]->Label);
         }
 
-        std::set<std::pair<TJoinColumn, TJoinColumn>> joinConditions;
         for (const auto& clazz : Input.EqClasses) {
-            auto [relId, varId] = clazz.Vars[0];
-            auto c1 = TJoinColumn(ToString(relId), ToString(varId));
-            for (int i = 1; i < (int)clazz.Vars.size(); i++) {
-                auto [crelId, cvarId] = clazz.Vars[i];
-                auto c2 = TJoinColumn(ToString(crelId), ToString(cvarId));
-                joinConditions.emplace(std::make_pair(c1, c2));
+            for (size_t i = 0; i < clazz.Vars.size(); i++) {
+                auto [lrelId, lvarId] = clazz.Vars[i];
+                int leftNodeId = lrelId - 1;
+                auto left = TJoinColumn{ToString(lrelId), ToString(lvarId)};
+                for (size_t j = 0; j < i; j++) {
+                    auto [rrelId, rvarId] = clazz.Vars[j];
+                    int rightNodeId = rrelId - 1;
+                    auto right = TJoinColumn{ToString(rrelId), ToString(rvarId)};
+
+                    auto maybeEdge1 = JoinGraph.Edges.find({leftNodeId, rightNodeId});
+                    auto maybeEdge2 = JoinGraph.Edges.find({rightNodeId, leftNodeId});
+                    if (maybeEdge1 == JoinGraph.Edges.end() && maybeEdge2 == JoinGraph.Edges.end()) {
+                        JoinGraph.AddEdge(TEdge(leftNodeId, rightNodeId, std::make_pair(left, right)));
+                    } else {
+                        Y_VERIFY(maybeEdge1 != JoinGraph.Edges.end() && maybeEdge2 != JoinGraph.Edges.end());
+                        maybeEdge1->JoinConditions.emplace(left, right);
+                        maybeEdge2->JoinConditions.emplace(right, left);
+                    }
+                }
             }
         }
-
-        for (auto cond : joinConditions) {
-            int fromNode = JoinGraph.FindNode(cond.first.RelName);
-            int toNode = JoinGraph.FindNode(cond.second.RelName);
-            JoinGraph.AddEdge(TEdge(fromNode, toNode, cond));
-        }
-        JoinGraph.ComputeTransitiveClosure(joinConditions);
 
         if (Log) {
             std::stringstream str;

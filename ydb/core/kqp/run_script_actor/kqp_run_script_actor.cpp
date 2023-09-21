@@ -248,9 +248,11 @@ private:
             ResultSetByteCount.resize(resultSetIndex + 1);
             Truncated.resize(resultSetIndex + 1);
             ExpireAt.resize(resultSetIndex + 1);
+            ResultSetMetaArray.resize(resultSetIndex + 1);
         }
 
-        if (ExpireAt[resultSetIndex] == TInstant::Zero()) {
+        bool newResultSet = ExpireAt[resultSetIndex] == TInstant::Zero();
+        if (newResultSet) {
             ExpireAt[resultSetIndex] = TInstant::Now() + TDuration::Days(1);
         }
 
@@ -277,15 +279,19 @@ private:
                 serializedRows.push_back(row.SerializeAsString());
             }
 
-            if (firstRow == 0 || Truncated[resultSetIndex]) {
+            if (newResultSet || Truncated[resultSetIndex]) {
                 Ydb::Query::Internal::ResultSetMeta meta;
-                *meta.mutable_columns() = ev->Get()->Record.GetResultSet().columns();
-                meta.set_truncated(Truncated[resultSetIndex]);
+                if (newResultSet) {
+                    *meta.mutable_columns() = ev->Get()->Record.GetResultSet().columns();
+                }
+                if (Truncated[resultSetIndex]) {
+                    meta.set_truncated(true);
+                }
 
                 NJson::TJsonValue* value;
-                if (firstRow == 0) {
+                if (newResultSet) {
                     value = &ResultSetMetas[resultSetIndex];
-                    ResultSetMetaArray.push_back(value);
+                    ResultSetMetaArray[resultSetIndex] = value;
                 } else {
                     value = ResultSetMetaArray[resultSetIndex];
                 }

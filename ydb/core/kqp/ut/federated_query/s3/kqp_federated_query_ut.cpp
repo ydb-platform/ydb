@@ -1208,6 +1208,72 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 2);
         UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 0);
     }
+
+    Y_UNIT_TEST(ExecuteScriptWithTruncatedMultiplyResults) {
+        using namespace fmt::literals;
+
+        const TString bucket = "test_bucket";
+        CreateBucket(bucket);
+
+        constexpr size_t NUMBER_OF_OBJECTS = 20;
+        constexpr size_t ROWS_LIMIT = NUMBER_OF_OBJECTS / 2;
+
+        const TString object = "/test_object";
+        const TString content = "test content";
+        for (size_t i = 0; i < NUMBER_OF_OBJECTS; ++i) {
+            UploadObject(bucket, object + ToString(i), content);
+        }
+
+        NKikimrConfig::TAppConfig appCfg;
+        appCfg.MutableQueryServiceConfig()->set_scriptresultrowslimit(ROWS_LIMIT);
+        appCfg.MutableTableServiceConfig()->MutableQueryLimits()->set_resultrowslimit(ROWS_LIMIT);
+
+        auto kikimr = MakeKikimrRunner(NYql::IHTTPGateway::Make(), nullptr, nullptr, appCfg);
+
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        const TString query = fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `/Root/external_data_source` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="{location}",
+                AUTH_METHOD="NONE"
+            );)",
+            "location"_a = GetBucketLocation(bucket)
+        );
+
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto db = kikimr->GetQueryClient();
+        const TString sql = R"(
+            SELECT `data`
+            FROM `/Root/external_data_source`.`/`
+            WITH (
+                FORMAT="raw",
+
+                SCHEMA=(
+                    `data` String NOT NULL
+                )
+            )
+        )";
+
+        auto scriptExecutionOperation = db.ExecuteScript(sql).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+       
+        NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
+        UNIT_ASSERT_EQUAL(readyOp.Metadata().ExecStatus, EExecStatus::Completed);
+        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
+        UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
+
+        TResultSetParser resultSet(results.ExtractResultSet());
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), ROWS_LIMIT);
+
+        for (size_t i = 0; i < ROWS_LIMIT; ++i) {
+            resultSet.TryNextRow();
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.GetValue(0).GetProto().bytes_value(), content);
+        }
+    }
 }
 
 } // namespace NKqp

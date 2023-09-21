@@ -202,6 +202,14 @@ public:
             return *this;
         }
 
+        friend inline bool operator==(const TRange& lhs, const TRange& rhs) {
+            return std::tie(lhs.FromIndex, lhs.ToIndex) == std::tie(rhs.FromIndex, rhs.ToIndex);
+        }
+
+        friend inline bool operator<(const TRange& lhs, const TRange& rhs) {
+            return std::tie(lhs.FromIndex, lhs.ToIndex) < std::tie(rhs.FromIndex, rhs.ToIndex);
+        }
+
         bool IsValid() const {
             return static_cast<bool>(Container);
         }

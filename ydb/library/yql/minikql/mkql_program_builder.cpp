@@ -5823,15 +5823,15 @@ TRuntimeNode PatternToRuntimeNode(const TRowPattern& pattern, const TProgramBuil
     for (const auto& term: pattern) {
         TTupleLiteralBuilder termBuilder(env);
         for (const auto& factor: term) {
-            TStructLiteralBuilder factorBuilder(env);
-            factorBuilder.Add("Primary", factor.Primary.index() == 0 ?
+            TTupleLiteralBuilder factorBuilder(env);
+            factorBuilder.Add(factor.Primary.index() == 0 ?
                 programBuilder.NewDataLiteral<NUdf::EDataSlot::String>(std::get<0>(factor.Primary)) :
                 PatternToRuntimeNode(std::get<1>(factor.Primary), programBuilder)
             );
-            factorBuilder.Add("QuantityMin", programBuilder.NewDataLiteral<ui64>(factor.QuantityMin));
-            factorBuilder.Add("QuantityMax", programBuilder.NewDataLiteral<ui64>(factor.QuantityMax));
-            factorBuilder.Add("Greedy", programBuilder.NewDataLiteral<bool>(factor.Greedy));
-            factorBuilder.Add("Output", programBuilder.NewDataLiteral<bool>(factor.Output));
+            factorBuilder.Add(programBuilder.NewDataLiteral<ui64>(factor.QuantityMin));
+            factorBuilder.Add(programBuilder.NewDataLiteral<ui64>(factor.QuantityMax));
+            factorBuilder.Add(programBuilder.NewDataLiteral<bool>(factor.Greedy));
+            factorBuilder.Add(programBuilder.NewDataLiteral<bool>(factor.Output));
             termBuilder.Add({factorBuilder.Build(), true});
         }
         patternBuilder.Add({termBuilder.Build(), true});

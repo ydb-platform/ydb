@@ -29,7 +29,7 @@ struct TSizeCollector {
 
 template<class T, typename U = std::make_unsigned_t<T>>
 size_t SizeOfUnsignedVarint(T v) {
-    static constexpr T Mask = Max<U>() - 0x7F;
+    static constexpr U Mask = Max<U>() - 0x7F;
 
     U value = v;
     size_t bytes = 1;
@@ -113,7 +113,7 @@ inline void WriteStringSize(TKafkaWritable& writable, TKafkaVersion version, TKa
 template<typename Meta>
 inline TKafkaInt32 ReadStringSize(TKafkaReadable& readable, TKafkaVersion version) {
     if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
-        return readable.readUnsignedVarint<TKafkaInt32>() - 1;
+        return readable.readUnsignedVarint<ui32>() - 1;
     } else {
         TKafkaInt16 v;
         readable >> v;
@@ -137,11 +137,22 @@ inline TKafkaInt32 ReadArraySize(TKafkaReadable& readable, TKafkaVersion version
     if constexpr (SizeFormat<Meta>() == Varint) {
         return readable.readVarint<TKafkaInt32>();
     } else if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
-        return readable.readUnsignedVarint<TKafkaInt32>() - 1;
+        return readable.readUnsignedVarint<ui32>() - 1;
     } else {
         TKafkaInt32 v;
         readable >> v;
         return v;
+    }
+}
+
+template<typename Meta>
+inline TKafkaInt32 ArraySize(TKafkaVersion version, TKafkaInt32 size) {
+    if constexpr (SizeFormat<Meta>() == Varint) {
+        return SizeOfVarint(size);
+    } else if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
+        return SizeOfUnsignedVarint(size + 1);
+    } else {
+        return sizeof(TKafkaInt32);
     }
 }
 
@@ -426,11 +437,7 @@ public:
     inline static i64 DoSize(TKafkaVersion version, const TKafkaBytes& value) {
         if (value) {
             const auto& v = *value;
-            if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
-                return v.size() + SizeOfUnsignedVarint(v.size() + 1);
-            } else {
-                return v.size() + sizeof(TKafkaInt32);
-            }
+            return v.size() + ArraySize<Meta>(version, v.size());
         } else {
             if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
                 return 1;
@@ -501,11 +508,7 @@ public:
         if (value) {
             const auto& v = *value;
             const auto size = v.Size(CURRENT_RECORD_VERSION);
-            if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
-                return size + SizeOfUnsignedVarint(size + 1);
-            } else {
-                return size + sizeof(TKafkaInt32);
-            }
+            return size + ArraySize<Meta>(version, size);
         } else {
             if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
                 return 1;
@@ -573,11 +576,7 @@ public:
                 size += ItemStrategy::DoSize(version, v);
             }
         }
-        if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
-            return size + SizeOfUnsignedVarint(value.size() + 1);
-        } else {
-            return size + sizeof(TKafkaInt32);
-        }
+        return size + ArraySize<Meta>(version, value.size());
     }
 
     inline static void DoLog(const std::vector<TValueType>& value) {

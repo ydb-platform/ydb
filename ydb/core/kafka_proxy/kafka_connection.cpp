@@ -49,10 +49,10 @@ public:
 
     static constexpr TDuration InactivityTimeout = TDuration::Minutes(10);
     TEvPollerReady* InactivityEvent = nullptr;
-    TPollerToken::TPtr PollerToken;
 
     TIntrusivePtr<TSocketDescriptor> Socket;
     TSocketAddressType Address;
+    TPollerToken::TPtr PollerToken;
     TBufferedWriter Buffer;
 
     THPTimer InactivityTimer;

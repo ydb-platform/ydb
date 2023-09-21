@@ -333,7 +333,7 @@ public:
 
     template<class T, typename U = std::make_unsigned_t<T>>
     void writeUnsignedVarint(T v) {
-        static constexpr T Mask = Max<T>() - 0x7F;
+        static constexpr U Mask = Max<U>() - 0x7F;
 
         U value = v;
         while ((value & Mask) != 0L) {
@@ -345,7 +345,7 @@ public:
         write((const char*)&b, sizeof(b));        
     }
 
-    template<class T, typename U = std::make_unsigned_t<T>>
+    template<std::signed_integral T, typename U = std::make_unsigned_t<T>>
     void writeVarint(T value) {
         writeUnsignedVarint<U>(AsUnsigned<T>(value));
     }
@@ -376,15 +376,15 @@ public:
     void read(char* val, size_t length);
     char get();
 
-    template<class T, typename U = std::make_unsigned_t<T>>
-    T readUnsignedVarint() {
-        static constexpr size_t MaxLength = (sizeof(T) << 3) - 4;
+    template<std::unsigned_integral U>
+    U readUnsignedVarint() {
+        static constexpr size_t MaxLength = (sizeof(U) * 8 - 1) / 7 * 7;
 
         U value = 0;
         size_t i = 0;
         U b;
         while (((b = static_cast<ui8>(get())) & 0x80) != 0) {
-            if (i > MaxLength) {
+            if (i >= MaxLength) {
                 ythrow yexception() << "illegal varint length";
             }
             value |= (b & 0x7f) << i;
@@ -395,7 +395,7 @@ public:
         return value;
     }
 
-    template<class T, typename S = std::make_signed_t<T>, typename U = std::make_unsigned_t<T>>
+    template<std::signed_integral S, typename U = std::make_unsigned_t<S>>
     S readVarint() {
         U v = readUnsignedVarint<U>();
         return (v >> 1) ^ -static_cast<S>(v & 1);        

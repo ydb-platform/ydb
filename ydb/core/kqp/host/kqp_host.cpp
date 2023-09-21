@@ -1099,14 +1099,26 @@ private:
             settings.EndOfQueryCommit = sqlAutoCommit;
             settings.Flags.insert("FlexibleTypes");
             settings.Flags.insert("AnsiLike");
+
             if (SessionCtx->Query().Type == EKikimrQueryType::Scan
                 || SessionCtx->Query().Type == EKikimrQueryType::YqlScript
-                || SessionCtx->Query().Type == EKikimrQueryType::YqlScriptStreaming)
+                || SessionCtx->Query().Type == EKikimrQueryType::YqlScriptStreaming
+                || SessionCtx->Query().Type == EKikimrQueryType::Query
+                || SessionCtx->Query().Type == EKikimrQueryType::Script)
             {
                 // We enable EmitAggApply for filter and aggregate pushdowns to Column Shards
                 settings.Flags.insert("EmitAggApply");
             } else {
                 settings.Flags.insert("DisableEmitStartsWith");
+            }
+
+            if (SessionCtx->Query().Type == EKikimrQueryType::Query
+                || SessionCtx->Query().Type == EKikimrQueryType::Script)
+            {
+                settings.Flags.insert("AnsiOptionalAs");
+                settings.Flags.insert("WarnOnAnsiAliasShadowing");
+                settings.Flags.insert("AnsiCurrentRow");
+                settings.Flags.insert("AnsiInForEmptyOrNullableItemsCollections");
             }
 
             if (query.ParameterTypes) {

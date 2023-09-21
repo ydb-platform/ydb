@@ -416,7 +416,7 @@ private:
             << Ydb::StatusIds::StatusCode_Name(status));
 
         // Skip sending empty result in case of success status - simplify client logic
-        if (status != Ydb::StatusIds::SUCCESS) {
+        if (status != Ydb::StatusIds::SUCCESS || message.size() > 0) {
             TString out;
             Ydb::Query::ExecuteQueryResponsePart response;
             response.set_status(status);

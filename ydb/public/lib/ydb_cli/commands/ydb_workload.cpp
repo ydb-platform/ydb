@@ -7,6 +7,7 @@
 #include "tpcc_workload.h"
 #include "topic_workload/topic_workload.h"
 #include "transfer_workload/transfer_workload.h"
+#include "query_workload.h"
 #include "ydb/library/yverify_stream/yverify_stream.h"
 
 #include <ydb/library/workload/workload_factory.h>
@@ -48,6 +49,7 @@ TCommandWorkload::TCommandWorkload()
     AddCommand(std::make_unique<TCommandWorkloadTransfer>());
     AddCommand(std::make_unique<TCommandTpch>());
     AddCommand(std::make_unique<TCommandTPCCWorkload>());
+    AddCommand(std::make_unique<TCommandQueryWorkload>());
 }
 
 TWorkloadCommand::TWorkloadCommand(const TString& name, const std::initializer_list<TString>& aliases, const TString& description)

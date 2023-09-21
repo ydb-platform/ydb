@@ -126,12 +126,13 @@ private:
 
         NUdf::TUnboxedValuePod Handler(ui32, const TSwitchHandler& handler, TComputationContext& ctx) {
             while (true) {
-                auto current = Get(Position++);
+                auto current = Get(Position);
                 if (current.IsSpecial()) {
-                    ResetPosition();
+                    if (current.IsYield())
+                        ResetPosition();
                     return current;
                 }
-
+                ++Position;
                 ui32 streamIndex = 0U;
                 if constexpr (IsInputVariant) {
                     streamIndex = current.GetVariantIndex();
@@ -314,6 +315,7 @@ private:
         const auto posPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { fieldsStruct.This(), fieldsStruct.GetPosition() }, "pos_ptr", block);
 
         const auto loop = BasicBlock::Create(context, "loop", ctx.Func);
+        const auto back = BasicBlock::Create(context, "back", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
 
@@ -337,16 +339,21 @@ private:
             input = new LoadInst(valueType, placeholder, "input", block);
         }
 
-        const auto plus = BinaryOperator::CreateAdd(pos, ConstantInt::get(pos->getType(), 1), "plus", block);
-        new StoreInst(plus, posPtr, block);
+        const auto special = SwitchInst::Create(input, good, 2U, block);
+        special->addCase(GetYield(context), back);
+        special->addCase(GetFinish(context), done);
 
-        BranchInst::Create(done, good, IsSpecial(input, block), block);
+        block = back;
+        new StoreInst(ConstantInt::get(pos->getType(), 0), posPtr, block);
+        BranchInst::Create(done, block);
 
         block = done;
-        new StoreInst(ConstantInt::get(pos->getType(), 0), posPtr, block);
         ReturnInst::Create(context, input, block);
 
         block = good;
+
+        const auto plus = BinaryOperator::CreateAdd(pos, ConstantInt::get(pos->getType(), 1), "plus", block);
+        new StoreInst(plus, posPtr, block);
 
         const auto unpack = IsInputVariant ? GetVariantParts(input, ctx, block) : std::make_pair(ConstantInt::get(indexType, 0), input);
 

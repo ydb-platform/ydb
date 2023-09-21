@@ -1,9 +1,14 @@
 # Building YDB from sources
 
-## Build Requirements
- We have tested YDB builds using Ubuntu 18.04, 20.04 and 22.04. Other Linux distributions are likely to work, but additional effort may be needed. Only x86_64 Linux is currently supported.
+From this repository you can build YDB Server and YDB CLI (Command Line Interface utility) executables.
 
- Below is a list of packages that need to be installed before building YDB. 'How to Build' section contains step by step instructions to obtain these packages.
+## Build Requirements
+
+Only x86_64 architecture is currently supported.
+YDB server can be built for Ubuntu 18.04, 20.04 and 22.04. Other Linux distributions are likely to work, but additional effort may be needed.
+YDB CLI can be built for Ubuntu 18+, Windows, and MacOS. Instructions below are provided for Ubuntu only, other options are to be described later.
+
+Below is a list of packages that need to be installed before building YDB. 'How to Build' section contains step by step instructions to obtain these packages.
 
  - cmake 3.22+
  - clang-14
@@ -16,7 +21,7 @@
  - libidn11-dev
  - ninja 1.10+
 
- We run multiple clang instances in parallel to speed up the process by default. Each instance of clang may use up to 1GB of RAM, and linking the binary may use up to 16GB of RAM, please make sure your build host has enough resources.
+We run multiple clang instances in parallel to speed up the process by default. Each instance of clang may use up to 1GB of RAM, and linking the binary may use up to 16GB of RAM, please make sure your build host has enough resources.
 
 ## Runtime Requirements
  The following packages are required to run ydbd server:
@@ -25,6 +30,8 @@
  - libaio
 
 # How to Build
+
+## Additional steps for Ubuntu versions earlier than 22.04
 
 <details>
    <summary>For Ubuntu 18.04, install Python 3.8, create and activate a new virtual environment, and install the latest PIP.</summary>
@@ -53,6 +60,8 @@
 
 </details>
 
+You do not need to run the above instructions for Ubuntu 22.04, just start from the following step below.
+
 ## Install dependencies
 
 ```bash
@@ -67,8 +76,24 @@ sudo pip3 install conan==1.59 grpcio-tools==1.57.0
 ```bash
 mkdir ~/ydbwork && cd ~/ydbwork
 mkdir build
-
 ```
+
+## Install ccache
+
+1. Install `ccache` into `/usr/local/bin/` (We are using version `4.8.1`, you can use any version greater than `4.7`)
+    ```bash
+    (V=4.8.1; curl -L https://github.com/ccache/ccache/releases/download/v${V}/ccache-${V}-linux-x86_64.tar.xz | \
+     sudo tar -xJ -C /usr/local/bin/ --strip-components=1 --no-same-owner ccache-${V}-linux-x86_64/ccache)
+    ```
+
+2. Configure `ccache` to use remote storage of YDB build artifacts, to speed up first build time:
+    ```bash
+    ccache -o remote_storage="http://cachesrv.ydb.tech:8080|read-only|layout=bazel"
+    ccache -o sloppiness=locale 
+    ccache -o base_dir=~/ydbwork/
+    ```
+
+If you use a non-default work directory, correct the `base_dir` ccache option to match it.
 
 ## Clone the ydb repository.
 
@@ -76,71 +101,51 @@ mkdir build
 git clone https://github.com/ydb-platform/ydb.git
 ```
 
-## Configure
+By default, a 'main' branch is checked out, which contains the latest development update for both YDB Server and CLI. This branch may sometimes be broken for short periods of time, so you may prefer to build the latest stable versions of YDB Server and CLI as described below.
 
+### Check out the latest stable YDB Server version for build
 
+To build a latest stable version of a YDB Server, check out the latest stable Server tag from the repository. To do so, visit the https://github.com/ydb-platform/ydb/releases/latest page and use the provided 'tag' value in the `git checkout <tag>` command.
 
-### Configure without Ccache
-
-Run cmake to generate build configuration:
+At the moment of this documentation update, the latest stable release was [YDB Server 23.2.12](https://github.com/ydb-platform/ydb/releases/tag/23.2.12) with a tag '23.2.12', so the command looks like that:
 
 ```bash
-cd build
-cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain \
-  ../ydb
+git checkout 23.2.12
 ```
 
+### Check out the latest stable YDB CLI version for build
 
-### (optional) Configure with Ccache
+To build a latest stable version of a YDB CLI, check out the latest stable CLI tag from the repository. To do so, visit the https://github.com/ydb-platform/ydb/releases page, scroll down to the top-most 'YDB CLI' release, and use the provided 'tag' value in the `git checkout <tag>` command.
 
-With enabled Ccache, you can finish the compilation of all targets on supported Linux distributions in a few minutes. 
-  Or just `ydbd` or `ydb` binary in a couple of seconds. To optionally enable `Ccache` and enhance the compilation speed, follow these steps:
+At the moment of this documentation update, the latest YDB CLI release was [YDB CLI 2.5.0](https://github.com/ydb-platform/ydb/releases/tag/CLI_2.5.0) with a tag 'CLI_2.5.0', so the command looks like that:
 
-1. Install `Ccache` into `/usr/local/bin/` (We are using version `4.8.1`, you can use any version greater than `4.7`)
-    ```bash
-    (V=4.8.1; curl -L https://github.com/ccache/ccache/releases/download/v${V}/ccache-${V}-linux-x86_64.tar.xz | \
-     sudo tar -xJ -C /usr/local/bin/ --strip-components=1 --no-same-owner ccache-${V}-linux-x86_64/ccache)
+```bash
+git checkout CLI_2.5.0
+```
 
-    ```
+## Configure
 
-2. Configure `Ccache` to use remote storage using environment variables
-    ```bash
-    export CCACHE_REMOTE_STORAGE="http://cachesrv.ydb.tech:8080|read-only|layout=bazel"
-    export CCACHE_SLOPPINESS=locale
-    export CCACHE_BASEDIR=~/ydbwork/
-   
-    ```
-    <details>
-    <summary>or using Ccache config file</summary>
-
-    ```bash
-    ccache -o remote_storage="http://cachesrv.ydb.tech:8080|read-only|layout=bazel"
-    ccache -o sloppiness=locale 
-    ccache -o base_dir=~/ydbwork/
-   
-    ```
-    </details>
-3. Also, you should change Conan's home folder to the build folder for better cache hit 
+1. Change Conan's home folder to the build folder for better remote cache hit 
     ```bash
     export CONAN_USER_HOME=~/ydbwork/build
     ```
 
-4. Generate build configuration using `ccache`
+2. Generate build configuration using `ccache`
     ```bash
     cd build
     cmake -G Ninja -DCMAKE_BUILD_TYPE=Release \
     -DCCACHE_PATH=/usr/local/bin/ccache \
     -DCMAKE_TOOLCHAIN_FILE=../ydb/clang.toolchain \
-    ../ydb
-   
+    ../ydb  
     ```
 
-## Build
+## Build 
 
-To build all binary artifacts (server YDBD, client YDB, unittest binaries) run:
+### Build YDB Server
+
+To build YDB Server run:
 ```bash
-ninja
+ninja ydb/apps/ydbd/all
 ```
 
 A YDB server binary can be found at:
@@ -148,9 +153,9 @@ A YDB server binary can be found at:
 ydb/apps/ydbd/ydbd
 ```
 
-## Build and Test YDB CLI
+### Build YDB CLI
 
-To build YDB CLI (ydb):
+To build YDB CLI (Command Line Interface utility) run:
 ```bash
 ninja ydb/apps/ydb/all
 ```
@@ -160,21 +165,42 @@ A YDB CLI binary can be found at:
 ydb/apps/ydb/ydb
 ```
 
-### Unit tests
+## Run tests
 
-To build YDB CLI unit tests:
+### Build all executable artifacts
+
+To run tests, you first to build all binary artifacts (tools, test executables, server and CLI, etc.), running `ninja` without parameters:
 ```bash
-ninja ydb/public/lib/ydb_cli/all
+ninja
 ```
+
+### Run unit tests
 
 To run tests execute:
 ```bash
-cd ydb/public/lib/ydb_cli/
 ctest
 ```
 
 ### Functional tests
 
-Before launch tests you need to build YDB CLI and YDB server binaries. 
-Also you can load [ydbd](https://ydb.tech/en/docs/downloads/#ydb-server) binary file and use it.
-To launch YDB CLI python tests run `ydb_cli` test suite via pytest according to this [instruction](ydb/tests/functional/README.md).
+Run test suites via pytest according to this [instruction](ydb/tests/functional/README.md).
+
+## Run YDB CLI tests only
+
+When changing YDB CLI code, you may choose building and running only YDB CLI tests, which is faster than running a full YDB testpack.
+
+To build YDB CLI binary and YDB CLI unit tests binaries run:
+```bash
+ninja ydb/apps/ydb/all
+ninja ydb/public/lib/ydb_cli/all
+```
+
+To run YDB CLI unit tests execute:
+```bash
+cd ydb/public/lib/ydb_cli/
+ctest
+```
+
+To run YDB CLI functional tests you need a compiled YDB Server binary (ydbd) located at ~/ydbwork/ydb/apps/ydbd/ydbd. You may compile it as described in the "Build YDB Server" above, or download a precompiled binary from the YDB [Downloads](https://ydb.tech/en/docs/downloads/#ydb-server) page.
+
+When both YDB CLI and YDB Server binary artifacts are present, launch the `ydb_cli` test suite via pytest according to this [instruction](ydb/tests/functional/README.md).

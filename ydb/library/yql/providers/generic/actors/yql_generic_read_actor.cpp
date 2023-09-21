@@ -217,7 +217,13 @@ namespace NYql::NDq {
                            ISecuredServiceAccountCredentialsFactory::TPtr /*credentialsFactory*/,
                            const NKikimr::NMiniKQL::THolderFactory& holderFactory)
     {
-        YQL_CLOG(DEBUG, ProviderGeneric) << "Creating read actor with params: " << params.ShortDebugString();
+        const auto dsi = params.select().data_source_instance();
+        YQL_CLOG(INFO, ProviderGeneric) << "Creating read actor with params:"
+                                        << " kind=" << NYql::NConnector::NApi::EDataSourceKind_Name(dsi.kind())
+                                        << ", endpoint=" << dsi.endpoint().ShortDebugString()
+                                        << ", database=" << dsi.database()
+                                        << ", use_tls=" << ToString(dsi.use_tls())
+                                        << ", protocol=" << NYql::NConnector::NApi::EProtocol_Name(dsi.protocol());
 
         // FIXME: strange piece of logic - authToken is created but not used:
         // https://a.yandex-team.ru/arcadia/ydb/library/yql/providers/clickhouse/actors/yql_ch_read_actor.cpp?rev=r11550199#L140
@@ -243,8 +249,14 @@ namespace NYql::NDq {
         part << ';';
         */
 
-        const auto actor = new TGenericReadActor(inputIndex, genericClient, params.select(), params.data_source_instance(),
-                                                 computeActorId, holderFactory);
+        const auto actor = new TGenericReadActor(
+            inputIndex,
+            genericClient,
+            params.select(),
+            dsi,
+            computeActorId,
+            holderFactory);
+
         return {actor, actor};
     }
 

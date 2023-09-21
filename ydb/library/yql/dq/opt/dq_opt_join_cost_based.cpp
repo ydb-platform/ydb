@@ -71,7 +71,7 @@ bool operator < (const TJoinColumn& c1, const TJoinColumn& c2) {
 struct TEdge {
     int From;
     int To;
-    std::set<std::pair<TJoinColumn, TJoinColumn>> JoinConditions;
+    mutable std::set<std::pair<TJoinColumn, TJoinColumn>> JoinConditions;
 
     TEdge(int f, int t): From(f), To(t) {}
 
@@ -392,19 +392,15 @@ struct TGraph {
                     int leftNodeId = ScopeMapping[left.RelName];
                     int rightNodeId = ScopeMapping[right.RelName];
 
-                    if (! Edges.contains(TEdge(leftNodeId,rightNodeId)) && 
-                        ! Edges.contains(TEdge(rightNodeId,leftNodeId))) {
+                    auto maybeEdge1 = Edges.find({leftNodeId, rightNodeId});
+                    auto maybeEdge2 = Edges.find({rightNodeId, leftNodeId});
+
+                    if (maybeEdge1 == Edges.end() && maybeEdge2 == Edges.end()) {
                         AddEdge(TEdge(leftNodeId,rightNodeId,std::make_pair(left, right)));
                     } else {
-                        TEdge e1 = *Edges.find(TEdge(leftNodeId,rightNodeId));
-                        if (!e1.JoinConditions.contains(std::make_pair(left, right))) {
-                            e1.JoinConditions.insert(std::make_pair(left, right));
-                        }
-                       
-                        TEdge e2 = *Edges.find(TEdge(rightNodeId,leftNodeId));
-                        if (!e2.JoinConditions.contains(std::make_pair(right, left))) {
-                            e2.JoinConditions.insert(std::make_pair(right, left));
-                        }
+                        Y_VERIFY(maybeEdge1 != Edges.end() && maybeEdge2 != Edges.end());
+                        maybeEdge1->JoinConditions.emplace(left, right);
+                        maybeEdge2->JoinConditions.emplace(right, left);
                     }
                 }
             }

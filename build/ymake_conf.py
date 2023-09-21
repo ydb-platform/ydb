@@ -2519,8 +2519,36 @@ class CuDNN(object):
             self.cudnn_version.emit()
 
 
+def customization():
+    if not is_positive('DISABLE_YMAKE_CONF_CUSTOMIZATION'):
+        try:
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'internal'))
+            from custom_conf import CustomConf
+            logger.debug('Customization extension was successfully loaded')
+            return CustomConf
+        except Exception as e:
+            logger.debug('Customization extension was not found; [{}]'.format(str(e)))
+    else:
+        logger.debug('Customization extension was disabled')
+
+    class DummyConf:
+        def __init__(self, options):
+            pass
+
+        def print_prologue(self):
+            pass
+
+        def print_epilogue(self):
+            pass
+
+    return DummyConf
+
+
 def main():
     options = opts()
+
+    CustomConfig = customization()
+    custom_conf = CustomConfig(options)
 
     arcadia = Arcadia(options.arcadia_root)
 
@@ -2533,11 +2561,15 @@ def main():
     if internal_conf_full_path and not is_positive('DISABLE_YMAKE_CONF_CUSTOMIZATION'):
         print('@import "${{CONF_ROOT}}/{}"'.format(_INTERNAL_CONF))
 
+    custom_conf.print_prologue()
+
     ymake.print_presets()
     ymake.print_settings()
 
     build = Build(arcadia, options.build_type, options.toolchain_params, force_ignore_local_files=not options.local_distbuild)
     build.print_build()
+
+    custom_conf.print_epilogue()
 
     emit_with_ignore_comment('CONF_SCRIPT_DEPENDS', __file__)
 

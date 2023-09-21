@@ -118,6 +118,11 @@ public:
         }
 
         auto& row = ResultSet_.GetProto().rows()[RowIndex_];
+
+        if (static_cast<size_t>(row.items_size()) != ColumnsCount()) {
+            FatalError(TStringBuilder() << "Corrupted data: row " << RowIndex_ << " contains " << row.items_size() << " column(s), but metadata contains " << ColumnsCount() << " column(s)");
+        }
+
         for (size_t i = 0; i < ColumnsCount(); ++i) {
             ColumnParsers[i].Reset(row.items(i));
         }

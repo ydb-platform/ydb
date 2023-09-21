@@ -1,5 +1,6 @@
 #include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -192,5 +193,43 @@ Y_UNIT_TEST_SUITE(CppGrpcClientResultSetTest) {
 
             row++;
         }
+    }
+
+    Y_UNIT_TEST(ListCorruptedResultSet) {
+        const TString resultSetString =
+            "columns {\n"
+            "  name: \"colName1\"\n"
+            "  type {\n"
+            "    optional_type {\n"
+            "      item {\n"
+            "        type_id: UTF8\n"
+            "      }\n"
+            "    }\n"
+            "  }\n"
+            "}\n"
+            "columns {\n"
+            "  name: \"colName2\"\n"
+            "  type {\n"
+            "    optional_type {\n"
+            "      item {\n"
+            "        type_id: UTF8\n"
+            "      }\n"
+            "    }\n"
+            "  }\n"
+            "}\n"
+            "rows {\n"
+            "  items {\n"
+            "    bytes_value: \"test content\"\n"
+            "  }\n"
+            "}\n";
+        Ydb::ResultSet rsProto;
+        google::protobuf::TextFormat::ParseFromString(resultSetString, &rsProto);
+
+        NYdb::TResultSet rs(std::move(rsProto));
+        NYdb::TResultSetParser rsParser(rs);
+        UNIT_ASSERT_EQUAL(rsParser.ColumnsCount(), 2);
+        UNIT_ASSERT_EQUAL(rsParser.RowsCount(), 1);
+        
+        UNIT_ASSERT_EXCEPTION_CONTAINS(rsParser.TryNextRow(), TContractViolation, "Corrupted data: row 0 contains 1 column(s), but metadata contains 2 column(s)");
     }
 }

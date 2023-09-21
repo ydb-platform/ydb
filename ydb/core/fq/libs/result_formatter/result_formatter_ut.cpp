@@ -579,7 +579,6 @@ Y_UNIT_TEST_SUITE(ResultFormatter) {
         {
             auto& value = *rs.add_rows();
             value.add_items()->set_low_128(1);
-            value.add_items()->set_high_128(2);
         }
 
         NJson::TJsonValue root;

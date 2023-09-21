@@ -88,14 +88,13 @@ mkdir build
      sudo tar -xJ -C /usr/local/bin/ --strip-components=1 --no-same-owner ccache-${V}-linux-x86_64/ccache)
     ```
 
-2. Configure `ccache` to use remote storage of YDB build artifacts to speed up the first build time:
+2. To speed up the first build time, you may configure `ccache` to use remote storage of YDB build artifacts:
     ```bash
     ccache -o remote_storage="http://cachesrv.ydb.tech:8080|read-only|layout=bazel"
     ccache -o sloppiness=locale 
     ccache -o base_dir=~/ydbwork/
     ```
-
-If you use a non-default work directory, adjust the `base_dir` ccache option to match it.
+   If you use a non-default work directory, adjust the `base_dir` ccache option to match it.
 
 ## Clone the ydb repository.
 
@@ -103,7 +102,7 @@ If you use a non-default work directory, adjust the `base_dir` ccache option to 
 git clone https://github.com/ydb-platform/ydb.git
 ```
 
-By default, the 'main' branch is checked out. It contains the latest development update for both YDB Server and CLI. This branch may sometimes be broken for short periods of time, so you may prefer to build the latest stable versions of YDB Server and CLI as described below.
+By default, the 'main' branch is checked out. It contains the latest development update for both YDB Server and CLI. This branch may sometimes be broken for short periods of time, so you may prefer to build the latest stable versions of YDB Server and CLI as described below. As stable versions of the YDB Server and CLI belong to different commits, it is not possible to get both server and CLI stable executables with a single checkout/build. Checkout and build server first, then CLI, or visa versa.
 
 ### Check out the latest stable YDB Server version for build
 

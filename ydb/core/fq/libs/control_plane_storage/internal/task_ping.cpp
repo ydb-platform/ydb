@@ -20,11 +20,17 @@ struct TPingTaskParams {
     std::shared_ptr<std::vector<TString>> MeteringRecords;
 };
 
+struct TFinalStatus {
+    FederatedQuery::QueryMeta::ComputeStatus Status = FederatedQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED;
+    NYql::TIssues Issues;
+    NYql::TIssues TransientIssues;
+};
+
 TPingTaskParams ConstructHardPingTask(
     const Fq::Private::PingTaskRequest& request, std::shared_ptr<Fq::Private::PingTaskResult> response,
     const TString& tablePathPrefix, const TDuration& automaticQueriesTtl, const TDuration& taskLeaseTtl,
     const THashMap<ui64, TRetryPolicyItem>& retryPolicies, ::NMonitoring::TDynamicCounterPtr rootCounters,
-    uint64_t maxRequestSize, bool dumpRawStatistics) {
+    uint64_t maxRequestSize, bool dumpRawStatistics, const std::shared_ptr<TFinalStatus>& finalStatus) {
 
     auto scope = request.scope();
     auto query_id = request.query_id().value();
@@ -331,6 +337,10 @@ TPingTaskParams ConstructHardPingTask(
             ythrow TCodeLineException(TIssuesIds::BAD_REQUEST) << "QueryInternal proto exceeded the size limit: " << internal.ByteSizeLong() << " of " << maxRequestSize << " " << TSizeFormatPrinter(internal).ToString();
         }
 
+        finalStatus->Status = query.meta().status();
+        NYql::IssuesFromMessage(query.issue(), finalStatus->Issues);
+        NYql::IssuesFromMessage(query.transient_issue(), finalStatus->TransientIssues);
+
         TSqlQueryBuilder writeQueryBuilder(tablePathPrefix, "HardPingTask(write)");
         writeQueryBuilder.AddString("tenant", request.tenant());
         writeQueryBuilder.AddString("scope", request.scope());
@@ -528,19 +538,12 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
     }
 
     std::shared_ptr<Fq::Private::PingTaskResult> response = std::make_shared<Fq::Private::PingTaskResult>();
-
-    if (request.status()) {
-        Counters.GetFinalStatusCounters(cloudId, scope)->IncByStatus(request.status());
-    }
-
-    if (IsTerminalStatus(request.status())) {
-        LOG_YQ_AUDIT_SERVICE_INFO("FinalStatus: cloud id: [" << cloudId  << "], scope: [" << scope << "], query id: [" << request.query_id() << "], job id: [" << request.job_id() << "], status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(request.status()));
-    }
+    std::shared_ptr<TFinalStatus> finalStatus = std::make_shared<TFinalStatus>();
 
     auto pingTaskParams = DoesPingTaskUpdateQueriesTable(request) ?
         ConstructHardPingTask(request, response, YdbConnection->TablePathPrefix, Config->AutomaticQueriesTtl,
             Config->TaskLeaseTtl, Config->RetryPolicies, Counters.Counters, Config->Proto.GetMaxRequestSize(),
-            Config->Proto.GetDumpRawStatistics()) :
+            Config->Proto.GetDumpRawStatistics(), finalStatus) :
         ConstructSoftPingTask(request, response, YdbConnection->TablePathPrefix, Config->TaskLeaseTtl);
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto result = ReadModifyWrite(pingTaskParams.Query, pingTaskParams.Params, pingTaskParams.Prepare, requestCounters, debugInfo);
@@ -558,13 +561,32 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
 
     success.Apply([=, actorSystem=NActors::TActivationContext::ActorSystem(), meteringRecords=pingTaskParams.MeteringRecords](const auto& future) {
             TDuration delta = TInstant::Now() - startTime;
-            LWPROBE(PingTaskRequest, queryId, delta, future.GetValue());
+            const auto success = future.GetValue();
+            LWPROBE(PingTaskRequest, queryId, delta, success);
             if (meteringRecords) {
                 for (const auto& metric : *meteringRecords) {
                     actorSystem->Send(NKikimr::NMetering::MakeMeteringServiceID(), new NKikimr::NMetering::TEvMetering::TEvWriteMeteringJson(metric));
                 }
             }
+
+            if (success) {
+                actorSystem->Send(ControlPlaneStorageServiceActorId(), new TEvControlPlaneStorage::TEvFinalStatusReport(request.query_id().value(), request.job_id().value(), cloudId, scope, finalStatus->Status, finalStatus->Issues, finalStatus->TransientIssues));
+            }
         });
+}
+
+void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvFinalStatusReport::TPtr& ev) {
+    const auto& event = *ev->Get();
+    if (!IsTerminalStatus(event.Status)) {
+        return;
+    }
+
+    static const TString unavailablePattern = "Kikimr cluster or one of its subsystems was unavailable";
+    if (event.Issues.ToOneLineString().Contains(unavailablePattern) || event.TransientIssues.ToOneLineString().Contains(unavailablePattern)) {
+        Counters.GetFinalStatusCounters(event.CloudId, event.Scope)->Unavailable->Inc();
+    }
+    Counters.GetFinalStatusCounters(event.CloudId, event.Scope)->IncByStatus(event.Status);
+    LOG_YQ_AUDIT_SERVICE_INFO("FinalStatus: cloud id: [" << event.CloudId  << "], scope: [" << event.Scope << "], query id: [" << event.QueryId << "], job id: [" << event.JobId << "], status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(event.Status));
 }
 
 } // NFq

@@ -647,6 +647,7 @@ public:
         hFunc(TEvControlPlaneStorage::TEvCreateDatabaseRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvDescribeDatabaseRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvModifyDatabaseRequest, Handle);
+        hFunc(TEvControlPlaneStorage::TEvFinalStatusReport, Handle);
     )
 
     void Handle(TEvControlPlaneStorage::TEvCreateQueryRequest::TPtr& ev);
@@ -688,6 +689,8 @@ public:
     void Handle(TEvControlPlaneStorage::TEvCreateDatabaseRequest::TPtr& ev);
     void Handle(TEvControlPlaneStorage::TEvDescribeDatabaseRequest::TPtr& ev);
     void Handle(TEvControlPlaneStorage::TEvModifyDatabaseRequest::TPtr& ev);
+
+    void Handle(TEvControlPlaneStorage::TEvFinalStatusReport::TPtr& ev);
 
     template <class TEventPtr, class TRequestActor, ERequestTypeCommon requestType>
     void HandleRateLimiterImpl(TEventPtr& ev);

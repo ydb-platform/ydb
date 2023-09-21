@@ -50,6 +50,9 @@ TFinalStatusCounters::TFinalStatusCounters(const ::NMonitoring::TDynamicCounterP
     AbortedByUser = subgroup->GetCounter("ABORTED_BY_USER", true);
     Failed = subgroup->GetCounter("FAILED", true);
     Paused = subgroup->GetCounter("PAUSED", true);
+
+    auto subgroupReason = counters->GetSubgroup("subcomponent", "FinalReason");
+    Unavailable = subgroup->GetCounter("Unavailable", true);
 }
 
 void TFinalStatusCounters::IncByStatus(FederatedQuery::QueryMeta::ComputeStatus finalStatus) {

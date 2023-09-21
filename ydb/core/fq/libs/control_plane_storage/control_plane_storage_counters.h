@@ -55,6 +55,9 @@ class TFinalStatusCounters: public virtual TThrRefBase {
     ::NMonitoring::TDynamicCounters::TCounterPtr Paused;
 
 public:
+    ::NMonitoring::TDynamicCounters::TCounterPtr Unavailable;
+
+public:
     TFinalStatusCounters(const ::NMonitoring::TDynamicCounterPtr& counters);
 
     void IncByStatus(FederatedQuery::QueryMeta::ComputeStatus finalStatus);

@@ -170,6 +170,7 @@ struct TEvControlPlaneStorage {
         EvDescribeDatabaseResponse,
         EvModifyDatabaseRequest,
         EvModifyDatabaseResponse,
+        EvFinalStatusReport,
         EvEnd,
     };
 
@@ -790,6 +791,26 @@ struct TEvControlPlaneStorage {
 
         NYql::TIssues Issues;
         TDebugInfoPtr DebugInfo;
+    };
+
+    struct TEvFinalStatusReport : NActors::TEventLocal<TEvFinalStatusReport, EvFinalStatusReport> {
+        TEvFinalStatusReport(const TString& queryId, const TString& jobId, const TString& cloudId, const TString& scope, FederatedQuery::QueryMeta::ComputeStatus status, const NYql::TIssues& issues, const NYql::TIssues& transientIssues)
+            : QueryId(queryId)
+            , JobId(jobId)
+            , CloudId(cloudId)
+            , Scope(scope)
+            , Status(status)
+            , Issues(issues)
+            , TransientIssues(transientIssues)
+        {}
+
+        TString QueryId;
+        TString JobId;
+        TString CloudId;
+        TString Scope;
+        FederatedQuery::QueryMeta::ComputeStatus Status = FederatedQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED;
+        NYql::TIssues Issues;
+        NYql::TIssues TransientIssues;
     };
 };
 

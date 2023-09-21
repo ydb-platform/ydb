@@ -1014,8 +1014,8 @@ class ToolchainOptions(object):
     def version_exactly(self, *args):
         if not args or len(args) > len(self.compiler_version_list):
             return False
-        for l, r in zip(args, list(self.compiler_version_list)[:len(args)]):
-            if l != r:
+        for left, right in zip(args, list(self.compiler_version_list)[:len(args)]):
+            if left != right:
                 return False
         return True
 
@@ -1666,9 +1666,9 @@ class LD(Linker):
         elif 'llvm-ar' in self.ar:
             self.ar_type = 'LLVM_AR'
             if target.is_apple:
-                self.llvm_ar_format="darwin"
+                self.llvm_ar_format = "darwin"
             else:
-                self.llvm_ar_format="gnu"
+                self.llvm_ar_format = "gnu"
 
         self.ld_flags = []
 

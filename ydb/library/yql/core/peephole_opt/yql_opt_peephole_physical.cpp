@@ -5352,9 +5352,6 @@ TExprNode::TPtr OptimizeWideFilterBlocks(const TExprNode::TPtr& node, TExprConte
         .Seal()
         .Build();
 
-    const size_t blockOutputs = blockLambda->ChildrenSize() - 2; // last column is a block count
-    YQL_ENSURE(blockOutputs > multiInputType->GetSize());
-
     if (auto it = rewritePositions.find(lambda->Child(1)); it != rewritePositions.end()) {
         // lambda is block-friendly
         YQL_ENSURE(it->second == multiInputType->GetSize(), "Block filter column must follow original input columns");
@@ -5405,6 +5402,8 @@ TExprNode::TPtr OptimizeWideFilterBlocks(const TExprNode::TPtr& node, TExprConte
             .Build();
     }
 
+    YQL_ENSURE(blockLambda->ChildrenSize() > 1);
+    const size_t blockOutputs = blockLambda->ChildrenSize() - 2; // last column is a block count
     TExprNode::TListType allArgs;
     for (size_t i = 0; i < blockOutputs; ++i) {
         allArgs.push_back(ctx.NewArgument(node->Pos(), "arg" + ToString(i)));

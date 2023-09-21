@@ -131,7 +131,10 @@ void TScheduler::AddJob(TCbs *cbs, TIntrusivePtr<TJob> &job, ui8 ownerIdx, ui8 g
     } else {
         job->WeightedInverseCost = (double)cbs->Weight;
     }
+
     cbs->PushJob(job);
+    HasAtLeastOneJob = true;
+
     LWPROBE(AddJob, (ui32)ownerIdx * 1000 + (ui32)gateIdx, timeNs, cbs->JobsSize, cbs->JobsCost);
     if (wasEmpty) {
         EvaluateNextJob(job->CbsIdx, timeNs, false);
@@ -190,43 +193,75 @@ TIntrusivePtr<TJob> TScheduler::SelectJob(ui64 timeNs) {
     }
     TIntrusivePtr<TJob> bestJob = nullptr;
     double totalWeightedCost = 0.0;
-    for (ui32 idx = 0; idx < Cbs.size(); ++idx) {
-        TCbs &cbs = Cbs[idx];
-        if (cbs.IsPresent() && !cbs.IsEmpty()) {
-            totalWeightedCost += (double)cbs.Weight / (double)cbs.PeekJob()->Cost;
-            if (cbs.State == CbsStateDepleted || cbs.State == CbsStateDepletedGrub) {
-                EvaluateNextJob(idx, timeNs, doLog);
+
+    bool foundAtLeastOneJob = false;
+
+    if (HasAtLeastOneJob) {
+        const size_t cbsSize = Cbs.size();
+
+        for (ui32 idx = 0; idx < cbsSize; ++idx) {
+            TCbs &cbs = Cbs[idx];
+
+            if (cbs.IsPresent() && !cbs.IsEmpty()) {
+                foundAtLeastOneJob = true;
+
+                totalWeightedCost += (double)cbs.Weight / (double)cbs.PeekJob()->Cost;
                 if (cbs.State == CbsStateDepleted || cbs.State == CbsStateDepletedGrub) {
-                    continue;
+                    EvaluateNextJob(idx, timeNs, doLog);
+                    if (cbs.State == CbsStateDepleted || cbs.State == CbsStateDepletedGrub) {
+                        continue;
+                    }
                 }
-            }
-            if (doLog) {
-                log.Write(cbs.CbsIdx); // CbsIdx
-                log.Write((ui64)cbs.State); // CbsState
-                log.Write(cbs.CbsDeadline); // CbsDeadline
-                log.Write(cbs.CurBudget); // CbsCurBudget
-            }
-            if (!bestJob) {
-                bestJob = cbs.PeekJob();
-            } else if (cbs.PeekJob()->Deadline < bestJob->Deadline) {
-                bestJob = cbs.PeekJob();
+                if (doLog) {
+                    log.Write(cbs.CbsIdx); // CbsIdx
+                    log.Write((ui64)cbs.State); // CbsState
+                    log.Write(cbs.CbsDeadline); // CbsDeadline
+                    log.Write(cbs.CurBudget); // CbsCurBudget
+                }
+                if (!bestJob) {
+                    bestJob = cbs.PeekJob();
+                } else if (cbs.PeekJob()->Deadline < bestJob->Deadline) {
+                    bestJob = cbs.PeekJob();
+                }
             }
         }
     }
+
+    if (!foundAtLeastOneJob) {
+        // This branch will be hit either if no jobs were found or if it was knonwn that there are no jobs.
+        HasAtLeastOneJob = false;
+
+        if (doLog) {
+            log.Write(Max<ui64>()); // CbsUpdate list terminator
+            
+            log.Write(Max<ui64>()); // CbsIdx
+            log.Write(Max<ui64>()); // CbsState
+            log.Write(Max<ui64>()); // JobId
+            log.Write(Max<ui64>()); // JobState
+            log.Write(Uact); // Uact
+        }
+
+        return nullptr;
+    }
+
     if (doLog) {
         log.Write(Max<ui64>()); // CbsUpdate list terminator
     }
 
     ui64 accountCbsIdx = TCbs::InvalidIdx;
+
     if (bestJob) {
         bestJob->State = JobStateRunning;
         Cbs[bestJob->CbsIdx].State = CbsStateRunning;
-        accountCbsIdx = bestJob->CbsIdx;;
+        accountCbsIdx = bestJob->CbsIdx;
     } else {
         double threshold = double(Rng() % (1ull << 23)) / double(1ull << 23) * totalWeightedCost;
         double acc = 0;
         TIntrusivePtr<TJob> job = nullptr;
-        for (ui32 idx = 0; idx < Cbs.size(); ++idx) {
+        
+        const size_t cbsSize = Cbs.size();
+
+        for (ui32 idx = 0; idx < cbsSize; ++idx) {
             TCbs &cbs = Cbs[idx];
             if (cbs.IsPresent() && !cbs.IsEmpty()) {
                 if (!bestJob) {
@@ -246,10 +281,14 @@ TIntrusivePtr<TJob> TScheduler::SelectJob(ui64 timeNs) {
                 accountCbsIdx = idx;
             }
         }
+        
         if (!bestJob) {
             bestJob = job;
         }
-        if (bestJob && accountCbsIdx != TCbs::InvalidIdx) {
+
+        Y_VERIFY(bestJob);
+
+        if (accountCbsIdx != TCbs::InvalidIdx) {
             bestJob->State = JobStateRunning;
             bestJob->AccountCbsIdx = accountCbsIdx;
             // TODO(cthulhu): Shouldn't he AccountCbsIdx be running?
@@ -257,17 +296,10 @@ TIntrusivePtr<TJob> TScheduler::SelectJob(ui64 timeNs) {
     }
 
     if (doLog) {
-        if (bestJob) {
-            log.Write(accountCbsIdx); // CbsIdx
-            log.Write((ui64)CbsStateRunning);//Cbs[accountCbsIdx].State); // CbsState
-            log.Write(bestJob->Id); // JobId
-            log.Write((ui64)bestJob->State); // JobState
-        } else {
-            log.Write(Max<ui64>()); // CbsIdx
-            log.Write(Max<ui64>()); // CbsState
-            log.Write(Max<ui64>()); // JobId
-            log.Write(Max<ui64>()); // JobState
-        }
+        log.Write(accountCbsIdx); // CbsIdx
+        log.Write((ui64)CbsStateRunning);//Cbs[accountCbsIdx].State); // CbsState
+        log.Write(bestJob->Id); // JobId
+        log.Write((ui64)bestJob->State); // JobState
         log.Write(Uact); // Uact
     }
 
@@ -297,7 +329,7 @@ void TScheduler::EvaluateNextJob(ui64 cbsIdx, ui64 timeNs, bool doLogCbsUpdate) 
     //       pages 15 and 16 (IV. HGRUB Algorithm)
 
     // (!!) depleted tasks also enter here
-    // Depleated tasks should stay that way until time t = di
+    // Depleted tasks should stay that way until time t = di
     // When this time instant arrives, the scheduling deadline is postponed (di = di + Ti)
     // and the budget is recharged to Qi (hard enforcement rule)
 

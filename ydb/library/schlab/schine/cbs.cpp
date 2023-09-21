@@ -34,14 +34,13 @@ void TCbs::Reset(ui64 cbsIdx, ui8 ownerIdx, ui8 gateIdx) {
 
 void TCbs::PushJob(TIntrusivePtr<TJob> &job) {
     Y_VERIFY(job);
-    if (job) {
-        LastSeqNo++;
-        job->SeqNo = LastSeqNo;
-        job->CbsIdx = CbsIdx;
-        Jobs.push_back(job);
-        JobsSize++;
-        JobsCost += job->Cost;
-    }
+    
+    LastSeqNo++;
+    job->SeqNo = LastSeqNo;
+    job->CbsIdx = CbsIdx;
+    Jobs.push_back(job);
+    JobsSize++;
+    JobsCost += job->Cost;
 }
 
 TIntrusivePtr<TJob> TCbs::PeekTailJob() {

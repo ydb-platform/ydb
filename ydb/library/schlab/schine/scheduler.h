@@ -59,6 +59,8 @@ class TScheduler {
 
     double Uact = 0;
 
+    bool HasAtLeastOneJob = true;
+
 public:
     TScheduler();
     void SetIsBinLogEnabled(bool is_enabled);

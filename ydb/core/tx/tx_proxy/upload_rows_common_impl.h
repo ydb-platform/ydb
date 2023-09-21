@@ -158,6 +158,7 @@ protected:
     // Additional schema info (for OLAP dst or source format)
     TVector<std::pair<TString, NScheme::TTypeInfo>> SrcColumns; // source columns in CSV could have any order
     TVector<std::pair<TString, NScheme::TTypeInfo>> YdbSchema;
+    std::set<std::string> NotNullColumns;
     THashMap<ui32, size_t> Id2Position; // columnId -> its position in YdbSchema
     THashMap<TString, NScheme::TTypeInfo> ColumnsToConvert;
     THashMap<TString, NScheme::TTypeInfo> ColumnsToConvertInplace;
@@ -220,7 +221,7 @@ protected:
     std::shared_ptr<arrow::RecordBatch> RowsToBatch(const TVector<std::pair<TSerializedCellVec, TString>>& rows,
                                                     TString& errorMessage)
     {
-        NArrow::TArrowBatchBuilder batchBuilder;
+        NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, NotNullColumns);
         batchBuilder.Reserve(rows.size()); // TODO: ReserveData()
         if (!batchBuilder.Start(YdbSchema)) {
             errorMessage = "Cannot make Arrow batch from rows";
@@ -464,6 +465,7 @@ private:
             bool notNull = entry.NotNullColumns.contains(ci.Name);
             if (notNull) {
                 notNullColumnsLeft.erase(ci.Name);
+                NotNullColumns.emplace(ci.Name);
             }
 
             if (ci.KeyOrder != -1) {

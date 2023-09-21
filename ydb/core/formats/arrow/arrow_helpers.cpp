@@ -74,18 +74,18 @@ std::shared_ptr<arrow::DataType> GetCSVArrowType(NScheme::TTypeInfo typeId) {
     }
 }
 
-std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
+std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns, const std::set<std::string>& notNullColumns) {
     std::vector<std::shared_ptr<arrow::Field>> fields;
     fields.reserve(columns.size());
     for (auto& [name, ydbType] : columns) {
         std::string colName(name.data(), name.size());
-        fields.emplace_back(std::make_shared<arrow::Field>(colName, GetArrowType(ydbType)));
+        fields.emplace_back(std::make_shared<arrow::Field>(colName, GetArrowType(ydbType), !notNullColumns.contains(colName)));
     }
     return fields;
 }
 
-std::shared_ptr<arrow::Schema> MakeArrowSchema(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns) {
-    return std::make_shared<arrow::Schema>(MakeArrowFields(ydbColumns));
+std::shared_ptr<arrow::Schema> MakeArrowSchema(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns, const std::set<std::string>& notNullColumns) {
+    return std::make_shared<arrow::Schema>(MakeArrowFields(ydbColumns, notNullColumns));
 }
 
 TString SerializeSchema(const arrow::Schema& schema) {
@@ -200,6 +200,14 @@ std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::
             } else {
                 AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "not_found_column")("column", field->name())
                     ("column_type", field->type()->ToString())("columns", JoinSeq(",", srcBatch->schema()->field_names()));
+                return nullptr;
+            }
+        } else {
+            auto srcField = srcBatch->schema()->GetFieldByName(field->name());
+            Y_VERIFY(srcField);
+            if (!field->Equals(srcField)) {
+                AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_parse_incoming_batch")("reason", "invalid_column_type")("column", field->name())
+                                ("column_type", field->ToString(true))("incoming_type", srcField->ToString(true));
                 return nullptr;
             }
         }

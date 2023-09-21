@@ -295,9 +295,9 @@ std::vector<TCell> MakeTestCells(const std::vector<TTypeInfo>& types, ui32 value
 
 
 TString MakeTestBlob(std::pair<ui64, ui64> range, const std::vector<std::pair<TString, TTypeInfo>>& columns,
-                     const TTestBlobOptions& options) {
+                     const TTestBlobOptions& options, const std::set<std::string>& notNullColumns) {
     TString err;
-    NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::LZ4_FRAME);
+    NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::LZ4_FRAME, notNullColumns);
     batchBuilder.Start(columns, 0, 0, err);
 
     std::vector<ui32> nullPositions;

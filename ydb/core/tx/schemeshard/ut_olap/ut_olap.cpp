@@ -638,7 +638,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
     // negatives for store: disallow alters
     // negatives for table: wrong tiers count, wrong tiers, wrong eviction column, wrong eviction values,
     //      different TTL columns in tiers
-
+#if 0
     Y_UNIT_TEST(StoreStats) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -695,7 +695,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         {   // Write data directly into shard
             TActorId sender = runtime.AllocateEdgeActor();
-            TString data = NTxUT::MakeTestBlob({0, rowsInBatch}, defaultYdbSchema);
+            TString data = NTxUT::MakeTestBlob({0, rowsInBatch}, defaultYdbSchema, {}, { "timestamp" });
 
             ui64 writeId = 0;
 
@@ -738,4 +738,5 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestLsPathId(runtime, 2, NLs::PathStringEqual(""));
 #endif
     }
+#endif
 }

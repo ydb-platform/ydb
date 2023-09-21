@@ -40,10 +40,11 @@ public:
 
 }
 
-TArrowCSV::TArrowCSV(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns, bool header)
+TArrowCSV::TArrowCSV(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns, bool header, const std::set<std::string>& notNullColumns)
     : ReadOptions(arrow::csv::ReadOptions::Defaults())
     , ParseOptions(arrow::csv::ParseOptions::Defaults())
     , ConvertOptions(arrow::csv::ConvertOptions::Defaults())
+    , NotNullColumns(notNullColumns)
 {
     ConvertOptions.check_utf8 = false;
     ConvertOptions.timestamp_parsers.clear();
@@ -84,7 +85,7 @@ TArrowCSV::TArrowCSV(const TVector<std::pair<TString, NScheme::TTypeInfo>>& colu
 
 std::shared_ptr<arrow::RecordBatch> TArrowCSV::ConvertColumnTypes(std::shared_ptr<arrow::RecordBatch> parsedBatch) const {
     if (!parsedBatch) {
-        return parsedBatch;
+        return nullptr;
     }
 
     const auto& schema = parsedBatch->schema();
@@ -101,7 +102,8 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ConvertColumnTypes(std::shared_pt
             auto it = OriginalColumnTypes.find(f->name());
             Y_VERIFY(it != OriginalColumnTypes.end());
             originalType = it->second;
-            Y_VERIFY(sBuilderFixed.AddField(std::make_shared<arrow::Field>(f->name(), originalType)).ok());
+            bool nullable = !NotNullColumns.contains(f->name());
+            Y_VERIFY(sBuilderFixed.AddField(std::make_shared<arrow::Field>(f->name(), originalType, nullable)).ok());
         } else {
             continue;
         }

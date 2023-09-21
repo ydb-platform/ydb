@@ -168,11 +168,12 @@ std::shared_ptr<arrow::RecordBatch> InplaceConvertColumns(const std::shared_ptr<
 
     for (i32 i = 0; i < batch->num_columns(); ++i) {
         auto& colName = batch->column_name(i);
+        auto origType = batch->schema()->GetFieldByName(colName);
         auto it = columnsToConvert.find(TString(colName.data(), colName.size()));
         if (it != columnsToConvert.end()) {
             columns[i] = InplaceConvertColumn(columns[i], it->second);
         }
-        fields.push_back(std::make_shared<arrow::Field>(colName, columns[i]->type()));
+        fields.push_back(std::make_shared<arrow::Field>(colName, columns[i]->type(), origType->nullable()));
     }
     auto resultSchemaFixed = std::make_shared<arrow::Schema>(std::move(fields));
     auto convertedBatch = arrow::RecordBatch::Make(resultSchemaFixed, batch->num_rows(), std::move(columns));

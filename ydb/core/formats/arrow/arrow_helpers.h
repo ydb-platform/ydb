@@ -42,8 +42,8 @@ inline bool ArrayEqualView(const std::shared_ptr<arrow::Array>& x, const std::sh
 
 struct TSortDescription;
 
-std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns);
-std::shared_ptr<arrow::Schema> MakeArrowSchema(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns);
+std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns,  const std::set<std::string>& notNullColumns = {});
+std::shared_ptr<arrow::Schema> MakeArrowSchema(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns, const std::set<std::string>& notNullColumns = {});
 
 TString SerializeSchema(const arrow::Schema& schema);
 std::shared_ptr<arrow::Schema> DeserializeSchema(const TString& str);

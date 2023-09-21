@@ -185,8 +185,9 @@ bool TRecordBatchReader::DeserializeFromStrings(const TString& schemaString, con
     return true;
 }
 
-TArrowBatchBuilder::TArrowBatchBuilder(arrow::Compression::type codec)
+TArrowBatchBuilder::TArrowBatchBuilder(arrow::Compression::type codec, const std::set<std::string>& notNullColumns)
     : WriteOptions(arrow::ipc::IpcWriteOptions::Defaults())
+    , NotNullColumns(notNullColumns)
 {
     Y_VERIFY(arrow::util::Codec::IsAvailable(codec));
     auto resCodec = arrow::util::Codec::Create(codec);
@@ -198,7 +199,7 @@ TArrowBatchBuilder::TArrowBatchBuilder(arrow::Compression::type codec)
 
 bool TArrowBatchBuilder::Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns) {
     YdbSchema = ydbColumns;
-    auto schema = MakeArrowSchema(ydbColumns);
+    auto schema = MakeArrowSchema(ydbColumns, NotNullColumns);
     auto status = arrow::RecordBatchBuilder::Make(schema, arrow::default_memory_pool(), RowsToReserve, &BatchBuilder);
     NumRows = NumBytes = 0;
     return status.ok();

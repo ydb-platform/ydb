@@ -6,6 +6,8 @@
 #include <ydb/core/tx/sharding/sharding.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/core/formats/arrow/serializer/full.h>
+#include <ydb/core/formats/arrow/serializer/batch_only.h>
 
 using namespace NYdb;
 
@@ -16,30 +18,18 @@ static const constexpr char* TestTablePath = TTestOlap::TablePath;
 
 TString TestBlob() {
     auto batch = TTestOlap::SampleBatch();
-    int64_t size;
-    auto status = arrow::ipc::GetRecordBatchSize(*batch, &size);
-    Y_VERIFY(status.ok());
-
-    TString buf;
-    buf.resize(size);
-    auto writer = arrow::Buffer::GetWriter(arrow::MutableBuffer::Wrap(&buf[0], size));
-    Y_VERIFY(writer.ok());
-
-    // UNCOMPRESSED
-    status = SerializeRecordBatch(*batch, arrow::ipc::IpcWriteOptions::Defaults(), (*writer).get());
-    Y_VERIFY(status.ok());
-    return buf;
+    return NArrow::NSerialization::TFullDataSerializer(arrow::ipc::IpcWriteOptions::Defaults()).Serialize(batch);
 }
 
 TVector<std::shared_ptr<arrow::RecordBatch>> SplitData(const TString& data, ui32 numBatches) {
-    std::shared_ptr<arrow::RecordBatch> batch = NArrow::DeserializeBatch(data, TTestOlap::ArrowSchema());
-    Y_VERIFY(batch);
+    auto batch = NArrow::NSerialization::TFullDataDeserializer().Deserialize(data);
+    UNIT_ASSERT(batch.ok());
 
     NSharding::TLogsSharding sharding(numBatches, { "timestamp", "uid" }, numBatches);
-    std::vector<ui32> rowSharding = sharding.MakeSharding(batch);
-    Y_VERIFY(rowSharding.size() == (size_t)batch->num_rows());
+    std::vector<ui32> rowSharding = sharding.MakeSharding(*batch);
+    Y_VERIFY(rowSharding.size() == (size_t)batch->get()->num_rows());
 
-    std::vector<std::shared_ptr<arrow::RecordBatch>> sharded = NArrow::ShardingSplit(batch, rowSharding, numBatches);
+    std::vector<std::shared_ptr<arrow::RecordBatch>> sharded = NArrow::ShardingSplit(*batch, rowSharding, numBatches);
     Y_VERIFY(sharded.size() == numBatches);
 
     TVector<std::shared_ptr<arrow::RecordBatch>> out;
@@ -324,7 +314,12 @@ Y_UNIT_TEST_SUITE(YdbLongTx) {
         {
             NLongTx::TLongTxReadResult resRead = futureRead.GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(resRead.Status().GetStatus(), EStatus::SUCCESS);
-            UNIT_ASSERT_VALUES_EQUAL(resRead.GetResult().data().data(), data);
+
+            auto inputBatch = NArrow::NSerialization::TFullDataDeserializer().Deserialize(data);
+            UNIT_ASSERT(inputBatch.ok());
+            auto readBatch = NArrow::NSerialization::TBatchPayloadDeserializer(inputBatch->get()->schema()).Deserialize(resRead.GetResult().data().data());
+            UNIT_ASSERT(readBatch.ok());
+            UNIT_ASSERT_VALUES_EQUAL(readBatch->get()->ToString(), inputBatch->get()->ToString());
         }
     }
 

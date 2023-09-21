@@ -76,7 +76,7 @@ public:
             const auto& keyFields = key->fields();
             size_t minSize = std::min(batchFields.size(), keyFields.size());
             for (size_t i = 0; i < minSize; ++i) {
-                Y_VERIFY_DEBUG(batchFields[i]->Equals(*keyFields[i]));
+                Y_VERIFY_DEBUG(batchFields[i]->type()->Equals(*keyFields[i]->type()));
             }
             if (batchFields.size() <= keyFields.size()) {
                 return NArrow::TReplaceKey::FromBatch(Object->Batch, Object->Batch->schema(), 0);

@@ -461,7 +461,7 @@ private:
                 auto& nullValue = cvsSettings.null_value();
                 bool withHeader = cvsSettings.header();
 
-                NFormats::TArrowCSV reader(SrcColumns, withHeader);
+                NFormats::TArrowCSV reader(SrcColumns, withHeader, NotNullColumns);
                 reader.SetSkipRows(skipRows);
 
                 if (!delimiter.empty()) {

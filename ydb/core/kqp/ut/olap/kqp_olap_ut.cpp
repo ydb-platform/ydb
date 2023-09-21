@@ -29,6 +29,7 @@
 
 #include <fmt/format.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
+#include <ydb/core/formats/arrow/serializer/full.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -513,7 +514,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto txId = resBeginTx.GetResult().tx_id();
         auto batch = lHelper.TestArrowBatch(pathIdBegin, tsBegin, rowCount);
-        TString data = NArrow::SerializeBatchNoCompression(batch);
+
+        TString data = NArrow::NSerialization::TFullDataSerializer(arrow::ipc::IpcWriteOptions::Defaults()).Serialize(batch);
 
         NLongTx::TLongTxWriteResult resWrite =
                 client.Write(txId, testTable, txId, data, Ydb::LongTx::Data::APACHE_ARROW).GetValueSync();
@@ -534,7 +536,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto txId = resBeginTx.GetResult().tx_id();
         auto batch = lHelper.TestArrowBatch(pathIdBegin, tsBegin, rowCount);
-        TString data = NArrow::SerializeBatchNoCompression(batch);
+        TString data = NArrow::NSerialization::TFullDataSerializer(arrow::ipc::IpcWriteOptions::Defaults()).Serialize(batch);
 
         NLongTx::TLongTxWriteResult resWrite =
                 client.Write(txId, testTable, txId, data, Ydb::LongTx::Data::APACHE_ARROW).GetValueSync();
@@ -554,7 +556,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto txId = resBeginTx.GetResult().tx_id();
         auto batch = lHelper.TestArrowBatch();
-        TString data = NArrow::SerializeBatchNoCompression(batch);
+        TString data = NArrow::NSerialization::TFullDataSerializer(arrow::ipc::IpcWriteOptions::Defaults()).Serialize(batch);
 
         NLongTx::TLongTxWriteResult resWrite =
                 client.Write(txId, testTable, txId, data, Ydb::LongTx::Data::APACHE_ARROW).GetValueSync();

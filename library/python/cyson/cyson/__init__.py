@@ -14,4 +14,4 @@ __all__ = [
     'YsonEntity', 'YsonString', 'YsonInt64', 'YsonUInt64',
     'YsonFloat64', 'YsonBoolean', 'YsonList', 'YsonMap',
     'UInt', 'UnicodeReader',
-]
+]  # noqa: F405

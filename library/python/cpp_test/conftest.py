@@ -2,16 +2,16 @@ import difflib
 
 
 def iter_diff(fr, to):
-    for l in difflib.unified_diff(fr.splitlines(), to.splitlines(), fromfile='L', tofile='R'):
-        l = l.rstrip('\n')
+    for line in difflib.unified_diff(fr.splitlines(), to.splitlines(), fromfile='L', tofile='R'):
+        line = line.rstrip('\n')
 
-        if l:
-            if l[0] == '-':
-                l = '[[bad]]' + l + '[[rst]]'
-            elif l[0] == '+':
-                l = '[[good]]' + l + '[[rst]]'
+        if line:
+            if line[0] == '-':
+                line = '[[bad]]' + line + '[[rst]]'
+            elif line[0] == '+':
+                line = '[[good]]' + line + '[[rst]]'
 
-        yield l
+        yield line
 
 
 def pytest_assertrepr_compare(op, left, right):

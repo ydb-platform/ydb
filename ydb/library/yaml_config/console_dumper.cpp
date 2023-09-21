@@ -591,10 +591,7 @@ NKikimrConsole::TConfigureRequest DumpYamlConfigRequest(const TString &cItem, co
         }
     }
 
-    auto fillItem = [&](auto& item) {
-        item.SetCookie(cookie.c_str());
-        item.SetMergeStrategy(mergeStrategy);
-
+    auto prepareActions = [&](auto& result) {
         Y_VERIFY(configNode.Type() == NFyaml::ENodeType::Mapping, "Config has to be mapping");
         switch (mergeStrategy) {
             case NKikimrConsole::TConfigItem::MERGE_OVERWRITE_REPEATED:
@@ -606,20 +603,30 @@ NKikimrConsole::TConfigureRequest DumpYamlConfigRequest(const TString &cItem, co
             default:
                 Y_VERIFY(CheckYamlMarkedForOverwrite(configNode), "Inheritance tags doesn't match choosen merge strategy");
         }
-        auto config = YamlToProto(configNode, true, false);
-        item.MutableConfig()->CopyFrom(config);
+
+        for (auto& item : configNode.Map()) {
+            auto separateConfig = NFyaml::TDocument::Parse("{}");
+            auto key = item.Key().Copy(separateConfig);
+            auto value = item.Value().Copy(separateConfig);
+            separateConfig.Root().Map().Append(key, value);
+            auto config = YamlToProto(separateConfig.Root(), true, false);
+            NKikimrConsole::TConfigItem& configItem = *result.AddActions()->MutableAddConfigItem()->MutableConfigItem();
+            configItem.MutableConfig()->CopyFrom(config);
+            configItem.SetCookie(cookie.c_str());
+            configItem.SetMergeStrategy(mergeStrategy);
+        }
     };
 
     // for domain
     if (tenants.empty()) {
-        NKikimrConsole::TConfigItem& item = *result.AddActions()->MutableAddConfigItem()->MutableConfigItem();
-        fillItem(item);
+        prepareActions(result);
     }
 
     for (auto& tenant : tenants) {
-        NKikimrConsole::TConfigItem& item = *result.AddActions()->MutableAddConfigItem()->MutableConfigItem();
-        item.MutableUsageScope()->MutableTenantAndNodeTypeFilter()->SetTenant(tenant);
-        fillItem(item);
+        prepareActions(result);
+        for (auto& action : *result.MutableActions()) {
+            action.MutableAddConfigItem()->MutableConfigItem()->MutableUsageScope()->MutableTenantAndNodeTypeFilter()->SetTenant(tenant);
+        }
     }
 
     return result;

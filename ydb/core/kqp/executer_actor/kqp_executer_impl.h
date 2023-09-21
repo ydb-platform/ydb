@@ -801,6 +801,10 @@ protected:
             if (sinkName) {
                 auto structuredToken = NYql::CreateStructuredTokenParser(extSink.GetAuthInfo()).ToBuilder().ReplaceReferences(secureParams).ToJson();
                 task.Meta.SecureParams.emplace(sinkName, structuredToken);
+                if (UserRequestContext->TraceId) {
+                    task.Meta.TaskParams.emplace("fq.job_id", UserRequestContext->TraceId);
+                    // "fq.restart_count"
+                }
             }
 
             auto& output = task.Outputs[sink.GetOutputIndex()];

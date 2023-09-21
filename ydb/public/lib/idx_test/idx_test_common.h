@@ -21,7 +21,7 @@ public:
 
 inline void ThrowOnError(const NYdb::TStatus& status) {
     if (!status.IsSuccess()) {
-        throw TYdbErrorException(status);
+        throw TYdbErrorException(status) << status;
     }
 }
 

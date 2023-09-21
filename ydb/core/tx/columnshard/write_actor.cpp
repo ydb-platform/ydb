@@ -38,6 +38,7 @@ public:
 
         if (status != NKikimrProto::OK) {
             LOG_S_ERROR("Unsuccessful TEvPutResult for blob " << msg->Id.ToString() << " status: " << status << " reason: " << msg->ErrorReason);
+            WriteController->Abort();
             return SendResultAndDie(ctx, status);
         }
 

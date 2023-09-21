@@ -3,8 +3,8 @@
 
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
-#include <ydb/core/tx/columnshard/blobs_action/bs.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 
@@ -25,7 +25,8 @@ namespace NKikimr::NColumnShard {
         Y_VERIFY(Status == EOperationStatus::Draft);
 
         NEvWrite::TWriteMeta writeMeta((ui64)WriteId, tableId, source);
-        std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildSlicesTask>(owner.TabletID(), ctx.SelfID, std::make_shared<NOlap::TBSWriteAction>(*owner.BlobManager), NEvWrite::TWriteData(writeMeta, data));
+        std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildSlicesTask>(owner.TabletID(), ctx.SelfID,
+            owner.StoragesManager->GetInsertOperator()->StartWritingAction(), NEvWrite::TWriteData(writeMeta, data));
         NConveyor::TCompServiceOperator::SendTaskToExecute(task);
 
         Status = EOperationStatus::Started;
@@ -81,13 +82,6 @@ namespace NKikimr::NColumnShard {
         THashSet<TWriteId> writeIds;
         writeIds.insert(GlobalWriteIds.begin(), GlobalWriteIds.end());
         owner.InsertTable->Abort(dbTable, writeIds);
-
-        TBlobManagerDb blobManagerDb(txc.DB);
-        auto allAborted = owner.InsertTable->GetAborted();
-        for (auto& [abortedWriteId, abortedData] : allAborted) {
-            owner.InsertTable->EraseAborted(dbTable, abortedData);
-            owner.BlobManager->DeleteBlob(abortedData.GetBlobRange().GetBlobId(), blobManagerDb);
-        }
     }
 
     bool TOperationsManager::Init(NTabletFlatExecutor::TTransactionContext& txc) {

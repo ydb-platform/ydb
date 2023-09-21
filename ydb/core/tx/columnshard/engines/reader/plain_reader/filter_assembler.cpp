@@ -5,7 +5,7 @@
 
 namespace NKikimr::NOlap::NPlainReader {
 
-bool TAssembleFilter::DoExecuteImpl() {
+bool TAssembleFilter::DoExecute() {
     /// @warning The replace logic is correct only in assumption that predicate is applied over a part of ReplaceKey.
     /// It's not OK to apply predicate before replacing key duplicates otherwise.
     /// Assumption: dup(A, B) <=> PK(A) = PK(B) => Predicate(A) = Predicate(B) => all or no dups for PK(A) here
@@ -51,6 +51,7 @@ bool TAssembleFilter::DoExecuteImpl() {
 }
 
 bool TAssembleFilter::DoApply(IDataReader& owner) const {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "apply");
     owner.GetMeAs<TPlainReadData>().GetSourceByIdxVerified(SourceIdx).InitFilterStageData(AppliedFilter, EarlyFilter, FilteredBatch);
     return true;
 }

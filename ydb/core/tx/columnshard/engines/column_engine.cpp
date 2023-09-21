@@ -1,4 +1,5 @@
 #include "column_engine.h"
+#include "changes/abstract/abstract.h"
 #include <util/stream/output.h>
 
 namespace NKikimr::NOlap {

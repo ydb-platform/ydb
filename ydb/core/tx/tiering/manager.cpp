@@ -1,9 +1,9 @@
 #include "common.h"
 #include "manager.h"
 #include "external_data.h"
-#include "s3_actor.h"
 
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/blobs_action/tier/adapter.h>
 #include <ydb/services/metadata/secret/fetcher.h>
 
 namespace NKikimr::NColumnShard {
@@ -78,45 +78,29 @@ TManager& TManager::Restart(const TTierConfig& config, std::shared_ptr<NMetadata
     if (Config.IsSame(config)) {
         return *this;
     }
-    if (Config.NeedExport()) {
-        Stop();
-    }
+    Stop();
     Config = config;
     Start(secrets);
     return *this;
 }
 
 bool TManager::Stop() {
-    if (!StorageActorId) {
-        ALS_DEBUG(NKikimrServices::TX_TIERING) << "Tier '" << GetTierName() << "' hasn't been started at tablet " << TabletId;
-        return true;
-    }
-    if (TlsActivationContext) {
-        TActivationContext::AsActorContext().Send(StorageActorId, new TEvents::TEvPoisonPill());
-    }
-    StorageActorId = {};
+    ExternalStorageOperator = nullptr;
+    ExternalStorageConfig = nullptr;
     ALS_DEBUG(NKikimrServices::TX_TIERING) << "Tier '" << GetTierName() << "' stopped at tablet " << TabletId;
     return true;
 }
 
 bool TManager::Start(std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) {
-    if (!Config.NeedExport()) {
-        ALS_DEBUG(NKikimrServices::TX_TIERING) << "Tier '" << GetTierName() << "' has no exports at tablet " << TabletId;
-        return true;
-    }
-    if (!!StorageActorId) {
+    if (!!ExternalStorageOperator) {
         ALS_DEBUG(NKikimrServices::TX_TIERING) << "Tier '" << GetTierName() << "' is already started at tablet " << TabletId;
         return true;
     }
 #ifndef KIKIMR_DISABLE_S3_OPS
-    auto& ctx = TActivationContext::AsActorContext();
-    const NActors::TActorId newActor = ctx.Register(
-        CreateS3Actor(TabletId, TabletActorId, Config.GetTierName())
-    );
     auto s3Config = Config.GetPatchedConfig(secrets);
-
-    ctx.Send(newActor, new TEvPrivate::TEvS3Settings(s3Config));
-    StorageActorId = newActor;
+    ExternalStorageConfig = NWrappers::NExternalStorage::IExternalStorageConfig::Construct(s3Config);
+    ExternalStorageOperator = ExternalStorageConfig->ConstructStorageOperator(false);
+    ExternalStorageOperator->InitReplyAdapter(std::make_shared<NOlap::NBlobOperations::NTier::TRepliesAdapter>());
 #endif
     ALS_DEBUG(NKikimrServices::TX_TIERING) << "Tier '" << GetTierName() << "' started at tablet " << TabletId;
     return true;
@@ -172,19 +156,16 @@ void TTiersManager::TakeConfigs(NMetadata::NFetcher::ISnapshot::TPtr snapshotExt
     }
 }
 
-TActorId TTiersManager::GetStorageActorId(const TString& tierId) {
+#ifndef KIKIMR_DISABLE_S3_OPS
+NWrappers::NExternalStorage::IExternalStorageOperator::TPtr TTiersManager::GetStorageOperator(const TString& tierId) const {
     auto it = Managers.find(tierId);
     if (it == Managers.end()) {
-        ALS_ERROR(NKikimrServices::TX_TIERING) << "No S3 actor for tier '" << tierId << "' at tablet " << TabletId;
-        return {};
+        ALS_ERROR(NKikimrServices::TX_TIERING) << "No storage operator for tier '" << tierId << "' at tablet " << TabletId;
+        return nullptr;
     }
-    auto actorId = it->second.GetStorageActorId();
-    if (!actorId) {
-        ALS_ERROR(NKikimrServices::TX_TIERING) << "Not started storage actor for tier '" << tierId << "' at tablet " << TabletId;
-        return {};
-    }
-    return actorId;
+    return it->second.GetExternalStorageOperator();
 }
+#endif
 
 TTiersManager& TTiersManager::Start(std::shared_ptr<TTiersManager> ownerPtr) {
     Y_VERIFY(!Actor);
@@ -213,6 +194,15 @@ const NTiers::TManager& TTiersManager::GetManagerVerified(const TString& tierId)
     return it->second;
 }
 
+const NTiers::TManager* TTiersManager::GetManagerOptional(const TString& tierId) const {
+    auto it = Managers.find(tierId);
+    if (it != Managers.end()) {
+        return &it->second;
+    } else {
+        return nullptr;
+    }
+}
+
 NMetadata::NFetcher::ISnapshotsFetcher::TPtr TTiersManager::GetExternalDataManipulation() const {
     if (!ExternalDataManipulation) {
         ExternalDataManipulation = std::make_shared<NTiers::TSnapshotConstructor>();
@@ -237,7 +227,6 @@ THashMap<ui64, NKikimr::NOlap::TTiering> TTiersManager::GetTiering() const {
                     auto it = tierConfigs.find(name);
                     if (it != tierConfigs.end()) {
                         tier->SetCompression(NTiers::ConvertCompression(it->second.GetCompression()));
-                        tier->SetNeedExport(it->second.NeedExport());
                     }
                 }
             }

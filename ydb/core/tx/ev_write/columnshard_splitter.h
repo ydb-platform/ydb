@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 
 
 namespace NKikimr::NEvWrite {

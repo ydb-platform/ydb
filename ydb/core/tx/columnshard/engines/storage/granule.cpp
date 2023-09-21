@@ -63,6 +63,9 @@ void TGranuleMeta::AddColumnRecord(const TIndexInfo& indexInfo, const TPortionIn
         Y_VERIFY(it->second->IsEqualWithSnapshots(portion));
         it->second->AddRecord(indexInfo, rec, portionMeta);
     }
+    if (portionMeta) {
+        it->second->InitOperator(Owner->GetStoragesManager()->InitializePortionOperator(*it->second), false);
+    }
 }
 
 void TGranuleMeta::OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter) {
@@ -158,7 +161,7 @@ TGranuleMeta::TGranuleMeta(const TGranuleRecord& rec, std::shared_ptr<TGranulesS
     , Record(rec)
 {
     Y_VERIFY(Owner);
-    OptimizerPlanner = std::make_shared<NStorageOptimizer::TIntervalsOptimizerPlanner>(rec.Granule);
+    OptimizerPlanner = std::make_shared<NStorageOptimizer::TIntervalsOptimizerPlanner>(rec.Granule, owner->GetStoragesManager());
 
 }
 

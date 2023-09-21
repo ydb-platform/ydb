@@ -3,7 +3,7 @@
 
 namespace NKikimr::NOlap::NPlainReader {
 
-bool TAssembleBatch::DoExecuteImpl() {
+bool TAssembleBatch::DoExecute() {
     /// @warning The replace logic is correct only in assumption that predicate is applied over a part of ReplaceKey.
     /// It's not OK to apply predicate before replacing key duplicates otherwise.
     /// Assumption: dup(A, B) <=> PK(A) = PK(B) => Predicate(A) = Predicate(B) => all or no dups for PK(A) here
@@ -26,10 +26,9 @@ bool TAssembleFFBatch::DoApply(IDataReader& owner) const {
     return true;
 }
 
-TAssembleBatch::TAssembleBatch(TPortionInfo::TPreparedBatchData&& batchConstructor,
-    const ui32 sourceIdx, const std::shared_ptr<NArrow::TColumnFilter>& filter,
-    const NColumnShard::IDataTasksProcessor::TPtr& processor)
-    : TBase(processor)
+TAssembleBatch::TAssembleBatch(const NActors::TActorId& scanActorId, TPortionInfo::TPreparedBatchData&& batchConstructor,
+    const ui32 sourceIdx, const std::shared_ptr<NArrow::TColumnFilter>& filter)
+    : TBase(scanActorId)
     , BatchConstructor(batchConstructor)
     , Filter(filter)
     , SourceIdx(sourceIdx)

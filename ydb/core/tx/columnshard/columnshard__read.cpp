@@ -47,7 +47,7 @@ private:
 };
 
 
-bool TTxRead::Execute(TTransactionContext& txc, const TActorContext& ctx) {
+bool TTxRead::Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) {
     Y_VERIFY(Ev);
     Y_VERIFY(Self->TablesManager.HasPrimaryIndex());
     Y_UNUSED(txc);
@@ -98,7 +98,6 @@ bool TTxRead::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     ui32 status = NKikimrTxColumnShard::EResultStatus::ERROR;
 
     if (metadata) {
-        Self->MapExternBlobs(ctx, *metadata);
         ReadMetadata = metadata;
         status = NKikimrTxColumnShard::EResultStatus::SUCCESS;
     }
@@ -131,7 +130,7 @@ void TTxRead::Complete(const TActorContext& ctx) {
         LOG_S_DEBUG(TxPrefix() << "complete" << TxSuffix() << " Metadata: " << *ReadMetadata);
 
         const ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(
-            std::static_pointer_cast<const NOlap::TReadMetadataBase>(ReadMetadata), *Self->BlobManager);
+            std::static_pointer_cast<const NOlap::TReadMetadataBase>(ReadMetadata));
         auto statsDelta = Self->InFlightReadsTracker.GetSelectStatsDelta();
 
         Self->IncCounter(COUNTER_READ_INDEX_GRANULES, statsDelta.Granules);
@@ -141,8 +140,8 @@ void TTxRead::Complete(const TActorContext& ctx) {
         Self->IncCounter(COUNTER_READ_INDEX_BYTES, statsDelta.Bytes);
 
         TInstant deadline = TInstant::Max(); // TODO
-        ctx.Register(CreateReadActor(Self->TabletID(), Ev->Get()->GetSource(),
-            std::move(Result), ReadMetadata, deadline, Self->SelfId(), requestCookie, Self->ReadCounters));
+        ctx.Register(CreateReadActor(Self->TabletID(), Self->GetBlobsReadActorId(), Ev->Get()->GetSource(),
+            Self->GetStoragesManager(), std::move(Result), ReadMetadata, deadline, Self->SelfId(), requestCookie, Self->ReadCounters));
     }
 }
 

@@ -21,12 +21,14 @@ target_link_libraries(engines-changes-abstract PUBLIC
   columnshard-counters-common
   ydb-core-tablet_flat
   yql-core-expr_nodes
+  tx-columnshard-blobs_action
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(engines-changes-abstract PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/abstract/abstract.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/abstract/mark.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/abstract/compaction_info.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/abstract/settings.cpp
 )
 generate_enum_serilization(engines-changes-abstract
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/abstract/abstract.h

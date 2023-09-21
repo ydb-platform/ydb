@@ -17,17 +17,13 @@ TColumnShardScanIterator::TColumnShardScanIterator(NOlap::TReadMetadata::TConstP
     }
 }
 
-void TColumnShardScanIterator::AddData(const TBlobRange& blobRange, TString data) {
-    IndexedData->AddData(blobRange, data);
-}
-
 std::optional<NOlap::TPartialReadResult> TColumnShardScanIterator::GetBatch() {
     FillReadyResults();
     return ReadyResults.pop_front();
 }
 
-std::optional<NBlobCache::TBlobRange> TColumnShardScanIterator::GetNextBlobToRead() {
-    return IndexedData->ExtractNextBlob(ReadyResults.size());
+std::shared_ptr<NOlap::NBlobOperations::NRead::ITask> TColumnShardScanIterator::GetNextTaskToRead() {
+    return IndexedData->ExtractNextReadTask(ReadyResults.size());
 }
 
 void TColumnShardScanIterator::FillReadyResults() {
@@ -50,14 +46,6 @@ void TColumnShardScanIterator::FillReadyResults() {
     if (limitLeft == 0) {
         IndexedData->Abort();
     }
-
-    if (IndexedData->IsFinished()) {
-        Context.MutableProcessor().Stop();
-    }
-}
-
-bool TColumnShardScanIterator::HasWaitingTasks() const {
-    return Context.GetProcessor().InWaiting();
 }
 
 TColumnShardScanIterator::~TColumnShardScanIterator() {
@@ -66,10 +54,9 @@ TColumnShardScanIterator::~TColumnShardScanIterator() {
 }
 
 void TColumnShardScanIterator::Apply(IDataTasksProcessor::ITask::TPtr task) {
-    if (!task->IsDataProcessed() || Context.GetProcessor().IsStopped() || !task->IsSameProcessor(Context.GetProcessor()) || IndexedData->IsFinished()) {
-        return;
+    if (!IndexedData->IsFinished()) {
+        Y_VERIFY(task->Apply(*IndexedData));
     }
-    Y_VERIFY(task->Apply(*IndexedData));
 }
 
 }

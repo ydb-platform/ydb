@@ -1,174 +1,15 @@
 #include "columnshard_impl.h"
-#include "columnshard_schema.h"
-#include "blob_cache.h"
-#include "blobs_action/bs.h"
+#include "blobs_action/transaction/tx_write.h"
+#include "blobs_action/transaction/tx_draft.h"
 #include "operations/slice_builder.h"
+#include "operations/write_data.h"
 
 #include <ydb/core/tx/conveyor/usage/service.h>
-#include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
-#include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
-#include <ydb/core/tx/columnshard/operations/write.h>
-#include <ydb/core/tx/columnshard/operations/write_data.h>
+#include <ydb/core/tx/ev_write/events.h>
 
 namespace NKikimr::NColumnShard {
 
 using namespace NTabletFlatExecutor;
-
-class TTxWriteDraft: public TTransactionBase<TColumnShard> {
-private:
-    const IWriteController::TPtr WriteController;
-public:
-    TTxWriteDraft(TColumnShard* self, const IWriteController::TPtr writeController)
-        : TBase(self)
-        , WriteController(writeController) {
-    }
-
-    bool Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) override {
-        TBlobManagerDb blobManagerDb(txc.DB);
-        for (auto&& action : WriteController->GetBlobActions()) {
-            action->OnExecuteTxBeforeWrite(*Self, blobManagerDb);
-        }
-        return true;
-    }
-    void Complete(const TActorContext& ctx) override {
-        for (auto&& action : WriteController->GetBlobActions()) {
-            action->OnCompleteTxBeforeWrite(*Self);
-        }
-        ctx.Register(NColumnShard::CreateWriteActor(Self->TabletID(), WriteController, TInstant::Max()));
-    }
-    TTxType GetTxType() const override { return TXTYPE_WRITE_DRAFT; }
-};
-
-class TTxWrite : public TTransactionBase<TColumnShard> {
-public:
-    TTxWrite(TColumnShard* self, const TEvPrivate::TEvWriteBlobsResult::TPtr& putBlobResult)
-        : TBase(self)
-        , PutBlobResult(putBlobResult)
-        , TabletTxNo(++Self->TabletTxCounter)
-    {}
-
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_WRITE; }
-
-private:
-    TEvPrivate::TEvWriteBlobsResult::TPtr PutBlobResult;
-    const ui32 TabletTxNo;
-    std::unique_ptr<NActors::IEventBase> Result;
-
-    bool InsertOneBlob(TTransactionContext& txc, const TEvPrivate::TEvWriteBlobsResult::TPutBlobData& blobData, const TWriteId writeId);
-
-    TStringBuilder TxPrefix() const {
-        return TStringBuilder() << "TxWrite[" << ToString(TabletTxNo) << "] ";
-    }
-
-    TString TxSuffix() const {
-        return TStringBuilder() << " at tablet " << Self->TabletID();
-    }
-};
-
-bool TTxWrite::InsertOneBlob(TTransactionContext& txc, const TEvPrivate::TEvWriteBlobsResult::TPutBlobData& blobData, const TWriteId writeId) {
-    const NKikimrTxColumnShard::TLogicalMetadata& meta = blobData.GetLogicalMeta();
-
-    const auto& blobRange = blobData.GetBlobRange();
-    Y_VERIFY(blobRange.GetBlobId().IsValid());
-
-    ui64 writeUnixTime = meta.GetDirtyWriteTimeSeconds();
-    TInstant time = TInstant::Seconds(writeUnixTime);
-
-    // First write wins
-    TBlobGroupSelector dsGroupSelector(Self->Info());
-    NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
-
-    const auto& writeMeta(PutBlobResult->Get()->GetWriteMeta());
-
-    auto tableSchema = Self->TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetSchemaUnsafe(PutBlobResult->Get()->GetSchemaVersion());
-
-    NOlap::TInsertedData insertData((ui64)writeId, writeMeta.GetTableId(), writeMeta.GetDedupId(), blobRange, meta, tableSchema->GetSnapshot());
-    bool ok = Self->InsertTable->Insert(dbTable, std::move(insertData));
-    if (ok) {
-        THashSet<TWriteId> writesToAbort = Self->InsertTable->OldWritesToAbort(time);
-        NIceDb::TNiceDb db(txc.DB);
-        Self->TryAbortWrites(db, dbTable, std::move(writesToAbort));
-
-        // TODO: It leads to write+erase for aborted rows. Abort() inserts rows, EraseAborted() erases them.
-        // It's not optimal but correct.
-        TBlobManagerDb blobManagerDb(txc.DB);
-        auto allAborted = Self->InsertTable->GetAborted(); // copy (src is modified in cycle)
-        for (auto& [abortedWriteId, abortedData] : allAborted) {
-            Self->InsertTable->EraseAborted(dbTable, abortedData);
-            Y_VERIFY(blobRange.IsFullBlob());
-            Self->BlobManager->DeleteBlob(abortedData.GetBlobRange().GetBlobId(), blobManagerDb);
-        }
-
-        // Put new data into blob cache
-        Y_VERIFY(blobRange.IsFullBlob());
-
-        Self->UpdateInsertTableCounters();
-        return true;
-    }
-    return false;
-}
-
-
-bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
-    LOG_S_DEBUG(TxPrefix() << "execute" << TxSuffix());
-
-    const auto& writeMeta(PutBlobResult->Get()->GetWriteMeta());
-    Y_VERIFY(Self->TablesManager.IsReadyForWrite(writeMeta.GetTableId()));
-
-    txc.DB.NoMoreReadsForTx();
-    TWriteOperation::TPtr operation;
-    if (writeMeta.HasLongTxId()) {
-        Y_VERIFY_S(PutBlobResult->Get()->GetBlobData().size() == 1, TStringBuilder() << "Blobs count: " << PutBlobResult->Get()->GetBlobData().size());
-    } else {
-        operation = Self->OperationsManager.GetOperation((TWriteId)writeMeta.GetWriteId());
-        Y_VERIFY(operation);
-        Y_VERIFY(operation->GetStatus() == EOperationStatus::Started);
-    }
-
-    TVector<TWriteId> writeIds;
-    for (auto blobData : PutBlobResult->Get()->GetBlobData()) {
-        auto writeId = TWriteId(writeMeta.GetWriteId());
-        if (operation) {
-            writeId = Self->BuildNextWriteId(txc);
-        } else {
-            NIceDb::TNiceDb db(txc.DB);
-            writeId = Self->GetLongTxWrite(db, writeMeta.GetLongTxIdUnsafe(), writeMeta.GetWritePartId());
-        }
-
-        if (!InsertOneBlob(txc, blobData, writeId)) {
-            LOG_S_DEBUG(TxPrefix() << "duplicate writeId " << (ui64)writeId << TxSuffix());
-            Self->IncCounter(COUNTER_WRITE_DUPLICATE);
-        }
-        writeIds.push_back(writeId);
-    }
-
-    TBlobManagerDb blobManagerDb(txc.DB);
-    for (auto&& i : PutBlobResult->Get()->GetActions()) {
-        i->OnExecuteTxAfterWrite(*Self, blobManagerDb);
-    }
-
-    if (operation) {
-        operation->OnWriteFinish(txc, writeIds);
-        auto txInfo = Self->ProgressTxController.RegisterTxWithDeadline(operation->GetTxId(), NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE, "", writeMeta.GetSource(), 0, txc);
-        Y_UNUSED(txInfo);
-        NEvents::TDataEvents::TCoordinatorInfo tInfo = Self->ProgressTxController.GetCoordinatorInfo(operation->GetTxId());
-        Result = NEvents::TDataEvents::TEvWriteResult::BuildPrepared(operation->GetTxId(), tInfo);
-    } else {
-        Y_VERIFY(writeIds.size() == 1);
-        Result = std::make_unique<TEvColumnShard::TEvWriteResult>(Self->TabletID(), writeMeta, (ui64)writeIds.front(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
-    }
-    return true;
-}
-
-void TTxWrite::Complete(const TActorContext& ctx) {
-    Y_VERIFY(Result);
-    LOG_S_DEBUG(TxPrefix() << "complete" << TxSuffix());
-    Self->CSCounters.OnWriteTxComplete((TMonotonic::Now() - PutBlobResult->Get()->GetWriteMeta().GetWriteStartInstant()).MilliSeconds());
-    Self->CSCounters.OnSuccessWriteResponse();
-    ctx.Send(PutBlobResult->Get()->GetWriteMeta().GetSource(), Result.release());
-}
 
 void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteData& writeData, std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx) {
     IncCounter(COUNTER_WRITE_FAIL);
@@ -321,7 +162,8 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
             << WritesMonitor.DebugString()
             << " at tablet " << TabletID());
 
-        std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildSlicesTask>(TabletID(), SelfId(), std::make_shared<NOlap::TBSWriteAction>(*BlobManager), writeData);
+        std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildSlicesTask>(TabletID(), SelfId(),
+            StoragesManager->GetInsertOperator()->StartWritingAction(), writeData);
         NConveyor::TCompServiceOperator::SendTaskToExecute(task);
     }
 }

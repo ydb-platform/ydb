@@ -56,7 +56,9 @@ bool IDataSource::OnIntervalFinished(const ui32 intervalIdx) {
     return Intervals.empty();
 }
 
-void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, std::shared_ptr<IFetchTaskConstructor> constructor, const std::shared_ptr<NArrow::TColumnFilter>& filter) {
+void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds,
+    const std::shared_ptr<IBlobsReadingAction>& readingAction, THashMap<TBlobRange, ui32>& nullBlocks,
+    const std::shared_ptr<NArrow::TColumnFilter>& filter) {
     const NArrow::TColumnFilter& cFilter = filter ? *filter : NArrow::TColumnFilter::BuildAllowFilter();
     for (auto&& i : columnIds) {
         auto columnChunks = Portion->GetColumnChunksPointers(i);
@@ -68,52 +70,51 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, std::
         for (auto&& c : columnChunks) {
             Y_VERIFY(!itFinished);
             if (!itFilter.IsBatchForSkip(c->GetMeta().GetNumRowsVerified())) {
-                constructor->AddWaitingRecord(*c);
-                Y_VERIFY(BlobsWaiting.emplace(c->BlobRange, constructor).second);
-                ReadData.AddBlobForFetch(GetSourceIdx(), c->BlobRange);
+                readingAction->AddRange(c->BlobRange);
             } else {
-                constructor->AddNullData(c->BlobRange, c->GetMeta().GetNumRowsVerified());
+                nullBlocks.emplace(c->BlobRange, c->GetMeta().GetNumRowsVerified());
             }
             itFinished = !itFilter.Next(c->GetMeta().GetNumRowsVerified());
         }
         AFL_VERIFY(itFinished)("filter", itFilter.DebugString())("count", Portion->NumRows(i));
     }
-    constructor->StartDataWaiting();
 }
 
 void TPortionDataSource::DoStartFilterStage() {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoFetchEF");
     Y_VERIFY(FetchingPlan->GetFilterStage()->GetSize());
     auto& columnIds = FetchingPlan->GetFilterStage()->GetColumnIds();
-    NeedFetchColumns(columnIds, std::make_shared<TEFTaskConstructor>(columnIds, *this, ReadData, FetchingPlan->CanUseEarlyFilterImmediately()), nullptr);
+
+    auto readAction = Portion->GetBlobsStorage()->StartReadingAction();
+    THashMap<TBlobRange, ui32> nullBlocks;
+    NeedFetchColumns(columnIds, readAction, nullBlocks, nullptr);
+
+    std::vector<std::shared_ptr<IBlobsReadingAction>> actions = {readAction};
+    auto constructor = std::make_shared<TEFTaskConstructor>(ReadData, actions, std::move(nullBlocks), columnIds, *this, FetchingPlan->CanUseEarlyFilterImmediately());
+    ReadData.AddForFetch(GetSourceIdx(), constructor, false);
 }
 
 void TPortionDataSource::DoStartFetchStage() {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoStartFetchStage");
     Y_VERIFY(!FetchStageData);
     Y_VERIFY(FilterStageData);
-    if (!FetchingPlan->GetFetchingStage()->GetSize()) {
-        InitFetchStageData(nullptr);
-    } else if (!FilterStageData->IsEmptyFilter()) {
+    if (FetchingPlan->GetFetchingStage()->GetSize() && !FilterStageData->IsEmptyFilter()) {
         auto& columnIds = FetchingPlan->GetFetchingStage()->GetColumnIds();
-        NeedFetchColumns(columnIds, std::make_shared<TFFColumnsTaskConstructor>(columnIds, *this, ReadData),
-            GetFilterStageData().GetActualFilter());
-    } else {
-        InitFetchStageData(nullptr);
-    }
-}
 
-void TPortionDataSource::AddData(const TBlobRange& range, TString&& data) {
-    auto it = BlobsWaiting.find(range);
-    Y_VERIFY(it != BlobsWaiting.end());
-    it->second->AddData(range, std::move(data));
-    BlobsWaiting.erase(it);
+        auto readAction = Portion->GetBlobsStorage()->StartReadingAction();
+        THashMap<TBlobRange, ui32> nullBlocks;
+        NeedFetchColumns(columnIds, readAction, nullBlocks, GetFilterStageData().GetActualFilter());
+        if (readAction->GetExpectedBlobsCount()) {
+            std::vector<std::shared_ptr<IBlobsReadingAction>> actions = {readAction};
+            auto constructor = std::make_shared<TFFColumnsTaskConstructor>(ReadData, actions, std::move(nullBlocks), columnIds, *this);
+            ReadData.AddForFetch(GetSourceIdx(), constructor, true);
+            return;
+        }
+    }
+    InitFetchStageData(nullptr);
 }
 
 void TPortionDataSource::DoAbort() {
-    for (auto&& i : BlobsWaiting) {
-        i.second->Abort();
-    }
 }
 
 void TCommittedDataSource::DoFetch() {
@@ -121,20 +122,16 @@ void TCommittedDataSource::DoFetch() {
     if (!ReadStarted) {
         Y_VERIFY(!ResultReady);
         ReadStarted = true;
-        ReadData.AddBlobForFetch(GetSourceIdx(), CommittedBlob.GetBlobRange());
-    }
-}
 
-void TCommittedDataSource::AddData(const TBlobRange& /*range*/, TString&& data) {
-    Y_VERIFY(!ResultReady);
-    ResultReady = true;
-    auto resultBatch = NArrow::DeserializeBatch(data, ReadData.GetReadMetadata()->GetBlobSchema(CommittedBlob.GetSchemaSnapshot()));
-    Y_VERIFY(resultBatch);
-    resultBatch = ReadData.GetReadMetadata()->GetIndexInfo().AddSpecialColumns(resultBatch, CommittedBlob.GetSnapshot());
-    Y_VERIFY(resultBatch);
-    ReadData.GetReadMetadata()->GetPKRangesFilter().BuildFilter(resultBatch).Apply(resultBatch);
-    InitFilterStageData(nullptr, ReadData.GetReadMetadata()->GetProgram().BuildEarlyFilter(resultBatch), NArrow::ExtractColumnsValidate(resultBatch, FetchingPlan->GetFilterStage()->GetColumnNamesVector()));
-    InitFetchStageData(NArrow::ExtractColumnsValidate(resultBatch, FetchingPlan->GetFetchingStage()->GetColumnNamesVector()));
+        std::shared_ptr<IBlobsStorageOperator> storageOperator = ReadData.GetContext().GetStoragesManager()->GetInsertOperator();
+        auto readAction = storageOperator->StartReadingAction();
+        readAction->AddRange(CommittedBlob.GetBlobRange());
+
+        THashMap<TBlobRange, ui32> nullBlocks;
+        std::vector<std::shared_ptr<IBlobsReadingAction>> actions = {readAction};
+        auto constructor = std::make_shared<TCommittedColumnsTaskConstructor>(ReadData, actions, std::move(nullBlocks), *this);
+        ReadData.AddForFetch(GetSourceIdx(), constructor, true);
+    }
 }
 
 }

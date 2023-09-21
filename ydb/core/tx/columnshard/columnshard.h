@@ -184,50 +184,6 @@ struct TEvColumnShard {
         }
     };
 
-    // Fallback read BlobCache read to tablet (small blobs or S3)
-    struct TEvReadBlobRanges : public TEventPB<TEvReadBlobRanges,
-                                                NKikimrTxColumnShard::TEvReadBlobRanges,
-                                                TEvColumnShard::EvReadBlobRanges>
-    {
-        std::vector<NOlap::TBlobRange> BlobRanges;
-
-        TEvReadBlobRanges() = default;
-
-        TEvReadBlobRanges(const std::vector<NOlap::TBlobRange>& blobRanges)
-            : BlobRanges(blobRanges)
-        {
-            for (const auto& r : BlobRanges) {
-                auto* range = Record.AddBlobRanges();
-                range->SetBlobId(r.BlobId.ToStringNew());
-                range->SetOffset(r.Offset);
-                range->SetSize(r.Size);
-            }
-        }
-
-        void RestoreFromProto(NColumnShard::TBlobGroupSelector* dsGroupSelector, TString& errString) {
-            BlobRanges.clear();
-            BlobRanges.reserve(Record.BlobRangesSize());
-
-            for (const auto& range : Record.GetBlobRanges()) {
-                auto blobId = NOlap::TUnifiedBlobId::ParseFromString(range.GetBlobId(), dsGroupSelector,
-                                                                            errString);
-                if (!errString.empty()) {
-                    return;
-                }
-                BlobRanges.push_back(NOlap::TBlobRange{blobId, (ui32)range.GetOffset(), (ui32)range.GetSize()});
-            }
-        }
-    };
-
-    struct TEvReadBlobRangesResult : public TEventPB<TEvReadBlobRangesResult,
-                                                NKikimrTxColumnShard::TEvReadBlobRangesResult,
-                                                TEvColumnShard::EvReadBlobRangesResult>
-    {
-        explicit TEvReadBlobRangesResult(ui64 tabletId = 0) {
-            Record.SetTabletId(tabletId);
-        }
-    };
-
     struct TEvWrite : public TEventPB<TEvWrite, NKikimrTxColumnShard::TEvWrite, TEvColumnShard::EvWrite> {
         TEvWrite() = default;
 

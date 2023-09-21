@@ -79,25 +79,29 @@ std::vector<NKikimr::NOlap::TPartialReadResult> TPlainReadData::DoExtractReadyRe
     return result;
 }
 
-void TPlainReadData::DoAddData(const TBlobRange& blobRange, const TString& data) {
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "DoAddData")("range", blobRange);
-    auto it = Sources.find(blobRange);
-    Y_VERIFY(it != Sources.end());
-    TString dataForMove = data;
-    it->second->AddData(blobRange, std::move(dataForMove));
-    Sources.erase(it);
-}
+std::shared_ptr<NBlobOperations::NRead::ITask> TPlainReadData::DoExtractNextReadTask(const bool /*hasReadyResults*/) {
+    while (PriorityQueue.empty() && Queue.empty() && Scanner->BuildNextInterval()) {
+    }
+    {
+        auto task = PriorityQueue.pop_front();
+        if (task) {
+            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "DoExtractNextBlob")("task", (*task)->DebugString());
+            return *task;
+        } else {
+            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "DoExtractNextBlob")("task", "nothing");
+        }
+    }
 
-std::optional<NKikimr::NOlap::TBlobRange> TPlainReadData::DoExtractNextBlob(const bool /*hasReadyResults*/) {
-    while (Queue.empty() && Scanner->BuildNextInterval()) {
+    {
+        auto task = Queue.pop_front();
+        if (task) {
+            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "DoExtractNextBlob")("task", (*task)->DebugString());
+            return *task;
+        } else {
+            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "DoExtractNextBlob")("task", "nothing");
+        }
     }
-    auto blobRange = Queue.pop_front();
-    if (blobRange) {
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "DoExtractNextBlob")("range", *blobRange);
-    } else {
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "DoExtractNextBlob")("range", "nothing");
-    }
-    return blobRange;
+    return nullptr;
 }
 
 void TPlainReadData::OnIntervalResult(std::shared_ptr<arrow::RecordBatch> batch) {

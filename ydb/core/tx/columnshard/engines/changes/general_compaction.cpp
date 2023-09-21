@@ -14,7 +14,6 @@
 namespace NKikimr::NOlap::NCompaction {
 
 TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstructionContext& context) noexcept {
-    const ui64 pathId = GranuleMeta->GetPathId();
     std::vector<TPortionInfoWithBlobs> portions = TPortionInfoWithBlobs::RestorePortions(SwitchedPortions, Blobs);
     std::optional<TSnapshot> maxSnapshot;
     for (auto&& i : SwitchedPortions) {
@@ -80,13 +79,12 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
     }
 
     std::map<std::string, std::vector<TColumnPortionResult>> columnChunks;
-    const auto saverContext = GetSaverContext(pathId);
 
     for (auto&& f : resultSchema->GetSchema()->fields()) {
         const ui32 columnId = resultSchema->GetColumnId(f->name());
         auto columnInfo = stats.GetColumnInfo(columnId);
         Y_VERIFY(columnInfo);
-        TColumnMergeContext context(resultSchema, portionRecordsCountLimit, 50 * 1024 * 1024, f, *columnInfo, saverContext);
+        TColumnMergeContext context(resultSchema, portionRecordsCountLimit, 50 * 1024 * 1024, f, *columnInfo, SaverContext);
         TMergedColumn mColumn(context);
         auto c = batchResult->GetColumnByName(f->name());
         if (c) {
@@ -122,7 +120,7 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
     }
 
     std::vector<TGeneralSerializedSlice> batchSlices;
-    std::shared_ptr<TDefaultSchemaDetails> schemaDetails(new TDefaultSchemaDetails(resultSchema, saverContext, std::move(stats)));
+    std::shared_ptr<TDefaultSchemaDetails> schemaDetails(new TDefaultSchemaDetails(resultSchema, SaverContext, std::move(stats)));
 
     for (ui32 i = 0; i < columnChunks.begin()->second.size(); ++i) {
         std::map<ui32, std::vector<IPortionColumnChunk::TPtr>> portionColumns;
@@ -140,8 +138,8 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
         TGeneralSerializedSlice slice(std::move(i));
         std::vector<std::vector<IPortionColumnChunk::TPtr>> chunksByBlobs = slice.GroupChunksByBlobs();
         auto b = batchResult->Slice(recordIdx, slice.GetRecordsCount());
-        AppendedPortions.emplace_back(TPortionInfoWithBlobs::BuildByBlobs(chunksByBlobs, nullptr, GranuleMeta->GetGranuleId(), *maxSnapshot));
-        AppendedPortions.back().GetPortionInfo().AddMetadata(*resultSchema, b, saverContext.GetTierName());
+        AppendedPortions.emplace_back(TPortionInfoWithBlobs::BuildByBlobs(chunksByBlobs, nullptr, GranuleMeta->GetGranuleId(), *maxSnapshot, SaverContext.GetStorageOperator()));
+        AppendedPortions.back().GetPortionInfo().AddMetadata(*resultSchema, b, SaverContext.GetTierName());
         recordIdx += slice.GetRecordsCount();
     }
     if (IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD)) {

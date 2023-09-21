@@ -273,16 +273,16 @@ public:
 
     const TPortionInfo& GetPortionVerified(const ui64 portion) const {
         auto it = Portions.find(portion);
-        Y_VERIFY(it != Portions.end());
+        AFL_VERIFY(it != Portions.end())("portion_id", portion)("count", Portions.size());
         return *it->second;
     }
 
-    const TPortionInfo* GetPortionPointer(const ui64 portion) const {
+    std::shared_ptr<TPortionInfo> GetPortionPtr(const ui64 portion) const {
         auto it = Portions.find(portion);
         if (it == Portions.end()) {
             return nullptr;
         }
-        return it->second.get();
+        return it->second;
     }
 
     bool ErasePortion(const ui64 portion);

@@ -12,7 +12,6 @@ private:
     std::shared_ptr<arrow::RecordBatch> AddSpecials(const std::shared_ptr<arrow::RecordBatch>& srcBatch,
         const TIndexInfo& indexInfo, const TInsertedData& inserted) const;
     std::vector<NOlap::TInsertedData> DataToIndex;
-
 protected:
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
     virtual void DoWriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) override;
@@ -25,11 +24,11 @@ public:
     const TMark DefaultMark;
     THashMap<ui64, std::vector<std::pair<TMark, ui64>>> PathToGranule; // pathId -> {mark, granule}
 public:
-    TInsertColumnEngineChanges(const TMark& defaultMark, std::vector<NOlap::TInsertedData>&& dataToIndex, const TSplitSettings& splitSettings)
-        : TBase(splitSettings)
+    TInsertColumnEngineChanges(const TMark& defaultMark, std::vector<NOlap::TInsertedData>&& dataToIndex, const TSplitSettings& splitSettings, const TSaverContext& saverContext)
+        : TBase(splitSettings, saverContext)
         , DataToIndex(std::move(dataToIndex))
-        , DefaultMark(defaultMark) {
-
+        , DefaultMark(defaultMark)
+    {
     }
 
     const std::vector<NOlap::TInsertedData>& GetDataToIndex() const {
@@ -40,7 +39,6 @@ public:
         return TBase::GetTouchedPortions();
     }
 
-    virtual THashSet<TBlobRange> GetReadBlobRanges() const override;
     virtual TString TypeString() const override {
         return "INSERT";
     }

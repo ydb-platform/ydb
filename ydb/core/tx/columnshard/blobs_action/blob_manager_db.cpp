@@ -22,7 +22,7 @@ void TBlobManagerDb::SaveLastGcBarrier(const TGenStep& lastCollectedGenStep) {
     Schema::SaveSpecialValue(db, Schema::EValueIds::LastGcBarrierStep, std::get<1>(lastCollectedGenStep));
 }
 
-bool TBlobManagerDb::LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, std::vector<TUnifiedBlobId>& blobsToDelete,
+bool TBlobManagerDb::LoadLists(std::vector<NOlap::TUnifiedBlobId>& blobsToKeep, std::vector<NOlap::TUnifiedBlobId>& blobsToDelete,
     const NOlap::IBlobGroupSelector* dsGroupSelector)
 {
     blobsToKeep.clear();
@@ -39,7 +39,7 @@ bool TBlobManagerDb::LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, std::ve
 
         while (!rowset.EndOfSet()) {
             const TString blobIdStr = rowset.GetValue<Schema::BlobsToKeep::BlobId>();
-            TUnifiedBlobId unifiedBlobId = TUnifiedBlobId::ParseFromString(blobIdStr, dsGroupSelector, error);
+            NOlap::TUnifiedBlobId unifiedBlobId = NOlap::TUnifiedBlobId::ParseFromString(blobIdStr, dsGroupSelector, error);
             Y_VERIFY(unifiedBlobId.IsValid(), "%s", error.c_str());
 
             blobsToKeep.push_back(unifiedBlobId);
@@ -57,7 +57,7 @@ bool TBlobManagerDb::LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, std::ve
 
         while (!rowset.EndOfSet()) {
             const TString blobIdStr = rowset.GetValue<Schema::BlobsToDelete::BlobId>();
-            TUnifiedBlobId unifiedBlobId = TUnifiedBlobId::ParseFromString(blobIdStr, dsGroupSelector, error);
+            NOlap::TUnifiedBlobId unifiedBlobId = NOlap::TUnifiedBlobId::ParseFromString(blobIdStr, dsGroupSelector, error);
             Y_VERIFY(unifiedBlobId.IsValid(), "%s", error.c_str());
             blobsToDelete.push_back(unifiedBlobId);
             if (!rowset.Next())
@@ -68,150 +68,91 @@ bool TBlobManagerDb::LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, std::ve
     return true;
 }
 
-void TBlobManagerDb::AddBlobToKeep(const TUnifiedBlobId& blobId) {
+void TBlobManagerDb::AddBlobToKeep(const NOlap::TUnifiedBlobId& blobId) {
     NIceDb::TNiceDb db(Database);
     db.Table<Schema::BlobsToKeep>().Key(blobId.ToStringLegacy()).Update();
 }
 
-void TBlobManagerDb::EraseBlobToKeep(const TUnifiedBlobId& blobId) {
+void TBlobManagerDb::EraseBlobToKeep(const NOlap::TUnifiedBlobId& blobId) {
     NIceDb::TNiceDb db(Database);
     db.Table<Schema::BlobsToKeep>().Key(blobId.ToStringLegacy()).Delete();
     db.Table<Schema::BlobsToKeep>().Key(blobId.ToStringNew()).Delete();
 }
 
-void TBlobManagerDb::AddBlobToDelete(const TUnifiedBlobId& blobId) {
+void TBlobManagerDb::AddBlobToDelete(const NOlap::TUnifiedBlobId& blobId) {
     NIceDb::TNiceDb db(Database);
     db.Table<Schema::BlobsToDelete>().Key(blobId.ToStringLegacy()).Update();
 }
 
-void TBlobManagerDb::EraseBlobToDelete(const TUnifiedBlobId& blobId) {
+void TBlobManagerDb::EraseBlobToDelete(const NOlap::TUnifiedBlobId& blobId) {
     NIceDb::TNiceDb db(Database);
     db.Table<Schema::BlobsToDelete>().Key(blobId.ToStringLegacy()).Delete();
     db.Table<Schema::BlobsToDelete>().Key(blobId.ToStringNew()).Delete();
 }
 
-void TBlobManagerDb::WriteSmallBlob(const TUnifiedBlobId& blobId, const TString& data) {
-    Y_VERIFY(blobId.IsSmallBlob());
-    NIceDb::TNiceDb db(Database);
-    db.Table<Schema::SmallBlobs>().Key(blobId.ToStringNew()).Update(
-        NIceDb::TUpdate<Schema::SmallBlobs::Data>(data)
-    );
-}
-
-void TBlobManagerDb::EraseSmallBlob(const TUnifiedBlobId& blobId) {
-    Y_VERIFY(blobId.IsSmallBlob());
-    NIceDb::TNiceDb db(Database);
-    db.Table<Schema::SmallBlobs>().Key(blobId.ToStringLegacy()).Delete();
-    db.Table<Schema::SmallBlobs>().Key(blobId.ToStringNew()).Delete();
-}
-
-bool TBlobManagerDb::LoadEvicted(THashMap<TEvictedBlob, TString>& evicted, THashMap<TEvictedBlob, TString>& dropped,
-                                 const NOlap::IBlobGroupSelector& dsGroupSelector) {
-    evicted.clear();
-    dropped.clear();
+bool TBlobManagerDb::LoadTierLists(const TString& storageId, std::deque<NOlap::TUnifiedBlobId>& blobsToDelete, std::deque<NOlap::TUnifiedBlobId>& draftBlobsToDelete) {
+    draftBlobsToDelete.clear();
+    blobsToDelete.clear();
 
     NIceDb::TNiceDb db(Database);
 
-    auto rowset = db.Table<Schema::OneToOneEvictedBlobs>().Select();
-    if (!rowset.IsReady()) {
-        return false;
+    {
+        auto rowset = db.Table<Schema::TierBlobsToDelete>().Prefix(storageId).Select();
+        if (!rowset.IsReady())
+            return false;
+
+        TString error;
+
+        while (!rowset.EndOfSet()) {
+            const TString blobIdStr = rowset.GetValue<Schema::TierBlobsToDelete::BlobId>();
+            NOlap::TUnifiedBlobId unifiedBlobId = NOlap::TUnifiedBlobId::ParseFromString(blobIdStr, nullptr, error);
+            Y_VERIFY(unifiedBlobId.IsValid(), "%s", error.c_str());
+
+            blobsToDelete.emplace_back(std::move(unifiedBlobId));
+            if (!rowset.Next())
+                return false;
+        }
     }
 
-    TString error;
-
-    while (!rowset.EndOfSet()) {
-        TString strBlobId = rowset.GetValue<Schema::OneToOneEvictedBlobs::BlobId>();
-        //ui64 size = rowset.GetValue<Schema::OneToOneEvictedBlobs::Size>();
-        EEvictState state = (EEvictState)rowset.GetValue<Schema::OneToOneEvictedBlobs::State>();
-        bool isDropped = rowset.GetValue<Schema::OneToOneEvictedBlobs::Dropped>();
-        TString meta = rowset.GetValue<Schema::OneToOneEvictedBlobs::Metadata>();
-        TString strExternId = rowset.GetValue<Schema::OneToOneEvictedBlobs::ExternBlobId>();
-        // TODO: CachedBlob
-
-        Y_VERIFY(state != EEvictState::UNKNOWN);
-
-        TUnifiedBlobId blobId = TUnifiedBlobId::ParseFromString(strBlobId, &dsGroupSelector, error);
-        Y_VERIFY(blobId.IsValid(), "%s", error.c_str());
-
-        TUnifiedBlobId externId = TUnifiedBlobId::ParseFromString(strExternId, nullptr, error);
-        if (NOlap::IsExported(state)) {
-            Y_VERIFY(externId.IsValid(), "%s", error.c_str());
-        }
-
-        TEvictedBlob evict{
-            .State = state,
-            .Blob = std::move(blobId),
-            .ExternBlob = std::move(externId),
-        };
-
-        if (isDropped) {
-            dropped.emplace(std::move(evict), std::move(meta));
-        } else {
-            evicted.emplace(std::move(evict), std::move(meta));
-        }
-
-        if (!rowset.Next())
+    {
+        auto rowset = db.Table<Schema::TierBlobsDraft>().Prefix(storageId).Select();
+        if (!rowset.IsReady())
             return false;
+
+        TString error;
+
+        while (!rowset.EndOfSet()) {
+            const TString blobIdStr = rowset.GetValue<Schema::TierBlobsDraft::BlobId>();
+            NOlap::TUnifiedBlobId unifiedBlobId = NOlap::TUnifiedBlobId::ParseFromString(blobIdStr, nullptr, error);
+            Y_VERIFY(unifiedBlobId.IsValid(), "%s", error.c_str());
+
+            draftBlobsToDelete.emplace_back(std::move(unifiedBlobId));
+            if (!rowset.Next())
+                return false;
+        }
     }
 
     return true;
 }
 
-void TBlobManagerDb::UpdateEvictBlob(const TEvictedBlob& evict, const TString& meta) {
+void TBlobManagerDb::AddTierBlobToDelete(const TString& storageId, const NOlap::TUnifiedBlobId& blobId) {
     NIceDb::TNiceDb db(Database);
-
-    TString serializedBlobId = evict.Blob.ToStringNew();
-
-    switch (evict.State) {
-        case EEvictState::EVICTING: {
-            Y_VERIFY(!meta.empty());
-            Y_VERIFY(evict.ExternBlob.IsS3Blob());
-            TString serializedExternId = evict.ExternBlob.ToStringNew();
-
-            db.Table<Schema::OneToOneEvictedBlobs>().Key(serializedBlobId).Update(
-                NIceDb::TUpdate<Schema::OneToOneEvictedBlobs::Size>(evict.Blob.BlobSize()),
-                NIceDb::TUpdate<Schema::OneToOneEvictedBlobs::State>((ui8)evict.State),
-                NIceDb::TUpdate<Schema::OneToOneEvictedBlobs::Metadata>(meta),
-                NIceDb::TUpdate<Schema::OneToOneEvictedBlobs::ExternBlobId>(serializedExternId)
-            );
-            break;
-        }
-        case EEvictState::SELF_CACHED:
-        case EEvictState::EXTERN: {
-            Y_VERIFY(meta.empty());
-            Y_VERIFY(evict.ExternBlob.IsS3Blob());
-            db.Table<Schema::OneToOneEvictedBlobs>().Key(serializedBlobId).Update(
-                NIceDb::TUpdate<Schema::OneToOneEvictedBlobs::State>((ui8)evict.State)
-            );
-            break;
-        }
-        case EEvictState::ERASING:
-            Y_VERIFY(meta.empty());
-            db.Table<Schema::OneToOneEvictedBlobs>().Key(serializedBlobId).Update(
-                NIceDb::TUpdate<Schema::OneToOneEvictedBlobs::State>((ui8)evict.State)
-            );
-            break;
-        case EEvictState::UNKNOWN:
-        case EEvictState::CACHED:
-            Y_VERIFY(false);
-            break;
-    }
+    db.Table<Schema::TierBlobsToDelete>().Key(storageId, blobId.ToStringNew()).Update();
 }
 
-void TBlobManagerDb::DropEvictBlob(const TEvictedBlob& evict) {
+void TBlobManagerDb::RemoveTierBlobToDelete(const TString& storageId, const NOlap::TUnifiedBlobId& blobId) {
     NIceDb::TNiceDb db(Database);
-
-    TString serializedBlobId = evict.Blob.ToStringNew();
-    db.Table<Schema::OneToOneEvictedBlobs>().Key(serializedBlobId).Update(
-        NIceDb::TUpdate<Schema::OneToOneEvictedBlobs::State>((ui8)evict.State),
-        NIceDb::TUpdate<Schema::OneToOneEvictedBlobs::Dropped>(true));
+    db.Table<Schema::TierBlobsToDelete>().Key(storageId, blobId.ToStringNew()).Delete();
 }
 
-void TBlobManagerDb::EraseEvictBlob(const TEvictedBlob& evict) {
+void TBlobManagerDb::AddTierDraftBlobId(const TString& storageId, const NOlap::TUnifiedBlobId& blobId) {
     NIceDb::TNiceDb db(Database);
+    db.Table<Schema::TierBlobsDraft>().Key(storageId, blobId.ToStringNew()).Update();
+}
 
-    TString serializedBlobId = evict.Blob.ToStringNew();
-    db.Table<Schema::OneToOneEvictedBlobs>().Key(serializedBlobId).Delete();
+void TBlobManagerDb::RemoveTierDraftBlobId(const TString& storageId, const NOlap::TUnifiedBlobId& blobId) {
+    NIceDb::TNiceDb db(Database);
+    db.Table<Schema::TierBlobsDraft>().Key(storageId, blobId.ToStringNew()).Delete();
 }
 
 }

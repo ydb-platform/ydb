@@ -20,6 +20,7 @@ target_link_libraries(columnshard-engines-portions PUBLIC
   columnshard-engines-scheme
   tx-columnshard-splitter
   tx-columnshard-common
+  ydb-core-tablet_flat
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(columnshard-engines-portions PRIVATE

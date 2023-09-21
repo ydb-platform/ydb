@@ -1,6 +1,7 @@
 #pragma once
 
 #include "blob_cache.h"
+#include "blobs_reader/task.h"
 #include "engines/reader/conveyor_task.h"
 #include "resources/memory.h"
 #include <ydb/core/formats/arrow/size_calcer.h>
@@ -146,11 +147,9 @@ public:
     virtual std::optional<ui32> GetAvailableResultsCount() const {
         return {};
     }
-    virtual void AddData(const NBlobCache::TBlobRange& /*blobRange*/, TString /*data*/) {}
-    virtual bool HasWaitingTasks() const = 0;
     virtual bool Finished() const = 0;
     virtual std::optional<NOlap::TPartialReadResult> GetBatch() = 0;
-    virtual std::optional<NBlobCache::TBlobRange> GetNextBlobToRead() { return {}; }
+    virtual std::shared_ptr<NOlap::NBlobOperations::NRead::ITask> GetNextTaskToRead() { return nullptr; }
     virtual TString DebugString() const {
         return "NO_DATA";
     }

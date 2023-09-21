@@ -4,6 +4,7 @@
 
 #include <ydb/library/accessor/accessor.h>
 
+#include <library/cpp/actors/core/actorid.h>
 #include <util/generic/string.h>
 
 namespace NKikimr::NConveyor {
@@ -38,6 +39,7 @@ public:
 private:
     YDB_READONLY_DEF(TString, ErrorMessage);
     YDB_ACCESSOR(EPriority, Priority, EPriority::Normal);
+    YDB_READONLY_DEF(std::optional<NActors::TActorId>, OwnerId);
 protected:
     ITask& SetErrorMessage(const TString& message) {
         ErrorMessage = message;
@@ -45,6 +47,11 @@ protected:
     }
     virtual bool DoExecute() = 0;
 public:
+    ITask(const std::optional<NActors::TActorId>& ownerId = {})
+        : OwnerId(ownerId)
+    {
+
+    }
     using TPtr = std::shared_ptr<ITask>;
     virtual ~ITask() = default;
 

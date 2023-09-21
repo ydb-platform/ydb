@@ -82,9 +82,10 @@ void TFakeExternalStorage::Execute(TEvGetObjectRequest::TPtr& ev, const TReplyAd
     auto awsRange = ev->Get()->GetRequest().GetRange();
     Y_VERIFY(awsRange.size());
     const TString strRange(awsRange.data(), awsRange.size());
-    Y_VERIFY(TryParseRange(strRange, range));
+    AFL_VERIFY(TryParseRange(strRange, range))("original", strRange);
 
     if (!!object) {
+        AFL_DEBUG(NKikimrServices::S3_WRAPPER)("method", "GetObject")("id", key)("range", strRange)("object_exists", true);
         Aws::S3::Model::GetObjectResult awsResult;
         awsResult.WithAcceptRanges(awsRange).SetETag(MD5::Calc(*object));
         data = *object;
@@ -94,6 +95,7 @@ void TFakeExternalStorage::Execute(TEvGetObjectRequest::TPtr& ev, const TReplyAd
         std::unique_ptr<TEvGetObjectResponse> result(new TEvGetObjectResponse(key, range, std::move(awsOutcome), std::move(data)));
         adapter.Reply(ev->Sender, std::move(result));
     } else {
+        AFL_DEBUG(NKikimrServices::S3_WRAPPER)("method", "GetObject")("id", key)("range", strRange)("object_exists", false);
         Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> awsOutcome;
         std::unique_ptr<TEvGetObjectResponse> result(new TEvGetObjectResponse(key, range, std::move(awsOutcome), std::move(data)));
         adapter.Reply(ev->Sender, std::move(result));
@@ -122,6 +124,7 @@ void TFakeExternalStorage::Execute(TEvHeadObjectRequest::TPtr& ev, const TReplyA
 void TFakeExternalStorage::Execute(TEvPutObjectRequest::TPtr& ev, const TReplyAdapterContainer& adapter) const {
     TGuard<TMutex> g(Mutex);
     const TString key = AwsToString(ev->Get()->GetRequest().GetKey());
+    AFL_DEBUG(NKikimrServices::S3_WRAPPER)("method", "PutObject")("id", key);
     auto& bucket = MutableBucket(AwsToString(ev->Get()->GetRequest().GetBucket()));
     bucket.PutObject(key, ev->Get()->Body);
     Aws::S3::Model::PutObjectResult awsResult;
@@ -135,6 +138,7 @@ void TFakeExternalStorage::Execute(TEvDeleteObjectRequest::TPtr& ev, const TRepl
     Aws::S3::Model::DeleteObjectResult awsResult;
     auto& bucket = MutableBucket(AwsToString(ev->Get()->GetRequest().GetBucket()));
     const TString key = AwsToString(ev->Get()->GetRequest().GetKey());
+    AFL_DEBUG(NKikimrServices::S3_WRAPPER)("method", "DeleteObject")("id", key);
     bucket.Remove(key);
 
     std::unique_ptr<TEvDeleteObjectResponse> result(new TEvDeleteObjectResponse(key, awsResult));

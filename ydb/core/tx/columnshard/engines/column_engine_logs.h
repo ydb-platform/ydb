@@ -81,6 +81,7 @@ class TColumnEngineForLogs : public IColumnEngine {
 private:
     const NColumnShard::TEngineLogsCounters SignalCounters;
     std::shared_ptr<TGranulesStorage> GranulesStorage;
+    std::shared_ptr<IStoragesManager> StoragesManager;
     TEvictionsController EvictionsController;
     class TTieringProcessContext {
     public:
@@ -114,7 +115,7 @@ public:
         ADD,
     };
 
-    TColumnEngineForLogs(ui64 tabletId, const TCompactionLimits& limits = {});
+    TColumnEngineForLogs(ui64 tabletId, const TCompactionLimits& limits, const std::shared_ptr<IStoragesManager>& storagesManager);
 
     virtual void OnTieringModified(std::shared_ptr<NColumnShard::TTiersManager> manager, const NColumnShard::TTtl& ttl) override;
 
@@ -174,7 +175,7 @@ public:
         if (it == Granules.end()) {
             return false;
         }
-        return it->second->GetPortionPointer(portionId);
+        return !!it->second->GetPortionPtr(portionId);
     }
 
     bool IsGranuleExists(const ui64 granuleId) const {

@@ -1,6 +1,8 @@
 #pragma once
 #include "granule.h"
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 
 namespace NKikimr::NOlap {
 
@@ -10,6 +12,7 @@ private:
     const NColumnShard::TEngineLogsCounters Counters;
     THashMap<ui64, TCompactionPriority> GranulesCompactionPriority;
     std::map<TCompactionPriority, std::set<ui64>> GranuleCompactionPrioritySorting;
+    std::shared_ptr<IStoragesManager> StoragesManager;
     bool PackModificationFlag = false;
     THashMap<ui64, const TGranuleMeta*> PackModifiedGranules;
     void StartModificationImpl() {
@@ -27,10 +30,16 @@ private:
     }
 
 public:
-    TGranulesStorage(const NColumnShard::TEngineLogsCounters counters, const TCompactionLimits& limits)
+    TGranulesStorage(const NColumnShard::TEngineLogsCounters counters, const TCompactionLimits& limits, const std::shared_ptr<IStoragesManager>& storagesManager)
         : Limits(limits)
-        , Counters(counters) {
+        , Counters(counters)
+        , StoragesManager(storagesManager)
+    {
 
+    }
+
+    const std::shared_ptr<IStoragesManager>& GetStoragesManager() const {
+        return StoragesManager;
     }
 
     const NColumnShard::TEngineLogsCounters& GetCounters() const {

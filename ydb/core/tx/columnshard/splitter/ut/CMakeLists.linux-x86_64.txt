@@ -26,6 +26,17 @@ target_link_libraries(ydb-core-tx-columnshard-splitter-ut PUBLIC
   libs-apache-arrow
   ydb-library-arrow_kernels
   tx-columnshard-counters
+  formats-arrow-compression
+  core-kqp-common
+  yql-parser-pg_wrapper
+  yql-public-udf
+  ydb-core-persqueue
+  core-kqp-session_actor
+  core-tx-tx_proxy
+  ydb-core-tx
+  ydb-core-mind
+  udf-service-exception_policy
+  yql-sql-pg
 )
 target_link_options(ydb-core-tx-columnshard-splitter-ut PRIVATE
   -ldl

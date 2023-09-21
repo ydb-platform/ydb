@@ -8,6 +8,7 @@
 #include <ydb/core/tx/columnshard/engines/insert_table/insert_table.h>
 #include <ydb/core/tx/columnshard/engines/granules_table.h>
 #include <ydb/core/tx/columnshard/engines/columns_table.h>
+#include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/operations/write.h>
 
 #include <type_traits>
@@ -40,6 +41,12 @@ struct Schema : NIceDb::Schema {
         ColumnsTableId,
         CountersTableId,
         OperationsTableId,
+    };
+
+    enum class ETierTables: ui32 {
+        TierBlobsDraft = 1024,
+        TierBlobsToKeep,
+        TierBlobsToDelete
     };
 
     enum class EValueIds : ui32 {
@@ -264,6 +271,22 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<TxId, WriteId, Status, CreatedAt, GlobalWriteId, Metadata>;
     };
 
+    struct TierBlobsDraft: NIceDb::Schema::Table<(ui32)ETierTables::TierBlobsDraft> {
+        struct StorageId: Column<1, NScheme::NTypeIds::String> {};
+        struct BlobId: Column<2, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<StorageId, BlobId>;
+        using TColumns = TableColumns<StorageId, BlobId>;
+    };
+
+    struct TierBlobsToDelete: NIceDb::Schema::Table<(ui32)ETierTables::TierBlobsToDelete> {
+        struct StorageId: Column<1, NScheme::NTypeIds::String> {};
+        struct BlobId: Column<2, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<StorageId, BlobId>;
+        using TColumns = TableColumns<StorageId, BlobId>;
+    };
+
     using TTables = SchemaTables<
         Value,
         TxInfo,
@@ -282,7 +305,9 @@ struct Schema : NIceDb::Schema {
         IndexCounters,
         SmallBlobs,
         OneToOneEvictedBlobs,
-        Operations
+        Operations,
+        TierBlobsDraft,
+        TierBlobsToDelete
         >;
 
     //

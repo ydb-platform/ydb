@@ -44,7 +44,7 @@ struct TTestSchema {
         TString Name;
         TString Codec;
         std::optional<int> CompressionLevel;
-        std::optional<NKikimrSchemeOp::TS3Settings> S3;
+        NKikimrSchemeOp::TS3Settings S3 = FakeS3();
 
         TStorageTier(const TString& name = {})
             : Name(name)
@@ -255,15 +255,11 @@ struct TTestSchema {
         ttlSettings->SetVersion(1);
         if (specials.HasTiers()) {
             ttlSettings->SetUseTiering("Tiering1");
-            if (specials.HasTtl()) {
-                InitTtl(specials, ttlSettings->MutableEnabled());
-            }
-            return true;
-        } else if (specials.HasTtl()) {
-            InitTtl(specials, ttlSettings->MutableEnabled());
-            return true;
         }
-        return false;
+        if (specials.HasTtl()) {
+            InitTtl(specials, ttlSettings->MutableEnabled());
+        }
+        return specials.HasTiers() || specials.HasTtl();
     }
 
     static TString CreateTableTxBody(ui64 pathId, const std::vector<std::pair<TString, TTypeInfo>>& columns,
@@ -402,7 +398,7 @@ struct TTestSchema {
 };
 
 bool ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, NOlap::TSnapshot snap);
-void ProvideTieringSnapshot(TTestBasicRuntime& runtime, TActorId& sender, NMetadata::NFetcher::ISnapshot::TPtr snapshot);
+void ProvideTieringSnapshot(TTestBasicRuntime& runtime, const TActorId& sender, NMetadata::NFetcher::ISnapshot::TPtr snapshot);
 void PlanSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot snap);
 
 void PlanWriteTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot snap, bool waitResult = true);

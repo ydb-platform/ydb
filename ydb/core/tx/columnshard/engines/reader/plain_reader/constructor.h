@@ -1,61 +1,49 @@
 #pragma once
+#include <ydb/core/tx/columnshard/engines/reader/read_metadata.h>
+#include <ydb/core/tx/columnshard/engines/reader/read_context.h>
 #include <ydb/core/tx/columnshard/engines/portions/column_record.h>
+#include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include "source.h"
 
 namespace NKikimr::NOlap::NPlainReader {
 
-class IFetchTaskConstructor {
+class IFetchTaskConstructor: public NBlobOperations::NRead::ITask {
 private:
-    bool Constructed = false;
-    IDataReader& Reader;
-    bool Started = false;
+    using TBase = NBlobOperations::NRead::ITask;
 protected:
-    THashSet<TBlobRange> WaitingData;
-    THashMap<TBlobRange, TPortionInfo::TAssembleBlobInfo> Data;
-    virtual void DoOnDataReady(IDataReader& reader) = 0;
-
-    void OnDataReady(IDataReader& reader) {
-        if (WaitingData.empty()) {
-            Constructed = true;
-            return DoOnDataReady(reader);
-        }
-    }
+    NActors::TActorId ScanActorId;
+    const ui32 SourceIdx;
+    std::shared_ptr<const TReadMetadata> ReadMetadata;
+    TReadContext Context;
+    THashMap<TBlobRange, ui32> NullBlocks;
+    virtual bool DoOnError(const TBlobRange& range) override;
 public:
-    IFetchTaskConstructor(IDataReader& reader)
-        : Reader(reader)
+    IFetchTaskConstructor(IDataReader& reader, const std::vector<std::shared_ptr<IBlobsReadingAction>>& readActions, THashMap<TBlobRange, ui32>&& nullBlocks, const IDataSource& source)
+        : TBase(readActions)
+        , ScanActorId(NActors::TActorContext::AsActorContext().SelfID)
+        , SourceIdx(source.GetSourceIdx())
+        , ReadMetadata(reader.GetReadMetadata())
+        , Context(reader.GetContext())
+        , NullBlocks(std::move(nullBlocks))
     {
 
     }
+};
 
-    void StartDataWaiting() {
-        Started = true;
-        OnDataReady(Reader);
-    }
+class TCommittedColumnsTaskConstructor: public IFetchTaskConstructor {
+private:
+    TCommittedBlob CommittedBlob;
+    using TBase = IFetchTaskConstructor;
+protected:
+    virtual void DoOnDataReady() override;
+public:
+    TCommittedColumnsTaskConstructor(IDataReader& reader, const std::vector<std::shared_ptr<IBlobsReadingAction>>& readActions, THashMap<TBlobRange, ui32>&& nullBlocks,
+        const TCommittedDataSource& source)
+        : TBase(reader, readActions, std::move(nullBlocks), source)
+        , CommittedBlob(source.GetCommitted())
+    {
 
-    void Abort() {
-        Constructed = true;
-    }
-
-    virtual ~IFetchTaskConstructor() {
-        Y_VERIFY(Constructed);
-    }
-
-    void AddWaitingRecord(const TColumnRecord& rec) {
-        Y_VERIFY(!Started);
-        Y_VERIFY(WaitingData.emplace(rec.BlobRange).second);
-    }
-
-    void AddData(const TBlobRange& range, TString&& data) {
-        Y_VERIFY(Started);
-        Y_VERIFY(WaitingData.erase(range));
-        Y_VERIFY(Data.emplace(range, std::move(data)).second);
-        OnDataReady(Reader);
-    }
-
-    void AddNullData(const TBlobRange& range, const ui32 rowsCount) {
-        Y_VERIFY(!Started);
-        Y_VERIFY(Data.emplace(range, rowsCount).second);
     }
 };
 
@@ -64,14 +52,13 @@ private:
     using TBase = IFetchTaskConstructor;
 protected:
     std::set<ui32> ColumnIds;
-    const ui32 SourceIdx;
     std::shared_ptr<TPortionInfo> PortionInfo;
-    TPortionInfo::TPreparedBatchData BuildBatchAssembler(IDataReader& reader);
+    TPortionInfo::TPreparedBatchData BuildBatchAssembler();
 public:
-    TAssembleColumnsTaskConstructor(const std::set<ui32>& columnIds, const TPortionDataSource& portion, IDataReader& reader)
-        : TBase(reader)
+    TAssembleColumnsTaskConstructor(IDataReader& reader, const std::vector<std::shared_ptr<IBlobsReadingAction>>& readActions, THashMap<TBlobRange, ui32>&& nullBlocks,
+        const std::set<ui32>& columnIds, const TPortionDataSource& portion)
+        : TBase(reader, readActions, std::move(nullBlocks), portion)
         , ColumnIds(columnIds)
-        , SourceIdx(portion.GetSourceIdx())
         , PortionInfo(portion.GetPortionInfoPtr())
     {
 
@@ -82,10 +69,11 @@ class TFFColumnsTaskConstructor: public TAssembleColumnsTaskConstructor {
 private:
     using TBase = TAssembleColumnsTaskConstructor;
     std::shared_ptr<NArrow::TColumnFilter> AppliedFilter;
-    virtual void DoOnDataReady(IDataReader& reader) override;
+    virtual void DoOnDataReady() override;
 public:
-    TFFColumnsTaskConstructor(const std::set<ui32>& columnIds, const TPortionDataSource& portion, IDataReader& reader)
-        : TBase(columnIds, portion, reader)
+    TFFColumnsTaskConstructor(IDataReader& reader, const std::vector<std::shared_ptr<IBlobsReadingAction>>& readActions, THashMap<TBlobRange, ui32>&& nullBlocks,
+        const std::set<ui32>& columnIds, const TPortionDataSource& portion)
+        : TBase(reader, readActions, std::move(nullBlocks), columnIds, portion)
         , AppliedFilter(portion.GetFilterStageData().GetAppliedFilter())
     {
     }
@@ -95,10 +83,11 @@ class TEFTaskConstructor: public TAssembleColumnsTaskConstructor {
 private:
     bool UseEarlyFilter = false;
     using TBase = TAssembleColumnsTaskConstructor;
-    virtual void DoOnDataReady(IDataReader& reader) override;
+    virtual void DoOnDataReady() override;
 public:
-    TEFTaskConstructor(const std::set<ui32>& columnIds, const TPortionDataSource& portion, IDataReader& reader, const bool useEarlyFilter)
-        : TBase(columnIds, portion, reader)
+    TEFTaskConstructor(IDataReader& reader, const std::vector<std::shared_ptr<IBlobsReadingAction>>& readActions, THashMap<TBlobRange, ui32>&& nullBlocks,
+        const std::set<ui32>& columnIds, const TPortionDataSource& portion, const bool useEarlyFilter)
+        : TBase(reader, readActions, std::move(nullBlocks), columnIds, portion)
         , UseEarlyFilter(useEarlyFilter)
     {
     }

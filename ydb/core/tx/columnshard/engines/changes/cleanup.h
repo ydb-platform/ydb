@@ -5,7 +5,9 @@ namespace NKikimr::NOlap {
 
 class TCleanupColumnEngineChanges: public TColumnEngineChanges {
 private:
+    using TBase = TColumnEngineChanges;
     THashMap<TString, THashSet<NOlap::TEvictedBlob>> BlobsToForget;
+    THashMap<TString, std::vector<std::shared_ptr<TPortionInfo>>> StoragePortions;
 protected:
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
     virtual void DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) override;
@@ -23,20 +25,18 @@ protected:
     }
     virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const override;
 public:
+    using TBase::TBase;
+
     virtual THashSet<TPortionAddress> GetTouchedPortions() const override {
         THashSet<TPortionAddress> result;
         for (const auto& portionInfo : PortionsToDrop) {
-            result.emplace(portionInfo.GetAddress());
+            result.emplace(portionInfo->GetAddress());
         }
         return result;
     }
 
-    std::vector<TPortionInfo> PortionsToDrop;
+    std::vector<std::shared_ptr<TPortionInfo>> PortionsToDrop;
     bool NeedRepeat = false;
-
-    virtual THashSet<TBlobRange> GetReadBlobRanges() const override {
-        return {};
-    }
 
     virtual ui32 GetWritePortionsCount() const override {
         return 0;

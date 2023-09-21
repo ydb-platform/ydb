@@ -281,7 +281,7 @@ void TTablesManager::IndexSchemaVersion(const TRowVersion& version, const NKikim
     NOlap::TIndexInfo indexInfo = DeserializeIndexInfoFromProto(schema);
     indexInfo.SetAllKeys();
     if (!PrimaryIndex) {
-        PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId);
+        PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, NOlap::TCompactionLimits(), StoragesManager);
     } else {
         const NOlap::TIndexInfo& lastIndexInfo = PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetIndexInfo();
         Y_VERIFY(lastIndexInfo.GetReplaceKey()->Equals(indexInfo.GetReplaceKey()));

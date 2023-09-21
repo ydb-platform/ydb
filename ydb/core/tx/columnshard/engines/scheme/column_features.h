@@ -3,6 +3,8 @@
 #include <ydb/core/formats/arrow/dictionary/object.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/formats/arrow/transformer/abstract.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
 
@@ -12,7 +14,16 @@ class TSaverContext {
 private:
     TString TierName;
     std::optional<NArrow::TCompression> ExternalCompression;
+    YDB_READONLY_DEF(std::shared_ptr<IBlobsStorageOperator>, StorageOperator);
+    YDB_READONLY_DEF(std::shared_ptr<IStoragesManager>, StoragesManager);
 public:
+    TSaverContext(const std::shared_ptr<IBlobsStorageOperator>& storageOperator, const std::shared_ptr<IStoragesManager>& storagesManager)
+        : StorageOperator(storageOperator)
+        , StoragesManager(storagesManager)
+    {
+
+    }
+
     const std::optional<NArrow::TCompression>& GetExternalCompression() const {
         return ExternalCompression;
     }

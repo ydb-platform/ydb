@@ -160,19 +160,7 @@ public:
             ctx.Send(res.TxInfo.Source, event.release(), 0, res.TxInfo.Cookie);
         }
 
-        Self->ScheduleNextGC(ctx);
-
-        switch (Trigger) {
-            case ETriggerActivities::POST_INSERT:
-                Self->EnqueueBackgroundActivities(false, TBackgroundActivity::Indexation());
-                break;
-            case ETriggerActivities::POST_SCHEMA:
-                Self->EnqueueBackgroundActivities();
-                break;
-            case ETriggerActivities::NONE:
-            default:
-                break;
-        }
+        Self->EnqueueBackgroundActivities();
     }
 
 private:

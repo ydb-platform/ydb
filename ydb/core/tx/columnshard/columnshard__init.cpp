@@ -130,42 +130,15 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     THashSet<TUnifiedBlobId> lostEvictions;
     TBlobManagerDb blobManagerDb(txc.DB);
 
-    // Initialize the BlobManager
-    {
-        if (!Self->BlobManager->LoadState(blobManagerDb)) {
-            return false;
-        }
-        if (!Self->BlobManager->LoadOneToOneExport(blobManagerDb, lostEvictions)) {
+    for (auto&& i : Self->StoragesManager->GetStorages()) {
+        if (!i.second->Load(blobManagerDb)) {
             return false;
         }
     }
+
 
     if (!Self->TablesManager.LoadIndex(dbTable, lostEvictions)) {
         return false;
-    }
-
-    // Set dropped evicting records to be erased in future cleanups
-    TString strBlobs;
-    for (auto& blobId : lostEvictions) {
-        TEvictMetadata meta;
-        auto evict = Self->BlobManager->GetDropped(blobId, meta);
-        Y_VERIFY(evict.State == EEvictState::EVICTING);
-        evict.State = EEvictState::ERASING;
-
-        if (meta.GetTierName().empty()) {
-            LOG_S_ERROR("Blob " << evict.Blob << " eviction with empty tier name at tablet " << Self->TabletID());
-        }
-
-        bool dropped;
-        bool present = Self->BlobManager->UpdateOneToOne(evict, blobManagerDb, dropped);
-        if (present) {
-            strBlobs += "'" + evict.Blob.ToStringNew() + "' ";
-        } else {
-            LOG_S_ERROR("Unknown dropped evicting blob " << evict.Blob << " at tablet " << Self->TabletID());
-        }
-    }
-    if (!strBlobs.empty()) {
-        LOG_S_NOTICE("Erasing potentially exported blobs " << strBlobs << "at tablet " << Self->TabletID());
     }
 
     Self->UpdateInsertTableCounters();

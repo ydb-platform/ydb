@@ -5,9 +5,6 @@ SRCS(
     blob.cpp
     blob_cache.cpp
     blob_manager.cpp
-    blob_manager_txs.cpp
-    columnshard__export.cpp
-    columnshard__forget.cpp
     columnshard__init.cpp
     columnshard__notify_tx_completion.cpp
     columnshard__plan_step.cpp
@@ -16,7 +13,6 @@ SRCS(
     columnshard__propose_transaction.cpp
     columnshard__read.cpp
     columnshard__read_base.cpp
-    columnshard__read_blob_ranges.cpp
     columnshard__scan.cpp
     columnshard__index_scan.cpp
     columnshard__stats_scan.cpp

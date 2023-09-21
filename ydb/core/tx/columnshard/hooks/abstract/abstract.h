@@ -1,12 +1,21 @@
 #pragma once
+#include <ydb/services/metadata/abstract/fetcher.h>
+#include <ydb/core/tx/tiering/snapshot.h>
+
 #include <ydb/library/accessor/accessor.h>
 #include <util/generic/singleton.h>
 #include <util/generic/refcount.h>
+#include <util/datetime/base.h>
 #include <memory>
 
 namespace NKikimr::NOlap::NIndexedReader {
 class IOrderPolicy;
 }
+
+namespace NKikimr::NColumnShard {
+class TTiersManager;
+}
+
 namespace NKikimr::NOlap {
 class TColumnEngineChanges;
 }
@@ -29,6 +38,13 @@ protected:
     virtual bool DoOnStartCompaction(std::shared_ptr<NOlap::TColumnEngineChanges>& /*changes*/) {
         return true;
     }
+    virtual bool DoOnWriteIndexComplete(const ui64 /*tabletId*/, const TString& /*changeClassName*/) {
+        return true;
+    }
+    virtual bool DoOnWriteIndexStart(const ui64 /*tabletId*/, const TString& /*changeClassName*/) {
+        return true;
+    }
+
 public:
     using TPtr = std::shared_ptr<ICSController>;
     virtual ~ICSController() = default;
@@ -39,8 +55,24 @@ public:
     bool OnAfterFilterAssembling(const std::shared_ptr<arrow::RecordBatch>& batch) {
         return DoOnAfterFilterAssembling(batch);
     }
+    bool OnWriteIndexComplete(const ui64 tabletId, const TString& changeClassName) {
+        return DoOnWriteIndexComplete(tabletId, changeClassName);
+    }
+    bool OnWriteIndexStart(const ui64 tabletId, const TString& changeClassName) {
+        return DoOnWriteIndexStart(tabletId, changeClassName);
+    }
     bool OnStartCompaction(std::shared_ptr<NOlap::TColumnEngineChanges>& changes) {
         return DoOnStartCompaction(changes);
+    }
+    virtual TDuration GetTTLDefaultWaitingDuration(const TDuration defaultValue) const {
+        return defaultValue;
+    }
+    virtual void OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& /*tiers*/) {
+    }
+
+    virtual NMetadata::NFetcher::ISnapshot::TPtr GetFallbackTiersSnapshot() const {
+        static std::shared_ptr<NColumnShard::NTiers::TConfigsSnapshot> result = std::make_shared<NColumnShard::NTiers::TConfigsSnapshot>(TInstant::Now());
+        return result;
     }
 };
 

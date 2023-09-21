@@ -7,16 +7,6 @@
 
 namespace NKikimr::NOlap {
 
-THashSet<TBlobRange> TInsertColumnEngineChanges::GetReadBlobRanges() const {
-    THashSet<TBlobRange> result;
-    for (size_t i = 0; i < DataToIndex.size(); ++i) {
-        const auto& insertedData = DataToIndex[i];
-        Y_VERIFY(insertedData.GetBlobRange().IsFullBlob());
-        Y_VERIFY(result.emplace(insertedData.GetBlobRange()).second);
-    }
-    return result;
-}
-
 bool TInsertColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context) {
     if (!TBase::DoApplyChanges(self, context)) {
         return false;
@@ -29,7 +19,6 @@ void TInsertColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self, 
     for (const auto& insertedData : DataToIndex) {
         self.InsertTable->EraseCommitted(context.DBWrapper, insertedData);
         Y_VERIFY(insertedData.GetBlobRange().IsFullBlob());
-        self.BlobManager->DeleteBlob(insertedData.GetBlobRange().GetBlobId(), *context.BlobManagerDb);
     }
     if (!DataToIndex.empty()) {
         self.UpdateInsertTableCounters();
@@ -52,6 +41,16 @@ bool TInsertColumnEngineChanges::AddPathIfNotExists(ui64 pathId) {
 
 void TInsertColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     TBase::DoStart(self);
+    Y_VERIFY(DataToIndex.size());
+    auto removing = BlobsAction.GetRemoving(IStoragesManager::DefaultStorageId);
+    auto reading = BlobsAction.GetReading(IStoragesManager::DefaultStorageId);
+    for (size_t i = 0; i < DataToIndex.size(); ++i) {
+        const auto& insertedData = DataToIndex[i];
+        Y_VERIFY(insertedData.GetBlobRange().IsFullBlob());
+        reading->AddRange(insertedData.GetBlobRange());
+        removing->DeclareRemove(insertedData.GetBlobRange().GetBlobId());
+    }
+
     self.BackgroundController.StartIndexing(*this);
 }
 
@@ -122,7 +121,7 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
 
         auto granuleBatches = TMarksGranules::SliceIntoGranules(merged, PathToGranule[pathId], resultSchema->GetIndexInfo());
         for (auto& [granule, batch] : granuleBatches) {
-            auto portions = MakeAppendedPortions(pathId, batch, granule, maxSnapshot, nullptr, context);
+            auto portions = MakeAppendedPortions(batch, granule, maxSnapshot, nullptr, context);
             Y_VERIFY(portions.size() > 0);
             for (auto& portion : portions) {
                 AppendedPortions.emplace_back(std::move(portion));

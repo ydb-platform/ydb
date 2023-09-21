@@ -59,6 +59,11 @@ protected:
     virtual void DoAbort() = 0;
 
 public:
+    const TFetchingPlan& GetFetchingPlan() const {
+        Y_VERIFY(FetchingPlan);
+        return *FetchingPlan;
+    }
+
     bool IsMergingStarted() const {
         return MergingStartedFlag;
     }
@@ -123,16 +128,16 @@ public:
     virtual ~IDataSource() {
         Y_VERIFY(Intervals.empty());
     }
-    virtual void AddData(const TBlobRange& range, TString&& data) = 0;
 };
 
 class TPortionDataSource: public IDataSource {
 private:
     using TBase = IDataSource;
     std::shared_ptr<TPortionInfo> Portion;
-    THashMap<TBlobRange, std::shared_ptr<IFetchTaskConstructor>> BlobsWaiting;
 
-    void NeedFetchColumns(const std::set<ui32>& columnIds, std::shared_ptr<IFetchTaskConstructor> constructor, const std::shared_ptr<NArrow::TColumnFilter>& filter);
+    void NeedFetchColumns(const std::set<ui32>& columnIds,
+        const std::shared_ptr<IBlobsReadingAction>& readingAction, THashMap<TBlobRange, ui32>& nullBlocks,
+        const std::shared_ptr<NArrow::TColumnFilter>& filter);
 
     virtual void DoStartFilterStage() override;
     virtual void DoStartFetchStage() override;
@@ -159,8 +164,6 @@ public:
         , Portion(portion) {
 
     }
-
-    virtual void AddData(const TBlobRange& range, TString&& data) override;
 };
 
 class TCommittedDataSource: public IDataSource {
@@ -199,8 +202,6 @@ public:
         , CommittedBlob(committed) {
 
     }
-
-    virtual void AddData(const TBlobRange& range, TString&& data) override;
 };
 
 }

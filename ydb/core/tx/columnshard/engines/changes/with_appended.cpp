@@ -37,7 +37,20 @@ void TChangesWithAppend::DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIn
                 Y_FAIL("Unexpected inactive case");
                 break;
         }
+    }
+    self.IncCounter(NColumnShard::COUNTER_PORTIONS_DEACTIVATED, PortionsToRemove.size());
 
+    THashSet<TUnifiedBlobId> blobsDeactivated;
+    for (auto& portionInfo : PortionsToRemove) {
+        for (auto& rec : portionInfo.Records) {
+            blobsDeactivated.insert(rec.BlobRange.BlobId);
+        }
+        self.IncCounter(NColumnShard::COUNTER_RAW_BYTES_DEACTIVATED, portionInfo.RawBytesSum());
+    }
+
+    self.IncCounter(NColumnShard::COUNTER_BLOBS_DEACTIVATED, blobsDeactivated.size());
+    for (auto& blobId : blobsDeactivated) {
+        self.IncCounter(NColumnShard::COUNTER_BYTES_DEACTIVATED, blobId.BlobSize());
     }
 }
 
@@ -62,6 +75,30 @@ bool TChangesWithAppend::DoApplyChanges(TColumnEngineForLogs& self, TApplyChange
         }
     }
 
+    auto g = self.GranulesStorage->StartPackModification();
+    for (auto& portionInfo : PortionsToRemove) {
+        Y_VERIFY(!portionInfo.Empty());
+        Y_VERIFY(!portionInfo.IsActive());
+
+        const ui64 granule = portionInfo.GetGranule();
+        const ui64 portion = portionInfo.GetPortion();
+
+        const TPortionInfo& oldInfo = self.GetGranuleVerified(granule).GetPortionVerified(portion);
+
+        auto& granuleStart = self.Granules[granule]->Record.Mark;
+
+        Y_VERIFY(granuleStart <= portionInfo.IndexKeyStart());
+        self.UpsertPortion(portionInfo, &oldInfo);
+
+        for (auto& record : portionInfo.Records) {
+            self.ColumnsTable->Write(context.DB, portionInfo, record);
+        }
+    }
+
+    for (auto& portionInfo : PortionsToRemove) {
+        self.CleanupPortions.insert(portionInfo.GetAddress());
+    }
+
     return true;
 }
 
@@ -70,46 +107,31 @@ void TChangesWithAppend::DoCompile(TFinalizationContext& context) {
         i.GetPortionInfo().SetPortion(context.NextPortionId());
         i.GetPortionInfo().UpdateRecordsMeta(TPortionMeta::EProduced::INSERTED);
     }
-}
-
-TSaverContext TChangesWithAppend::GetSaverContext(const ui32 pathId) const {
-    TString tierName;
-    std::optional<NArrow::TCompression> compression;
-    if (pathId) {
-        if (auto* tiering = TieringInfo.FindPtr(pathId)) {
-            tierName = tiering->GetHottestTierName();
-            if (const auto& tierCompression = tiering->GetCompression(tierName)) {
-                compression = *tierCompression;
-            }
-        }
+    for (auto& portionInfo : PortionsToRemove) {
+        Y_VERIFY(portionInfo.IsActive());
+        portionInfo.SetRemoveSnapshot(context.GetSnapshot());
     }
-    TSaverContext saverContext;
-    saverContext.SetTierName(tierName).SetExternalCompression(compression);
-    return saverContext;
 }
 
-std::vector<TPortionInfoWithBlobs> TChangesWithAppend::MakeAppendedPortions(
-    const ui64 pathId, const std::shared_ptr<arrow::RecordBatch> batch, const ui64 granule, const TSnapshot& snapshot,
-    const TGranuleMeta* granuleMeta, TConstructionContext& context) const {
+std::vector<TPortionInfoWithBlobs> TChangesWithAppend::MakeAppendedPortions(const std::shared_ptr<arrow::RecordBatch> batch,
+    const ui64 granule, const TSnapshot& snapshot, const TGranuleMeta* granuleMeta, TConstructionContext& context) const {
     Y_VERIFY(batch->num_rows());
 
     auto resultSchema = context.SchemaVersions.GetSchema(snapshot);
     std::vector<TPortionInfoWithBlobs> out;
 
-    const TSaverContext saverContext = GetSaverContext(pathId);
-
     NOlap::TSerializationStats stats;
     if (granuleMeta) {
         stats = granuleMeta->BuildSerializationStats(resultSchema);
     }
-    auto schema = std::make_shared<TDefaultSchemaDetails>(resultSchema, saverContext, std::move(stats));
+    auto schema = std::make_shared<TDefaultSchemaDetails>(resultSchema, SaverContext, std::move(stats));
     TRBSplitLimiter limiter(context.Counters.SplitterCounters, schema, batch, SplitSettings);
 
     std::vector<std::vector<IPortionColumnChunk::TPtr>> chunkByBlobs;
     std::shared_ptr<arrow::RecordBatch> portionBatch;
     while (limiter.Next(chunkByBlobs, portionBatch)) {
-        TPortionInfoWithBlobs infoWithBlob = TPortionInfoWithBlobs::BuildByBlobs(chunkByBlobs, nullptr, granule, snapshot);
-        infoWithBlob.GetPortionInfo().AddMetadata(*resultSchema, portionBatch, saverContext.GetTierName());
+        TPortionInfoWithBlobs infoWithBlob = TPortionInfoWithBlobs::BuildByBlobs(chunkByBlobs, nullptr, granule, snapshot, SaverContext.GetStorageOperator());
+        infoWithBlob.GetPortionInfo().AddMetadata(*resultSchema, portionBatch, SaverContext.GetTierName());
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("portion_appended", infoWithBlob.GetPortionInfo().DebugString());
         out.emplace_back(std::move(infoWithBlob));
     }
@@ -117,10 +139,7 @@ std::vector<TPortionInfoWithBlobs> TChangesWithAppend::MakeAppendedPortions(
     return out;
 }
 
-void TChangesWithAppend::DoStart(NColumnShard::TColumnShard& self) {
-    if (self.Tiers) {
-        TieringInfo = self.Tiers->GetTiering();
-    }
+void TChangesWithAppend::DoStart(NColumnShard::TColumnShard& /*self*/) {
 }
 
 }

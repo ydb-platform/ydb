@@ -13,13 +13,12 @@ namespace NKikimr::NOlap {
 
 class TTierInfo {
 private:
-    TString Name;
-    TString EvictColumnName;
-    TDuration EvictDuration;
-    bool NeedExport = false;
+    YDB_READONLY_DEF(TString, Name);
+    YDB_READONLY_DEF(TString, EvictColumnName);
+    YDB_READONLY_DEF(TDuration, EvictDuration);
 
     ui32 TtlUnitsInSecond;
-    std::optional<NArrow::TCompression> Compression;
+    YDB_READONLY_DEF(std::optional<NArrow::TCompression>, Compression);
 public:
     TTierInfo(const TString& tierName, TDuration evictDuration, const TString& column, ui32 unitsInSecond = 0)
         : Name(tierName)
@@ -31,41 +30,13 @@ public:
         Y_VERIFY(!!EvictColumnName);
     }
 
-    const TString& GetName() const {
-        return Name;
-    }
-
-    const TString& GetEvictColumnName() const {
-        return EvictColumnName;
-    }
-
     TInstant GetEvictInstant(const TInstant now) const {
         return now - EvictDuration;
-    }
-
-    TDuration GetEvictDuration() const {
-        return EvictDuration;
-    }
-
-    bool GetNeedExport() const {
-        return NeedExport;
-    }
-
-    TTierInfo& SetNeedExport(const bool value) {
-        NeedExport = value;
-        return *this;
     }
 
     TTierInfo& SetCompression(const NArrow::TCompression& value) {
         Compression = value;
         return *this;
-    }
-
-    const std::optional<NArrow::TCompression> GetCompression() const {
-        if (NeedExport) {
-            return {};
-        }
-        return Compression;
     }
 
     std::shared_ptr<arrow::Field> GetEvictColumn(const std::shared_ptr<arrow::Schema>& schema) const {
@@ -131,8 +102,6 @@ class TTiering {
     TSet<TTierRef> OrderedTiers;
 public:
 
-    std::shared_ptr<TTierInfo> GetMainTierInfo() const;
-
     std::shared_ptr<TTierInfo> Ttl;
 
     const TTiersMap& GetTierByName() const {
@@ -164,24 +133,6 @@ public:
         return {};
     }
 
-    std::optional<TInstant> ScalarToInstant(const std::shared_ptr<arrow::Scalar>& scalar) const {
-        auto mainTier = GetMainTierInfo();
-        if (!mainTier) {
-            return {};
-        } else {
-            return mainTier->ScalarToInstant(scalar);
-        }
-    }
-
-    std::optional<TInstant> GetEvictInstant(const TInstant now) const {
-        auto mainTier = GetMainTierInfo();
-        if (!mainTier) {
-            return {};
-        } else {
-            return mainTier->GetEvictInstant(now);
-        }
-    }
-
     std::optional<NArrow::TCompression> GetCompression(const TString& name) const {
         auto it = TierByName.find(name);
         if (it != TierByName.end()) {
@@ -189,15 +140,6 @@ public:
             return it->second->GetCompression();
         }
         return {};
-    }
-
-    bool NeedExport(const TString& name) const {
-        auto it = TierByName.find(name);
-        if (it != TierByName.end()) {
-            Y_VERIFY(!name.empty());
-            return it->second->GetNeedExport();
-        }
-        return false;
     }
 
     THashSet<TString> GetTtlColumns() const {

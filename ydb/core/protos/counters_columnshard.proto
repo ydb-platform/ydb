@@ -175,4 +175,7 @@ enum ETxTypes {
     TXTYPE_EXPORT = 13                                      [(TxTypeOpts) = {Name: "TxExport"}];
     TXTYPE_FORGET = 14                                      [(TxTypeOpts) = {Name: "TxForget"}];
     TXTYPE_WRITE_DRAFT = 15                                 [(TxTypeOpts) = {Name: "TxWriteDraft"}];
+    TXTYPE_CLEANUP_INSERT_TABLE = 16                        [(TxTypeOpts) = {Name: "TxInsertTableCleanup"}];
+    TXTYPE_GC_FINISHED = 17                                 [(TxTypeOpts) = {Name: "TxGarbageCollectionFinished"}];
+	
 }

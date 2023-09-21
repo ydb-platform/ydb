@@ -1,9 +1,9 @@
 #pragma once
-#include "changes/abstract/abstract.h"
 #include "granules_table.h"
 #include "portions/portion_info.h"
 #include "scheme/snapshot_scheme.h"
 #include "predicate/filter.h"
+#include "changes/abstract/settings.h"
 #include "changes/abstract/compaction_info.h"
 #include <ydb/core/tx/columnshard/common/reverse_accessor.h>
 
@@ -15,8 +15,10 @@ class TTtl;
 namespace NKikimr::NOlap {
 class TInsertColumnEngineChanges;
 class TCompactColumnEngineChanges;
+class TColumnEngineChanges;
 class TTTLColumnEngineChanges;
 class TCleanupColumnEngineChanges;
+
 struct TSelectInfo {
     struct TStats {
         size_t Granules{};

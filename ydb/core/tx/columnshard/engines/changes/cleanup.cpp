@@ -9,54 +9,32 @@ void TCleanupColumnEngineChanges::DoDebugString(TStringOutput& out) const {
     if (ui32 dropped = PortionsToDrop.size()) {
         out << "drop " << dropped << " portions";
         for (auto& portionInfo : PortionsToDrop) {
-            out << portionInfo;
+            out << portionInfo->DebugString();
         }
     }
 }
 
-void TCleanupColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context) {
+void TCleanupColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& /*context*/) {
     self.IncCounter(NColumnShard::COUNTER_PORTIONS_ERASED, PortionsToDrop.size());
-    THashSet<TUnifiedBlobId> blobsToDrop;
-    for (const auto& portionInfo : PortionsToDrop) {
-        for (const auto& rec : portionInfo.Records) {
-            const auto& blobId = rec.BlobRange.BlobId;
-            if (blobsToDrop.emplace(blobId).second) {
-                AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "Delete blob")("blob_id", blobId);
-            }
+    THashSet<TUnifiedBlobId> blobIds;
+    for (auto&& p : PortionsToDrop) {
+        auto removing = BlobsAction.GetRemoving(*p);
+        for (auto&& r : p->Records) {
+            removing->DeclareRemove(r.BlobRange.BlobId);
         }
-        self.IncCounter(NColumnShard::COUNTER_RAW_BYTES_ERASED, portionInfo.RawBytesSum());
-    }
-
-    for (const auto& blobId : blobsToDrop) {
-        if (self.BlobManager->DropOneToOne(blobId, *context.BlobManagerDb)) {
-            NColumnShard::TEvictMetadata meta;
-            auto evict = self.BlobManager->GetDropped(blobId, meta);
-            Y_VERIFY(evict.State != EEvictState::UNKNOWN);
-            Y_VERIFY(!meta.GetTierName().empty());
-
-            BlobsToForget[meta.GetTierName()].emplace(std::move(evict));
-
-            if (NOlap::IsDeleted(evict.State)) {
-                AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "SKIP delete blob")("blob_id", blobId);
-                continue;
-            }
-        }
-        self.BlobManager->DeleteBlob(blobId, *context.BlobManagerDb);
-        self.IncCounter(NColumnShard::COUNTER_BLOBS_ERASED);
-        self.IncCounter(NColumnShard::COUNTER_BYTES_ERASED, blobId.BlobSize());
+        self.IncCounter(NColumnShard::COUNTER_RAW_BYTES_ERASED, p->RawBytesSum());
     }
 }
 
 bool TCleanupColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context) {
-    // Drop old portions
-
+    THashSet<TUnifiedBlobId> blobIds;
     for (auto& portionInfo : PortionsToDrop) {
-        if (!self.ErasePortion(portionInfo)) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot erase portion")("portion", portionInfo.DebugString());
+        if (!self.ErasePortion(*portionInfo)) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot erase portion")("portion", portionInfo->DebugString());
             return false;
         }
-        for (auto& record : portionInfo.Records) {
-            self.ColumnsTable->Erase(context.DB, portionInfo, record);
+        for (auto& record : portionInfo->Records) {
+            self.ColumnsTable->Erase(context.DB, *portionInfo, record);
         }
     }
 
@@ -67,8 +45,7 @@ void TCleanupColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     self.BackgroundController.StartCleanup();
 }
 
-void TCleanupColumnEngineChanges::DoWriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) {
-    self.ForgetBlobs(context.ActorContext, BlobsToForget);
+void TCleanupColumnEngineChanges::DoWriteIndexComplete(NColumnShard::TColumnShard& /*self*/, TWriteIndexCompleteContext& context) {
     context.TriggerActivity = NeedRepeat ? NColumnShard::TBackgroundActivity::Cleanup() : NColumnShard::TBackgroundActivity::None();
 }
 

@@ -23,16 +23,16 @@ namespace NKikimr::NOlap::NPlainReader {
         const bool UseFilter = true;
     protected:
         virtual bool DoApply(IDataReader& owner) const override;
-        virtual bool DoExecuteImpl() override;
+        virtual bool DoExecute() override;
     public:
 
         virtual TString GetTaskClassIdentifier() const override {
             return "PlainReading::TAssembleFilter";
         }
 
-        TAssembleFilter(TPortionInfo::TPreparedBatchData&& batchConstructor, NOlap::TReadMetadata::TConstPtr readMetadata,
-            const ui32 sourceIdx, const std::set<ui32>& filterColumnIds, NColumnShard::IDataTasksProcessor::TPtr processor, const bool useFilter)
-            : TBase(processor)
+        TAssembleFilter(const NActors::TActorId& scanActorId, TPortionInfo::TPreparedBatchData&& batchConstructor, NOlap::TReadMetadata::TConstPtr readMetadata,
+            const ui32 sourceIdx, const std::set<ui32>& filterColumnIds, const bool useFilter)
+            : TBase(scanActorId)
             , BatchConstructor(batchConstructor)
             , SourceIdx(sourceIdx)
             , ReadMetadata(readMetadata)

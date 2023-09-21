@@ -1,5 +1,7 @@
 #pragma once
 #include "mark.h"
+#include "settings.h"
+#include <ydb/core/tx/columnshard/blobs_action/abstract/action.h>
 #include <ydb/core/tx/columnshard/counters/indexation.h>
 #include <ydb/core/tx/columnshard/engines/columns_table.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
@@ -30,52 +32,16 @@ class TColumnEngineForLogs;
 class TVersionedIndex;
 class TPortionInfoWithBlobs;
 
-struct TCompactionLimits {
-    static constexpr const ui64 MIN_GOOD_BLOB_SIZE = 256 * 1024; // some BlobStorage constant
-    static constexpr const ui64 MAX_BLOB_SIZE = 8 * 1024 * 1024; // some BlobStorage constant
-    static constexpr const ui64 EVICT_HOT_PORTION_BYTES = 1 * 1024 * 1024;
-    static constexpr const ui64 DEFAULT_EVICTION_BYTES = 64 * 1024 * 1024;
-    static constexpr const ui64 MAX_BLOBS_TO_DELETE = 10000;
-
-    static constexpr const ui64 OVERLOAD_INSERT_TABLE_SIZE_BY_PATH_ID = 1024 * MAX_BLOB_SIZE;
-    static constexpr const ui64 WARNING_INSERT_TABLE_SIZE_BY_PATH_ID = 0.3 * OVERLOAD_INSERT_TABLE_SIZE_BY_PATH_ID;
-    static constexpr const ui64 WARNING_INSERT_TABLE_COUNT_BY_PATH_ID = 100;
-
-    static constexpr const i64 OVERLOAD_GRANULE_SIZE = 20 * MAX_BLOB_SIZE;
-    static constexpr const i64 WARNING_OVERLOAD_GRANULE_SIZE = 0.25 * OVERLOAD_GRANULE_SIZE;
-
-    static constexpr const i64 WARNING_INSERTED_PORTIONS_SIZE = 0.5 * WARNING_OVERLOAD_GRANULE_SIZE;
-    static constexpr const ui32 WARNING_INSERTED_PORTIONS_COUNT = 100;
-    static constexpr const TDuration CompactionTimeout = TDuration::Minutes(3);
-
-    ui32 GoodBlobSize{MIN_GOOD_BLOB_SIZE};
-    ui32 GranuleBlobSplitSize{MAX_BLOB_SIZE};
-
-    ui32 InGranuleCompactSeconds = 2 * 60; // Trigger in-granule compaction to guarantee no PK intersections
-
-    i64 GranuleOverloadSize = OVERLOAD_GRANULE_SIZE;
-    i64 GranuleSizeForOverloadPrevent = WARNING_OVERLOAD_GRANULE_SIZE;
-    i64 GranuleIndexedPortionsSizeLimit = WARNING_INSERTED_PORTIONS_SIZE;
-    ui32 GranuleIndexedPortionsCountLimit = WARNING_INSERTED_PORTIONS_COUNT;
-
-    TSplitSettings GetSplitSettings() const {
-        return TSplitSettings()
-            .SetMinBlobSize(0.5 * std::min<ui64>(MAX_BLOB_SIZE, GranuleSizeForOverloadPrevent))
-            .SetMaxBlobSize(std::min<ui64>(MAX_BLOB_SIZE, GranuleSizeForOverloadPrevent))
-            .SetMaxPortionSize(0.5 * GranuleSizeForOverloadPrevent);
-    }
-};
-
 struct TPortionEvictionFeatures {
     const TString TargetTierName;
     const ui64 PathId;      // portion path id for cold-storage-key construct
-    bool NeedExport = false;
     bool DataChanges = true;
+    const std::shared_ptr<IBlobsStorageOperator> StorageOperator;
 
-    TPortionEvictionFeatures(const TString& targetTierName, const ui64 pathId, const bool needExport)
+    TPortionEvictionFeatures(const TString& targetTierName, const ui64 pathId, const std::shared_ptr<IBlobsStorageOperator>& storageOperator)
         : TargetTierName(targetTierName)
         , PathId(pathId)
-        , NeedExport(needExport)
+        , StorageOperator(storageOperator)
     {}
 };
 
@@ -200,8 +166,20 @@ protected:
 
     }
 
+    TBlobsAction BlobsAction;
+
     virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const = 0;
 public:
+    TBlobsAction& GetBlobsAction() {
+        return BlobsAction;
+    }
+
+    TColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager)
+        : BlobsAction(storagesManager)
+    {
+
+    }
+
     TConclusionStatus ConstructBlobs(TConstructionContext& context) noexcept;
     virtual ~TColumnEngineChanges();
 
@@ -234,7 +212,11 @@ public:
 
     THashMap<TBlobRange, TString> Blobs;
 
-    virtual THashSet<TBlobRange> GetReadBlobRanges() const = 0;
+    std::vector<std::shared_ptr<IBlobsReadingAction>> GetReadingActions() const {
+        auto result = BlobsAction.GetReadingActions();
+        Y_VERIFY(result.size());
+        return result;
+    }
     virtual TString TypeString() const = 0;
     TString DebugString() const;
 

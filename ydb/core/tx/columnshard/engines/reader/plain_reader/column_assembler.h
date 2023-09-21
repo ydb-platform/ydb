@@ -15,14 +15,14 @@ private:
 protected:
     std::shared_ptr<arrow::RecordBatch> Result;
     const ui32 SourceIdx;
-    virtual bool DoExecuteImpl() override;
+    virtual bool DoExecute() override;
 public:
     virtual TString GetTaskClassIdentifier() const override {
         return "PlainReader::TAssembleBatch";
     }
 
-    TAssembleBatch(TPortionInfo::TPreparedBatchData&& batchConstructor,
-        const ui32 sourceIdx, const std::shared_ptr<NArrow::TColumnFilter>& filter, const NColumnShard::IDataTasksProcessor::TPtr& processor);
+    TAssembleBatch(const NActors::TActorId& scanActorId, TPortionInfo::TPreparedBatchData&& batchConstructor,
+        const ui32 sourceIdx, const std::shared_ptr<NArrow::TColumnFilter>& filter);
 };
 
 class TAssembleFFBatch: public TAssembleBatch {

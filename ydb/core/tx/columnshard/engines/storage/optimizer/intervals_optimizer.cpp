@@ -1,7 +1,8 @@
 #include "intervals_optimizer.h"
-#include <ydb/core/tx/columnshard/engines/changes/general_compaction.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/counters/common/owner.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/changes/general_compaction.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer {
 
@@ -80,24 +81,32 @@ public:
 
 };
 
-std::shared_ptr<TColumnEngineChanges> TIntervalsOptimizerPlanner::GetSmallPortionsMergeTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule) const {
+std::shared_ptr<TColumnEngineChanges> TIntervalsOptimizerPlanner::GetSmallPortionsMergeTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const THashSet<TPortionAddress>& busyPortions) const {
     if (SumSmall > (i64)LimitSmallBlobsMerge) {
         ui64 currentSum = 0;
         std::map<ui64, std::shared_ptr<TPortionInfo>> portions;
+        std::optional<TString> tierName;
         for (auto&& i : SmallBlobs) {
             for (auto&& c : i.second) {
+                if (busyPortions.contains(c.second->GetAddress())) {
+                    return nullptr;
+                }
+                if (c.second->GetMeta().GetTierName() && (!tierName || *tierName < c.second->GetMeta().GetTierName())) {
+                    tierName = c.second->GetMeta().GetTierName();
+                }
                 currentSum += c.second->RawBytesSum();
                 portions.emplace(c.first, c.second);
             }
         }
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "take_granule_with_small")("portions", portions.size())("current_sum", currentSum)("remained", SmallBlobs.size())("remained_size", SumSmall);
-        return std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(limits, granule, portions);
+        TSaverContext saverContext(StoragesManager->GetOperator(tierName.value_or(IStoragesManager::DefaultStorageId)), StoragesManager);
+        return std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(limits, granule, portions, saverContext);
     }
     return nullptr;
 }
 
 std::shared_ptr<TColumnEngineChanges> TIntervalsOptimizerPlanner::DoGetOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const THashSet<TPortionAddress>& busyPortions) const {
-    if (auto result = GetSmallPortionsMergeTask(limits, granule)) {
+    if (auto result = GetSmallPortionsMergeTask(limits, granule, busyPortions)) {
         return result;
     }
     if (RangedSegments.empty()) {
@@ -165,7 +174,11 @@ std::shared_ptr<TColumnEngineChanges> TIntervalsOptimizerPlanner::DoGetOptimizat
         return nullptr;
     }
 
+    std::optional<TString> tierName;
     for (auto&& i : features.GetSummaryPortions()) {
+        if (i.second->GetMeta().GetTierName() && (!tierName || *tierName < i.second->GetMeta().GetTierName())) {
+            tierName = i.second->GetMeta().GetTierName();
+        }
         if (busyPortions.contains(i.second->GetAddress())) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "take_granule_skip")("features", features.DebugJson().GetStringRobust())
                 ("count", features.GetSummaryPortions().size())("reason", "busy_portion")("portion_address", i.second->GetAddress().DebugString());
@@ -173,7 +186,9 @@ std::shared_ptr<TColumnEngineChanges> TIntervalsOptimizerPlanner::DoGetOptimizat
         }
     }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "take_granule")("features", features.DebugJson().GetStringRobust())("count", features.GetSummaryPortions().size());
-    return std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(limits, granule, features.GetSummaryPortions());
+
+    TSaverContext saverContext(StoragesManager->GetOperator(tierName.value_or(IStoragesManager::DefaultStorageId)), StoragesManager);
+    return std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(limits, granule, features.GetSummaryPortions(), saverContext);
 }
 
 bool TIntervalsOptimizerPlanner::RemoveSmallPortion(const std::shared_ptr<TPortionInfo>& info) {
@@ -275,8 +290,10 @@ void TIntervalsOptimizerPlanner::AddRanged(const TBorderPositions& data) {
     }
 }
 
-TIntervalsOptimizerPlanner::TIntervalsOptimizerPlanner(const ui64 granuleId)
-    : TBase(granuleId) {
+TIntervalsOptimizerPlanner::TIntervalsOptimizerPlanner(const ui64 granuleId, const std::shared_ptr<IStoragesManager>& storagesManager)
+    : TBase(granuleId)
+    , StoragesManager(storagesManager)
+{
     Counters = std::make_shared<TCounters>();
 }
 

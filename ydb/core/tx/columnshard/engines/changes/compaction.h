@@ -15,7 +15,6 @@ private:
 protected:
     const TCompactionLimits Limits;
     std::shared_ptr<TGranuleMeta> GranuleMeta;
-    std::optional<TCompactionSrcGranule> SrcGranule;
 
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
     virtual void DoWriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) override;
@@ -29,14 +28,11 @@ protected:
         NeedGranuleStatusProvide = false;
     }
 public:
-    virtual THashSet<TBlobRange> GetReadBlobRanges() const override;
-
     std::vector<TPortionInfo> SwitchedPortions; // Portions that would be replaced by new ones
 
     virtual THashSet<TPortionAddress> GetTouchedPortions() const override;
 
-    TCompactColumnEngineChanges(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const std::map<ui64, std::shared_ptr<TPortionInfo>>& portions);
-    TCompactColumnEngineChanges(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const TCompactionSrcGranule& srcGranule);
+    TCompactColumnEngineChanges(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const std::map<ui64, std::shared_ptr<TPortionInfo>>& portions, const TSaverContext& saverContext);
     ~TCompactColumnEngineChanges();
 
     ui32 NumSplitInto(const ui32 srcRows) const;

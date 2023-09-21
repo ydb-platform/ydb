@@ -18,24 +18,4 @@ std::optional<TInstant> TTierInfo::ScalarToInstant(const std::shared_ptr<arrow::
     }
 }
 
-std::shared_ptr<NKikimr::NOlap::TTierInfo> TTiering::GetMainTierInfo() const {
-    auto ttl = Ttl;
-    auto tier = OrderedTiers.size() ? OrderedTiers.begin()->GetPtr() : nullptr;
-    if (!ttl && !tier) {
-        return nullptr;
-    } else if (!tier) {
-        return ttl;
-    } else if (!ttl) {
-        return tier;
-    } else {
-        const TDuration ttlDuration = ttl->GetEvictDuration();
-        const TDuration tierDuration = tier->GetEvictDuration();
-        if (tierDuration < ttlDuration) {
-            return tier;
-        } else {
-            return ttl;
-        }
-    }
-}
-
 }

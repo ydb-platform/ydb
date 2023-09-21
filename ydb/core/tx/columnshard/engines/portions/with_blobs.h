@@ -88,7 +88,7 @@ public:
     }
 
     static TPortionInfoWithBlobs BuildByBlobs(std::vector<std::vector<IPortionColumnChunk::TPtr>>& chunksByBlobs, std::shared_ptr<arrow::RecordBatch> batch,
-        const ui64 granule, const TSnapshot& snapshot);
+        const ui64 granule, const TSnapshot& snapshot, const std::shared_ptr<NOlap::IBlobsStorageOperator>& bStorageOperator);
 
     std::optional<TPortionInfoWithBlobs> ChangeSaver(ISnapshotSchema::TPtr currentSchema, const TSaverContext& saverContext) const;
 

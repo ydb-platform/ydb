@@ -1,20 +1,23 @@
 #pragma once
 
-#include "abstract.h"
+#include <ydb/core/tx/columnshard/blobs_action/abstract/write.h>
 #include <ydb/core/tx/columnshard/blob_manager.h>
+#include <ydb/core/tx/columnshard/blob_cache.h>
 
-namespace NKikimr::NOlap {
+namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
 
-class TBSWriteAction: public IBlobsAction {
+class TWriteAction: public IBlobsWritingAction {
 private:
+    using TBase = IBlobsWritingAction;
     NColumnShard::TBlobBatch BlobBatch;
+    std::shared_ptr<NColumnShard::IBlobManager> Manager;
 protected:
     virtual void DoSendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId) override {
         return BlobBatch.SendWriteBlobRequest(data, blobId, TInstant::Max(), TActorContext::AsActorContext());
     }
 
-    virtual void DoOnBlobWriteResult(const TLogoBlobID& blobId, const NKikimrProto::EReplyStatus status) override {
-        return BlobBatch.OnBlobWriteResult(blobId, status);
+    virtual void DoOnBlobWriteResult(const TUnifiedBlobId& blobId, const NKikimrProto::EReplyStatus status) override {
+        return BlobBatch.OnBlobWriteResult(blobId.GetLogoBlobId(), status);
     }
 
     virtual void DoOnExecuteTxBeforeWrite(NColumnShard::TColumnShard& /*self*/, NColumnShard::TBlobManagerDb& /*dbBlobs*/) override {
@@ -25,17 +28,11 @@ protected:
         return;
     }
 
-    virtual void DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs) override;
+    virtual void DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs, const bool success) override;
     virtual void DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& /*self*/) override {
 
     }
 public:
-    virtual ui32 GetBlobsCount() const override {
-        return BlobBatch.GetBlobCount();
-    }
-    virtual ui32 GetTotalSize() const override {
-        return BlobBatch.GetTotalSize();
-    }
     virtual bool NeedDraftTransaction() const override {
         return false;
     }
@@ -43,12 +40,11 @@ public:
     virtual TUnifiedBlobId AllocateNextBlobId(const TString& data) override {
         return BlobBatch.AllocateNextBlobId(data);
     }
-    virtual bool IsReady() const override {
-        return BlobBatch.AllBlobWritesCompleted();
-    }
 
-    TBSWriteAction(NColumnShard::IBlobManager& blobManager)
-        : BlobBatch(blobManager.StartBlobBatch())
+    TWriteAction(const TString& storageId, const std::shared_ptr<NColumnShard::IBlobManager>& manager)
+        : TBase(storageId)
+        , BlobBatch(manager->StartBlobBatch())
+        , Manager(manager)
     {
 
     }

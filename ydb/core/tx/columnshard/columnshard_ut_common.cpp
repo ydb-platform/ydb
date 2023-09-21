@@ -42,7 +42,7 @@ void TTester::Setup(TTestActorRuntime& runtime) {
     runtime.UpdateCurrentTime(TInstant::Now());
 }
 
-void ProvideTieringSnapshot(TTestBasicRuntime& runtime, TActorId& sender, NMetadata::NFetcher::ISnapshot::TPtr snapshot) {
+void ProvideTieringSnapshot(TTestBasicRuntime& runtime, const TActorId& sender, NMetadata::NFetcher::ISnapshot::TPtr snapshot) {
     auto event = std::make_unique<NMetadata::NProvider::TEvRefreshSubscriberData>(snapshot);
 
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
@@ -372,9 +372,7 @@ NMetadata::NFetcher::ISnapshot::TPtr TTestSchema::BuildSnapshot(const TTableSpec
         {
             NKikimrSchemeOp::TStorageTierConfig cProto;
             cProto.SetName(tier.Name);
-            if (tier.S3) {
-                *cProto.MutableObjectStorage() = *tier.S3;
-            }
+            *cProto.MutableObjectStorage() = tier.S3;
             if (tier.Codec) {
                 cProto.MutableCompression()->SetCompressionCodec(tier.GetCodecId());
             }

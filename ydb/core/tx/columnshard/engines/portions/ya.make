@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/scheme
     ydb/core/tx/columnshard/splitter
     ydb/core/tx/columnshard/common
+    ydb/core/tablet_flat
 )
 
 GENERATE_ENUM_SERIALIZATION(portion_info.h)

@@ -2,39 +2,39 @@
 
 #include <ydb/core/tx/columnshard/defs.h>
 #include <ydb/core/tx/columnshard/blob.h>
-
+#include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 
 namespace NKikimr::NOlap {
 
-std::optional<TBlobWriteInfo> TCompactedWriteController::Next() {
+TCompactedWriteController::TCompactedWriteController(const TActorId& dstActor, TAutoPtr<NColumnShard::TEvPrivate::TEvWriteIndex> writeEv)
+    : WriteIndexEv(writeEv)
+    , DstActor(dstActor)
+{
     auto& changes = *WriteIndexEv->IndexChanges;
-    while (CurrentPortion < changes.GetWritePortionsCount()) {
-        auto* pInfo = changes.GetWritePortionInfo(CurrentPortion);
+    for (ui32 i = 0; i < changes.GetWritePortionsCount(); ++i) {
+        if (!changes.NeedWritePortion(i)) {
+            continue;
+        }
+        auto* pInfo = changes.GetWritePortionInfo(i);
         Y_VERIFY(pInfo);
         TPortionInfoWithBlobs& portionWithBlobs = *pInfo;
-        if (CurrentBlobIndex < portionWithBlobs.GetBlobs().size() && changes.NeedWritePortion(CurrentPortion)) {
-            CurrentBlobInfo = &portionWithBlobs.GetBlobs()[CurrentBlobIndex];
-            ++CurrentBlobIndex;
-            auto result = TBlobWriteInfo::BuildWriteTask(CurrentBlobInfo->GetBlob(), WriteIndexEv->BlobsAction);
-            CurrentBlobInfo->RegisterBlobId(portionWithBlobs, result.GetBlobId());
-            return result;
-        } else {
-            ++CurrentPortion;
-            CurrentBlobIndex = 0;
+        auto action = changes.GetBlobsAction().GetWriting(portionWithBlobs.GetPortionInfo());
+        for (auto&& b : portionWithBlobs.GetBlobs()) {
+            auto& task = AddWriteTask(TBlobWriteInfo::BuildWriteTask(b.GetBlob(), action));
+            b.RegisterBlobId(portionWithBlobs, task.GetBlobId());
         }
     }
-    return {};
 }
-
-TCompactedWriteController::TCompactedWriteController(const TActorId& dstActor, TAutoPtr<NColumnShard::TEvPrivate::TEvWriteIndex> writeEv, bool /*blobGrouppingEnabled*/)
-    : WriteIndexEv(writeEv)
-    , Action(WriteIndexEv->BlobsAction)
-    , DstActor(dstActor)
-{}
 
 void TCompactedWriteController::DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) {
     WriteIndexEv->PutResult = putResult;
     ctx.Send(DstActor, WriteIndexEv.Release());
+}
+
+TCompactedWriteController::~TCompactedWriteController() {
+    if (WriteIndexEv && WriteIndexEv->IndexChanges) {
+        WriteIndexEv->IndexChanges->AbortEmergency();
+    }
 }
 
 }

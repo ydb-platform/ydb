@@ -1,9 +1,11 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include "column_engine_logs.h"
 #include "predicate/predicate.h"
+#include "changes/cleanup.h"
 
 #include <ydb/core/tx/columnshard/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
+#include <ydb/core/tx/columnshard/blobs_action/bs/storage.h>
 
 
 namespace NKikimr {
@@ -358,7 +360,10 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, T
 bool Cleanup(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, ui32 expectedToDrop) {
     THashSet<ui64> pathsToDrop;
     std::shared_ptr<TCleanupColumnEngineChanges> changes = engine.StartCleanup(snap, pathsToDrop, 1000);
-    UNIT_ASSERT(changes);
+    UNIT_ASSERT(changes || !expectedToDrop);
+    if (!expectedToDrop && !changes) {
+        return true;
+    }
     UNIT_ASSERT_VALUES_EQUAL(changes->PortionsToDrop.size(), expectedToDrop);
 
 
@@ -372,7 +377,7 @@ bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db,
          const THashMap<ui64, NOlap::TTiering>& pathEviction, ui32 expectedToDrop) {
     std::shared_ptr<TTTLColumnEngineChanges> changes = engine.StartTtl(pathEviction, {});
     UNIT_ASSERT(changes);
-    UNIT_ASSERT_VALUES_EQUAL(changes->PortionsToDrop.size(), expectedToDrop);
+    UNIT_ASSERT_VALUES_EQUAL(changes->PortionsToRemove.size(), expectedToDrop);
 
 
     changes->StartEmergency();
@@ -399,6 +404,20 @@ std::shared_ptr<TPredicate> MakeStrPredicate(const std::string& key, NArrow::EOp
 
 } // namespace
 
+class TTestStoragesManager: public NOlap::IStoragesManager {
+private:
+    using TBase = NOlap::IStoragesManager;
+    TIntrusivePtr<TTabletStorageInfo> TabletInfo = new TTabletStorageInfo();
+protected:
+    virtual std::shared_ptr<NOlap::IBlobsStorageOperator> DoBuildOperator(const TString& storageId) override {
+        if (storageId == TBase::DefaultStorageId) {
+            return std::make_shared<NOlap::NBlobOperations::NBlobStorage::TOperator>(storageId, NActors::TActorId(), TabletInfo, 1);
+        } else 
+            return nullptr;
+    }
+};
+
+std::shared_ptr<NKikimr::NOlap::IStoragesManager> CommonStoragesManager = std::make_shared<TTestStoragesManager>();
 
 Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
     void WriteLoadRead(const std::vector<std::pair<TString, TTypeInfo>>& ydbSchema,
@@ -416,7 +435,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
         // load
-        TColumnEngineForLogs engine(0);
+        TColumnEngineForLogs engine(0, TestLimits(), CommonStoragesManager);
         TSnapshot indexSnaphot(1, 1);
         engine.UpdateDefaultSchema(indexSnaphot, TIndexInfo(tableInfo));
         THashSet<TUnifiedBlobId> lostBlobs;
@@ -497,7 +516,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         TIndexInfo tableInfo = NColumnShard::BuildTableInfo(ydbSchema, key);
 
         TSnapshot indexSnapshot(1, 1);
-        TColumnEngineForLogs engine(0, TestLimits());
+        TColumnEngineForLogs engine(0, TestLimits(), CommonStoragesManager);
         engine.UpdateDefaultSchema(indexSnapshot, TIndexInfo(tableInfo));
         THashSet<TUnifiedBlobId> lostBlobs;
         engine.Load(db, lostBlobs);
@@ -598,7 +617,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         // inserts
         ui64 planStep = 1;
 
-        TColumnEngineForLogs engine(0, TestLimits());
+        TColumnEngineForLogs engine(0, TestLimits(), CommonStoragesManager);
         TSnapshot indexSnapshot(1, 1);
         engine.UpdateDefaultSchema(indexSnapshot, TIndexInfo(tableInfo));
         THashSet<TUnifiedBlobId> lostBlobs;
@@ -622,7 +641,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         }
 
         { // check it's overloaded after reload
-            TColumnEngineForLogs tmpEngine(0, TestLimits());
+            TColumnEngineForLogs tmpEngine(0, TestLimits(), CommonStoragesManager);
             tmpEngine.UpdateDefaultSchema(TSnapshot::Zero(), TIndexInfo(tableInfo));
             tmpEngine.Load(db, lostBlobs);
         }
@@ -651,7 +670,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         }
 
         { // check it's not overloaded after reload
-            TColumnEngineForLogs tmpEngine(0, TestLimits());
+            TColumnEngineForLogs tmpEngine(0, TestLimits(), CommonStoragesManager);
             tmpEngine.UpdateDefaultSchema(TSnapshot::Zero(), TIndexInfo(tableInfo));
             tmpEngine.Load(db, lostBlobs);
         }
@@ -668,7 +687,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         ui64 planStep = 1;
 
         TSnapshot indexSnapshot(1, 1);
-        TColumnEngineForLogs engine(0, TestLimits());
+        TColumnEngineForLogs engine(0, TestLimits(), CommonStoragesManager);
         engine.UpdateDefaultSchema(indexSnapshot, TIndexInfo(tableInfo));
         THashSet<TUnifiedBlobId> lostBlobs;
         engine.Load(db, lostBlobs);

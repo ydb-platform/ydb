@@ -98,7 +98,6 @@ public:
 
     std::shared_ptr<NOlap::TPredicate> LessPredicate;
     std::shared_ptr<NOlap::TPredicate> GreaterPredicate;
-    std::shared_ptr<const THashSet<TUnifiedBlobId>> ExternBlobs;
     ui64 Limit{0}; // TODO
 
     virtual void Dump(IOutputStream& out) const {

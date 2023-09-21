@@ -1,12 +1,14 @@
 #pragma once
 
+#include "blobs_action/abstract/storages_manager.h"
 #include "columnshard_schema.h"
 #include "columnshard_ttl.h"
 #include "engines/column_engine.h"
 
-#include "ydb/core/base/row_version.h"
-#include "ydb/library/accessor/accessor.h"
-#include "ydb/core/protos/tx_columnshard.pb.h"
+#include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
+#include <ydb/core/base/row_version.h>
+#include <ydb/library/accessor/accessor.h>
+#include <ydb/core/protos/tx_columnshard.pb.h>
 
 
 namespace NKikimr::NColumnShard {
@@ -136,8 +138,15 @@ private:
     THashSet<ui64> PathsToDrop;
     TTtl Ttl;
     std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
+    std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     ui64 TabletId;
 public:
+    TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager)
+        : StoragesManager(storagesManager)
+    {
+
+    }
+
     const TTtl& GetTtl() const {
         return Ttl;
     }

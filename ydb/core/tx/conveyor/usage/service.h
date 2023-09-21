@@ -28,7 +28,7 @@ public:
             return true;
         } else {
             task->Execute(nullptr);
-            context.Send(selfId, new NConveyor::TEvExecution::TEvTaskProcessedResult(task));
+            context.Send(task->GetOwnerId().value_or(selfId), new NConveyor::TEvExecution::TEvTaskProcessedResult(task));
             return false;
         }
     }

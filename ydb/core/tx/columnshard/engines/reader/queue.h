@@ -1,27 +1,27 @@
 #pragma once
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/core/tx/columnshard/blob.h>
+#include <ydb/core/tx/columnshard/blobs_reader/task.h>
 
 namespace NKikimr::NOlap {
 
-class TBatchBlobRange {
+class TBatchReadTask {
 private:
     const ui64 ObjectId;
-    const TBlobRange Range;
+    const std::shared_ptr<NBlobOperations::NRead::ITask> ReadTask;
 public:
     ui64 GetObjectId() const {
         return ObjectId;
     }
 
-    const TBlobRange& GetRange() const {
-        return Range;
+    const std::shared_ptr<NBlobOperations::NRead::ITask>& GetTask() const {
+        return ReadTask;
     }
 
-    TBatchBlobRange(const ui64 objectId, const TBlobRange range)
+    TBatchReadTask(const ui64 objectId, const std::shared_ptr<NBlobOperations::NRead::ITask>& readTask)
         : ObjectId(objectId)
-        , Range(range)
+        , ReadTask(readTask)
     {
-        Y_VERIFY(range.BlobId.IsValid());
     }
 };
 
@@ -59,23 +59,24 @@ public:
         return &IteratorBlobsSequential.front();
     }
 
-    std::optional<TBlobRange> pop_front() {
+    std::optional<std::shared_ptr<NBlobOperations::NRead::ITask>> pop_front() {
         if (!StoppedFlag && IteratorBlobsSequential.size()) {
             auto result = IteratorBlobsSequential.front();
             IteratorBlobsSequential.pop_front();
-            return result.GetRange();
+            return result.GetTask();
         } else {
             return {};
         }
     }
 
-    void emplace_back(const ui64 objectId, const TBlobRange& range) {
+    void emplace_back(const ui64 objectId, const std::shared_ptr<NBlobOperations::NRead::ITask>& task) {
         Y_VERIFY(!StoppedFlag);
-        IteratorBlobsSequential.emplace_back(objectId, range);
+        Y_VERIFY(task);
+        IteratorBlobsSequential.emplace_back(objectId, task);
     }
 
 };
 
-using TFetchBlobsQueue = TFetchBlobsQueueImpl<TBatchBlobRange>;
+using TFetchBlobsQueue = TFetchBlobsQueueImpl<TBatchReadTask>;
 
 }

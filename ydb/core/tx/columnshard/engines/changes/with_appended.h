@@ -8,9 +8,10 @@ namespace NKikimr::NOlap {
 
 class TChangesWithAppend: public TColumnEngineChanges {
 private:
-    THashMap<ui64, NOlap::TTiering> TieringInfo;
+    using TBase = TColumnEngineChanges;
     TSplitSettings SplitSettings;
 protected:
+    TSaverContext SaverContext;
     virtual void DoDebugString(TStringOutput& out) const override;
     virtual void DoCompile(TFinalizationContext& context) override;
     virtual bool DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context) override;
@@ -18,11 +19,8 @@ protected:
     virtual void DoWriteIndexComplete(NColumnShard::TColumnShard& /*self*/, TWriteIndexCompleteContext& /*context*/) override {
 
     }
-    TSaverContext GetSaverContext(const ui32 pathId) const;
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
-    std::vector<TPortionInfoWithBlobs> MakeAppendedPortions(const ui64 pathId,
-        const std::shared_ptr<arrow::RecordBatch> batch,
-        const ui64 granule,
+    std::vector<TPortionInfoWithBlobs> MakeAppendedPortions(const std::shared_ptr<arrow::RecordBatch> batch, const ui64 granule,
         const TSnapshot& snapshot, const TGranuleMeta* granuleMeta, TConstructionContext& context) const;
 
 public:
@@ -30,18 +28,25 @@ public:
         return SplitSettings;
     }
 
-    TChangesWithAppend(const TSplitSettings& splitSettings)
-        : SplitSettings(splitSettings)
+    TChangesWithAppend(const TSplitSettings& splitSettings, const TSaverContext& saverContext)
+        : TBase(saverContext.GetStoragesManager())
+        , SplitSettings(splitSettings)
+        , SaverContext(saverContext)
     {
 
     }
 
     virtual THashSet<TPortionAddress> GetTouchedPortions() const override {
-        return {};
+        THashSet<TPortionAddress> result;
+        for (auto&& i : PortionsToRemove) {
+            result.emplace(i.GetAddress());
+        }
+        return result;
     }
 
-    std::vector<TPortionInfoWithBlobs> AppendedPortions; // New portions after indexing or compaction
-    THashMap<ui64, std::pair<ui64, TMark>> NewGranules; // granule -> {pathId, key}
+    std::vector<TPortionInfo> PortionsToRemove;
+    std::vector<TPortionInfoWithBlobs> AppendedPortions;
+    THashMap<ui64, std::pair<ui64, TMark>> NewGranules;
     ui64 FirstGranuleId = 0;
     virtual ui32 GetWritePortionsCount() const override {
         return AppendedPortions.size();

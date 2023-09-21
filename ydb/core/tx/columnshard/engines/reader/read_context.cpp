@@ -4,10 +4,10 @@
 
 namespace NKikimr::NOlap {
 
-TReadContext::TReadContext(const NColumnShard::TDataTasksProcessorContainer& processor,
+TReadContext::TReadContext(const std::shared_ptr<IStoragesManager>& storagesManager,
     const NColumnShard::TConcreteScanCounters& counters,
     std::shared_ptr<NOlap::TActorBasedMemoryAccesor> memoryAccessor, const bool isInternalRead)
-    : Processor(processor)
+    : StoragesManager(storagesManager)
     , Counters(counters)
     , MemoryAccessor(memoryAccessor)
     , IsInternalRead(isInternalRead)

@@ -5,7 +5,8 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/core/tx/ctor_logger.h>
 #include <ydb/core/control/immediate_control_board_impl.h>
-#include <ydb/core/tx/columnshard/engines/column_engine.h>
+#include <ydb/core/tx/columnshard/engines/changes/abstract/settings.h>
+#include <ydb/core/tx/columnshard/engines/defs.h>
 #include <ydb/core/tx/columnshard/engines/writer/put_status.h>
 
 namespace NKikimr::NColumnShard {

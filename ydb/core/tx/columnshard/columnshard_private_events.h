@@ -1,9 +1,11 @@
 #pragma once
 
 #include "blob_manager.h"
+#include "blobs_action/abstract/gc.h"
 #include "defs.h"
 
 #include <ydb/core/protos/counters_columnshard.pb.h>
+#include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/ev_write/write_data.h>
 #include <ydb/core/formats/arrow/special_keys.h>
@@ -25,16 +27,28 @@ struct TEvPrivate {
         EvWriteBlobsResult,
         EvStartReadTask,
         EvWriteDraft,
+        EvGarbageCollectionFinished,
+        EvTieringModified,
         EvEnd
     };
 
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
+    struct TEvTieringModified: public TEventLocal<TEvTieringModified, EvTieringModified> {
+    };
+
     struct TEvWriteDraft: public TEventLocal<TEvWriteDraft, EvWriteDraft> {
         const std::shared_ptr<IWriteController> WriteController;
         TEvWriteDraft(std::shared_ptr<IWriteController> controller)
-            : WriteController(controller)
-        {
+            : WriteController(controller) {
+
+        }
+    };
+
+    struct TEvGarbageCollectionFinished: public TEventLocal<TEvGarbageCollectionFinished, EvGarbageCollectionFinished> {
+        const std::shared_ptr<NOlap::IBlobsGCAction> Action;
+        TEvGarbageCollectionFinished(const std::shared_ptr<NOlap::IBlobsGCAction>& action)
+            : Action(action) {
 
         }
     };
@@ -48,15 +62,13 @@ struct TEvPrivate {
         bool CacheData{false};
         TDuration Duration;
         TBlobPutResult::TPtr PutResult;
-        std::shared_ptr<NOlap::IBlobsAction> BlobsAction;
 
         TEvWriteIndex(NOlap::TVersionedIndex&& indexInfo,
             std::shared_ptr<NOlap::TColumnEngineChanges> indexChanges,
-            bool cacheData, std::shared_ptr<NOlap::IBlobsAction> action)
+            bool cacheData)
             : IndexInfo(std::move(indexInfo))
             , IndexChanges(indexChanges)
             , CacheData(cacheData)
-            , BlobsAction(action)
         {
             PutResult = std::make_shared<TBlobPutResult>(NKikimrProto::UNKNOWN);
         }
@@ -220,7 +232,7 @@ struct TEvPrivate {
             Y_VERIFY(PutResult);
         }
 
-        TEvWriteBlobsResult(const NColumnShard::TBlobPutResult::TPtr& putResult, TVector<TPutBlobData>&& blobData, const std::vector<std::shared_ptr<NOlap::IBlobsAction>>& actions, const NEvWrite::TWriteMeta& writeMeta, const ui64 schemaVersion)
+        TEvWriteBlobsResult(const NColumnShard::TBlobPutResult::TPtr& putResult, TVector<TPutBlobData>&& blobData, const std::vector<std::shared_ptr<NOlap::IBlobsWritingAction>>& actions, const NEvWrite::TWriteMeta& writeMeta, const ui64 schemaVersion)
             : TEvWriteBlobsResult(putResult, writeMeta)
         {
             Actions = actions;
@@ -228,7 +240,7 @@ struct TEvPrivate {
             SchemaVersion = schemaVersion;
         }
 
-        const std::vector<std::shared_ptr<NOlap::IBlobsAction>>& GetActions() const {
+        const std::vector<std::shared_ptr<NOlap::IBlobsWritingAction>>& GetActions() const {
             return Actions;
         }
 
@@ -255,7 +267,7 @@ struct TEvPrivate {
     private:
         NColumnShard::TBlobPutResult::TPtr PutResult;
         TVector<TPutBlobData> BlobData;
-        std::vector<std::shared_ptr<NOlap::IBlobsAction>> Actions;
+        std::vector<std::shared_ptr<NOlap::IBlobsWritingAction>> Actions;
         NEvWrite::TWriteMeta WriteMeta;
         ui64 SchemaVersion = 0;
     };

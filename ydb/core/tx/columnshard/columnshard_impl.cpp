@@ -2,8 +2,13 @@
 #include "columnshard_schema.h"
 #include "blobs_reader/task.h"
 #include "blobs_reader/events.h"
-#include "blobs_action/bs.h"
 #include "engines/changes/ttl.h"
+#include "engines/changes/cleanup.h"
+#include "blobs_action/bs/storage.h"
+#include "blobs_action/tier/storage.h"
+#include "blobs_action/transaction/tx_gc_insert_table.h"
+#include "blobs_action/transaction/tx_gc_indexed.h"
+#include "hooks/abstract/abstract.h"
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/tiering/external_data.h>
@@ -130,11 +135,39 @@ bool TColumnShard::TAlterMeta::Validate(const NOlap::ISnapshotSchema::TPtr& sche
     return true;
 }
 
+class TColumnShard::TStoragesManager: public NOlap::IStoragesManager {
+private:
+    using TBase = NOlap::IStoragesManager;
+    TColumnShard* Shard;
+protected:
+    virtual std::shared_ptr<NOlap::IBlobsStorageOperator> DoBuildOperator(const TString& storageId) override {
+        if (storageId == TBase::DefaultStorageId) {
+            return std::make_shared<NOlap::NBlobOperations::NBlobStorage::TOperator>(storageId, Shard->SelfId(), Shard->Info(), Shard->Executor()->Generation());
+        } else if (!Shard->Tiers) {
+            return nullptr;
+        } else {
+            const NTiers::TManager* externalManager = Shard->Tiers->GetManagerOptional(storageId);
+            if (!externalManager) {
+                return nullptr;
+            } else {
+                return std::make_shared<NOlap::NBlobOperations::NTier::TOperator>(storageId, *Shard, externalManager->GetExternalStorageOperator());
+            }
+        }
+    }
+public:
+    TStoragesManager(TColumnShard* shard)
+        : Shard(shard) {
+
+    }
+};
 
 TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, nullptr)
     , ProgressTxController(*this)
+    , StoragesManager(std::make_shared<TStoragesManager>(this))
+    , InFlightReadsTracker(StoragesManager)
+    , TablesManager(StoragesManager)
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
     , InsertTable(std::make_unique<NOlap::TInsertTable>())
     , ReadCounters("Read")
@@ -593,18 +626,6 @@ void TColumnShard::RunAlterStore(const NKikimrTxColumnShard::TAlterStore& proto,
     }
 }
 
-void TColumnShard::ScheduleNextGC(const TActorContext& ctx, bool cleanupOnly) {
-    LOG_S_DEBUG("Scheduling GC at tablet " << TabletID());
-
-    UpdateBlobMangerCounters();
-    if (BlobManager->CanCollectGarbage(cleanupOnly)) {
-        BlobManager->GetCounters().StartCollection->Add(1);
-        Execute(CreateTxRunGc(), ctx);
-    } else {
-        BlobManager->GetCounters().SkipCollection->Add(1);
-    }
-}
-
 void TColumnShard::EnqueueBackgroundActivities(bool periodic, TBackgroundActivity activity) {
     TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID()));
     ACFL_DEBUG("event", "EnqueueBackgroundActivities")("periodic", periodic)("activity", activity.DebugString());
@@ -617,7 +638,6 @@ void TColumnShard::EnqueueBackgroundActivities(bool periodic, TBackgroundActivit
         return;
     }
 
-    const TActorContext& ctx = ActorContext();
     if (activity.HasIndexation()) {
         SetupIndexation();
     }
@@ -627,17 +647,16 @@ void TColumnShard::EnqueueBackgroundActivities(bool periodic, TBackgroundActivit
     }
 
     if (activity.HasCleanup()) {
-        if (auto event = SetupCleanup()) {
-            ctx.Send(SelfId(), event.release());
-        } else if (periodic) {
-            // Small cleanup (no index changes)
-            CleanForgottenBlobs(ctx);
-        }
+        SetupCleanup();
     }
 
     if (activity.HasTtl()) {
         SetupTtl();
     }
+
+    SetupGC();
+
+    SetupCleanupInsertTable();
 }
 
 class TChangesTask: public NConveyor::ITask {
@@ -697,7 +716,7 @@ protected:
     }
 public:
     TChangesReadTask(std::unique_ptr<TEvPrivate::TEvWriteIndex>&& event, const TActorId parentActorId, const ui64 tabletId, const TIndexationCounters& counters)
-        : TBase(event->IndexChanges->GetReadBlobRanges())
+        : TBase(event->IndexChanges->GetReadingActions())
         , ParentActorId(parentActorId)
         , TabletId(tabletId)
         , TxEvent(std::move(event))
@@ -772,7 +791,7 @@ void TColumnShard::SetupIndexation() {
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
     indexChanges->Start(*this);
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges,
-        Settings.CacheDataAfterIndexing, std::make_shared<NOlap::TBSWriteAction>(*BlobManager));
+        Settings.CacheDataAfterIndexing);
 
     ActorContext().Send(BlobsReadActor, std::make_unique<NOlap::NBlobOperations::NRead::TEvStartReadTask>(std::make_unique<TChangesReadTask>(std::move(ev), SelfId(), TabletID(), IndexationCounters)));
 }
@@ -794,7 +813,7 @@ void TColumnShard::SetupCompaction() {
         indexChanges->Start(*this);
 
         auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
-        auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges, Settings.CacheDataAfterCompaction, std::make_shared<NOlap::TBSWriteAction>(*BlobManager));
+        auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges, Settings.CacheDataAfterCompaction);
         ActorContext().Send(BlobsReadActor, std::make_unique<NOlap::NBlobOperations::NRead::TEvStartReadTask>(std::make_unique<TChangesReadTask>(std::move(ev), SelfId(), TabletID(), CompactionCounters)));
     }
 
@@ -832,8 +851,8 @@ bool TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls, con
     LOG_S_INFO("TTL" << (needWrites ? " with writes" : "" ) << " prepared at tablet " << TabletID());
 
     indexChanges->Start(*this);
-    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges, false, std::make_shared<NOlap::TBSWriteAction>(*BlobManager));
-
+    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges, false);
+    NYDBTest::TControllers::GetColumnShardController()->OnWriteIndexStart(TabletID(), indexChanges->TypeString());
     if (needWrites) {
         ActorContext().Send(BlobsReadActor, std::make_unique<NOlap::NBlobOperations::NRead::TEvStartReadTask>(std::make_unique<TChangesReadTask>(std::move(ev), SelfId(), TabletID(), CompactionCounters)));
     } else {
@@ -843,11 +862,11 @@ bool TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls, con
     return true;
 }
 
-std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
+void TColumnShard::SetupCleanup() {
     CSCounters.OnSetupCleanup();
     if (BackgroundController.IsCleanupActive()) {
         LOG_S_DEBUG("Cleanup already in progress at tablet " << TabletID());
-        return {};
+        return;
     }
 
     NOlap::TSnapshot cleanupSnapshot{GetMinReadStep(), 0};
@@ -856,209 +875,36 @@ std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
         TablesManager.MutablePrimaryIndex().StartCleanup(cleanupSnapshot, TablesManager.MutablePathsToDrop(), TLimits::MAX_TX_RECORDS);
     if (!changes) {
         LOG_S_INFO("Cannot prepare cleanup at tablet " << TabletID());
-        return {};
-    }
-
-    // Filter PortionsToDrop
-    std::vector<NOlap::TPortionInfo> portionsCanBedropped;
-    THashSet<ui64> excludedPortions;
-    for (const auto& portionInfo : changes->PortionsToDrop) {
-        const ui64 portionId = portionInfo.GetPortion();
-        // Exclude portions that are used by in-flight reads/scans
-        if (!InFlightReadsTracker.IsPortionUsed(portionId)) {
-            portionsCanBedropped.push_back(portionInfo);
-        } else {
-            excludedPortions.insert(portionId);
-        }
-    }
-    changes->PortionsToDrop.swap(portionsCanBedropped);
-
-    LOG_S_DEBUG("Prepare Cleanup snapshot: " << cleanupSnapshot
-        << " portions to drop: " << changes->PortionsToDrop.size()
-        << " in use by reads: " << excludedPortions.size()
-        << " at tablet " << TabletID());
-
-    if (changes->PortionsToDrop.empty()) {
-        return {};
+        return;
     }
 
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
-    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), changes, false, std::make_shared<NOlap::TBSWriteAction>(*BlobManager));
+    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), changes, false);
     ev->SetPutStatus(NKikimrProto::OK); // No new blobs to write
 
     changes->Start(*this);
-    return ev;
+
+    Send(SelfId(), ev.release());
 }
 
+void TColumnShard::SetupGC() {
+    for (auto&& i : StoragesManager->GetStorages()) {
+        i.second->StartGC();
+    }
+}
 
-void TColumnShard::MapExternBlobs(const TActorContext& /*ctx*/, NOlap::TReadMetadata& metadata) {
-    if (!metadata.SelectInfo) {
+void TColumnShard::Handle(TEvPrivate::TEvGarbageCollectionFinished::TPtr& ev, const TActorContext& ctx) {
+    Execute(new TTxGarbageCollectionFinished(this, ev->Get()->Action), ctx);
+}
+
+void TColumnShard::SetupCleanupInsertTable() {
+    auto writeIdsToCleanup = InsertTable->OldWritesToAbort(AppData()->TimeProvider->Now());
+
+    if (!InsertTable->GetAborted().size() && !writeIdsToCleanup.size()) {
         return;
     }
 
-    if (!BlobManager->HasExternBlobs()) {
-        return;
-    }
-
-    THashSet<TUnifiedBlobId> uniqBlobs;
-    for (auto& portion : metadata.SelectInfo->PortionsOrderedPK) {
-        for (auto& rec : portion->Records) {
-            uniqBlobs.insert(rec.BlobRange.BlobId);
-        }
-    }
-
-    auto exported = std::make_shared<THashSet<TUnifiedBlobId>>();
-
-    for (auto& blobId : uniqBlobs) {
-        TEvictMetadata meta;
-        auto evicted = BlobManager->GetEvicted(blobId, meta);
-        if (evicted.IsExternal()) {
-            exported->insert(blobId);
-        }
-    }
-
-    if (!exported->empty()) {
-        metadata.ExternBlobs = exported;
-    }
-}
-
-void TColumnShard::CleanForgottenBlobs(const TActorContext& ctx, const THashSet<TUnifiedBlobId>& allowList) {
-    THashMap<TString, THashSet<NOlap::TEvictedBlob>> tierBlobsToForget;
-    BlobManager->GetCleanupBlobs(tierBlobsToForget, allowList);
-    if (tierBlobsToForget.size()) {
-        ForgetBlobs(ctx, tierBlobsToForget);
-    }
-}
-
-void TColumnShard::Reexport(const TActorContext& ctx) {
-    THashMap<TString, THashSet<NOlap::TEvictedBlob>> tierBlobsToReexport;
-    BlobManager->GetReexportBlobs(tierBlobsToReexport);
-
-    ui64 exportNo = LastExportNo;
-    LastExportNo += tierBlobsToReexport.size(); // TODO: persist it?
-
-    for (auto& [tierName, evictSet] : tierBlobsToReexport) {
-        ++exportNo;
-        LOG_S_INFO("Reexport " << exportNo << " at tablet " << TabletID());
-        ExportBlobs(ctx, std::make_unique<TEvPrivate::TEvExport>(exportNo, tierName, evictSet));
-    }
-}
-
-void TColumnShard::ExportBlobs(const TActorContext& ctx, std::unique_ptr<TEvPrivate::TEvExport>&& event) {
-    Y_VERIFY(event);
-    Y_VERIFY(event->ExportNo);
-    Y_VERIFY(event->Blobs.size());
-    Y_VERIFY(event->SrcToDstBlobs.size() == event->Blobs.size());
-
-    const auto& tierName = event->TierName;
-    if (auto s3 = GetS3ActorForTier(tierName)) {
-        TStringBuilder strBlobs;
-        ui64 sumBytes = 0;
-        for (auto& [blobId, _] : event->Blobs) {
-            strBlobs << "'" << blobId << "' ";
-            sumBytes += blobId.BlobSize();
-        }
-        event->DstActor = s3;
-        IncCounter(COUNTER_EXPORTING_BLOBS, event->Blobs.size());
-        IncCounter(COUNTER_EXPORTING_BYTES, sumBytes);
-
-        LOG_S_NOTICE("Export blobs " << strBlobs << "(tier '" << tierName << "') at tablet " << TabletID());
-        ctx.Register(CreateExportActor(TabletID(), SelfId(), event.release()));
-    } else {
-        LOG_S_INFO("Cannot export blobs (no S3 actor for tier '" << tierName << "') at tablet " << TabletID());
-    }
-}
-
-// It should be called from ForgetBlobs() only to log all S3 activity
-void TColumnShard::ForgetTierBlobs(const TActorContext& ctx, const TString& tierName, std::vector<NOlap::TEvictedBlob>&& blobs) const {
-    if (auto s3 = GetS3ActorForTier(tierName)) {
-        auto forget = std::make_unique<TEvPrivate::TEvForget>();
-        forget->Evicted = std::move(blobs);
-
-        ui64 sumBytes = 0;
-        for (auto& blob : forget->Evicted) {
-            sumBytes += blob.Blob.BlobSize();
-        }
-        IncCounter(COUNTER_FORGETTING_BLOBS, forget->Evicted.size());
-        IncCounter(COUNTER_FORGETTING_BYTES, sumBytes);
-
-        ctx.Send(s3, forget.release());
-    }
-}
-
-void TColumnShard::ForgetBlobs(const TActorContext& ctx, const THashMap<TString, THashSet<NOlap::TEvictedBlob>>& evictedBlobs) {
-    TStringBuilder strBlobs;
-    TStringBuilder strBlobsDelayed;
-
-    for (const auto& [tierName, evictSet] : evictedBlobs) {
-        std::vector<NOlap::TEvictedBlob> tierBlobs;
-
-        for (const auto& ev : evictSet) {
-            auto& blobId = ev.Blob;
-            if (BlobManager->BlobInUse(blobId)) {
-                LOG_S_DEBUG("Blob '" << blobId << "' is in use at tablet " << TabletID());
-                strBlobsDelayed << "'" << blobId << "' ";
-                continue;
-            }
-
-            TEvictMetadata meta;
-            auto evict = BlobManager->GetDropped(blobId, meta);
-            if (!evict.Blob.IsValid()) {
-                LOG_S_INFO("Forget forgotten blob '" << blobId << "' at tablet " << TabletID());
-                continue;
-            }
-            if (tierName != meta.GetTierName()) {
-                LOG_S_ERROR("Forget blob '" << blobId << "' with unexpected tier name '"
-                    << meta.GetTierName() << "' at tablet " << TabletID());
-                continue;
-            }
-
-            if (evict.State == EEvictState::UNKNOWN) {
-                LOG_S_ERROR("Forget unknown blob '" << blobId << "' at tablet " << TabletID());
-            } else if (NOlap::CouldBeExported(evict.State)) {
-                Y_VERIFY(evict.Blob == blobId);
-                strBlobs << "'" << blobId << "' ";
-                tierBlobs.emplace_back(std::move(evict));
-            } else {
-                Y_VERIFY(evict.Blob == blobId);
-                strBlobsDelayed << "'" << blobId << "' ";
-            }
-        }
-
-        if (tierBlobs.size()) {
-            ForgetTierBlobs(ctx, tierName, std::move(tierBlobs));
-        }
-    }
-
-    if (strBlobs.size()) {
-        LOG_S_NOTICE("Forget blobs " << strBlobs << "at tablet " << TabletID());
-    }
-    if (strBlobsDelayed.size()) {
-        LOG_S_NOTICE("Forget blobs (deleyed) " << strBlobsDelayed << "at tablet " << TabletID());
-    }
-}
-
-bool TColumnShard::GetExportedBlob(const TActorContext& ctx, TActorId dst, ui64 cookie, const TString& tierName,
-                                   NOlap::TEvictedBlob&& evicted, std::vector<NOlap::TBlobRange>&& ranges) {
-    if (auto s3 = GetS3ActorForTier(tierName)) {
-        auto get = std::make_unique<TEvPrivate::TEvGetExported>();
-        get->DstActor = dst;
-        get->DstCookie = cookie;
-        get->Evicted = std::move(evicted);
-        get->BlobRanges = std::move(ranges);
-
-        ui64 sumBytes = 0;
-        for (auto& blobRange : get->BlobRanges) {
-            sumBytes += blobRange.Size;
-        }
-        IncCounter(COUNTER_READING_EXPORTED_BLOBS);
-        IncCounter(COUNTER_READING_EXPORTED_RANGES, get->BlobRanges.size());
-        IncCounter(COUNTER_READING_EXPORTED_BYTES, sumBytes);
-
-        ctx.Send(s3, get.release());
-        return true;
-    }
-    return false;
+    Execute(new TTxInsertTableCleanup(this, std::move(writeIdsToCleanup)), TActorContext::AsActorContext());
 }
 
 void TColumnShard::Die(const TActorContext& ctx) {
@@ -1069,12 +915,14 @@ void TColumnShard::Die(const TActorContext& ctx) {
     return IActor::Die(ctx);
 }
 
-TActorId TColumnShard::GetS3ActorForTier(const TString& tierId) const {
+#ifndef KIKIMR_DISABLE_S3_OPS
+NWrappers::NExternalStorage::IExternalStorageOperator::TPtr TColumnShard::GetTierStorageOperator(const TString& tierId) const {
     if (!Tiers) {
-        return {};
+        return nullptr;
     }
-    return Tiers->GetStorageActorId(tierId);
+    return Tiers->GetStorageOperator(tierId);
 }
+#endif
 
 void TColumnShard::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
     Y_VERIFY(Tiers);
@@ -1084,24 +932,29 @@ void TColumnShard::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& 
 }
 
 void TColumnShard::ActivateTiering(const ui64 pathId, const TString& useTiering) {
-    if (!Tiers) {
-        Tiers = std::make_shared<TTiersManager>(TabletID(), SelfId(),
-            [this](const TActorContext& ctx){
-                if (!TablesManager.HasPrimaryIndex()) {
-                    return;
-                }
-                TablesManager.MutablePrimaryIndex().OnTieringModified(Tiers, TablesManager.GetTtl());
-                CleanForgottenBlobs(ctx);
-                Reexport(ctx);
-            });
-        Tiers->Start(Tiers);
-    }
+    Y_VERIFY(!!Tiers);
     if (!!Tiers) {
         if (useTiering) {
             Tiers->EnablePathId(pathId, useTiering);
         } else {
             Tiers->DisablePathId(pathId);
         }
+    }
+    OnTieringModified();
+}
+
+void TColumnShard::Enqueue(STFUNC_SIG) {
+    switch (ev->GetTypeRewrite()) {
+        HFunc(TEvPrivate::TEvTieringModified, Handle);
+        default:
+            return NTabletFlatExecutor::TTabletExecutedFlat::Enqueue(ev);
+    }
+}
+
+void TColumnShard::OnTieringModified() {
+    StoragesManager->OnTieringModified(Tiers);
+    if (TablesManager.HasPrimaryIndex()) {
+        TablesManager.MutablePrimaryIndex().OnTieringModified(Tiers, TablesManager.GetTtl());
     }
 }
 

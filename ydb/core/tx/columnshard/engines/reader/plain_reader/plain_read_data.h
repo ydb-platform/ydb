@@ -25,7 +25,7 @@ private:
     std::vector<TPartialReadResult> PartialResults;
     ui32 ReadyResultsCount = 0;
     TFetchBlobsQueue Queue;
-    THashMap<TBlobRange, std::shared_ptr<IDataSource>> Sources;
+    TFetchBlobsQueue PriorityQueue;
     bool AbortedFlag = false;
 protected:
     virtual TString DoDebugString() const override {
@@ -48,8 +48,7 @@ protected:
         return (Scanner->IsFinished() && PartialResults.empty());
     }
 
-    virtual void DoAddData(const TBlobRange& blobRange, const TString& data) override;
-    virtual std::optional<TBlobRange> DoExtractNextBlob(const bool hasReadyResults) override;
+    virtual std::shared_ptr<NBlobOperations::NRead::ITask> DoExtractNextReadTask(const bool hasReadyResults) override;
 public:
     TFetchingPlan GetColumnsFetchingPlan(const bool exclusiveSource) const;
 
@@ -57,9 +56,12 @@ public:
         return *Scanner->GetSourceVerified(sourceIdx);
     }
 
-    void AddBlobForFetch(const ui64 objectId, const TBlobRange& bRange) {
-        Queue.emplace_back(objectId, bRange);
-        Y_VERIFY(Sources.emplace(bRange, Scanner->GetSourceVerified(objectId)).second);
+    void AddForFetch(const ui64 objectId, const std::shared_ptr<NBlobOperations::NRead::ITask>& readTask, const bool priority) {
+        if (priority) {
+            PriorityQueue.emplace_back(objectId, readTask);
+        } else {
+            Queue.emplace_back(objectId, readTask);
+        }
     }
 
     void OnIntervalResult(std::shared_ptr<arrow::RecordBatch> batch);

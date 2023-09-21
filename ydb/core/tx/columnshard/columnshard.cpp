@@ -1,5 +1,6 @@
 #include "columnshard_impl.h"
 #include "blobs_reader/actor.h"
+#include "hooks/abstract/abstract.h"
 
 namespace NKikimr {
 
@@ -31,6 +32,7 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
     LOG_S_INFO("Switched to work at " << TabletID() << " actor " << ctx.SelfID);
 
     BlobsReadActor = ctx.Register(new NOlap::NBlobOperations::NRead::TActor(TabletID(), SelfId()));
+
     for (auto&& i : TablesManager.GetTables()) {
         ActivateTiering(i.first, i.second.GetTieringUsage());
     }
@@ -40,15 +42,29 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
 void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     LOG_S_DEBUG("OnActivateExecutor at " << TabletID() << " actor " << ctx.SelfID);
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr.release());
-    BlobManager = std::make_unique<TBlobManager>(Info(), Executor()->Generation());
 
-    auto& icb = *AppData(ctx)->Icb;
-    BlobManager->RegisterControls(icb);
-    Limits.RegisterControls(icb);
-    CompactionLimits.RegisterControls(icb);
-    Settings.RegisterControls(icb);
+    const auto selfActorId = SelfId();
+    Tiers = std::make_shared<TTiersManager>(TabletID(), SelfId(),
+        [selfActorId](const TActorContext& ctx) {
+        ctx.Send(selfActorId, new TEvPrivate::TEvTieringModified);
+    });
+    Tiers->Start(Tiers);
+    if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
+        Tiers->TakeConfigs(NYDBTest::TControllers::GetColumnShardController()->GetFallbackTiersSnapshot(), nullptr);
+    }
+}
 
-    Execute(CreateTxInitSchema(), ctx);
+void TColumnShard::Handle(TEvPrivate::TEvTieringModified::TPtr& /*ev*/, const TActorContext& ctx) {
+    OnTieringModified();
+    if (!TiersInitializedFlag) {
+        TiersInitializedFlag = true;
+        auto& icb = *AppData(ctx)->Icb;
+        Limits.RegisterControls(icb);
+        CompactionLimits.RegisterControls(icb);
+        Settings.RegisterControls(icb);
+        Execute(CreateTxInitSchema(), ctx);
+    }
+    NYDBTest::TControllers::GetColumnShardController()->OnTieringModified(Tiers);
 }
 
 void TColumnShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext&) {
@@ -108,7 +124,7 @@ void TColumnShard::Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorCon
     Y_UNUSED(ctx);
     ui64 readCookie = ev->Get()->RequestCookie;
     LOG_S_DEBUG("Finished read cookie: " << readCookie << " at tablet " << TabletID());
-    auto blobs = InFlightReadsTracker.RemoveInFlightRequest(ev->Get()->RequestCookie, *BlobManager);
+    InFlightReadsTracker.RemoveInFlightRequest(ev->Get()->RequestCookie);
 
     ui64 txId = ev->Get()->TxId;
     if (ScanTxInFlight.contains(txId)) {
@@ -116,11 +132,6 @@ void TColumnShard::Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorCon
         IncCounter(COUNTER_SCAN_LATENCY, duration);
         ScanTxInFlight.erase(txId);
         SetCounter(COUNTER_SCAN_IN_FLY, ScanTxInFlight.size());
-    }
-
-    if (blobs.size()) {
-        // Cleanup just freed blobs (dropped exported ones)
-        CleanForgottenBlobs(ctx, blobs);
     }
 }
 
@@ -164,18 +175,6 @@ void TColumnShard::Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, cons
 
     RescheduleWaitingReads();
     EnqueueBackgroundActivities(true);
-}
-
-void TColumnShard::UpdateBlobMangerCounters() {
-    const auto counters = BlobManager->GetCountersUpdate();
-    IncCounter(COUNTER_BLOB_MANAGER_GC_REQUESTS, counters.GcRequestsSent);
-    IncCounter(COUNTER_BLOB_MANAGER_KEEP_BLOBS, counters.BlobKeepEntries);
-    IncCounter(COUNTER_BLOB_MANAGER_DONT_KEEP_BLOBS, counters.BlobDontKeepEntries);
-    IncCounter(COUNTER_BLOB_MANAGER_SKIPPED_BLOBS, counters.BlobSkippedEntries);
-    IncCounter(COUNTER_SMALL_BLOB_WRITE_COUNT, counters.SmallBlobsWritten);
-    IncCounter(COUNTER_SMALL_BLOB_WRITE_BYTES, counters.SmallBlobsBytesWritten);
-    IncCounter(COUNTER_SMALL_BLOB_DELETE_COUNT, counters.SmallBlobsDeleted);
-    IncCounter(COUNTER_SMALL_BLOB_DELETE_BYTES, counters.SmallBlobsBytesDeleted);
 }
 
 void TColumnShard::UpdateInsertTableCounters() {

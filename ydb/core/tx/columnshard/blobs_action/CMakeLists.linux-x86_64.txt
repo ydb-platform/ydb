@@ -6,6 +6,10 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(abstract)
+add_subdirectory(bs)
+add_subdirectory(tier)
+add_subdirectory(transaction)
 
 add_library(tx-columnshard-blobs_action)
 target_link_libraries(tx-columnshard-blobs_action PUBLIC
@@ -16,9 +20,12 @@ target_link_libraries(tx-columnshard-blobs_action PUBLIC
   libs-apache-arrow
   ydb-core-tablet_flat
   core-tx-tiering
+  columnshard-blobs_action-bs
+  columnshard-blobs_action-abstract
+  columnshard-blobs_action-transaction
+  columnshard-blobs_action-tier
 )
 target_sources(tx-columnshard-blobs_action PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/abstract.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/bs.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/blob_manager_db.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/memory.cpp
 )

@@ -14,6 +14,7 @@ target_link_libraries(engines-storage-optimizer PUBLIC
   libs-apache-arrow
   ydb-core-protos
   core-formats-arrow
+  engines-changes-abstract
 )
 target_sources(engines-storage-optimizer PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/optimizer.cpp

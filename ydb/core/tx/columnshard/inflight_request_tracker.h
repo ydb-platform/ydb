@@ -11,28 +11,25 @@ using NOlap::IBlobInUseTracker;
 class TInFlightReadsTracker {
 public:
     // Returns a unique cookie associated with this request
-    ui64 AddInFlightRequest(NOlap::TReadMetadataBase::TConstPtr readMeta, IBlobInUseTracker& blobTracker) {
+    ui64 AddInFlightRequest(NOlap::TReadMetadataBase::TConstPtr readMeta) {
         const ui64 cookie = NextCookie++;
-        AddToInFlightRequest(cookie, readMeta, blobTracker);
+        AddToInFlightRequest(cookie, readMeta);
         return cookie;
     }
 
     // Returns a unique cookie associated with this request
     template <class TReadMetadataList>
-    ui64 AddInFlightRequest(const TReadMetadataList& readMetaList, IBlobInUseTracker& blobTracker) {
+    ui64 AddInFlightRequest(const TReadMetadataList& readMetaList) {
         const ui64 cookie = NextCookie++;
         for (const auto& readMetaPtr : readMetaList) {
-            AddToInFlightRequest(cookie, readMetaPtr, blobTracker);
+            AddToInFlightRequest(cookie, readMetaPtr);
         }
         return cookie;
     }
 
-    // Forget completed request
-    THashSet<NOlap::TUnifiedBlobId> RemoveInFlightRequest(ui64 cookie, IBlobInUseTracker& blobTracker) {
+    void RemoveInFlightRequest(ui64 cookie) {
         Y_VERIFY(RequestsMeta.contains(cookie), "Unknown request cookie %" PRIu64, cookie);
         const auto& readMetaList = RequestsMeta[cookie];
-
-        THashSet<NOlap::TUnifiedBlobId> freedBlobs;
 
         for (const auto& readMetaBase : readMetaList) {
             NOlap::TReadMetadata::TConstPtr readMeta = std::dynamic_pointer_cast<const NOlap::TReadMetadata>(readMetaBase);
@@ -50,22 +47,20 @@ public:
                 } else {
                     it->second--;
                 }
+                auto tracker = portion->GetBlobsStorage()->GetBlobsTracker();
                 for (auto& rec : portion->Records) {
-                    if (blobTracker.SetBlobInUse(rec.BlobRange.BlobId, false)) {
-                        freedBlobs.emplace(rec.BlobRange.BlobId);
-                    }
+                    tracker->FreeBlob(rec.BlobRange.BlobId);
                 }
             }
 
+            auto insertStorage = StoragesManager->GetInsertOperator();
+            auto tracker = insertStorage->GetBlobsTracker();
             for (const auto& committedBlob : readMeta->CommittedBlobs) {
-                if (blobTracker.SetBlobInUse(committedBlob.GetBlobRange().GetBlobId(), false)) {
-                    freedBlobs.emplace(committedBlob.GetBlobRange().GetBlobId());
-                }
+                tracker->FreeBlob(committedBlob.GetBlobRange().GetBlobId());
             }
         }
 
         RequestsMeta.erase(cookie);
-        return freedBlobs;
     }
 
     // Checks if the portion is in use by any in-flight request
@@ -79,8 +74,14 @@ public:
         return delta;
     }
 
+    TInFlightReadsTracker(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager)
+        : StoragesManager(storagesManager)
+    {
+
+    }
+
 private:
-    void AddToInFlightRequest(const ui64 cookie, NOlap::TReadMetadataBase::TConstPtr readMetaBase, IBlobInUseTracker& blobTracker) {
+    void AddToInFlightRequest(const ui64 cookie, NOlap::TReadMetadataBase::TConstPtr readMetaBase) {
         RequestsMeta[cookie].push_back(readMetaBase);
 
         NOlap::TReadMetadata::TConstPtr readMeta = std::dynamic_pointer_cast<const NOlap::TReadMetadata>(readMetaBase);
@@ -96,17 +97,21 @@ private:
         for (const auto& portion : readMeta->SelectInfo->PortionsOrderedPK) {
             const ui64 portionId = portion->GetPortion();
             PortionUseCount[portionId]++;
+            auto tracker = portion->GetBlobsStorage()->GetBlobsTracker();
             for (auto& rec : portion->Records) {
-                blobTracker.SetBlobInUse(rec.BlobRange.BlobId, true);
+                tracker->UseBlob(rec.BlobRange.BlobId);
             }
         }
 
+        auto insertStorage = StoragesManager->GetInsertOperator();
+        auto tracker = insertStorage->GetBlobsTracker();
         for (const auto& committedBlob : readMeta->CommittedBlobs) {
-            blobTracker.SetBlobInUse(committedBlob.GetBlobRange().GetBlobId(), true);
+            tracker->UseBlob(committedBlob.GetBlobRange().GetBlobId());
         }
     }
 
 private:
+    std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     ui64 NextCookie{1};
     THashMap<ui64, TList<NOlap::TReadMetadataBase::TConstPtr>> RequestsMeta;
     THashMap<ui64, ui64> PortionUseCount;

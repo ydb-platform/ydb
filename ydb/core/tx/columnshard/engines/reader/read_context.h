@@ -1,6 +1,7 @@
 #pragma once
 #include "conveyor_task.h"
 #include <ydb/core/tx/columnshard/blob.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/columnshard__scan.h>
 #include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/resources/memory.h>
@@ -26,22 +27,23 @@ public:
 
 class TReadContext {
 private:
-    YDB_ACCESSOR_DEF(NColumnShard::TDataTasksProcessorContainer, Processor);
+    YDB_READONLY_DEF(std::shared_ptr<IStoragesManager>, StoragesManager);
     const NColumnShard::TConcreteScanCounters Counters;
-    YDB_READONLY_DEF(std::shared_ptr<NOlap::TActorBasedMemoryAccesor>, MemoryAccessor);
+    YDB_READONLY_DEF(std::shared_ptr<TActorBasedMemoryAccesor>, MemoryAccessor);
     YDB_READONLY(bool, IsInternalRead, false);
 public:
     const NColumnShard::TConcreteScanCounters& GetCounters() const {
         return Counters;
     }
 
-    TReadContext(const NColumnShard::TDataTasksProcessorContainer& processor,
+    TReadContext(const std::shared_ptr<IStoragesManager>& storagesManager,
         const NColumnShard::TConcreteScanCounters& counters,
         std::shared_ptr<NOlap::TActorBasedMemoryAccesor> memoryAccessor, const bool isInternalRead
         );
 
-    TReadContext(const NColumnShard::TConcreteScanCounters& counters, const bool isInternalRead)
-        : Counters(counters)
+    TReadContext(const std::shared_ptr<IStoragesManager>& storagesManager, const NColumnShard::TConcreteScanCounters& counters, const bool isInternalRead)
+        : StoragesManager(storagesManager)
+        , Counters(counters)
         , IsInternalRead(isInternalRead)
     {
 
@@ -52,8 +54,7 @@ class IDataReader {
 protected:
     TReadContext Context;
     std::shared_ptr<const TReadMetadata> ReadMetadata;
-    virtual void DoAddData(const TBlobRange& blobRange, const TString& data) = 0;
-    virtual std::optional<TBlobRange> DoExtractNextBlob(const bool hasReadyResults) = 0;
+    virtual std::shared_ptr<NBlobOperations::NRead::ITask> DoExtractNextReadTask(const bool hasReadyResults) = 0;
     virtual TString DoDebugString() const = 0;
     virtual void DoAbort() = 0;
     virtual bool DoIsFinished() const = 0;
@@ -80,10 +81,6 @@ public:
 
     const NColumnShard::TConcreteScanCounters& GetCounters() const noexcept {
         return Context.GetCounters();
-    }
-
-    const NColumnShard::TDataTasksProcessorContainer& GetTasksProcessor() const noexcept {
-        return Context.GetProcessor();
     }
 
     void Abort() {
@@ -120,12 +117,8 @@ public:
         sb << DoDebugString();
         return sb;
     }
-
-    void AddData(const TBlobRange& blobRange, const TString& data) {
-        DoAddData(blobRange, data);
-    }
-    std::optional<TBlobRange> ExtractNextBlob(const bool hasReadyResults) {
-        return DoExtractNextBlob(hasReadyResults);
+    std::shared_ptr<NBlobOperations::NRead::ITask> ExtractNextReadTask(const bool hasReadyResults) {
+        return DoExtractNextReadTask(hasReadyResults);
     }
 };
 

@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/scheme/column_features.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr::NOlap {
@@ -20,9 +21,28 @@ private:
 
     bool HasPkMinMax() const;
     TPortionMeta Meta;
+    std::shared_ptr<NOlap::IBlobsStorageOperator> BlobsOperator;
 public:
+    bool HasStorageOperator() const {
+        return !!BlobsOperator;
+    }
+
+    void InitOperator(const std::shared_ptr<NOlap::IBlobsStorageOperator>& bOperator, const bool rewrite) {
+        if (rewrite) {
+            AFL_VERIFY(!!BlobsOperator);
+        } else {
+            AFL_VERIFY(!BlobsOperator);
+        }
+        AFL_VERIFY(!!bOperator);
+        BlobsOperator = bOperator;
+    }
+
     static constexpr const ui32 BLOB_BYTES_LIMIT = 8 * 1024 * 1024;
 
+    const std::shared_ptr<NOlap::IBlobsStorageOperator>& GetBlobsStorage() const {
+        Y_VERIFY(BlobsOperator);
+        return BlobsOperator;
+    }
     std::vector<const TColumnRecord*> GetColumnChunksPointers(const ui32 columnId) const;
 
     TSerializationStats GetSerializationStat(const ISnapshotSchema& schema) const {
@@ -35,6 +55,7 @@ public:
 
     void ResetMeta() {
         Meta = TPortionMeta();
+        BlobsOperator = nullptr;
     }
 
     const TPortionMeta& GetMeta() const {
@@ -78,10 +99,11 @@ public:
         return TPortionInfo();
     }
 
-    TPortionInfo(const ui64 granuleId, const ui64 portionId, const TSnapshot& minSnapshot)
+    TPortionInfo(const ui64 granuleId, const ui64 portionId, const TSnapshot& minSnapshot, const std::shared_ptr<NOlap::IBlobsStorageOperator>& blobsOperator)
         : Granule(granuleId)
         , Portion(portionId)
         , MinSnapshot(minSnapshot)
+        , BlobsOperator(blobsOperator)
     {
     }
 
@@ -102,13 +124,6 @@ public:
     bool AllowEarlyFilter() const {
         return Meta.GetProduced() == TPortionMeta::EProduced::COMPACTED
             || Meta.GetProduced() == TPortionMeta::EProduced::SPLIT_COMPACTED;
-    }
-
-    bool EvictReady(size_t hotSize) const {
-        return Meta.GetProduced() == TPortionMeta::EProduced::COMPACTED
-            || Meta.GetProduced() == TPortionMeta::EProduced::SPLIT_COMPACTED
-            || Meta.GetProduced() == TPortionMeta::EProduced::EVICTED
-            || (Meta.GetProduced() == TPortionMeta::EProduced::INSERTED && BlobsSizes().first >= hotSize);
     }
 
     ui64 GetPortion() const {

@@ -307,6 +307,10 @@ struct TBlobRange {
         }
     }
 
+    static TBlobRange FromBlobId(const TUnifiedBlobId& blobId) {
+        return TBlobRange(blobId, 0, blobId.BlobSize());
+    }
+
     bool operator == (const TBlobRange& other) const {
         return
             BlobId == other.BlobId &&
@@ -328,16 +332,20 @@ struct TBlobRange {
 };
 
 class IBlobInUseTracker {
-protected:
-    ~IBlobInUseTracker() = default;
-
+private:
+    virtual bool DoFreeBlob(const NOlap::TUnifiedBlobId& blobId) = 0;
+    virtual bool DoUseBlob(const NOlap::TUnifiedBlobId& blobId) = 0;
 public:
-    // Marks the blob as "in use (or no longer in use) by an in-flight request", increments (or decrements)
-    // it's ref count. This will prevent the blob from beeing physically deleted when DeleteBlob() is called
-    // until all the references are released.
-    // NOTE: this ref counts are in-memory only, so the blobs can be deleted if tablet restarts
-    virtual bool SetBlobInUse(const NOlap::TUnifiedBlobId& blobId, bool inUse) = 0;
-    virtual bool BlobInUse(const NOlap::TUnifiedBlobId& blobId) const = 0;
+    virtual ~IBlobInUseTracker() = default;
+
+    bool FreeBlob(const NOlap::TUnifiedBlobId& blobId) {
+        return DoFreeBlob(blobId);
+    }
+    bool UseBlob(const NOlap::TUnifiedBlobId& blobId) {
+        return DoUseBlob(blobId);
+    }
+
+    virtual bool IsBlobInUsage(const NOlap::TUnifiedBlobId& blobId) const = 0;
 };
 
 // Expected blob lifecycle: EVICTING -> SELF_CACHED -> EXTERN <-> CACHED

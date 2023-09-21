@@ -67,7 +67,7 @@ std::shared_ptr<arrow::Scalar> TPortionInfo::MaxValue(ui32 columnId) const {
 }
 
 TPortionInfo TPortionInfo::CopyWithFilteredColumns(const THashSet<ui32>& columnIds) const {
-    TPortionInfo result(Granule, Portion, GetMinSnapshot());
+    TPortionInfo result(Granule, Portion, GetMinSnapshot(), BlobsOperator);
     result.Meta = Meta;
     result.Records.reserve(columnIds.size());
 
@@ -116,6 +116,9 @@ TString TPortionInfo::DebugString() const {
         "meta:(" << Meta.DebugString() << ");";
     if (RemoveSnapshot.Valid()) {
         sb << "remove_snapshot:(" << RemoveSnapshot.DebugString() << ");";
+    }
+    if (BlobsOperator) {
+        sb << "blobs_operator:" << BlobsOperator->DebugString() << ";";
     }
     sb << "chunks:(" << Records.size() << ");";
     if (IS_TRACE_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD)) {

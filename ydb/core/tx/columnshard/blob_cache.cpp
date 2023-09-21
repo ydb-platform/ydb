@@ -212,7 +212,6 @@ private:
             HFunc(TEvBlobStorage::TEvGetResult, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-            HFunc(TEvColumnShard::TEvReadBlobRangesResult, Handle);
         default:
             LOG_S_WARN("Unhandled event type: " << ev->GetTypeRewrite()
                        << " event: " << ev->ToString());
@@ -435,15 +434,11 @@ private:
         // We might need to free some space to accommodate the results of new reads
         Evict(ctx);
 
-        std::vector<ui64> tabletReads;
-        tabletReads.reserve(groupedBlobRanges.size() + fallbackRanges.size());
-
         for (auto& [blobId, ranges] : fallbackRanges) {
             Y_VERIFY(blobId.IsDsBlob());
 
             ui64 cookie = ++ReadCookie;
             CookieToRange[cookie] = std::move(ranges);
-            tabletReads.push_back(cookie);
         }
 
         ui64 cookie = ++ReadCookie;
@@ -453,17 +448,13 @@ private:
             ui64 requestSize = 0;
             ui32 dsGroup = std::get<1>(target);
             TReadItem::EReadVariant readVariant = std::get<2>(target);
-            bool isDS = rangesGroup.begin()->BlobId.IsDsBlob();
+            Y_VERIFY(rangesGroup.begin()->BlobId.IsDsBlob());
 
             std::vector<ui64> dsReads;
 
             for (auto& blobRange : rangesGroup) {
                 if (requestSize && (requestSize + blobRange.Size > MAX_REQUEST_BYTES)) {
-                    if (isDS) {
-                        dsReads.push_back(cookie);
-                    } else {
-                        tabletReads.push_back(cookie);
-                    }
+                    dsReads.push_back(cookie);
                     cookie = ++ReadCookie;
                     requestSize = 0;
                 }
@@ -472,11 +463,7 @@ private:
                 CookieToRange[cookie].emplace_back(std::move(blobRange));
             }
             if (requestSize) {
-                if (isDS) {
-                    dsReads.push_back(cookie);
-                } else {
-                    tabletReads.push_back(cookie);
-                }
+                dsReads.push_back(cookie);
                 cookie = ++ReadCookie;
                 requestSize = 0;
             }
@@ -484,10 +471,6 @@ private:
             for (ui64 cookie : dsReads) {
                 SendBatchReadRequestToDS(CookieToRange[cookie], cookie, dsGroup, readVariant, ctx);
             }
-        }
-
-        for (ui64 cookie : tabletReads) {
-            SendBatchReadRequestToTablet(CookieToRange[cookie], cookie, ctx);
         }
     }
 
@@ -577,35 +560,6 @@ private:
         OutstandingReads.erase(readIt);
     }
 
-    void SendBatchReadRequestToTablet(const std::vector<TBlobRange>& blobRanges,
-        const ui64 cookie, const TActorContext& ctx)
-    {
-        Y_VERIFY(!blobRanges.empty());
-        ui64 tabletId = blobRanges.front().BlobId.GetTabletId();
-
-        LOG_S_INFO("Sending read from Tablet: " << tabletId
-            << " ranges: " << JoinStrings(blobRanges.begin(), blobRanges.end(), " ")
-            << " cookie: " << cookie);
-
-        if (!ShardPipes.contains(tabletId)) {
-            NTabletPipe::TClientConfig clientConfig;
-            clientConfig.AllowFollower = false;
-            clientConfig.CheckAliveness = true;
-            clientConfig.RetryPolicy = {
-                .RetryLimitCount = 10,
-                .MinRetryTime = TDuration::MilliSeconds(5),
-            };
-            ShardPipes[tabletId] = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig));
-        }
-
-        auto ev = std::make_unique<TEvColumnShard::TEvReadBlobRanges>(blobRanges);
-
-        InFlightTabletRequests[tabletId].insert(cookie);
-        NTabletPipe::SendData(ctx, ShardPipes[tabletId], ev.release(), cookie);
-
-        ReadRequests->Inc();
-    }
-
     // Frogets the pipe to the tablet and fails all in-flight requests to it
     void DestroyPipe(ui64 tabletId, const TActorContext& ctx) {
         ShardPipes.erase(tabletId);
@@ -650,64 +604,6 @@ private:
 
         LOG_S_DEBUG("Closed pipe connection to tablet: " << tabletId);
         DestroyPipe(tabletId, ctx);
-    }
-
-    void Handle(TEvColumnShard::TEvReadBlobRangesResult::TPtr& ev, const TActorContext& ctx) {
-        const auto& record = ev->Get()->Record;
-        ui64 tabletId = record.GetTabletId();
-        ui64 readCookie = ev->Cookie;
-        LOG_S_INFO("Got read result from tablet: " << tabletId);
-
-        auto cookieIt = CookieToRange.find(readCookie);
-        if (cookieIt == CookieToRange.end()) {
-            // This might only happen in case fo race between response and pipe close
-            LOG_S_NOTICE("Unknown read result cookie: " << readCookie);
-            return;
-        }
-
-        std::vector<TBlobRange> blobRanges = std::move(cookieIt->second);
-
-        Y_VERIFY(record.ResultsSize(), "Zero results for read request!");
-        Y_VERIFY(blobRanges.size() >= record.ResultsSize(), "Mismatched number of results for read request");
-
-        if (blobRanges.size() == record.ResultsSize()) {
-            InFlightTabletRequests[tabletId].erase(readCookie);
-            CookieToRange.erase(readCookie);
-        } else {
-            // Extract blobRanges for returned blobId. Keep others ordered.
-            TString strReturnedBlobId = record.GetResults(0).GetBlobRange().GetBlobId();
-            std::vector<TBlobRange> same;
-            std::vector<TBlobRange> others;
-            same.reserve(record.ResultsSize());
-            others.reserve(blobRanges.size() - record.ResultsSize());
-
-            for (auto&& blobRange : blobRanges) {
-                TString strBlobId = blobRange.BlobId.ToStringNew();
-                if (strBlobId == strReturnedBlobId) {
-                    same.emplace_back(std::move(blobRange));
-                } else {
-                    others.emplace_back(std::move(blobRange));
-                }
-            }
-            blobRanges.swap(same);
-
-            CookieToRange[readCookie] = std::move(others);
-        }
-
-        for (size_t i = 0; i < record.ResultsSize(); ++i) {
-            const auto& res = record.GetResults(i);
-            const auto& blobRange = blobRanges[i];
-            if (!blobRange.BlobId.IsSmallBlob()) {
-                FallbackDataSize -= blobRange.Size;
-            }
-
-            Y_VERIFY(blobRange.BlobId.ToStringNew() == res.GetBlobRange().GetBlobId());
-            Y_VERIFY(blobRange.Offset == res.GetBlobRange().GetOffset());
-            Y_VERIFY(blobRange.Size == res.GetBlobRange().GetSize());
-            ProcessSingleRangeResult(blobRange, readCookie, res.GetStatus(), res.GetData(), ctx);
-        }
-
-        MakeReadRequests(ctx);
     }
 
     void InsertIntoCache(const TBlobRange& blobRange, TString data) {

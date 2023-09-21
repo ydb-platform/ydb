@@ -16,8 +16,8 @@ private:
     NActors::TActorId Parent;
     NActors::TActorId BlobCacheActorId;
     THashMap<TBlobRange, std::vector<std::shared_ptr<ITask>>> BlobTasks;
-
 public:
+    static TAtomicCounter WaitingBlobsCount;
     TActor(ui64 tabletId, const TActorId& parent);
 
     void Handle(TEvStartReadTask::TPtr& ev);

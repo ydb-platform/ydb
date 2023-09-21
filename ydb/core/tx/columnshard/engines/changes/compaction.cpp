@@ -18,20 +18,6 @@ void TCompactColumnEngineChanges::DoDebugString(TStringOutput& out) const {
     }
 }
 
-THashSet<TBlobRange> TCompactColumnEngineChanges::GetReadBlobRanges() const {
-    Y_VERIFY(SwitchedPortions.size());
-
-    THashSet<TBlobRange> result;
-    for (const auto& portionInfo : SwitchedPortions) {
-        Y_VERIFY(!portionInfo.Empty());
-
-        for (const auto& rec : portionInfo.Records) {
-            Y_VERIFY(result.emplace(rec.BlobRange).second);
-        }
-    }
-    return result;
-}
-
 void TCompactColumnEngineChanges::DoCompile(TFinalizationContext& context) {
     TBase::DoCompile(context);
 
@@ -39,39 +25,10 @@ void TCompactColumnEngineChanges::DoCompile(TFinalizationContext& context) {
     for (auto& portionInfo : AppendedPortions) {
         portionInfo.GetPortionInfo().UpdateRecordsMeta(producedClassResultCompaction);
     }
-    for (auto& portionInfo : SwitchedPortions) {
-        Y_VERIFY(portionInfo.IsActive());
-        portionInfo.SetRemoveSnapshot(context.GetSnapshot());
-    }
 }
 
 bool TCompactColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context) {
-    Y_VERIFY(TBase::DoApplyChanges(self, context));
-    auto g = self.GranulesStorage->StartPackModification();
-    for (auto& portionInfo : SwitchedPortions) {
-        Y_VERIFY(!portionInfo.Empty());
-        Y_VERIFY(!portionInfo.IsActive());
-
-        const ui64 granule = portionInfo.GetGranule();
-        const ui64 portion = portionInfo.GetPortion();
-
-        const TPortionInfo& oldInfo = self.GetGranuleVerified(granule).GetPortionVerified(portion);
-
-        auto& granuleStart = self.Granules[granule]->Record.Mark;
-
-        Y_VERIFY(granuleStart <= portionInfo.IndexKeyStart());
-        self.UpsertPortion(portionInfo, &oldInfo);
-
-        for (auto& record : portionInfo.Records) {
-            self.ColumnsTable->Write(context.DB, portionInfo, record);
-        }
-    }
-
-    for (auto& portionInfo : SwitchedPortions) {
-        self.CleanupPortions.insert(portionInfo.GetAddress());
-    }
-
-    return true;
+    return TBase::DoApplyChanges(self, context);
 }
 
 ui32 TCompactColumnEngineChanges::NumSplitInto(const ui32 srcRows) const {
@@ -81,25 +38,22 @@ ui32 TCompactColumnEngineChanges::NumSplitInto(const ui32 srcRows) const {
     return std::max<ui32>(2, numSplitInto);
 }
 
-void TCompactColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& /*context*/) {
-    self.IncCounter(NColumnShard::COUNTER_PORTIONS_DEACTIVATED, SwitchedPortions.size());
-
-    THashSet<TUnifiedBlobId> blobsDeactivated;
-    for (auto& portionInfo : SwitchedPortions) {
-        for (auto& rec : portionInfo.Records) {
-            blobsDeactivated.insert(rec.BlobRange.BlobId);
-        }
-        self.IncCounter(NColumnShard::COUNTER_RAW_BYTES_DEACTIVATED, portionInfo.RawBytesSum());
-    }
-
-    self.IncCounter(NColumnShard::COUNTER_BLOBS_DEACTIVATED, blobsDeactivated.size());
-    for (auto& blobId : blobsDeactivated) {
-        self.IncCounter(NColumnShard::COUNTER_BYTES_DEACTIVATED, blobId.BlobSize());
-    }
+void TCompactColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIndexContext& context) {
+    TBase::DoWriteIndex(self, context);
 }
 
 void TCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     TBase::DoStart(self);
+
+    Y_VERIFY(SwitchedPortions.size());
+    for (const auto& p : SwitchedPortions) {
+        Y_VERIFY(!p.Empty());
+        auto action = BlobsAction.GetReading(p);
+        for (const auto& rec : p.Records) {
+            action->AddRange(rec.BlobRange);
+        }
+    }
+
     self.BackgroundController.StartCompaction(NKikimr::NOlap::TPlanCompactionInfo(GranuleMeta->GetPathId()), *this);
     NeedGranuleStatusProvide = true;
     GranuleMeta->OnCompactionStarted();
@@ -121,36 +75,19 @@ void TCompactColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, T
     NeedGranuleStatusProvide = false;
 }
 
-TCompactColumnEngineChanges::TCompactColumnEngineChanges(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const TCompactionSrcGranule& srcGranule)
-    : TBase(limits.GetSplitSettings())
+TCompactColumnEngineChanges::TCompactColumnEngineChanges(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const std::map<ui64, std::shared_ptr<TPortionInfo>>& portions, const TSaverContext& saverContext)
+    : TBase(limits.GetSplitSettings(), saverContext)
     , Limits(limits)
     , GranuleMeta(granule)
-    , SrcGranule(srcGranule)
 {
     Y_VERIFY(GranuleMeta);
-
-    SwitchedPortions.reserve(GranuleMeta->GetPortions().size());
-    for (const auto& [_, portionInfo] : GranuleMeta->GetPortions()) {
-        if (portionInfo->IsActive()) {
-            SwitchedPortions.push_back(*portionInfo);
-            Y_VERIFY(portionInfo->GetGranule() == GranuleMeta->GetGranuleId());
-        }
-    }
-    Y_VERIFY(SwitchedPortions.size());
-}
-
-TCompactColumnEngineChanges::TCompactColumnEngineChanges(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const std::map<ui64, std::shared_ptr<TPortionInfo>>& portions)
-    : TBase(limits.GetSplitSettings())
-    , Limits(limits)
-    , GranuleMeta(granule)
-{
-//    Y_VERIFY(GranuleMeta);
 
     SwitchedPortions.reserve(portions.size());
     for (const auto& [_, portionInfo] : portions) {
         Y_VERIFY(portionInfo->IsActive());
-        SwitchedPortions.push_back(*portionInfo);
-        Y_VERIFY(!GranuleMeta || portionInfo->GetGranule() == GranuleMeta->GetGranuleId());
+        SwitchedPortions.emplace_back(*portionInfo);
+        PortionsToRemove.emplace_back(*portionInfo);
+        Y_VERIFY(portionInfo->GetGranule() == GranuleMeta->GetGranuleId());
     }
     Y_VERIFY(SwitchedPortions.size());
 }

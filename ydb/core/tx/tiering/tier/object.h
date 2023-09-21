@@ -76,9 +76,6 @@ public:
     bool DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& r);
     NMetadata::NInternal::TTableRecord SerializeToRecord() const;
 
-    bool NeedExport() const {
-        return ProtoConfig.HasObjectStorage();
-    }
     bool IsSame(const TTierConfig& item) const;
     NJson::TJsonValue GetDebugJson() const;
     static TString GetTypeId() {

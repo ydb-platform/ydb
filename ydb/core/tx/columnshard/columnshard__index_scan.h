@@ -96,17 +96,13 @@ public:
 
     virtual void Apply(IDataTasksProcessor::ITask::TPtr task) override;
 
-    virtual bool HasWaitingTasks() const override;
-
-    void AddData(const TBlobRange& blobRange, TString data) override;
-
     bool Finished() const  override {
         return IndexedData->IsFinished() && ReadyResults.empty();
     }
 
     std::optional<NOlap::TPartialReadResult> GetBatch() override;
 
-    std::optional<NBlobCache::TBlobRange> GetNextBlobToRead() override;
+    virtual std::shared_ptr<NOlap::NBlobOperations::NRead::ITask> GetNextTaskToRead() override;
 
 private:
     void FillReadyResults();

@@ -14,6 +14,7 @@
 #include <ydb/core/formats/arrow/simple_builder/filler.h>
 #include <ydb/core/formats/arrow/simple_builder/array.h>
 #include <ydb/core/formats/arrow/simple_builder/batch.h>
+#include <util/string/join.h>
 
 namespace NKikimr {
 
@@ -724,21 +725,22 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     UNIT_ASSERT(write(runtime, sender, writeId, tableId, MakeTestBlob(portion[0], ydbSchema), ydbSchema, intWriteIds));
 
     // read
-
-    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
-                new TEvColumnShard::TEvRead(sender, metaShard, 0, 0, tableId));
     TAutoPtr<IEventHandle> handle;
-    auto event2 = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
-    UNIT_ASSERT(event2);
+    {
+        NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 1);
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
+            new TEvColumnShard::TEvRead(sender, metaShard, 0, 0, tableId));
+        auto event2 = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
+        UNIT_ASSERT(event2);
 
-    auto& resRead = Proto(event2);
-    UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
-    UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
-    UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
-    UNIT_ASSERT_EQUAL(resRead.GetBatch(), 0);
-    UNIT_ASSERT_EQUAL(resRead.GetFinished(), true);
-    UNIT_ASSERT_EQUAL(resRead.GetData(), "");
-
+        auto& resRead = Proto(event2);
+        UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
+        UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
+        UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
+        UNIT_ASSERT_EQUAL(resRead.GetBatch(), 0);
+        UNIT_ASSERT_EQUAL(resRead.GetFinished(), true);
+        UNIT_ASSERT_EQUAL(resRead.GetData(), "");
+    }
     // commit 1: ins:0, cmt:1, idx:0
 
     ui64 planStep = 21;
@@ -747,64 +749,69 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     planCommit(runtime, sender, planStep, txId);
 
     // read 2 (committed, old snapshot)
+    {
+        NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 2);
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
+            new TEvColumnShard::TEvRead(sender, metaShard, 0, 0, tableId));
+        auto event5 = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
+        UNIT_ASSERT(event5);
 
-    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
-                new TEvColumnShard::TEvRead(sender, metaShard, 0, 0, tableId));
-    auto event5 = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
-    UNIT_ASSERT(event5);
-
-    auto& resRead2 = Proto(event5);
-    UNIT_ASSERT_EQUAL(resRead2.GetOrigin(), TTestTxConfig::TxTablet0);
-    UNIT_ASSERT_EQUAL(resRead2.GetTxInitiator(), metaShard);
-    UNIT_ASSERT_EQUAL(resRead2.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
-    UNIT_ASSERT_EQUAL(resRead2.GetBatch(), 0);
-    UNIT_ASSERT_EQUAL(resRead2.GetFinished(), true);
-    UNIT_ASSERT_EQUAL(resRead2.GetData(), "");
+        auto& resRead2 = Proto(event5);
+        UNIT_ASSERT_EQUAL(resRead2.GetOrigin(), TTestTxConfig::TxTablet0);
+        UNIT_ASSERT_EQUAL(resRead2.GetTxInitiator(), metaShard);
+        UNIT_ASSERT_EQUAL(resRead2.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
+        UNIT_ASSERT_EQUAL(resRead2.GetBatch(), 0);
+        UNIT_ASSERT_EQUAL(resRead2.GetFinished(), true);
+        UNIT_ASSERT_EQUAL(resRead2.GetData(), "");
+    }
 
     // read 3 (committed)
-
-    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
-                new TEvColumnShard::TEvRead(sender, metaShard, planStep, txId, tableId));
-    auto event6 = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
-    UNIT_ASSERT(event6);
-
-    auto& resRead3 = Proto(event6);
-    UNIT_ASSERT_EQUAL(resRead3.GetOrigin(), TTestTxConfig::TxTablet0);
-    UNIT_ASSERT_EQUAL(resRead3.GetTxInitiator(), metaShard);
-    UNIT_ASSERT_EQUAL(resRead3.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
-    UNIT_ASSERT_EQUAL(resRead3.GetBatch(), 0);
-    UNIT_ASSERT_EQUAL(resRead3.GetFinished(), true);
-    //UNIT_ASSERT_EQUAL(resRead3.GetData(), data);
-    UNIT_ASSERT(resRead3.GetData().size() > 0);
-    UNIT_ASSERT(CheckColumns(resRead3.GetData(), resRead3.GetMeta(), TTestSchema::ExtractNames(ydbSchema)));
     {
-        std::vector<TString> readData;
-        readData.push_back(resRead3.GetData());
-        auto& schema = resRead3.GetMeta().GetSchema();
-        UNIT_ASSERT(DataHas(readData, schema, portion[0]));
-        UNIT_ASSERT(CheckOrdered(resRead3.GetData(), schema));
+        NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 3);
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
+            new TEvColumnShard::TEvRead(sender, metaShard, planStep, txId, tableId));
+        auto event6 = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
+        UNIT_ASSERT(event6);
+
+        auto& resRead3 = Proto(event6);
+        UNIT_ASSERT_EQUAL(resRead3.GetOrigin(), TTestTxConfig::TxTablet0);
+        UNIT_ASSERT_EQUAL(resRead3.GetTxInitiator(), metaShard);
+        UNIT_ASSERT_EQUAL(resRead3.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
+        UNIT_ASSERT_EQUAL(resRead3.GetBatch(), 0);
+        UNIT_ASSERT_EQUAL(resRead3.GetFinished(), true);
+        //UNIT_ASSERT_EQUAL(resRead3.GetData(), data);
+        UNIT_ASSERT(resRead3.GetData().size() > 0);
+        UNIT_ASSERT(CheckColumns(resRead3.GetData(), resRead3.GetMeta(), TTestSchema::ExtractNames(ydbSchema)));
+        {
+            std::vector<TString> readData;
+            readData.push_back(resRead3.GetData());
+            auto& schema = resRead3.GetMeta().GetSchema();
+            UNIT_ASSERT(DataHas(readData, schema, portion[0]));
+            UNIT_ASSERT(CheckOrdered(resRead3.GetData(), schema));
+        }
     }
 
     // read 4 (column by id)
-
-    auto read_col1 = std::make_unique<TEvColumnShard::TEvRead>(sender, metaShard, planStep, txId, tableId);
-    Proto(read_col1.get()).AddColumnIds(1);
-    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read_col1.release());
-    auto event7 = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
-    UNIT_ASSERT(event7);
-
-    auto& resRead4 = Proto(event7);
-    UNIT_ASSERT_EQUAL(resRead4.GetOrigin(), TTestTxConfig::TxTablet0);
-    UNIT_ASSERT_EQUAL(resRead4.GetTxInitiator(), metaShard);
-    UNIT_ASSERT_EQUAL(resRead4.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
-    UNIT_ASSERT_EQUAL(resRead4.GetBatch(), 0);
-    UNIT_ASSERT_EQUAL(resRead4.GetFinished(), true);
-    UNIT_ASSERT(CheckColumns(resRead4.GetData(), resRead4.GetMeta(), {"timestamp"}));
     {
-        auto& schema = resRead4.GetMeta().GetSchema();
-        UNIT_ASSERT(CheckOrdered(resRead4.GetData(), schema));
-    }
+        NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 4);
+        auto read_col1 = std::make_unique<TEvColumnShard::TEvRead>(sender, metaShard, planStep, txId, tableId);
+        Proto(read_col1.get()).AddColumnIds(1);
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read_col1.release());
+        auto event7 = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
+        UNIT_ASSERT(event7);
 
+        auto& resRead4 = Proto(event7);
+        UNIT_ASSERT_EQUAL(resRead4.GetOrigin(), TTestTxConfig::TxTablet0);
+        UNIT_ASSERT_EQUAL(resRead4.GetTxInitiator(), metaShard);
+        UNIT_ASSERT_EQUAL(resRead4.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
+        UNIT_ASSERT_EQUAL(resRead4.GetBatch(), 0);
+        UNIT_ASSERT_EQUAL(resRead4.GetFinished(), true);
+        UNIT_ASSERT(CheckColumns(resRead4.GetData(), resRead4.GetMeta(), {"timestamp"}));
+        {
+            auto& schema = resRead4.GetMeta().GetSchema();
+            UNIT_ASSERT(CheckOrdered(resRead4.GetData(), schema));
+        }
+    }
     // read 5 (2 columns by name)
 
     auto read_col2 = std::make_unique<TEvColumnShard::TEvRead>(sender, metaShard, planStep, txId, tableId);
@@ -2795,7 +2802,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         }
     }
 
-    void TestCompactionGC(bool enableSmallBlobs) {
+    void TestCompactionGC() {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
 
@@ -2864,9 +2871,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     ++cleanupsHappened;
                     Cerr << "Cleanup old portions:";
                     for (const auto& portion : cleanup->PortionsToDrop) {
-                        ui64 portionId = portion.GetPortion();
-                        Cerr << " " << portionId;
-                        deletedPortions.insert(portionId);
+                        Cerr << " " << portion->GetPortion();
+                        deletedPortions.insert(portion->GetPortion());
                     }
                     Cerr << Endl;
                 }
@@ -2911,13 +2917,6 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             return false;
         };
         runtime.SetEventFilter(captureEvents);
-
-        // Enable/Disable small blobs
-        {
-            TAtomic unused;
-            TAtomic maxSmallBlobSize = enableSmallBlobs ? 1000000 : 0;
-            runtime.GetAppData().Icb->SetValue("ColumnShardControls.MaxSmallBlobSize",maxSmallBlobSize, unused);
-        }
 
         // Disable GC batching so that deleted blobs get collected without a delay
         {
@@ -3060,15 +3059,11 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         UNIT_ASSERT_GE(compactionsHappened, previousCompactionsHappened);
         UNIT_ASSERT_GT(cleanupsHappened, previousCleanupsHappened);
         UNIT_ASSERT_VALUES_EQUAL_C(oldPortions.size(), deletedPortions.size(), "All old portions must be deleted after read has finished");
-        UNIT_ASSERT_VALUES_EQUAL_C(delayedBlobs.size(), 0, "All previously delayed deletions must now happen");
+        UNIT_ASSERT_VALUES_EQUAL_C(delayedBlobs.size(), 0, "All previously delayed deletions must now happen " + JoinSeq(",", delayedBlobs));
     }
 
     Y_UNIT_TEST(CompactionGC) {
-        TestCompactionGC(false);
-    }
-
-    Y_UNIT_TEST(CompactionGCWithSmallBlobs) {
-        TestCompactionGC(true);
+        TestCompactionGC();
     }
 }
 

@@ -56,7 +56,7 @@ void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
         itSignal = Signals.emplace(taskClass, std::make_shared<TTaskSignals>("Conveyor/" + ConveyorName, taskClass)).first;
     }
 
-    TWorkerTask wTask(ev->Get()->GetTask(), ev->Sender, itSignal->second);
+    TWorkerTask wTask(ev->Get()->GetTask(), ev->Get()->GetTask()->GetOwnerId().value_or(ev->Sender), itSignal->second);
 
     if (Workers.size()) {
         Counters.WaitingHistogram->Collect(0);

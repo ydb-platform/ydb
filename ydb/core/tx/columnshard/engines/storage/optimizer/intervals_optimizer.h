@@ -3,6 +3,8 @@
 #include <ydb/core/formats/arrow/replace_key.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/core/tx/columnshard/splitter/settings.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/write.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer {
 
@@ -167,6 +169,7 @@ class TIntervalsOptimizerPlanner: public IOptimizerPlanner {
 private:
     static ui64 LimitSmallBlobsMerge;
     static ui64 LimitSmallBlobDetect;
+    std::shared_ptr<IStoragesManager> StoragesManager;
 
     std::shared_ptr<TCounters> Counters;
 
@@ -255,7 +258,7 @@ private:
 
     bool AddSmallPortion(const std::shared_ptr<TPortionInfo>& info);
 
-    std::shared_ptr<TColumnEngineChanges> GetSmallPortionsMergeTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule) const;
+    std::shared_ptr<TColumnEngineChanges> GetSmallPortionsMergeTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const THashSet<TPortionAddress>& busyPortions) const;
 
 protected:
     virtual void DoAddPortion(const std::shared_ptr<TPortionInfo>& info) override;
@@ -267,7 +270,7 @@ protected:
     virtual TString DoDebugString() const override;
 
 public:
-    TIntervalsOptimizerPlanner(const ui64 granuleId);
+    TIntervalsOptimizerPlanner(const ui64 granuleId, const std::shared_ptr<IStoragesManager>& storagesManager);
 };
 
 } // namespace NKikimr::NOlap

@@ -52,7 +52,7 @@ struct TSeries {
         , UploadedUserId(uploadedUserId) {}
 };
 
-class TYdbErrorException: yexception {
+class TYdbErrorException: public yexception {
 public:
     TYdbErrorException(NYdb::TStatus status)
         : Status(std::move(status))

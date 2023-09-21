@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common.h"
+#include "default_map.h"
 
 namespace NYT {
 
@@ -111,7 +112,8 @@ template <class TMap, class TKey>
 typename TMap::mapped_type GetOrDefault(
     const TMap& map,
     const TKey& key,
-    const typename TMap::mapped_type& defaultValue = {});
+    const typename TMap::mapped_type& defaultValue = {})
+    requires (!TIsDefaultMap<TMap>::Value);
 
 template <class TMap, class TKey, class TCtor>
 auto& GetOrInsert(TMap&& map, const TKey& key, TCtor&& ctor);

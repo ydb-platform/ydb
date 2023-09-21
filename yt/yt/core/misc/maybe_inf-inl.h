@@ -4,84 +4,131 @@
 #include "maybe_inf.h"
 #endif
 
-#include <library/cpp/yt/assert/assert.h>
-
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <std::unsigned_integral T>
-TMaybeInf<T>::TMaybeInf(T value) noexcept
-    : Value_(value)
+template <std::unsigned_integral U>
+TMaybeInf<T>::TMaybeInf(TMaybeInf<U> that) noexcept
+    : Value_(that.Value_)
 {
-    YT_ASSERT(value != TTraits::InfiniteValue);
+    YT_ASSERT(that.Value_ < TTraits::Infinity);
+}
+
+template <std::unsigned_integral T>
+template <std::integral U>
+TMaybeInf<T>::TMaybeInf(U value) noexcept
+    : Value_(static_cast<std::make_unsigned_t<U>>(value))
+{
+    if constexpr (std::is_signed_v<U>) {
+        YT_ASSERT(value >= 0);
+    }
+    YT_ASSERT(static_cast<std::make_unsigned_t<U>>(value) < TTraits::Infinity);
 }
 
 template <std::unsigned_integral T>
 TMaybeInf<T> TMaybeInf<T>::Infinity() noexcept
 {
-    // NB: Avoid using public constructor which prohibits infinity.
+    // NB: Public constructor does not accept infinity.
     TMaybeInf result;
-    result.Value_ = TTraits::InfiniteValue;
+    result.Value_ = TTraits::Infinity;
     return result;
 }
 
 template <std::unsigned_integral T>
 T TMaybeInf<T>::ToUnderlying() const noexcept
 {
-    YT_ASSERT(!IsInfinity());
+    YT_ASSERT(IsFinite());
     return Value_;
 }
 
 template <std::unsigned_integral T>
-bool TMaybeInf<T>::IsInfinity() const noexcept
+bool TMaybeInf<T>::IsInfinite() const noexcept
 {
-    return Value_ == TTraits::InfiniteValue;
+    return Value_ == TTraits::Infinity;
 }
 
 template <std::unsigned_integral T>
-bool TMaybeInf<T>::CanBeIncreased(TMaybeInf delta) const noexcept
+bool TMaybeInf<T>::IsFinite() const noexcept
 {
-    return (!IsInfinity() && !delta.IsInfinity()) || Value_ == 0 || delta.Value_ == 0;
+    return !IsInfinite();
 }
 
 template <std::unsigned_integral T>
-bool TMaybeInf<T>::CanBeDecreased(TMaybeInf delta) const noexcept
+bool TMaybeInf<T>::CanIncrease(TMaybeInf delta) const noexcept
 {
     return
-        !delta.IsInfinity() &&
-        (IsInfinity() ? delta.Value_ == 0 : Value_ >= delta.Value_);
+        delta.IsFinite() &&
+        (IsFinite() || delta.Value_ == 0) &&
+        Value_ + delta.Value_ >= Value_ &&
+        Value_ + delta.Value_ < TTraits::Infinity;
 }
 
 template <std::unsigned_integral T>
-void TMaybeInf<T>::IncreaseBy(TMaybeInf delta) noexcept
+bool TMaybeInf<T>::CanDecrease(TMaybeInf delta) const noexcept
 {
-    YT_ASSERT(CanBeIncreased(delta));
+    return
+        delta.IsFinite() &&
+        (IsFinite() || delta.Value_ == 0) &&
+        Value_ >= delta.Value_;
+}
 
-    if (IsInfinity() || delta.IsInfinity()) {
-        Value_ = TTraits::InfiniteValue;
+template <std::unsigned_integral T>
+void TMaybeInf<T>::Increase(T delta) noexcept
+{
+    YT_ASSERT(CanIncrease(delta));
+    Value_ += delta;
+}
+
+template <std::unsigned_integral T>
+void TMaybeInf<T>::Decrease(T delta) noexcept
+{
+    YT_ASSERT(CanDecrease(delta));
+    Value_ -= delta;
+}
+
+template <std::unsigned_integral T>
+void TMaybeInf<T>::IncreaseWithInfinityAllowed(TMaybeInf that) noexcept
+{
+    YT_ASSERT(IsInfinite() || that.IsInfinite() || (Value_ + that.Value_ >= Value_));
+    if (IsInfinite() || that.IsInfinite()) [[unlikely]] {
+        Value_ = TTraits::Infinity;
     } else {
-        auto newValue = Value_ + delta.ToUnderlying();
-        // Check overflow.
-        YT_ASSERT(newValue != TTraits::InfiniteValue);
-        YT_ASSERT(newValue >= Value_);
-        Value_ = newValue;
+        Value_ += that.Value_;
     }
 }
 
 template <std::unsigned_integral T>
-void TMaybeInf<T>::DecreaseBy(TMaybeInf delta) noexcept
+void TMaybeInf<T>::UnsafeAssign(T value) noexcept
 {
-    YT_ASSERT(CanBeDecreased(delta));
-
-    Value_ -= delta.Value_;
+    Value_ = value;
 }
 
 template <std::unsigned_integral T>
-std::strong_ordering TMaybeInf<T>::operator<=>(TMaybeInf that) const noexcept
+T TMaybeInf<T>::UnsafeToUnderlying() const noexcept
 {
-    // It works because infinity is represented as `numeric_limits<T>::max()`.
-    return Value_ <=> that.Value_;
+    return Value_;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
+void FormatValue(TStringBuilderBase* builder, TMaybeInf<T> value, TStringBuf format)
+{
+    if (value.IsFinite()) {
+        FormatValue(builder, value.ToUnderlying(), format);
+    } else {
+        FormatValue(builder, "inf", format);
+    }
+}
+
+template <class T>
+TString ToString(TMaybeInf<T> value)
+{
+    TStringBuilder builder;
+    FormatValue(&builder, value);
+    return builder.Flush();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

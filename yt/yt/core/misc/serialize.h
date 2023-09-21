@@ -6,9 +6,11 @@
 #include "property.h"
 #include "serialize_dump.h"
 
-#include <library/cpp/yt/memory/ref.h>
+#include "maybe_inf.h"
 
 #include <library/cpp/yt/assert/assert.h>
+
+#include <library/cpp/yt/memory/ref.h>
 
 #include <util/stream/buffered.h>
 #include <util/stream/file.h>

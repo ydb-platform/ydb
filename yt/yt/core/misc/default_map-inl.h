@@ -8,19 +8,47 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class TUnderlying>
-TDefaultMap<TUnderlying>::TDefaultMap(mapped_type defaultValue)
+template <class T>
+TDefaultMap<T>::TDefaultMap(mapped_type defaultValue)
     : DefaultValue_(std::move(defaultValue))
 { }
 
-template <class TUnderlying>
+template <class T>
 template <class K>
-typename TDefaultMap<TUnderlying>::mapped_type& TDefaultMap<TUnderlying>::operator[](const K& key)
+typename TDefaultMap<T>::mapped_type& TDefaultMap<T>::operator[](const K& key)
 {
-    if (auto it = TUnderlying::find(key); it != TUnderlying::end()) {
+    if (auto it = T::find(key); it != T::end()) {
         return it->second;
     }
-    return TUnderlying::insert({key, DefaultValue_}).first->second;
+    return T::insert({key, DefaultValue_}).first->second;
+}
+
+template <class T>
+template <class K>
+const typename TDefaultMap<T>::mapped_type& TDefaultMap<T>::GetOrDefault(const K& key) const
+{
+    auto it = T::find(key);
+    return it == T::end() ? DefaultValue_ : it->second;
+}
+
+template <class T>
+T& TDefaultMap<T>::AsUnderlying() noexcept
+{
+    return static_cast<T&>(*this);
+}
+
+template <class T>
+const T& TDefaultMap<T>::AsUnderlying() const noexcept
+{
+    return static_cast<const T&>(*this);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
+void FormatValue(TStringBuilderBase* builder, const TDefaultMap<T>& map, TStringBuf format)
+{
+    FormatValue(builder, static_cast<const T&>(map), format);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

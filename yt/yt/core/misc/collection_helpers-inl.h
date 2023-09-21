@@ -217,6 +217,7 @@ typename TMap::mapped_type GetOrDefault(
     const TMap& map,
     const TKey& key,
     const typename TMap::mapped_type& defaultValue)
+    requires (!TIsDefaultMap<TMap>::Value)
 {
     auto it = map.find(key);
     return it == map.end() ? defaultValue : it->second;

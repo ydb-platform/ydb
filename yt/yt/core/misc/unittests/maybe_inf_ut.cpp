@@ -7,11 +7,15 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TMaybeInf, IncreaseBy)
+TEST(TMaybeInf, Increase)
 {
     using TLimit = TMaybeInf<ui32>;
     TLimit a(1);
-    EXPECT_FALSE(a.CanBeIncreased(TLimit::Infinity()));
+    EXPECT_FALSE(a.CanIncrease(TLimit::Infinity()));
+    EXPECT_TRUE(a.CanIncrease(TLimit(1)));
+    a.Increase(TLimit(1).ToUnderlying());
+    EXPECT_EQ(a.ToUnderlying(), ui32(2));
+    EXPECT_TRUE(a.IsFinite());
 }
 
 TEST(TMaybeInf, DecreaseBy)
@@ -19,22 +23,22 @@ TEST(TMaybeInf, DecreaseBy)
     using TLimit = TMaybeInf<ui32>;
     TLimit a(1);
     auto b = TLimit::Infinity();
-    EXPECT_FALSE(a.CanBeDecreased(b));
+    EXPECT_FALSE(a.CanDecrease(b));
     a = TLimit::Infinity();
-    EXPECT_FALSE(a.CanBeDecreased(b));
+    EXPECT_FALSE(a.CanDecrease(b));
     b = TLimit();
-    EXPECT_TRUE(a.CanBeDecreased(b));
+    EXPECT_TRUE(a.CanDecrease(b));
     b = TLimit(1);
-    EXPECT_FALSE(a.CanBeDecreased(b));
+    EXPECT_FALSE(a.CanDecrease(b));
     a = TLimit(4);
-    EXPECT_TRUE(a.CanBeDecreased(b));
+    EXPECT_TRUE(a.CanDecrease(b));
     b = TLimit(4);
-    EXPECT_TRUE(a.CanBeDecreased(b));
-    a.DecreaseBy(b);
+    EXPECT_TRUE(a.CanDecrease(b));
+    a.Decrease(b.ToUnderlying());
     EXPECT_EQ(a.ToUnderlying(), 0u);
     a = TLimit(4);
     b = TLimit(5);
-    EXPECT_FALSE(a.CanBeDecreased(b));
+    EXPECT_FALSE(a.CanDecrease(b));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

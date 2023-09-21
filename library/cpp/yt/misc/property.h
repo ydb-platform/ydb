@@ -7,8 +7,8 @@
 //! Declares a trivial public read-write property that is passed by reference.
 #define DECLARE_BYREF_RW_PROPERTY(type, name) \
 public: \
-    type& name(); \
-    const type& name() const
+    type& name() noexcept; \
+    const type& name() const noexcept
 
 //! Defines a trivial public read-write property that is passed by reference.
 //! All arguments after name are used as default value (via braced-init-list).
@@ -17,12 +17,12 @@ protected: \
     type name##_ { __VA_ARGS__ }; \
     \
 public: \
-    Y_FORCE_INLINE type& name() \
+    Y_FORCE_INLINE type& name() noexcept \
     { \
         return name##_; \
     } \
     \
-    Y_FORCE_INLINE const type& name() const \
+    Y_FORCE_INLINE const type& name() const noexcept \
     { \
         return name##_; \
     } \
@@ -35,12 +35,12 @@ protected: \
     type name##_; \
     \
 public: \
-    Y_FORCE_INLINE type& name() \
+    Y_FORCE_INLINE type& name() noexcept \
     { \
         return name##_; \
     } \
     \
-    Y_FORCE_INLINE const type& name() const \
+    Y_FORCE_INLINE const type& name() const noexcept \
     { \
         return name##_; \
     } \
@@ -48,12 +48,12 @@ public: \
 
 //! Forwards a trivial public read-write property that is passed by reference.
 #define DELEGATE_BYREF_RW_PROPERTY(declaringType, type, name, delegateTo) \
-    type& declaringType::name() \
+    type& declaringType::name() noexcept \
     { \
         return (delegateTo).name(); \
     } \
     \
-    const type& declaringType::name() const \
+    const type& declaringType::name() const noexcept \
     { \
         return (delegateTo).name(); \
     } \
@@ -64,7 +64,7 @@ public: \
 //! Declares a trivial public read-only property that is passed by reference.
 #define DECLARE_BYREF_RO_PROPERTY(type, name) \
 public: \
-    const type& name() const
+    const type& name() const noexcept
 
 //! Defines a trivial public read-only property that is passed by reference.
 //! All arguments after name are used as default value (via braced-init-list).
@@ -73,7 +73,7 @@ protected: \
     type name##_ { __VA_ARGS__ }; \
     \
 public: \
-    Y_FORCE_INLINE const type& name() const \
+    Y_FORCE_INLINE const type& name() const noexcept \
     { \
         return name##_; \
     } \
@@ -86,7 +86,7 @@ protected: \
     type name##_; \
     \
 public: \
-    Y_FORCE_INLINE const type& name() const \
+    Y_FORCE_INLINE const type& name() const noexcept \
     { \
         return name##_; \
     } \
@@ -94,7 +94,7 @@ public: \
 
 //! Forwards a trivial public read-only property that is passed by reference.
 #define DELEGATE_BYREF_RO_PROPERTY(declaringType, type, name, delegateTo) \
-    const type& declaringType::name() const \
+    const type& declaringType::name() const noexcept \
     { \
         return (delegateTo).name(); \
     } \

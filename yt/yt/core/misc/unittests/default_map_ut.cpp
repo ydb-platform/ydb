@@ -18,6 +18,7 @@ TEST(TDefaultMap, Common)
     defaultMap.insert({2, "abc"});
     EXPECT_EQ(defaultMap[2], "abc");
     EXPECT_EQ(defaultMap.find(3), defaultMap.end());
+    EXPECT_EQ(defaultMap.GetOrDefault(7), "Hello");
 }
 
 ////////////////////////////////////////////////////////////////////////////////

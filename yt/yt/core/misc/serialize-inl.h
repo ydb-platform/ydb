@@ -1998,6 +1998,23 @@ struct TSerializerTraits<TStrongTypedef<T, TTag>, C, void>
     using TComparer = TValueBoundComparer;
 };
 
+template <class T, class C>
+struct TSerializerTraits<TMaybeInf<T>, C, void>
+{
+    struct TSerializer
+    {
+        static void Save(C& context, TMaybeInf<T> value)
+        {
+            NYT::Save(context, value.UnsafeToUnderlying());
+        }
+
+        static void Load(C& context, TMaybeInf<T>& value)
+        {
+            value.UnsafeAssign(NYT::Load<T>(context));
+        }
+    };
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

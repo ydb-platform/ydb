@@ -14,6 +14,7 @@ struct TEndpointInfo {
 class TSocketDescriptor : public NActors::TSharedDescriptor, public TNetworkConfig {
     std::unique_ptr<TNetworkConfig::TSocketType> Socket;
     std::shared_ptr<TEndpointInfo> Endpoint;
+    TSpinLock Lock;
 
 public:
     TSocketDescriptor(TSocketType&& s, std::shared_ptr<TEndpointInfo> endpoint)
@@ -56,6 +57,7 @@ public:
     int UpgradeToSecure() {
         std::unique_ptr<TNetworkConfig::TSecureSocketType> socket = std::make_unique<TNetworkConfig::TSecureSocketType>(std::move(*Socket));
         int res = socket->SecureAccept(Endpoint->SecureContext.get());
+        TGuard lock(Lock);
         Socket.reset(socket.release());
         return res;
     }
@@ -81,6 +83,7 @@ public:
     }
 
     SOCKET GetRawSocket() const {
+        TGuard lock(Lock);
         return *Socket;
     }
 

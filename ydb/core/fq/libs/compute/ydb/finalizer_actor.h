@@ -14,6 +14,7 @@ std::unique_ptr<NActors::IActor> CreateFinalizerActor(const TRunActorParams& par
                                                       const NActors::TActorId& parent,
                                                       const NActors::TActorId& pinger,
                                                       NYdb::NQuery::EExecStatus execStatus,
+                                                      FederatedQuery::QueryMeta::ComputeStatus status,
                                                       const ::NYql::NCommon::TServiceCounters& queryCounters);
 
 }

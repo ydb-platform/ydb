@@ -59,12 +59,13 @@ public:
         }
     };
 
-    TFinalizerActor(const TRunActorParams& params, const TActorId& parent, const TActorId& pinger, NYdb::NQuery::EExecStatus execStatus, const ::NYql::NCommon::TServiceCounters& queryCounters)
+    TFinalizerActor(const TRunActorParams& params, const TActorId& parent, const TActorId& pinger, NYdb::NQuery::EExecStatus execStatus, FederatedQuery::QueryMeta::ComputeStatus status, const ::NYql::NCommon::TServiceCounters& queryCounters)
         : TBaseComputeActor(queryCounters, "Finalizer")
         , Params(params)
         , Parent(parent)
         , Pinger(pinger)
         , ExecStatus(execStatus)
+        , Status(status)
         , Counters(GetStepCountersSubgroup())
         , StartTime(TInstant::Now())
     {}
@@ -72,17 +73,54 @@ public:
     static constexpr char ActorName[] = "FQ_FINALIZER_ACTOR";
 
     void Start() {
-        LOG_I("Start finalizer actor. Compute state: " << FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status));
+        LOG_I("Start finalizer actor. Compute status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(Status));
         auto pingCounters = Counters.GetCounters(ERequestType::RT_PING);
         pingCounters->InFly->Inc();
         Become(&TFinalizerActor::StateFunc);
         Fq::Private::PingTaskRequest pingTaskRequest;
-        if (ExecStatus == NYdb::NQuery::EExecStatus::Completed || Params.Status == FederatedQuery::QueryMeta::COMPLETING) {
+        if (ExecStatus == NYdb::NQuery::EExecStatus::Completed || Status == FederatedQuery::QueryMeta::COMPLETING) {
             pingTaskRequest.mutable_result_id()->set_value(Params.ResultId);
         }
-        pingTaskRequest.set_status(ExecStatus == NYdb::NQuery::EExecStatus::Completed || Params.Status == FederatedQuery::QueryMeta::COMPLETING ? ::FederatedQuery::QueryMeta::COMPLETED : ::FederatedQuery::QueryMeta::FAILED);
+        pingTaskRequest.set_status(GetFinalStatus());
         *pingTaskRequest.mutable_finished_at() = google::protobuf::util::TimeUtil::MillisecondsToTimestamp(TInstant::Now().MilliSeconds());
         Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest, true));
+    }
+
+    FederatedQuery::QueryMeta::ComputeStatus GetFinalStatus() const {
+        switch (ExecStatus) {
+            case NYdb::NQuery::EExecStatus::Completed:
+                return ::FederatedQuery::QueryMeta::COMPLETED;
+            case NYdb::NQuery::EExecStatus::Unspecified:
+            case NYdb::NQuery::EExecStatus::Starting:
+            case NYdb::NQuery::EExecStatus::Aborted:
+            case NYdb::NQuery::EExecStatus::Canceled:
+            case NYdb::NQuery::EExecStatus::Failed:
+            break;
+        }
+
+        switch (Status) {
+            case FederatedQuery::QueryMeta::COMPLETING:
+            case FederatedQuery::QueryMeta::COMPLETED:
+                return FederatedQuery::QueryMeta::COMPLETED;
+            case FederatedQuery::QueryMeta::ABORTING_BY_USER:
+            case FederatedQuery::QueryMeta::ABORTED_BY_USER:
+                return FederatedQuery::QueryMeta::ABORTED_BY_USER;
+            case FederatedQuery::QueryMeta::ABORTING_BY_SYSTEM:
+            case FederatedQuery::QueryMeta::ABORTED_BY_SYSTEM:
+                return FederatedQuery::QueryMeta::ABORTED_BY_SYSTEM;
+            case FederatedQuery::QueryMeta::STARTING:
+            case FederatedQuery::QueryMeta::FAILED:
+            case FederatedQuery::QueryMeta::RESUMING:
+            case FederatedQuery::QueryMeta::FAILING:
+            case FederatedQuery::QueryMeta::RUNNING:
+            case FederatedQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED:
+            case FederatedQuery::QueryMeta_ComputeStatus_QueryMeta_ComputeStatus_INT_MIN_SENTINEL_DO_NOT_USE_:
+            case FederatedQuery::QueryMeta_ComputeStatus_QueryMeta_ComputeStatus_INT_MAX_SENTINEL_DO_NOT_USE_:
+                return FederatedQuery::QueryMeta::FAILED;
+            case FederatedQuery::QueryMeta::PAUSING:
+            case FederatedQuery::QueryMeta::PAUSED:
+                return FederatedQuery::QueryMeta::PAUSED;
+        }
     }
 
     STRICT_STFUNC(StateFunc,
@@ -111,6 +149,8 @@ private:
     TActorId Parent;
     TActorId Pinger;
     NYdb::NQuery::EExecStatus ExecStatus;
+    FederatedQuery::QueryMeta::ComputeStatus Status;
+    
     TCounters Counters;
     TInstant StartTime;
 };
@@ -119,8 +159,9 @@ std::unique_ptr<NActors::IActor> CreateFinalizerActor(const TRunActorParams& par
                                                       const TActorId& parent,
                                                       const TActorId& pinger,
                                                       NYdb::NQuery::EExecStatus execStatus,
+                                                      FederatedQuery::QueryMeta::ComputeStatus status,
                                                       const ::NYql::NCommon::TServiceCounters& queryCounters) {
-    return std::make_unique<TFinalizerActor>(params, parent, pinger, execStatus, queryCounters);
+    return std::make_unique<TFinalizerActor>(params, parent, pinger, execStatus, status, queryCounters);
 }
 
 }

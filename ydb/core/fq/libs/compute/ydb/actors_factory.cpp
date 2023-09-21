@@ -71,8 +71,9 @@ struct TActorFactory : public IActorFactory {
 
     std::unique_ptr<NActors::IActor> CreateFinalizer(const NActors::TActorId& parent,
                                                      const NActors::TActorId& pinger,
-                                                     NYdb::NQuery::EExecStatus execStatus) const override {
-        return CreateFinalizerActor(Params, parent, pinger, execStatus, Counters);
+                                                     NYdb::NQuery::EExecStatus execStatus,
+                                                     FederatedQuery::QueryMeta::ComputeStatus status) const override {
+        return CreateFinalizerActor(Params, parent, pinger, execStatus, status, Counters);
     }
 
     std::unique_ptr<NActors::IActor> CreateStopper(const NActors::TActorId& parent,

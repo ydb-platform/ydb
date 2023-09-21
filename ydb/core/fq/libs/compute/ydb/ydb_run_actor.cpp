@@ -68,6 +68,7 @@ public:
         hFunc(TEvYdbCompute::TEvResourcesCleanerResponse, Handle);
         hFunc(TEvYdbCompute::TEvFinalizerResponse, Handle);
         hFunc(TEvYdbCompute::TEvStopperResponse, Handle);
+        hFunc(TEvents::TEvQueryActionResult, Handle);
     )
 
     void Handle(const TEvYdbCompute::TEvInitializerResponse::TPtr& ev) {
@@ -130,7 +131,7 @@ public:
             return;
         }
         LOG_I("ResourcesCleanerResponse (success) " << response.Status << " Issues: " << response.Issues.ToOneLineString());
-        Register(ActorFactory->CreateFinalizer(SelfId(), Pinger, ExecStatus).release());
+        Register(ActorFactory->CreateFinalizer(SelfId(), Pinger, ExecStatus, IsAborted ? FederatedQuery::QueryMeta::ABORTING_BY_USER : Params.Status).release());
     }
 
     void Handle(const TEvYdbCompute::TEvFinalizerResponse::TPtr ev) {
@@ -145,7 +146,7 @@ public:
     }
 
     void Handle(TEvents::TEvQueryActionResult::TPtr& ev) {
-        LOG_I("QueryActionResult: " << ev->Get()->Action);
+        LOG_I("QueryActionResult: " << FederatedQuery::QueryAction_Name(ev->Get()->Action));
         if (Params.OperationId.GetKind() != Ydb::TOperationId::UNUSED && !IsAborted) {
             IsAborted = true;
             Register(ActorFactory->CreateStopper(SelfId(), Connector, Params.OperationId).release());
@@ -171,14 +172,14 @@ public:
             if (Params.OperationId.GetKind() != Ydb::TOperationId::UNUSED) {
                 Register(ActorFactory->CreateResourcesCleaner(SelfId(), Connector, Params.OperationId).release());
             } else {
-                Register(ActorFactory->CreateFinalizer(SelfId(), Pinger, ExecStatus).release());
+                Register(ActorFactory->CreateFinalizer(SelfId(), Pinger, ExecStatus, Params.Status).release());
             }
             break;
         case FederatedQuery::QueryMeta::COMPLETING:
             if (Params.OperationId.GetKind() != Ydb::TOperationId::UNUSED) {
                 Register(ActorFactory->CreateResultWriter(SelfId(), Connector, Pinger, Params.OperationId).release());
             } else {
-                Register(ActorFactory->CreateFinalizer(SelfId(), Pinger, ExecStatus).release());
+                Register(ActorFactory->CreateFinalizer(SelfId(), Pinger, ExecStatus, Params.Status).release());
             }
             break;
         case FederatedQuery::QueryMeta::STARTING:

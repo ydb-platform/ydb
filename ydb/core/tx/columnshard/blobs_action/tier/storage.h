@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
 #include <ydb/core/tx/columnshard/blob_manager.h>
 #include <ydb/core/tx/columnshard/blob_cache.h>
+#include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/wrappers/abstract.h>
 #include "gc_info.h"
 
@@ -16,7 +17,12 @@ private:
     TAtomicCounter CurrentOperatorIdx = 0;
     std::deque<NWrappers::NExternalStorage::IExternalStorageOperator::TPtr> ExternalStorageOperators;
     std::shared_ptr<TGCInfo> GCInfo = std::make_shared<TGCInfo>();
+    NWrappers::NExternalStorage::IExternalStorageConfig::TPtr ExternalStorageConfig;
+    NWrappers::NExternalStorage::IExternalStorageOperator::TPtr ExternalStorageOperator;
+
     NWrappers::NExternalStorage::IExternalStorageOperator::TPtr GetCurrentOperator() const;
+    void InitNewExternalOperator(const NColumnShard::NTiers::TManager& tierManager);
+
     virtual TString DoDebugString() const override {
         return GetCurrentOperator()->DebugString();
     }
@@ -32,7 +38,8 @@ protected:
     virtual void DoOnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& tiers) override;
 
 public:
-    TOperator(const TString& storageId, const NColumnShard::TColumnShard& shard, const std::shared_ptr<NWrappers::NExternalStorage::IExternalStorageOperator>& externalOperator);
+    TOperator(const TString& storageId, const NColumnShard::TColumnShard& shard);
+
     virtual std::shared_ptr<IBlobInUseTracker> GetBlobsTracker() const override {
         return GCInfo;
     }

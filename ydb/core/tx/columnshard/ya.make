@@ -62,6 +62,12 @@ PEERDIR(
     ydb/library/chunks_limiter
 )
 
+IF (OS_WINDOWS)
+    CFLAGS(
+        -DKIKIMR_DISABLE_S3_OPS
+    )
+ENDIF()
+
 YQL_LAST_ABI_VERSION()
 
 END()

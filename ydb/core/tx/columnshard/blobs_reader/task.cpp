@@ -106,4 +106,8 @@ bool ITask::OnError(const TBlobRange& range) {
     return DoOnError(range);
 }
 
+ITask::~ITask() {
+    Y_VERIFY(!NActors::TlsActivationContext || DataIsReadyFlag || TaskFinishedWithError);
+}
+
 }

@@ -6,13 +6,11 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/actor.h>
 
+#include <ydb/public/sdk/cpp/client/ydb_types/s3_settings.h>
 #include <ydb/services/metadata/secret/snapshot.h>
 #include <ydb/services/metadata/service.h>
 
 #include <ydb/library/accessor/accessor.h>
-#ifndef KIKIMR_DISABLE_S3_OPS
-#include <ydb/core/wrappers/abstract.h>
-#endif
 
 namespace NKikimr::NColumnShard {
 namespace NTiers {
@@ -25,11 +23,13 @@ private:
     YDB_READONLY_DEF(NActors::TActorId, TabletActorId);
     YDB_READONLY_DEF(TTierConfig, Config);
     YDB_READONLY_DEF(NActors::TActorId, StorageActorId);
-#ifndef KIKIMR_DISABLE_S3_OPS
-    NWrappers::NExternalStorage::IExternalStorageConfig::TPtr ExternalStorageConfig;
-    YDB_READONLY_DEF(NWrappers::NExternalStorage::IExternalStorageOperator::TPtr, ExternalStorageOperator);
-#endif
+    std::optional<NKikimrSchemeOp::TS3Settings> S3Settings;
 public:
+    const NKikimrSchemeOp::TS3Settings& GetS3Settings() const {
+        Y_VERIFY(S3Settings);
+        return *S3Settings;
+    }
+
     TManager(const ui64 tabletId, const NActors::TActorId& tabletActorId, const TTierConfig& config);
 
     TManager& Restart(const TTierConfig& config, std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets);
@@ -81,9 +81,6 @@ public:
 
     TTiersManager& Start(std::shared_ptr<TTiersManager> ownerPtr);
     TTiersManager& Stop();
-#ifndef KIKIMR_DISABLE_S3_OPS
-    NWrappers::NExternalStorage::IExternalStorageOperator::TPtr GetStorageOperator(const TString& tierId) const;
-#endif
     const NTiers::TManager& GetManagerVerified(const TString & tierId) const;
     const NTiers::TManager* GetManagerOptional(const TString& tierId) const;
     NMetadata::NFetcher::ISnapshotsFetcher::TPtr GetExternalDataManipulation() const;

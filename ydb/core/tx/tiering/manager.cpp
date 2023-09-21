@@ -3,7 +3,6 @@
 #include "external_data.h"
 
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
-#include <ydb/core/tx/columnshard/blobs_action/tier/adapter.h>
 #include <ydb/services/metadata/secret/fetcher.h>
 
 namespace NKikimr::NColumnShard {
@@ -85,23 +84,14 @@ TManager& TManager::Restart(const TTierConfig& config, std::shared_ptr<NMetadata
 }
 
 bool TManager::Stop() {
-    ExternalStorageOperator = nullptr;
-    ExternalStorageConfig = nullptr;
+    S3Settings.reset();
     ALS_DEBUG(NKikimrServices::TX_TIERING) << "Tier '" << GetTierName() << "' stopped at tablet " << TabletId;
     return true;
 }
 
 bool TManager::Start(std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) {
-    if (!!ExternalStorageOperator) {
-        ALS_DEBUG(NKikimrServices::TX_TIERING) << "Tier '" << GetTierName() << "' is already started at tablet " << TabletId;
-        return true;
-    }
-#ifndef KIKIMR_DISABLE_S3_OPS
-    auto s3Config = Config.GetPatchedConfig(secrets);
-    ExternalStorageConfig = NWrappers::NExternalStorage::IExternalStorageConfig::Construct(s3Config);
-    ExternalStorageOperator = ExternalStorageConfig->ConstructStorageOperator(false);
-    ExternalStorageOperator->InitReplyAdapter(std::make_shared<NOlap::NBlobOperations::NTier::TRepliesAdapter>());
-#endif
+    AFL_VERIFY(!S3Settings)("tier", GetTierName())("event", "already started");
+    S3Settings = Config.GetPatchedConfig(secrets);
     ALS_DEBUG(NKikimrServices::TX_TIERING) << "Tier '" << GetTierName() << "' started at tablet " << TabletId;
     return true;
 }
@@ -147,25 +137,14 @@ void TTiersManager::TakeConfigs(NMetadata::NFetcher::ISnapshot::TPtr snapshotExt
             continue;
         }
         NTiers::TManager localManager(TabletId, TabletActorId, i.second);
-        auto& manager = Managers.emplace(tierName, std::move(localManager)).first->second;
-        manager.Start(Secrets);
+        auto itManager = Managers.emplace(tierName, std::move(localManager)).first;
+        itManager->second.Start(Secrets);
     }
 
     if (ShardCallback && TlsActivationContext) {
         ShardCallback(TActivationContext::AsActorContext());
     }
 }
-
-#ifndef KIKIMR_DISABLE_S3_OPS
-NWrappers::NExternalStorage::IExternalStorageOperator::TPtr TTiersManager::GetStorageOperator(const TString& tierId) const {
-    auto it = Managers.find(tierId);
-    if (it == Managers.end()) {
-        ALS_ERROR(NKikimrServices::TX_TIERING) << "No storage operator for tier '" << tierId << "' at tablet " << TabletId;
-        return nullptr;
-    }
-    return it->second.GetExternalStorageOperator();
-}
-#endif
 
 TTiersManager& TTiersManager::Start(std::shared_ptr<TTiersManager> ownerPtr) {
     Y_VERIFY(!Actor);

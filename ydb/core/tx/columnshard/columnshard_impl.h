@@ -460,10 +460,6 @@ private:
     void RunDropTable(const NKikimrTxColumnShard::TDropTable& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc);
     void RunAlterStore(const NKikimrTxColumnShard::TAlterStore& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc);
 
-#ifndef KIKIMR_DISABLE_S3_OPS
-    NWrappers::NExternalStorage::IExternalStorageOperator::TPtr GetTierStorageOperator(const TString& tierId) const;
-#endif
-
     void SetupIndexation();
     void SetupCompaction();
     bool SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls = {}, const bool force = false);

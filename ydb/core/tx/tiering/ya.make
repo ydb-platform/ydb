@@ -10,6 +10,12 @@ SRCS(
     snapshot.cpp
 )
 
+IF (OS_WINDOWS)
+    CFLAGS(
+        -DKIKIMR_DISABLE_S3_OPS
+    )
+ENDIF()
+
 PEERDIR(
     library/cpp/actors/core
     library/cpp/json/writer

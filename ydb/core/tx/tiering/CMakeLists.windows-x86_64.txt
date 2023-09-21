@@ -11,6 +11,9 @@ add_subdirectory(tier)
 add_subdirectory(ut)
 
 add_library(core-tx-tiering)
+target_compile_options(core-tx-tiering PRIVATE
+  -DKIKIMR_DISABLE_S3_OPS
+)
 target_link_libraries(core-tx-tiering PUBLIC
   contrib-libs-cxxsupp
   yutil
@@ -35,6 +38,9 @@ target_sources(core-tx-tiering PRIVATE
 )
 
 add_global_library_for(core-tx-tiering.global core-tx-tiering)
+target_compile_options(core-tx-tiering.global PRIVATE
+  -DKIKIMR_DISABLE_S3_OPS
+)
 target_link_libraries(core-tx-tiering.global PUBLIC
   contrib-libs-cxxsupp
   yutil

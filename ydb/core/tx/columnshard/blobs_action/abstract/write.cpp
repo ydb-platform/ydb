@@ -22,7 +22,7 @@ bool IBlobsWritingAction::IsReady() const {
 }
 
 IBlobsWritingAction::~IBlobsWritingAction() {
-    AFL_VERIFY(BlobsForWrite.empty() || Aborted);
+    AFL_VERIFY(!NActors::TlsActivationContext || BlobsForWrite.empty() || Aborted);
 }
 
 }

@@ -5,7 +5,11 @@
 #include "engines/changes/ttl.h"
 #include "engines/changes/cleanup.h"
 #include "blobs_action/bs/storage.h"
+
+#ifndef KIKIMR_DISABLE_S3_OPS
 #include "blobs_action/tier/storage.h"
+#endif
+
 #include "blobs_action/transaction/tx_gc_insert_table.h"
 #include "blobs_action/transaction/tx_gc_indexed.h"
 #include "hooks/abstract/abstract.h"
@@ -146,12 +150,11 @@ protected:
         } else if (!Shard->Tiers) {
             return nullptr;
         } else {
-            const NTiers::TManager* externalManager = Shard->Tiers->GetManagerOptional(storageId);
-            if (!externalManager) {
-                return nullptr;
-            } else {
-                return std::make_shared<NOlap::NBlobOperations::NTier::TOperator>(storageId, *Shard, externalManager->GetExternalStorageOperator());
-            }
+#ifndef KIKIMR_DISABLE_S3_OPS
+            return std::make_shared<NOlap::NBlobOperations::NTier::TOperator>(storageId, *Shard);
+#else
+            return nullptr;
+#endif
         }
     }
 public:
@@ -914,15 +917,6 @@ void TColumnShard::Die(const TActorContext& ctx) {
     UnregisterMediatorTimeCast();
     return IActor::Die(ctx);
 }
-
-#ifndef KIKIMR_DISABLE_S3_OPS
-NWrappers::NExternalStorage::IExternalStorageOperator::TPtr TColumnShard::GetTierStorageOperator(const TString& tierId) const {
-    if (!Tiers) {
-        return nullptr;
-    }
-    return Tiers->GetStorageOperator(tierId);
-}
-#endif
 
 void TColumnShard::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
     Y_VERIFY(Tiers);

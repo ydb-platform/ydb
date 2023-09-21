@@ -74,9 +74,7 @@ public:
 
     const std::vector<std::shared_ptr<IBlobsReadingAction>>& GetAgents() const;
 
-    virtual ~ITask() {
-        Y_VERIFY(DataIsReadyFlag || TaskFinishedWithError);
-    }
+    virtual ~ITask();
 
     ITask(const std::vector<std::shared_ptr<IBlobsReadingAction>>& actions);
 

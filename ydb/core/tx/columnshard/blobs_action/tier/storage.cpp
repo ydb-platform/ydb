@@ -1,11 +1,12 @@
 #include "storage.h"
+#include "adapter.h"
 #include "remove.h"
 #include "write.h"
 #include "read.h"
 #include "gc.h"
+#include "gc_actor.h"
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/tiering/manager.h>
-#include "gc_actor.h"
 
 namespace NKikimr::NOlap::NBlobOperations::NTier {
 
@@ -40,13 +41,23 @@ bool TOperator::DoStartGC() {
     return true;
 }
 
-TOperator::TOperator(const TString& storageId, const NColumnShard::TColumnShard& shard, const std::shared_ptr<NWrappers::NExternalStorage::IExternalStorageOperator>& externalOperator)
+void TOperator::InitNewExternalOperator(const NColumnShard::NTiers::TManager& tierManager) {
+    auto extStorageConfig = NWrappers::NExternalStorage::IExternalStorageConfig::Construct(tierManager.GetS3Settings());
+    AFL_VERIFY(extStorageConfig);
+    auto extStorageOperator = extStorageConfig->ConstructStorageOperator(false);
+    extStorageOperator->InitReplyAdapter(std::make_shared<NOlap::NBlobOperations::NTier::TRepliesAdapter>());
+    ExternalStorageOperators.emplace_back(extStorageOperator);
+    if (CurrentOperatorIdx.Val() + 1 < (i64)ExternalStorageOperators.size()) {
+        CurrentOperatorIdx.Inc();
+    }
+}
+
+TOperator::TOperator(const TString& storageId, const NColumnShard::TColumnShard& shard)
     : TBase(storageId)
     , TabletId(shard.TabletID())
     , TabletActorId(shard.SelfId())
-    , ExternalStorageOperators({externalOperator})
 {
-    AFL_VERIFY(externalOperator);
+    InitNewExternalOperator(shard.GetTierManagerVerified(storageId));
 }
 
 void TOperator::DoOnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& tiers) {
@@ -54,10 +65,7 @@ void TOperator::DoOnTieringModified(const std::shared_ptr<NColumnShard::TTiersMa
     auto* tierManager = tiers->GetManagerOptional(TBase::GetStorageId());
     ui32 cleanCount = ExternalStorageOperators.size() - 1;
     if (tierManager) {
-        auto bOperator = tiers->GetManagerVerified(TBase::GetStorageId()).GetExternalStorageOperator();
-        AFL_VERIFY(bOperator);
-        ExternalStorageOperators.emplace_back(bOperator);
-        CurrentOperatorIdx.Inc();
+        InitNewExternalOperator(*tierManager);
     } else {
         cleanCount = ExternalStorageOperators.size();
     }

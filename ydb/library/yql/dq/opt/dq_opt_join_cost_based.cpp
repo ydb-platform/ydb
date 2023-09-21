@@ -198,7 +198,7 @@ struct TJoinOptimizerNode : public IBaseOptimizerNode {
     void ComputeStatistics() {
         double newCard = 0.2 * LeftArg->Stats->Nrows * RightArg->Stats->Nrows;
         int newNCols = LeftArg->Stats->Ncols + RightArg->Stats->Ncols;
-        Stats = std::shared_ptr<TOptimizerStatistics>(new TOptimizerStatistics(newCard,newNCols));
+        Stats = std::make_shared<TOptimizerStatistics>(newCard,newNCols);
     }
 
     /**
@@ -248,7 +248,7 @@ struct TJoinOptimizerNode : public IBaseOptimizerNode {
 std::shared_ptr<TJoinOptimizerNode> MakeJoin(std::shared_ptr<IBaseOptimizerNode> left, 
     std::shared_ptr<IBaseOptimizerNode> right, const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions) {
 
-    auto res = std::shared_ptr<TJoinOptimizerNode>(new TJoinOptimizerNode(left, right, joinConditions));
+    auto res = std::make_shared<TJoinOptimizerNode>(left, right, joinConditions);
     res->ComputeStatistics();
     res->Stats->Cost = res->ComputeCost();
     return res;
@@ -447,7 +447,7 @@ struct TGraph {
 */
 template <int N>
 class TDPccpSolver {
-    public:
+public:
 
     // Construct the DPccp solver based on the join graph and data about input relations
     TDPccpSolver(TGraph<N>& g, TVector<std::shared_ptr<TRelOptimizerNode>> rels): 
@@ -458,7 +458,7 @@ class TDPccpSolver {
     // Run DPccp algorithm and produce the join tree in CBO's internal representation
     std::shared_ptr<TJoinOptimizerNode> Solve();
 
-    private:
+private:
 
     // Compute the next subset of relations, given by the final bitset
     std::bitset<N> NextBitset(const std::bitset<N>& current, const std::bitset<N>& final);
@@ -947,7 +947,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(const TExprBase& node, TExprContext& ctx, 
 
         auto label = scope.Cast<TCoAtom>().StringValue();
         auto stats = typesCtx.StatisticsMap[joinArg.Raw()];
-        rels.push_back( std::shared_ptr<TRelOptimizerNode>( new TRelOptimizerNode(label, stats)));
+        rels.push_back(std::make_shared<TRelOptimizerNode>(label, stats));
     }
 
     YQL_CLOG(TRACE, CoreDq) << "All statistics for join in place";
@@ -1079,7 +1079,7 @@ private:
         for (const auto& r : Input.Rels) {
             auto label = ToString(index++);
             auto stats = std::make_shared<TOptimizerStatistics>(r.Rows, r.TargetVars.size(), r.TotalCost);
-            Rels.push_back(std::shared_ptr<TRelOptimizerNode>(new TRelOptimizerNode(label, stats)));
+            Rels.push_back(std::make_shared<TRelOptimizerNode>(label, stats));
         }
 
         for (size_t i = 0; i < Rels.size(); i++) {

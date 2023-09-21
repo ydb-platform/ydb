@@ -1,5 +1,6 @@
 #include "base_compute_actor.h"
 
+#include <ydb/core/fq/libs/common/compression.h>
 #include <ydb/core/fq/libs/common/util.h>
 #include <ydb/core/fq/libs/compute/common/metrics.h>
 #include <ydb/core/fq/libs/compute/common/retry_actor.h>
@@ -76,6 +77,7 @@ public:
         , OperationId(operationId)
         , Counters(GetStepCountersSubgroup())
         , BackoffTimer(20, 1000)
+        , Compressor(params.Config.GetCommon().GetQueryArtifactsCompressionMethod(), params.Config.GetCommon().GetQueryArtifactsCompressionMinSize())
     {}
 
     static constexpr char ActorName[] = "FQ_STATUS_TRACKER";
@@ -165,8 +167,7 @@ public:
         Fq::Private::PingTaskRequest pingTaskRequest;
         NYql::IssuesToMessage(Issues, pingTaskRequest.mutable_issues());
         pingTaskRequest.set_status(::FederatedQuery::QueryMeta::FAILING);
-        pingTaskRequest.set_ast(QueryStats.query_ast());
-        pingTaskRequest.set_plan(QueryStats.query_plan());
+        PrepareAstAndPlan(pingTaskRequest, QueryStats.query_plan(), QueryStats.query_ast());
         Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest));
     }
 
@@ -177,14 +178,28 @@ public:
         Fq::Private::PingTaskRequest pingTaskRequest;
         NYql::IssuesToMessage(Issues, pingTaskRequest.mutable_issues());
         pingTaskRequest.set_status(::FederatedQuery::QueryMeta::COMPLETING);
-        pingTaskRequest.set_ast(QueryStats.query_ast());
-        pingTaskRequest.set_plan(QueryStats.query_plan());
+        PrepareAstAndPlan(pingTaskRequest, QueryStats.query_plan(), QueryStats.query_ast());
         try {
             pingTaskRequest.set_statistics(GetV1StatFromV2Plan(QueryStats.query_plan()));
         } catch(const NJson::TJsonException& ex) {
             LOG_E("Error statistics conversion: " << ex.what());
         }
         Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest));
+    }
+
+    void PrepareAstAndPlan(Fq::Private::PingTaskRequest& request, const TString& plan, const TString& expr) const {
+        if (Compressor.IsEnabled()) {
+            auto [astCompressionMethod, astCompressed] = Compressor.Compress(expr);
+            request.mutable_ast_compressed()->set_method(astCompressionMethod);
+            request.mutable_ast_compressed()->set_data(astCompressed);
+
+            auto [planCompressionMethod, planCompressed] = Compressor.Compress(plan);
+            request.mutable_plan_compressed()->set_method(planCompressionMethod);
+            request.mutable_plan_compressed()->set_data(planCompressed);
+        } else {
+            request.set_ast(expr);
+            request.set_plan(plan);
+        }
     }
 
 private:
@@ -200,6 +215,7 @@ private:
     NYdb::NQuery::EExecStatus ExecStatus = NYdb::NQuery::EExecStatus::Unspecified;
     Ydb::TableStats::QueryStats QueryStats;
     NKikimr::TBackoffTimer BackoffTimer;
+    const TCompressor Compressor;
 };
 
 std::unique_ptr<NActors::IActor> CreateStatusTrackerActor(const TRunActorParams& params,

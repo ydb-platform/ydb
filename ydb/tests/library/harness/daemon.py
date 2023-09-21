@@ -21,6 +21,9 @@ def extract_stderr_details(stderr_file, max_lines=0):
     if max_lines == 0:
         return []
 
+    if stderr_file is None:
+        return []
+
     result = ["Stderr content:", ""]
     with open(stderr_file, 'r') as r:
         for line in r.readlines():

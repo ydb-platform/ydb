@@ -107,7 +107,7 @@ private:
     TString DatabaseName;
 };
 
-class TCommandPgConvert : public TToolsCommand, public TCommandWithPath {
+class TCommandPgConvert : public TToolsCommand {
 public:
     TCommandPgConvert();
     virtual void Config(TConfig& config) override;
@@ -115,7 +115,7 @@ public:
     virtual int Run(TConfig& config) override;
 
 private:
-    TString FilePath;
+    TString Path;
 };
 
 }

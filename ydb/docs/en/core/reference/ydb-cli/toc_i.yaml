@@ -79,6 +79,8 @@ items:
       href: table-query-execute.md
     - name: Running parameterized queries
       href: parameterized-queries-cli.md
+    - name: Interactive query execution mode
+      href: interactive-cli.md
 #  - name: Utilities
 #    items:
     # - name: Backup

@@ -82,6 +82,8 @@ items:
       href: table-query-execute.md
     - name: Выполнение параметризованных запросов
       href: parameterized-queries-cli.md
+    - name: Интерактивный режим выполнения запросов
+      href: interactive-cli.md
 #  - name: Утилиты
 #    items:
     # - name: Снятие бэкапа

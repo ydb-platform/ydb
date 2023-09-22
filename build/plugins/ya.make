@@ -2,12 +2,11 @@ OWNER(g:ymake)
 
 PY2_LIBRARY()
 
-PY_NAMESPACE(.)
-
 PY_SRCS(
+    TOP_LEVEL
+
     code_generator.py
     ssqls.py
-    maps_mobile_idl.py
 
     _common.py
     _requirements.py

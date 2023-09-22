@@ -10,7 +10,13 @@
 namespace NKafka {
 
 struct TPartitionRequestInfo {
+    i64 PartitionId;
     i64 Timestamp;
+};
+
+struct TTopicRequestInfo {
+    size_t TopicIndex;
+    std::vector<TPartitionRequestInfo> Partitions;
 };
 
 class TKafkaListOffsetsActor: public NActors::TActorBootstrapped<TKafkaListOffsetsActor> {
@@ -51,7 +57,7 @@ private:
     const TListOffsetsResponseData::TPtr ListOffsetsResponseData;
 
     EKafkaErrors ErrorCode = EKafkaErrors::NONE_ERROR;
-    std::unordered_map<TActorId, std::pair<size_t, std::unordered_map<ui64, TPartitionRequestInfo>>> TopicsRequestsInfo;
+    std::unordered_map<TActorId, TTopicRequestInfo> TopicsRequestsInfo;
 };
 
 } // namespace NKafka

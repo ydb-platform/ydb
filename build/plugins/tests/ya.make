@@ -1,14 +1,6 @@
 PY2TEST()
 
-OWNER(g:yatool)
-
-PEERDIR(
-    build/plugins
-)
-
-PY_SRCS(
-    fake_ymake.py
-)
+OWNER(g:ymake)
 
 TEST_SRCS(
     test_code_generator.py
@@ -17,9 +9,11 @@ TEST_SRCS(
     test_ssqls.py
 )
 
-NO_CHECK_IMPORTS(
-    build.plugins.code_generator
-    build.plugins.ssqls
+PEERDIR(
+    build/plugins
+    build/plugins/lib/proxy
+    build/plugins/lib/test_const/proxy
+    build/plugins/tests/fake_ymake
 )
 
 END()

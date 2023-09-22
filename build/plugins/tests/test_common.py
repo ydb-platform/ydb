@@ -1,6 +1,5 @@
 import pytest
-
-import build.plugins._common as pc
+import _common as pc
 
 
 def test_sort_by_keywords():

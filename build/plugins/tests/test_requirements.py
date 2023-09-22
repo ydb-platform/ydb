@@ -1,7 +1,7 @@
 import pytest
 
-import build.plugins._requirements as requirements
-import build.plugins.lib.test_const as consts
+import _requirements as requirements
+import lib.test_const as consts
 
 
 class TestRequirements(object):

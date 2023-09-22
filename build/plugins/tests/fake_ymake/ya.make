@@ -3,7 +3,7 @@ OWNER(g:ymake)
 PY23_LIBRARY()
 
 PY_SRCS(
-    _metric_resolvers.py
+    __init__.py=ymake
 )
 
 END()

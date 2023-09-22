@@ -1051,6 +1051,7 @@ struct Schema : NIceDb::Schema {
         struct SourceOwnerId : Column<13, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; static constexpr Type Default = InvalidOwnerId; };
         struct SourceLocalPathId : Column<14, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; static constexpr Type Default = InvalidLocalPathId; };
         struct PlanStep : Column<15, NScheme::NTypeIds::Uint64> { using Type = TStepId; };
+        struct NeedUpdateObject : Column<16, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<TxId, TxPartId>;
         using TColumns = TableColumns<
@@ -1068,7 +1069,8 @@ struct Schema : NIceDb::Schema {
             BuildIndexId,
             SourceOwnerId,
             SourceLocalPathId,
-            PlanStep
+            PlanStep,
+            NeedUpdateObject
         >;
     };
 

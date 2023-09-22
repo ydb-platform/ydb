@@ -255,6 +255,7 @@ struct TTxState {
 
     // persist - TxShards:
     TVector<TShardOperation> Shards; // shards + operations on them
+    bool NeedUpdateObject = false;
     // not persist:
     THashSet<TShardIdx> ShardsInProgress; // indexes of datashards or pqs that operation waits for
     THashMap<TShardIdx, std::pair<TActorId, ui32>> SchemeChangeNotificationReceived;

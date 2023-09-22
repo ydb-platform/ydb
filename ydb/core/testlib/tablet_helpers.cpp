@@ -1144,6 +1144,7 @@ namespace NKikimr {
                 HFunc(TEvHive::TEvDeleteOwnerTablets, Handle);
                 HFunc(TEvHive::TEvRequestHiveInfo, Handle);
                 HFunc(TEvHive::TEvInitiateTabletExternalBoot, Handle);
+                HFunc(TEvHive::TEvUpdateTabletsObject, Handle);
                 HFunc(TEvFakeHive::TEvSubscribeToTabletDeletion, Handle);
                 HFunc(TEvents::TEvPoisonPill, Handle);
             }
@@ -1419,6 +1420,18 @@ namespace NKikimr {
 
             THolder<TTabletStorageInfo> tabletInfo(CreateTestTabletInfo(tabletId, it->second.Type));
             ctx.Send(ev->Sender, new TEvLocal::TEvBootTablet(*tabletInfo.Get(), 0), 0, ev->Cookie);
+        }
+
+        void Handle(TEvHive::TEvUpdateTabletsObject::TPtr &ev, const TActorContext &ctx) {
+            LOG_INFO_S(ctx, NKikimrServices::HIVE, "[" << TabletID() << "] TEvUpdateTabletsObject, msg: " << ev->Get()->Record.ShortDebugString());
+
+            // Fake Hive does not care about objects, do nothing
+
+
+            auto response = std::make_unique<TEvHive::TEvUpdateTabletsObjectReply>(NKikimrProto::OK);
+            response->Record.SetTxId(ev->Get()->Record.GetTxId());
+            response->Record.SetTxPartId(ev->Get()->Record.GetTxPartId());
+            ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
         }
 
         void Handle(TEvFakeHive::TEvSubscribeToTabletDeletion::TPtr &ev, const TActorContext &ctx) {

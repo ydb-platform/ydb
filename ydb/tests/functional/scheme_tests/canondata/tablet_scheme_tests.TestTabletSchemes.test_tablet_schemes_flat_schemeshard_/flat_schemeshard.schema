@@ -2656,6 +2656,11 @@
                 "ColumnId": 15,
                 "ColumnName": "PlanStep",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 16,
+                "ColumnName": "NeedUpdateObject",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -2676,7 +2681,8 @@
                     12,
                     13,
                     14,
-                    15
+                    15,
+                    16
                 ],
                 "RoomID": 0,
                 "Codec": 0,

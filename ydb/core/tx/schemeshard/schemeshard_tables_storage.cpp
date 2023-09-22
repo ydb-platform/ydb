@@ -132,8 +132,8 @@ TColumnTablesLayout TColumnTablesLayout::BuildTrivial(const std::vector<ui64>& t
     return TColumnTablesLayout({ TTablesGroup(std::move(emptyGroup), std::move(shardIdsGroup)) });
 }
 
-bool TTablesStorage::TTableCreateOperator::InitShardingTablets(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, TOlapStoreInfo::ILayoutPolicy::TPtr layoutPolicy) const {
-    if (!layoutPolicy->Layout(currentLayout, shardsCount, Object->ColumnShards)) {
+bool TTablesStorage::TTableCreateOperator::InitShardingTablets(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, TOlapStoreInfo::ILayoutPolicy::TPtr layoutPolicy, bool& isNewGroup) const {
+    if (!layoutPolicy->Layout(currentLayout, shardsCount, Object->ColumnShards, isNewGroup)) {
         ALS_ERROR(NKikimrServices::FLAT_TX_SCHEMESHARD) << "cannot layout new table with " << shardsCount << " shards";
         return false;
     }

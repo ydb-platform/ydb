@@ -253,7 +253,7 @@ public:
     }
 
     bool HandleReply(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
-         return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
+        return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
     }
 
     bool ProgressState(TOperationContext& context) override {
@@ -340,7 +340,7 @@ public:
 
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
             } else {
-                Y_FAIL("unexpected tablet type");
+                LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, DebugHint() << " unexpected tablet type");
             }
 
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -350,6 +350,7 @@ public:
         }
 
         txState->UpdateShardsInProgress();
+
         return false;
     }
 };
@@ -398,7 +399,8 @@ public:
             Y_VERIFY(table->ColumnShards.empty());
             auto currentLayout = TColumnTablesLayout::BuildTrivial(TColumnTablesLayout::ShardIdxToTabletId(table->OwnedColumnShards, *context.SS));
             auto layoutPolicy = std::make_shared<TOlapStoreInfo::TMinimalTablesCountLayout>();
-            Y_VERIFY(table.InitShardingTablets(currentLayout, table->OwnedColumnShards.size(), layoutPolicy));
+            bool isNewGroup;
+            Y_VERIFY(table.InitShardingTablets(currentLayout, table->OwnedColumnShards.size(), layoutPolicy, isNewGroup));
         }
 
         context.SS->PersistColumnTableAlterRemove(db, pathId);
@@ -477,6 +479,10 @@ public:
         return txState->ShardsInProgress.empty();
     }
 
+    bool HandleReply(TEvHive::TEvUpdateTabletsObjectReply::TPtr&, TOperationContext&) override {
+        return false;
+    }
+
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
@@ -501,7 +507,7 @@ public:
                     break;
                 }
                 default: {
-                    Y_FAIL("unexpected tablet type");
+                    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, DebugHint() << " unexpected tablet type");
                 }
             }
 
@@ -509,6 +515,20 @@ public:
                         DebugHint() << " ProgressState"
                                     << " wait for NotifyTxCompletionResult"
                                     << " tabletId: " << tabletId);
+        }
+
+        if (txState->NeedUpdateObject) {
+            auto event = std::make_unique<TEvHive::TEvUpdateTabletsObject>();
+            for (const auto& shard : txState->Shards) {
+                TTabletId tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
+                event->Record.AddTabletIds(tabletId.GetValue());
+            }
+            event->Record.SetObjectId(TSimpleRangeHash{}(event->Record.GetTabletIds()));
+            event->Record.SetTxId(ui64(OperationId.GetTxId()));
+            event->Record.SetTxPartId(OperationId.GetSubTxId());
+            TPathId pathId = txState->TargetPathId;
+            auto hiveToRequest = context.SS->ResolveHive(pathId, context.Ctx);
+            context.OnComplete.BindMsgToPipe(OperationId, hiveToRequest, pathId, event.release());
         }
 
         return false;
@@ -680,6 +700,7 @@ public:
 
         TProposeErrorCollector errors(*result);
         TColumnTableInfo::TPtr tableInfo;
+        bool needUpdateObject = false;
         if (storeInfo) {
             TOlapPresetConstructor tableConstructor(*storeInfo);
             if (!tableConstructor.Deserialize(createDescription, errors)) {
@@ -691,7 +712,7 @@ public:
                 auto currentLayout = context.SS->ColumnTables.GetTablesLayout(
                     TColumnTablesLayout::ShardIdxToTabletId(storeInfo->GetColumnShards(), *context.SS));
                 TTablesStorage::TTableCreateOperator createOperator(tableInfo);
-                if (!createOperator.InitShardingTablets(currentLayout, shardsCount, layoutPolicy)) {
+                if (!createOperator.InitShardingTablets(currentLayout, shardsCount, layoutPolicy, needUpdateObject)) {
                     result->SetError(NKikimrScheme::StatusPreconditionFailed,
                         "cannot layout table by shards");
                     return result;
@@ -721,6 +742,7 @@ public:
         dstPath.Base()->PathType = TPathElement::EPathType::EPathTypeColumnTable;
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateColumnTable, pathId);
+        txState.NeedUpdateObject = needUpdateObject;
 
         if (storeInfo) {
             NIceDb::TNiceDb db(context.GetDB());

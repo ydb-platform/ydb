@@ -544,9 +544,13 @@ message TEvTabletOwnersReply {
 message TEvUpdateTabletsObject {
     optional uint64 ObjectId = 1;
     repeated fixed64 TabletIds = 2;
+    optional uint64 TxId = 3;
+    optional uint64 TxPartId = 4;
 }
 
 message TEvUpdateTabletsObjectReply {
     optional NKikimrProto.EReplyStatus Status = 1;
+    optional uint64 TxId = 2;
+    optional uint64 TxPartId = 3;
 }
 

@@ -874,22 +874,23 @@ public:
 
     class ILayoutPolicy {
     protected:
-        virtual bool DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result) const = 0;
+        virtual bool DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result, bool& isNewGroup) const = 0;
     public:
         using TPtr = std::shared_ptr<ILayoutPolicy>;
         virtual ~ILayoutPolicy() = default;
-        bool Layout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result) const;
+        bool Layout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result, bool& isNewGroup) const;
     };
 
     class TMinimalTablesCountLayout: public ILayoutPolicy {
     protected:
-        virtual bool DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result) const override;
+        virtual bool DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result, bool& isNewGroup) const override;
     };
 
     class TIdentityGroupsLayout: public ILayoutPolicy {
     protected:
-        virtual bool DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result) const override;
+        virtual bool DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result, bool& isNewGroup) const override;
     };
+
     TPtr AlterData;
 
     const NKikimrSchemeOp::TColumnStoreDescription& GetDescription() const {

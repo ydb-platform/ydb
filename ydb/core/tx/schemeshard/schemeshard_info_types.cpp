@@ -407,18 +407,20 @@ inline THashMap<ui32, size_t> DeduplicateRepeatedById(
 
 }
 
-bool TOlapStoreInfo::ILayoutPolicy::Layout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result) const {
-    if (!DoLayout(currentLayout, shardsCount, result)) {
+bool TOlapStoreInfo::ILayoutPolicy::Layout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result, bool& isNewGroup) const {
+    if (!DoLayout(currentLayout, shardsCount, result, isNewGroup)) {
         return false;
     }
     Y_VERIFY(result.size() == shardsCount);
     return true;
 }
 
-bool TOlapStoreInfo::TIdentityGroupsLayout::DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result) const {
+bool TOlapStoreInfo::TIdentityGroupsLayout::DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result, bool& isNewGroup) const {
+    isNewGroup = false;
     for (auto&& i : currentLayout.GetGroups()) {
         if (i.GetTableIds().Size() == 0 && i.GetShardIds().Size() >= shardsCount) {
             result = i.GetShardIds().GetIdsVector(shardsCount);
+            isNewGroup = true;
             return true;
         }
         if (i.GetShardIds().Size() != shardsCount) {
@@ -430,9 +432,13 @@ bool TOlapStoreInfo::TIdentityGroupsLayout::DoLayout(const TColumnTablesLayout& 
     return false;
 }
 
-bool TOlapStoreInfo::TMinimalTablesCountLayout::DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result) const {
+bool TOlapStoreInfo::TMinimalTablesCountLayout::DoLayout(const TColumnTablesLayout& currentLayout, const ui32 shardsCount, std::vector<ui64>& result, bool& isNewGroup) const {
+    isNewGroup = true;
     std::vector<ui64> resultLocal;
     for (auto&& i : currentLayout.GetGroups()) {
+        if (i.GetTableIds().Size() > 0) {
+            isNewGroup = false;
+        }
         for (auto&& s : i.GetShardIds()) {
             resultLocal.emplace_back(s);
             if (resultLocal.size() == shardsCount) {

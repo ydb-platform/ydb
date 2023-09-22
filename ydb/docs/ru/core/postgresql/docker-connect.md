@@ -1,6 +1,6 @@
-# Подключение к {{ ydb-short-name }} в докер-контейнере по postgres-интерфейсу
+# Подключение через PostgreSQL-протокол
 
-## Запуск {{ ydb-short-name }} с включенным Postgres
+## Запуск {{ ydb-short-name }} с включенным PostgreSQL
 
 Сейчас функционал postgres-совместимости доступен в образе: `cr.yandex/yc/yandex-docker-local-ydb:trunk`.
 

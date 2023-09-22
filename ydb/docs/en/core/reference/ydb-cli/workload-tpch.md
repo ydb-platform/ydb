@@ -22,7 +22,7 @@ See the description of the command to run the data load:
 
 | Option name | Option description |
 ---|---
-| `--path <value>` | Directory to create tables in. Default value: `""`. |
+| `--path <value>` | Directory to create tables in. Default value - empty string. |
 | `--store <value>` | Type of table storage. Acceptable values: `row`, `column`. Default value: `row`. |
 
 ## Uploading data to the table {#load}
@@ -60,6 +60,7 @@ See the description of the command to run the data load:
 
 | Option name | Option description |
 ---|---
+| `--path <value>` | Directory to create tables in. Default value - empty string. |
 | `--output <value>` | The name of the file in which the query execution results will be saved. The default value is `results.out`. |
 | `--iterations <value>` | The number of executions of each load generating query. The default value is `1`. |
 | `--json` | The name of the file in which the query execution statistics will be saved in `json` format. By default, the file is not saved. |

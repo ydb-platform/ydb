@@ -314,7 +314,7 @@ TTpchCommandRun::TTpchCommandRun()
 void TTpchCommandRun::Config(TConfig& config) {
     TClientCommand::Config(config);
     config.SetFreeArgsNum(0);
-    config.Opts->AddLongOption('p', "path", "Folder name to create tables in")
+    config.Opts->AddLongOption('p', "path", "Folder name where benchmark tables are located")
         .Optional()
         .DefaultValue("")
         .Handler1T<TStringBuf>([this](TStringBuf arg) {

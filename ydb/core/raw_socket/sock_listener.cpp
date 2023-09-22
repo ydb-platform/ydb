@@ -42,6 +42,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(NActors::TEvPollerRegisterResult, Handle);
             hFunc(NActors::TEvPollerReady, Handle);
+            hFunc(TEvents::TEvUnsubscribe, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -93,6 +94,11 @@ public:
         }
     }
 
+    void Handle(TEvents::TEvUnsubscribe::TPtr ev) {
+        auto erased = Connections.erase(ev->Sender);
+        Y_VERIFY_DEBUG(erased);
+    }
+
     void Handle(NActors::TEvPollerRegisterResult::TPtr ev) {
         PollerToken = std::move(ev->Get()->PollerToken);
         PollerToken->Request(true, false); // request read polling
@@ -105,7 +111,7 @@ public:
             if (!socket) {
                 break;
             }
-            NActors::IActor* connectionSocket = ConnectionCreator(socket, addr);
+            NActors::IActor* connectionSocket = ConnectionCreator(SelfId(), socket, addr);
             NActors::TActorId connectionId = Register(connectionSocket);
             Send(Poller, new TEvPollerRegister(socket, connectionId, connectionId));
             Connections.emplace(connectionId);

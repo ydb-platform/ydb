@@ -8,7 +8,9 @@ namespace NPG {
 
 using namespace NKikimr::NRawSocket;
 
-NActors::IActor* CreatePGConnection(TIntrusivePtr<TSocketDescriptor> socket, TNetworkConfig::TSocketAddressType address,
+NActors::IActor* CreatePGConnection(const TActorId& listenerActorId, 
+                                    TIntrusivePtr<TSocketDescriptor> socket,
+                                    TNetworkConfig::TSocketAddressType address,
                                     const NActors::TActorId& databaseProxy);
 
 } // namespace NPG

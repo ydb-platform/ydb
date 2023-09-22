@@ -20,7 +20,9 @@ enum EErrorAction {
     Abort
 };
 
-using TConnectionCreator = std::function<NActors::IActor* (TIntrusivePtr<TSocketDescriptor> socket, TNetworkConfig::TSocketAddressType address)>;
+using TConnectionCreator = std::function<NActors::IActor* (const TActorId& listenerActorId,
+                                                           TIntrusivePtr<TSocketDescriptor> socket,
+                                                           TNetworkConfig::TSocketAddressType address)>;
 
 NActors::IActor* CreateSocketListener(const NActors::TActorId& poller, const TListenerSettings& settings,
                                       TConnectionCreator connectionCreator, NKikimrServices::EServiceKikimr service,

@@ -50,6 +50,8 @@ public:
     static constexpr TDuration InactivityTimeout = TDuration::Minutes(10);
     TEvPollerReady* InactivityEvent = nullptr;
 
+    const TActorId ListenerActorId;
+
     TIntrusivePtr<TSocketDescriptor> Socket;
     TSocketAddressType Address;
     TPollerToken::TPtr PollerToken;
@@ -63,7 +65,6 @@ public:
 
     bool ConnectionEstablished = false;
     bool CloseConnection = false;
-    bool ActorActive = true;
 
     NAddressClassifier::TLabeledAddressClassifier::TConstPtr DatacenterClassifier;
 
@@ -82,9 +83,12 @@ public:
 
     TContext::TPtr Context;
 
-    TKafkaConnection(TIntrusivePtr<TSocketDescriptor> socket, TNetworkConfig::TSocketAddressType address,
+    TKafkaConnection(const TActorId& listenerActorId,
+                     TIntrusivePtr<TSocketDescriptor> socket,
+                     TNetworkConfig::TSocketAddressType address,
                      const NKikimrConfig::TKafkaProxyConfig& config)
-        : Socket(std::move(socket))
+        : ListenerActorId(listenerActorId)
+        , Socket(std::move(socket))
         , Address(address)
         , Buffer(Socket.Get(), config.GetPacketSize())
         , Step(SIZE_READ)
@@ -105,17 +109,12 @@ public:
 
     void PassAway() override {
         KAFKA_LOG_D("PassAway");
-        if (!ActorActive) {
-            return;
-        }
-        ActorActive = false;
 
-        if (ConnectionEstablished) {
-            ConnectionEstablished = false;
-        }
+        ConnectionEstablished = false;
         if (ProduceActorId) {
             Send(ProduceActorId, new TEvents::TEvPoison());
         }
+        Send(ListenerActorId, new TEvents::TEvUnsubscribe());
         Shutdown();
         TBase::PassAway();
     }
@@ -608,9 +607,11 @@ protected:
     }
 };
 
-NActors::IActor* CreateKafkaConnection(TIntrusivePtr<TSocketDescriptor> socket, TNetworkConfig::TSocketAddressType address,
+NActors::IActor* CreateKafkaConnection(const TActorId& listenerActorId,
+                                       TIntrusivePtr<TSocketDescriptor> socket,
+                                       TNetworkConfig::TSocketAddressType address,
                                        const NKikimrConfig::TKafkaProxyConfig& config) {
-    return new TKafkaConnection(std::move(socket), std::move(address), config);
+    return new TKafkaConnection(listenerActorId, std::move(socket), std::move(address), config);
 }
 
 } // namespace NKafka

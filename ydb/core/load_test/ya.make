@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/control
     ydb/core/keyvalue
     ydb/core/kqp/common
+    ydb/core/tx/datashard
     ydb/library/workload
     ydb/public/lib/base
     ydb/public/lib/operation_id

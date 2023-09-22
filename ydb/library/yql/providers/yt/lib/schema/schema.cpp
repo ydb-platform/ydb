@@ -333,9 +333,11 @@ NYT::TNode YTSchemaToRowSpec(const NYT::TNode& schema, const TYTSortInfo* sortIn
             if (!type) {
                 continue;
             }
-            resultTypes.Add(NYT::TNode()
-                .Add(fieldName)
-                .Add(*type));
+            if (YqlFakeColumnName != fieldName || schema.AsList().size() > 1) {
+                resultTypes.Add(NYT::TNode()
+                    .Add(fieldName)
+                    .Add(*type));
+            }
         }
     }
 
@@ -996,7 +998,7 @@ NYT::TTableSchema RowSpecToYTSchema(const NYT::TNode& rowSpec, ui64 nativeTypeCo
     // add fake column to avoid slow 0-columns YT schema
     if (schema.Columns().empty()) {
         schema.AddColumn(NYT::TColumnSchema()
-            .Name("_yql_fake_column")
+            .Name(TString{YqlFakeColumnName})
             .Type(NYT::EValueType::VT_BOOLEAN, /*required*/ false));
     }
 

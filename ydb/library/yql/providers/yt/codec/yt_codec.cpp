@@ -208,7 +208,7 @@ void TMkqlIOSpecs::LoadSpecInfo(bool inputSpec, const NYT::TNode& attrs, NCommon
         if (inputSpec && AS_TYPE(TStructType, info.Type)->GetMembersCount() == 0) {
             auto fieldType = codecCtx.Builder.NewDataType(NUdf::EDataSlot::Bool);
             fieldType = codecCtx.Builder.NewOptionalType(fieldType);
-            info.AuxColumns.emplace("_yql_fake_column", fieldType);
+            info.AuxColumns.emplace(YqlFakeColumnName, fieldType);
         }
     }
     else {

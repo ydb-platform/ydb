@@ -300,13 +300,10 @@ bool TYqlRowSpecInfo::ParseFull(const NYT::TNode& rowSpecAttr, const THashMap<TS
             if (type->GetKind() != ETypeAnnotationKind::Struct) {
                 YQL_LOG_CTX_THROW yexception() << "YT schema type has a non struct type: " << *type;
             }
-            THashSet<TStringBuf> auxFields;
-            for (auto& col: SortedBy) {
-                auxFields.insert(col);
-            }
+            THashSet<TStringBuf> auxFields(SortedBy.cbegin(), SortedBy.cend());
             TStringBuilder hiddenFields;
             for (auto item: type->Cast<TStructExprType>()->GetItems()) {
-                if (!Type->FindItem(item->GetName()) && !auxFields.contains(item->GetName())) {
+                if (const auto name = item->GetName(); !Type->FindItem(name) && !auxFields.contains(name)) {
                     if (hiddenFields.size() > 100) {
                         hiddenFields << ", ...";
                         break;

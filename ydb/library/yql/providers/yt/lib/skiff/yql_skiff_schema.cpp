@@ -236,8 +236,8 @@ NYT::TNode RowSpecToOutputSkiff(const NYT::TNode& attrs) {
     }
 
     if (typeColumns.empty()) {
-        typeColumns.emplace("_yql_fake_column", NYT::TNode()
-            ("name", "_yql_fake_column")
+        typeColumns.emplace(YqlFakeColumnName, NYT::TNode()
+            ("name", YqlFakeColumnName)
             ("wire_type", "variant8")
             ("children", NYT::TNode()
                 .Add(NYT::TNode()("wire_type", "nothing"))

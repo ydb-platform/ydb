@@ -38,6 +38,7 @@ const TStringBuf YqlSysColumnNum = "_yql_sys_tablenum";
 const TStringBuf YqlSysColumnKeySwitch = "_yql_sys_tablekeyswitch";
 
 const TStringBuf YqlOthersColumnName = "_other";
+const TStringBuf YqlFakeColumnName = "_yql_fake_column";
 const TStringBuf YqlTypeAttribute = "_yql_type";
 const TStringBuf YqlTypeView = "view";
 

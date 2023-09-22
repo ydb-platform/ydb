@@ -720,6 +720,62 @@
 
 {% endlist %}
 
+### Запись сообщений без дедупликации {#nodedup}
+
+Подробнее о записи без дедупликации — в [соответствующем разделе концепций](../../concepts/topic#no-dedup).
+
+{% list tabs %}
+
+- C++
+
+  Если в настройках сессии записи не указывается опция `ProducerId`, будет создана сессия записи без дедупликации.
+  Пример создания такой сессии записи:
+
+  ```cpp
+  auto settings = TWriteSessionSettings()
+      .Path(myTopicPath);
+
+  auto session = topicClient.CreateWriteSession(settings);
+  ```
+
+  Для включения дедупликации нужно в настройках сессии записи указать опцию `ProducerId` или явно включить дедупликацию, вызвав метод `EnableDeduplication()`, например, как в секции ["Подключение к топику"](#start-writer).
+
+{% endlist %}
+
+### Запись метаданных на уровне сообщения {#messagemeta}
+
+При записи сообщения можно дополнительно указать метаданные как список пар "ключ-значение". Эти данные будут доступны при вычитывании сообщения. 
+Ограничение на размер метаданных — не более 1000 ключей.
+
+{% list tabs %}
+
+- C++
+
+  Воспользоваться функцией записи метаданных можно с помощью метода `Write()`, принимающего `TWriteMessage` объект:
+
+  ```cpp
+  auto settings = TWriteSessionSettings()
+      .Path(myTopicPath)
+  //set all oter settings;
+  ;
+
+  auto session = topicClient.CreateWriteSession(settings);
+
+  TMaybe<TWriteSessionEvent::TEvent> event = session->GetEvent(/*block=*/true);
+  TWriteMessage message("This is yet another message").MessageMeta({
+      {"meta-key", "meta-value"},
+      {"another-key", "value"}
+  });
+
+  if (auto* readyEvent = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
+      session->Write(std::move(event.ContinuationToken), std::move(message));
+  }
+
+  ```
+
+{% endlist %}
+
+
 ## Чтение сообщений {#reading}
 
 ### Подключение к топику для чтения сообщений {#start-reader}

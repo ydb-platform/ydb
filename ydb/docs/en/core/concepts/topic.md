@@ -45,7 +45,7 @@ The recommended maximum number of <producer ID, message group ID> pairs is up to
 
 {% cut "Why and when the message processing order is important" %}
 
-**When the message processing order is important**
+### When the message processing order is important
 
 Let's consider a finance application that calculates the balance on a user's account and permits or prohibits debiting the funds.
 
@@ -63,11 +63,11 @@ Below is an example when all transactions on accounts with even ids are transfer
 
 ![topic-design](../_assets/example-topic-design.svg)
 
-**When the processing order is not important**
+### When the processing order is not important {#no-dedup}
 
 For some tasks, the message processing order is not critical. For example, it's sometimes important to simply deliver data that will then be ordered by the storage system.
 
-Although message ordering is not important in this case, the protocol used for writing messages to a persistent queue requires that its source ID be specified. {{ydb-short-name}} remembers the source ID link and the partition that the message was written to. If the source ID is selected randomly, this will cause a great number of different source IDs and, hence, a large amount of stored data by the links between the sources and partitions, which may overload {{ydb-short-name}}.
+For such tasks, the 'no-deduplication' mode can be used. In this scenario neither [`producer_id`](#producer-id) or [`source_id`](#source-id) are specified in write session setup and [`sequence numbers`](#seqno) are also not used for messages. The no-deduplication mode offers better perfomance and requires less server resources, but there is no message ordering or deduplication on the server side, which means that some message sent to the server multiple times (for example due to network instablity or writer process crash) also may be written to the topic multiple times.
 
 {% note warning %}
 
@@ -77,7 +77,7 @@ We strongly recommend that you don't use random or pseudo-random source IDs. We 
 
 {% endcut %}
 
-#### Source ID {source-id}
+#### Source ID {#source-id}
 
 A source ID is an arbitrary string up to 2048 characters long. This is usually the ID of a file server or some other ID.
 
@@ -102,6 +102,8 @@ A message group ID is an arbitrary string up to 2048 characters long. This is us
 ## Message sequence numbers {#seqno}
 
 All messages from the same source have a [`sequence number`](#seqno) used for their deduplication. A message sequence number should monotonically increase within a `topic`, `source` pair. If the server receives a message whose sequence number is less than or equal to the maximum number written for the `topic`, `source` pair, the message will be skipped as a duplicate.  Some sequence numbers in the sequence may be skipped. Message sequence numbers must be unique within the `topic`, `source` pair.
+
+Sequence numbers are not used if [no-deduplication mode](#no-dedup) is enabled.
 
 ### Sample message sequence numbers {#seqno-examples}
 

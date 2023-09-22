@@ -727,6 +727,58 @@ For more details on using data compression for topics, see [here](../../concepts
 
 {% endlist %}
 
+### Writing messages in no-deduplication mode
+
+{% list tabs %}
+
+- C++
+
+If no ProducerId is specified on write session setup, the session runs in no-deduplication mode. The example below deminstrates such a session setup:
+
+```cpp
+  auto settings = TWriteSessionSettings()
+      .Path(myTopicPath);
+
+  auto session = topicClient.CreateWriteSession(settings);
+  ```
+
+If, on other hand, you want to ensure deduplication is enabled, you can specify the ProducerId option or call the `EnableDeduplication()` method from WriteSessionSettings. The '[Connecting to a topic for message writes](#start-writer)' section has an example of write session that has deduplication enabled.
+
+{% endlist %}
+
+### Using message metadata feature
+
+You can provide some metadata for any particular message when writing. This metadata can be a list of up to 100 key-value pairs per message.
+All the metadata provided when writing a message is returned to a consumer with the message during reading.
+
+{% list tabs %}
+
+- C++
+
+ To take advantage of message metadata feature, use the `Write()` method with `TWriteMessage`argument as below:
+
+  ```cpp
+  auto settings = TWriteSessionSettings()
+      .Path(myTopicPath)
+  //set all oter settings;
+  ;
+
+  auto session = topicClient.CreateWriteSession(settings);
+
+  TMaybe<TWriteSessionEvent::TEvent> event = session->GetEvent(/*block=*/true);
+  TWriteMessage message("This is yet another message").MessageMeta({
+      {"meta-key", "meta-value"},
+      {"another-key", "value"}
+  });
+
+  if (auto* readyEvent = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
+      session->Write(std::move(event.ContinuationToken), std::move(message));
+  };
+
+  ```
+
+{% endlist %}
+
 ## Reading messages {#reading}
 
 ### Connecting to a topic for message reads {#start-reader}

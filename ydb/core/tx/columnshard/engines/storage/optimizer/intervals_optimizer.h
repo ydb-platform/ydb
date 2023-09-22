@@ -67,7 +67,7 @@ private:
     YDB_READONLY(i32, RecordsCount, 0);
     YDB_READONLY(i64, PortionsWeight, 0);
     YDB_READONLY(i64, PortionsRawWeight, 0);
-    YDB_READONLY(i32, SmallPortionsWeight, 0);
+    YDB_READONLY(i64, SmallPortionsWeight, 0);
     YDB_READONLY(i64, SmallPortionsCount, 0);
     std::map<ui64, std::shared_ptr<TPortionInfo>> SummaryPortions;
 public:

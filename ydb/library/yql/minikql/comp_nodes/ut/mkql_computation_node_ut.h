@@ -83,6 +83,7 @@ template<bool UseLLVM>
 struct TSetup {
     TSetup(TComputationNodeFactory nodeFactory = {}, TVector<TUdfModuleInfo>&& modules = {})
         : Alloc(__LOCATION__)
+        , StatsRegistry(CreateDefaultStatsRegistry())
     {
         NodeFactory = nodeFactory;
         FunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
@@ -107,7 +108,7 @@ struct TSetup {
         Explorer.Walk(pgm.GetNode(), *Env);
         TComputationPatternOpts opts(Alloc.Ref(), *Env, GetTestFactory(NodeFactory),
             FunctionRegistry.Get(), NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception,
-             UseLLVM ? "" : "OFF", EGraphPerProcess::Multi, nullptr, nullptr, nullptr);
+             UseLLVM ? "" : "OFF", EGraphPerProcess::Multi, StatsRegistry.Get(), nullptr, nullptr);
         Pattern = MakeComputationPattern(Explorer, pgm, entryPoints, opts);
         auto graph = Pattern->Clone(opts.ToComputationOptions(*RandomProvider, *TimeProvider));
         Terminator.Reset(new TBindTerminator(graph->GetTerminator()));
@@ -119,12 +120,13 @@ struct TSetup {
         Pattern.Reset();
     }
 
+    TScopedAlloc Alloc;
     TComputationNodeFactory NodeFactory;
     TIntrusivePtr<IFunctionRegistry> FunctionRegistry;
     TIntrusivePtr<IRandomProvider> RandomProvider;
     TIntrusivePtr<ITimeProvider> TimeProvider;
+    IStatsRegistryPtr StatsRegistry;
 
-    TScopedAlloc Alloc;
     THolder<TTypeEnvironment> Env;
     THolder<TProgramBuilder> PgmBuilder;
 

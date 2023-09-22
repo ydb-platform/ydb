@@ -139,7 +139,7 @@ std::optional<NTable::ECollectQueryStatsMode> TryParseCollectStatsMode(const std
 
     TrimSpacesLeft(name);
     TrimSpacesRight(name);
-    if (name != "stats") {
+    if (ToLower(name) != "stats") {
         return {};
     }
 

@@ -2,6 +2,50 @@
 
 # Список изменений {{ ydb-short-name }} CLI
 
+## Версия 2.6.0 {#2-6-0}
+
+Дата выхода 7 сентября 2023. Для обновления до версии **2.6.0** перейдите в раздел [Загрузки](downloads/index.md#ydb-cli).
+
+**Функциональность:**
+
+* В [ydb workload tpch run](reference/ydb-cli/workload-tpch.md#run) добавлена опция `--path`, содержащая путь до директории с таблицами, созданными командой [ydb workload tpch init](reference/ydb-cli/workload-tpch.md#init).
+
+* Добавлена команда [ydb workload transfer topic-to-table](reference/ydb-cli/workload-transfer.md), которая нагружает базу запросами на чтение из топиков и запись в таблицу.
+
+* Добавлена опция `--consumer-prefix` в командax [ydb workload topic init](reference/ydb-cli/workload-topic.md#init), [ydb workload topic run read|full](reference/ydb-cli/workload-topic.md#run-read), задающая префиксы имен читателей.
+
+* Добавлена опция `--partition-ids` в команде [ydb topic read](reference/ydb-cli/topic-read.md), задающая список id партиций топика для чтения, разделенных запятой.
+
+* Добавлена поддержка форматов параметров CSV и TSV в командах исполнения [YQL запросов](reference/ydb-cli/parameterized-queries-cli.md).
+
+* Переработан [интерактивный режим выполнения запросов](reference/ydb-cli/interactive-cli.md). Добавлены [новые специфичные команды интерактивного режима](reference/ydb-cli/interactive-cli.md#spec-commands): `SET stats`, `EXPLAIN`, `EXPLAIN AST`. Добавлены сохранение истории между запусками CLI и автодополнение YQL запросов.
+
+* Добавлена команда [ydb config info](reference/ydb-cli/commands/config-info.md), которая выводит текущие параметры соединения без подключения к базе данных.
+
+* Добавлена команда [ydb workload kv run mixed](reference/ydb-cli/workload-kv.md#mixed-kv), которая нагружает базу запросами на запись и чтение.
+
+* Опция `--percentile` в командах [ydb workload topic run write|read|full](reference/ydb-cli/workload-topic.md#run-write) теперь может принимать вещественные значения.
+
+* Увеличены значения по умолчанию для опций `--seconds` и `--warmup` в командах [ydb workload topic run write|read|full](reference/ydb-cli/workload-topic.md#run-write) до 60 секунд и 5 секунд соответственно.
+
+* Изменено значение по умолчанию для опции `--supported-codecs` на `RAW` в командах [ydb topic create](reference/ydb-cli/topic-create.md) и [ydb topic consumer add](reference/ydb-cli/topic-consumer-add.md).
+
+**Исправления ошибок:**
+
+* Исправлена потеря строк при загрузке командой [ydb import file json](reference/ydb-cli/export_import/import-file.md).
+
+* Исправлен неучет статистики во время прогрева команд [ydb workload topic run write|read|full](reference/ydb-cli/workload-topic.md#run-write).
+
+* Исправлен неполный вывод статистики в командах [ydb scripting yql](reference/ydb-cli/scripting-yql.md) и [ydb yql](reference/ydb-cli/yql.md).
+
+* Исправлен неправильный вывод progress bar'a в командах [ydb tools dump](reference/ydb-cli/export_import/tools_dump.md) и [ydb tools restore](reference/ydb-cli/export_import/tools_restore.md).
+
+* Исправлена ошибка загрузки больших файлов с заголовком в команде [ydb import file csv|tsv](reference/ydb-cli/export_import/import-file.md).
+
+* Исправлено зависание команды [ydb tools restore --import-data](reference/ydb-cli/export_import/tools_restore.md#optional).
+
+* Исправлена ошибка `Unknown value Rejected` при выполнении команды [ydb operation list buildindex](reference/ydb-cli/operation-list.md).
+
 ## Версия 2.5.0 {#2-5-0}
 
 Дата выхода 20 июня 2023. Для обновления до версии **2.5.0** перейдите в раздел [Загрузки](downloads/index.md#ydb-cli).
@@ -10,7 +54,7 @@
 
 * Для команды `ydb import file` добавлен параметр [--timeout](reference/ydb-cli/export_import/import-file.md#optional), задающий время, в течение которого должна быть выполнена операция на сервере.
 * Добавлен индикатор прогресса в командах [ydb scheme rmdir --recursive](reference/ydb-cli/commands/dir.md#rmdir) и [ydb import file](reference/ydb-cli/export_import/import-file.md).
-* Добавлена команда `ydb workload kv run read-rows`, которая нагружает базу запросами на чтение строк, используя новый экспериментальный API вызов ReadRows (реализован только в ветке [main](https://github.com/ydb-platform/ydb)), выполняющий более быстрое чтение по ключу, чем [select](reference/ydb-cli/workload-kv.md#select-kv).
+* Добавлена команда [ydb workload kv run read-rows](reference/ydb-cli/workload-kv.md#read-rows-kv), которая нагружает базу запросами на чтение строк, используя новый экспериментальный API вызов ReadRows (реализован только в ветке [main](https://github.com/ydb-platform/ydb)), выполняющий более быстрое чтение по ключу, чем [select](reference/ydb-cli/workload-kv.md#select-kv).
 * В [ydb workload topic](reference/ydb-cli/workload-topic.md) добавлены новые параметры `--warmup-time`, `--percentile`, `--topic`, задающие время прогрева теста, процентиль в выводе статистики и имя топика соответственно.
 * Добавлена команда [ydb workload tpch](reference/ydb-cli/workload-tpch.md) для запуска нагрузочного теста TPC-H.
 * Добавлен флаг `--ordered` в команде [ydb tools dump](reference/ydb-cli/export_import/tools_dump.md), сохраняющий порядок по первичному ключу в таблицах.

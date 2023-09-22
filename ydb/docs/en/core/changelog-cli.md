@@ -2,6 +2,48 @@
 
 # {{ ydb-short-name }} CLI changelog
 
+## Version 2.6.0 {#2-6-0}
+
+**Features:**
+
+* Added `--path` option to [ydb workload tpch run](reference/ydb-cli/workload-tpch.md#run), which contains the path to the directory with tables created by the [ydb workload tpch init](reference/ydb-cli/workload-tpch.md#init) command.
+
+* Added `ydb workload transfer topic-to-table` command, which loads the database with read requests from topics and write requests to the table.
+
+* Added the option `--consumer-prefix` in the commands [ydb workload topic init](reference/ydb-cli/workload-topic.md#init), [ydb workload topic run read|full](reference/ydb-cli/workload-topic.md#run-read), specifying prefixes of consumer names.
+
+* Added the `--partition-ids` option in the [ydb topic read](reference/ydb-cli/topic-read.md) command, which specifies a comma-separated list of topic partition identifiers to read from.
+
+* Added support for CSV and TSV parameter formats in [YQL query](reference/ydb-cli/parameterized-queries-cli.md) execution commands.
+
+* The [interactive mode of query execution](reference/ydb-cli/interactive-cli.md) has been redesigned. Added [new interactive mode specific commands](reference/ydb-cli/interactive-cli.md#spec-commands): `SET`, `EXPLAIN`, `EXPLAIN AST`. Added saving history between CLI launches and auto-completion of YQL queries.
+
+* Added the command [ydb config info](reference/ydb-cli/commands/config-info.md), which outputs the current connection parameters without connecting to the database.
+
+* Added the command [ydb workload kv run mixed](reference/ydb-cli/workload-kv.md#mixed-kv), which loads the database with write and read requests.
+
+* The `--percentile` option in the [ydb workload topic run write|read|full](reference/ydb-cli/workload-topic.md#run-write) commands can now take floating point values.
+
+* The default values for the `--seconds` and `--warmup` options in the [ydb workload topic run write|read|full](reference/ydb-cli/workload-topic.md#run-write) commands have been increased to 60 seconds and 5 seconds, respectively.
+
+* Changed the default value for the `--supported-codecs` option to `RAW` in the [ydb topic create](reference/ydb-cli/topic-create.md) and [ydb topic consumer add](reference/ydb-cli/topic-consumer-add.md) commands.
+
+**Bug fixes:**
+
+* Fixed string loss when loading with the [ydb import file json](reference/ydb-cli/export_import/import-file.md) command.
+
+* Fixed ignored statistics during the warm-up of commands [ydb workload topic run write|read|full](reference/ydb-cli/workload-topic.md#run-write).
+
+* Fixed incomplete statistics output in the [ydb scripting yql](reference/ydb-cli/scripting-yql.md) and [ydb yql](reference/ydb-cli/yql.md) commands.
+
+* Fixed incorrect output of progress bar in [ydb tools dump](reference/ydb-cli/export_import/tools_dump.md) and [ydb tools restore](reference/ydb-cli/export_import/tools_restore.md) commands.
+
+* Fixed loading large files with the header in the [ydb import file csv|tsv](reference/ydb-cli/export_import/import-file.md) command.
+
+* Fixed hanging of the [ydb tools restore --import-data](reference/ydb-cli/export_import/tools_restore.md#optional) command.
+
+* Fixed error `Unknown value Rejected` when executing the [ydb operation list build index](reference/ydb-cli/operation-list.md) command.
+
 ## Version 2.5.0 {#2-5-0}
 
 Released on June 20, 2023. To update to version **2.5.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
@@ -10,10 +52,10 @@ Released on June 20, 2023. To update to version **2.5.0**, select the [Downloads
 
 * For the `ydb import file` command, a parameter [--timeout](reference/ydb-cli/export_import/import-file.md#optional) has been added that specifies the time within which the operation should be performed on the server.
 * Added a progress bar in commands [ydb scheme rmdir --recursive](reference/ydb-cli/commands/dir.md#rmdir) and [ydb import file](reference/ydb-cli/export_import/import-file.md).
-* Added the command `ydb workload kv run read-rows`, which loads the database with requests to read rows using a new experimental API call ReadRows (implemented only in the [main](https://github.com/ydb-platform/ydb) branch), which performs faster key reading than [select](reference/ydb-cli/workload-kv.md#select-kv).
-* New parameters `--warmup-time`, `--percentile`, `--topic` have been added to the `ydb workload topic`, setting the test warm-up time, the percentile in the statistics output and the topic name, respectively.
-* Added the `ydb workload tpch` command to run the TPC-H benchmark.
-* Added the `--ordered` flag in the command `ydb tools dump`, which preserves the order by primary key in tables.
+* Added the command [ydb workload kv run read-rows](reference/ydb-cli/workload-kv.md#read-rows-kv), which loads the database with requests to read rows using a new experimental API call ReadRows (implemented only in the [main](https://github.com/ydb-platform/ydb) branch), which performs faster key reading than [select](reference/ydb-cli/workload-kv.md#select-kv).
+* New parameters `--warmup-time`, `--percentile`, `--topic` have been added to the [ydb workload topic](reference/ydb-cli/workload-topic.md), setting the test warm-up time, the percentile in the statistics output and the topic name, respectively.
+* Added the [ydb workload tpch](reference/ydb-cli/workload-tpch.md) command to run the TPC-H benchmark.
+* Added the `--ordered` flag in the command [ydb tools dump](reference/ydb-cli/export_import/tools_dump.md), which preserves the order by primary key in tables.
 
 **Performance:**
 

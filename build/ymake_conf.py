@@ -688,10 +688,6 @@ class Build(object):
         ragel.configure_toolchain(self, compiler)
         ragel.print_variables()
 
-        perl = Perl()
-        perl.configure_local()
-        perl.print_variables('LOCAL_')
-
         swiftc = SwiftCompiler(self)
         swiftc.configure()
         swiftc.print_compiler()
@@ -2215,52 +2211,6 @@ class Python(object):
         variables.update_from_presets()
         variables.reset_if_any(reset_value='PYTHON-NOT-FOUND')
         variables.emit()
-
-
-class Perl(object):
-    # Parse (key, value) from "version='5.26.0';" lines
-    PERL_CONFIG_RE = re.compile(r"^(?P<key>\w+)='(?P<value>.*)';$", re.MULTILINE)
-
-    def __init__(self):
-        self.perl = None
-        self.version = None
-        self.privlib = None
-        self.archlib = None
-
-    def configure_local(self, perl=None):
-        self.perl = perl or preset('PERL') or which('perl')
-        if self.perl is None:
-            return
-
-        # noinspection PyTypeChecker
-        config = dict(self._iter_config(['version', 'privlibexp', 'archlibexp']))
-        self.version = config.get('version')
-        self.privlib = config.get('privlibexp')
-        self.archlib = config.get('archlibexp')
-
-    def print_variables(self, prefix=''):
-        variables = Variables({
-            prefix + 'PERL': self.perl,
-            prefix + 'PERL_VERSION': self.version,
-            prefix + 'PERL_PRIVLIB': self.privlib,
-            prefix + 'PERL_ARCHLIB': self.archlib,
-        })
-
-        variables.reset_if_any(reset_value='PERL-NOT-FOUND')
-        variables.emit(with_ignore_comment=variables.keys())
-
-    def _iter_config(self, config_keys):
-        # Run perl -V:version -V:etc...
-        perl_config = [self.perl] + ['-V:{}'.format(key) for key in config_keys]
-        config = six.ensure_str(get_stdout(perl_config) or '')
-
-        start = 0
-        while True:
-            match = Perl.PERL_CONFIG_RE.search(config, start)
-            if match is None:
-                break
-            yield match.group('key', 'value')
-            start = match.end()
 
 
 class Setting(object):

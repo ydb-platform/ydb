@@ -1,0 +1,8 @@
+items:
+- { name: Чтение данных через подключения,        href: external_data_source.md }
+- { name: Чтение данных через внешние таблицы,    href: external_table.md }
+- { name: Запись данных в бакеты S3,              href: write_data.md }
+- { name: Форматы данных и алгоритмы сжатия,      href: formats.md }
+- { name: Партиционирование данных,               href: partitioning.md }
+- { name: Расширенное партиционирование,          href: partition_projection.md }
+

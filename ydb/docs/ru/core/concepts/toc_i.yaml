@@ -14,6 +14,8 @@ items:
 - { name: Скан запросы,                           href: scan_query.md }
 - { name: Ограничения базы данных,                href: limits-ydb.md }
 - { name: Многоверсионное управление конкурентным доступом (MVCC), href: mvcc.md }
+- name: Федеративные запросы
+  include: { path: federated_query/toc_p.yaml, mode: link }
 - name: Кластер YDB
   items:
   - name: Обзор

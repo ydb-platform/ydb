@@ -4,7 +4,7 @@ default:
   backend_name_lower: ydb
   ydb: true
   example_cluster: ydbtest
-  feature_secondary_index: true 
+  feature_secondary_index: true
   feature_changefeed: true
   feature_replace: true
   feature_upsert: true
@@ -15,6 +15,7 @@ default:
   feature_user_and_group: true
   feature_olap_tables: true
   feature_topic_control_plane: true
+  feature_federated_queries: true
 #  feature_topic_settings_reset: true
 #  feature_logbroker: true
   ydb-full-name: YDB

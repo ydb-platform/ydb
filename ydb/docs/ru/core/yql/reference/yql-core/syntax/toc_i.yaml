@@ -8,6 +8,10 @@ items:
 - { name: ALTER TOPIC,                  href: alter-topic.md,                when: feature_topic_control_plane }
 - { name: ALTER USER,                   href: alter-user.md,                 when: feature_user_and_group }
 - { name: CREATE GROUP,                 href: create-group.md,               when: feature_user_and_group }
+- { name: CREATE EXTERNAL DATA SOURCE,  href: create-external-data-source.md,when: feature_federated_queries}
+- { name: CREATE EXTERNAL TABLE,        href: create-external-table.md,      when: feature_federated_queries}
+- { name: CREATE OBJECT TYPE SECRET,    href: create-object-type-secret.md,  when: feature_federated_queries}
+- { name: CREATE OBJECT TYPE SECRET_ACCESS,    href: create-object-type-secret-access.md,  when: feature_federated_queries}
 - { name: CREATE TABLE,                 href: create_table.md }
 - { name: CREATE TOPIC,                 href: create-topic.md,               when: feature_topic_control_plane }
 - { name: CREATE USER,                  href: create-user.md,                when: feature_user_and_group }
@@ -15,6 +19,10 @@ items:
 - { name: DELETE,                       href: delete.md,                     when: feature_map_tables }
 - { name: DISCARD,                      href: discard.md }
 - { name: DROP GROUP,                   href: drop-group.md,                 when: feature_user_and_group }
+- { name: DROP EXTERNAL DATA SOURCE,    href: drop-external-data-source.md,  when: feature_federated_queries}
+- { name: DROP EXTERNAL TABLE,          href: drop-external-table.md,        when: feature_federated_queries}
+- { name: DROP OBJECT TYPE SECRET,    href: drop-object-type-secret.md,      when: feature_federated_queries}
+- { name: DROP OBJECT TYPE SECRET_ACCESS,    href: drop-object-type-secret-access.md,  when: feature_federated_queries}
 - { name: DROP TABLE,                   href: drop_table.md }
 - { name: DROP TOPIC,                   href: drop-topic.md,                 when: feature_topic_control_plane }
 - { name: DROP USER,                    href: drop-user.md,                  when: feature_user_and_group }
@@ -34,6 +42,7 @@ items:
 - { name: SUBQUERY,                     href: subquery.md,                   when: feature_subquery }
 - { name: UPDATE,                       href: update.md,                     when: feature_map_tables }
 - { name: UPSERT,                       href: upsert_into.md,                when: feature_upsert }
+- { name: UPSERT OBJECT TYPE SECRET,    href: upsert-object-type-secret.md,  when: feature_federated_queries}
 - { name: USE,                          href: use.md,                        when: feature_mapreduce }
 - { name: VALUES,                       href: values.md }
 - { name: WINDOW,                       href: window.md,                     when: feature_window_functions }

@@ -1,5 +1,8 @@
 items:
 - { name: Обзор,                                  href: index.md }
-- { name: Директория,                             href: dir.md }
-- { name: Таблица,                                href: table.md }
-- { name: Топик,                                  href: ../topic.md }
+- { name: Директории,                             href: dir.md }
+- { name: Таблицы,                                href: table.md }
+- { name: Топики,                                 href: ../topic.md }
+- { name: Секреты,                                href: secrets.md }
+- { name: Внешние источники данных,               href: external_data_source.md }
+- { name: Внешние таблицы,                        href: external_table.md }

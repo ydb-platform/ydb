@@ -105,6 +105,8 @@ items:
       href: commands/discovery-list.md
     - name: Authentication
       href: commands/discovery-whoami.md
+    - name: Displaying connection parameters
+      href: commands/config-info.md
     - name: Getting the YDB CLI version
       href: version.md
   - name: Load testing

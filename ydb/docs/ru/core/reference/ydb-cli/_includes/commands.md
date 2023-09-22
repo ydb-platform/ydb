@@ -22,6 +22,7 @@
 
 Команда / подкоманда | Краткое описание
 --- | ---
+[config info](../commands/config-info.md) | Просмотр [параметров соединения](../connect.md)
 [config profile activate](../profile/activate.md) | Активация [профиля](../profile/index.md)
 [config profile create](../profile/create.md) | Создание [профиля](../profile/index.md)
 [config profile delete](../profile/create.md) | Удаление [профиля](../profile/index.md)

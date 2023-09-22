@@ -22,6 +22,7 @@ Any command can be run from the command line with the `--help` option to get hel
 
 | Command / subcommand | Brief description |
 --- | ---
+| [config info](../commands/config-info.md) | Displaying [connection parameters](../connect.md) |
 | [config profile activate](../profile/activate.md) | Activating a [profile](../profile/index.md) |
 | [config profile create](../profile/create.md) | Creating a [profile](../profile/index.md) |
 | [config profile delete](../profile/create.md) | Deleting a [profile](../profile/index.md) |

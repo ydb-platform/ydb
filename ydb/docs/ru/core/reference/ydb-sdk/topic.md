@@ -927,6 +927,8 @@
 
 Информацию о том, какие сообщения уже обработаны, можно [сохранять на клиентской стороне](#client-commit), передавая на сервер стартовую позицию чтения при создании подключения. При этом позиция чтения сообщений на сервере не изменяется.
 
+Можно использовать [транзакции](#read-tx). В этом случае позиция чтения изменится при подтверждении транзакции. При новом подключении будут прочитаны все неподтверждённые сообщения.
+
 {% list tabs %}
 
 - C++
@@ -1269,6 +1271,78 @@
   Чтение с заданной позиции в текущей версии SDK отсутствует.
 
   Поддерживается настройка читателя `setReadFrom` для чтения событий с отметками времени записи не меньше данной.
+
+{% endlist %}
+
+### Чтение в транзакции {#read-tx}
+
+{% list tabs %}
+
+- C++
+
+  Перед чтением из топика клиентский код должен передать в настройки получения событий из сессии ссылку на объект транзакции.
+
+  ```cpp
+      ReadSession->WaitEvent().Wait(TDuration::Seconds(1));
+
+      auto tableSettings = NYdb::NTable::TTxSettings::SerializableRW();
+      auto transactionResult = TableSession->BeginTransaction(tableSettings).GetValueSync();
+      auto Transaction = transactionResult.GetTransaction();
+
+      NYdb::NTopic::TReadSessionGetEventSettings topicSettings;
+      topicSettings.Block(false);
+      topicSettings.Tx(Transaction);
+
+      auto events = ReadSession->GetEvents(topicSettings);
+
+      for (auto& event : events) {
+          // обработать событие и записать результаты в таблицу
+      }
+
+      NYdb::NTable::TCommitTxSettings commitSettings;
+      auto commitResult = Transaction.Commit(commitSettings).GetValueSync();
+  ```
+
+{% note warning %}
+
+  При обработке событий `events` не нужно явно подтверждать обработку для событий типа `TDataReceivedEvent`.
+
+{% endnote %}
+
+  Подтверждение обработки события `TStopPartitionSessionEvent` надо делать после вызова `Commit`.
+
+  ```cpp
+      std::optional<TStopPartitionSessionEvent> stopPartitionSession;
+
+      auto events = ReadSession->GetEvents(topicSettings);
+
+      for (auto& event : events) {
+          if (auto* e = std::get_if<TStopPartitionSessionEvent>(&event) {
+              stopPartitionSessionEvent = std::move(*e);
+          } else {
+              // обработать событие и записать результаты в таблицу
+          }
+      }
+
+      NYdb::NTable::TCommitTxSettings commitSettings;
+      auto commitResult = Transaction.Commit(commitSettings).GetValueSync();
+
+      if (stopPartitionSessionEvent) {
+          stopPartitionSessionEvent->Commit();
+      }
+  ```
+
+- Go
+
+  Функциональность находится в разработке.
+
+- Python
+
+  Функциональность находится в разработке.
+
+- Java
+
+  Функциональность находится в разработке.
 
 {% endlist %}
 

@@ -861,6 +861,42 @@ bool AllInnerJoins(const TCoEquiJoinTuple& joinTuple) {
     return true;
 }
 
+bool DqCollectJoinRelationsWithStats(
+    TTypeAnnotationContext& typesCtx, 
+    const TCoEquiJoin& equiJoin, 
+    const std::function<void(const TString&, const std::shared_ptr<TOptimizerStatistics>&)>& collector) 
+{
+    if (equiJoin.ArgCount() < 3) {
+        return false;
+    }
+
+    for (size_t i = 0; i < equiJoin.ArgCount() - 2; ++i) {
+        auto input = equiJoin.Arg(i).Cast<TCoEquiJoinInput>();
+        auto joinArg = input.List();
+
+        auto maybeStat = typesCtx.StatisticsMap.find(joinArg.Raw());
+
+        if (maybeStat == typesCtx.StatisticsMap.end()) {
+            YQL_CLOG(TRACE, CoreDq) << "Didn't find statistics for scope " << input.Scope().Cast<TCoAtom>().StringValue() << "\n";
+            return false;
+        }
+
+        if (!maybeStat->second->Cost.has_value()) {
+            return false;
+        }
+
+        auto scope = input.Scope();
+        if (!scope.Maybe<TCoAtom>()){
+            return false;
+        }
+
+        auto label = scope.Cast<TCoAtom>().StringValue();
+        auto stats = maybeStat->second;
+        collector(label, stats);
+    }
+    return true;
+}
+
 /**
  * Main routine that checks:
  * 1. Do we have an equiJoin
@@ -901,28 +937,10 @@ TExprBase DqOptimizeEquiJoinWithCosts(const TExprBase& node, TExprContext& ctx, 
     // Check that statistics for all inputs of equiJoin were computed
     // The arguments of the EquiJoin are 1..n-2, n-2 is the actual join tree
     // of the EquiJoin and n-1 argument are the parameters to EquiJoin
-    for (size_t i = 0; i < equiJoin.ArgCount() - 2; ++i) {
-        auto input = equiJoin.Arg(i).Cast<TCoEquiJoinInput>();
-        auto joinArg = input.List();
-
-        if (!typesCtx.StatisticsMap.contains(joinArg.Raw())) {
-            YQL_CLOG(TRACE, CoreDq) << "Didn't find statistics for scope " << input.Scope().Cast<TCoAtom>().StringValue() << "\n";
-
-            return node;
-        }
-
-        if (!typesCtx.StatisticsMap[joinArg.Raw()]->Cost.has_value()) {
-            return node;
-        }
-
-        auto scope = input.Scope();
-        if (!scope.Maybe<TCoAtom>()){
-            return node;
-        }
-
-        auto label = scope.Cast<TCoAtom>().StringValue();
-        auto stats = typesCtx.StatisticsMap[joinArg.Raw()];
-        rels.push_back(std::make_shared<TRelOptimizerNode>(label, stats));
+    if (!DqCollectJoinRelationsWithStats(typesCtx, equiJoin, [&](auto label, auto stat) {
+        rels.emplace_back(std::make_shared<TRelOptimizerNode>(label, stat));
+    })) {
+        return node;
     }
 
     YQL_CLOG(TRACE, CoreDq) << "All statistics for join in place";

@@ -238,6 +238,7 @@ class TTableItBase : TNonCopyable {
             // way out.
             LastKey.assign(endKey.begin(), endKey.end());
             LastKeyPage = {};
+            LastKeyState = ERowOp::Erase;
         }
         return SkipTo(endKey, !inclusive);
     }
@@ -295,8 +296,10 @@ public:
             } else if ((Ready = Apply()) != EReady::Data) {
 
             } else if (mode != ENext::Data || State.GetRowState() != ERowOp::Erase) {
+                InitLastKey(State.GetRowState());
                 break;
             } else {
+                InitLastKey(ERowOp::Erase);
                 ++Stats.DeletedRowSkips; /* skip internal technical row states w/o data */
                 if (ErasedKeysCache && Stats.InvisibleRowSkips == SnapInvisibleRowSkips) {
                     // Try to cache erases that are at a head version
@@ -325,6 +328,10 @@ public:
         return State;
     }
 
+    ERowOp GetKeyState() const noexcept {
+        return LastKeyState;
+    }
+
     bool IsUncommitted() const noexcept;
     ui64 GetUncommittedTxId() const noexcept;
     EReady SkipUncommitted() noexcept;
@@ -343,6 +350,7 @@ private:
     TRowState State;
     TVector<TCell> LastKey;
     TSharedData LastKeyPage;
+    ERowOp LastKeyState = ERowOp::Absent;
 
     // RowVersion of a persistent snapshot that we are reading
     // By default iterator is initialized with the HEAD snapshot
@@ -413,6 +421,7 @@ private:
     void ClearKey() {
         LastKey.clear();
         LastKeyPage = {};
+        LastKeyState = ERowOp::Absent;
     }
 
     // ITERATORS STORAGE
@@ -439,6 +448,7 @@ private:
     EReady Snap(TRowVersion rowVersion) noexcept;
     EReady DoSkipUncommitted() noexcept;
     EReady Apply() noexcept;
+    void InitLastKey(ERowOp op) noexcept;
     void AddReadyIterator(TArrayRef<const TCell> key, TIteratorId itId);
     void AddNotReadyIterator(TIteratorId itId);
 
@@ -783,6 +793,8 @@ inline EReady TTableItBase<TIteratorOps>::Snap() noexcept
             return EReady::Data;
 
         case EReady::Gone:
+            InitLastKey(ERowOp::Absent);
+            ++Stats.DeletedRowSkips;
             Stage = EStage::Turn;
             return EReady::Data;
 
@@ -941,6 +953,15 @@ inline EReady TTableItBase<TIteratorOps>::Apply() noexcept
         return EReady::Page;
     }
 
+    Stage = EStage::Done;
+    return EReady::Data;
+}
+
+template<class TIteratorOps>
+inline void TTableItBase<TIteratorOps>::InitLastKey(ERowOp op) noexcept
+{
+    TArrayRef<const TCell> key = Iterators.back().Key;
+
     LastKey.assign(key.begin(), key.end());
 
     TIteratorId ai = Iterators.back().IteratorId;
@@ -963,8 +984,7 @@ inline EReady TTableItBase<TIteratorOps>::Apply() noexcept
         }
     }
 
-    Stage = EStage::Done;
-    return EReady::Data;
+    LastKeyState = op;
 }
 
 template<class TIteratorOps>

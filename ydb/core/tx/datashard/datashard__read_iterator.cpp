@@ -314,6 +314,7 @@ class TReader {
 
     ui32 FirstUnprocessedQuery; // must be unsigned
     TString LastProcessedKey;
+    bool LastProcessedKeyErased = false;
 
     ui64 RowsRead = 0;
     ui64 RowsProcessed = 0;
@@ -371,17 +372,17 @@ public:
         if (Y_UNLIKELY(FirstUnprocessedQuery == State.FirstUnprocessedQuery && State.LastProcessedKey)) {
             if (!State.Reverse) {
                 keyFromCells = TSerializedCellVec(State.LastProcessedKey);
-                fromInclusive = false;
+                fromInclusive = State.LastProcessedKeyErased;
 
                 keyToCells = range.To;
                 toInclusive = range.ToInclusive;
             } else {
                 // reverse
                 keyFromCells = range.From;
-                fromInclusive = true;
+                fromInclusive = range.FromInclusive;
 
                 keyToCells = TSerializedCellVec(State.LastProcessedKey);
-                toInclusive = false;
+                toInclusive = State.LastProcessedKeyErased;
             }
         } else {
             keyFromCells = range.From;
@@ -755,6 +756,7 @@ public:
         state.TotalRows += RowsRead;
         state.FirstUnprocessedQuery = FirstUnprocessedQuery;
         state.LastProcessedKey = LastProcessedKey;
+        state.LastProcessedKeyErased = LastProcessedKeyErased;
         if (sentResult) {
             state.ConsumeSeqNo(RowsRead, BytesInResult);
         }
@@ -865,52 +867,56 @@ private:
     EReadStatus IterateRange(TIterator* iter, const TActorContext& ctx) {
         Y_UNUSED(ctx);
 
-        bool stoppedByLimit = false;
         auto keyAccessSampler = Self->GetKeyAccessSampler();
 
         bool advanced = false;
-        while (iter->Next(CanResume() ? NTable::ENext::All : NTable::ENext::Data) == NTable::EReady::Data) {
+        while (iter->Next(NTable::ENext::Data) == NTable::EReady::Data) {
             advanced = true;
             DeletedRowSkips += iter->Stats.DeletedRowSkips;
             InvisibleRowSkips += iter->Stats.InvisibleRowSkips;
 
             TDbTupleRef rowKey = iter->GetKey();
 
-            // Note: we sample and count deleted keys too
             keyAccessSampler->AddSample(TableId, rowKey.Cells());
             const ui64 processedRecords = 1 + ResetRowSkips(iter->Stats);
             RowsSinceLastCheck += processedRecords;
             RowsProcessed += processedRecords;
 
-            // Note: we skip deleted rows
-            if (iter->Row().GetRowState() != NTable::ERowOp::Erase) {
-                TDbTupleRef rowValues = iter->GetValues();
+            TDbTupleRef rowValues = iter->GetValues();
 
-                // note that if user requests key columns then they will be in
-                // rowValues and we don't have to add rowKey columns
-                BlockBuilder.AddRow(TDbTupleRef(), rowValues);
-                ++RowsRead;
+            // note that if user requests key columns then they will be in
+            // rowValues and we don't have to add rowKey columns
+            BlockBuilder.AddRow(TDbTupleRef(), rowValues);
+            ++RowsRead;
 
-                if (ReachedTotalRowsLimit()) {
-                    break;
-                }
-            } else {
-                ++DeletedRowSkips;
+            if (ReachedTotalRowsLimit()) {
+                LastProcessedKey.clear();
+                return EReadStatus::Done;
             }
 
             if (ShouldStop()) {
-                stoppedByLimit = true;
-                break;
+                LastProcessedKey = TSerializedCellVec::Serialize(rowKey.Cells());
+                LastProcessedKeyErased = false;
+                return EReadStatus::StoppedByLimit;
             }
         }
 
-        if (auto key = iter->GetKey().Cells()) {
-            LastProcessedKey = TSerializedCellVec::Serialize(key);
+        // Note: when stopping due to page faults after an erased row we will
+        // reposition on that same row so erase cache can extend that cached
+        // erased range. When we don't observe any user-visible rows before a
+        // page fault we want to make sure we observe multiple deleted rows,
+        // which must be at least 2 (because we may resume from a known deleted
+        // row). When there are not enough rows we would prefer restarting in
+        // the same transaction, instead of starting a new one, in which case
+        // we will not update stats and will not update RowsProcessed.
+        auto lastKey = iter->GetKey().Cells();
+        if (lastKey && (advanced || iter->Stats.DeletedRowSkips >= 4) && iter->Last() == NTable::EReady::Page) {
+            LastProcessedKey = TSerializedCellVec::Serialize(lastKey);
+            LastProcessedKeyErased = iter->GetKeyState() == NTable::ERowOp::Erase;
             advanced = true;
+        } else {
+            LastProcessedKey.clear();
         }
-
-        if (stoppedByLimit)
-            return EReadStatus::StoppedByLimit;
 
         // last iteration to Page or Gone might also have deleted or invisible rows
         if (advanced || iter->Last() != NTable::EReady::Page) {
@@ -926,10 +932,6 @@ private:
         if (iter->Last() == NTable::EReady::Page) {
             return EReadStatus::NeedData;
         }
-
-        // range fully read, no reason to keep LastProcessedKey
-        if (iter->Last() == NTable::EReady::Gone)
-            LastProcessedKey.clear();
 
         return EReadStatus::Done;
     }

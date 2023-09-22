@@ -2,8 +2,6 @@
 
 The `CREATE TOPIC` call creates a [topic](../../../../concepts/topic).
 
-{% include [trunk](../../../_includes/trunk.md) %}
-
 When creating a topic, you can add topic [consumers](../../../../concepts/topic#consumer) to it and topic settings.
 
 ```

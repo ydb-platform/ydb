@@ -2,8 +2,6 @@
 
 С помощью оператора `CREATE TOPIC` можно создать [топик](../../../../concepts/topic), а также [читателей](../../../../concepts/topic#consumer) для него.
 
-{% include [trunk](../../../_includes/trunk.md) %}
-
 Общий вид команды:
 
 ```sql

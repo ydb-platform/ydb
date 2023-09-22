@@ -2,8 +2,6 @@
 
 You can use the `ALTER TOPIC` command to change the [topic](../../../../concepts/topic) settings, as well as add, update, or delete its consumers.
 
-{% include [trunk](../../../_includes/trunk.md) %}
-
 Here is the general format of the `ALTER TOPIC` command:
 
 ```sql

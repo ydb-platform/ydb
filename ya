@@ -317,6 +317,10 @@ def main():
         if src_root is not None:
             env['YA_SOURCE_ROOT'] = src_root
 
+    # Disable respawn for opensource/ya
+    if __file__.endswith('ya/opensource/ya'):
+        env['YA_NO_RESPAWN'] = os.environ.get('YA_NO_RESPAWN', '1')
+
     for env_name in [
         'LD_PRELOAD',
         'Y_PYTHON_SOURCE_ROOT',

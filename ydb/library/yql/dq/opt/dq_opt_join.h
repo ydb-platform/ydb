@@ -24,8 +24,6 @@ NNodes::TExprBase DqBuildJoinDict(const NNodes::TDqJoin& join, TExprContext& ctx
 
 NNodes::TDqJoin DqSuppressSortOnJoinInput(const NNodes::TDqJoin& node, TExprContext& ctx);
 
-bool AllInnerJoins(const NNodes::TCoEquiJoinTuple& joinTuple);
-
 bool DqCollectJoinRelationsWithStats(
     TTypeAnnotationContext& typesCtx,
     const NNodes::TCoEquiJoin& equiJoin,

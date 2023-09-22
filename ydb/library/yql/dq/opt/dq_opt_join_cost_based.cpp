@@ -11,6 +11,7 @@
 #include <ydb/library/yql/core/yql_cost_function.h>
 
 #include <ydb/library/yql/core/cbo/cbo_optimizer.h> //interface
+#include <ydb/library/yql/core/yql_opt_utils.h>
 
 #include <library/cpp/disjoint_sets/disjoint_sets.h>
 
@@ -839,28 +840,6 @@ TExprBase RearrangeEquiJoinTree(TExprContext& ctx, const TCoEquiJoin& equiJoin,
         .Done();
 }
 
-/**
- * Check if all joins in the equiJoin tree are Inner Joins
- * FIX: This is a temporary solution, need to be able to process all types of joins in the future
-*/
-bool AllInnerJoins(const TCoEquiJoinTuple& joinTuple) {
-    if (joinTuple.Type() != "Inner") {
-        return false;
-    }
-    if (joinTuple.LeftScope().Maybe<TCoEquiJoinTuple>()) {
-        if (! AllInnerJoins(joinTuple.LeftScope().Cast<TCoEquiJoinTuple>())) {
-            return false;
-        }
-    }
-
-    if (joinTuple.RightScope().Maybe<TCoEquiJoinTuple>()) {
-        if (! AllInnerJoins(joinTuple.RightScope().Cast<TCoEquiJoinTuple>())) {
-            return false;
-        }
-    }
-    return true;
-}
-
 bool DqCollectJoinRelationsWithStats(
     TTypeAnnotationContext& typesCtx, 
     const TCoEquiJoin& equiJoin, 
@@ -926,7 +905,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(const TExprBase& node, TExprContext& ctx, 
         return node;
     }
 
-    if (! AllInnerJoins(equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>())) {
+    if (! HasOnlyOneJoinType(*equiJoin.Arg(equiJoin.ArgCount() - 2).Ptr(), "Inner")) {
         return node;
     }
 

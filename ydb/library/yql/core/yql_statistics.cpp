@@ -20,9 +20,9 @@ bool TOptimizerStatistics::Empty() const {
 TOptimizerStatistics& TOptimizerStatistics::operator+=(const TOptimizerStatistics& other) {
     Nrows += other.Nrows;
     Ncols += other.Ncols;
-    if (Cost) {
+    if (Cost.has_value() && other.Cost.has_value()) {
         Cost = *Cost + *other.Cost;
-    } else {
+    } else if (other.Cost.has_value()) {
         Cost = other.Cost;
     }
     return *this;

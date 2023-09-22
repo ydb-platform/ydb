@@ -8,6 +8,7 @@
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/core/yql_type_helpers.h>
 #include <ydb/library/yql/core/yql_statistics.h>
+#include <ydb/library/yql/core/yql_cost_function.h>
 
 #include <ydb/library/yql/core/cbo/cbo_optimizer.h> //interface
 
@@ -192,29 +193,6 @@ struct TJoinOptimizerNode : public IBaseOptimizerNode {
     virtual ~TJoinOptimizerNode() {}
 
     /**
-     * Compute and set the statistics for this node.
-     * Currently we have a very rough calculation of statistics
-    */
-    void ComputeStatistics() {
-        double newCard = 0.2 * LeftArg->Stats->Nrows * RightArg->Stats->Nrows;
-        int newNCols = LeftArg->Stats->Ncols + RightArg->Stats->Ncols;
-        Stats = std::make_shared<TOptimizerStatistics>(newCard,newNCols);
-    }
-
-    /**
-     * Compute the cost of the join based on statistics and costs of children
-     * Again, we only have a rought calculation at this time
-    */
-    double ComputeCost() {
-        Y_ENSURE(LeftArg->Stats->Cost.has_value() && RightArg->Stats->Cost.has_value(),
-            "Missing values for costs in join computation");
-
-        return 2.0 * LeftArg->Stats->Nrows + RightArg->Stats->Nrows 
-            + Stats->Nrows 
-            + LeftArg->Stats->Cost.value() + RightArg->Stats->Cost.value();
-    }
-
-    /**
      * Print out the join tree, rooted at this node
     */
     virtual void Print(std::stringstream& stream, int ntabs=0) {
@@ -246,11 +224,12 @@ struct TJoinOptimizerNode : public IBaseOptimizerNode {
  * Create a new join and compute its statistics and cost
 */
 std::shared_ptr<TJoinOptimizerNode> MakeJoin(std::shared_ptr<IBaseOptimizerNode> left, 
-    std::shared_ptr<IBaseOptimizerNode> right, const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions) {
+    std::shared_ptr<IBaseOptimizerNode> right, 
+    const std::set<std::pair<TJoinColumn, TJoinColumn>>& joinConditions,
+    EJoinImplType joinImpl) {
 
     auto res = std::make_shared<TJoinOptimizerNode>(left, right, joinConditions);
-    res->ComputeStatistics();
-    res->Stats->Cost = res->ComputeCost();
+    res->Stats = std::make_shared<TOptimizerStatistics>( ComputeJoinStats(*left->Stats, *right->Stats, joinImpl));
     return res;
 }
 
@@ -681,20 +660,20 @@ template <int N> void TDPccpSolver<N>::EmitCsgCmp(const std::bitset<N>& S1, cons
 
     if (! DpTable.contains(joined)) {
         TEdge e1 = Graph.FindCrossingEdge(S1, S2);
-        DpTable[joined] = MakeJoin(DpTable[S1], DpTable[S2], e1.JoinConditions);
+        DpTable[joined] = MakeJoin(DpTable[S1], DpTable[S2], e1.JoinConditions, GraceJoin);
         TEdge e2 = Graph.FindCrossingEdge(S2, S1);
         std::shared_ptr<TJoinOptimizerNode> newJoin = 
-            MakeJoin(DpTable[S2], DpTable[S1], e2.JoinConditions);
+            MakeJoin(DpTable[S2], DpTable[S1], e2.JoinConditions, GraceJoin);
         if (newJoin->Stats->Cost.value() < DpTable[joined]->Stats->Cost.value()){
             DpTable[joined] = newJoin;
         }
     } else {
         TEdge e1 = Graph.FindCrossingEdge(S1, S2);
         std::shared_ptr<TJoinOptimizerNode> newJoin1 =
-             MakeJoin(DpTable[S1], DpTable[S2], e1.JoinConditions);
+             MakeJoin(DpTable[S1], DpTable[S2], e1.JoinConditions, GraceJoin);
         TEdge e2 = Graph.FindCrossingEdge(S2, S1);
         std::shared_ptr<TJoinOptimizerNode> newJoin2 = 
-            MakeJoin(DpTable[S2], DpTable[S1], e2.JoinConditions);
+            MakeJoin(DpTable[S2], DpTable[S1], e2.JoinConditions, GraceJoin);
         if (newJoin1->Stats->Cost.value() < DpTable[joined]->Stats->Cost.value()){
             DpTable[joined] = newJoin1;
         }

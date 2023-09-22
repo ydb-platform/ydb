@@ -281,7 +281,7 @@ public:
 
         PreparedExplainTransformer = TTransformationPipeline(typesCtx)
             .Add(CreateKqpExplainPreparedTransformer(
-                Gateway, Cluster, TransformCtx, &funcRegistry, timeProvider, randomProvider), "ExplainQuery")
+                Gateway, Cluster, TransformCtx, &funcRegistry, timeProvider, randomProvider, *typesCtx), "ExplainQuery")
             .Build(false);
 
         PhysicalOptimizeTransformer = CreateKqpQueryBlocksTransformer(TTransformationPipeline(typesCtx)
@@ -329,6 +329,7 @@ public:
             .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
             .AddPostTypeAnnotation()
             .Add(CreateKqpBuildPhysicalQueryTransformer(OptimizeCtx, BuildQueryCtx), "BuildPhysicalQuery")
+            .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config), "Statistics")
             .Build(false);
 
         PhysicalPeepholeTransformer = TTransformationPipeline(typesCtx)

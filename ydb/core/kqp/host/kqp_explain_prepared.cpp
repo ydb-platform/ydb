@@ -15,12 +15,14 @@ using namespace NThreading;
 class TKqpExplainPreparedTransformer : public NYql::TGraphTransformerBase {
 public:
     TKqpExplainPreparedTransformer(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
-        TIntrusivePtr<TKqlTransformContext> transformCtx, const NMiniKQL::IFunctionRegistry* funcRegistry)
+        TIntrusivePtr<TKqlTransformContext> transformCtx, const NMiniKQL::IFunctionRegistry* funcRegistry,
+        TTypeAnnotationContext& typeCtx)
         : Gateway(gateway)
         , Cluster(cluster)
         , TransformCtx(transformCtx)
         , FuncRegistry(funcRegistry)
         , CurrentTxIndex(0)
+        , TypeCtx(typeCtx)
     {
         TxAlloc = TransformCtx->QueryCtx->QueryData->GetAllocState();
     }
@@ -57,7 +59,7 @@ public:
         }
 
         PhyQuerySetTxPlans(query, TKqpPhysicalQuery(input), std::move(TxResults),
-            ctx, Cluster, TransformCtx->Tables, TransformCtx->Config);
+            ctx, Cluster, TransformCtx->Tables, TransformCtx->Config, TypeCtx);
         query.SetQueryAst(KqpExprToPrettyString(*input, ctx));
 
         return TStatus::Ok;
@@ -112,16 +114,18 @@ private:
     NThreading::TFuture<IKqpGateway::TExecPhysicalResult> ExecuteFuture;
     NThreading::TPromise<void> Promise;
     TTxAllocatorState::TPtr TxAlloc;
+    TTypeAnnotationContext& TypeCtx;
 };
 
 
 TAutoPtr<IGraphTransformer> CreateKqpExplainPreparedTransformer(TIntrusivePtr<IKqpGateway> gateway,
     const TString& cluster, TIntrusivePtr<TKqlTransformContext> transformCtx, const NMiniKQL::IFunctionRegistry* funcRegistry,
-    TIntrusivePtr<ITimeProvider> timeProvider, TIntrusivePtr<IRandomProvider> randomProvider)
+    TIntrusivePtr<ITimeProvider> timeProvider, TIntrusivePtr<IRandomProvider> randomProvider,
+    TTypeAnnotationContext& typeCtx)
 {
     Y_UNUSED(randomProvider);
     Y_UNUSED(timeProvider);
-    return new TKqpExplainPreparedTransformer(gateway, cluster, transformCtx, funcRegistry);
+    return new TKqpExplainPreparedTransformer(gateway, cluster, transformCtx, funcRegistry, typeCtx);
 }
 
 } // namespace NKqp

@@ -5,6 +5,7 @@ SRCS(
     yql_atom_enums.h
     yql_callable_transform.cpp
     yql_callable_transform.h
+    yql_cost_function.cpp
     yql_csv.cpp
     yql_csv.h
     yql_data_provider.h

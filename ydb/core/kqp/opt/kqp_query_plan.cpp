@@ -66,13 +66,15 @@ struct TSerializerCtx {
     TSerializerCtx(TExprContext& exprCtx, const TString& cluster,
         const TIntrusivePtr<NYql::TKikimrTablesData> tablesData,
         const TKikimrConfiguration::TPtr config, ui32 txCount,
-        TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults)
+        TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults,
+        TTypeAnnotationContext& typeCtx)
         : ExprCtx(exprCtx)
         , Cluster(cluster)
         , TablesData(tablesData)
         , Config(config)
         , TxCount(txCount)
         , PureTxResults(std::move(pureTxResults))
+        , TypeCtx(typeCtx)
     {}
 
     TMap<TString, TTableInfo> Tables;
@@ -88,6 +90,7 @@ struct TSerializerCtx {
     const TKikimrConfiguration::TPtr Config;
     const ui32 TxCount;
     TVector<TVector<NKikimrMiniKQL::TResult>> PureTxResults;
+    TTypeAnnotationContext& TypeCtx;
 };
 
 TString GetExprStr(const TExprBase& scalar, bool quoteStr = true) {
@@ -724,6 +727,8 @@ private:
                 op.Properties["Reverse"] = true;
             }
 
+            AddOptimizerEstimates(op, sourceSettings);
+
             SerializerCtx.Tables[table].Reads.push_back(readInfo);
 
             if (readInfo.Type == EPlanTableReadType::Scan) {
@@ -832,6 +837,8 @@ private:
                 readInfo.Reverse = true;
                 op.Properties["Reverse"] = true;
             }
+
+            AddOptimizerEstimates(op, sourceSettings);
 
             if (readInfo.Type == EPlanTableReadType::FullScan) {
                 op.Properties["Name"] = "TableFullScan";
@@ -954,6 +961,17 @@ private:
                 Y_ENSURE(!TMaybeNode<TDqConnection>(node).IsValid());
                 return TMaybeNode<TCoJoinDict>(node).IsValid();
             })).Cast<TCoJoinDict>();
+            operatorId = Visit(flatMap, join, planNode);
+            node = join.Ptr();
+        } else if (auto maybeJoinDict = TMaybeNode<TCoGraceJoinCore>(node)) {
+            operatorId = Visit(maybeJoinDict.Cast(), planNode);
+        } else if (TMaybeNode<TCoFlatMapBase>(node).Lambda().Body().Maybe<TCoGraceJoinCore>() ||
+                   TMaybeNode<TCoFlatMapBase>(node).Lambda().Body().Maybe<TCoMap>().Input().Maybe<TCoGraceJoinCore>()) {
+            auto flatMap = TMaybeNode<TCoFlatMapBase>(node).Cast();
+            auto join = TExprBase(FindNode(node, [](const TExprNode::TPtr& node) {
+                Y_ENSURE(!TMaybeNode<TDqConnection>(node).IsValid());
+                return TMaybeNode<TCoGraceJoinCore>(node).IsValid();
+            })).Cast<TCoGraceJoinCore>();
             operatorId = Visit(flatMap, join, planNode);
             node = join.Ptr();
         } else if (auto maybeCondense1 = TMaybeNode<TCoCondense1>(node)) {
@@ -1130,6 +1148,9 @@ private:
 
         TOperator op;
         op.Properties["Name"] = name;
+
+        AddOptimizerEstimates(op, join);
+
         auto operatorId = AddOperator(planNode, name, std::move(op));
 
         auto inputs = Visit(flatMap.Input().Ptr(), planNode);
@@ -1142,6 +1163,9 @@ private:
 
         TOperator op;
         op.Properties["Name"] = name;
+
+        AddOptimizerEstimates(op, join);
+
         return AddOperator(planNode, name, std::move(op));
     }
 
@@ -1150,6 +1174,9 @@ private:
 
         TOperator op;
         op.Properties["Name"] = name;
+
+        AddOptimizerEstimates(op, join);
+
         auto operatorId = AddOperator(planNode, name, std::move(op));
 
         auto inputs = Visit(flatMap.Input().Ptr(), planNode);
@@ -1162,6 +1189,34 @@ private:
 
         TOperator op;
         op.Properties["Name"] = name;
+
+        AddOptimizerEstimates(op, join);
+
+        return AddOperator(planNode, name, std::move(op));
+    }
+
+    ui32 Visit(const TCoFlatMapBase& flatMap, const TCoGraceJoinCore& join, TQueryPlanNode& planNode) {
+        const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (Grace)";
+
+        TOperator op;
+        op.Properties["Name"] = name;
+        auto operatorId = AddOperator(planNode, name, std::move(op));
+
+        AddOptimizerEstimates(op, join);
+
+        auto inputs = Visit(flatMap.Input().Ptr(), planNode);
+        planNode.Operators[operatorId].Inputs.insert(inputs.begin(), inputs.end());
+        return operatorId;
+    }
+
+    ui32 Visit(const TCoGraceJoinCore& join, TQueryPlanNode& planNode) {
+        const auto name = TStringBuilder() << join.JoinKind().Value() << "Join (Grace)";
+
+        TOperator op;
+        op.Properties["Name"] = name;
+
+        AddOptimizerEstimates(op, join);
+
         return AddOperator(planNode, name, std::move(op));
     }
 
@@ -1176,12 +1231,30 @@ private:
         return pred;
     }
 
+    void AddOptimizerEstimates(TOperator& op, const TExprBase& expr) {
+        if (!SerializerCtx.Config->HasOptEnableCostBasedOptimization()) {
+            return;
+        }
+        
+        if (auto stats = SerializerCtx.TypeCtx.GetStats(expr.Raw())) {
+            op.Properties["E-Rows"] = stats->Nrows;
+            op.Properties["E-Cost"] = stats->Cost.value();
+        }
+        else {
+            op.Properties["E-Rows"] = "No estimate";
+            op.Properties["E-Cost"] = "No estimate";
+
+        }
+    }
+
     ui32 Visit(const TCoFilterBase& filter, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Filter";
 
         auto pred = ExtractPredicate(filter.Lambda());
         op.Properties["Predicate"] = pred.Body;
+
+        AddOptimizerEstimates(op, filter);
 
         if (filter.Limit()) {
             op.Properties["Limit"] = PrettyExprStr(filter.Limit().Cast());
@@ -1204,6 +1277,8 @@ private:
             readInfo.Columns.push_back(TString(col.Value()));
             columns.AppendValue(col.Value());
         }
+
+        AddOptimizerEstimates(op, lookup);
 
         SerializerCtx.Tables[table].Reads.push_back(readInfo);
         planNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
@@ -1305,6 +1380,8 @@ private:
         if (read.Maybe<TKqpReadOlapTableRangesBase>()) {
             op.Properties["SsaProgram"] = GetSsaProgramInJsonByTable(table, planNode.StageProto);
         }
+
+        AddOptimizerEstimates(op, read);
 
         ui32 operatorId;
         if (readInfo.Type == EPlanTableReadType::FullScan) {
@@ -1443,6 +1520,8 @@ private:
         }
 
         SerializerCtx.Tables[table].Reads.push_back(readInfo);
+
+        AddOptimizerEstimates(op, read);
 
         ui32 operatorId;
         if (readInfo.Type == EPlanTableReadType::Scan) {
@@ -1664,9 +1743,10 @@ TString SerializeTxPlans(const TVector<const TString>& txPlans, const TString co
 // TODO(sk): check params from correlated subqueries // lookup join
 void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQuery& query,
     TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults, TExprContext& ctx, const TString& cluster,
-    const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, TKikimrConfiguration::TPtr config)
+    const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, TKikimrConfiguration::TPtr config,
+    TTypeAnnotationContext& typeCtx)
 {
-    TSerializerCtx serializerCtx(ctx, cluster, tablesData, config, query.Transactions().Size(), std::move(pureTxResults));
+    TSerializerCtx serializerCtx(ctx, cluster, tablesData, config, query.Transactions().Size(), std::move(pureTxResults), typeCtx);
 
     /* bindingName -> stage */
     auto collectBindings = [&serializerCtx, &query] (auto id, const auto& phase) {

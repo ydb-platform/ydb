@@ -1,5 +1,6 @@
 #pragma once
 
+#include <util/generic/string.h>
 #include <optional>
 #include <iostream>
 
@@ -16,10 +17,13 @@ struct TOptimizerStatistics {
     double Nrows = 0;
     int Ncols = 0;
     std::optional<double> Cost;
+    TString Descr;
 
     TOptimizerStatistics() : Cost(std::nullopt) {}
     TOptimizerStatistics(double nrows,int ncols): Nrows(nrows), Ncols(ncols), Cost(std::nullopt) {}
     TOptimizerStatistics(double nrows,int ncols, double cost): Nrows(nrows), Ncols(ncols), Cost(cost) {}
+    TOptimizerStatistics(double nrows,int ncols, double cost, TString descr): Nrows(nrows), Ncols(ncols), Cost(cost), Descr(descr) {}
+
 
     TOptimizerStatistics& operator+=(const TOptimizerStatistics& other);
     bool Empty() const;

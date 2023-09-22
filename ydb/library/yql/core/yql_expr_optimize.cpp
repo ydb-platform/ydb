@@ -329,6 +329,32 @@ namespace {
         }
     }
 
+    void VisitExprLambdasLastInternal(const TExprNode::TPtr& node, 
+        const TExprVisitPtrFunc& preLambdaFunc,
+        const TExprVisitPtrFunc& postLambdaFunc,
+        TNodeSet& visitedNodes)
+    {
+        if (!visitedNodes.emplace(node.Get()).second) {
+            return;
+        }
+
+        for (auto child : node->Children()) {
+            if (!child->IsLambda()) {
+                VisitExprLambdasLastInternal(child, preLambdaFunc, postLambdaFunc, visitedNodes);
+            }
+        }
+        
+        preLambdaFunc(node);
+        
+        for (auto child : node->Children()) {
+            if (child->IsLambda()) {
+                VisitExprLambdasLastInternal(child, preLambdaFunc, postLambdaFunc, visitedNodes);
+            }
+        }
+
+        postLambdaFunc(node);
+    }
+
     void VisitExprInternal(const TExprNode& node, const TExprVisitRefFunc& preFunc,
         const TExprVisitRefFunc& postFunc, TNodeSet& visitedNodes)
     {
@@ -862,6 +888,12 @@ void VisitExpr(const TExprNode& root, const TExprVisitRefFunc& func) {
 
 void VisitExpr(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func, TNodeSet& visitedNodes) {
     VisitExprInternal(root, func, {}, visitedNodes);
+}
+    
+void VisitExprLambdasLast(const TExprNode::TPtr& root, const TExprVisitPtrFunc& preLambdaFunc, const TExprVisitPtrFunc& postLambdaFunc)
+{
+    TNodeSet visitedNodes;
+    VisitExprLambdasLastInternal(root, preLambdaFunc, postLambdaFunc, visitedNodes);
 }
 
 void VisitExprByFirst(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func) {

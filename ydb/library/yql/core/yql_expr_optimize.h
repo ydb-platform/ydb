@@ -58,6 +58,8 @@ void VisitExpr(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func);
 void VisitExpr(const TExprNode::TPtr& root, const TExprVisitPtrFunc& preFunc, const TExprVisitPtrFunc& postFunc);
 void VisitExpr(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func, TNodeSet& visitedNodes);
 void VisitExpr(const TExprNode& root, const TExprVisitRefFunc& func);
+void VisitExprLambdasLast(const TExprNode::TPtr& root, const TExprVisitPtrFunc& preLambdaFunc, const TExprVisitPtrFunc& postLambdaFunc);
+
 
 void VisitExprByFirst(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func);
 void VisitExprByFirst(const TExprNode::TPtr& root, const TExprVisitPtrFunc& preFunc, const TExprVisitPtrFunc& postFunc);

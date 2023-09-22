@@ -230,10 +230,10 @@ namespace NYql::NDqs::NExecutionHelpers {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(TraceId);
             YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
             Y_VERIFY(ev->Get()->Record.GetMessageId() == WriteQueue.front().MessageId);
-            if (!WriteQueue.front().SentProcessedEvent) {  // messages, received before limits exceeded, are already been reported
+            while (!WriteQueue.empty() && !WriteQueue.front().SentProcessedEvent) {  // messages, received before limits exceeded, are already been reported
                 TBase::Send(TBase::SelfId(), MakeHolder<TEvMessageProcessed>(WriteQueue.front().MessageId));
+                WriteQueue.pop();
             }
-            WriteQueue.pop();
 
             if (WriteQueue.empty()) {
                 WaitingAckFromFRW = false;

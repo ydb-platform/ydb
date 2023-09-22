@@ -56,6 +56,19 @@
 `api.http.data_streams.put_records.successful_messages`<br/>`RATE`, штуки | Количество сообщений, отправленных методом `PutRecords`, которые были успешно записаны.<br/>Метки:<br/>- _topic_ – название топика.
 `api.http.data_streams.put_records.total_messages`<br/>`RATE`, штуки | Количество сообщений, отправленных методом `PutRecords`.<br/>Метки:<br/>- _topic_ – название топика.
 
+### Метрики Kafka API {#kafka_api}
+
+Имя метрики<br/>Тип, единицы измерения | Описание<br/>Метки
+----- | -----
+`api.kafka.request.count`<br/>`RATE`, штуки  | Количество запросов по протоколу Kafka в единицу времени.<br/>Метки:<br/>- _method_ – название метода сервиса Kafka API, например `PRODUCE`, `SASL_HANDSHAKE`.
+`api.kafka.request.bytes`<br/>`RATE`, байты  | Суммарный размер запросов по протоколу Kafka в единицу времени.<br/>Метки:<br/>- _method_ – название метода сервиса Kafka API, например `PRODUCE`, `SASL_HANDSHAKE`.
+`api.kafka.response.count`<br/>`RATE`, штуки  | Количество ответов по протоколу Kafka в едининицу времени.<br/>Метки:<br/>- _method_ – название метода сервиса Kafka API, например `PRODUCE`, `SASL_HANDSHAKE`.<br/>- _error_code_ – код ответа Kafka.
+`api.kafka.response.bytes`<br/>`RATE`, байты  | Суммарный размер ответов по протоколу Kafka в единицу времени.<br/>Метки:<br/>- _method_ – название метода сервиса Kafka API, например `PRODUCE`, `SASL_HANDSHAKE`.
+`api.kafka.response.duration_milliseconds`<br/>`HIST_RATE`, штуки  | Гистограммный счетчик. Определяет набор интервалов в миллисекундах и для каждого из них показывает количество запросов с попадающим в этот интервал временем выполнения.<br/>Метки:<br/>- _method_ – название метода сервиса Kafka API.
+`api.kafka.produce.failed_messages`<br/>`RATE`, штуки | Количество сообщений в единицу времени, отправленных методом `PRODUCE`, которые не были записаны.<br/>Метки:<br/>- _topic_ – название топика.
+`api.kafka.produce.successful_messages`<br/>`RATE`, штуки | Количество сообщений в единицу времени, отправленных методом `PRODUCE`, которые были успешно записаны.<br/>Метки:<br/>- _topic_ – название топика.
+`api.kafka.produce.total_messages`<br/>`RATE`, штуки | Количество сообщений в единицу времени, отправленных методом `PRODUCE`<br/>Метки:<br/>- _topic_ – название топика.
+
 ### Метрики сессий {#sessions}
 
 Имя метрики<br/>Тип, единицы измерения | Описание<br/>Метки

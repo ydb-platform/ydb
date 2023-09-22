@@ -66,7 +66,7 @@ TActorId TKafkaListOffsetsActor::SendOffsetsRequest(const TListOffsetsRequestDat
     KAFKA_LOG_D("ListOffsets actor: Get offsets for topic '" << topic.Name << "' for user '" << Context->UserToken->GetUserSID() << "'");
     
     TEvKafka::TGetOffsetsRequest offsetsRequest;
-    offsetsRequest.Topic = topic.Name.value();
+    offsetsRequest.Topic = NormalizePath(Context->DatabasePath, topic.Name.value());
     offsetsRequest.Token = Context->UserToken->GetSerializedToken();
     offsetsRequest.Database = Context->DatabasePath;
 

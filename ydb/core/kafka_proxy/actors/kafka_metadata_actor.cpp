@@ -52,7 +52,7 @@ TActorId TKafkaMetadataActor::SendTopicRequest(const TMetadataRequestData::TMeta
     KAFKA_LOG_D("Describe partitions locations for topic '" << *topicRequest.Name << "' for user '" << Context->UserToken->GetUserSID() << "'");
 
     TGetPartitionsLocationRequest locationRequest{};
-    locationRequest.Topic = topicRequest.Name.value();
+    locationRequest.Topic = NormalizePath(Context->DatabasePath, topicRequest.Name.value());
     locationRequest.Token = Context->UserToken->GetSerializedToken();
     locationRequest.Database = Context->DatabasePath;
 

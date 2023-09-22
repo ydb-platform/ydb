@@ -662,7 +662,6 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
 
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableQueryServiceConfig()->set_scriptresultrowslimit(ROWS_LIMIT);
-        appCfg.MutableTableServiceConfig()->MutableQueryLimits()->set_resultrowslimit(ROWS_LIMIT);
 
         auto kikimr = DefaultKikimrRunner({}, appCfg);
         auto db = kikimr.GetQueryClient();
@@ -683,7 +682,6 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
 
         NKikimrConfig::TAppConfig appCfg;
         appCfg.MutableQueryServiceConfig()->set_scriptresultsizelimit(NUMER_ROWS / 2);
-        appCfg.MutableTableServiceConfig()->MutableQueryLimits()->set_resultrowslimit(NUMER_ROWS);
 
         auto kikimr = DefaultKikimrRunner({}, appCfg);
         auto db = kikimr.GetQueryClient();

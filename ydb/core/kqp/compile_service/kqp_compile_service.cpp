@@ -330,19 +330,20 @@ public:
         return NKikimrServices::TActivity::KQP_COMPILE_SERVICE;
     }
 
-    TKqpCompileService(const TTableServiceConfig& serviceConfig,
-        const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig, const TKqpSettings::TConstPtr& kqpSettings,
+    TKqpCompileService(const TTableServiceConfig& tableServiceConfig, const TQueryServiceConfig& queryServiceConfig,
+        const TMetadataProviderConfig& metadataProviderConfig, const TKqpSettings::TConstPtr& kqpSettings,
         TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
         std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
         std::optional<TKqpFederatedQuerySetup> federatedQuerySetup
         )
-        : Config(serviceConfig)
+        : TableServiceConfig(tableServiceConfig)
+        , QueryServiceConfig(queryServiceConfig)
         , MetadataProviderConfig(metadataProviderConfig)
         , KqpSettings(kqpSettings)
         , ModuleResolverState(moduleResolverState)
         , Counters(counters)
-        , QueryCache(Config.GetCompileQueryCacheSize(), TDuration::Seconds(Config.GetCompileQueryCacheTTLSec()))
-        , RequestsQueue(Config.GetCompileRequestQueueSize())
+        , QueryCache(TableServiceConfig.GetCompileQueryCacheSize(), TDuration::Seconds(TableServiceConfig.GetCompileQueryCacheTTLSec()))
+        , RequestsQueue(TableServiceConfig.GetCompileRequestQueueSize())
         , QueryReplayFactory(std::move(queryReplayFactory))
         , FederatedQuerySetup(federatedQuerySetup)
     {}
@@ -350,7 +351,7 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         Y_UNUSED(ctx);
 
-        QueryReplayBackend.Reset(CreateQueryReplayBackend(Config, Counters, QueryReplayFactory));
+        QueryReplayBackend.Reset(CreateQueryReplayBackend(TableServiceConfig, Counters, QueryReplayFactory));
         // Subscribe for TableService config changes
         ui32 tableServiceConfigKind = (ui32) NKikimrConsole::TConfigItem::TableServiceConfigItem;
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
@@ -358,7 +359,7 @@ public:
              IEventHandle::FlagTrackDelivery);
 
         Become(&TKqpCompileService::MainState);
-        if (Config.GetCompileQueryCacheTTLSec()) {
+        if (TableServiceConfig.GetCompileQueryCacheTTLSec()) {
             StartCheckQueriesTtlTimer();
         }
     }
@@ -390,50 +391,50 @@ private:
     void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         auto &event = ev->Get()->Record;
 
-        bool enableKqpDataQueryStreamLookup = Config.GetEnableKqpDataQueryStreamLookup();
-        bool enableKqpScanQueryStreamLookup = Config.GetEnableKqpScanQueryStreamLookup();
-        bool enableKqpScanQueryStreamIdxLookupJoin = Config.GetEnableKqpScanQueryStreamIdxLookupJoin();
+        bool enableKqpDataQueryStreamLookup = TableServiceConfig.GetEnableKqpDataQueryStreamLookup();
+        bool enableKqpScanQueryStreamLookup = TableServiceConfig.GetEnableKqpScanQueryStreamLookup();
+        bool enableKqpScanQueryStreamIdxLookupJoin = TableServiceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin();
 
-        bool enableKqpDataQuerySourceRead = Config.GetEnableKqpDataQuerySourceRead();
-        bool enableKqpScanQuerySourceRead = Config.GetEnableKqpScanQuerySourceRead();
+        bool enableKqpDataQuerySourceRead = TableServiceConfig.GetEnableKqpDataQuerySourceRead();
+        bool enableKqpScanQuerySourceRead = TableServiceConfig.GetEnableKqpScanQuerySourceRead();
 
-        bool enableKqpDataQueryPredicateExtract = Config.GetEnablePredicateExtractForDataQueries();
-        bool enableKqpScanQueryPredicateExtract = Config.GetEnablePredicateExtractForScanQueries();
-        bool predicateExtract20 = Config.GetPredicateExtract20();
+        bool enableKqpDataQueryPredicateExtract = TableServiceConfig.GetEnablePredicateExtractForDataQueries();
+        bool enableKqpScanQueryPredicateExtract = TableServiceConfig.GetEnablePredicateExtractForScanQueries();
+        bool predicateExtract20 = TableServiceConfig.GetPredicateExtract20();
 
-        bool enableSequentialReads = Config.GetEnableSequentialReads();
-        bool defaultSyntaxVersion = Config.GetSqlVersion();
-        bool enableKqpImmediateEffects = Config.GetEnableKqpImmediateEffects();
+        bool enableSequentialReads = TableServiceConfig.GetEnableSequentialReads();
+        bool defaultSyntaxVersion = TableServiceConfig.GetSqlVersion();
+        bool enableKqpImmediateEffects = TableServiceConfig.GetEnableKqpImmediateEffects();
 
-        bool indexAutoChooser = Config.GetEnableIndexAutoChooser();
+        bool indexAutoChooser = TableServiceConfig.GetEnableIndexAutoChooser();
 
-        Config.Swap(event.MutableConfig()->MutableTableServiceConfig());
+        TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 
         auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
 
-        if (Config.GetSqlVersion() != defaultSyntaxVersion ||
-            Config.GetEnableKqpDataQueryStreamLookup() != enableKqpDataQueryStreamLookup ||
-            Config.GetEnableKqpScanQueryStreamLookup() != enableKqpScanQueryStreamLookup ||
-            Config.GetEnableKqpScanQueryStreamIdxLookupJoin() != enableKqpScanQueryStreamIdxLookupJoin ||
-            Config.GetEnableKqpDataQuerySourceRead() != enableKqpDataQuerySourceRead ||
-            Config.GetEnableKqpScanQuerySourceRead() != enableKqpScanQuerySourceRead ||
-            Config.GetEnablePredicateExtractForDataQueries() != enableKqpDataQueryPredicateExtract ||
-            Config.GetEnablePredicateExtractForScanQueries() != enableKqpScanQueryPredicateExtract ||
-            Config.GetPredicateExtract20() != predicateExtract20 ||
-            Config.GetEnableSequentialReads() != enableSequentialReads ||
-            Config.GetEnableKqpImmediateEffects() != enableKqpImmediateEffects ||
-            Config.GetEnableIndexAutoChooser() != indexAutoChooser) {
+        if (TableServiceConfig.GetSqlVersion() != defaultSyntaxVersion ||
+            TableServiceConfig.GetEnableKqpDataQueryStreamLookup() != enableKqpDataQueryStreamLookup ||
+            TableServiceConfig.GetEnableKqpScanQueryStreamLookup() != enableKqpScanQueryStreamLookup ||
+            TableServiceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin() != enableKqpScanQueryStreamIdxLookupJoin ||
+            TableServiceConfig.GetEnableKqpDataQuerySourceRead() != enableKqpDataQuerySourceRead ||
+            TableServiceConfig.GetEnableKqpScanQuerySourceRead() != enableKqpScanQuerySourceRead ||
+            TableServiceConfig.GetEnablePredicateExtractForDataQueries() != enableKqpDataQueryPredicateExtract ||
+            TableServiceConfig.GetEnablePredicateExtractForScanQueries() != enableKqpScanQueryPredicateExtract ||
+            TableServiceConfig.GetPredicateExtract20() != predicateExtract20 ||
+            TableServiceConfig.GetEnableSequentialReads() != enableSequentialReads ||
+            TableServiceConfig.GetEnableKqpImmediateEffects() != enableKqpImmediateEffects ||
+            TableServiceConfig.GetEnableIndexAutoChooser() != indexAutoChooser) {
 
             LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
                 "Iterator read flags was changed. StreamLookup from " << enableKqpDataQueryStreamLookup <<
-                " to " << Config.GetEnableKqpDataQueryStreamLookup() << " for data queries, from " <<
-                enableKqpScanQueryStreamLookup << " to " << Config.GetEnableKqpScanQueryStreamLookup() << ", from "
-                << enableKqpScanQueryStreamIdxLookupJoin << " to " << Config.GetEnableKqpScanQueryStreamIdxLookupJoin()
+                " to " << TableServiceConfig.GetEnableKqpDataQueryStreamLookup() << " for data queries, from " <<
+                enableKqpScanQueryStreamLookup << " to " << TableServiceConfig.GetEnableKqpScanQueryStreamLookup() << ", from "
+                << enableKqpScanQueryStreamIdxLookupJoin << " to " << TableServiceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin()
                 << " scan queries. Sources for data queries from " << enableKqpDataQuerySourceRead << " to "
-                << Config.GetEnableKqpDataQuerySourceRead() << "for scan queries from " << enableKqpScanQuerySourceRead
-                << " to " << Config.GetEnableKqpScanQuerySourceRead());
+                << TableServiceConfig.GetEnableKqpDataQuerySourceRead() << "for scan queries from " << enableKqpScanQuerySourceRead
+                << " to " << TableServiceConfig.GetEnableKqpScanQuerySourceRead());
 
             QueryCache.Clear();
         }
@@ -739,7 +740,7 @@ private:
 
 private:
     void ProcessQueue(const TActorContext& ctx) {
-        auto maxActiveRequests = Config.GetCompileMaxActiveRequests();
+        auto maxActiveRequests = TableServiceConfig.GetCompileMaxActiveRequests();
 
         while (RequestsQueue.ActiveRequestsCount() < maxActiveRequests) {
             auto request = RequestsQueue.Dequeue();
@@ -766,7 +767,7 @@ private:
     }
 
     void StartCompilation(TKqpCompileRequest&& request, const TActorContext& ctx) {
-        auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, Config, MetadataProviderConfig, ModuleResolverState, Counters, 
+        auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, TableServiceConfig, QueryServiceConfig, MetadataProviderConfig, ModuleResolverState, Counters, 
              request.Uid, request.Query, request.UserToken, FederatedQuerySetup, request.DbCounters, request.UserRequestContext,
              request.CompileServiceSpan.GetTraceId(), std::move(request.TempTablesState));
         auto compileActorId = ctx.ExecutorThread.RegisterActor(compileActor, TMailboxType::HTSwap,
@@ -781,7 +782,7 @@ private:
     }
 
     void StartCheckQueriesTtlTimer() {
-        Schedule(TDuration::Seconds(Config.GetCompileQueryCacheTTLSec()), new TEvents::TEvWakeup());
+        Schedule(TDuration::Seconds(TableServiceConfig.GetCompileQueryCacheTTLSec()), new TEvents::TEvWakeup());
     }
 
     void Reply(const TActorId& sender, const TKqpCompileResult::TConstPtr& compileResult,
@@ -846,8 +847,9 @@ private:
     }
 
 private:
-    TTableServiceConfig Config;
-    NKikimrConfig::TMetadataProviderConfig MetadataProviderConfig;
+    TTableServiceConfig TableServiceConfig;
+    TQueryServiceConfig QueryServiceConfig;
+    TMetadataProviderConfig MetadataProviderConfig;
     TKqpSettings::TConstPtr KqpSettings;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
     TIntrusivePtr<TKqpCounters> Counters;
@@ -859,14 +861,14 @@ private:
     std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
 };
 
-IActor* CreateKqpCompileService(const TTableServiceConfig& serviceConfig,
-    const NKikimrConfig::TMetadataProviderConfig& metadataProviderConfig, const TKqpSettings::TConstPtr& kqpSettings,
+IActor* CreateKqpCompileService(const TTableServiceConfig& tableServiceConfig, const TQueryServiceConfig& queryServiceConfig,
+    const TMetadataProviderConfig& metadataProviderConfig, const TKqpSettings::TConstPtr& kqpSettings,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
     std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
     std::optional<TKqpFederatedQuerySetup> federatedQuerySetup
     )
 {
-    return new TKqpCompileService(serviceConfig, metadataProviderConfig, kqpSettings, moduleResolverState, counters,
+    return new TKqpCompileService(tableServiceConfig, queryServiceConfig, metadataProviderConfig, kqpSettings, moduleResolverState, counters,
                                   std::move(queryReplayFactory), federatedQuerySetup);
 }
 

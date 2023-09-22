@@ -1,6 +1,24 @@
-#!/usr/bin/env python
+#!/usr/bin/env sh
 
 # Please, keep this script in sync with arcadia/ya
+
+# Shell commands follow
+# Next line is bilingual: it starts a comment in Python, but do nothing in shell
+""":"
+
+# Find a suitable python interpreter
+for cmd in python3 python; do
+    command -v > /dev/null $cmd && exec `command -v $cmd` $0 "$@"
+done
+
+echo "Python interpreter is not found in this system, please, install python" >&2
+
+exit 2
+
+":"""
+# Previous line is bilingual: it ends a comment in Python, but do nothing in shell
+# Shell commands end here
+# Python script follows
 
 import os
 import sys

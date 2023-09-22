@@ -182,7 +182,7 @@ public:
         std::vector<TTestSession> result;
         result.reserve(resources.size());
         for (TQuoterResourceTree* resource : resources) {
-            TQuoterSession* session = Resources->GetOrCreateSession(clientId, resource);
+            TQuoterSession* session = Resources->GetOrCreateSession(clientId, 1, resource);
             UNIT_ASSERT(session);
             session->SetResourceSink(sink);
             const NActors::TActorId prevPipeServerId = session->SetPipeServerId(pipeServerId);

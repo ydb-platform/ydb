@@ -308,6 +308,7 @@ class TQuoterService : public TActorBootstrapped<TQuoterService> {
     void AllocateResource(TResource &quores);
     void PublishStats();
 
+    void Handle(NMon::TEvHttpInfo::TPtr &ev);
     void Handle(TEvQuota::TEvRequest::TPtr &ev);
     void Handle(TEvQuota::TEvCancelRequest::TPtr &ev);
     void Handle(TEvQuota::TEvProxySession::TPtr &ev);
@@ -333,6 +334,7 @@ public:
 
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(NMon::TEvHttpInfo, Handle);
             hFunc(TEvQuota::TEvRequest, Handle);
             hFunc(TEvQuota::TEvCancelRequest, Handle);
             hFunc(TEvQuota::TEvProxySession, Handle);

@@ -401,6 +401,7 @@ struct TKesusTablet::THtmlRenderer {
                     props += resource->GetProps().Utf8DebugString();
                     SubstGlobal(props, "\n", "\n    "); // make indent
                     out << "Props:" << props << "\n";
+                    resource->HtmlDebugInfo(out);
                 }
 
                 TAG(TH3) { out << "Children resources"; }
@@ -422,19 +423,23 @@ struct TKesusTablet::THtmlRenderer {
                 TABLEHEAD() {
                     TABLER() {
                         TABLEH() { out << "Client"; }
+                        TABLEH() { out << "Version"; }
                         TABLEH() { out << "Active"; }
-                        TABLEH() { out << "Consumed"; }
+                        TABLEH() { out << "Sent"; }
+                        TABLEH() { out << "ConsumedSinceReplicationEnabled"; }
                         TABLEH() { out << "Requested"; }
                     }
                 }
                 TABLEBODY() {
                     const auto& clients = resource->GetSessions();
-                    for (const NActors::TActorId& clientId : clients) {
+                    for (const auto& [clientId, _] : clients) {
                         const TQuoterSession* session = Self->QuoterResources.FindSession(clientId, resource->GetResourceId());
                         Y_VERIFY(session);
                         TABLER() {
                             TABLED() { out << clientId; }
+                            TABLED() { out << session->GetClientVersion(); }
                             TABLED() { out << (session->IsActive() ? "true" : "false"); }
+                            TABLED() { out << session->GetTotalSent(); }
                             TABLED() { out << session->GetTotalConsumed(); }
                             TABLED() { out << session->GetAmountRequested(); }
                         }

@@ -439,6 +439,7 @@ message TEvSubscribeOnResources {
     }
     repeated TResourceSubscribeInfo Resources = 1;
     NActorsProto.TActorId ActorID = 2;
+    uint32 ProtocolVersion = 3;
 }
 
 message TEvSubscribeOnResourcesResult {
@@ -446,8 +447,10 @@ message TEvSubscribeOnResourcesResult {
         uint64 ResourceId = 1;
         TKesusError Error = 2;
         TStreamingQuoterResource EffectiveProps = 3;
+        double InitialAvailable = 4;
     }
     repeated TResourceSubscribeResult Results = 1; // Resources are in the same order that they were specified in request.
+    uint32 ProtocolVersion = 2;
 }
 
 // Notification about resources consumption state update.
@@ -517,4 +520,38 @@ message TEvAccountResourcesAck {
         TKesusError StateNotification = 4; // Resource can be deleted before accounting. In this case Kesus will send an error for resource.
     }
     repeated TResourceInfo ResourcesInfo = 1;
+}
+
+// Account consumed resources into metering.
+// Event is sent from client to Kesus.
+message TEvReportResources {
+    message TResourceInfo {
+        uint64 ResourceId = 1;
+        double TotalConsumed = 2;
+        uint32 ReportId = 3;
+    }
+    repeated TResourceInfo ResourcesInfo = 1;
+    NActorsProto.TActorId ActorID = 2;
+}
+
+// Ack for TEvAccountResources event.
+message TEvReportResourcesAck {
+    message TResourceInfo {
+        uint64 ResourceId = 1;
+        TKesusError StateNotification = 4; // Resource can be deleted before accounting. In this case Kesus will send an error for resource.
+    }
+    repeated TResourceInfo ResourcesInfo = 1;
+}
+
+message TEvSyncResources {
+    message TResourceInfo {
+        uint64 ResourceId = 1;
+        double Available = 2;
+        uint32 LastReportId = 3; // Last ack report id for this session
+    }
+    repeated TResourceInfo ResourcesInfo = 1;
+}
+
+// Ack for TEvResourcesSync event.
+message TEvSyncResourcesAck {
 }

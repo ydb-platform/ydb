@@ -5,8 +5,9 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/kesus/tablet/events.h>
-#include <ydb/library/time_series_vec/time_series_vec.h>
+#include <ydb/core/kesus/tablet/quoter_constants.h>
 
+#include <ydb/library/time_series_vec/time_series_vec.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 #include <library/cpp/actors/core/hfunc.h>
@@ -40,10 +41,6 @@
 namespace NKikimr {
 namespace NQuoter {
 
-static constexpr double FADING_ALLOCATION_COEFFICIENT = 0.999;
-static constexpr double PREFETCH_COEFFICIENT_DEFAULT = 0.20;
-static constexpr double PREFETCH_WATERMARK_DEFAULT = 0.75;
-
 using NKesus::TEvKesus;
 
 class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
@@ -61,15 +58,30 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
         std::pair<TDuration, double> AverageAllocationParams = {TDuration::Zero(), 0.0};
 
         NKikimrKesus::TStreamingQuoterResource Props;
+
         bool InitedProps = false;
 
         TKesusResourceAllocationStatistics AllocStats;
 
         THolder<TTimeSeriesVec<double>> History;
-        bool PendingReport = false; // History contains data to send
+        bool PendingAccountingReport = false; // History contains data to send
         TInstant HistoryAccepted; // Do not report history before this instant
-        TInstant LastReport; // Aligned to `ReportPeriod` grid timestamp of last sent report
-        TDuration ReportPeriod = TDuration::Max();
+        TInstant LastAccountingReport; // Aligned to `ReportPeriod` grid timestamp of last sent report
+        TDuration AccountingReportPeriod = TDuration::Max();
+
+        struct TReportHistoryItem {
+            ui32 ReportId;
+            double TotalConsumed;
+            double TotalAllocated;
+        };
+        bool ReplicationEnabled = false;
+        std::deque<TReportHistoryItem> ReportHistory;
+        size_t MaxReportHistory = 120;
+        ui32 ReportId = 0;
+        double TotalConsumed; // Since last replication enabled
+        double TotalAllocated;
+        TInstant LastReplicationReport; // Aligned to `ReportPeriod` grid timestamp of last sent report
+        TDuration ReplicationReportPeriod = TDuration::Max();
 
         struct TCounters {
             class TDoubleCounter {
@@ -161,12 +173,18 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
             ev.Resources.emplace_back(ResId, sustainedRate, std::move(update), TEvQuota::EUpdateState::Normal);
         }
 
-        void SetProps(const NKikimrKesus::TStreamingQuoterResource& props) {
+        void AddConsumed(double consumed) {
+            if (ReplicationEnabled) {
+                TotalConsumed += consumed;
+            }
+        }
+
+        void SetProps(const NKikimrKesus::TStreamingQuoterResource& props, ui32 serverVersion) {
             Props = props;
             const auto& cfg = Props.GetHierarchicalDRRResourceConfig();
             const double speed = cfg.GetMaxUnitsPerSecond();
-            const double prefetch = cfg.GetPrefetchCoefficient() ? cfg.GetPrefetchCoefficient() : PREFETCH_COEFFICIENT_DEFAULT;
-            const double watermark = std::clamp(cfg.GetPrefetchWatermark() ? cfg.GetPrefetchWatermark() : PREFETCH_WATERMARK_DEFAULT, 0.0, 1.0);
+            const double prefetch = cfg.GetPrefetchCoefficient() ? cfg.GetPrefetchCoefficient() : NKesus::NQuoter::PREFETCH_COEFFICIENT_DEFAULT;
+            const double watermark = std::clamp(cfg.GetPrefetchWatermark() ? cfg.GetPrefetchWatermark() : NKesus::NQuoter::PREFETCH_WATERMARK_DEFAULT, 0.0, 1.0);
 
             const double prevBucketMaxSize = ResourceBucketMaxSize;
             ResourceBucketMaxSize = Max(0.0, speed * prefetch);
@@ -187,15 +205,27 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
             }
 
             if (Props.GetAccountingConfig().GetEnabled()) {
-                ReportPeriod = TDuration::MilliSeconds(Props.GetAccountingConfig().GetReportPeriodMs());
+                AccountingReportPeriod = TDuration::MilliSeconds(Props.GetAccountingConfig().GetReportPeriodMs());
                 THolder<TTimeSeriesVec<double>> history(new TTimeSeriesVec<double>(Props.GetAccountingConfig().GetCollectPeriodSec()));
                 if (History) {
                     history->Add(*History.Get());
                 }
                 History.Reset(history.Release());
             } else {
-                ReportPeriod = TDuration::Max();
+                AccountingReportPeriod = TDuration::Max();
                 History.Destroy();
+            }
+
+            if (serverVersion >= 1 && Props.GetHierarchicalDRRResourceConfig().HasReplicatedBucket()) {
+                ReplicationEnabled = true;
+                ReplicationReportPeriod = TDuration::MilliSeconds(Props.GetHierarchicalDRRResourceConfig().GetReplicatedBucket().GetReportIntervalMs());
+                TotalConsumed = 0;
+                TotalAllocated = 0;
+            } else {
+                ReplicationEnabled = false;
+                ReplicationReportPeriod = TDuration::Max();
+                TotalConsumed = 0;
+                TotalAllocated = 0;
             }
 
             if (!InitedProps) {
@@ -248,6 +278,7 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
     TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TKesusInfo> KesusInfo;
     THolder<ITabletPipeFactory> TabletPipeFactory;
     TActorId KesusPipeClient;
+    ui32 ServerVersion = 0;
 
     bool Connected = false;
     TInstant DisconnectTime;
@@ -261,6 +292,7 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
 
     THolder<NKesus::TEvKesus::TEvUpdateConsumptionState> UpdateEv;
     THolder<NKesus::TEvKesus::TEvAccountResources> AccountEv;
+    THolder<NKesus::TEvKesus::TEvReportResources> ReplicationEv;
     THolder<TEvQuota::TEvProxyUpdate> ProxyUpdateEv;
     THashMap<TDuration, THolder<TEvPrivate::TEvOfflineResourceAllocation>> OfflineAllocationEvSchedule;
 
@@ -361,6 +393,85 @@ private:
         return indexIt != ResIndex.end() ? indexIt->second->second.Get() : nullptr;
     }
 
+    void Handle(NMon::TEvHttpInfo::TPtr &ev) {
+        TStringStream str;
+        str << NMonitoring::HTTPOKHTML;
+        HTML(str) {
+            HEAD() {
+                str << "<link rel='stylesheet' href='../cms/ext/bootstrap.min.css'>" << Endl
+                    << "<script language='javascript' type='text/javascript' src='../cms/ext/jquery.min.js'></script>" << Endl
+                    << "<script language='javascript' type='text/javascript' src='../cms/ext/bootstrap.bundle.min.js'></script>" << Endl;
+            }
+
+            DIV() {
+                OL_CLASS("breadcrumb") {
+                    LI_CLASS("breadcrumb-item") {
+                        str << "<a href='..' id='host-ref'>YDB Developer UI</a>" << Endl;
+                    }
+                    LI_CLASS("breadcrumb-item") {
+                        str << "<a href='.'>Actors</a>" << Endl;
+                    }
+                    LI_CLASS("breadcrumb-item") {
+                        str << "<a href='./quoter_proxy'>QuoterService</a>" << Endl;
+                    }
+                    LI_CLASS("breadcrumb-item active") {
+                        str << LogPrefix << Endl;
+                    }
+                }
+            }
+            DIV_CLASS("container") {
+                str << "<a class='collapse-ref' data-toggle='collapse' data-target='#proxy-state'>"
+                    << "ProxyState</a><div id='proxy-state' class='collapse show'>";
+                PRE() {
+                    str << "Path: " << LogPrefix << "\n"
+                        << "KesusTabletId: " << KesusInfo->Description.GetKesusTabletId() << "\n"
+                        << "ServerVersion: " << ServerVersion << "\n"
+                        << "Connected: " << (Connected ? "true" : "false") << "\n"
+                        << "DisconnectTime: " << DisconnectTime << "\n"
+                        << "Resources:\n";
+                    for (auto& [name, res] : Resources) {
+                        str << "  Resource: " << name << "\n";
+
+                        if (res) {
+                            str << "  Id: " << res->ResId << "\n"
+                                << "  Available: " << res->Available << "\n"
+                                << "  QueueWeight: " << res->QueueWeight << "\n"
+                                << "  SessionIsActive: " << (res->SessionIsActive ? "true" : "false") << "\n"
+                                << "  ProxySessionWasSent: " << (res->ProxySessionWasSent ? "true" : "false") << "\n"
+                                << "  LastAllocated: " << res->LastAllocated << "\n"
+                                << "  InitedProps: " << (res->InitedProps ? "true" : "false") << "\n"
+                                << "  PendingAccountingReport: " << (res->PendingAccountingReport ? "true" : "false") << "\n"
+                                << "  HistoryAccepted: " << res->HistoryAccepted << "\n"
+                                << "  LastAccountingReport: " << res->LastAccountingReport << "\n"
+                                << "  AccountingReportPeriod: " << res->AccountingReportPeriod << "\n"
+                                << "  ReplicationEnabled: " << (res->ReplicationEnabled ? "true" : "false") << "\n"
+                                << "  TotalConsumed: " << res->TotalConsumed << "\n"
+                                << "  TotalAllocated: " << res->TotalAllocated << "\n"
+                                << "  LastReplicationReport: " << res->LastReplicationReport << "\n"
+                                << "  ReplicationReportPeriod: " << res->ReplicationReportPeriod << "\n"
+                                << "  Props: " << res->Props.ShortDebugString() << "\n";
+                        }
+                    }
+                    str << "UpdateEv: " << (UpdateEv ? "" : "null") << "\n";
+                    if (UpdateEv) {
+
+                    }
+                    str << "AccountEv: " << (AccountEv ? "" : "null") << "\n";
+                    if (AccountEv) {
+
+                    }
+                    str << "ReplicationEv: " << (ReplicationEv ? "" : "null") << "\n";
+                    if (ReplicationEv) {
+
+                    }
+                }
+                str << "</div>";
+            }
+        }
+
+        Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+    }
+
     void Handle(TEvQuota::TEvProxyRequest::TPtr& ev) {
         TEvQuota::TEvProxyRequest* msg = ev->Get();
         KESUS_PROXY_LOG_INFO("ProxyRequest \"" << msg->Resource << "\"");
@@ -396,6 +507,7 @@ private:
         if (Connected) {
             KESUS_PROXY_LOG_DEBUG("Subscribe on resource \"" << resourcePath << "\"");
             auto ev = std::make_unique<TEvKesus::TEvSubscribeOnResources>();
+            ev->Record.SetProtocolVersion(NKesus::NQuoter::QUOTER_PROTOCOL_VERSION);
             ActorIdToProto(SelfId(), ev->Record.MutableActorID());
             auto* res = ev->Record.AddResources();
             res->SetResourcePath(resourcePath);
@@ -411,6 +523,7 @@ private:
         std::vector<TString> resourcePaths;
         resourcePaths.reserve(Resources.size());
         auto ev = std::make_unique<TEvKesus::TEvSubscribeOnResources>();
+        ev->Record.SetProtocolVersion(NKesus::NQuoter::QUOTER_PROTOCOL_VERSION);
         ActorIdToProto(SelfId(), ev->Record.MutableActorID());
         for (auto&& [resourcePath, resInfo] : Resources) {
             auto* res = ev->Record.AddResources();
@@ -445,7 +558,20 @@ private:
         }
     }
 
+    void InitReplicationEv() {
+        if (!ReplicationEv) {
+            ReplicationEv = MakeHolder<NKesus::TEvKesus::TEvReportResources>();
+            ActorIdToProto(SelfId(), ReplicationEv->Record.MutableActorID());
+        }
+    }
+
     void SendDeferredEvents() {
+        for (auto& [_, res] : Resources) {
+            if (res->ReplicationEnabled) {
+                CheckReplicationReport(*res, TActivationContext::Now());
+            }
+        }
+
         if (Connected && UpdateEv) {
             KESUS_PROXY_LOG_TRACE("UpdateConsumptionState(" << UpdateEv->Record << ")");
             NTabletPipe::SendData(SelfId(), KesusPipeClient, UpdateEv.Release());
@@ -457,6 +583,12 @@ private:
             NTabletPipe::SendData(SelfId(), KesusPipeClient, AccountEv.Release());
         }
         AccountEv.Reset();
+
+        if (Connected && ReplicationEv && ReplicationEv->Record.GetResourcesInfo().size() > 0) {
+            KESUS_PROXY_LOG_TRACE("ReportResources(" << ReplicationEv->Record << ")");
+            NTabletPipe::SendData(SelfId(), KesusPipeClient, ReplicationEv.Release());
+        }
+        ReplicationEv.Reset();
 
         if (ProxyUpdateEv && ProxyUpdateEv->Resources) {
             SendToService(std::move(ProxyUpdateEv));
@@ -510,7 +642,7 @@ private:
             if (when) {
                 const TDuration disconnected = now - DisconnectTime;
                 const double microseconds = static_cast<double>((when + disconnected).MicroSeconds());
-                amount *= std::pow(FADING_ALLOCATION_COEFFICIENT, microseconds / 1000000.0);
+                amount *= std::pow(NKesus::NQuoter::FADING_ALLOCATION_COEFFICIENT, microseconds / 1000000.0);
             }
             event->Resources.emplace_back(res.ResId, amount);
         }
@@ -537,7 +669,7 @@ private:
         }
     }
 
-    void ReportSession(TResourceState& res) {
+    void ReportAccountingSession(TResourceState& res) {
         if (Connected && res.History) {
             InitAccountEv();
             auto* resInfo = AccountEv->Record.AddResourcesInfo();
@@ -564,8 +696,23 @@ private:
                 resInfo->SetIntervalUs(res.History->Interval().MicroSeconds());
             } else {
                 // We have no useful data to report
-                res.PendingReport = false;
+                res.PendingAccountingReport = false;
                 AccountEv->Record.MutableResourcesInfo()->RemoveLast(); // undo AddResourcesInfo()
+            }
+        }
+    }
+
+    void ReportReplicationSession(TResourceState& res) {
+        if (Connected && res.ReplicationEnabled) {
+            InitReplicationEv();
+            auto* resInfo = ReplicationEv->Record.AddResourcesInfo();
+            resInfo->SetResourceId(res.ResId);
+            resInfo->SetTotalConsumed(res.TotalConsumed);
+            resInfo->SetReportId(res.ReportId);
+            res.ReportHistory.push_back({res.ReportId, res.TotalConsumed, res.TotalAllocated});
+            ++res.ReportId;
+            if (res.ReportHistory.size() > res.MaxReportHistory) {
+                res.ReportHistory.pop_front();
             }
         }
     }
@@ -577,13 +724,17 @@ private:
             const auto indexIt = ResIndex.find(stat.ResourceId);
             if (indexIt != ResIndex.end()) {
                 TResourceState& res = *indexIt->second->second;
+                res.AddConsumed(stat.Consumed);
                 res.SetAvailable(res.Available - stat.Consumed);
                 res.QueueWeight = stat.QueueWeight;
                 res.Counters.AddConsumed(stat.Consumed);
                 if (res.History) {
                     res.History->Add(stat.History);
-                    res.PendingReport = true;
-                    CheckReport(res, TActivationContext::Now());
+                    res.PendingAccountingReport = true;
+                    CheckAccountingReport(res, TActivationContext::Now());
+                }
+                if (res.ReplicationEnabled) {
+                    CheckReplicationReport(res, TActivationContext::Now());
                 }
                 if (res.Counters.QueueSize) {
                     *res.Counters.QueueSize = static_cast<i64>(stat.QueueSize);
@@ -667,6 +818,7 @@ private:
         const std::vector<TString> resourcePaths = PopResourcePathsForRequest(ev->Cookie);
         if (!resourcePaths.empty()) {
             const auto& result = ev->Get()->Record;
+            ServerVersion = result.GetProtocolVersion();
             KESUS_PROXY_LOG_TRACE("SubscribeOnResourceResult(" << result << ")");
             Y_VERIFY(result.ResultsSize() == resourcePaths.size(), "Expected %" PRISZT " resources, but got %" PRISZT, resourcePaths.size(), result.ResultsSize());
             for (size_t i = 0; i < resourcePaths.size(); ++i) {
@@ -683,7 +835,10 @@ private:
                         }
                         resState->ResId = resResult.GetResourceId();
                         ResIndex[resState->ResId] = resourceIt;
-                        resourceIt->second->SetProps(resResult.GetEffectiveProps());
+                        resourceIt->second->SetProps(resResult.GetEffectiveProps(), ServerVersion);
+                        if (resourceIt->second->ReplicationEnabled) { // use initial availiable only in replicated mode
+                            resourceIt->second->SetAvailable(resResult.GetInitialAvailable());
+                        }
                         resState->AllocStats.OnConnected();
                         resourceIt->second->AddUpdate(GetProxyUpdateEv());
                         SendProxySessionIfNotSent(resState);
@@ -709,11 +864,12 @@ private:
                 const auto amount = allocatedInfo.GetAmount();
                 KESUS_PROXY_LOG_TRACE("Kesus allocated {\"" << res->Resource << "\", " << amount << "}");
                 if (allocatedInfo.HasEffectiveProps()) { // changed
-                    res->SetProps(allocatedInfo.GetEffectiveProps());
+                    res->SetProps(allocatedInfo.GetEffectiveProps(), ServerVersion);
                 }
                 res->SetAvailable(res->Available + amount);
                 res->LastAllocated = now;
                 res->AllocStats.OnResourceAllocated(now, amount);
+                res->TotalAllocated += amount;
                 res->Counters.ReceivedFromKesus += amount;
                 CheckState(*res);
                 res->AddUpdate(GetProxyUpdateEv());
@@ -751,6 +907,29 @@ private:
     }
 
     void Handle(NKesus::TEvKesus::TEvUpdateConsumptionStateAck::TPtr&) {
+    }
+
+    void Handle(NKesus::TEvKesus::TEvSyncResources::TPtr& ev) {
+        KESUS_PROXY_LOG_TRACE("SyncResources(" << ev->Get()->Record << ")");
+        const TInstant now = TActivationContext::Now();
+        for (const NKikimrKesus::TEvSyncResources::TResourceInfo& syncInfo : ev->Get()->Record.GetResourcesInfo()) {
+            TResourceState* res = FindResource(syncInfo.GetResourceId());
+            if (!res) {
+                continue;
+            }
+
+            const auto available = syncInfo.GetAvailable();
+            KESUS_PROXY_LOG_TRACE("Kesus sync {\"" << res->Resource << "\", " << available << "}");
+            while (!res->ReportHistory.empty() && res->ReportHistory.front().ReportId < syncInfo.GetLastReportId()) {
+               res->ReportHistory.pop_front();
+            }
+            double consumedLagCompensation = res->ReportHistory.empty() ? 0 : res->TotalConsumed - res->ReportHistory.front().TotalConsumed;
+            double allocatedLagCompensation = res->ReportHistory.empty() ? 0 : res->TotalAllocated - res->ReportHistory.front().TotalAllocated;
+            res->SetAvailable(available - consumedLagCompensation + allocatedLagCompensation);
+            res->LastAllocated = now;
+            CheckState(*res);
+            res->AddUpdate(GetProxyUpdateEv());
+        }
     }
 
     void Handle(NKesus::TEvKesus::TEvAccountResourcesAck::TPtr& ev) {
@@ -840,14 +1019,25 @@ private:
         }
     }
 
-    void CheckReport(TResourceState& res, TInstant now) {
-        if (res.LastReport + res.ReportPeriod < now && res.PendingReport) {
-            ReportSession(res);
-            // `LastReport` must be aligned to send resources' stats in one message
+    void CheckAccountingReport(TResourceState& res, TInstant now) {
+        if (res.LastAccountingReport + res.AccountingReportPeriod < now && res.PendingAccountingReport) {
+            ReportAccountingSession(res);
+            // `LastAccountingReport` must be aligned to send resources' stats in one message
             // in case they have the same `ReportPeriod`
-            Y_ASSERT(res.ReportPeriod < TDuration::Max());
-            ui64 periodUs = res.ReportPeriod.MicroSeconds();
-            res.LastReport = TInstant::MicroSeconds(res.ReportPeriod.MicroSeconds() / periodUs * periodUs);
+            Y_ASSERT(res.AccountingReportPeriod < TDuration::Max());
+            ui64 periodUs = res.AccountingReportPeriod.MicroSeconds();
+            res.LastAccountingReport = TInstant::MicroSeconds(res.AccountingReportPeriod.MicroSeconds() / periodUs * periodUs);
+        }
+    }
+
+    void CheckReplicationReport(TResourceState& res, TInstant now) {
+        if (res.LastReplicationReport + res.ReplicationReportPeriod < now) {
+            ReportReplicationSession(res);
+            // `LastReplicationReport` must be aligned to send resources' stats in one message
+            // in case they have the same `ReportPeriod`
+            Y_ASSERT(res.ReplicationReportPeriod < TDuration::Max());
+            ui64 periodUs = res.ReplicationReportPeriod.MicroSeconds();
+            res.LastReplicationReport = TInstant::MicroSeconds(now.MicroSeconds() / periodUs * periodUs);
         }
     }
 
@@ -889,6 +1079,7 @@ public:
 
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(NMon::TEvHttpInfo, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
             hFunc(TEvQuota::TEvProxyRequest, Handle);
             hFunc(TEvQuota::TEvProxyStats, Handle);
@@ -900,6 +1091,8 @@ public:
             hFunc(NKesus::TEvKesus::TEvUpdateConsumptionStateAck, Handle);
             hFunc(NKesus::TEvKesus::TEvAccountResourcesAck, Handle);
             hFunc(TEvPrivate::TEvOfflineResourceAllocation, Handle);
+            hFunc(NKesus::TEvKesus::TEvSyncResources, Handle);
+            IgnoreFunc(NKesus::TEvKesus::TEvReportResourcesAck);
             default:
                 KESUS_PROXY_LOG_WARN("TKesusQuoterProxy::StateFunc unexpected event type# "
                     << ev->GetTypeRewrite()

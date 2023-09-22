@@ -280,6 +280,7 @@ STFUNC(TKesusTablet::StateWork) {
         hFunc(TEvKesus::TEvSubscribeOnResources, Handle);
         hFunc(TEvKesus::TEvUpdateConsumptionState, Handle);
         hFunc(TEvKesus::TEvAccountResources, Handle);
+        hFunc(TEvKesus::TEvReportResources, Handle);
         hFunc(TEvKesus::TEvResourcesAllocatedAck, Handle);
         hFunc(TEvKesus::TEvGetQuoterResourceCounters, Handle);
         hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
@@ -289,10 +290,11 @@ STFUNC(TKesusTablet::StateWork) {
         hFunc(TEvPrivate::TEvSelfCheckTimeout, Handle);
 
         IgnoreFunc(TEvTabletPipe::TEvServerConnected);
+        IgnoreFunc(NKesus::TEvKesus::TEvSyncResourcesAck);
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                Y_FAIL("Unexpected event 0x%x", ev->GetTypeRewrite());
+                LOG_WARN(*TActivationContext::ActorSystem(), NKikimrServices::KESUS_TABLET, "Unexpected event 0x%x", ev->GetTypeRewrite());
             }
             break;
     }

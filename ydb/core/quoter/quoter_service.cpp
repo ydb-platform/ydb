@@ -5,6 +5,7 @@
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/events.h>
+#include <ydb/core/mon/mon.h>
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
 #include <cmath>
@@ -355,6 +356,12 @@ TInstant TQuoterService::TimeToGranularity(TInstant rawTime) {
 }
 
 void TQuoterService::Bootstrap() {
+    NActors::TMon *mon = AppData()->Mon;
+    if (mon) {
+        NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
+        mon->RegisterActorPage(actorsMonPage, "quoter_proxy", "QuoterProxy", false, TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
+    }
+
     TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = GetServiceCounters(AppData()->Counters, QUOTER_SERVICE_COUNTER_SENSOR_NAME);
 
     Counters.ActiveQuoterProxies = counters->GetCounter("ActiveQuoterProxies", false);
@@ -804,6 +811,94 @@ void TQuoterService::InitialRequestProcessing(TEvQuota::TEvRequest::TPtr &ev, co
         reqq.PrevDeadlineRequest = placeholderIdx;
         placeholder.NextDeadlineRequest = reqIdx;
     }
+}
+
+void TQuoterService::Handle(NMon::TEvHttpInfo::TPtr &ev) {
+    const auto& httpRequest = ev->Get()->Request;
+    if (auto quoterStr = httpRequest.GetParams().Get("quoter"); quoterStr) {
+        ui64 quoterId = std::numeric_limits<ui64>::max();
+        if (!TryFromString<ui64>(quoterStr, quoterId) || Quoters.find(quoterId) == Quoters.end()) {
+            TStringStream str;
+            str << NMonitoring::HTTPNOTFOUND;
+            Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+            return;
+        }
+        Send(ev->Forward(Quoters.find(quoterId)->second.ProxyId));
+        return;
+    }
+    TStringStream str;
+    str << NMonitoring::HTTPOKHTML;
+    HTML(str) {
+        HEAD() {
+            str << "<link rel='stylesheet' href='../cms/ext/bootstrap.min.css'>" << Endl
+                << "<script language='javascript' type='text/javascript' src='../cms/ext/jquery.min.js'></script>" << Endl
+                << "<script language='javascript' type='text/javascript' src='../cms/ext/bootstrap.bundle.min.js'></script>" << Endl;
+        }
+
+        DIV() {
+            OL_CLASS("breadcrumb") {
+                LI_CLASS("breadcrumb-item") {
+                    str << "<a href='..' id='host-ref'>YDB Developer UI</a>" << Endl;
+                }
+                LI_CLASS("breadcrumb-item") {
+                    str << "<a href='.'>Actors</a>" << Endl;
+                }
+                LI_CLASS("breadcrumb-item active") {
+                    str << "QuoterService" << Endl;
+                }
+            }
+        }
+        DIV_CLASS("container") {
+            str << "<a class='collapse-ref' data-toggle='collapse' data-target='#quoter-state'>"
+                << "Quoter State</a><div id='quoter-state' class='collapse'>";
+            PRE() {
+                str << "LastProcessed: " << LastProcessed << "\n"
+                    << "Quoters:\n";
+                for (auto& [quoterId, quoterState] : Quoters) {
+                    str << "  Name: " << quoterState.QuoterName << "\n"
+                        << "  Id: " << quoterId << "\n"
+                        << "  ProxyId: " << quoterState.ProxyId << "\n"
+                        << "  Resources:\n";
+                    for (auto& [resId, resPtr] : quoterState.Resources) {
+                        str << "    Id: " << resId << "\n";
+                        if (resPtr) {
+                            str << "    Name: " << resPtr->Resource << "\n"
+                                << "    Activation: " << resPtr->Activation << "\n"
+                                << "    NextTick: " << resPtr->NextTick << "\n"
+                                << "    LastTick: " << resPtr->LastTick << "\n"
+                                << "    QueueSize: " << resPtr->QueueSize << "\n"
+                                << "    LastAllocated: " << resPtr->LastAllocated << "\n"
+                                << "    FreeBalance: " << resPtr->FreeBalance << "\n"
+                                << "    Balance: " << resPtr->Balance << "\n"
+                                << "    TickRate: " << resPtr->TickRate << "\n"
+                                << "    TickSize: " << resPtr->TickSize << "\n"
+                                << "    QuotaChannels:\n";
+                            for (auto& [chId, ch] : resPtr->QuotaChannels) {
+                                str << "      Id: " << chId << "\n"
+                                    << "      Channel: " << ch.Channel << "\n"
+                                    << "      Ticks: " << ch.Ticks << "\n"
+                                    << "      Rate: " << ch.Rate << "\n"
+                                    << "      Policy: " << (ui32)ch.Policy << "\n";
+                            }
+                            str << "    AmountConsumed: " << resPtr->AmountConsumed << "\n"
+                                << "    StartStarvationTime: " << resPtr->StartStarvationTime << "\n";
+                        }
+                    }
+                }
+            }
+            str << "</div>";
+            UL_CLASS("list-group") {
+                for (auto& [quoterId, quoterState] : Quoters) {
+                    LI_CLASS("list-group-item") {
+                        HREF(TStringBuilder{} << "?quoter=" << quoterId) {
+                            str << quoterState.QuoterName;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
 }
 
 void TQuoterService::Handle(TEvQuota::TEvRequest::TPtr &ev) {

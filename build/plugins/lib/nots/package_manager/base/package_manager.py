@@ -104,12 +104,14 @@ class BasePackageManager(object):
 
         return [p[prefix_len:] for p in pj.get_workspace_map(ignore_self=True).keys()]
 
-    def _exec_command(self, args, include_defaults=True):
+    def _exec_command(self, args, include_defaults=True, script_path=None):
         if not self.nodejs_bin_path:
             raise PackageManagerError("Unable to execute command: nodejs_bin_path is not configured")
 
         cmd = (
-            [self.nodejs_bin_path, self.script_path] + args + (self._get_default_options() if include_defaults else [])
+            [self.nodejs_bin_path, script_path or self.script_path]
+            + args
+            + (self._get_default_options() if include_defaults else [])
         )
         p = subprocess.Popen(
             cmd,

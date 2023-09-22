@@ -16,6 +16,7 @@ class PnpmPackageManager(BasePackageManager):
     _STORE_NM_PATH = os.path.join(".pnpm", "store")
     _VSTORE_NM_PATH = os.path.join(".pnpm", "virtual-store")
     _STORE_VER = "v3"
+    _PREBUILDER_PKG = "@yatool/prebuilder"
 
     @classmethod
     def load_lockfile(cls, path):
@@ -57,6 +58,7 @@ class PnpmPackageManager(BasePackageManager):
                 "--strict-peer-dependencies",
             ]
         )
+        self._run_apply_addons()
         self._fix_stores_in_modules_yaml()
 
         bundle_node_modules(
@@ -197,6 +199,22 @@ class PnpmPackageManager(BasePackageManager):
 
         ws.write()
 
+    def _run_apply_addons(self):
+        pj = self.load_package_json_from_dir(self.sources_path)
+        prebuilder_version = pj.get_dep_specifier(self._PREBUILDER_PKG)
+        if not prebuilder_version:
+            return  # prebuilder should be in deps
+
+        self._exec_command(
+            [
+                "apply-addons",
+                "--virtual-store",
+                self._nm_path(self._VSTORE_NM_PATH),
+            ],
+            include_defaults=False,
+            script_path=self._get_prebuilder_bin(),
+        )
+
     def _fix_stores_in_modules_yaml(self):
         """
         Ensures that store paths are the same as would be after installing deps in the source dir.
@@ -221,3 +239,6 @@ class PnpmPackageManager(BasePackageManager):
 
     def _get_debug_log_path(self):
         return self._nm_path(".pnpm-debug.log")
+
+    def _get_prebuilder_bin(self):
+        return self._nm_path(self._PREBUILDER_PKG, "build", "bin", "prebuilder.js")

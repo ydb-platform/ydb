@@ -48,7 +48,7 @@ def ontest_data(unit, *args):
 def prepare_recipes(data):
     data = data.replace('"USE_RECIPE_DELIM"', "\n")
     data = data.replace("$TEST_RECIPES_VALUE", "")
-    return base64.b64encode(data or "")
+    return base64.b64encode(six.ensure_binary(data or ""))
 
 
 def prepare_env(data):
@@ -342,7 +342,7 @@ def dump_test(unit, kw):
         return None
     string_handler = StringIO()
     for k, v in six.iteritems(valid_kw):
-        print(k + ': ' + v, file=string_handler)
+        print(k + ': ' + six.ensure_str(v), file=string_handler)
     print(BLOCK_SEPARATOR, file=string_handler)
     data = string_handler.getvalue()
     string_handler.close()
@@ -350,7 +350,7 @@ def dump_test(unit, kw):
 
 
 def serialize_list(lst):
-    lst = filter(None, lst)
+    lst = list(filter(None, lst))
     return '\"' + ';'.join(lst) + '\"' if lst else ''
 
 
@@ -840,7 +840,7 @@ def add_test_to_dart(unit, test_type, binary_path=None, runner_bin=None):
     if unit.get('ADD_SRCDIR_TO_TEST_DATA') == "yes":
         unit.ondata_files(_common.get_norm_unit_path(unit))
     custom_deps = get_values_list(unit, 'TEST_DEPENDS_VALUE')
-    timeout = filter(None, [unit.get(["TEST_TIMEOUT"])])
+    timeout = list(filter(None, [unit.get(["TEST_TIMEOUT"])]))
     if timeout:
         timeout = timeout[0]
     else:
@@ -1162,7 +1162,7 @@ def onsetup_exectest(unit, *args):
     command = command.replace("$EXECTEST_COMMAND_VALUE", "")
     if "PYTHON_BIN" in command:
         unit.ondepends('contrib/tools/python')
-    unit.set(["TEST_BLOB_DATA", base64.b64encode(command)])
+    unit.set(["TEST_BLOB_DATA", base64.b64encode(six.ensure_binary(command))])
     add_test_to_dart(unit, "exectest", binary_path=os.path.join(unit.path(), unit.filename()).replace(".pkg", ""))
 
 

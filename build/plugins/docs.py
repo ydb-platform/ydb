@@ -13,7 +13,7 @@ def macro_calls_to_dict(unit, calls):
         if arg is None:
             return None
 
-        kv = filter(None, arg.split('='))
+        kv = list(filter(None, arg.split('=')))
         if len(kv) != 2:
             unit.message(
                 [

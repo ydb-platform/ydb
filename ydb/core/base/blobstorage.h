@@ -353,6 +353,10 @@ public:
             return Max<ui32>();
     }
 
+    ui32 GroupFor(const TLogoBlobID& id) const {
+        return GroupFor(id.Channel(), id.Generation());
+    }
+
     TString ToString() const {
         TStringStream str;
         str << "{Version# " << Version;

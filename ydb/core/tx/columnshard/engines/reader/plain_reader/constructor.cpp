@@ -27,7 +27,7 @@ TPortionInfo::TPreparedBatchData TAssembleColumnsTaskConstructor::BuildBatchAsse
         resultSchema = readSchema;
     }
 
-    return PortionInfo->PrepareForAssemble(*blobSchema, *resultSchema, blobs);
+    return PortionInfo->PrepareForAssemble(*blobSchema, *resultSchema, blobsDataAssemble);
 }
 
 void TEFTaskConstructor::DoOnDataReady() {

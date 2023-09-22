@@ -120,6 +120,8 @@ items:
       href: workload-kv.md
     - name: Topic нагрузка
       href: workload-topic.md
+    - name: Transfer нагрузка
+      href: workload-transfer.md
     - name: TPC-H нагрузка
       href: workload-tpch.md
   - name: Работа с конфигурацией

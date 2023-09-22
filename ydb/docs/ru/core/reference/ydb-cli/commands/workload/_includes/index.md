@@ -26,3 +26,4 @@
 * [ClickBench](../../../workload-click-bench.md) - аналитический бенчмарк ClickBench (https://github.com/ClickHouse/ClickBench).
 * [TPC-H](../../../workload-tpch.md) - TPC-H бенчмарк (https://www.tpc.org/tpch/).
 * [Topic](../../../workload-topic.md) - Topic нагрузка.
+* [Transfer](../../../workload-transfer.md) - Transfer нагрузка.

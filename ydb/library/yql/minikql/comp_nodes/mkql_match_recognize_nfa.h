@@ -192,6 +192,7 @@ private:
             for (const auto& i: epsilonTransitions) {
                 NewStates.emplace(i, TMatchedVars(State.Vars), std::stack<ui64>(State.Quantifiers));
             }
+            DeletedStates.insert(State);
         }
         void operator()(const TQuantityEnterTransition& quantityEnterTransition) {
             DeletedStates.insert(State);

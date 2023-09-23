@@ -21,6 +21,7 @@ SRCS(
     dq_opt_phy.cpp
     dq_opt_stat.cpp
     dq_opt_join_cost_based.cpp
+    dq_opt_join_cost_based_generic.cpp
 )
 
 YQL_LAST_ABI_VERSION()

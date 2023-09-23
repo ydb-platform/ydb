@@ -132,22 +132,6 @@ TExprNode::TPtr OptimizeWideToBlocks(const TExprNode::TPtr& node, TExprContext& 
         return node->Head().HeadPtr();
     }
 
-    if (node->Head().IsCallable("WideMap")) {
-        // swap if all outputs are arguments
-        const auto& lambda = node->Head().Tail();
-        if (auto newLambda = RebuildArgumentsOnlyLambdaForBlocks(lambda, ctx, types)) {
-            YQL_CLOG(DEBUG, Core) << "Swap " << node->Head().Content() << " with " << node->Content();
-            return ctx.Builder(node->Pos())
-                .Callable("WideMap")
-                    .Callable(0, "WideToBlocks")
-                        .Add(0, node->Head().HeadPtr())
-                    .Seal()
-                    .Add(1, newLambda)
-                .Seal()
-                .Build();
-        }
-    }
-
     if (const auto& input = node->Head(); input.IsCallable("Extend")) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << input.Content();
         TExprNodeList newChildren;
@@ -5598,6 +5582,29 @@ TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx)
                     .Callable(0, input.Content())
                         .Add(0, MakeWideMapForDropUnused(input.HeadPtr(), unused, ctx))
                         .Atom(1, index - delta)
+                    .Seal()
+                    .Add(1, DropUnusedArgs(node->Tail(), unused, ctx))
+                .Seal().Build();
+        } else if (input.IsCallable("WideToBlocks")) {
+            auto actualUnused = unused;
+            if (actualUnused.back() + 1U == node->Tail().Head().ChildrenSize())
+                actualUnused.pop_back();
+            if (!actualUnused.empty()) {
+                YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << input.Content() << " with " << actualUnused.size() << " unused fields.";
+                return ctx.Builder(node->Pos())
+                    .Callable(node->Content())
+                        .Callable(0, input.Content())
+                            .Add(0, MakeWideMapForDropUnused(input.HeadPtr(), actualUnused, ctx))
+                        .Seal()
+                        .Add(1, DropUnusedArgs(node->Tail(), actualUnused, ctx))
+                    .Seal().Build();
+            }
+        } else if (input.IsCallable("WideFromBlocks")) {
+            YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << input.Content() << " with " << unused.size() << " unused fields.";
+            return ctx.Builder(node->Pos())
+                .Callable(node->Content())
+                    .Callable(0, input.Content())
+                        .Add(0, MakeWideMapForDropUnused(input.HeadPtr(), unused, ctx))
                     .Seal()
                     .Add(1, DropUnusedArgs(node->Tail(), unused, ctx))
                 .Seal().Build();

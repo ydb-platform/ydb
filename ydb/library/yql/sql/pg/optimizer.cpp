@@ -167,6 +167,8 @@ void TPgOptimizer::LogNode(const TString& prefix, void* node)
 
 IOptimizer::TOutput TPgOptimizer::MakeOutput(Path* path) {
     TOutput output = {{}, &Input};
+    output.Rows = path->rows;
+    output.TotalCost = path->total_cost;
     MakeOutputJoin(output, path);
     return output;
 }

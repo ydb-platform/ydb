@@ -33,8 +33,8 @@ Y_UNIT_TEST(PgJoinSearch2Rels) {
     auto res = optimizer->JoinSearch();
     auto resStr = res.ToString();
     Cerr << resStr;
-    TString expected = R"__(Rows: 0.00
-TotalCost: 0.00
+    TString expected = R"__(Rows: 500000000.00
+TotalCost: 10000001260000260.00
 {
  Inner Join
  Loop Strategy
@@ -79,8 +79,8 @@ Y_UNIT_TEST(PgJoinSearch2RelsLeft) {
     auto res = optimizer->JoinSearch();
     auto resStr = res.ToString();
     Cerr << resStr;
-    TString expected = R"__(Rows: 0.00
-TotalCost: 0.00
+    TString expected = R"__(Rows: 500000000.00
+TotalCost: 1650702509.00
 {
  Left Join
  Loop Strategy
@@ -125,8 +125,8 @@ Y_UNIT_TEST(PgJoinSearch2RelsRight) {
     auto res = optimizer->JoinSearch();
     auto resStr = res.ToString();
     Cerr << resStr;
-    TString expected = R"__(Rows: 0.00
-TotalCost: 0.00
+    TString expected = R"__(Rows: 500000000.00
+TotalCost: 1260000259.00
 {
  Left Join
  Loop Strategy
@@ -163,8 +163,8 @@ Y_UNIT_TEST(PgJoinSearch3Rels) {
     auto res = optimizer->JoinSearch();
     auto resStr = res.ToString();
     Cerr << resStr;
-    TString expected = R"__(Rows: 0.00
-TotalCost: 0.00
+    TString expected = R"__(Rows: 25000000000.00
+TotalCost: 25100000272571156.00
 {
  Inner Join
  Hash Strategy

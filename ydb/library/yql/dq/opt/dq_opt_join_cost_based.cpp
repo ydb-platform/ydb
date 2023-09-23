@@ -997,6 +997,8 @@ public:
         TOutput output;
         output.Input = &Input;
         BuildOutput(&output, result.get());
+        output.Rows = result->Stats->Nrows;
+        output.TotalCost = *result->Stats->Cost;
         if (Log) {
             Log(output.ToString());
         }

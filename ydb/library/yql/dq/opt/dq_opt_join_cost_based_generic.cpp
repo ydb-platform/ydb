@@ -192,7 +192,11 @@ TExprBase DqOptimizeEquiJoinWithCosts(
         return node;
     }
 
+    int cols = 0;
     state.CollectJoins(equiJoin.Arg(equiJoin.ArgCount() - 2).Ptr());
+    for (auto& rel : state.Input.Rels) {
+        cols += rel.TargetVars.size();
+    }
     state.Input.Normalize();
     std::unique_ptr<IOptimizer> opt = std::unique_ptr<IOptimizer>(optFactory(std::move(state.Input)));
     state.Result = opt->JoinSearch();
@@ -205,9 +209,14 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     joinArgs.push_back(state.BuildTree(ctx, 0));
     joinArgs.push_back(equiJoin.Arg(equiJoin.ArgCount() - 1));
 
-    return Build<TCoEquiJoin>(ctx, equiJoin.Pos())
+    auto res = Build<TCoEquiJoin>(ctx, equiJoin.Pos())
         .Add(joinArgs)
         .Done();
+
+
+    typesCtx.StatisticsMap[res.Raw()] = std::make_shared<TOptimizerStatistics>(state.Result.Rows, cols, state.Result.TotalCost);
+
+    return res;
 }
 
 } // namespace NYql::NDq

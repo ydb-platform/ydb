@@ -15,13 +15,14 @@ IMPORT_DECL=re.compile(r'''
 
 def parse_args():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--arcadia-prefix', required=True)
     parser.add_argument('--input-dir', required=True)
     parser.add_argument('--map', nargs='*', default=None)
 
     return parser.parse_args()
 
 
-def process_go_file(file_name, import_map):
+def process_go_file(file_name, import_map, arcadia_prefix):
     content = ''
     with open(file_name, 'r') as f:
         content = f.read()
@@ -41,7 +42,7 @@ def process_go_file(file_name, import_map):
         ns = namespace.split('.')
         name = '__'.join(ns)
         import_path = '/'.join(ns)
-        imports = imports.replace('{} "{}"'.format(name, import_path), '{} "a.yandex-team.ru/{}"'.format(name, path))
+        imports = imports.replace('{} "{}"'.format(name, import_path), '{} "{}{}"'.format(name, arcadia_prefix, path))
 
     if imports != content[start:end]:
         with open(file_name, 'w') as f:
@@ -65,7 +66,7 @@ def main():
 
     for root, _, files in os.walk(args.input_dir):
         for src in (f for f in files if f.endswith('.go')):
-            process_go_file(os.path.join(root, src), import_map)
+            process_go_file(os.path.join(root, src), import_map, args.arcadia_prefix)
 
 
 if __name__ == '__main__':

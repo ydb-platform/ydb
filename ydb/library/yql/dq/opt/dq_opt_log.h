@@ -21,6 +21,13 @@ NNodes::TExprBase DqRewriteTakeSortToTopSort(NNodes::TExprBase node, TExprContex
 
 NNodes::TExprBase DqOptimizeEquiJoinWithCosts(const NNodes::TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx, bool isRuleEnabled);
 
+NNodes::TExprBase DqOptimizeEquiJoinWithCosts(
+    const NNodes::TExprBase& node,
+    TExprContext& ctx,
+    TTypeAnnotationContext& typesCtx,
+    const std::function<IOptimizer*(IOptimizer::TInput&&)> optFactory,
+    bool ruleEnabled);
+
 NNodes::TExprBase DqRewriteEquiJoin(const NNodes::TExprBase& node, TExprContext& ctx);
 
 NNodes::TExprBase DqEnforceCompactPartition(NNodes::TExprBase node, NNodes::TExprList frames, TExprContext& ctx);

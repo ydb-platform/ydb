@@ -10,6 +10,8 @@
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/core/cbo/cbo_optimizer.h>
+#include <ydb/library/yql/parser/pg_wrapper/interface/optimizer.h>
 
 namespace NYql::NDqs {
 
@@ -114,8 +116,20 @@ protected:
     }
 
     TMaybeNode<TExprBase> OptimizeEquiJoinWithCosts(TExprBase node, TExprContext& ctx) {
-        if (TypesCtx.CostBasedOptimizerType == "native") {
-            return DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, true);
+        if (TypesCtx.CostBasedOptimizerType == "native" || TypesCtx.CostBasedOptimizerType == "pg") {
+            std::function<void(const TString&)> log = [&](auto str) {                
+                YQL_CLOG(INFO, ProviderDq) << str;
+            };
+            std::function<IOptimizer*(IOptimizer::TInput&&)> factory = [&](auto input) {
+                if (TypesCtx.CostBasedOptimizerType == "native") {
+                    return MakeNativeOptimizer(input, log);
+                } else if (TypesCtx.CostBasedOptimizerType == "pg") {
+                    return MakePgOptimizer(input, log);
+                } else {
+                    YQL_ENSURE(false, "Unknown CBO type");
+                }
+            };
+            return DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, factory, true);
         } else {
             return node;
         }

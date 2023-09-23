@@ -14,10 +14,10 @@ namespace {
 struct TState {
 	IOptimizer::TInput Input;
     IOptimizer::TOutput Result;
-    std::vector<TStringBuf> Tables; // relId -> table
-    std::vector<THashMap<TStringBuf, int>> VarIds; // relId -> varsIds
-    THashMap<TStringBuf, std::vector<int>> Table2RelIds;
-	std::vector<std::vector<std::tuple<TStringBuf, TStringBuf>>> Var2TableCol; // relId, varId -> table, col
+    std::vector<TString> Tables; // relId -> table
+    std::vector<THashMap<TString, int>> VarIds; // relId -> varsIds
+    THashMap<TString, std::vector<int>> Table2RelIds;
+    std::vector<std::vector<std::tuple<TStringBuf, TStringBuf>>> Var2TableCol; // relId, varId -> table, col
     TPositionHandle Pos;
 
     TState(const TCoEquiJoin& join)
@@ -38,9 +38,10 @@ struct TState {
         return varId;
     }
 
-    void CollectRel(TStringBuf label, auto stat) {
+    void CollectRel(const TString& label, auto stat) {
         Input.Rels.emplace_back();
-		Var2TableCol.emplace_back();
+        Var2TableCol.emplace_back();
+        VarIds.emplace_back();
         int relId = Input.Rels.size();
         Input.Rels.back().Rows = stat->Nrows;
         Input.Rels.back().TotalCost = *stat->Cost;

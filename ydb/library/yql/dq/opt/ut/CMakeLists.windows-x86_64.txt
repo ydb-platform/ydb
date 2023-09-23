@@ -20,7 +20,8 @@ target_link_libraries(ydb-library-yql-dq-opt-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   yql-dq-opt
-  yql-sql-pg_dummy
+  yql-sql-pg
+  yql-parser-pg_wrapper
   udf-service-stub
 )
 target_sources(ydb-library-yql-dq-opt-ut PRIVATE

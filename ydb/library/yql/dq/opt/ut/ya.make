@@ -6,7 +6,8 @@ SRCS(
 
 PEERDIR(
     ydb/library/yql/dq/opt
-    ydb/library/yql/sql/pg_dummy
+    ydb/library/yql/sql/pg
+    ydb/library/yql/parser/pg_wrapper
     ydb/library/yql/public/udf/service/stub
 )
 

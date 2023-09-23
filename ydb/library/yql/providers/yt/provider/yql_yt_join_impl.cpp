@@ -198,7 +198,7 @@ ui64 CalcInMemorySize(const TJoinLabels& labels, const TYtJoinNodeOp& op,
 
     const ui64 rows = isLeft ? settings.LeftRows : settings.RightRows;
 
-    if (op.JoinKind->Content() == "Cross") {
+    if (op.JoinKind->IsAtom("Cross")) {
         if (mapJoinUseFlow) {
             return size + rows * (1ULL + label.InputType->GetSize()) * sizeof(NKikimr::NUdf::TUnboxedValuePod); // Table content after Collect
         } else {
@@ -272,10 +272,9 @@ TStatus UpdateInMemorySizeSetting(TMapJoinSettings& settings, TYtSection& inputS
     const TVector<TYtPathInfo::TPtr>& tables, bool mapJoinUseFlow)
 {
     ui64 size = isLeft ? settings.LeftSize : settings.RightSize;
-    const bool needPayload = (op.JoinKind->Content() == "Inner"
-                              || op.JoinKind->Content() == (isLeft ? "Right" : "Left"));
+    const bool needPayload = op.JoinKind->IsAtom("Inner") || op.JoinKind->IsAtom(isLeft ? "Right" : "Left");
 
-    if (!needPayload && op.JoinKind->Content() != "Cross") {
+    if (!needPayload && !op.JoinKind->IsAtom("Cross")) {
         if (joinKeyList.size() < itemType->GetSize()) {
             TVector<ui64> dataSizes;
             auto status = TryEstimateDataSizeChecked(dataSizes, inputSection, cluster, tables, joinKeyList, *state, ctx);
@@ -4117,6 +4116,8 @@ EStarRewriteStatus RewriteYtEquiJoinStarSingleChain(TYtEquiJoin equiJoin, TYtJoi
     }
 
     TYtOutTableInfo outTableInfo(outItemType, state->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+    outTableInfo.RowSpec->SetConstraints(equiJoin.Ref().GetConstraintSet());
+    outTableInfo.SetUnique(equiJoin.Ref().GetConstraint<TDistinctConstraintNode>(), pos, ctx);
     // TODO: mark output sorted
     Y_UNUSED(starSortedKeys);
 
@@ -4158,7 +4159,7 @@ EStarRewriteStatus RewriteYtEquiJoinStarSingleChain(TYtEquiJoin equiJoin, TYtJoi
                                              commonPremapKind, isStarInput ? starRenames : starChain[i].Renames, ctx);
 
                             parent
-                                .Atom(2 * i + 1, ToString(i))
+                                .Atom(2 * i + 1, i)
                                 .Lambda(2 * i + 2)
                                     .Param("unpackedVariant")
                                     .Callable("FlatMap")
@@ -4181,7 +4182,7 @@ EStarRewriteStatus RewriteYtEquiJoinStarSingleChain(TYtEquiJoin equiJoin, TYtJoi
                                             .Callable("Just")
                                                 .Callable(0, "Variant")
                                                     .Arg(0, "filteredRenamedAndPremapped")
-                                                    .Atom(1, ToString(i), TNodeFlags::Default)
+                                                    .Atom(1, i)
                                                     .Add(2, ExpandType(pos, *inputVariant, ctx))
                                                 .Seal()
                                             .Seal()
@@ -4236,7 +4237,7 @@ EStarRewriteStatus RewriteYtEquiJoinStarSingleChain(TYtEquiJoin equiJoin, TYtJoi
                                 .Atom(0, starChain[innerIndexes[i]].Label + ".")
                                 .Callable(1, "Nth")
                                     .Arg(0, "inners")
-                                    .Atom(1, ToString(i), TNodeFlags::Default)
+                                    .Atom(1, i)
                                 .Seal()
                             .Seal();
                     }
@@ -4287,7 +4288,7 @@ EStarRewriteStatus RewriteYtEquiJoinStarSingleChain(TYtEquiJoin equiJoin, TYtJoi
                                                 .Callable(0, "Exists")
                                                     .Callable(0, "Nth")
                                                         .Arg(0, "state")
-                                                        .Atom(1, ToString(i), TNodeFlags::Default)
+                                                        .Atom(1, i)
                                                     .Seal()
                                                 .Seal()
                                             .Seal();
@@ -4298,7 +4299,7 @@ EStarRewriteStatus RewriteYtEquiJoinStarSingleChain(TYtEquiJoin equiJoin, TYtJoi
                                             .Callable(seqno++, "Exists")
                                                 .Callable(0, "Nth")
                                                     .Arg(0, "state")
-                                                    .Atom(1, ToString(i), TNodeFlags::Default)
+                                                    .Atom(1, i)
                                                 .Seal()
                                             .Seal();
                                     }
@@ -4389,7 +4390,7 @@ EStarRewriteStatus RewriteYtEquiJoinStarSingleChain(TYtEquiJoin equiJoin, TYtJoi
                         auto joinKind = starChain[i].JoinKind;
                         bool isEmptyStructInState = joinKind.EndsWith("Semi") || joinKind.EndsWith("Only");
                         parent
-                            .Atom(2 * i + 1, ToString(i), TNodeFlags::Default)
+                            .Atom(2 * i + 1, i)
                             .Lambda(2 * i + 2)
                                 .Param("var")
                                 .List()
@@ -4398,7 +4399,7 @@ EStarRewriteStatus RewriteYtEquiJoinStarSingleChain(TYtEquiJoin equiJoin, TYtJoi
                                         .Callable(0, "Exists")
                                             .Callable(0, "Nth")
                                                 .Arg(0, "state")
-                                                .Atom(1, ToString(i), TNodeFlags::Default)
+                                                .Atom(1, i)
                                             .Seal()
                                         .Seal()
                                         .Arg(1, "state")
@@ -4440,14 +4441,14 @@ EStarRewriteStatus RewriteYtEquiJoinStarSingleChain(TYtEquiJoin equiJoin, TYtJoi
                             .With(0, "item")
                             .With(1, "state")
                         .Seal()
-                        .Atom(1, "0", TNodeFlags::Default)
+                        .Atom(1, 0U)
                     .Seal()
                     .Callable(1, "Nth")
                         .Apply(0, foldMapVisitLambda)
                             .With(0, "item")
                             .With(1, "state")
                         .Seal()
-                        .Atom(1, "1", TNodeFlags::Default)
+                        .Atom(1, 1U)
                     .Seal()
                 .Seal()
             .Seal()

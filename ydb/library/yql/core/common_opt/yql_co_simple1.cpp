@@ -2932,23 +2932,24 @@ TExprNodeList DedupCalcOverWindowsOnSamePartitioning(const TExprNodeList& calcs,
     return uniqueCalcs;
 }
 
-TExprNode::TPtr BuildCalcOverWindowGroup(TCoCalcOverWindowGroup node, TExprNodeList&& calcs, TExprContext& ctx) {
+TExprNode::TPtr BuildCalcOverWindowGroup(TCoCalcOverWindowGroup node, TExprNodeList&& calcs, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
     if (calcs.size() == 0) {
         return node.Input().Ptr();
     }
 
+    TExprNode::TPtr result;
     if (calcs.size() == 1) {
         TCoCalcOverWindowTuple calc(calcs[0]);
         if (calc.SessionSpec().Maybe<TCoVoid>()) {
             YQL_ENSURE(calc.SessionColumns().Size() == 0);
-            return Build<TCoCalcOverWindow>(ctx, node.Pos())
+            result = Build<TCoCalcOverWindow>(ctx, node.Pos())
                 .Input(node.Input())
                 .Keys(calc.Keys())
                 .SortSpec(calc.SortSpec())
                 .Frames(calc.Frames())
                 .Done().Ptr();
         } else {
-            return Build<TCoCalcOverSessionWindow>(ctx, node.Pos())
+            result = Build<TCoCalcOverSessionWindow>(ctx, node.Pos())
                 .Input(node.Input())
                 .Keys(calc.Keys())
                 .SortSpec(calc.SortSpec())
@@ -2957,12 +2958,14 @@ TExprNode::TPtr BuildCalcOverWindowGroup(TCoCalcOverWindowGroup node, TExprNodeL
                 .SessionColumns(calc.SessionColumns())
                 .Done().Ptr();
         }
+    } else {
+        result = Build<TCoCalcOverWindowGroup>(ctx, node.Pos())
+            .Input(node.Input())
+            .Calcs(ctx.NewList(node.Pos(), std::move(calcs)))
+            .Done().Ptr();
     }
 
-    return Build<TCoCalcOverWindowGroup>(ctx, node.Pos())
-        .Input(node.Input())
-        .Calcs(ctx.NewList(node.Pos(), std::move(calcs)))
-        .Done().Ptr();
+    return KeepColumnOrder(result, node.Ref(), ctx, typesCtx);
 }
 
 TExprNode::TPtr DoNormalizeFrames(const TExprNode::TPtr& frames, TExprContext& ctx) {
@@ -3032,15 +3035,16 @@ TExprNode::TPtr DoNormalizeFrames(const TExprNode::TPtr& frames, TExprContext& c
     return frames;
 }
 
-TExprNode::TPtr NormalizeFrames(TCoCalcOverWindowBase node, TExprContext& ctx) {
+TExprNode::TPtr NormalizeFrames(TCoCalcOverWindowBase node, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
     auto origFrames = node.Frames().Ptr();
     auto normalizedFrames = DoNormalizeFrames(origFrames, ctx);
     if (normalizedFrames != origFrames) {
-        return ctx.ChangeChild(node.Ref(), TCoCalcOverWindowBase::idx_Frames, std::move(normalizedFrames));
+        auto result = ctx.ChangeChild(node.Ref(), TCoCalcOverWindowBase::idx_Frames, std::move(normalizedFrames));
+        return KeepColumnOrder(result, node.Ref(), ctx, typesCtx);
     }
     return node.Ptr();
 }
-TExprNode::TPtr NormalizeFrames(TCoCalcOverWindowGroup node, TExprContext& ctx) {
+TExprNode::TPtr NormalizeFrames(TCoCalcOverWindowGroup node, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
     TExprNodeList normalizedCalcs;
     bool changed = false;
     for (auto calc : node.Calcs()) {
@@ -3055,7 +3059,7 @@ TExprNode::TPtr NormalizeFrames(TCoCalcOverWindowGroup node, TExprContext& ctx) 
     }
 
     if (changed) {
-        return BuildCalcOverWindowGroup(node, std::move(normalizedCalcs), ctx);
+        return BuildCalcOverWindowGroup(node, std::move(normalizedCalcs), ctx, typesCtx);
     }
     return node.Ptr();
 }
@@ -5794,9 +5798,9 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             .Done().Ptr();
     };
 
-    map["CalcOverWindow"] = map["CalcOverSessionWindow"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+    map["CalcOverWindow"] = map["CalcOverSessionWindow"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         TCoCalcOverWindowBase self(node);
-        if (auto normalized = NormalizeFrames(self, ctx); normalized != node) {
+        if (auto normalized = NormalizeFrames(self, ctx, *optCtx.Types); normalized != node) {
             YQL_CLOG(DEBUG, Core) << node->Content() << ": convert window function frames to ROWS BETWEEN UP AND CR";
             return normalized;
         }
@@ -5816,12 +5820,13 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         }
 
         YQL_CLOG(DEBUG, Core) << node->Content() << " with duplicate or empty frames";
-        return ctx.ChangeChild(*node, TCoCalcOverWindowBase::idx_Frames, std::move(mergedFrames));
+        auto result = ctx.ChangeChild(*node, TCoCalcOverWindowBase::idx_Frames, std::move(mergedFrames));
+        return KeepColumnOrder(result, self.Ref(), ctx, *optCtx.Types);
     };
 
-    map["CalcOverWindowGroup"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+    map["CalcOverWindowGroup"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         TCoCalcOverWindowGroup self(node);
-        if (auto normalized = NormalizeFrames(self, ctx); normalized != node) {
+        if (auto normalized = NormalizeFrames(self, ctx, *optCtx.Types); normalized != node) {
             YQL_CLOG(DEBUG, Core) << node->Content() << ": convert window function frames to ROWS BETWEEN UP AND CR";
             return normalized;
         }
@@ -5854,13 +5859,13 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
         if (merged || dedupCalcs.size() < self.Calcs().Size()) {
             YQL_CLOG(DEBUG, Core) << "CalcOverWindowGroup with duplicate/empty frames and/or duplicate windows";
-            return BuildCalcOverWindowGroup(self, std::move(mergedCalcs), ctx);
+            return BuildCalcOverWindowGroup(self, std::move(mergedCalcs), ctx, *optCtx.Types);
         }
 
         if (mergedCalcs.size() <= 1) {
             TStringBuf msg = mergedCalcs.empty() ? "CalcOverWindowGroup without windows" : "CalcOverWindowGroup with single window";
             YQL_CLOG(DEBUG, Core) << msg;
-            return BuildCalcOverWindowGroup(self, std::move(mergedCalcs), ctx);
+            return BuildCalcOverWindowGroup(self, std::move(mergedCalcs), ctx, *optCtx.Types);
         }
 
         return node;

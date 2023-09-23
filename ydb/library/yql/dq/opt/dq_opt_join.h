@@ -27,7 +27,7 @@ NNodes::TDqJoin DqSuppressSortOnJoinInput(const NNodes::TDqJoin& node, TExprCont
 bool DqCollectJoinRelationsWithStats(
     TTypeAnnotationContext& typesCtx,
     const NNodes::TCoEquiJoin& equiJoin,
-    const std::function<void(const TString&, const std::shared_ptr<TOptimizerStatistics>&)>& collector);
+    const std::function<void(TStringBuf, const std::shared_ptr<TOptimizerStatistics>&)>& collector);
 
 } // namespace NDq
 } // namespace NYql

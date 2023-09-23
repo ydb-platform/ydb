@@ -843,7 +843,7 @@ TExprBase RearrangeEquiJoinTree(TExprContext& ctx, const TCoEquiJoin& equiJoin,
 bool DqCollectJoinRelationsWithStats(
     TTypeAnnotationContext& typesCtx, 
     const TCoEquiJoin& equiJoin, 
-    const std::function<void(const TString&, const std::shared_ptr<TOptimizerStatistics>&)>& collector) 
+    const std::function<void(TStringBuf, const std::shared_ptr<TOptimizerStatistics>&)>& collector) 
 {
     if (equiJoin.ArgCount() < 3) {
         return false;
@@ -869,7 +869,7 @@ bool DqCollectJoinRelationsWithStats(
             return false;
         }
 
-        auto label = scope.Cast<TCoAtom>().StringValue();
+        TStringBuf label = scope.Cast<TCoAtom>();
         auto stats = maybeStat->second;
         collector(label, stats);
     }
@@ -917,7 +917,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(const TExprBase& node, TExprContext& ctx, 
     // The arguments of the EquiJoin are 1..n-2, n-2 is the actual join tree
     // of the EquiJoin and n-1 argument are the parameters to EquiJoin
     if (!DqCollectJoinRelationsWithStats(typesCtx, equiJoin, [&](auto label, auto stat) {
-        rels.emplace_back(std::make_shared<TRelOptimizerNode>(label, stat));
+        rels.emplace_back(std::make_shared<TRelOptimizerNode>(TString(label), stat));
     })) {
         return node;
     }

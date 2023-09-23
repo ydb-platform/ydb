@@ -14,9 +14,9 @@ namespace {
 struct TState {
 	IOptimizer::TInput Input;
     IOptimizer::TOutput Result;
-    std::vector<TString> Tables; // relId -> table
-    std::vector<THashMap<TString, int>> VarIds; // relId -> varsIds
-    THashMap<TString, std::vector<int>> Table2RelIds;
+    std::vector<TStringBuf> Tables; // relId -> table
+    std::vector<THashMap<TStringBuf, int>> VarIds; // relId -> varsIds
+    THashMap<TStringBuf, std::vector<int>> Table2RelIds;
     std::vector<std::vector<std::tuple<TStringBuf, TStringBuf>>> Var2TableCol; // relId, varId -> table, col
     TPositionHandle Pos;
 
@@ -38,7 +38,7 @@ struct TState {
         return varId;
     }
 
-    void CollectRel(const TString& label, auto stat) {
+    void CollectRel(TStringBuf label, auto stat) {
         Input.Rels.emplace_back();
         Var2TableCol.emplace_back();
         VarIds.emplace_back();
@@ -158,7 +158,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
 	const TExprBase& node, 
 	TExprContext& ctx, 
 	TTypeAnnotationContext& typesCtx,
-	const std::function<IOptimizer*(IOptimizer::TInput&&)> optFactory,
+	const std::function<IOptimizer*(IOptimizer::TInput&&)>& optFactory,
     bool ruleEnabled)
 {
     Y_UNUSED(ctx);

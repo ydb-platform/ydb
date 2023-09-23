@@ -120,7 +120,7 @@ void TExecContextBase::SetInput(TExprBase input, bool forcePathColumns, const TH
             auto sysColumnsSetting = NYql::GetSettingAsColumnList(section.Settings().Ref(), EYtSettingType::SysColumns);
             if (forcePathColumns) {
                 for (auto& colType: section.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>()->GetItems()) {
-                    if (!colType->GetName().StartsWith(YqlSysColumnPrefix) || sysColumnsSetting.empty()) {
+                    if (auto name = colType->GetName(); !name.SkipPrefix(YqlSysColumnPrefix) || Find(sysColumnsSetting, name) == sysColumnsSetting.cend()) {
                         columns.push_back(colType->GetName());
                     }
                 }

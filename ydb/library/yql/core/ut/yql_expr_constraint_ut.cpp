@@ -338,7 +338,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedMultiMap", "Sorted(x[asc];z[asc])");
     }
 
-    Y_UNIT_TEST(SortedOverNestedOrderedFlatMap) {
+    Y_UNIT_TEST(SortedOverNestedFlatMap) {
         const auto s = R"((
             (let mr_sink (DataSink 'yt (quote plato)))
             (let list (AsList
@@ -347,7 +347,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
                 (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value (String 'w)))
             ))
             (let sorted (Sort list (Bool 'True) (lambda '(item) '((Member item 'key) (Member item 'value)))))
-            (let map (OrderedFlatMap sorted (lambda '(row) (OrderedFlatMap (ListFromRange (Uint8 '0) (Uint8 '5) (Uint8 '1)) (lambda '(index)
+            (let map (OrderedFlatMap sorted (lambda '(row) (FlatMap (ListFromRange (Uint8 '0) (Uint8 '5) (Uint8 '1)) (lambda '(index)
                 (OptionalIf (AggrNotEquals index (Uint8 '3)) (AsStruct '('x (Member row 'key)) '('y (Concat (ToString index) (Member row 'subkey))) '('z (Member row 'value))))
             )))))
             (let world (Write! world mr_sink (Key '('table (String 'Output))) (LazyList map) '('('mode 'renew))))

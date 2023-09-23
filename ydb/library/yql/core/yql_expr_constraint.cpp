@@ -948,13 +948,16 @@ private:
         return argsConstraints;
     }
 
-    template<class TConstraint, class TInput>
+    template<class TConstraint, bool OrderedMap, class TInput>
     static void GetFromMapLambda(const TInput& input, const TConstraintSet& handler, TConstraintSet& output, TExprContext& ctx) {
+        constexpr bool isOrderConstraint = std::is_same<typename TConstraint::TMainConstraint, TSortedConstraintNode>() || std::is_same<typename TConstraint::TMainConstraint, TChoppedConstraintNode>();
         if (const auto lambda = handler.GetConstraint<TConstraint>()) {
             const auto original = input.template GetConstraint<typename TConstraint::TMainConstraint>();
-            if (original) {
-                if (const auto complete = TConstraint::MakeComplete(ctx, lambda->GetColumnMapping(), original)) {
-                    output.AddConstraint(complete);
+            if constexpr (OrderedMap || !isOrderConstraint) {
+                if (original) {
+                    if (const auto complete = TConstraint::MakeComplete(ctx, lambda->GetColumnMapping(), original)) {
+                        output.AddConstraint(complete);
+                    }
                 }
             }
             if (const auto part = input.template GetConstraint<TConstraint>()) {
@@ -968,20 +971,23 @@ private:
                 if (!mapping.empty()) {
                     output.AddConstraint(ctx.MakeConstraint<TConstraint>(std::move(mapping)));
                 }
-            } else if constexpr (std::is_same<typename TConstraint::TMainConstraint, TSortedConstraintNode>() || std::is_same<typename TConstraint::TMainConstraint, TChoppedConstraintNode>()) {
+            } else if constexpr (isOrderConstraint) {
                 if (const auto filtered = lambda->RemoveOriginal(ctx, original))
                     output.AddConstraint(filtered);
             }
         }
     }
 
-    template<class TConstraint, bool WideOutput>
+    template<class TConstraint, bool OrderedMap, bool WideOutput>
     static void GetFromMapLambda(const TExprNode::TPtr& input, TExprContext& ctx) {
+        constexpr bool isOrderConstraint = std::is_same<typename TConstraint::TMainConstraint, TSortedConstraintNode>() || std::is_same<typename TConstraint::TMainConstraint, TChoppedConstraintNode>();
         if (const auto lambda = GetConstraintFromLambda<TConstraint, WideOutput>(input->Tail(), ctx)) {
             const auto original = GetDetailed(input->Head().GetConstraint<typename TConstraint::TMainConstraint>(), *input->Head().GetTypeAnn(), ctx);
-            if (original) {
-                if (const auto complete = TConstraint::MakeComplete(ctx, lambda->GetColumnMapping(), original)) {
-                    input->AddConstraint(complete->GetSimplifiedForType(*input->GetTypeAnn(), ctx));
+            if constexpr (OrderedMap || !isOrderConstraint) {
+                if (original) {
+                    if (const auto complete = TConstraint::MakeComplete(ctx, lambda->GetColumnMapping(), original)) {
+                        input->AddConstraint(complete->GetSimplifiedForType(*input->GetTypeAnn(), ctx));
+                    }
                 }
             }
             if (const auto part = input->Head().GetConstraint<TConstraint>()) {
@@ -995,7 +1001,7 @@ private:
                 if (!mapping.empty()) {
                     input->AddConstraint(ctx.MakeConstraint<TConstraint>(std::move(mapping)));
                 }
-            } else if constexpr (std::is_same<typename TConstraint::TMainConstraint, TSortedConstraintNode>() || std::is_same<typename TConstraint::TMainConstraint, TChoppedConstraintNode>()) {
+            } else if constexpr (isOrderConstraint) {
                 if (const auto filtered = lambda->RemoveOriginal(ctx, original))
                     input->AddConstraint(filtered);
             }
@@ -1030,12 +1036,10 @@ private:
             }
         }
 
-        GetFromMapLambda<TPartOfUniqueConstraintNode, WideOutput>(input, ctx);
-        GetFromMapLambda<TPartOfDistinctConstraintNode, WideOutput>(input, ctx);
-        if constexpr (Ordered) {
-            GetFromMapLambda<TPartOfSortedConstraintNode, WideOutput>(input, ctx);
-            GetFromMapLambda<TPartOfChoppedConstraintNode, WideOutput>(input, ctx);
-        }
+        GetFromMapLambda<TPartOfUniqueConstraintNode, Ordered, WideOutput>(input, ctx);
+        GetFromMapLambda<TPartOfDistinctConstraintNode, Ordered, WideOutput>(input, ctx);
+        GetFromMapLambda<TPartOfSortedConstraintNode, Ordered, WideOutput>(input, ctx);
+        GetFromMapLambda<TPartOfChoppedConstraintNode, Ordered, WideOutput>(input, ctx);
 
         const auto lambdaVarIndex = GetConstraintFromLambda<TVarIndexConstraintNode, WideOutput>(input->Tail(), ctx);
         const auto lambdaMulti = GetConstraintFromLambda<TMultiConstraintNode, WideOutput>(input->Tail(), ctx);
@@ -1082,12 +1086,11 @@ private:
                             }
                         }
                     }
-                    GetFromMapLambda<TPartOfUniqueConstraintNode>(input->Head(), item.second, remappedItems.back().second, ctx);
-                    GetFromMapLambda<TPartOfDistinctConstraintNode>(input->Head(), item.second, remappedItems.back().second, ctx);
-                    if constexpr (Ordered) {
-                        GetFromMapLambda<TPartOfSortedConstraintNode>(input->Head(), item.second, remappedItems.back().second, ctx);
-                        GetFromMapLambda<TPartOfChoppedConstraintNode>(input->Head(), item.second, remappedItems.back().second, ctx);
-                    }
+                    GetFromMapLambda<TPartOfUniqueConstraintNode, Ordered>(input->Head(), item.second, remappedItems.back().second, ctx);
+                    GetFromMapLambda<TPartOfDistinctConstraintNode, Ordered>(input->Head(), item.second, remappedItems.back().second, ctx);
+                    GetFromMapLambda<TPartOfSortedConstraintNode, Ordered>(input->Head(), item.second, remappedItems.back().second, ctx);
+                    GetFromMapLambda<TPartOfChoppedConstraintNode, Ordered>(input->Head(), item.second, remappedItems.back().second, ctx);
+
                     if (const auto empty = item.second.template GetConstraint<TEmptyConstraintNode>()) {
                         remappedItems.pop_back();
                     }
@@ -1109,12 +1112,11 @@ private:
                                     }
                                 }
                             }
-                            GetFromMapLambda<TPartOfUniqueConstraintNode>(*origConstr, item.second, remappedItems.back().second, ctx);
-                            GetFromMapLambda<TPartOfDistinctConstraintNode>(*origConstr, item.second, remappedItems.back().second, ctx);
-                            if constexpr (Ordered) {
-                                GetFromMapLambda<TPartOfSortedConstraintNode>(*origConstr, item.second, remappedItems.back().second, ctx);
-                                GetFromMapLambda<TPartOfChoppedConstraintNode>(*origConstr, item.second, remappedItems.back().second, ctx);
-                            }
+                            GetFromMapLambda<TPartOfUniqueConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, ctx);
+                            GetFromMapLambda<TPartOfDistinctConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, ctx);
+                            GetFromMapLambda<TPartOfSortedConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, ctx);
+                            GetFromMapLambda<TPartOfChoppedConstraintNode, Ordered>(*origConstr, item.second, remappedItems.back().second, ctx);
+
                             if (const auto empty = item.second.template GetConstraint<TEmptyConstraintNode>()) {
                                 remappedItems.pop_back();
                             }
@@ -3605,7 +3607,7 @@ private:
             case TExprNode::Atom:
             case TExprNode::World:
                 input->SetState(TExprNode::EState::ConstrComplete);
-                CheckExpected(*input, ctx);
+                CheckExpected(*input);
                 return TStatus::Ok;
 
             case TExprNode::List:
@@ -3615,7 +3617,7 @@ private:
                     retStatus = CallableTransformer->Transform(input, output, ctx);
                     if (retStatus == TStatus::Ok) {
                         input->SetState(TExprNode::EState::ConstrComplete);
-                        CheckExpected(*input, ctx);
+                        CheckExpected(*input);
                         break;
                     }
                 }
@@ -3669,7 +3671,7 @@ private:
                         input->SetState(TExprNode::EState::ConstrComplete);
                     else
                         input->CopyConstraints(input->Tail());
-                    CheckExpected(*input, ctx);
+                    CheckExpected(*input);
                 }
                 break;
             }
@@ -3730,7 +3732,7 @@ private:
                             "Child with index " << i << " of callable " << TString{input->Content()}.Quote() << " has bad state after constraint transform");
                     }
                     input->SetState(TExprNode::EState::ConstrComplete);
-                    CheckExpected(*input, ctx);
+                    CheckExpected(*input);
                 } else if (retStatus == TStatus::Async) {
                     CallableInputs.push_back(input);
                     input->SetState(TExprNode::EState::ConstrInProgress);
@@ -3786,7 +3788,7 @@ private:
         }
     }
 
-    void CheckExpected(const TExprNode& input, TExprContext&) {
+    void CheckExpected(const TExprNode& input) {
         if constexpr (DisableCheck)
             return;
 

@@ -115,8 +115,15 @@ void PrettyPrintRel(TStringBuilder& b, const IOptimizer::TInput* input, const au
 
 TString IOptimizer::TOutput::ToString() const {
     TStringBuilder b;
+    char buf[1024];
+    snprintf(buf, sizeof(buf), "%.2lf", Rows);
+    b << "Rows: " << buf << "\n";
+    snprintf(buf, sizeof(buf), "%.2lf", TotalCost);
+    b << "TotalCost: " << buf << "\n";
     b << "{\n";
-    PrettyPrintNode(0, b, *this, 0);
+    if (!Nodes.empty()) {
+        PrettyPrintNode(0, b, *this, 0);
+    }
     b << "}\n";
     return b;
 }

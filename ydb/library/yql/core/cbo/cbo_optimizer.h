@@ -62,6 +62,8 @@ struct IOptimizer {
     struct TOutput {
         std::vector<TJoinNode> Nodes;
         TInput* Input = nullptr;
+        double Rows = 0;
+        double TotalCost = 0;
 
         TString ToString() const;
     };

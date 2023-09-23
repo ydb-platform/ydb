@@ -27,6 +27,18 @@ EqClasses: [[a,b,c]]
     UNIT_ASSERT_STRINGS_EQUAL(expected, str);
 }
 
+Y_UNIT_TEST(OutputToString) {
+    IOptimizer::TOutput output;
+    auto str = output.ToString();
+
+    TString expected = R"__(Rows: 0.00
+TotalCost: 0.00
+{
+}
+)__";
+    UNIT_ASSERT_STRINGS_EQUAL(expected, str);
+}
+
 Y_UNIT_TEST(InputNormalize) {
     IOptimizer::TRel rel1 = {100000, 1000000, {{'a'}}};
     IOptimizer::TRel rel2 = {1000000, 9000009, {{'b'}}};

@@ -410,6 +410,7 @@
   - __memory/unique_ptr.h:                        contrib/libs/cxxsupp/libcxx/include/__memory/unique_ptr.h
   - __memory/uses_allocator.h:                    contrib/libs/cxxsupp/libcxx/include/__memory/uses_allocator.h
   - __memory/voidify.h:                           contrib/libs/cxxsupp/libcxx/include/__memory/voidify.h
+  - __random/is_valid.h:                          contrib/libs/cxxsupp/libcxx/include/__random/is_valid.h
   - __random/log2.h:                              contrib/libs/cxxsupp/libcxx/include/__random/log2.h
   - __random/uniform_int_distribution.h:          contrib/libs/cxxsupp/libcxx/include/__random/uniform_int_distribution.h
   - __ranges/access.h:                            contrib/libs/cxxsupp/libcxx/include/__ranges/access.h

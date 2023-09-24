@@ -597,6 +597,10 @@ void TSolomonExporter::DoHandleShard(
         NMonitoring::ECompression compression = NMonitoring::ECompression::IDENTITY;
         if (auto acceptEncoding = req->GetHeaders()->Find("Accept-Encoding")) {
             compression = NMonitoring::CompressionFromAcceptEncodingHeader(*acceptEncoding);
+            if (compression == NMonitoring::ECompression::UNKNOWN) {
+                // Fallback to identity if we cannot recognize the requested encoding.
+                compression = NMonitoring::ECompression::IDENTITY;
+            }
         }
 
         TStringStream buffer;

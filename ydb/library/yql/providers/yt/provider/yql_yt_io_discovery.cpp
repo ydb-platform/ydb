@@ -376,7 +376,7 @@ public:
             if (keys.GetType() == TYtKey::EType::Folder) {
                 const auto res = FetchFolderResult(ctx, cluster, *keys.GetKeys().front().GetFolder());
                 if (!res) {
-                    return node;
+                    return {};
                 }
                 if (auto file = std::get_if<TFileLinkPtr>(&res->ItemsOrFileLink)) {
                     TString alias;

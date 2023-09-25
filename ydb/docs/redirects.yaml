@@ -19,3 +19,5 @@ common:
 ru:
   - from: /concepts/column-table.md
     to: /concepts/datamodel/table.md
+  - from: /postgresql/index.md
+    to: /postgresql/intro.md

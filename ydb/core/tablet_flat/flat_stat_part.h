@@ -93,8 +93,8 @@ public:
         : PartEndRowId(part->Index.GetEndRowId())
         , SmallHelper(part)
     {
-        GroupHelpers.reserve(part->Scheme->Groups.size());
-        for (ui32 group : xrange(part->Scheme->Groups.size())) {
+        GroupHelpers.reserve(part->GroupsCount);
+        for (ui32 group : xrange(part->GroupsCount)) {
             GroupHelpers.emplace_back(part, NPage::TGroupId(group));
         }
     }
@@ -129,11 +129,11 @@ public:
     {
         Pos = Part->Index->Begin();
         End = Part->Index->End();
-        AltGroups.reserve(Part->Scheme->Groups.size() - 1);
-        for (ui32 group : xrange(size_t(1), Part->Scheme->Groups.size())) {
+        AltGroups.reserve(Part->GroupsCount - 1);
+        for (ui32 group : xrange(size_t(1), Part->GroupsCount)) {
             AltGroups.emplace_back(Part.Get(), NPage::TGroupId(group));
         }
-        for (ui32 group : xrange(Part->HistoricIndexes.size())) {
+        for (ui32 group : xrange(Part->HistoricGroupsCount)) {
             HistoryGroups.emplace_back(Part.Get(), NPage::TGroupId(group, true));
         }
         FillKey();

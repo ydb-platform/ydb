@@ -270,7 +270,7 @@ namespace NTest {
 
             auto& slots = Parts[part];
             if (slots.empty()) {
-                slots.reserve(partStore->Store->GetRoomCount() + part->HistoricIndexes.size());
+                slots.reserve(partStore->Store->GetRoomCount() + part->HistoricGroupsCount);
                 for (ui32 room : xrange(partStore->Store->GetRoomCount())) {
                     if (room < partStore->Store->GetGroupCount()) {
                         NPage::TGroupId groupId(room);
@@ -283,7 +283,7 @@ namespace NTest {
                         Y_FAIL("Don't know how to work with room %" PRIu32, room);
                     }
                 }
-                for (ui32 group : xrange(part->HistoricIndexes.size())) {
+                for (ui32 group : xrange(part->HistoricGroupsCount)) {
                     NPage::TGroupId groupId(group, true);
                     slots.push_back(Settle(partStore, group, new NFwd::TCache(partStore->GetGroupIndex(groupId))));
                 }

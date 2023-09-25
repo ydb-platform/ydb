@@ -209,7 +209,7 @@ Y_UNIT_TEST_SUITE(TPart) {
         auto eggs = TPartCook(lay, PageConf(/* groups = */ 3)).Add(foo).Add(bar).Finish();
         auto part = eggs.Lone();
 
-        UNIT_ASSERT_VALUES_EQUAL(part->Groups, 3u);
+        UNIT_ASSERT_VALUES_EQUAL(part->GroupsCount, 3u);
 
         TCheckIt wrap(eggs, { });
 
@@ -507,7 +507,7 @@ Y_UNIT_TEST_SUITE(TPart) {
             .Finish();
         auto part = eggs.Lone();
 
-        UNIT_ASSERT_VALUES_EQUAL(part->Groups, 3u);
+        UNIT_ASSERT_VALUES_EQUAL(part->GroupsCount, 3u);
         UNIT_ASSERT_VALUES_EQUAL(part->MinRowVersion, TRowVersion(0, 99));
         UNIT_ASSERT_VALUES_EQUAL(part->MaxRowVersion, TRowVersion(5, 50));
 
@@ -598,7 +598,7 @@ Y_UNIT_TEST_SUITE(TPart) {
         auto eggs = cook.Finish();
         auto part = eggs.Lone();
 
-        UNIT_ASSERT_VALUES_EQUAL(part->Groups, 3u);
+        UNIT_ASSERT_VALUES_EQUAL(part->GroupsCount, 3u);
         UNIT_ASSERT_VALUES_EQUAL(part->MinRowVersion, TRowVersion(0, 42));
         UNIT_ASSERT_VALUES_EQUAL(part->MaxRowVersion, TRowVersion(2, 1000));
 

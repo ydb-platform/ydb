@@ -103,7 +103,7 @@ public:
             auto glob = Pseudo.Get()->PageCollection->Glob(bounds.Lo.Blob);
             return glob.Logo.Channel();
         } else {
-            return PageCollections.at(Groups).Get()->Id.Channel();
+            return PageCollections.at(GroupsCount).Get()->Id.Channel();
         }
     }
 
@@ -125,7 +125,7 @@ public:
             Y_Fail("Invalid ref ELargeObj{" << int(lob) << ", " << ref << "}");
         }
 
-        return (lob == ELargeObj::Extern ? Pseudo : PageCollections.at(Groups)).Get();
+        return (lob == ELargeObj::Extern ? Pseudo : PageCollections.at(GroupsCount)).Get();
     }
 
     TAutoPtr<NPageCollection::TFetch> DataPages() const noexcept

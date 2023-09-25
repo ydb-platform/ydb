@@ -97,17 +97,22 @@ namespace NTable {
             , GarbageStats(std::move(params.GarbageStats))
             , TxIdStats(std::move(params.TxIdStats))
             , Stat(stat)
-            , Groups(1 + GroupIndexes.size())
+            , GroupsCount(IndexPages.Groups.size())
+            , HistoricGroupsCount(IndexPages.Historic.size())
             , IndexesRawSize(Index.RawSize() + SumRawSize(GroupIndexes))
             , MinRowVersion(params.MinRowVersion)
             , MaxRowVersion(params.MaxRowVersion)
         {
-            Y_VERIFY(Scheme->Groups.size() == Groups,
+            Y_VERIFY(Scheme->Groups.size() == GroupsCount,
                 "Part has scheme with %" PRISZT " groups, but %" PRISZT " indexes",
-                Scheme->Groups.size(), Groups);
-            Y_VERIFY(HistoricIndexes.empty() || HistoricIndexes.size() == Groups,
+                Scheme->Groups.size(), GroupsCount);
+            Y_VERIFY(HistoricIndexes.empty() || HistoricIndexes.size() == GroupsCount,
                 "Part has %" PRISZT " indexes, but %" PRISZT " historic indexes",
-                Groups, HistoricIndexes.size());
+                GroupsCount, HistoricIndexes.size());
+
+            Y_VERIFY(!HistoricGroupsCount || HistoricGroupsCount == GroupsCount,
+                "Part has %" PRISZT " indexes, but %" PRISZT " historic indexes",
+                GroupsCount, HistoricGroupsCount);
         }
 
         virtual ~TPart() = default;
@@ -170,7 +175,8 @@ namespace NTable {
             , ByKey(src.ByKey)
             , GarbageStats(src.GarbageStats)
             , Stat(src.Stat)
-            , Groups(src.Groups)
+            , GroupsCount(src.GroupsCount)
+            , HistoricGroupsCount(src.HistoricGroupsCount)
             , IndexesRawSize(src.IndexesRawSize)
             , MinRowVersion(src.MinRowVersion)
             , MaxRowVersion(src.MaxRowVersion)
@@ -200,7 +206,8 @@ namespace NTable {
         const TIntrusiveConstPtr<NPage::TGarbageStats> GarbageStats;
         const TIntrusiveConstPtr<NPage::TTxIdStatsPage> TxIdStats;
         const TStat Stat;
-        const size_t Groups;
+        const size_t GroupsCount;
+        const size_t HistoricGroupsCount;
         const size_t IndexesRawSize;
         const TRowVersion MinRowVersion;
         const TRowVersion MaxRowVersion;

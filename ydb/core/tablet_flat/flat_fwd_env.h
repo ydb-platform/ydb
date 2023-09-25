@@ -110,7 +110,7 @@ namespace NFwd {
 
         const TSharedData* TryGetPage(const TPart* part, TPageId ref, TGroupId groupId) override
         {
-            ui16 room = (groupId.Historic ? part->Groups + 2 : 0) + groupId.Index;
+            ui16 room = (groupId.Historic ? part->GroupsCount + 2 : 0) + groupId.Index;
             TSlot slot = GetQueueSlot(part, room);
 
             if (part->GetPageType(ref, groupId) == EPage::Index) {
@@ -131,7 +131,7 @@ namespace NFwd {
                 Y_Fail("Invalid ref ELargeObj{" << int(lob) << ", " << ref << "}");
             }
 
-            ui32 room = part->Groups + (lob == ELargeObj::Extern ? 1 : 0);
+            ui32 room = part->GroupsCount + (lob == ELargeObj::Extern ? 1 : 0);
 
             return Handle(GetQueue(part, room), ref);
         }
@@ -239,7 +239,7 @@ namespace NFwd {
                     continue; // we don't trace cold parts
                 }
                 if (auto &blobs = part->Blobs) {
-                    auto &q = GetQueue(part, part->Groups + 1);
+                    auto &q = GetQueue(part, part->GroupsCount + 1);
                     auto &line = dynamic_cast<TBlobs&>(*q.PageLoadingLogic);
 
                     Y_VERIFY(q.Slot < (sieves.size() - 1));
@@ -299,14 +299,14 @@ namespace NFwd {
             ui32 partSlot = Parts.size();
 
             auto& slots = Parts[part];
-            slots.reserve(part->Groups + 2 + part->HistoricIndexes.size());
+            slots.reserve(part->GroupsCount + 2 + part->HistoricGroupsCount);
 
-            for (ui32 group : xrange(ui32(part->Groups))) {
+            for (ui32 group : xrange(ui32(part->GroupsCount))) {
                 slots.push_back(Settle(MakeCache(part, NPage::TGroupId(group), partView.Slices), partSlot));
             }
             slots.push_back(Settle(MakeOuter(part, partView.Slices), partSlot));
             slots.push_back(Settle(MakeExtern(part, partView.Slices), partSlot));
-            for (ui32 group : xrange(ui32(part->HistoricIndexes.size()))) {
+            for (ui32 group : xrange(ui32(part->HistoricGroupsCount))) {
                 slots.push_back(Settle(MakeCache(part, NPage::TGroupId(group, true), nullptr), partSlot));
             }
 
@@ -399,7 +399,7 @@ namespace NFwd {
 
                 TVector<ui32> edge(small->Stats().Tags.size(), Max<ui32>());
 
-                auto pageCollection = partStore->PageCollections.at(partStore->Groups)->PageCollection;
+                auto pageCollection = partStore->PageCollections.at(partStore->GroupsCount)->PageCollection;
 
                 return
                     { new NFwd::TBlobs(small, std::move(bounds), edge, false), pageCollection };

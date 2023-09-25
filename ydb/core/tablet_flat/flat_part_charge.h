@@ -29,7 +29,7 @@ namespace NTable {
             , Scheme(*Part->Scheme)
             , Index(Part, Env, TGroupId())
         {
-            if (includeHistory && Part->IndexPages.Historic) {
+            if (includeHistory && Part->HistoricGroupsCount) {
                 HistoryIndex.emplace(Part, Env, TGroupId(0, true));
             }
 

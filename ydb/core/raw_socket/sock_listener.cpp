@@ -95,8 +95,7 @@ public:
     }
 
     void Handle(TEvents::TEvUnsubscribe::TPtr ev) {
-        auto erased = Connections.erase(ev->Sender);
-        Y_VERIFY_DEBUG(erased);
+        Connections.erase(ev->Sender);
     }
 
     void Handle(NActors::TEvPollerRegisterResult::TPtr ev) {

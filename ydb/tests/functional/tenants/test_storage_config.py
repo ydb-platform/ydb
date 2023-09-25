@@ -112,25 +112,27 @@ def case_0():
     creation_options.partition_config.with_partitioning_policy(0)  # for now external blobs and autosplit not compatible
 
     has_external = True
-    scheme = lambda table_name: has_item(
-        has_properties(
-            TableName='__user__{}'.format(table_name),
-            ColumnFamilies={
-                0: {'Large': 524288,
-                    'Cache': 0,
-                    'InMemory': False,
-                    'Codec': 0,
-                    'Small': 4294967295,
-                    'RoomID': 0,
-                    'Columns': [1, 2]}
-            },
-            Rooms={
-                0: {'Main': 1,
-                    'Outer': 1,
-                    'Blobs': 1}
-            }
+
+    def scheme(table_name):
+        return has_item(
+            has_properties(
+                TableName='__user__{}'.format(table_name),
+                ColumnFamilies={
+                    0: {'Large': 524288,
+                        'Cache': 0,
+                        'InMemory': False,
+                        'Codec': 0,
+                        'Small': 4294967295,
+                        'RoomID': 0,
+                        'Columns': [1, 2]}
+                },
+                Rooms={
+                    0: {'Main': 1,
+                        'Outer': 1,
+                        'Blobs': 1}
+                }
+            )
         )
-    )
     return (creation_options, has_external, scheme)
 
 

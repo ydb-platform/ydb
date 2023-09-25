@@ -215,11 +215,13 @@ public:
         Functions["WideChopper"] = &TCallableConstraintTransformer::InheriteEmptyFromInput;
         Functions["WideCombiner"] = &TCallableConstraintTransformer::InheriteEmptyFromInput;
         Functions["WideCondense1"] = &TCallableConstraintTransformer::Condense1Wrap<true>;
-        Functions["Aggregate"] = &TCallableConstraintTransformer::AggregateWrap;
-        Functions["AggregateMergeState"] = &TCallableConstraintTransformer::AggregateWrap;
-        Functions["AggregateMergeFinalize"] = &TCallableConstraintTransformer::AggregateWrap;
-        Functions["AggregateMergeManyFinalize"] = &TCallableConstraintTransformer::AggregateWrap;
-        Functions["AggregateFinalize"] = &TCallableConstraintTransformer::AggregateWrap;
+        Functions["Aggregate"] = &TCallableConstraintTransformer::AggregateWrap<true>;
+        Functions["AggregateMergeState"] = &TCallableConstraintTransformer::AggregateWrap<true>;
+        Functions["AggregateMergeFinalize"] = &TCallableConstraintTransformer::AggregateWrap<true>;
+        Functions["AggregateMergeManyFinalize"] = &TCallableConstraintTransformer::AggregateWrap<true>;
+        Functions["AggregateFinalize"] = &TCallableConstraintTransformer::AggregateWrap<true>;
+        Functions["AggregateCombine"] = &TCallableConstraintTransformer::AggregateWrap<false>;
+        Functions["AggregateCombineState"] = &TCallableConstraintTransformer::AggregateWrap<false>;
         Functions["Fold"] = &TCallableConstraintTransformer::FoldWrap;
         Functions["Fold1"] = &TCallableConstraintTransformer::FoldWrap;
         Functions["WithContext"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
@@ -233,8 +235,8 @@ public:
         Functions["WideToBlocks"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["WideFromBlocks"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["BlockExpandChunked"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
-        Functions["BlockMergeFinalizeHashed"] = &TCallableConstraintTransformer::AggregateWrap;
-        Functions["BlockMergeManyFinalizeHashed"] = &TCallableConstraintTransformer::AggregateWrap;
+        Functions["BlockMergeFinalizeHashed"] = &TCallableConstraintTransformer::AggregateWrap<true>;
+        Functions["BlockMergeManyFinalizeHashed"] = &TCallableConstraintTransformer::AggregateWrap<true>;
     }
 
     std::optional<IGraphTransformer::TStatus> ProcessCore(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
@@ -3144,18 +3146,21 @@ private:
         return FromFirst<TEmptyConstraintNode>(input, output, ctx);
     }
 
+    template <bool Final>
     TStatus AggregateWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
         if (HasSetting(input->Tail(), "session"))
             return TStatus::Ok;
 
         if (const auto size = input->Child(1)->ChildrenSize()) {
-            std::vector<std::string_view> columns;
-            columns.reserve(size);
-            for (const auto& child: input->Child(1)->Children()) {
-                columns.emplace_back(child->Content());
+            if constexpr (Final) {
+                std::vector<std::string_view> columns;
+                columns.reserve(size);
+                for (const auto& child: input->Child(1)->Children()) {
+                    columns.emplace_back(child->Content());
+                }
+                input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(columns));
+                input->AddConstraint(ctx.MakeConstraint<TDistinctConstraintNode>(columns));
             }
-            input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(columns));
-            input->AddConstraint(ctx.MakeConstraint<TDistinctConstraintNode>(columns));
             return FromFirst<TEmptyConstraintNode>(input, output, ctx);
         }
         return TStatus::Ok;

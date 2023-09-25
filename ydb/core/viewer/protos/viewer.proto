@@ -507,7 +507,7 @@ message TNodeLocation {
 message TQueryRequest {
     string Uri = 1;
     bytes Content = 2;
-    string UserToken = 3;
+    bytes UserToken = 3;
 }
 
 message TEvViewerRequest {

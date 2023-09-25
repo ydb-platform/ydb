@@ -1167,12 +1167,6 @@ bool TPartitionConfigMerger::VerifyCompactionPolicy(const NKikimrSchemeOp::TComp
         case NKikimrSchemeOp::CompactionStrategyGenerational:
             break;
         case NKikimrSchemeOp::CompactionStrategySharded:
-            if (!KIKIMR_ALLOW_SHARDED_COMPACTION) {
-                err = TStringBuilder()
-                        << "Unsupported compaction strategy.";
-                return false;
-            }
-            break;
         default:
             err = TStringBuilder()
                     << "Unsupported compaction strategy.";

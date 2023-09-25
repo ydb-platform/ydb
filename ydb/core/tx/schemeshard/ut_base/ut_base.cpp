@@ -9337,22 +9337,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 }
             }
             )",
-            { KIKIMR_ALLOW_SHARDED_COMPACTION ?
-                NKikimrScheme::StatusAccepted :
-                NKikimrScheme::StatusInvalidParameter });
-
-        if (KIKIMR_ALLOW_SHARDED_COMPACTION) {
-            env.TestWaitNotification(runtime, txId);
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/Table2"),
-                               { [](const auto& result) {
-                                   auto strategy = result
-                                    .GetPathDescription()
-                                    .GetTable()
-                                    .GetPartitionConfig()
-                                    .GetCompactionPolicy()
-                                    .GetCompactionStrategy();
-                                   UNIT_ASSERT(strategy == NKikimrSchemeOp::CompactionStrategySharded);}});
-        }
+            { NKikimrScheme::StatusInvalidParameter });
     }
 
     Y_UNIT_TEST(AlterTableWithCompactionStrategies) { //+
@@ -9391,22 +9376,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 }
             }
             )",
-            { KIKIMR_ALLOW_SHARDED_COMPACTION ?
-                NKikimrScheme::StatusAccepted :
-                NKikimrScheme::StatusInvalidParameter });
-
-        if (KIKIMR_ALLOW_SHARDED_COMPACTION) {
-            env.TestWaitNotification(runtime, txId);
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"),
-                               { [](const auto& result) {
-                                   auto strategy = result
-                                    .GetPathDescription()
-                                    .GetTable()
-                                    .GetPartitionConfig()
-                                    .GetCompactionPolicy()
-                                    .GetCompactionStrategy();
-                                   UNIT_ASSERT(strategy == NKikimrSchemeOp::CompactionStrategySharded);}});
-        }
+            { NKikimrScheme::StatusInvalidParameter });
     }
 
     Y_UNIT_TEST(SimultaneousDropForceDrop) { //+

@@ -180,8 +180,8 @@ public:
         if (auto *table = GetTableInfo(id)) {
             auto strategy = table->CompactionPolicy->CompactionStrategy;
             if (strategy != NKikimrSchemeOp::CompactionStrategyUnset) {
-                if (table->ColdBorrow && strategy == NKikimrSchemeOp::CompactionStrategySharded) {
-                    // Sharded strategy does not support cold borrow
+                if (strategy == NKikimrSchemeOp::CompactionStrategySharded) {
+                    // Sharded strategy doesn't exist anymore
                     // Use the safe generational strategy instead
                     strategy = NKikimrSchemeOp::CompactionStrategyGenerational;
                 }

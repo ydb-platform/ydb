@@ -196,10 +196,6 @@ void TCompactionPolicy::Serialize(NKikimrSchemeOp::TCompactionPolicy& policyPb) 
 
 TCompactionPolicyPtr CreateDefaultTablePolicy() {
     TCompactionPolicyPtr policy = new TCompactionPolicy;
-#if KIKIMR_DEFAULT_SHARDED_COMPACTION
-    policy->CompactionStrategy = NKikimrSchemeOp::CompactionStrategySharded;
-    policy->ShardPolicy.SetTaskPriorityBase(100);
-#endif
     return policy;
 }
 
@@ -212,9 +208,6 @@ TCompactionPolicyPtr CreateDefaultUserTablePolicy() {
                 LegacyQueueIdToTaskName(2), false});
     userPolicy->Generations.push_back({400 * 1024 * 1024, 5, 16, 16ull * 1024 * 1024 * 1024,
                 LegacyQueueIdToTaskName(3), false});
-#if KIKIMR_DEFAULT_SHARDED_COMPACTION
-    userPolicy->CompactionStrategy = NKikimrSchemeOp::CompactionStrategySharded;
-#endif
     return userPolicy;
 }
 

@@ -122,7 +122,7 @@ message TFamilyDescription {
 enum ECompactionStrategy {
     CompactionStrategyUnset = 0;
     CompactionStrategyGenerational = 1;
-    CompactionStrategySharded = 2;
+    CompactionStrategySharded = 2; // DEPRECATED: use CompactionStrategyGenerational
 }
 
 message TCompactionPolicy {

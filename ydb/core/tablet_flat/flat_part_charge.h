@@ -168,65 +168,6 @@ namespace NTable {
         }
 
         /**
-         * Precharges data around the specified splitKey
-         *
-         * This method will ensure pages with the first key >= splitKey and the
-         * last key < splitKey are precharged. This method will not try to
-         * load pages outside of [beginRowId, endRowId) range.
-         */
-        bool SplitKey(const TCells splitKey, const TKeyCellDefaults& keyDefaults,
-                const TRowId beginRowId, const TRowId endRowId) const noexcept
-        {
-            Y_VERIFY_DEBUG(beginRowId < endRowId, "Unexpected empty row range");
-            Y_VERIFY_DEBUG(!Groups, "Unexpected column groups during SplitKey precharge");
-
-            auto index = Index.TryLoadRaw();
-            if (!index) {
-                return false;
-            }
-
-            bool ready = true;
-
-            // The first page that may contain splitKey
-            auto found = index->LookupKey(splitKey, Scheme.Groups[0], ESeek::Lower, &keyDefaults);
-
-            // Note: as we may have cut index key we may both need prev and next pages
-
-            if (auto prev = found; prev.Off() && --prev) {
-                TRowId pageBegin = prev->GetRowId();
-                TRowId pageEnd = found ? found->GetRowId() : index->GetEndRowId();
-                if (pageBegin < endRowId && beginRowId < pageEnd) {
-                    ready &= bool(Env->TryGetPage(Part, prev->GetPageId()));
-                }
-            }
-
-            if (found && found->GetRowId() < endRowId) {
-                bool needNext = true;
-                if (found->GetRowId() < beginRowId) {
-                    // iterator may re-seek to the first page that's in range
-                    auto adjusted = index->LookupRow(beginRowId, found);
-                    if (found != adjusted) {
-                        found = adjusted;
-                        needNext = false;
-                    }
-                }
-                if (found) {
-                    ready &= bool(Env->TryGetPage(Part, found->GetPageId()));
-                }
-                if (needNext) {
-                    // splitKey may be on the next page
-                    if (auto next = found; ++next) {
-                        if (next->GetRowId() < endRowId) {
-                            ready &= bool(Env->TryGetPage(Part, next->GetPageId()));
-                        }
-                    }
-                }
-            }
-
-            return ready;
-        }
-
-        /**
          * Precharges data for rows between row1 and row2 inclusive
          *
          * Important caveat: assumes iteration won't touch any row > row2

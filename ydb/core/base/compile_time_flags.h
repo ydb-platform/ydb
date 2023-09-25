@@ -3,16 +3,6 @@
 // This file is used for enabling or disabling dangerous kikimr features
 // These flags may only be changed at compile time
 
-// This feature allows schemeshard to accept sharded compaction for tables
-#ifndef KIKIMR_ALLOW_SHARDED_COMPACTION
-#define KIKIMR_ALLOW_SHARDED_COMPACTION 0
-#endif
-
-// This feature switches default to sharded compaction for all tables
-#ifndef KIKIMR_DEFAULT_SHARDED_COMPACTION
-#define KIKIMR_DEFAULT_SHARDED_COMPACTION 0
-#endif
-
 // This feature enables tablet to serialize bundle deltas in part switches
 // It may only be enabled after 19-2 or newer is deployed everywhere
 #ifndef KIKIMR_TABLET_WRITE_BUNDLE_DELTAS

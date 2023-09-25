@@ -7,7 +7,6 @@ SRCS(
     flat_comp.cpp
     flat_comp_create.cpp
     flat_comp_gen.cpp
-    flat_comp_shard.cpp
     flat_cxx_database.h
     flat_database.cpp
     flat_database.h
@@ -51,7 +50,6 @@ SRCS(
     flat_part_slice.cpp
     flat_range_cache.cpp
     flat_row_versions.cpp
-    flat_stat_part.cpp
     flat_stat_part.h
     flat_stat_table.h
     flat_stat_table.cpp
@@ -75,8 +73,6 @@ SRCS(
 )
 
 GENERATE_ENUM_SERIALIZATION(flat_comp_gen.h)
-
-GENERATE_ENUM_SERIALIZATION(flat_comp_shard.h)
 
 GENERATE_ENUM_SERIALIZATION(flat_part_loader.h)
 

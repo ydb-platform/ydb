@@ -1,12 +1,5 @@
 LIBRARY()
 
-IF (KIKIMR_DEFAULT_SHARDED_COMPACTION)
-    # Makes it easier to test sharded compaction
-    CFLAGS(
-        -DKIKIMR_DEFAULT_SHARDED_COMPACTION=1
-    )
-ENDIF()
-
 SRCS(
     actor_activity_names.cpp
     appdata.h

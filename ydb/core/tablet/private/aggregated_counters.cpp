@@ -142,6 +142,9 @@ void TAggregatedSimpleCounters::RecalcAll() {
     sumValues.resize(count, 0);
 
     for (size_t i = 0; i < count; ++i) {
+        if (!ChangedCounters[i]) {
+            continue;
+        }
         auto* histCounter = HistSimpleCounters[i].Get();
         if (histCounter) {
             histCounter->Clear();
@@ -259,6 +262,9 @@ void TAggregatedCumulativeCounters::RecalcAll() {
     maxValues.resize(count, 0);
 
     for (size_t i = 0; i < count; ++i) {
+        if (!ChangedCounters[i]) {
+            continue;
+        }
         auto* histCounter = HistCumulativeCounters[i].Get();
         if (histCounter) {
             histCounter->Clear();

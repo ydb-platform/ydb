@@ -2,7 +2,7 @@
 
 ## Запуск {{ ydb-short-name }} с включенным PostgreSQL
 
-Сейчас функционал postgres-совместимости доступен в образе: `cr.yandex/yc/yandex-docker-local-ydb:trunk`.
+Сейчас функционал postgres-совместимости доступен в образе: `ghcr.io/ydb-platform/local-ydb:nightly`.
 
 Команды для запуска локального докер-контейнера с YDB и открытыми портами postgres и Web-UI.
 
@@ -136,23 +136,12 @@ SELECT COUNT(*) FROM example;
 
     {% endnote %}
 
-- Docker-команда в одну строку
+- Docker-команда
 
     Эта команда остановит и удалит данные:
 
     ```bash
     docker rm -f ydb-postgres
     ```
-
-    {% note info %}
-
-    Для остановки контейнера с сохранением данных уберите из конфига переменную YDB_USE_IN_MEMORY_PDISKS и используйте команду остановки:
-
-    ```bash
-    docker stop ydb-postgres
-    ```
-
-    {% endnote %}
-
 
 {% endlist %}

@@ -656,8 +656,6 @@ namespace NTable {
             // Save an estimate for MaxVersion
             MaxVersion = rowVersion;
             return EReady::Data;
-
-            return Exhausted();
         }
 
         using TPartGroupRowIt::IsValid;

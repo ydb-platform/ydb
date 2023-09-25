@@ -2544,8 +2544,9 @@ void THive::RequestPoolsInformation() {
     BLOG_D("THive::RequestPoolsInformation()");
     TVector<THolder<NKikimrBlobStorage::TEvControllerSelectGroups::TGroupParameters>> requests;
 
-    for (const auto& [poolName, storagePool] : StoragePools) {
+    for (auto& [poolName, storagePool] : StoragePools) {
         THolder<NKikimrBlobStorage::TEvControllerSelectGroups::TGroupParameters> item = storagePool.BuildRefreshRequest();
+        ++storagePool.RefreshRequestInFlight;
         requests.emplace_back(std::move(item));
     }
 
@@ -2559,6 +2560,7 @@ void THive::RequestPoolsInformation() {
         }
         SendToBSControllerPipe(ev.Release());
     }
+    Schedule(TDuration::Minutes(10), new TEvPrivate::TEvRefreshStorageInfo());
 }
 
 ui32 THive::GetEventPriority(IEventHandle* ev) {
@@ -2648,6 +2650,7 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvHive::TEvTabletOwnersReply, Handle);
         hFunc(TEvPrivate::TEvBalancerOut, Handle);
         hFunc(TEvHive::TEvUpdateTabletsObject, Handle);
+        hFunc(TEvPrivate::TEvRefreshStorageInfo, Handle);
     }
 }
 
@@ -2741,6 +2744,7 @@ STFUNC(THive::StateWork) {
         fFunc(TEvHive::TEvTabletOwnersReply::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvBalancerOut::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvUpdateTabletsObject::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvRefreshStorageInfo::EventType, EnqueueIncomingEvent);
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -2967,6 +2971,10 @@ void THive::Handle(TEvHive::TEvTabletOwnersReply::TPtr& ev) {
 void THive::Handle(TEvHive::TEvUpdateTabletsObject::TPtr& ev) {
     BLOG_D("Handle TEvHive::TEvUpdateTabletsObject");
     Execute(CreateUpdateTabletsObject(std::move(ev)));
+}
+
+void THive::Handle(TEvPrivate::TEvRefreshStorageInfo::TPtr&) {
+    RequestPoolsInformation();
 }
 
 TVector<TNodeId> THive::GetNodesForWhiteboardBroadcast(size_t maxNodesToReturn) {

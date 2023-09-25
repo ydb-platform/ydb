@@ -25,6 +25,7 @@ struct TEvPrivate {
         EvRestartComplete,
         EvBalancerOut,
         EvProcessIncomingEvent,
+        EvRefreshStorageInfo,
         EvEnd
     };
 
@@ -84,6 +85,8 @@ struct TEvPrivate {
     struct TEvBalancerOut : TEventLocal<TEvBalancerOut, EvBalancerOut> {};
 
     struct TEvProcessIncomingEvent : TEventLocal<TEvProcessIncomingEvent, EvProcessIncomingEvent> {};
+
+    struct TEvRefreshStorageInfo : TEventLocal<TEvRefreshStorageInfo, EvRefreshStorageInfo> {};
 };
 
 } // NHive

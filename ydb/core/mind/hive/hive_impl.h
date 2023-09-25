@@ -527,6 +527,7 @@ protected:
     void Handle(TEvHive::TEvRequestTabletOwners::TPtr& ev);
     void Handle(TEvHive::TEvTabletOwnersReply::TPtr& ev);
     void Handle(TEvHive::TEvUpdateTabletsObject::TPtr& ev);
+    void Handle(TEvPrivate::TEvRefreshStorageInfo::TPtr& ev);
     void Handle(TEvPrivate::TEvProcessIncomingEvent::TPtr& ev);
 
 protected:

@@ -81,9 +81,8 @@ Y_UNIT_TEST(OrderJoinsDoesNothingWhenCBODisabled) {
 void OrderJoins2Tables(ECostBasedOptimizer optimizerType) {
     TExprContext exprCtx;
     auto tree = MakeOp({"c", "c_nationkey"}, {"n", "n_nationkey"}, {"c", "n"}, exprCtx);
-    // TODO: check join order with different table sizes
     tree->Left = MakeLeaf({"c"}, {"c"},  100000, 12333, exprCtx);
-    tree->Right = MakeLeaf({"n"}, {"n"}, 100000, 12333, exprCtx);
+    tree->Right = MakeLeaf({"n"}, {"n"}, 1000, 1233, exprCtx);
 
     TYtState::TPtr state = MakeIntrusive<TYtState>();
     state->Configuration->CostBasedOptimizer = optimizerType;

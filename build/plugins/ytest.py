@@ -949,7 +949,7 @@ def onjava_test(unit, *args):
         if prop['type'] == 'file':
             test_data.append(prop['path'].replace('${ARCADIA_ROOT}', 'arcadia'))
 
-    props = base64.b64encode(json.dumps(props, encoding='utf-8'))
+    props = base64.b64encode(six.ensure_binary(json.dumps(props)))
 
     test_cwd = unit.get('TEST_CWD_VALUE') or ''  # TODO: validate test_cwd value
 

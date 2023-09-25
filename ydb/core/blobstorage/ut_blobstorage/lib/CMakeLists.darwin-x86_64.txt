@@ -30,7 +30,7 @@ target_link_libraries(blobstorage-ut_blobstorage-lib PUBLIC
   core-tx-mediator
   core-tx-coordinator
   ydb-core-util
-  udf-service-stub
+  udf-service-exception_policy
   yql-sql-pg_dummy
 )
 target_sources(blobstorage-ut_blobstorage-lib PRIVATE

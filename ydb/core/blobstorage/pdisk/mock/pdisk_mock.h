@@ -29,6 +29,8 @@ namespace NKikimr {
         void SetStatusFlags(NPDisk::TStatusFlags flags);
 
         TPtr Snapshot(); // create a copy of PDisk whole state
+
+        void SetReadOnly(const TVDiskID& vDiskId, bool isReadOnly);
     };
 
     IActor *CreatePDiskMockActor(TPDiskMockState::TPtr state);

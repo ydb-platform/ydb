@@ -44,6 +44,7 @@ struct TPDiskMockState::TImpl {
     std::unordered_map<TString, ui32> Blocks;
     TIntervalSet<ui64> Corrupted;
     NPDisk::TStatusFlags StatusFlags;
+    THashSet<TVDiskID> ReadOnlyVDisks;
 
     TImpl(ui32 nodeId, ui32 pdiskId, ui64 pdiskGuid, ui64 size, ui32 chunkSize)
         : NodeId(nodeId)
@@ -97,20 +98,39 @@ struct TPDiskMockState::TImpl {
         }
     }
 
-    template<typename TQuery, typename TResult>
-    TOwner *FindOwner(TQuery *msg, std::unique_ptr<TResult>& res) {
+    template<typename TQuery>
+    std::variant<TOwner*, std::tuple<NKikimrProto::EReplyStatus, TString>> FindOwner(TQuery *msg) {
         if (const auto it = Owners.find(msg->Owner); it == Owners.end()) {
             Y_FAIL("invalid Owner");
         } else if (it->second.Slain) {
-            res->Status = NKikimrProto::INVALID_OWNER;
-            res->ErrorReason = "VDisk is slain";
+            return std::make_tuple(NKikimrProto::INVALID_OWNER, "VDisk is slain");
         } else if (msg->OwnerRound != it->second.OwnerRound) {
-            res->Status = NKikimrProto::INVALID_ROUND;
-            res->ErrorReason = "invalid OwnerRound";
+            return std::make_tuple(NKikimrProto::INVALID_ROUND, "invalid OwnerRound");
         } else {
             return &it->second;
         }
         return nullptr;
+    }
+
+    template<typename TQuery, typename TResult>
+    TOwner *FindOwner(TQuery *msg, std::unique_ptr<TResult>& res) {
+        auto owner = FindOwner(msg);
+        if (std::holds_alternative<TOwner*>(owner)) {
+            return std::get<0>(owner);
+        }
+        std::tie(res->Status, res->ErrorReason) = std::get<1>(owner);
+        return nullptr;
+    }
+
+    template<typename TQuery>
+    bool CheckIsReadOnlyOwner(TQuery *msg) {
+        auto owner = FindOwner(msg);
+        if (std::holds_alternative<TOwner*>(owner)) {
+            if (auto o = std::get<0>(owner)) {
+                return IsReadOnly(o->VDiskId);
+            }
+        }
+        return false;
     }
 
     std::tuple<ui8, TOwner*> FindOrCreateOwner(const TVDiskID& vdiskId, ui32 slotId, bool *created) {
@@ -231,6 +251,18 @@ struct TPDiskMockState::TImpl {
     void SetStatusFlags(NKikimrBlobStorage::TPDiskSpaceColor::E spaceColor) {
         StatusFlags = SpaceColorToStatusFlag(spaceColor);
     }
+
+    void SetReadOnly(const TVDiskID& vDiskId, bool isReadOnly) {
+        if (isReadOnly) {
+            ReadOnlyVDisks.insert(vDiskId);
+        } else {
+            ReadOnlyVDisks.erase(vDiskId);
+        }
+    }
+
+    bool IsReadOnly(const TVDiskID& vDiskId) const {
+        return ReadOnlyVDisks.contains(vDiskId);
+    }
 };
 
 TPDiskMockState::TPDiskMockState(ui32 nodeId, ui32 pdiskId, ui64 pdiskGuid, ui64 size, ui32 chunkSize)
@@ -270,6 +302,10 @@ void TPDiskMockState::SetStatusFlags(NKikimrBlobStorage::TPDiskSpaceColor::E spa
 
 void TPDiskMockState::SetStatusFlags(NPDisk::TStatusFlags flags) {
     Impl->SetStatusFlags(flags);
+}
+
+void TPDiskMockState::SetReadOnly(const TVDiskID& vDiskId, bool isReadOnly) {
+    Impl->SetReadOnly(vDiskId, isReadOnly);
 }
 
 TPDiskMockState::TPtr TPDiskMockState::Snapshot() {
@@ -414,6 +450,7 @@ public:
     std::deque<std::tuple<TActorId, THolder<NPDisk::TEvLog>>> LogQ;
 
     void Handle(NPDisk::TEvLog::TPtr ev) {
+        Y_VERIFY(!Impl.CheckIsReadOnlyOwner(ev->Get()));
         if (LogQ.empty()) {
             TActivationContext::Send(new IEventHandle(EvResume, 0, SelfId(), TActorId(), nullptr, 0));
         }
@@ -425,6 +462,7 @@ public:
             TActivationContext::Send(new IEventHandle(EvResume, 0, SelfId(), TActorId(), nullptr, 0));
         }
         for (auto& msg : ev->Get()->Logs) {
+            Y_VERIFY(!Impl.CheckIsReadOnlyOwner(msg.Get()));
             LogQ.emplace_back(ev->Sender, std::move(msg));
         }
     }
@@ -576,6 +614,7 @@ public:
 
     void Handle(NPDisk::TEvChunkReserve::TPtr ev) {
         auto *msg = ev->Get();
+        Y_VERIFY(!Impl.CheckIsReadOnlyOwner(msg));
         auto res = std::make_unique<NPDisk::TEvChunkReserveResult>(NKikimrProto::OK, GetStatusFlags());
         if (TImpl::TOwner *owner = Impl.FindOwner(msg, res)) {
             if (Impl.GetNumFreeChunks() < msg->SizeChunks) {
@@ -644,6 +683,7 @@ public:
     }
 
     void Handle(NPDisk::TEvChunkWrite::TPtr ev) {
+        Y_VERIFY(!Impl.CheckIsReadOnlyOwner(ev->Get()));
         auto *msg = ev->Get();
         auto res = std::make_unique<NPDisk::TEvChunkWriteResult>(NKikimrProto::OK, msg->ChunkIdx, msg->Cookie,
             GetStatusFlags(), TString());

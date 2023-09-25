@@ -12,11 +12,17 @@ PEERDIR(
     ydb/core/control
     ydb/core/keyvalue
     ydb/core/kqp/common
+    ydb/core/kqp/rm_service
+    ydb/core/tx/columnshard
     ydb/core/tx/datashard
     ydb/library/workload
     ydb/public/lib/base
     ydb/public/lib/operation_id
     ydb/public/sdk/cpp/client/ydb_proto
+    ydb/services/kesus
+    ydb/services/metadata
+    ydb/services/persqueue_cluster_discovery
+    ydb/services/ydb
 )
 
 SRCS(

@@ -17,6 +17,7 @@ target_link_libraries(ut_blobstorage-ut_read_only_vdisk PUBLIC
   yutil
   cpp-testing-unittest_main
   blobstorage-ut_blobstorage-lib
+  ydb-core-load_test
 )
 target_link_options(ut_blobstorage-ut_read_only_vdisk PRIVATE
   -ldl

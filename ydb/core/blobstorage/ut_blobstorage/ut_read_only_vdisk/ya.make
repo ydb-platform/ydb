@@ -12,6 +12,7 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
 
     PEERDIR(
         ydb/core/blobstorage/ut_blobstorage/lib
+        ydb/core/load_test
     )
 
 END()

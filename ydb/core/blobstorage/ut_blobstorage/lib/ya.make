@@ -34,7 +34,7 @@ PEERDIR(
     ydb/core/tx/coordinator
     ydb/core/tx/scheme_board
     ydb/core/util
-    ydb/library/yql/public/udf/service/stub
+    ydb/library/yql/public/udf/service/exception_policy
     ydb/library/yql/sql/pg_dummy
 )
 

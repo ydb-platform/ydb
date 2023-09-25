@@ -30,11 +30,17 @@ target_link_libraries(ydb-core-load_test PUBLIC
   ydb-core-control
   ydb-core-keyvalue
   core-kqp-common
+  core-kqp-rm_service
+  core-tx-columnshard
   core-tx-datashard
   ydb-library-workload
   public-lib-base
   public-lib-operation_id
   cpp-client-ydb_proto
+  ydb-services-kesus
+  ydb-services-metadata
+  ydb-services-persqueue_cluster_discovery
+  ydb-services-ydb
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(ydb-core-load_test PRIVATE

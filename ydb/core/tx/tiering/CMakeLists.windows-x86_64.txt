@@ -21,6 +21,7 @@ target_link_libraries(core-tx-tiering PUBLIC
   cpp-json-writer
   ydb-core-blobstorage
   ydb-core-protos
+  core-tx-schemeshard
   tx-tiering-rule
   tx-tiering-tier
   core-tablet_flat-protos
@@ -48,6 +49,7 @@ target_link_libraries(core-tx-tiering.global PUBLIC
   cpp-json-writer
   ydb-core-blobstorage
   ydb-core-protos
+  core-tx-schemeshard
   tx-tiering-rule
   tx-tiering-tier
   core-tablet_flat-protos

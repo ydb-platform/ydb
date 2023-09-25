@@ -148,35 +148,6 @@ struct TDqTaskRunnerStats : public TTaskRunnerStatsBase {
     }
 };
 
-struct TDqTaskRunnerStatsInplace : public TTaskRunnerStatsBase {
-    // all stats are owned by this object
-    TVector<THolder<TDqInputChannelStats>> InputChannelHolder;
-    TVector<THolder<TDqAsyncInputBufferStats>> SourceHolder;
-    TVector<THolder<TDqOutputChannelStats>> OutputChannelHolder;
-
-    template<typename TStat>
-    static TStat* GetOrCreate(THashMap<ui64, const TStat*>& mapper, TVector<THolder<TStat>>& holder, ui64 statIdx) {
-        if (auto it = mapper.find(statIdx); it != mapper.end()) {
-            return const_cast<TStat*>(it->second);
-        }
-        holder.push_back(MakeHolder<TStat>(statIdx));
-        mapper[statIdx] = holder.back().Get();
-        return holder.back().Get();
-    }
-
-    TDqInputChannelStats* MutableInputChannel(ui64 channelId) override {
-        return GetOrCreate(InputChannels, InputChannelHolder, channelId);
-    }
-
-    TDqAsyncInputBufferStats* MutableSource(ui64 sourceId) override {
-        return GetOrCreate(Sources, SourceHolder, sourceId);
-    }
-
-    TDqOutputChannelStats* MutableOutputChannel(ui64 channelId) override {
-        return GetOrCreate(OutputChannels, OutputChannelHolder, channelId);
-    }
-};
-
 // Provides read access to TTaskRunnerStatsBase
 // May or may not own the underlying object
 class TDqTaskRunnerStatsView {

@@ -7,6 +7,8 @@
 
 #include <yt/yt/core/misc/bit_packed_unsigned_vector.h>
 
+#include <library/cpp/yt/memory/chunked_output_stream.h>
+
 #include <library/cpp/yt/string/string_builder.h>
 
 namespace NYT::NColumnConverters {
@@ -75,15 +77,18 @@ private:
 
     std::vector<TStringBuf> Values_;
     THashMap<TStringBuf, ui32> Dictionary_;
-    TStringBuilder DirectBuffer_;
+    std::unique_ptr<TChunkedOutputStream> DirectBuffer_;
 
     void Reset()
     {
         AllStringsSize_ = 0;
         RowCount_ = 0;
         DictionaryByteSize_ = 0;
+        DirectBuffer_ = std::make_unique<TChunkedOutputStream>(
+            GetRefCountedTypeCookie<TConverterTag>(),
+            256_KB,
+            1_MB);
 
-        DirectBuffer_.Reset();
         Values_.clear();
         Dictionary_.clear();
     }
@@ -122,10 +127,21 @@ private:
         ui32 maxDiff;
         PrepareDiffFromExpected(&offsets, &expectedLength, &maxDiff);
 
-        auto directData = DirectBuffer_.GetBuffer();
+        auto directDataSize = DirectBuffer_->GetSize();
+        auto directData = DirectBuffer_->Finish();
 
         auto offsetsRef = TSharedRef::MakeCopy<TConverterTag>(TRef(offsets.data(), sizeof(ui32) * offsets.size()));
-        auto directDataPtr = TSharedRef::MakeCopy<TConverterTag>(TRef(directData.data(), directData.size()));
+
+        auto directDataPtr = TSharedMutableRef::Allocate<TConverterTag>(directDataSize, {.InitializeStorage = false});
+        ui32 directOffset = 0;
+        for (auto directDataChunk : directData) {
+            std::memcpy(
+                directDataPtr.Begin() + directOffset,
+                directDataChunk.Begin(),
+                directDataChunk.Size());
+            directOffset += directDataChunk.Size();
+        }
+
         auto column = std::make_shared<TBatchColumn>();
 
         FillColumnarStringValues(
@@ -310,7 +326,7 @@ private:
             ? GetYsonSize(unversionedValue)
             : static_cast<i64>(unversionedValue.Length);
 
-        char* buffer = DirectBuffer_.Preallocate(valueCapacity);
+        char* buffer = DirectBuffer_->Preallocate(valueCapacity);
         if (!buffer) {
             // This means, that we reserved nothing, because all strings are either null or empty.
             // To distinguish between null and empty, we set preallocated pointer to special value.
@@ -335,7 +351,7 @@ private:
 
         YT_VERIFY(value.size() <= valueCapacity);
 
-        DirectBuffer_.Advance(value.size());
+        DirectBuffer_->Advance(value.size());
 
         if (Dictionary_.emplace(value, Dictionary_.size() + 1).second) {
             DictionaryByteSize_ += value.size();

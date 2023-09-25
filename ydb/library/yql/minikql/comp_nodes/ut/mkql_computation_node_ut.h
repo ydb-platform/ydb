@@ -81,7 +81,7 @@ struct TUdfModuleInfo {
 
 template<bool UseLLVM>
 struct TSetup {
-    TSetup(TComputationNodeFactory nodeFactory = {}, TVector<TUdfModuleInfo>&& modules = {})
+    explicit TSetup(TComputationNodeFactory nodeFactory = GetTestFactory(), TVector<TUdfModuleInfo>&& modules = {})
         : Alloc(__LOCATION__)
         , StatsRegistry(CreateDefaultStatsRegistry())
     {
@@ -104,11 +104,19 @@ struct TSetup {
     }
 
     THolder<IComputationGraph> BuildGraph(TRuntimeNode pgm, const std::vector<TNode*>& entryPoints = std::vector<TNode*>()) {
+       return BuildGraph(pgm, EGraphPerProcess::Multi, entryPoints);
+    }
+
+    THolder<IComputationGraph> BuildGraph(TRuntimeNode pgm, EGraphPerProcess graphPerProcess) {
+        return BuildGraph(pgm, graphPerProcess, {});
+    }
+
+    TAutoPtr<IComputationGraph> BuildGraph(TRuntimeNode pgm, EGraphPerProcess graphPerProcess, const std::vector<TNode*>& entryPoints) {
         Reset();
         Explorer.Walk(pgm.GetNode(), *Env);
-        TComputationPatternOpts opts(Alloc.Ref(), *Env, GetTestFactory(NodeFactory),
+        TComputationPatternOpts opts(Alloc.Ref(), *Env, NodeFactory,
             FunctionRegistry.Get(), NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception,
-             UseLLVM ? "" : "OFF", EGraphPerProcess::Multi, StatsRegistry.Get(), nullptr, nullptr);
+             UseLLVM ? "" : "OFF", graphPerProcess, StatsRegistry.Get(), nullptr, nullptr);
         Pattern = MakeComputationPattern(Explorer, pgm, entryPoints, opts);
         auto graph = Pattern->Clone(opts.ToComputationOptions(*RandomProvider, *TimeProvider));
         Terminator.Reset(new TBindTerminator(graph->GetTerminator()));

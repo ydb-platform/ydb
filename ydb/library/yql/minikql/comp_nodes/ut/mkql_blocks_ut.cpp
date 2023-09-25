@@ -721,7 +721,7 @@ Y_UNIT_TEST(WithScalars) {
 Y_UNIT_TEST(Udf) {
     TVector<TUdfModuleInfo> modules;
     modules.emplace_back(TUdfModuleInfo{"", "BlockUT", new TBlockUTModule()});
-    TSetup<false> setup({}, std::move(modules));
+    TSetup<false> setup(GetTestFactory(), std::move(modules));
 
     auto& pb = *setup.PgmBuilder;
 

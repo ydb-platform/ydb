@@ -61,56 +61,17 @@ IComputationNode* WrapTestBlockFlow(TCallable& callable, const TComputationNodeF
     return new TTestBlockFlowWrapper(ctx.Mutables, 5, 2);
 }
 
-TIntrusivePtr<IRandomProvider> CreateRandomProvider() {
-    return CreateDeterministicRandomProvider(1);
-}
-
-TIntrusivePtr<ITimeProvider> CreateTimeProvider() {
-    return CreateDeterministicTimeProvider(10000000);
-}
-
-TComputationNodeFactory GetTestFactory() {
+TComputationNodeFactory GetNodeFactory() {
     return [](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
         if (callable.GetType()->GetName() == "TestBlockFlow") {
             return WrapTestBlockFlow(callable, ctx);
         }
         return GetBuiltinFactory()(callable, ctx);
     };
-}
 
-struct TSetup_ {
-    TSetup_()
-    : Alloc(__LOCATION__)
-    {
-        FunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
-        RandomProvider = CreateRandomProvider();
-        TimeProvider = CreateTimeProvider();
+} //namespace
 
-        Env.Reset(new TTypeEnvironment(Alloc));
-        PgmBuilder.Reset(new TProgramBuilder(*Env, *FunctionRegistry));
-    }
-
-    TAutoPtr<IComputationGraph> BuildGraph(TRuntimeNode pgm, EGraphPerProcess graphPerProcess = EGraphPerProcess::Multi, const std::vector<TNode*>& entryPoints = std::vector<TNode*>()) {
-        Explorer.Walk(pgm.GetNode(), *Env);
-        TComputationPatternOpts opts(Alloc.Ref(), *Env, GetTestFactory(), FunctionRegistry.Get(),
-                                     NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception, "OFF", graphPerProcess);
-        Pattern = MakeComputationPattern(Explorer, pgm, entryPoints, opts);
-        return Pattern->Clone(opts.ToComputationOptions(*RandomProvider, *TimeProvider));
-    }
-
-    TIntrusivePtr<IFunctionRegistry> FunctionRegistry;
-    TIntrusivePtr<IRandomProvider> RandomProvider;
-    TIntrusivePtr<ITimeProvider> TimeProvider;
-
-    TScopedAlloc Alloc;
-    THolder<TTypeEnvironment> Env;
-    THolder<TProgramBuilder> PgmBuilder;
-
-    TExploringNodeVisitor Explorer;
-    IComputationPattern::TPtr Pattern;
-};
-
-TRuntimeNode MakeFlow(TSetup_& setup) {
+TRuntimeNode MakeFlow(TSetup<false>& setup) {
     TProgramBuilder& pb = *setup.PgmBuilder;
     TCallableBuilder callableBuilder(*setup.Env, "TestBlockFlow",
                                      pb.NewFlowType(
@@ -127,7 +88,7 @@ TRuntimeNode MakeFlow(TSetup_& setup) {
 
 Y_UNIT_TEST_SUITE(TMiniKQLWideTakeSkipBlocks) {
     Y_UNIT_TEST(TestWideTakeSkipBlocks) {
-        TSetup_ setup;
+        TSetup<false> setup(GetNodeFactory());
         TProgramBuilder& pb = *setup.PgmBuilder;
 
         const auto flow = MakeFlow(setup);

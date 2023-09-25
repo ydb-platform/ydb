@@ -28,7 +28,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLPGSortTest) {
         const std::array<TString, 3U> values = {{"2000-01-01","1979-12-12","2010-12-01"}};
         const std::array<TString, 3U> sortedValues = {{"1979-12-12","2000-01-01","2010-12-01"} };
 
-        TSetup<LLVM> setup(GetPgFactory());
+        TSetup<LLVM> setup(GetTestFactory(GetPgFactory()));
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
         auto pgDateType = static_cast<TPgType*>(pgmBuilder.NewPgType(NPg::LookupType("date").TypeId));

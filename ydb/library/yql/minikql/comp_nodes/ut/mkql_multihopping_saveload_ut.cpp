@@ -1,4 +1,5 @@
 #include "../mkql_multihopping.h"
+#include "mkql_computation_node_ut.h"
 #include <ydb/library/yql/minikql/mkql_node.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
@@ -15,14 +16,6 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 namespace {
-    TIntrusivePtr<IRandomProvider> CreateRandomProvider() {
-        return CreateDeterministicRandomProvider(1);
-    }
-
-    TIntrusivePtr<ITimeProvider> CreateTimeProvider() {
-        return CreateDeterministicTimeProvider(10000000);
-    }
-
     TComputationNodeFactory GetAuxCallableFactory(TWatermark& watermark) {
         return [&watermark](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
             if (callable.GetType()->GetName() == "OneYieldStream") {
@@ -34,42 +27,6 @@ namespace {
             return GetBuiltinFactory()(callable, ctx);
         };
     }
-
-    struct TSetup {
-        TSetup(TScopedAlloc& alloc)
-            : Alloc(alloc)
-        {
-            FunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
-            RandomProvider = CreateRandomProvider();
-            TimeProvider = CreateTimeProvider();
-
-            Env.Reset(new TTypeEnvironment(Alloc));
-            PgmBuilder.Reset(new TProgramBuilder(*Env, *FunctionRegistry));
-        }
-
-        THolder<IComputationGraph> BuildGraph(TRuntimeNode pgm, const std::vector<TNode*>& entryPoints = std::vector<TNode*>()) {
-            Explorer.Walk(pgm.GetNode(), *Env);
-            TComputationPatternOpts opts(Alloc.Ref(), *Env, GetAuxCallableFactory(Watermark),
-                FunctionRegistry.Get(),
-                NUdf::EValidateMode::None, NUdf::EValidatePolicy::Fail, "OFF", EGraphPerProcess::Multi);
-            Pattern = MakeComputationPattern(Explorer, pgm, entryPoints, opts);
-            TComputationOptsFull compOpts = opts.ToComputationOptions(*RandomProvider, *TimeProvider);
-            return Pattern->Clone(compOpts);
-        }
-
-        TIntrusivePtr<IFunctionRegistry> FunctionRegistry;
-        TIntrusivePtr<IRandomProvider> RandomProvider;
-        TIntrusivePtr<ITimeProvider> TimeProvider;
-
-        TScopedAlloc& Alloc;
-        THolder<TTypeEnvironment> Env;
-        THolder<TProgramBuilder> PgmBuilder;
-
-        TExploringNodeVisitor Explorer;
-        IComputationPattern::TPtr Pattern;
-        TWatermark Watermark;
-    };
-
     struct TStreamWithYield : public NUdf::TBoxedValue {
         TStreamWithYield(const TUnboxedValueVector& items, ui32 yieldPos, ui32 index)
             : Items(items)
@@ -106,7 +63,7 @@ namespace {
         }
     };
 
-    THolder<IComputationGraph> BuildGraph(TSetup& setup, const std::vector<std::tuple<ui32, i64, ui32>> items,
+    THolder<IComputationGraph> BuildGraph(TSetup<false>& setup, const std::vector<std::tuple<ui32, i64, ui32>> items,
                                           ui32 yieldPos, ui32 startIndex, bool dataWatermarks) {
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
@@ -204,12 +161,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingSaveLoadTest) {
         bool withTraverse,
         bool dataWatermarks)
     {
-        TScopedAlloc alloc(__LOCATION__);
-
+        TWatermark watermark;
         for (ui32 yieldPos = 0; yieldPos < input.size(); ++yieldPos) {
             std::vector<std::tuple<ui32, ui32>> result;
 
-            TSetup setup1(alloc);
+            TSetup<false> setup1(GetAuxCallableFactory(watermark));
             auto graph1 = BuildGraph(setup1, input, yieldPos, 0, dataWatermarks);
             auto root1 = graph1->GetValue();
 
@@ -230,7 +186,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingSaveLoadTest) {
                 graphState = graph1->SaveGraphState();
             }
 
-            TSetup setup2(alloc);
+            TSetup<false> setup2(GetAuxCallableFactory(watermark));
             auto graph2 = BuildGraph(setup2, input, -1, yieldPos, dataWatermarks);
             NUdf::TUnboxedValue root2;
             if (withTraverse) {

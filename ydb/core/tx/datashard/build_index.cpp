@@ -378,7 +378,7 @@ public:
             TMemoryPool valueDataPool(256);
             TVector<TCell> cells;
             TString err;
-            BuildExtraColumns(cells, ColumnBuildSettings, err, valueDataPool);
+            Y_VERIFY(BuildExtraColumns(cells, ColumnBuildSettings, err, valueDataPool));
             TSerializedCellVec valueCells(cells);
             TString serializedValue = TSerializedCellVec::Serialize(cells);
             TSerializedCellVec keyCopy(key);

@@ -4237,67 +4237,15 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
 
                 while (!rowset.EndOfSet()) {
-                    TIndexBuildId id = rowset.GetValue<Schema::IndexBuild::Id>();
-                    TString uid = rowset.GetValue<Schema::IndexBuild::Uid>();
+                    TIndexBuildInfo::TPtr indexInfo = TIndexBuildInfo::FromRow(rowset);
 
-                    TIndexBuildInfo::TPtr indexInfo = new TIndexBuildInfo(id, uid);
-
-                    indexInfo->DomainPathId = TPathId(
-                        rowset.GetValue<Schema::IndexBuild::DomainOwnerId>(),
-                        rowset.GetValue<Schema::IndexBuild::DomainLocalId>());
-
-                    indexInfo->TablePathId = TPathId(
-                        rowset.GetValue<Schema::IndexBuild::TableOwnerId>(),
-                        rowset.GetValue<Schema::IndexBuild::TableLocalId>());
-
-                    indexInfo->IndexName = rowset.GetValue<Schema::IndexBuild::IndexName>();
-                    indexInfo->IndexType = rowset.GetValue<Schema::IndexBuild::IndexType>();
-
-                    indexInfo->State = TIndexBuildInfo::EState(rowset.GetValue<Schema::IndexBuild::State>());
-                    indexInfo->Issue = rowset.GetValueOrDefault<Schema::IndexBuild::Issue>();
-                    indexInfo->CancelRequested = rowset.GetValueOrDefault<Schema::IndexBuild::CancelRequest>(false);
-
-                    indexInfo->LockTxId = rowset.GetValueOrDefault<Schema::IndexBuild::LockTxId>(indexInfo->LockTxId);
-                    indexInfo->LockTxStatus = rowset.GetValueOrDefault<Schema::IndexBuild::LockTxStatus>(indexInfo->LockTxStatus);
-                    indexInfo->LockTxDone = rowset.GetValueOrDefault<Schema::IndexBuild::LockTxDone>(indexInfo->LockTxDone);
-
-                    indexInfo->InitiateTxId = rowset.GetValueOrDefault<Schema::IndexBuild::InitiateTxId>(indexInfo->InitiateTxId);
-                    indexInfo->InitiateTxStatus = rowset.GetValueOrDefault<Schema::IndexBuild::InitiateTxStatus>(indexInfo->InitiateTxStatus);
-                    indexInfo->InitiateTxDone = rowset.GetValueOrDefault<Schema::IndexBuild::InitiateTxDone>(indexInfo->InitiateTxDone);
-
-                    indexInfo->Limits.MaxBatchRows = rowset.GetValue<Schema::IndexBuild::MaxBatchRows>();
-                    indexInfo->Limits.MaxBatchBytes = rowset.GetValue<Schema::IndexBuild::MaxBatchBytes>();
-                    indexInfo->Limits.MaxShards = rowset.GetValue<Schema::IndexBuild::MaxShards>();
-                    indexInfo->Limits.MaxRetries = rowset.GetValueOrDefault<Schema::IndexBuild::MaxRetries>(indexInfo->Limits.MaxRetries);
-
-                    indexInfo->ApplyTxId = rowset.GetValueOrDefault<Schema::IndexBuild::ApplyTxId>(indexInfo->ApplyTxId);
-                    indexInfo->ApplyTxStatus = rowset.GetValueOrDefault<Schema::IndexBuild::ApplyTxStatus>(indexInfo->ApplyTxStatus);
-                    indexInfo->ApplyTxDone = rowset.GetValueOrDefault<Schema::IndexBuild::ApplyTxDone>(indexInfo->ApplyTxDone);
-
-                    indexInfo->UnlockTxId = rowset.GetValueOrDefault<Schema::IndexBuild::UnlockTxId>(indexInfo->UnlockTxId);
-                    indexInfo->UnlockTxStatus = rowset.GetValueOrDefault<Schema::IndexBuild::UnlockTxStatus>(indexInfo->UnlockTxStatus);
-                    indexInfo->UnlockTxDone = rowset.GetValueOrDefault<Schema::IndexBuild::UnlockTxDone>(indexInfo->UnlockTxDone);
-
-                    // note: please note that here we specify BuildIndex as operation default,
-                    // because previosly this table was dedicated for build index operations only.
-                    indexInfo->BuildKind = TIndexBuildInfo::EBuildKind(
-                        rowset.GetValueOrDefault<Schema::IndexBuild::BuildKind>(ui32(TIndexBuildInfo::EBuildKind::BuildIndex)));
-
-                    indexInfo->AlterMainTableTxId = rowset.GetValueOrDefault<Schema::IndexBuild::AlterMainTableTxId>(indexInfo->AlterMainTableTxId);
-                    indexInfo->AlterMainTableTxStatus = rowset.GetValueOrDefault<Schema::IndexBuild::AlterMainTableTxStatus>(indexInfo->AlterMainTableTxStatus);
-                    indexInfo->AlterMainTableTxDone = rowset.GetValueOrDefault<Schema::IndexBuild::AlterMainTableTxDone>(indexInfo->AlterMainTableTxDone);
-
-                    indexInfo->Billed = TBillingStats(
-                        rowset.GetValueOrDefault<Schema::IndexBuild::RowsBilled>(0),
-                        rowset.GetValueOrDefault<Schema::IndexBuild::BytesBilled>(0));
-
-                    Y_VERIFY(!Self->IndexBuilds.contains(id));
-                    Self->IndexBuilds[id] = indexInfo;
-                    if (uid) {
-                        Self->IndexBuildsByUid[uid] = indexInfo;
+                    Y_VERIFY(!Self->IndexBuilds.contains(indexInfo->Id));
+                    Self->IndexBuilds[indexInfo->Id] = indexInfo;
+                    if (indexInfo->Uid) {
+                        Self->IndexBuildsByUid[indexInfo->Uid] = indexInfo;
                     }
 
-                    OnComplete.ToProgress(id);
+                    OnComplete.ToProgress(indexInfo->Id);
 
                     if (!rowset.Next()) {
                         return false;
@@ -4323,27 +4271,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                                    << ": id# " << id);
 
                     TIndexBuildInfo::TPtr buildInfo = Self->IndexBuilds.at(id);
-
-                    TString columnName = rowset.GetValue<Schema::IndexBuildColumns::ColumnName>();
-                    EIndexColumnKind columnKind = rowset.GetValueOrDefault<Schema::IndexBuildColumns::ColumnKind>(EIndexColumnKind::KeyColumn);
-                    ui32 columnNo = rowset.GetValue<Schema::IndexBuildColumns::ColumnNo>();
-
-                    Y_VERIFY_S(columnNo == (buildInfo->IndexColumns.size() + buildInfo->DataColumns.size()),
-                               "Unexpected non contiguous column number# " << columnNo <<
-                               " indexColumns# " << buildInfo->IndexColumns.size() <<
-                               " dataColumns# " << buildInfo->DataColumns.size());
-
-                    switch (columnKind) {
-                        case EIndexColumnKind::KeyColumn:
-                            buildInfo->IndexColumns.push_back(columnName);
-                        break;
-                        case EIndexColumnKind::DataColumn:
-                            buildInfo->DataColumns.push_back(columnName);
-                        break;
-                        default:
-                            Y_FAIL_S("Unknown column kind# " << (int)columnKind);
-                        break;
-                    }
+                    buildInfo->AddIndexColumnInfo(rowset);
 
                     if (!rowset.Next()) {
                         return false;
@@ -4363,11 +4291,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                                    << ": id# " << id);
 
                     TIndexBuildInfo::TPtr buildInfo = Self->IndexBuilds.at(id);
-
-                    TString columnName = rowset.GetValue<Schema::BuildColumnOperationSettings::ColumnName>();
-                    TString defaultFromLiteral = rowset.GetValue<Schema::BuildColumnOperationSettings::DefaultFromLiteral>();
-
-                    buildInfo->BuildColumns.push_back(TIndexBuildInfo::TColumnBuildInfo(columnName, defaultFromLiteral));
+                    buildInfo->AddBuildColumnInfo(rowset);
 
                     if (!rowset.Next()) {
                         return false;
@@ -4388,26 +4312,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                                    << ": id# " << id);
 
                     TIndexBuildInfo::TPtr buildInfo = Self->IndexBuilds.at(id);
-
-                    TShardIdx shardIdx = TShardIdx(rowset.GetValue<Schema::IndexBuildShardStatus::OwnerShardIdx>(),
-                                                   rowset.GetValue<Schema::IndexBuildShardStatus::LocalShardIdx>());
-
-                    NKikimrTx::TKeyRange range = rowset.GetValue<Schema::IndexBuildShardStatus::Range>();
-                    TString lastKeyAck = rowset.GetValue<Schema::IndexBuildShardStatus::LastKeyAck>();
-
-                    buildInfo->Shards.emplace(shardIdx, TIndexBuildInfo::TShardStatus(TSerializedTableRange(range), std::move(lastKeyAck)));
-                    TIndexBuildInfo::TShardStatus& shardStatus = buildInfo->Shards.at(shardIdx);
-
-                    shardStatus.Status = rowset.GetValue<Schema::IndexBuildShardStatus::Status>();
-
-                    shardStatus.DebugMessage = rowset.GetValueOrDefault<Schema::IndexBuildShardStatus::Message>();
-                    shardStatus.UploadStatus = rowset.GetValueOrDefault<Schema::IndexBuildShardStatus::UploadStatus>(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
-
-                    shardStatus.Processed = TBillingStats(
-                        rowset.GetValueOrDefault<Schema::IndexBuildShardStatus::RowsProcessed>(0),
-                        rowset.GetValueOrDefault<Schema::IndexBuildShardStatus::BytesProcessed>(0));
-
-                    buildInfo->Processed += shardStatus.Processed;
+                    buildInfo->AddShardStatus(rowset);
 
                     if (!rowset.Next()) {
                         return false;

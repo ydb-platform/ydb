@@ -6,6 +6,7 @@
 #include "schemeshard_path_element.h"
 #include "schemeshard_identificators.h"
 #include "schemeshard_olap_types.h"
+#include "schemeshard_schema.h"
 
 #include <ydb/core/tx/message_seqno.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -3072,6 +3073,178 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         : Id(id)
         , Uid(uid)
     {}
+
+    template<class TRow>
+    void AddBuildColumnInfo(const TRow& row){
+        TString columnName = row.template GetValue<Schema::BuildColumnOperationSettings::ColumnName>();
+        TString defaultFromLiteral = row.template GetValue<Schema::BuildColumnOperationSettings::DefaultFromLiteral>();
+        BuildColumns.push_back(TColumnBuildInfo(columnName, defaultFromLiteral));
+    }
+
+    template<class TRowSetType>
+    void AddIndexColumnInfo(const TRowSetType& row) {
+
+        TString columnName =
+            row.template GetValue<Schema::IndexBuildColumns::ColumnName>();
+        EIndexColumnKind columnKind =
+            row.template GetValueOrDefault<Schema::IndexBuildColumns::ColumnKind>(
+                EIndexColumnKind::KeyColumn);
+        ui32 columnNo = row.template GetValue<Schema::IndexBuildColumns::ColumnNo>();
+
+        Y_VERIFY_S(columnNo == (IndexColumns.size() + DataColumns.size()),
+                   "Unexpected non contiguous column number# "
+                       << columnNo << " indexColumns# "
+                       << IndexColumns.size() << " dataColumns# "
+                       << DataColumns.size());
+
+        switch (columnKind) {
+        case EIndexColumnKind::KeyColumn:
+            IndexColumns.push_back(columnName);
+            break;
+        case EIndexColumnKind::DataColumn:
+            DataColumns.push_back(columnName);
+            break;
+        default:
+            Y_FAIL_S("Unknown column kind# " << (int)columnKind);
+            break;
+        }
+    }
+
+    template<class TRow>
+    static TIndexBuildInfo::TPtr FromRow(const TRow& row) {
+        TIndexBuildId id = row.template GetValue<Schema::IndexBuild::Id>();
+        TString uid = row.template GetValue<Schema::IndexBuild::Uid>();
+
+        TIndexBuildInfo::TPtr indexInfo = new TIndexBuildInfo(id, uid);
+
+        indexInfo->DomainPathId =
+            TPathId(row.template GetValue<Schema::IndexBuild::DomainOwnerId>(),
+                    row.template GetValue<Schema::IndexBuild::DomainLocalId>());
+
+        indexInfo->TablePathId =
+            TPathId(row.template GetValue<Schema::IndexBuild::TableOwnerId>(),
+                    row.template GetValue<Schema::IndexBuild::TableLocalId>());
+
+        indexInfo->IndexName = row.template GetValue<Schema::IndexBuild::IndexName>();
+        indexInfo->IndexType = row.template GetValue<Schema::IndexBuild::IndexType>();
+
+        indexInfo->State = TIndexBuildInfo::EState(
+            row.template GetValue<Schema::IndexBuild::State>());
+        indexInfo->Issue =
+            row.template GetValueOrDefault<Schema::IndexBuild::Issue>();
+        indexInfo->CancelRequested =
+            row.template GetValueOrDefault<Schema::IndexBuild::CancelRequest>(false);
+
+        indexInfo->LockTxId =
+            row.template GetValueOrDefault<Schema::IndexBuild::LockTxId>(
+                indexInfo->LockTxId);
+        indexInfo->LockTxStatus =
+            row.template GetValueOrDefault<Schema::IndexBuild::LockTxStatus>(
+                indexInfo->LockTxStatus);
+        indexInfo->LockTxDone =
+            row.template GetValueOrDefault<Schema::IndexBuild::LockTxDone>(
+                indexInfo->LockTxDone);
+
+        indexInfo->InitiateTxId =
+            row.template GetValueOrDefault<Schema::IndexBuild::InitiateTxId>(
+                indexInfo->InitiateTxId);
+        indexInfo->InitiateTxStatus =
+            row.template GetValueOrDefault<Schema::IndexBuild::InitiateTxStatus>(
+                indexInfo->InitiateTxStatus);
+        indexInfo->InitiateTxDone =
+            row.template GetValueOrDefault<Schema::IndexBuild::InitiateTxDone>(
+                indexInfo->InitiateTxDone);
+
+        indexInfo->Limits.MaxBatchRows =
+            row.template GetValue<Schema::IndexBuild::MaxBatchRows>();
+        indexInfo->Limits.MaxBatchBytes =
+            row.template GetValue<Schema::IndexBuild::MaxBatchBytes>();
+        indexInfo->Limits.MaxShards =
+            row.template GetValue<Schema::IndexBuild::MaxShards>();
+        indexInfo->Limits.MaxRetries =
+            row.template GetValueOrDefault<Schema::IndexBuild::MaxRetries>(
+                indexInfo->Limits.MaxRetries);
+
+        indexInfo->ApplyTxId =
+            row.template GetValueOrDefault<Schema::IndexBuild::ApplyTxId>(
+                indexInfo->ApplyTxId);
+        indexInfo->ApplyTxStatus =
+            row.template GetValueOrDefault<Schema::IndexBuild::ApplyTxStatus>(
+                indexInfo->ApplyTxStatus);
+        indexInfo->ApplyTxDone =
+            row.template GetValueOrDefault<Schema::IndexBuild::ApplyTxDone>(
+                indexInfo->ApplyTxDone);
+
+        indexInfo->UnlockTxId =
+            row.template GetValueOrDefault<Schema::IndexBuild::UnlockTxId>(
+                indexInfo->UnlockTxId);
+        indexInfo->UnlockTxStatus =
+            row.template GetValueOrDefault<Schema::IndexBuild::UnlockTxStatus>(
+                indexInfo->UnlockTxStatus);
+        indexInfo->UnlockTxDone =
+            row.template GetValueOrDefault<Schema::IndexBuild::UnlockTxDone>(
+                indexInfo->UnlockTxDone);
+
+        // note: please note that here we specify BuildIndex as operation
+        // default, because previosly this table was dedicated for build index
+        // operations only.
+        indexInfo->BuildKind = TIndexBuildInfo::EBuildKind(
+            row.template GetValueOrDefault<Schema::IndexBuild::BuildKind>(
+                ui32(TIndexBuildInfo::EBuildKind::BuildIndex)));
+
+        indexInfo->AlterMainTableTxId =
+            row.template GetValueOrDefault<Schema::IndexBuild::AlterMainTableTxId>(
+                indexInfo->AlterMainTableTxId);
+        indexInfo->AlterMainTableTxStatus =
+            row
+                .template GetValueOrDefault<Schema::IndexBuild::AlterMainTableTxStatus>(
+                    indexInfo->AlterMainTableTxStatus);
+        indexInfo->AlterMainTableTxDone =
+            row.template GetValueOrDefault<Schema::IndexBuild::AlterMainTableTxDone>(
+                indexInfo->AlterMainTableTxDone);
+
+        indexInfo->Billed = TBillingStats(
+            row.template GetValueOrDefault<Schema::IndexBuild::RowsBilled>(0),
+            row.template GetValueOrDefault<Schema::IndexBuild::BytesBilled>(0));
+
+        return indexInfo;
+    }
+
+    template<class TRow>
+    void AddShardStatus(const TRow& row) {
+        TShardIdx shardIdx =
+            TShardIdx(row.template GetValue<
+                          Schema::IndexBuildShardStatus::OwnerShardIdx>(),
+                      row.template GetValue<
+                          Schema::IndexBuildShardStatus::LocalShardIdx>());
+
+        NKikimrTx::TKeyRange range =
+            row.template GetValue<Schema::IndexBuildShardStatus::Range>();
+        TString lastKeyAck =
+            row.template GetValue<Schema::IndexBuildShardStatus::LastKeyAck>();
+
+        Shards.emplace(
+            shardIdx, TIndexBuildInfo::TShardStatus(
+                          TSerializedTableRange(range), std::move(lastKeyAck)));
+        TIndexBuildInfo::TShardStatus &shardStatus = Shards.at(shardIdx);
+
+        shardStatus.Status =
+            row.template GetValue<Schema::IndexBuildShardStatus::Status>();
+
+        shardStatus.DebugMessage = row.template GetValueOrDefault<
+            Schema::IndexBuildShardStatus::Message>();
+        shardStatus.UploadStatus = row.template GetValueOrDefault<
+            Schema::IndexBuildShardStatus::UploadStatus>(
+            Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
+
+        shardStatus.Processed = TBillingStats(
+            row.template GetValueOrDefault<
+                Schema::IndexBuildShardStatus::RowsProcessed>(0),
+            row.template GetValueOrDefault<
+                Schema::IndexBuildShardStatus::BytesProcessed>(0));
+
+        Processed += shardStatus.Processed;
+    }
 
     bool IsCancellationRequested() const {
         return CancelRequested;

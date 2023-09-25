@@ -852,16 +852,17 @@ TNodePtr TSqlExpression::RowPatternVarAccess(const TString& alias, const TRule_u
                             );
                         case TRule_id_or_type::kAltIdOrType2:
                             break;
-
                         case TRule_id_or_type::ALT_NOT_SET:
                             break;
                     }
+                    break;
                 }
                 case TRule_an_id_or_type::kAltAnIdOrType2:
                     break;
                 case TRule_an_id_or_type::ALT_NOT_SET:
                     break;
             }
+            break;
         case TRule_unary_subexpr_suffix_TBlock1_TAlt3_TBlock1_TBlock2::ALT_NOT_SET:
             Y_FAIL("You should change implementation according to grammar changes");
     }

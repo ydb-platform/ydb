@@ -59,20 +59,22 @@ void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams& params, TInsta
     TVector<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent> stopPartitionSessionEvents;
 
     while (Now() < endTime && !*params.ErrorFlag) {
-        TInstant st = TInstant::Now();
-        if (TInstant::Now() - LastPartitionStatusRequestTime > TDuration::Seconds(1)) {
+        auto now = TInstant::Now();
+        if (now - LastPartitionStatusRequestTime > TDuration::Seconds(1)) {
             for (auto& st : streamState) {
                 if (st.second.Stream) {
                     st.second.Stream->RequestStatus();
                 }
             }
-            LastPartitionStatusRequestTime = st;
+            LastPartitionStatusRequestTime = now;
         }
 
         readSession->WaitEvent().Wait(TDuration::Seconds(1));
         TVector<NYdb::NTopic::TReadSessionEvent::TEvent> events = GetEvents(*readSession, params, txSupport);
 
-        auto now = TInstant::Now();
+        // we could wait for the event for almost one second, so we need to update the value of the variable
+        now = TInstant::Now();
+
         for (auto& event : events) {
             if (auto* dataEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&event)) {
                 WRITE_LOG(params.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << dataEvent->DebugString());

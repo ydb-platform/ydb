@@ -545,7 +545,7 @@ template<int N> std::shared_ptr<TJoinOptimizerNode> TDPccpSolver<N>::Solve()
     }
 
     Y_ENSURE(DpTable.contains(V), "Final relset not in dptable");
-    return std::dynamic_pointer_cast<TJoinOptimizerNode>(DpTable[V]); 
+    return std::static_pointer_cast<TJoinOptimizerNode>(DpTable[V]); 
 }
 
 /**
@@ -773,21 +773,21 @@ TExprBase BuildTree(TExprContext& ctx, const TCoEquiJoin& equiJoin,
     // Build left argument of the join
     if (reorderResult->LeftArg->Kind == RelNodeType) {
         std::shared_ptr<TRelOptimizerNode> rel = 
-            std::dynamic_pointer_cast<TRelOptimizerNode>(reorderResult->LeftArg);
+            std::static_pointer_cast<TRelOptimizerNode>(reorderResult->LeftArg);
         leftArg = BuildAtom(rel->Label, equiJoin.Pos(), ctx);
     } else {
         std::shared_ptr<TJoinOptimizerNode> join = 
-            std::dynamic_pointer_cast<TJoinOptimizerNode>(reorderResult->LeftArg);
+            std::static_pointer_cast<TJoinOptimizerNode>(reorderResult->LeftArg);
         leftArg = BuildTree(ctx,equiJoin,join);
     }
     // Build right argument of the join
     if (reorderResult->RightArg->Kind == RelNodeType) {
         std::shared_ptr<TRelOptimizerNode> rel = 
-            std::dynamic_pointer_cast<TRelOptimizerNode>(reorderResult->RightArg);
+            std::static_pointer_cast<TRelOptimizerNode>(reorderResult->RightArg);
         rightArg = BuildAtom(rel->Label, equiJoin.Pos(), ctx);
     } else {
         std::shared_ptr<TJoinOptimizerNode> join = 
-            std::dynamic_pointer_cast<TJoinOptimizerNode>(reorderResult->RightArg);
+            std::static_pointer_cast<TJoinOptimizerNode>(reorderResult->RightArg);
         rightArg = BuildTree(ctx,equiJoin,join);
     }
 

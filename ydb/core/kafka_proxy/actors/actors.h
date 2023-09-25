@@ -123,6 +123,12 @@ inline TString NormalizePath(const TString& database, const TString& topic) {
     return NKikimr::CanonizePath(database + "/" + topic);
 }
 
+inline TString GetTopicNameWithoutDb(const TString& database, TString topic) {
+    auto topicWithDb = NormalizePath(database, topic);
+    topic = topicWithDb.substr(database.Size()+1);
+    return topic;
+}
+
 NActors::IActor* CreateKafkaApiVersionsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TApiVersionsRequestData>& message);
 NActors::IActor* CreateKafkaInitProducerIdActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TInitProducerIdRequestData>& message);
 NActors::IActor* CreateKafkaMetadataActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TMetadataRequestData>& message);

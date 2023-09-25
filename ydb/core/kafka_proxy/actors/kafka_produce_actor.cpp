@@ -41,9 +41,9 @@ void TKafkaProduceActor::LogEvent(IEventHandle& ev) {
 }
 
 void TKafkaProduceActor::SendMetrics(const TString& topicName, size_t delta, const TString& name, const TActorContext& ctx) {
-    auto topic = SplitPath(topicName).back();
-    ctx.Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(delta, BuildLabels(Context, "", topic, TStringBuilder() << "api.kafka.produce." << name, "")));
-    ctx.Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(delta, BuildLabels(Context, "", topic, "api.kafka.produce.total_messages", ""))); 
+    auto topicWithoutDb = GetTopicNameWithoutDb(Context->DatabasePath, topicName);
+    ctx.Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(delta, BuildLabels(Context, "", topicWithoutDb, TStringBuilder() << "api.kafka.produce." << name, "")));
+    ctx.Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(delta, BuildLabels(Context, "", topicWithoutDb, "api.kafka.produce.total_messages", ""))); 
 }
 
 void TKafkaProduceActor::Bootstrap(const NActors::TActorContext& /*ctx*/) {
@@ -125,7 +125,6 @@ void TKafkaProduceActor::HandleInit(TEvTxProxySchemeCache::TEvNavigateKeySetResu
             auto topicPath = CanonizePath(NKikimr::JoinPath(info.Path));
             KAFKA_LOG_D("Produce actor: Received topic '" << topicPath << "' description");
             TopicsForInitialization.erase(topicPath);
-
             auto& topic = Topics[topicPath];
 
             topic.MeteringMode = info.PQGroupInfo->Description.GetPQTabletConfig().GetMeteringMode();

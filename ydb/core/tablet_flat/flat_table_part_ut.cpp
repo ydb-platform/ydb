@@ -76,15 +76,17 @@ Y_UNIT_TEST_SUITE(TLegacy) {
                 std::vector<ui64>& sizes)
         {
             TPartDataStats stats = { };
+            TTestEnv env;
             // TScreenedPartIndexIterator without screen previously was TPartIndexIterator
-            TScreenedPartIndexIterator idxIter(TPartView{part, nullptr, nullptr}, scheme->Keys, nullptr, nullptr);
+            TScreenedPartIndexIterator idxIter(TPartView{part, nullptr, nullptr}, &env, scheme->Keys, nullptr, nullptr);
             sizes.clear();
 
+            UNIT_ASSERT_VALUES_EQUAL(idxIter.Start(), EReady::Data);
             while (idxIter.IsValid()) {
                 TDbTupleRef key = idxIter.GetCurrentKey();
                 dbgOut << DbgPrintTuple(key, typeRegistry) << " " << stats.RowCount << " " << stats.DataSize.Size << Endl;
                 sizes.push_back(stats.DataSize.Size);
-                idxIter.Next(stats);
+                UNIT_ASSERT(idxIter.Next(stats) != EReady::Page);
             }
         };
 
@@ -144,13 +146,15 @@ Y_UNIT_TEST_SUITE(TLegacy) {
         auto fnIterate = [&dbgOut, &typeRegistry] (TIntrusiveConstPtr<TPartStore> part, TIntrusiveConstPtr<TScreen> screen,
                             TIntrusiveConstPtr<TRowScheme> scheme, TIntrusiveConstPtr<NPage::TFrames> frames) -> std::pair<ui64, ui64> {
             TPartDataStats stats = { };
-            TScreenedPartIndexIterator idxIter(TPartView{part, screen, nullptr}, scheme->Keys, std::move(frames), nullptr);
+            TTestEnv env;
+            TScreenedPartIndexIterator idxIter(TPartView{part, screen, nullptr}, &env, scheme->Keys, std::move(frames), nullptr);
 
+            UNIT_ASSERT_VALUES_EQUAL(idxIter.Start(), EReady::Data);
             while (idxIter.IsValid()) {
                 TDbTupleRef key = idxIter.GetCurrentKey();
                 dbgOut << DbgPrintTuple(key, typeRegistry)
                      << " " << stats.RowCount << " " << stats.DataSize.Size << Endl;
-                idxIter.Next(stats);
+                UNIT_ASSERT(idxIter.Next(stats) != EReady::Page);
             }
 
             return {stats.RowCount, stats.DataSize.Size};
@@ -301,16 +305,27 @@ Y_UNIT_TEST_SUITE(TLegacy) {
                 });
 
         TPartDataStats stats = { };
+        TTestEnv env;
         TStatsIterator stIter(lay2.RowScheme()->Keys);
-        stIter.Add(MakeHolder<TScreenedPartIndexIterator>(TPartView{eggs2.At(0), screen2, nullptr}, lay2.RowScheme()->Keys, nullptr, nullptr));
-        stIter.Add(MakeHolder<TScreenedPartIndexIterator>(TPartView{eggs1.At(0), screen1, nullptr}, lay2.RowScheme()->Keys, nullptr, nullptr));
-
-
+        {
+            auto it1 = MakeHolder<TScreenedPartIndexIterator>(TPartView{eggs2.At(0), screen2, nullptr}, &env, lay2.RowScheme()->Keys, nullptr, nullptr);
+            auto it2 = MakeHolder<TScreenedPartIndexIterator>(TPartView{eggs1.At(0), screen1, nullptr}, &env, lay2.RowScheme()->Keys, nullptr, nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(it1->Start(), EReady::Data);
+            UNIT_ASSERT_VALUES_EQUAL(it2->Start(), EReady::Data);
+            stIter.Add(std::move(it1));
+            stIter.Add(std::move(it2));
+        }
 
         TSerializedCellVec prevKey;
         ui64 prevRowCount = 0;
         ui64 prevDataSize = 0;
-        while (stIter.Next(stats)) {
+        while (true) {
+            auto ready = stIter.Next(stats);
+            if (ready == EReady::Gone) {
+                break;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(ready, EReady::Data);
+
             TDbTupleRef key = stIter.GetCurrentKey();
 
             dbgOut << DbgPrintTuple(key, typeRegistry)

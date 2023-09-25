@@ -32,6 +32,7 @@ SRCS(
     ut_iterator.cpp
     ut_memtable.cpp
     ut_sausage.cpp
+    ut_stat.cpp
     ut_comp_gen.cpp
     ut_comp_shard.cpp
     ut_compaction.cpp

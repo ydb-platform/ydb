@@ -21,6 +21,7 @@ namespace NTest {
         struct IBand {
             virtual ~IBand() = default;
             virtual void Add(const TRow&) noexcept = 0;
+            virtual void Ver(TRowVersion rowVersion = TRowVersion::Min()) = 0;
         };
 
         struct TPart : IBand {
@@ -34,6 +35,11 @@ namespace NTest {
             void Add(const TRow &row) noexcept override
             {
                 Cook.Add(row);
+            }
+
+            void Ver(TRowVersion rowVersion) override
+            {
+                Cook.Ver(rowVersion);
             }
 
             const TEpoch Epoch;
@@ -50,6 +56,11 @@ namespace NTest {
             void Add(const TRow &row) noexcept override
             {
                 Cooker.Add(row, ERowOp::Upsert);
+            }
+
+            void Ver(TRowVersion) override
+            {
+                Y_FAIL("unsupported");
             }
 
             TCooker Cooker;
@@ -77,8 +88,9 @@ namespace NTest {
             return cook.Add(Saved.begin(), Saved.end()).Finish();
         }
 
-        TAutoPtr<TSubset> Mixed(ui32 frozen, ui32 flatten, THash hash)
+        TAutoPtr<TSubset> Mixed(ui32 frozen, ui32 flatten, THash hash, float history = 0)
         {
+            TMersenne<ui64> rnd(0);
             TDeque<TAutoPtr<IBand>> bands;
 
             for (auto it: xrange(flatten)) {
@@ -90,8 +102,22 @@ namespace NTest {
                 bands.emplace_back(new TMem(Scheme, TEpoch::FromIndex(bands.size()), it));
 
             if (const auto slots = bands.size()) {
-                for (auto &row: Saved)
-                    bands[hash(row) % slots]->Add(row);
+                for (auto &row: Saved) {
+                    auto &band = bands[hash(row) % slots];
+                    if (history) {
+                        for (ui64 txId = 10; txId; txId--) {
+                            band->Ver({0, txId});
+                            // FIXME: change row data?
+                            band->Add(row);
+                            if (rnd.GenRandReal4() > history) {
+                                // each row will have from 1 to 10 versions
+                                break;
+                            }
+                        }
+                    } else {
+                        band->Add(row);
+                    }
+                }
             }
 
             TAutoPtr<TSubset> subset = new TSubset(TEpoch::FromIndex(bands.size()), Scheme);

@@ -60,6 +60,7 @@ target_sources(ydb-core-tablet_flat-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_iterator.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_memtable.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_sausage.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_stat.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_comp_gen.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_comp_shard.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_compaction.cpp

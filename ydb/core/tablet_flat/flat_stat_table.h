@@ -25,11 +25,7 @@ public:
         Heap.push(it);
     }
 
-    /**
-     * @return true when we haven't reached the end and have current key
-     * @return false when we have reached the end and don't have current key
-     */
-    bool Next(TPartDataStats& stats) {
+    EReady Next(TPartDataStats& stats) {
         ui64 lastRowCount = stats.RowCount;
         ui64 lastDataSize = stats.DataSize.Size;
 
@@ -41,16 +37,24 @@ public:
             TSerializedCellVec serialized = TSerializedCellVec(TSerializedCellVec::Serialize({it->GetCurrentKey().Columns, it->GetCurrentKey().ColumnCount}));
             TDbTupleRef key(KeyColumns->BasicTypes().data(), serialized.GetCells().data(), serialized.GetCells().size());
 
-            if (MoveIterator(it, stats))
+            auto ready = it->Next(stats);
+            if (ready == EReady::Page) {
+                return ready;
+            } else if (ready == EReady::Data) {
                 Heap.push(it);
+            }
 
             // guarantees that all results will be different
             while (!Heap.empty() && CompareKeys(key, Heap.top()->GetCurrentKey()) == 0) {
                 it = Heap.top();
                 Heap.pop();
 
-                if (MoveIterator(it, stats))
+                ready = it->Next(stats);
+                if (ready == EReady::Page) {
+                    return ready;
+                } else if (ready == EReady::Data) {
                     Heap.push(it);
+                }
             }
 
             if (stats.RowCount != lastRowCount && stats.DataSize.Size != lastDataSize) {
@@ -58,7 +62,7 @@ public:
             }
         }
 
-        return !Heap.empty();
+        return Heap.empty() ? EReady::Gone : EReady::Data;
     }
 
     TDbTupleRef GetCurrentKey() const {
@@ -78,11 +82,6 @@ private:
             return Self->CompareKeys(a->GetCurrentKey(), b->GetCurrentKey()) > 0;
         }
     };
-
-    bool MoveIterator(TScreenedPartIndexIterator* it, TPartDataStats& stats) {
-        it->Next(stats);
-        return it->IsValid();
-    }
 
     TIntrusiveConstPtr<TKeyCellDefaults> KeyColumns;
     THolderVector<TScreenedPartIndexIterator> Iterators;
@@ -186,7 +185,7 @@ private:
     THashMap<TString, ui64> KeyRefCount;
 };
 
-void BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, const IPages* env);
+bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, IPages* env);
 void GetPartOwners(const TSubset& subset, THashSet<ui64>& partOwners);
 
 }}

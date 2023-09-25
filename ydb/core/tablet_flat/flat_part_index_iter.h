@@ -89,7 +89,7 @@ public:
         return DataOrGone();
     }
 
-    bool IsValid() {
+    bool IsValid() const {
         return bool(Iter);
     }
 
@@ -99,23 +99,23 @@ public:
     }
 
 public:
-    TRowId GetEndRowId() {
+    TRowId GetEndRowId() const {
         return EndRowId;
     }
 
-    TPageId GetPageId() {
+    TPageId GetPageId() const {
         Y_VERIFY(Index);
         Y_VERIFY(Iter);
         return Iter->GetPageId();
     }
 
-    TRowId GetRowId() {
+    TRowId GetRowId() const {
         Y_VERIFY(Index);
         Y_VERIFY(Iter);
         return Iter->GetRowId();
     }
 
-    TRowId GetNextRowId() {
+    TRowId GetNextRowId() const {
         Y_VERIFY(Index);
         auto next = Iter + 1;
         return next
@@ -123,14 +123,14 @@ public:
             : Max<TRowId>();
     }
 
-    const TRecord * GetRecord() {
+    const TRecord * GetRecord() const {
         Y_VERIFY(Index);
         Y_VERIFY(Iter);
         return Iter.GetRecord();
     }
 
 private:
-    EReady DataOrGone() {
+    EReady DataOrGone() const {
         return Iter ? EReady::Data : EReady::Gone;
     }
 

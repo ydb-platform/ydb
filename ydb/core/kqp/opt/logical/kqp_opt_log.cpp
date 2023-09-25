@@ -38,11 +38,7 @@ public:
         AddHandler(0, &TDqJoin::Match, HNDL(JoinToIndexLookup));
         AddHandler(0, &TCoCalcOverWindowBase::Match, HNDL(ExpandWindowFunctions));
         AddHandler(0, &TCoCalcOverWindowGroup::Match, HNDL(ExpandWindowFunctions));
-        AddHandler(0, &TCoFlatMap::Match, HNDL(LatePushExtractedPredicateToReadTable));
         AddHandler(0, &TCoTopSort::Match, HNDL(RewriteTopSortOverFlatMap));
-        AddHandler(0, &TCoTop::Match, HNDL(RewriteTopSortOverIndexRead));
-        AddHandler(0, &TCoTopSort::Match, HNDL(RewriteTopSortOverIndexRead));
-        AddHandler(0, &TCoTake::Match, HNDL(RewriteTakeOverIndexRead));
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(RewriteFlatMapOverExtend));
         AddHandler(0, &TKqlDeleteRows::Match, HNDL(DeleteOverLookup));
         AddHandler(0, &TKqlUpsertRowsBase::Match, HNDL(ExcessUpsertInputColumns));
@@ -54,21 +50,26 @@ public:
         AddHandler(0, &TCoTop::Match, HNDL(TopSortOverExtend));
         AddHandler(0, &TCoTopSort::Match, HNDL(TopSortOverExtend));
 
-        AddHandler(1, &TKqlReadTableIndex::Match, HNDL(RewriteIndexRead));
-        AddHandler(1, &TKqlLookupIndex::Match, HNDL(RewriteLookupIndex));
-        AddHandler(1, &TKqlStreamLookupIndex::Match, HNDL(RewriteStreamLookupIndex));
-        AddHandler(1, &TKqlReadTableIndexRanges::Match, HNDL(RewriteIndexRead));
+        AddHandler(1, &TCoFlatMap::Match, HNDL(LatePushExtractedPredicateToReadTable));
+        AddHandler(1, &TCoTop::Match, HNDL(RewriteTopSortOverIndexRead));
+        AddHandler(1, &TCoTopSort::Match, HNDL(RewriteTopSortOverIndexRead));
+        AddHandler(1, &TCoTake::Match, HNDL(RewriteTakeOverIndexRead));
 
-        AddHandler(2, &TKqlLookupTable::Match, HNDL(RewriteLookupTable));
+        AddHandler(2, &TKqlReadTableIndex::Match, HNDL(RewriteIndexRead));
+        AddHandler(2, &TKqlLookupIndex::Match, HNDL(RewriteLookupIndex));
+        AddHandler(2, &TKqlStreamLookupIndex::Match, HNDL(RewriteStreamLookupIndex));
+        AddHandler(2, &TKqlReadTableIndexRanges::Match, HNDL(RewriteIndexRead));
 
-        AddHandler(3, &TKqlReadTableBase::Match, HNDL(ApplyExtractMembersToReadTable<true>));
-        AddHandler(3, &TKqlReadTableRangesBase::Match, HNDL(ApplyExtractMembersToReadTableRanges<true>));
-        AddHandler(3, &TKqpReadOlapTableRangesBase::Match, HNDL(ApplyExtractMembersToReadOlapTable<true>));
-        AddHandler(3, &TKqlLookupTableBase::Match, HNDL(ApplyExtractMembersToLookupTable<true>));
+        AddHandler(3, &TKqlLookupTable::Match, HNDL(RewriteLookupTable));
+
+        AddHandler(4, &TKqlReadTableBase::Match, HNDL(ApplyExtractMembersToReadTable<true>));
+        AddHandler(4, &TKqlReadTableRangesBase::Match, HNDL(ApplyExtractMembersToReadTableRanges<true>));
+        AddHandler(4, &TKqpReadOlapTableRangesBase::Match, HNDL(ApplyExtractMembersToReadOlapTable<true>));
+        AddHandler(4, &TKqlLookupTableBase::Match, HNDL(ApplyExtractMembersToLookupTable<true>));
 
 #undef HNDL
 
-        SetGlobal(3u);
+        SetGlobal(4u);
     }
 
 protected:

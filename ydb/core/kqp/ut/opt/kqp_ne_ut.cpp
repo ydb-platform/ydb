@@ -3912,6 +3912,83 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         AssertTableReads(result, "/Root/SecondaryKeys/Index/indexImplTable", 1);
     }
 
+
+    Y_UNIT_TEST_TWIN(ComplexLookupLimit, NewPredicateExtract) {
+        if (NewPredicateExtract) {
+            return;
+        }
+
+        TKikimrSettings settings;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetPredicateExtract20(NewPredicateExtract);
+        settings.SetAppConfig(appConfig);
+
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+
+        {
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+
+                CREATE TABLE `/Root/Sample` (
+                    A Uint64,
+                    B Uint64,
+                    C Uint64,
+                    D Uint64,
+                    E Uint64,
+                    PRIMARY KEY (A, B, C)
+                );
+
+            )").GetValueSync());
+
+            AssertSuccessResult(session.ExecuteDataQuery(R"(
+                REPLACE INTO `/Root/Sample` (A, B, C, D, E) VALUES
+                    (1, 1, 1, 1, 1),
+                    (1, 2, 2, 2, 2),
+                    (2, 2, 2, 2, 2),
+                    (3, 3, 3, 3, 3),
+                    (4, 4, 4, 4, 4),
+                    (4, 4, 4, 4, 4),
+                    (5, 5, 5, 5, 5);
+            )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync());
+        }
+
+        auto params =
+            TParamsBuilder()
+                .AddParam("$lastCounterId").Uint64(1).Build()
+                .AddParam("$lastId").Uint64(1).Build()
+                .AddParam("$counterIds")
+                    .BeginList()
+                        .AddListItem().Uint64(1)
+                        .AddListItem().Uint64(2)
+                        .AddListItem().Uint64(3)
+                    .EndList()
+                    .Build()
+                .Build();
+
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        NYdb::NTable::TExecDataQuerySettings querySettings;
+        querySettings.CollectQueryStats(ECollectQueryStatsMode::Profile);
+        auto result = session.ExecuteDataQuery(R"(
+            DECLARE $counterIds AS List<Uint64>;
+            DECLARE $lastCounterId AS Uint64;
+            DECLARE $lastId AS Uint64;
+            SELECT A, B FROM
+                    `/Root/Sample`
+                    WHERE
+                        A in $counterIds and
+                        (A,B) > ($lastCounterId, $lastId)
+                        ORDER BY A,B
+                        LIMIT 2;
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params, querySettings).GetValueSync();
+
+        AssertSuccessResult(result);
+        AssertTableReads(result, "/Root/Sample", NewPredicateExtract ? 2 : 4);
+        CompareYson(R"([[[1u];[2u]];[[2u];[2u]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
 }
 
 } // namespace NKikimr::NKqp

@@ -245,4 +245,73 @@ const IComputationNode* TBlockFuncNode::TArrowNode::GetArgument(ui32 index) cons
     return Parent_->ArgsNodes[index];
 }
 
+
+TBlockState::TBlockState(TMemoryUsageInfo* memInfo, size_t width)
+    : TBase(memInfo), Values(width), Arrays(width - 1ULL)
+{}
+
+void TBlockState::FillArrays() {
+    auto& counterDatum = TArrowBlock::From(Values.back()).GetDatum();
+    MKQL_ENSURE(counterDatum.is_scalar(), "Unexpected block length type (expecting scalar)");
+    Count = counterDatum.scalar_as<arrow::UInt64Scalar>().value;
+    if (!Count)
+        return;
+
+    for (size_t i = 0U; i < Arrays.size(); ++i) {
+        Arrays[i].clear();
+        if (const auto value = Values[i]) {
+            const auto& datum = TArrowBlock::From(value).GetDatum();
+            if (datum.is_scalar()) {
+                return;
+            }
+            MKQL_ENSURE(datum.is_arraylike(), "Unexpected block type (expecting array or chunked array)");
+            if (datum.is_array()) {
+                Arrays[i].push_back(datum.array());
+            } else {
+                for (auto& chunk : datum.chunks()) {
+                    Arrays[i].push_back(chunk->data());
+                }
+            }
+        }
+    }
+}
+
+ui64 TBlockState::Slice() {
+    auto sliceSize = Count;
+    for (size_t i = 0; i < Arrays.size(); ++i) {
+        const auto& arr = Arrays[i];
+        if (arr.empty())
+            continue;
+
+        MKQL_ENSURE(ui64(arr.front()->length) <= Count, "Unexpected array length at column #" << i);
+        sliceSize = std::min<ui64>(sliceSize, arr.front()->length);
+    }
+    Count -= sliceSize;
+    return sliceSize;
+}
+
+NUdf::TUnboxedValuePod TBlockState::Get(const ui64 sliceSize, const THolderFactory& holderFactory, const size_t idx) {
+    if (idx >= Arrays.size())
+        return holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(sliceSize)));
+
+    if (Arrays[idx].empty())
+        return Values[idx];
+
+    if (auto& array = Arrays[idx].front(); ui64(array->length) == sliceSize) {
+        const auto result = holderFactory.CreateArrowBlock(std::move(array));
+        Arrays[idx].pop_front();
+        return result;
+    } else
+        return holderFactory.CreateArrowBlock(Chop(array, sliceSize));
+}
+
+void TBlockState::FillOutputs(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
+    const auto sliceSize = Slice();
+    for (size_t i = 0; i < Values.size(); ++i) {
+        if (const auto out = output[i]) {
+            *out = Get(sliceSize, ctx.HolderFactory, i);
+        }
+    }
+}
+
 }

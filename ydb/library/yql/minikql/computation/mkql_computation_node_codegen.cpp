@@ -1723,8 +1723,19 @@ void CleanupUnboxed(Value* value, const TCodegenContext& ctx, BasicBlock*& block
 #endif
 
 void SafeUnRefUnboxed(Value* pointer, const TCodegenContext& ctx, BasicBlock*& block) {
-    UnRefUnboxed(pointer, ctx, block);
-    new StoreInst(ConstantInt::get(pointer->getType()->getPointerElementType(), 0), pointer, block);
+    if (const auto itemType = pointer->getType()->getPointerElementType(); itemType->isArrayTy()) {
+        const auto indexType = Type::getInt64Ty(ctx.Codegen.GetContext());
+        Value* zeros = UndefValue::get(itemType);
+        for (size_t idx = 0U; idx < itemType->getArrayNumElements(); ++idx) {
+            const auto item = GetElementPtrInst::CreateInBounds(itemType, pointer, {  ConstantInt::get(indexType, 0), ConstantInt::get(indexType, idx) }, (TString("item_") += ToString(idx)).c_str(), block);
+            UnRefUnboxed(item, ctx, block);
+            zeros = InsertValueInst::Create(zeros, ConstantInt::get(itemType->getArrayElementType(), 0), {idx}, (TString("zero_") += ToString(idx)).c_str(), block);
+        }
+        new StoreInst(zeros, pointer, block);
+    } else {
+        UnRefUnboxed(pointer, ctx, block);
+        new StoreInst(ConstantInt::get(itemType, 0), pointer, block);
+    }
 }
 
 void ValueAddRef(EValueRepresentation kind, Value* pointer, const TCodegenContext& ctx, BasicBlock*& block) {

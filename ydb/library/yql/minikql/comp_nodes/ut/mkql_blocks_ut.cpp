@@ -63,8 +63,8 @@ namespace {
 }
 
 Y_UNIT_TEST_SUITE(TMiniKQLBlocksTest) {
-Y_UNIT_TEST(TestEmpty) {
-    TSetup<false> setup;
+Y_UNIT_TEST_LLVM(TestEmpty) {
+    TSetup<LLVM> setup;
     auto& pb = *setup.PgmBuilder;
 
     const auto type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
@@ -79,9 +79,9 @@ Y_UNIT_TEST(TestEmpty) {
     UNIT_ASSERT(!iterator.Next(item));
 }
 
-Y_UNIT_TEST(TestSimple) {
+Y_UNIT_TEST_LLVM(TestSimple) {
     static const size_t dataCount = 1000;
-    TSetup<false> setup;
+    TSetup<LLVM> setup;
     auto& pb = *setup.PgmBuilder;
 
     TRuntimeNode::TList data;
@@ -105,10 +105,11 @@ Y_UNIT_TEST(TestSimple) {
     }
     NUdf::TUnboxedValue item;
     UNIT_ASSERT(!iterator.Next(item));
+    UNIT_ASSERT(!iterator.Next(item));
 }
 
-Y_UNIT_TEST(TestWideToBlocks) {
-    TSetup<false> setup;
+Y_UNIT_TEST_LLVM(TestWideToBlocks) {
+    TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
@@ -143,6 +144,9 @@ Y_UNIT_TEST(TestWideToBlocks) {
 
     UNIT_ASSERT(iterator.Next(item));
     UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 30);
+
+    UNIT_ASSERT(!iterator.Next(item));
+    UNIT_ASSERT(!iterator.Next(item));
 }
 
 namespace {
@@ -258,12 +262,12 @@ Y_UNIT_TEST(TestScalar) {
     UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(value).GetDatum().scalar_as<arrow::UInt64Scalar>().value, testValue);
 }
 
-Y_UNIT_TEST(TestReplicateScalar) {
+Y_UNIT_TEST_LLVM(TestReplicateScalar) {
     const ui64 count = 1000;
     const ui32 value = 42;
 
-    TSetup<false> setup;
-    auto& pb = *setup.PgmBuilder;
+    TSetup<LLVM> setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto valueType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
 
@@ -294,8 +298,8 @@ Y_UNIT_TEST(TestReplicateScalar) {
     UNIT_ASSERT(!iterator.Next(item));
 }
 
-Y_UNIT_TEST(TestBlockFunc) {
-    TSetup<false> setup;
+Y_UNIT_TEST_LLVM(TestBlockFunc) {
+    TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
@@ -337,8 +341,8 @@ Y_UNIT_TEST(TestBlockFunc) {
     UNIT_ASSERT(!iterator.Next(item));
 }
 
-Y_UNIT_TEST(TestBlockFuncWithNullables) {
-    TSetup<false> setup;
+Y_UNIT_TEST_LLVM(TestBlockFuncWithNullables) {
+    TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto optionalUi64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id, true);
@@ -393,11 +397,13 @@ Y_UNIT_TEST(TestBlockFuncWithNullables) {
 
     UNIT_ASSERT(iterator.Next(item));
     UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 30);
+
+    UNIT_ASSERT(!iterator.Next(item));
     UNIT_ASSERT(!iterator.Next(item));
 }
 
-Y_UNIT_TEST(TestBlockFuncWithNullableScalar) {
-    TSetup<false> setup;
+Y_UNIT_TEST_LLVM(TestBlockFuncWithNullableScalar) {
+    TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto optionalUi64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id, true);
@@ -436,6 +442,7 @@ Y_UNIT_TEST(TestBlockFuncWithNullableScalar) {
         UNIT_ASSERT(!item);
 
         UNIT_ASSERT(!iterator.Next(item));
+        UNIT_ASSERT(!iterator.Next(item));
     }
 
     {
@@ -454,6 +461,7 @@ Y_UNIT_TEST(TestBlockFuncWithNullableScalar) {
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item);
 
+        UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }
 
@@ -474,11 +482,12 @@ Y_UNIT_TEST(TestBlockFuncWithNullableScalar) {
         UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 130);
 
         UNIT_ASSERT(!iterator.Next(item));
+        UNIT_ASSERT(!iterator.Next(item));
     }
 }
 
-Y_UNIT_TEST(TestBlockFuncWithScalar) {
-    TSetup<false> setup;
+Y_UNIT_TEST_LLVM(TestBlockFuncWithScalar) {
+    TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
@@ -510,6 +519,7 @@ Y_UNIT_TEST(TestBlockFuncWithScalar) {
 
     UNIT_ASSERT(iterator.Next(item));
     UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 1130);
+
     UNIT_ASSERT(!iterator.Next(item));
     UNIT_ASSERT(!iterator.Next(item));
 }
@@ -546,11 +556,14 @@ Y_UNIT_TEST_LLVM(TestWideFromBlocks) {
 
     UNIT_ASSERT(iterator.Next(item));
     UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 30);
+
+    UNIT_ASSERT(!iterator.Next(item));
+    UNIT_ASSERT(!iterator.Next(item));
 }
 
-Y_UNIT_TEST(TestWideToAndFromBlocks) {
-    TSetup<false> setup;
-    auto& pb = *setup.PgmBuilder;
+Y_UNIT_TEST_LLVM(TestWideToAndFromBlocks) {
+    TSetup<LLVM> setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
     const auto tupleType = pb.NewTupleType({ui64Type, ui64Type});
@@ -585,6 +598,9 @@ Y_UNIT_TEST(TestWideToAndFromBlocks) {
 
     UNIT_ASSERT(iterator.Next(item));
     UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 30);
+
+    UNIT_ASSERT(!iterator.Next(item));
+    UNIT_ASSERT(!iterator.Next(item));
 }
 }
 

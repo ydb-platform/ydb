@@ -90,70 +90,15 @@ struct TBlockState : public TComputationValue<TBlockState> {
     TUnboxedValueVector Values;
     std::vector<std::deque<std::shared_ptr<arrow::ArrayData>>> Arrays;
 
-    TBlockState(TMemoryUsageInfo* memInfo, size_t width)
-        : TBase(memInfo), Values(width), Arrays(width - 1ULL)
-    {}
+    TBlockState(TMemoryUsageInfo* memInfo, size_t width);
 
-    void FillArrays(NUdf::TUnboxedValue*const* output) {
-        auto& counterDatum = TArrowBlock::From(Values.back()).GetDatum();
-        MKQL_ENSURE(counterDatum.is_scalar(), "Unexpected block length type (expecting scalar)");
-        Count = counterDatum.scalar_as<arrow::UInt64Scalar>().value;
-        if (!Count) {
-            return;
-        }
-        for (size_t i = 0U; i < Arrays.size(); ++i) {
-            Arrays[i].clear();
-            if (!output[i]) {
-                return;
-            }
-            auto& datum = TArrowBlock::From(Values[i]).GetDatum();
-            if (datum.is_scalar()) {
-                return;
-            }
-            MKQL_ENSURE(datum.is_arraylike(), "Unexpected block type (expecting array or chunked array)");
-            if (datum.is_array()) {
-                Arrays[i].push_back(datum.array());
-            } else {
-                for (auto& chunk : datum.chunks()) {
-                    Arrays[i].push_back(chunk->data());
-                }
-            }
-        }
-    }
+    void FillArrays();
 
-    void FillOutputs(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
-        auto sliceSize = Count;
-        for (size_t i = 0; i < Arrays.size(); ++i) {
-            const auto& arr = Arrays[i];
-            if (arr.empty()) {
-                continue;
-            }
+    ui64 Slice();
 
-            MKQL_ENSURE(ui64(arr.front()->length) <= Count, "Unexpected array length at column #" << i);
-            sliceSize = std::min<ui64>(sliceSize, arr.front()->length);
-        }
+    NUdf::TUnboxedValuePod Get(const ui64 sliceSize, const THolderFactory& holderFactory, const size_t idx); // TODO: const - mandatory for correct behavior in all cases.
 
-        for (size_t i = 0; i < Arrays.size(); ++i) {
-            if (const auto out = output[i]) {
-                if (Arrays[i].empty()) {
-                    *out = Values[i];
-                    continue;
-                }
-
-                if (auto& array = Arrays[i].front(); ui64(array->length) == sliceSize) {
-                    *out = ctx.HolderFactory.CreateArrowBlock(std::move(array));
-                    Arrays[i].pop_front();
-                } else {
-                    *out = ctx.HolderFactory.CreateArrowBlock(Chop(array, sliceSize));
-                }
-            }
-        }
-
-        if (const auto out = output[Values.size() - 1U]) {
-            *out = ctx.HolderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(sliceSize)));
-        }
-        Count -= sliceSize;
-    }
+    void FillOutputs(TComputationContext& ctx, NUdf::TUnboxedValue*const* output);
 };
 
 template <typename TDerived>
@@ -196,10 +141,11 @@ private:
         auto& s = GetState(ctx, output);
         const auto fields = ctx.WideFields.data() + WideFieldsIndex;
         while (s.Count == 0) {
+            s.Values.assign(s.Values.size(), NUdf::TUnboxedValuePod());
             if (const auto result = static_cast<const TDerived*>(this)->DoCalculate(s.ChildState, ctx, fields); result != EFetchResult::One) {
                 return result;
             }
-            s.FillArrays(output);
+            s.FillArrays();
         }
 
         s.FillOutputs(ctx, output);

@@ -46,33 +46,10 @@ namespace NTable {
             Trace = 2, /* how many last data pages to keep while seq scans */
         };
 
-        class TIndexPages {
-        public:
+        struct TIndexPages {
             using TPageId = NPage::TPageId;
-            using TGroupId = NPage::TGroupId;
-
-            TIndexPages(TVector<TPageId> groups, TVector<TPageId> historic)
-                : Groups(std::move(groups))
-                , Historic(std::move(historic))
-                , All(Groups.size() + Historic.size())
-            {
-                for (auto p : Groups) {
-                    All.insert(p);
-                }
-                for (auto p : Historic) {
-                    All.insert(p);
-                }
-            }
-
             const TVector<TPageId> Groups;
             const TVector<TPageId> Historic;
-
-            bool Has(NPage::TGroupId groupId, TPageId pageId) const {
-                return groupId.IsMain() && All.contains(pageId);
-            }
-
-        private:
-            THashSet<TPageId> All;
         };
 
         struct TParams {
@@ -155,6 +132,7 @@ namespace NTable {
         virtual ui64 DataSize() const = 0;
         virtual ui64 BackingSize() const = 0;
         virtual ui64 GetPageSize(NPage::TPageId id, NPage::TGroupId groupId = { }) const = 0;
+        virtual NPage::EPage GetPageType(NPage::TPageId id, NPage::TGroupId groupId = { }) const = 0;
         virtual ui8 GetPageChannel(NPage::TPageId id, NPage::TGroupId groupId = { }) const = 0;
         virtual ui8 GetPageChannel(ELargeObj lob, ui64 ref) const = 0;
 

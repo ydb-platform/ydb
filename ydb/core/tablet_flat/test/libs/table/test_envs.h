@@ -103,7 +103,7 @@ namespace NTest {
 
         const TSharedData* TryGetPage(const TPart* part, TPageId ref, TGroupId groupId) override
         {
-            auto pass = ShouldPass((const void*)part, ref | (ui64(groupId.Raw()) << 32), part->IndexPages.Has(groupId, ref));
+            auto pass = ShouldPass((const void*)part, ref | (ui64(groupId.Raw()) << 32), part->GetPageType(ref, groupId) == EPage::Index);
 
             return pass ? TTestEnv::TryGetPage(part, ref, groupId) : nullptr;
         }
@@ -255,7 +255,7 @@ namespace NTest {
 
             Y_VERIFY(groupId.Index < partStore->Store->GetGroupCount());
 
-            if (part->IndexPages.Has(groupId, pageId)) {
+            if (part->GetPageType(pageId, groupId) == EPage::Index) {
                 return partStore->Store->GetPage(groupId.Index, pageId);
             } else {
                 ui32 room = (groupId.Historic ? partStore->Store->GetRoomCount() : 0) + groupId.Index;

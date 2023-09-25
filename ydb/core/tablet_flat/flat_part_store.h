@@ -79,6 +79,12 @@ public:
         return PageCollections[groupId.Index]->PageCollection->Page(id).Size;
     }
 
+    NPage::EPage GetPageType(NPage::TPageId id, NPage::TGroupId groupId) const override
+    {
+        Y_VERIFY(groupId.Index < PageCollections.size());
+        return EPage(PageCollections[groupId.Index]->PageCollection->Page(id).Type);
+    }
+
     ui8 GetPageChannel(NPage::TPageId id, NPage::TGroupId groupId) const override
     {
         Y_UNUSED(id);

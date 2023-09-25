@@ -63,6 +63,13 @@ namespace NTest {
             return &PageCollections.at(room).at(page);
         }
 
+        NPage::EPage GetPageType(ui32 room, ui32 page) const noexcept
+        {
+            Y_VERIFY(room < PageCollections.size(), "Room is out of bounds");
+
+            return PageTypes.at(room).at(page);
+        }
+
         TArrayRef<const TSharedData> PageCollectionArray(ui32 room) const noexcept
         {
             Y_VERIFY(room < PageCollections.size(), "Only regular rooms can be used as arr");
@@ -208,6 +215,7 @@ namespace NTest {
 
             TPageId id = PageCollections[group].size();
             PageCollections[group].push_back(std::move(page));
+            PageTypes[group].push_back(type);
 
             if (group == 0) {
                 switch (type) {
@@ -264,6 +272,7 @@ namespace NTest {
             : Groups(groups)
             , GlobOffset(globOffset)
             , PageCollections(groups + 2)
+            , PageTypes(groups + 2)
         { }
 
         ui32 NextGlobOffset() const {
@@ -275,6 +284,7 @@ namespace NTest {
         const size_t Groups;
         const ui32 GlobOffset;
         TVector<TVector<TSharedData>> PageCollections;
+        TVector<TVector<EPage>> PageTypes;
 
         /*_ Sometimes will be replaced just with one root TPageId */
 

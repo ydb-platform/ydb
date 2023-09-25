@@ -51,6 +51,11 @@ namespace NTest {
             return Store->GetPage(groupId.Index, id)->size();
         }
 
+        NPage::EPage GetPageType(NPage::TPageId id, NPage::TGroupId groupId) const override
+        {
+            return Store->GetPageType(groupId.Index, id);
+        }
+
         ui8 GetPageChannel(NPage::TPageId id, NPage::TGroupId groupId) const override
         {
             Y_UNUSED(id);

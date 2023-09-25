@@ -113,7 +113,7 @@ namespace NFwd {
             ui16 room = (groupId.Historic ? part->Groups + 2 : 0) + groupId.Index;
             TSlot slot = GetQueueSlot(part, room);
 
-            if (part->IndexPages.Has(groupId, ref)) {
+            if (part->GetPageType(ref, groupId) == EPage::Index) {
                 return TryGetIndexPage(slot, ref);
             }
                 

@@ -5647,7 +5647,12 @@ private:
 
         TNodeSet nodesToOptimize;
         TProcessedNodesSet processedNodes;
+        processedNodes.insert(res->Head().UniqueId());
         VisitExpr(res, [&nodesToOptimize, &processedNodes](const TExprNode::TPtr& input) {
+            if (processedNodes.contains(input->UniqueId())) {
+                return false;
+            }
+
             if (auto read = TMaybeNode<TYtLength>(input).Input().Maybe<TYtReadTable>()) {
                 nodesToOptimize.insert(read.Cast().Raw());
                 return false;
@@ -5711,7 +5716,12 @@ private:
 
         TNodeSet nodesToOptimize;
         TProcessedNodesSet processedNodes;
+        processedNodes.insert(res->Head().UniqueId());
         VisitExpr(res, [&nodesToOptimize, &processedNodes](const TExprNode::TPtr& input) {
+            if (processedNodes.contains(input->UniqueId())) {
+                return false;
+            }
+
             if (TYtTableContent::Match(input.Get())) {
                 nodesToOptimize.insert(input.Get());
                 return false;

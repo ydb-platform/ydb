@@ -282,12 +282,18 @@ namespace {
 
         NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final {
             Y_UNUSED(input);
+            YQL_ENSURE(DelegatedProvider);
+            YQL_ENSURE(DelegatedNode);
+            YQL_ENSURE(DelegatedNodeOutput);
             return DelegatedProvider->GetCallableExecutionTransformer()
                 .GetAsyncFuture(*DelegatedNode);
         }
 
         TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
             output = input;
+            YQL_ENSURE(DelegatedProvider);
+            YQL_ENSURE(DelegatedNode);
+            YQL_ENSURE(DelegatedNodeOutput);
             auto status = DelegatedProvider->GetCallableExecutionTransformer()
                 .ApplyAsyncChanges(DelegatedNode, DelegatedNodeOutput, ctx);
             if (status == TStatus::Repeat && input != DelegatedNodeOutput->TailPtr()) {

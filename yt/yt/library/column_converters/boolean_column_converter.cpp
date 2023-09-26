@@ -36,7 +36,7 @@ public:
         , ColumnSchema_(columnSchema)
     { }
 
-    TConvertedColumn Convert(const std::vector<TUnversionedRowValues>& rowsValues) override
+    TConvertedColumn Convert(TRange<TUnversionedRowValues> rowsValues) override
     {
         Reset();
         AddValues(rowsValues);
@@ -74,11 +74,11 @@ private:
         NullBitmap_.Flush<TConverterTag>();
     }
 
-    void AddValues(const std::vector<TUnversionedRowValues>& rowsValues)
+    void AddValues(TRange<TUnversionedRowValues> rowsValues)
     {
-        for (auto rowValues : rowsValues) {
+        for (const auto& rowValues : rowsValues) {
             auto value = rowValues[ColumnIndex_];
-            bool isNull = value == nullptr || value->Type == NTableClient::EValueType::Null;
+            bool isNull = !value || value->Type == NTableClient::EValueType::Null;
             bool data = isNull ? false : value->Data.Boolean;
             NullBitmap_.Append(isNull);
             Values_.Append(data);

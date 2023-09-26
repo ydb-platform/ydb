@@ -60,7 +60,7 @@ public:
         , ColumnSchema_(columnSchema)
     { }
 
-    TConvertedColumn Convert(const std::vector<TUnversionedRowValues>& rowsValues) override
+    TConvertedColumn Convert(TRange<TUnversionedRowValues> rowsValues) override
     {
         Reset();
         AddValues(rowsValues);
@@ -294,11 +294,11 @@ private:
         }
     }
 
-    void AddValues(const std::vector<TUnversionedRowValues>& rowsValues)
+    void AddValues(TRange<TUnversionedRowValues> rowsValues)
     {
-        for (auto rowValues : rowsValues) {
+        for (const auto& rowValues : rowsValues) {
             auto unversionedValue = rowValues[ColumnIndex_];
-            YT_VERIFY(unversionedValue != nullptr);
+            YT_VERIFY(unversionedValue);
             auto value = CaptureValue(*unversionedValue);
             Values_.push_back(value);
             ++RowCount_;

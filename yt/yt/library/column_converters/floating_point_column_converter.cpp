@@ -58,7 +58,7 @@ public:
 
     { }
 
-    TConvertedColumn Convert(const std::vector<TUnversionedRowValues>& rowsValues)
+    TConvertedColumn Convert(TRange<TUnversionedRowValues> rowsValues)
     {
         Reset();
         AddValues(rowsValues);
@@ -104,14 +104,14 @@ private:
         NullBitmap_.Flush<TConverterTag>();
     }
 
-    void AddValues(const std::vector<TUnversionedRowValues>& rowsValues)
+    void AddValues(TRange<TUnversionedRowValues> rowsValues)
     {
-        for (auto rowValues : rowsValues) {
+        for (const auto& rowValues : rowsValues) {
             auto value = rowValues[ColumnIndex_];
-            bool isNull = value == nullptr || value->Type == NTableClient::EValueType::Null;
-            TValue data = isNull ? 0 : value->Data.Double;
+            bool isNull = !value || value->Type == NTableClient::EValueType::Null;
+            TValue valueData = isNull ? 0 : value->Data.Double;
             NullBitmap_.Append(isNull);
-            Values_.push_back(data);
+            Values_.push_back(valueData);
         }
     }
 };

@@ -16,7 +16,7 @@ public:
         : ColumnIndex_(columnIndex)
     { }
 
-    TConvertedColumn Convert(const std::vector<TUnversionedRowValues>& rowsValues) override
+    TConvertedColumn Convert(TRange<TUnversionedRowValues> rowsValues) override
     {
         auto rowCount = rowsValues.size();
 

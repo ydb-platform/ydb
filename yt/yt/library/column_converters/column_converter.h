@@ -38,7 +38,7 @@ struct IColumnConverter
     : private TNonCopyable
 {
     virtual ~IColumnConverter() = default;
-    virtual TConvertedColumn Convert(const std::vector<TUnversionedRowValues>& rowsValues) = 0;
+    virtual TConvertedColumn Convert(TRange<TUnversionedRowValues> rowsValues) = 0;
 };
 
 using IColumnConverterPtr = std::unique_ptr<IColumnConverter>;

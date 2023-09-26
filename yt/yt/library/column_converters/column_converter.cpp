@@ -69,9 +69,8 @@ TConvertedColumnRange ConvertRowsToColumns(
     std::vector<TUnversionedRowValues> rowsValues;
     rowsValues.reserve(rows.size());
 
-    for (const auto& row : rows) {
-        TUnversionedRowValues rowValues;
-        rowValues.resize(columnSchema.size(), nullptr);
+    for (auto row : rows) {
+        TUnversionedRowValues rowValues(columnSchema.size(), nullptr);
         for (const auto* item = row.Begin(); item != row.End(); ++item) {
             rowValues[item->Id] = item;
         }

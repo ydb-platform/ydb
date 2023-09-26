@@ -11,6 +11,7 @@ namespace NTable {
 namespace NFwd {
 
     class TCache : public IPageLoadingLogic {
+        using TGroupId = NPage::TGroupId;
 
         template<size_t Items>
         struct TRound {
@@ -57,8 +58,8 @@ namespace NFwd {
     public:
         TCache() = delete;
 
-        TCache(const NPage::TIndex& index, const TIntrusiveConstPtr<TSlices>& bounds = nullptr)
-            : Index(index, 1, bounds)
+        TCache(const TPart* part, IPages* env, TGroupId groupId, const TIntrusiveConstPtr<TSlices>& bounds = nullptr)
+            : Index(part, env, groupId, 1, bounds)
         { }
 
         ~TCache()

@@ -334,7 +334,7 @@ namespace NTable {
             }
 
             PrepareBoots();
-            SeekState = ESeekState::SeekBoots;
+            SeekState = ESeekState::LoadIndexes;
             return true;
         }
 
@@ -354,6 +354,20 @@ namespace NTable {
             }
 
             return LoadingParts == 0;
+        }
+
+        bool LoadIndexes() noexcept
+        {
+            bool ready = true;
+            for (const auto& partView : Subset.Flatten) {
+                for (auto indexPageId : partView->IndexPages.Groups) {
+                    ready &= bool(CurrentEnv->TryGetPage(partView.Part.Get(), indexPageId));
+                }
+                for (auto indexPageId : partView->IndexPages.Historic) {
+                    ready &= bool(CurrentEnv->TryGetPage(partView.Part.Get(), indexPageId));
+                }
+            }
+            return ready;
         }
 
         void PrepareBoots() noexcept
@@ -433,6 +447,9 @@ namespace NTable {
             return Boots.empty();
         }
 
+        /**
+         * @return true on page fault
+         */
         bool Seek() noexcept
         {
             switch (SeekState) {
@@ -444,6 +461,12 @@ namespace NTable {
                     [[fallthrough]];
                 case ESeekState::PrepareBoots:
                     PrepareBoots();
+                    SeekState = ESeekState::LoadIndexes;
+                    [[fallthrough]];
+                case ESeekState::LoadIndexes:
+                    if (!LoadIndexes()) {
+                        return true;
+                    }
                     SeekState = ESeekState::SeekBoots;
                     [[fallthrough]];
                 case ESeekState::SeekBoots:
@@ -473,6 +496,7 @@ namespace NTable {
         enum class ESeekState {
             LoadColdParts,
             PrepareBoots,
+            LoadIndexes,
             SeekBoots,
             Finished,
         };

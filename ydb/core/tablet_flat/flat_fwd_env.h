@@ -348,18 +348,16 @@ namespace NFwd {
             }
         }
 
-        TEgg MakeCache(const TPart *part, NPage::TGroupId groupId, TIntrusiveConstPtr<TSlices> bounds) const noexcept
+        TEgg MakeCache(const TPart *part, NPage::TGroupId groupId, TIntrusiveConstPtr<TSlices> bounds) noexcept
         {
             auto *partStore = dynamic_cast<const TPartStore*>(part);
 
             Y_VERIFY(groupId.Index < partStore->PageCollections.size(), "Got part without enough page collections");
 
             auto& cache = partStore->PageCollections[groupId.Index];
-            auto& index = part->GetGroupIndex(groupId);
-            if (cache->PageCollection->Total() < index.UpperPage())
-                Y_FAIL("Part index last page is out of storage capacity");
-
-            return { new NFwd::TCache(index, bounds), cache->PageCollection };
+            
+            auto* fwd = new NFwd::TCache(part, this, groupId, bounds);
+            return { fwd, cache->PageCollection };
         }
 
         TEgg MakeExtern(const TPart *part, TIntrusiveConstPtr<TSlices> bounds) const noexcept

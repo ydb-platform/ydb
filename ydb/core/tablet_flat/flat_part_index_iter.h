@@ -93,7 +93,7 @@ public:
         return bool(Iter);
     }
 
-    // for precharge only
+    // for precharge and TForward only
     TIndex* TryLoadRaw() {
         return TryGetIndex();
     }

@@ -274,7 +274,8 @@ namespace NTest {
                 for (ui32 room : xrange(partStore->Store->GetRoomCount())) {
                     if (room < partStore->Store->GetGroupCount()) {
                         NPage::TGroupId groupId(room);
-                        slots.push_back(Settle(partStore, room, new NFwd::TCache(partStore->GetGroupIndex(groupId))));
+                        auto *cache = new NFwd::TCache(part, this, groupId);
+                        slots.push_back(Settle(partStore, room, cache));
                     } else if (room == partStore->Store->GetOuterRoom()) {
                         slots.push_back(Settle(partStore, room, MakeOuter(partStore)));
                     } else if (room == partStore->Store->GetExternRoom()) {
@@ -285,7 +286,8 @@ namespace NTest {
                 }
                 for (ui32 group : xrange(part->HistoricGroupsCount)) {
                     NPage::TGroupId groupId(group, true);
-                    slots.push_back(Settle(partStore, group, new NFwd::TCache(partStore->GetGroupIndex(groupId))));
+                    auto *cache = new NFwd::TCache(part, this, groupId);
+                    slots.push_back(Settle(partStore, group, cache));
                 }
             }
 

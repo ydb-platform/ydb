@@ -1,6 +1,9 @@
 {
     "bottles": {},
     "resources": {
+        "2214720943": "http://devtools-registry.s3.yandex.net/2214720943",
+        "2214542408": "http://devtools-registry.s3.yandex.net/2214542408",
+        "1886578148": "http://devtools-registry.s3.yandex.net/1886578148",
         "4748237118": "http://devtools-registry.s3.yandex.net/4748237118",
         "4748241015": "http://devtools-registry.s3.yandex.net/4748241015",
         "4748280193": "http://devtools-registry.s3.yandex.net/4748280193",
@@ -26,6 +29,7 @@
         "1966560555": "http://devtools-registry.s3.yandex.net/1966560555",
         "360916612": "http://devtools-registry.s3.yandex.net/360916612",
         "4312064267": "http://devtools-registry.s3.yandex.net/4312064267",
+        "2062930743": "http://devtools-registry.s3.yandex.net/2062930743",
         "2842390994": "http://devtools-registry.s3.yandex.net/2842390994",
         "4978388684": "http://devtools-registry.s3.yandex.net/4978388684",
         "2989597929": "http://devtools-registry.s3.yandex.net/2989597929",
@@ -86,6 +90,9 @@
         "2980468199": "http://devtools-registry.s3.yandex.net/2980468199"
     },
     "resources_descriptions": {
+        "2214720943": "Clang 11.0.0 for darwin-arm64",
+        "2214542408": "Clang 11.0.0 for darwin-x86_64 from task/828474520 with LTO and PGO",
+        "1886578148": "Clang 11.0.0 for linux-x86_64 from task/846665983 with LTO and PGO at r7671799",
         "4748237118": "Clang 14.0.6 for darwin arm64",
         "4748241015": "Clang 14.0.6 for darwin x86_64",
         "4748280193": "Clang 14.0.6 for linux aarch64",
@@ -111,6 +118,7 @@
         "1966560555": "Ubuntu 14 x86-64 native SDK (patched, v3)",
         "360916612": "binutils 2.26 for linux_ubuntu_10.04_lucid",
         "4312064267": "black_linter for linux",
+        "2062930743": "contrib/libs/clang11/pkg-windows-x86_64.json",
         "2842390994": "devtools jacoco agent 0.8.7 with shaded asm",
         "4978388684": "devtools jstyle runner 10.2",
         "2989597929": "devtools/huge_python/python for darwin",

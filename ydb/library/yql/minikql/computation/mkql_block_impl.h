@@ -87,6 +87,8 @@ struct TBlockState : public TComputationValue<TBlockState> {
     using TBase = TComputationValue<TBlockState>;
 
     ui64 Count = 0;
+    NUdf::TUnboxedValue* Pointer_ = nullptr;
+
     TUnboxedValueVector Values;
     std::vector<std::deque<std::shared_ptr<arrow::ArrayData>>> Arrays;
 

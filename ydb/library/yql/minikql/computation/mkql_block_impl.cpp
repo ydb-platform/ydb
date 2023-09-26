@@ -245,10 +245,11 @@ const IComputationNode* TBlockFuncNode::TArrowNode::GetArgument(ui32 index) cons
     return Parent_->ArgsNodes[index];
 }
 
-
 TBlockState::TBlockState(TMemoryUsageInfo* memInfo, size_t width)
     : TBase(memInfo), Values(width), Arrays(width - 1ULL)
-{}
+{
+    Pointer_ = Values.data();
+}
 
 void TBlockState::FillArrays() {
     auto& counterDatum = TArrowBlock::From(Values.back()).GetDatum();

@@ -150,9 +150,10 @@ Y_UNIT_TEST_LLVM(TestWideToBlocks) {
 }
 
 namespace {
+template<bool LLVM>
 void TestChunked(bool withBlockExpand) {
-    TSetup<false> setup;
-    auto& pb = *setup.PgmBuilder;
+    TSetup<LLVM> setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto ui64Type   = pb.NewDataType(NUdf::TDataType<ui64>::Id);
     const auto boolType   = pb.NewDataType(NUdf::TDataType<bool>::Id);
@@ -239,12 +240,12 @@ void TestChunked(bool withBlockExpand) {
 
 } // namespace
 
-Y_UNIT_TEST(TestBlockExpandChunked) {
-    TestChunked(true);
+Y_UNIT_TEST_LLVM(TestBlockExpandChunked) {
+    TestChunked<LLVM>(true);
 }
 
-Y_UNIT_TEST(TestWideFromBlocksForChunked) {
-    TestChunked(false);
+Y_UNIT_TEST_LLVM(TestWideFromBlocksForChunked) {
+    TestChunked<LLVM>(false);
 }
 
 Y_UNIT_TEST(TestScalar) {

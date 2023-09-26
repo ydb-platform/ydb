@@ -844,6 +844,10 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             .SmallDisk = true,
         });
 
+        TString data(NPDisk::SmallDiskMaximumChunkSize, '0');
+
+        auto parts = MakeIntrusive<NPDisk::TEvChunkWrite::TStrokaBackedUpParts>(data);
+
         ui64 dataMb = 0;
         for (ui32 i = 0; i < 200; ++i) {
             TVDiskMock mock(&testCtx);
@@ -858,10 +862,9 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                     if (resp->Status == NKikimrProto::OK) {
                         ui32 chunk = resp->ChunkIds.front();
                         chunks.push_back(chunk);
-                        TString data(NPDisk::SmallDiskMaximumChunkSize, '0');
                         testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(new NPDisk::TEvChunkWrite(
                             evInitRes->PDiskParams->Owner, evInitRes->PDiskParams->OwnerRound,
-                            chunk, 0, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(data), nullptr, false, 0),
+                            chunk, 0, parts, nullptr, false, 0),
                             NKikimrProto::OK);
                         dataMb += NPDisk::SmallDiskMaximumChunkSize >> 20;
                     } else {

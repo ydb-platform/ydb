@@ -71,13 +71,15 @@ TExprNode::TPtr KeepChoppedConstraint(TExprNode::TPtr node, const TExprNode& src
     return node;
 }
 
-TExprNodeBuilder GetterBuilder(TExprNodeBuilder parent, ui32 index, TPartOfConstraintBase::TPathType path) {
+TExprNodeBuilder GetterBuilder(TExprNodeBuilder parent, ui32 index, const TTypeAnnotationNode& type, TPartOfConstraintBase::TPathType path) {
     if (path.empty())
         return parent.Arg(index, "item");
 
     const auto& name = path.back();
     path.pop_back();
-    return GetterBuilder(parent.Callable(index, "Member"), 0U, path).Atom(1, name).Seal();
+    const auto parentType = TPartOfConstraintBase::GetSubTypeByPath(path, type);
+    YQL_ENSURE(parentType, "Wrong path '" << path << "' to component of: " << type);
+    return GetterBuilder(parent.Callable(index, ETypeAnnotationKind::Struct == parentType->GetKind() ? "Member" : "Nth"), 0U, type, path).Atom(1, name).Seal();
 }
 
 }
@@ -225,7 +227,7 @@ bool IsRenameFlatMapWithMapping(const NNodes::TCoFlatMapBase& node, TExprNode::T
     return true;
 }
 
-// Check if the flat map is a simple rename flat map or a flatmap that also computes some 
+// Check if the flat map is a simple rename flat map or a flatmap that also computes some
 // values in 1-1 fashion
 bool IsRenameOrApplyFlatMapWithMapping(const NNodes::TCoFlatMapBase& node, TExprNode::TPtr& structNode,
     THashMap<TString, TString> & mapping, TSet<TString> & apply) {
@@ -1853,13 +1855,14 @@ bool HasDependsOn(const TExprNode::TPtr& root, const TExprNode::TPtr& arg) {
     return withDependsOn;
 }
 
-TExprNode::TPtr KeepSortedConstraint(TExprNode::TPtr node, const TSortedConstraintNode* sorted, TExprContext& ctx) {
-    if (!sorted) {
+template<bool Assume>
+TExprNode::TPtr MakeSortConstraintImpl(TExprNode::TPtr node, const TSortedConstraintNode* sorted, const TTypeAnnotationNode* rowType, TExprContext& ctx) {
+    if (!(sorted && rowType))
         return node;
-    }
+
     const auto& constent = sorted->GetContent();
     return ctx.Builder(node->Pos())
-        .Callable("AssumeSorted")
+        .Callable(Assume ? "AssumeSorted" : "Sort")
             .Add(0, std::move(node))
             .List(1)
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
@@ -1878,7 +1881,7 @@ TExprNode::TPtr KeepSortedConstraint(TExprNode::TPtr node, const TSortedConstrai
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                         size_t index = 0;
                         for (const auto& c : constent)
-                            GetterBuilder(parent, index++, c.first.front());
+                            GetterBuilder(parent, index++, *rowType, c.first.front());
                         return parent;
                     })
                 .Seal()
@@ -1887,8 +1890,16 @@ TExprNode::TPtr KeepSortedConstraint(TExprNode::TPtr node, const TSortedConstrai
         .Build();
 }
 
+TExprNode::TPtr KeepSortedConstraint(TExprNode::TPtr node, const TSortedConstraintNode* sorted, const TTypeAnnotationNode* rowType, TExprContext& ctx) {
+    return MakeSortConstraintImpl<true>(std::move(node), sorted, rowType, ctx);
+}
+
+TExprNode::TPtr MakeSortByConstraint(TExprNode::TPtr node, const TSortedConstraintNode* sorted, const TTypeAnnotationNode* rowType, TExprContext& ctx) {
+    return MakeSortConstraintImpl<false>(std::move(node), sorted, rowType, ctx);
+}
+
 TExprNode::TPtr KeepConstraints(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx) {
-    auto res = KeepSortedConstraint(node, src.GetConstraint<TSortedConstraintNode>(), ctx);
+    auto res = KeepSortedConstraint(node, src.GetConstraint<TSortedConstraintNode>(), GetSeqItemType(src.GetTypeAnn()), ctx);
     res = KeepChoppedConstraint(std::move(res), src, ctx);
     res = KeepUniqueConstraint<true>(std::move(res), src, ctx);
     res = KeepUniqueConstraint<false>(std::move(res), src, ctx);

@@ -2533,11 +2533,10 @@ TExprNode::TPtr OptimizeReorder(const TExprNode::TPtr& node, TExprContext& ctx) 
             }
         }
 
-        if (auto inputConstr = node->Head().GetConstraint<TSortedConstraintNode>()) {
-            if (auto topConstr = node->GetConstraint<TSortedConstraintNode>()) {
+        if (const auto inputConstr = node->Head().GetConstraint<TSortedConstraintNode>()) {
+            if (const auto topConstr = node->GetConstraint<TSortedConstraintNode>()) {
                 if (topConstr->IsPrefixOf(*inputConstr)) {
                     YQL_CLOG(DEBUG, Core) << node->Content() << " over sorted input";
-
                     auto res = ctx.Builder(node->Pos())
                         .Callable("Take")
                             .Add(0, node->HeadPtr())
@@ -2545,11 +2544,8 @@ TExprNode::TPtr OptimizeReorder(const TExprNode::TPtr& node, TExprContext& ctx) 
                         .Seal()
                         .Build();
 
-                    if (topConstr->Equals(*inputConstr)) {
-                        return res;
-                    }
-
-                    return KeepSortedConstraint(res, topConstr, ctx);
+                    return topConstr->Equals(*inputConstr) ? res :
+                        KeepSortedConstraint(std::move(res), topConstr, GetSeqItemType(node->GetTypeAnn()), ctx);
                 }
             }
             YQL_CLOG(DEBUG, Core) << node->Content() << " over input with " << *inputConstr;
@@ -2585,8 +2581,9 @@ TExprNode::TPtr OptimizeReorder(const TExprNode::TPtr& node, TExprContext& ctx) 
         if (const auto inputConstr = node->Head().GetConstraint<TSortedConstraintNode>()) {
             if (const auto sortConstr = node->GetConstraint<TSortedConstraintNode>()) {
                 if (sortConstr->IsPrefixOf(*inputConstr)) {
-                    YQL_CLOG(DEBUG, Core) << node->Content() << " over sorted input";
-                    return KeepSortedConstraint(node->HeadPtr(), sortConstr, ctx);
+                    YQL_CLOG(DEBUG, Core) << node->Content() << " over sorted input.";
+                    return //TODO: sortConstr->Equals(*inputConstr) ? node->HeadPtr() :
+                        KeepSortedConstraint(node->HeadPtr(), sortConstr, GetSeqItemType(node->GetTypeAnn()), ctx);
                 }
             }
             YQL_CLOG(DEBUG, Core) << node->Content() << " over input with " << *inputConstr;
@@ -2684,50 +2681,6 @@ TExprNode::TPtr OptimizeReorder(const TExprNode::TPtr& node, TExprContext& ctx) 
     return node;
 }
 
-void FixSortness(const TExprNode& origNode, TExprNode::TPtr& node, TExprContext& ctx) {
-    if (const auto sorted = origNode.GetConstraint<TSortedConstraintNode>()) {
-        if (const auto simple = sorted->FilterFields(ctx, [](const TPartOfConstraintBase::TPathType& path) { return 1U == path.size(); })) {
-            const auto& content = simple->GetContent();
-            node = ctx.Builder(origNode.Pos())
-                .Callable("Sort")
-                    .Add(0, std::move(node))
-                    .List(1)
-                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                            size_t index = 0;
-                            for (auto c : content) {
-                                parent.Callable(index++, "Bool")
-                                        .Atom(0, ToString(c.second), TNodeFlags::Default)
-                                        .Seal();
-                            }
-                            return parent;
-                        })
-                    .Seal()
-                    .Lambda(2)
-                        .Param("item")
-                        .List()
-                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                                size_t index = 0;
-                                for (auto c : content) {
-                                    if (c.first.empty())
-                                        parent.Arg(0, "item");
-                                    else {
-                                        YQL_ENSURE(c.first.front().size() == 1U, "Just column expected.");
-                                        parent.Callable(index++, "Member")
-                                                .Arg(0, "item")
-                                                .Atom(1, c.first.front().front())
-                                                .Seal();
-                                    }
-                                }
-                                return parent;
-                            })
-                        .Seal()
-                    .Seal()
-                .Seal()
-                .Build();
-        }
-    }
-}
-
 TExprNode::TPtr ConvertSqlInPredicatesPrefixToJoins(const TExprNode::TPtr& flatMap, const TPredicateChain& chain,
     const TExprNode::TPtr& sqlInTail, TExprContext& ctx)
 {
@@ -2773,7 +2726,7 @@ TExprNode::TPtr ConvertSqlInPredicatesPrefixToJoins(const TExprNode::TPtr& flatM
     YQL_CLOG(DEBUG, Core) << "FlatMapOverJoinableSqlInChain of size " << chain.size();
 
     auto eq = BuildEquiJoinForSqlInChain(flatMap, chain, ctx);
-    FixSortness(*flatMap, eq, ctx);
+    eq = MakeSortByConstraint(std::move(eq), flatMap->GetConstraint<TSortedConstraintNode>(), GetSeqItemType(flatMap->GetTypeAnn()), ctx);
 
     auto tail = sqlInTail ? sqlInTail : MakeBool<true>(flatMap->Pos(), ctx);
     return RebuildFlatmapOverPartOfPredicate(flatMap, eq, tail, true, ctx);
@@ -3702,7 +3655,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         auto right = node->ChildPtr(1);
         if (left->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Resource && right->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Resource) {
             return ctx.ChangeChild(*node, 0, ctx.NewCallable(node->Pos(), "TypeHandle", {left}));
-        } 
+        }
         if (left->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Resource && right->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Resource) {
             return ctx.ChangeChild(*node, 1, ctx.NewCallable(node->Pos(), "TypeHandle", {right}));
         }

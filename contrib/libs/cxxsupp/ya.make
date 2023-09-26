@@ -8,7 +8,7 @@ LICENSE(Not-Applicable)
 NO_PLATFORM()
 
 IF (NOT USE_STL_SYSTEM)
-    IF (MSVC)
+    IF (MSVC AND NOT CLANG_CL)
         PEERDIR(
             contrib/libs/cxxsupp/libcxxmsvc
         )

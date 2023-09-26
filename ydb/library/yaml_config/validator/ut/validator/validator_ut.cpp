@@ -276,7 +276,8 @@ Y_UNIT_TEST_SUITE(Validator) {
     Y_UNIT_TEST(OpaqueMaps) {
         auto b =
         TMapBuilder()
-            .Int64("int");
+            .Int64("int")
+            .NotOpaque();
 
         auto notOpaque = b.CreateValidator();
 

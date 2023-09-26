@@ -253,8 +253,24 @@ TValidationResult TArrayValidator::Validate(const TNodeRef& node) {
         validationResult.AddValidationErrors(ItemValidatorPtr_->Validate(item));
     }
 
-    // TODO: check uniqueness
-    Y_UNUSED(Unique_);
+    THashMap<TString, size_t> valueToIndex;
+    if (Unique_) {
+        for (size_t i = 0; i < node.Sequence().size(); ++i) {
+            const auto& item = node.Sequence()[i];
+            if (item.Type() != NFyaml::ENodeType::Scalar) {
+                ythrow yexception() << "Can't check uniqueness of non-scalar fields";
+            }
+            TString value = item.Scalar();
+            if (valueToIndex.contains(value)) {
+                TString i1 = ToString(valueToIndex[value]);
+                TString i2 = ToString(i);
+                validationResult.AddIssue({
+                    node.Path(),
+                    "items with indexes " + i1 + " and " + i2 + " are conflicting"});
+            }
+            valueToIndex[value] = i;
+        }
+    }
 
     if (validationResult.Ok()) {
         performChecks(validationResult, node);
@@ -391,7 +407,9 @@ TValidationResult TEnumValidator::Validate(const TNodeRef& node) {
 
     TValidationResult validationResult;
 
-    if (!Items_.contains(node.Scalar())) {
+    TString value = node.Scalar();
+    value.to_lower();
+    if (!Items_.contains(value)) {
         TString variants = JoinStrings(Items_.begin(), Items_.end(), ", ");
 
         validationResult.Issues.push_back({

@@ -7,6 +7,7 @@
 
 
 add_subdirectory(public)
+add_subdirectory(static_validator)
 add_subdirectory(ut)
 add_subdirectory(validator)
 

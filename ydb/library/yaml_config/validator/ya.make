@@ -7,6 +7,8 @@ SRCS(
     validator.cpp
     validator_checks.h
     validator_checks.cpp
+    configurators.h
+    configurators.cpp
 )
 
 PEERDIR(

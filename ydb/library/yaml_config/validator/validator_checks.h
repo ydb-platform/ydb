@@ -34,6 +34,8 @@ template <typename TThis>
 class TNodeWrapperCommonOps {
 public:
     TNodeWrapperCommonOps(TCheckContext& context, NFyaml::TNodeRef node, TString pathFromCheckNode);
+    TNodeWrapperCommonOps(const TNodeWrapperCommonOps<TThis>& other);
+
     bool Exists() const;
 
     TNodeWrapperCommonOps<TThis>& operator=(const TNodeWrapperCommonOps<TThis>& other);
@@ -60,6 +62,12 @@ TNodeWrapperCommonOps<TThis>::TNodeWrapperCommonOps(
     : Context_(context)
     , Node_(node)
     , PathFromCheckNode_(pathFromCheckNode) {}
+
+template <typename TThis>
+TNodeWrapperCommonOps<TThis>::TNodeWrapperCommonOps(const TNodeWrapperCommonOps<TThis>& other)
+    : Context_(other.Context_)
+    , Node_(other.Node_)
+    , PathFromCheckNode_(other.PathFromCheckNode_) {}
 
 template <typename TThis>
 TNodeWrapperCommonOps<TThis>& TNodeWrapperCommonOps<TThis>::operator=(const TNodeWrapperCommonOps<TThis>& other) {
@@ -121,6 +129,7 @@ public:
     TStringNodeWrapper String();
     TBoolNodeWrapper Bool();
     TEnumNodeWrapper Enum();
+    TString Scalar();
 
     TMaybe<ENodeType> ValidatorType();
 

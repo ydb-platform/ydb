@@ -28,6 +28,7 @@ END()
 RECURSE(
     public
     validator
+    static_validator
 )
 
 RECURSE_FOR_TESTS(

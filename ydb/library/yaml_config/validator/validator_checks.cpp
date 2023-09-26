@@ -178,6 +178,13 @@ TEnumNodeWrapper TNodeWrapper::Enum() {
         PathFromCheckNode_);
 }
 
+TString TNodeWrapper::Scalar() {
+    if (!IsScalar()) {
+        throw TCheckException() << "Node " + Node_.Path() + " must be a scalar";
+    }
+    return Node_.Scalar();
+}
+
 TMaybe<ENodeType> TNodeWrapper::ValidatorType() {
     ThrowIfNullNode();
     return NodeType_;

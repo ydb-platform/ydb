@@ -146,7 +146,7 @@ public:
 
 private:
     THashMap<TString, TSimpleSharedPtr<TBuilder>> Children_;
-    bool Opaque_ = false;
+    bool Opaque_ = true;
 
     void ThrowIfAlreadyHasField(const TString& field);
 };

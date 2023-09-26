@@ -124,8 +124,23 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TYsonStructFinalClassHolder
+{
+protected:
+    explicit TYsonStructFinalClassHolder(std::type_index typeIndex);
+
+    // This constructor is only declared but not defined as it never is called.
+    // If we delete it default constructor of TYsonStructLite will be implicitly deleted as well and compilation will fail.
+    TYsonStructFinalClassHolder();
+
+    std::type_index FinalType_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TYsonStructLite
-    : public TYsonStructBase
+    : public virtual TYsonStructFinalClassHolder
+    , public TYsonStructBase
 { };
 
 ////////////////////////////////////////////////////////////////////////////////

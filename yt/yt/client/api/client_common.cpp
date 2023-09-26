@@ -50,7 +50,7 @@ struct TSerializableUserWorkloadDescriptor
 public:
     static TThis Wrap(const TUserWorkloadDescriptor& source)
     {
-        TThis result = Create();
+        TThis result;
         result.Band = source.Band;
         result.Category = source.Category;
         return result;
@@ -72,14 +72,14 @@ void Serialize(const TUserWorkloadDescriptor& workloadDescriptor, NYson::IYsonCo
 
 void Deserialize(TUserWorkloadDescriptor& workloadDescriptor, INodePtr node)
 {
-    auto serializableWorkloadDescriptor = TSerializableUserWorkloadDescriptor::Create();
+    TSerializableUserWorkloadDescriptor serializableWorkloadDescriptor;
     NYTree::Deserialize(serializableWorkloadDescriptor, node);
     workloadDescriptor = serializableWorkloadDescriptor.Unwrap();
 }
 
 void Deserialize(TUserWorkloadDescriptor& workloadDescriptor, NYson::TYsonPullParserCursor* cursor)
 {
-    auto serializableWorkloadDescriptor = TSerializableUserWorkloadDescriptor::Create();
+    TSerializableUserWorkloadDescriptor serializableWorkloadDescriptor;
     NYTree::Deserialize(serializableWorkloadDescriptor, cursor);
     workloadDescriptor = serializableWorkloadDescriptor.Unwrap();
 }

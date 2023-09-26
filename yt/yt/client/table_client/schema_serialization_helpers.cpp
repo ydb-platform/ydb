@@ -9,14 +9,14 @@ namespace NYT::NTableClient {
 
 void Deserialize(TMaybeDeletedColumnSchema& schema, NYson::TYsonPullParserCursor* cursor)
 {
-    TSerializableColumnSchema wrapper = TSerializableColumnSchema::Create();
+    TSerializableColumnSchema wrapper;
     wrapper.DeserializeFromCursor(cursor);
     schema = wrapper;
 }
 
 void Deserialize(TMaybeDeletedColumnSchema& schema, NYTree::INodePtr node)
 {
-    TSerializableColumnSchema wrapper = TSerializableColumnSchema::Create();
+    TSerializableColumnSchema wrapper;
     Deserialize(static_cast<NYTree::TYsonStructLite&>(wrapper), node);
     schema = static_cast<TMaybeDeletedColumnSchema>(wrapper);
 }
@@ -210,7 +210,7 @@ void TSerializableColumnSchema::RunPostprocessor()
 
 void Serialize(const TColumnSchema& schema, NYson::IYsonConsumer* consumer)
 {
-    TSerializableColumnSchema wrapper = TSerializableColumnSchema::Create();
+    TSerializableColumnSchema wrapper;
     wrapper.SetColumnSchema(schema);
     Serialize(static_cast<const NYTree::TYsonStructLite&>(wrapper), consumer);
 }
@@ -260,7 +260,7 @@ void Deserialize(TTableSchema& schema, NYTree::INodePtr node)
     std::vector<TDeletedColumn> deletedColumns;
 
     for (auto childNode : childNodes) {
-        auto wrapper = TSerializableColumnSchema::Create();
+        TSerializableColumnSchema wrapper;
         Deserialize(static_cast<NYTree::TYsonStructLite&>(wrapper), childNode);
         if (wrapper.Deleted() && *wrapper.Deleted()) {
             deletedColumns.push_back(TDeletedColumn(wrapper.StableName()));

@@ -806,7 +806,7 @@ public:
 
 TEST(TYsonStructTest, SaveLite)
 {
-    TTestConfigLite config = TTestConfigLite::Create();
+    TTestConfigLite config;
 
     config.MyString = "hello!";
     config.NullableInt = 42;
@@ -854,7 +854,7 @@ public:
 
 TEST(TYsonStructTest, NewLiteInitedWithDefaults)
 {
-    TTestLiteWithDefaults config = TTestLiteWithDefaults::Create();
+    TTestLiteWithDefaults config;
     EXPECT_EQ(config.MyString, "y");
     EXPECT_EQ(config.MyInt, 10);
     EXPECT_TRUE(config.Subconfig != nullptr);
@@ -1007,8 +1007,8 @@ public:
 
 TEST(TYsonStructTest, ParameterTuplesAndContainers)
 {
-    TTestConfigWithContainers original = TTestConfigWithContainers::Create();
-    TTestConfigWithContainers deserialized = TTestConfigWithContainers::Create();
+    TTestConfigWithContainers original;
+    TTestConfigWithContainers deserialized;
 
     original.Vector = { "fceswf", "sadfcesa" };
     original.Array = {{ "UYTUY", ":LL:a", "78678678" }};
@@ -1524,7 +1524,7 @@ TEST(TYsonStructTest, TestSimpleSerialization)
     EXPECT_EQ(config->MyString, "TestString");
     EXPECT_EQ(config->NullableInt, 42);
 
-    auto liteConfig = TTestConfigLite::Create();
+    TTestConfigLite liteConfig;
     initialize(liteConfig);
     ::Save(&stream, liteConfig);
 
@@ -1540,7 +1540,7 @@ TEST(TYsonStructTest, TestComplexSerialization)
     {
         TTestConfigPtr Config1;
         TTestConfigPtr Config2;
-        TTestConfigLite LiteConfig = TTestConfigLite::Create();
+        TTestConfigLite LiteConfig;
         TString StructName;
 
         Y_SAVELOAD_DEFINE(Config1, Config2, LiteConfig, StructName);
@@ -1549,7 +1549,7 @@ TEST(TYsonStructTest, TestComplexSerialization)
     TComplexStruct toSerialize{
         .Config1 = New<TTestConfig>(),
         .Config2 = New<TTestConfig>(),
-        .LiteConfig = TTestConfigLite::Create(),
+        .LiteConfig = TTestConfigLite(),
         .StructName = "tmp",
     };
     toSerialize.Config1->Load(GetCompleteConfigNode());

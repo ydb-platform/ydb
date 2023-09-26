@@ -118,21 +118,21 @@ struct TSerializableWorkloadDescriptor
 
 void Serialize(const TWorkloadDescriptor& descriptor, IYsonConsumer* consumer)
 {
-    TSerializableWorkloadDescriptor wrapper = TSerializableWorkloadDescriptor::Create();
+    TSerializableWorkloadDescriptor wrapper;
     static_cast<TWorkloadDescriptor&>(wrapper) = descriptor;
     Serialize(static_cast<const TYsonStructLite&>(wrapper), consumer);
 }
 
 void Deserialize(TWorkloadDescriptor& descriptor, INodePtr node)
 {
-    TSerializableWorkloadDescriptor wrapper = TSerializableWorkloadDescriptor::Create();
+    TSerializableWorkloadDescriptor wrapper;
     Deserialize(static_cast<TYsonStructLite&>(wrapper), node);
     descriptor = static_cast<TWorkloadDescriptor&>(wrapper);
 }
 
 void Deserialize(TWorkloadDescriptor& descriptor, NYson::TYsonPullParserCursor* cursor)
 {
-    TSerializableWorkloadDescriptor wrapper = TSerializableWorkloadDescriptor::Create();
+    TSerializableWorkloadDescriptor wrapper;
     Deserialize(static_cast<TYsonStructLite&>(wrapper), cursor);
     descriptor = static_cast<TWorkloadDescriptor&>(wrapper);
 }
@@ -185,4 +185,3 @@ TString ToString(const TWorkloadDescriptor& descriptor)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
-

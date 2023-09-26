@@ -59,7 +59,7 @@ struct THedgingClientOptions
     // This parameter is set on postprocessor.
     TVector<TClientOptions> Clients;
 
-    REGISTER_YSON_STRUCT(THedgingClientOptions);
+    REGISTER_YSON_STRUCT_LITE(THedgingClientOptions);
 
     static void Register(TRegistrar registrar);
 };

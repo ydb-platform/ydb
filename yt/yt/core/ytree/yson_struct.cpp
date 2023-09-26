@@ -16,6 +16,12 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TYsonStructFinalClassHolder::TYsonStructFinalClassHolder(std::type_index typeIndex)
+    : FinalType_(typeIndex)
+{ }
+
+////////////////////////////////////////////////////////////////////////////////
+
 IMapNodePtr TYsonStructBase::GetLocalUnrecognized() const
 {
     return LocalUnrecognized_;

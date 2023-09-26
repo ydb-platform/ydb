@@ -309,6 +309,12 @@ private: \
 #define YSON_STRUCT_IMPL__CTOR_BODY(TStruct) \
     ::NYT::NYTree::TYsonStructRegistry::Get()->InitializeStruct(this);
 
+#define YSON_STRUCT_LITE_IMPL__CTOR_BODY(TStruct) \
+    YSON_STRUCT_IMPL__CTOR_BODY(TStruct) \
+    if (std::type_index(typeid(TStruct)) == FinalType_ && !::NYT::NYTree::TYsonStructRegistry::Get()->InitializationInProgress()) { \
+        SetDefaults(); \
+    } \
+
 
 #define DECLARE_YSON_STRUCT(TStruct) \
 public: \
@@ -319,45 +325,39 @@ public: \
 public: \
     TStruct() \
     { \
+        static_assert(std::is_base_of_v<::NYT::NYTree::TYsonStruct, TStruct>, "Class must inherit from TYsonStruct"); \
         YSON_STRUCT_IMPL__CTOR_BODY(TStruct) \
     } \
     YSON_STRUCT_IMPL__DECLARE_ALIASES(TStruct)
 
 
-#define REGISTER_YSON_STRUCT_LITE_BASE(TStruct) \
-public: \
-    static TStruct Create() \
-    { \
-        static_assert(std::is_base_of_v<::NYT::NYTree::TYsonStructLite, TStruct>, "Class must inherit from TYsonStructLite"); \
-        TStruct result; \
-        result.SetDefaults(); \
-        return result; \
-    } \
- \
-    template <class T> \
-    friend const std::type_info& ::NYT::NYTree::CallCtor(); \
- \
-   YSON_STRUCT_IMPL__DECLARE_ALIASES(TStruct) \
-
 #define DECLARE_YSON_STRUCT_LITE(TStruct) \
-    REGISTER_YSON_STRUCT_LITE_BASE(TStruct) \
- \
-protected: \
-    TStruct();
+public: \
+    TStruct(); \
+    YSON_STRUCT_IMPL__DECLARE_ALIASES(TStruct)
 
 #define REGISTER_YSON_STRUCT_LITE(TStruct) \
-    REGISTER_YSON_STRUCT_LITE_BASE(TStruct) \
- \
-protected: \
+public: \
     TStruct() \
+        : ::NYT::NYTree::TYsonStructFinalClassHolder(std::type_index(typeid(TStruct))) \
     { \
-        YSON_STRUCT_IMPL__CTOR_BODY(TStruct) \
-    }
+        static_assert(std::is_base_of_v<::NYT::NYTree::TYsonStructLite, TStruct>, "Class must inherit from TYsonStructLite"); \
+        YSON_STRUCT_LITE_IMPL__CTOR_BODY(TStruct) \
+    } \
+    YSON_STRUCT_IMPL__DECLARE_ALIASES(TStruct) \
 
+#define DEFINE_YSON_STRUCT_LITE(TStruct) \
+TStruct::TStruct() \
+    : ::NYT::NYTree::TYsonStructFinalClassHolder(std::type_index(typeid(TStruct))) \
+{ \
+    static_assert(std::is_base_of_v<::NYT::NYTree::TYsonStructLite, TStruct>, "Class must inherit from TYsonStructLite"); \
+    YSON_STRUCT_LITE_IMPL__CTOR_BODY(TStruct) \
+}
 
 #define DEFINE_YSON_STRUCT(TStruct) \
 TStruct::TStruct() \
 { \
+    static_assert(std::is_base_of_v<::NYT::NYTree::TYsonStruct, TStruct>, "Class must inherit from TYsonStruct"); \
     YSON_STRUCT_IMPL__CTOR_BODY(TStruct) \
 }
 

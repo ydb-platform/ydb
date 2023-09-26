@@ -674,6 +674,7 @@ private:
     void SubscribeToSibling(TSiblingState& state);
     void UnsubscribeFromSiblings();
     void Handle(TEvTxProxy::TEvUpdatedLastStep::TPtr &ev);
+    void Handle(TEvTxProxy::TEvRequirePlanSteps::TPtr &ev);
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr &ev);
 
     void Handle(TEvPrivate::TEvPlanTick::TPtr &ev, const TActorContext &ctx);
@@ -697,6 +698,7 @@ private:
     void SchedulePlanTick();
     void SchedulePlanTickExact(ui64 next);
     void SchedulePlanTickAligned(ui64 next);
+    ui64 AlignPlanStep(ui64 step);
 
     void TryInitMonCounters(const TActorContext &ctx);
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) override;
@@ -780,6 +782,7 @@ public:
                 HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
                 HFunc(TEvPrivate::TEvRestoredProcessingParams, Handle);
                 hFunc(TEvTxProxy::TEvUpdatedLastStep, Handle);
+                hFunc(TEvTxProxy::TEvRequirePlanSteps, Handle);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             )
 

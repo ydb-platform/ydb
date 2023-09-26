@@ -149,6 +149,13 @@ message TEvUpdatedLastStep {
     optional fixed64 LastStep = 3;
 }
 
+// Time cast to coordinators
+// Notifies coordinator that clients are waiting for some specific steps
+message TEvRequirePlanSteps {
+    optional fixed64 CoordinatorID = 1;
+    repeated uint64 PlanSteps = 2 [packed = true];
+}
+
 // coordinator to mediator
 message TCoordinatorTransaction {
     repeated uint64 AffectedSet = 1; // read and write set - joined and then filtered for concrete mediator

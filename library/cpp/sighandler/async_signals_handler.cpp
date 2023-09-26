@@ -54,7 +54,7 @@ namespace {
     private:
         TThread Thread;
         int SignalPipeReadFd;
-        typedef TAutoPtr<TEventHandler> TEventHandlerPtr;
+        typedef THolder<TEventHandler> TEventHandlerPtr;
         THashMap<int, TEventHandlerPtr> Handlers;
         TRWMutex HandlersLock;
 
@@ -159,18 +159,18 @@ namespace {
 */
         }
 
-        bool DoInstall(int signum, TAutoPtr<TEventHandler> handler) {
+        bool DoInstall(int signum, THolder<TEventHandler> handler) {
             TWriteGuard dnd(HandlersLock);
             TEventHandlerPtr& ev = Handlers[signum];
             const bool ret = !ev;
 
-            ev = handler;
+            ev = std::move(handler);
 
             return ret;
         }
 
-        void Install(int signum, TAutoPtr<TEventHandler> handler) {
-            if (DoInstall(signum, handler)) {
+        void Install(int signum, THolder<TEventHandler> handler) {
+            if (DoInstall(signum, std::move(handler))) {
                 struct sigaction a;
 
                 memset(&a, 0, sizeof(a));
@@ -191,7 +191,7 @@ namespace {
     TAsyncSignalsHandler* SIGNALS_HANDLER = nullptr;
 }
 
-void SetAsyncSignalHandler(int signum, TAutoPtr<TEventHandler> handler) {
+void SetAsyncSignalHandler(int signum, THolder<TEventHandler> handler) {
     static TAdaptiveLock lock;
 
     if (Y_UNLIKELY(SIGNALS_HANDLER == nullptr)) {
@@ -203,12 +203,12 @@ void SetAsyncSignalHandler(int signum, TAutoPtr<TEventHandler> handler) {
         }
     }
 
-    SIGNALS_HANDLER->Install(signum, handler);
+    SIGNALS_HANDLER->Install(signum, std::move(handler));
 }
 
 #else //_win_
 
-void SetAsyncSignalHandler(int, TAutoPtr<TEventHandler>) {
+void SetAsyncSignalHandler(int, THolder<TEventHandler>) {
     // TODO: it's really easy to port using _pipe, _read and _write, but it must be tested properly.
 }
 
@@ -236,10 +236,10 @@ namespace {
 }
 
 void SetAsyncSignalHandler(int signum, void (*handler)(int)) {
-    SetAsyncSignalHandler(signum, new TFunctionEventHandler<void (*)(int)>(handler));
+    SetAsyncSignalHandler(signum, MakeHolder<TFunctionEventHandler<void (*)(int)>>(handler));
 }
 
 void SetAsyncSignalFunction(int signum, std::function<void(int)> func) {
     typedef std::function<void(int)> TFunc;
-    SetAsyncSignalHandler(signum, new TFunctionEventHandler<TFunc>(func));
+    SetAsyncSignalHandler(signum, MakeHolder<TFunctionEventHandler<TFunc>>(func));
 }

@@ -523,7 +523,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
             NPDisk::TDriveData badDrive1;
             badDrive1.Path = "/bad1";
-            char s[] = {50, 51, 52, -128}; // Non-ASCII character -128.
+            char s[] = {50, 51, 52, -128, 0}; // Non-ASCII character -128.
             badDrive1.SerialNumber = TString(s);
 
             NPDisk::TDriveData badDrive2;

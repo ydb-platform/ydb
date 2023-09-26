@@ -483,6 +483,7 @@ message TRegisterReadSession {
 
 message TGetReadSessionsInfo {
     optional string ClientId = 1;
+    repeated uint32 Partitions = 2;
 }
 
 
@@ -530,6 +531,22 @@ message TReadSessionsInfoResponse {
 
     }
     repeated TReadSessionInfo ReadSessions = 3;
+}
+
+
+message TGetPartitionsLocation {
+    repeated uint64 Partitions = 1;
+}
+
+message TPartitionLocation {
+    optional uint32 PartitionId = 1;
+    optional uint64 NodeId = 2;
+    optional uint32 Generation = 3;
+};
+
+message TPartitionsLocationResponse {
+    optional bool Status = 1;
+    repeated TPartitionLocation Locations = 2;
 }
 
 message TLockPartition {
@@ -842,6 +859,7 @@ message TDataTransaction {
     repeated uint64 ReceivingShards = 4;
     optional bool Immediate = 5;
     optional fixed64 LockTxId = 6;
+    repeated uint64 Coordinators = 7;
 }
 
 message TConfigTransaction {

@@ -732,7 +732,7 @@ ui64 TTestContext::AddQuoterResource(const NKikimrKesus::TStreamingQuoterResourc
 ui64 TTestContext::AddQuoterResource(const TString& resourcePath, const NKikimrKesus::THierarchicalDRRResourceConfig& config, Ydb::StatusIds::StatusCode status) {
     NKikimrKesus::TStreamingQuoterResource resource;
     resource.SetResourcePath(resourcePath);
-    *resource.MutableHierarhicalDRRResourceConfig() = config;
+    *resource.MutableHierarchicalDRRResourceConfig() = config;
     return AddQuoterResource(resource, status);
 }
 
@@ -752,14 +752,14 @@ void TTestContext::UpdateQuoterResource(const NKikimrKesus::TStreamingQuoterReso
 void TTestContext::UpdateQuoterResource(const TString& resourcePath, const NKikimrKesus::THierarchicalDRRResourceConfig& config, Ydb::StatusIds::StatusCode status) {
     NKikimrKesus::TStreamingQuoterResource resource;
     resource.SetResourcePath(resourcePath);
-    *resource.MutableHierarhicalDRRResourceConfig() = config;
+    *resource.MutableHierarchicalDRRResourceConfig() = config;
     UpdateQuoterResource(resource, status);
 }
 
 void TTestContext::UpdateQuoterResource(ui64 resourceId, const NKikimrKesus::THierarchicalDRRResourceConfig& config, Ydb::StatusIds::StatusCode status) {
     NKikimrKesus::TStreamingQuoterResource resource;
     resource.SetResourceId(resourceId);
-    *resource.MutableHierarhicalDRRResourceConfig() = config;
+    *resource.MutableHierarchicalDRRResourceConfig() = config;
     UpdateQuoterResource(resource, status);
 }
 

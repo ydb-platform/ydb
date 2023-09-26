@@ -18,7 +18,7 @@ enum class ECompareType {
 class TColumnFilter {
 private:
     bool DefaultFilterValue = true;
-    bool CurrentValue = true;
+    bool LastValue = true;
     ui32 Count = 0;
     std::vector<ui32> Filter;
     mutable std::optional<std::vector<bool>> FilterPlain;
@@ -33,12 +33,12 @@ private:
             return DefaultFilterValue;
         }
         if (reverse) {
-            return CurrentValue;
+            return LastValue;
         } else {
             if (Filter.size() % 2 == 0) {
-                return !CurrentValue;
+                return !LastValue;
             } else {
-                return CurrentValue;
+                return LastValue;
             }
         }
     }

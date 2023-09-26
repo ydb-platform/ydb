@@ -11,8 +11,8 @@ inline NActors::IActor* CreatePGListener(const NActors::TActorId& poller, const 
                                          const TListenerSettings& settings = {.Port = 5432}) {
     return CreateSocketListener(
         poller, settings,
-        [=](TIntrusivePtr<TSocketDescriptor> socket, TNetworkConfig::TSocketAddressType address) {
-            return CreatePGConnection(socket, address, databaseProxy);
+        [=](const TActorId& listenerActorId, TIntrusivePtr<TSocketDescriptor> socket, TNetworkConfig::TSocketAddressType address) {
+            return CreatePGConnection(listenerActorId, socket, address, databaseProxy);
         },
         NKikimrServices::EServiceKikimr::PGWIRE);
 }

@@ -20,7 +20,7 @@ PEERDIR(
     ydb/core/tablet
     ydb/library/mkql_proto
     ydb/library/mkql_proto/protos
-    ydb/library/mkql_proto/ut/helpers
+#    ydb/library/mkql_proto/ut/helpers
     ydb/public/api/protos
     ydb/library/yql/minikql/comp_nodes/llvm
     ydb/library/yql/parser/pg_wrapper/interface

@@ -244,6 +244,7 @@ private:
     THolder<NTabletPipe::IClientCache> PipeClientCache;
 
     bool SubDomainOutOfSpace = false;
+    TInstant LongSourceIdNextWarnTime;
 
     void BeginWriteTxs(const TActorContext& ctx);
     void EndWriteTxs(const NKikimrClient::TResponse& resp,

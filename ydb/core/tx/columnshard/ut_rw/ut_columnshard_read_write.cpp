@@ -2452,7 +2452,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             auto scanActorId = ActorIdFromProto(msg.GetScanActorId());
 
             ui32 resultLimit = 1024 * 1024;
-            runtime.Send(new IEventHandle(scanActorId, sender, new NKqp::TEvKqpCompute::TEvScanDataAck(resultLimit)));
+            runtime.Send(new IEventHandle(scanActorId, sender, new NKqp::TEvKqpCompute::TEvScanDataAck(resultLimit, 0, 1)));
             auto scan = runtime.GrabEdgeEvent<NKqp::TEvKqpCompute::TEvScanData>(handle);
             auto batchStats = scan->ArrowBatch;
             UNIT_ASSERT(batchStats);

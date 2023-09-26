@@ -366,6 +366,21 @@ namespace NKikimr::NPersQueueTests {
                     };
 
                 {
+                    NYdb::NScheme::TSchemeClient schemeClient(*ydbDriver);
+                    NYdb::NScheme::TPermissions permissions("user@builtin", {"ydb.generic.read", "ydb.generic.write"});
+
+                    auto result = schemeClient.ModifyPermissions("/Root",
+                                                                 NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)).ExtractValueSync();
+                    Cerr << result.GetIssues().ToString() << "\n";
+                    UNIT_ASSERT(result.IsSuccess());
+                }
+
+                {
+                    auto newDriverCfg = driverCfg;
+                    newDriverCfg.SetAuthToken("user@builtin");
+
+                    ydbDriver = MakeHolder<NYdb::TDriver>(newDriverCfg);
+
                     auto writer = CreateSimpleWriter(*ydbDriver, fullTopicName, "123", 1);
                     for (int i = 0; i < 4; ++i) {
                         bool res = writer->Write(TString(10, 'a'));

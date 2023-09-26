@@ -128,6 +128,7 @@ struct TEvPQ {
         EvPartitionConfigChanged,
         EvSubDomainStatus,
         EvStatsWakeup,
+        EvFetchResponse,
         EvEnd
     };
 
@@ -793,6 +794,14 @@ struct TEvPQ {
         {}
 
         ui64 Round;
+    };
+
+    struct TEvFetchResponse : public TEventLocal<TEvFetchResponse, EvFetchResponse> {
+        TEvFetchResponse()
+        {}
+        Ydb::StatusIds::StatusCode Status;
+        TString Message;
+        NKikimrClient::TPersQueueFetchResponse Response;
     };
 };
 

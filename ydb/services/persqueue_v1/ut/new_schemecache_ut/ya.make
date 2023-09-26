@@ -25,6 +25,7 @@ SRCS(
 PEERDIR(
     library/cpp/getopt
     library/cpp/svnversion
+    ydb/library/persqueue/tests
     ydb/core/testlib/default
     ydb/public/api/grpc
     ydb/public/sdk/cpp/client/resources

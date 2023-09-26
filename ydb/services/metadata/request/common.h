@@ -45,6 +45,10 @@ enum EEvents {
     EvCreatePathInternalResponse,
     EvCreatePathResponse,
 
+    EvDeleteSessionRequest,
+    EvDeleteSessionInternalResponse,
+    EvDeleteSessionResponse,
+
     EvEnd
 };
 
@@ -83,6 +87,8 @@ using TDialogSelect = TDialogPolicyImpl<Ydb::Table::ExecuteDataQueryRequest, Ydb
     EEvents::EvSelectRequest, EEvents::EvSelectInternalResponse, EEvents::EvSelectResponse>;
 using TDialogCreateSession = TDialogPolicyImpl<Ydb::Table::CreateSessionRequest, Ydb::Table::CreateSessionResponse,
     EEvents::EvCreateSessionRequest, EEvents::EvCreateSessionInternalResponse, EEvents::EvCreateSessionResponse>;
+using TDialogDeleteSession = TDialogPolicyImpl<Ydb::Table::DeleteSessionRequest, Ydb::Table::DeleteSessionResponse,
+    EEvents::EvDeleteSessionRequest, EEvents::EvDeleteSessionInternalResponse, EEvents::EvDeleteSessionResponse>;
 
 template <ui32 evResult = EEvents::EvGeneralYQLResponse>
 using TCustomDialogYQLRequest = TDialogPolicyImpl<Ydb::Table::ExecuteDataQueryRequest, Ydb::Table::ExecuteDataQueryResponse,

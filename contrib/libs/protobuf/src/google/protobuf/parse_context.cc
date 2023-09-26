@@ -392,7 +392,8 @@ void PrintUTF8ErrorLog(const char* field_name, const char* operation_str,
                        bool emit_stacktrace);
 
 bool VerifyUTF8(StringPiece str, const char* field_name) {
-  if (!IsStructurallyValidUTF8(str)) {
+  if (!IsStructurallyValidUTF8(str) && strcmp(field_name, "Ydb.Topic.StreamReadMessage.ReadResponse.MessageData.message_group_id")
+                                    && strcmp(field_name, "Ydb.Topic.StreamReadMessage.ReadResponse.Batch.producer_id")) {
     PrintUTF8ErrorLog(field_name, "parsing", false);
     return false;
   }

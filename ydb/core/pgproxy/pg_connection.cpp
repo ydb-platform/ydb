@@ -13,6 +13,7 @@ using namespace NActors;
 class TPGConnection : public TActorBootstrapped<TPGConnection>, public TNetworkConfig {
 public:
     using TBase = TActorBootstrapped<TPGConnection>;
+    const TActorId ListenerActorId;
     TIntrusivePtr<TSocketDescriptor> Socket;
     TSocketAddressType Address;
     THPTimer InactivityTimer;
@@ -42,8 +43,9 @@ public:
     char TransactionStatus = 'I'; // could be 'I' (idle), 'T' (transaction), 'E' (failed transaction)
     std::deque<TAutoPtr<IEventHandle>> PostponedEvents;
 
-    TPGConnection(TIntrusivePtr<TSocketDescriptor> socket, TNetworkConfig::TSocketAddressType address, const TActorId& databaseProxy)
-        : Socket(std::move(socket))
+    TPGConnection(const TActorId& listenerActorId, TIntrusivePtr<TSocketDescriptor> socket, TNetworkConfig::TSocketAddressType address, const TActorId& databaseProxy)
+        : ListenerActorId(listenerActorId)
+        , Socket(std::move(socket))
         , Address(address)
         , DatabaseProxy(databaseProxy)
     {
@@ -64,6 +66,7 @@ public:
             Send(DatabaseProxy, new TEvPGEvents::TEvConnectionClosed());
             ConnectionEstablished = false;
         }
+        Send(ListenerActorId, new TEvents::TEvUnsubscribe());
         Shutdown();
         TBase::PassAway();
     }
@@ -807,19 +810,11 @@ protected:
     }
 
     bool UpgradeToSecure() {
-        for (;;) {
-            int res = Socket->UpgradeToSecure();
-            if (res >= 0) {
-                break;
-            } else if (-res == EINTR) {
-                continue;
-            } else if (-res == EAGAIN || -res == EWOULDBLOCK) {
-                break;
-            } else {
-                BLOG_ERROR("connection closed - error in UpgradeToSecure: " << strerror(-res));
-                PassAway();
-                return false;
-            }
+        int res = Socket->TryUpgradeToSecure();
+        if (res < 0) {
+            BLOG_ERROR("connection closed - error in UpgradeToSecure: " << strerror(-res));
+            PassAway();
+            return false;
         }
         return true;
     }
@@ -846,8 +841,8 @@ protected:
     }
 };
 
-NActors::IActor* CreatePGConnection(TIntrusivePtr<TSocketDescriptor> socket, TNetworkConfig::TSocketAddressType address, const TActorId& databaseProxy) {
-    return new TPGConnection(std::move(socket), std::move(address), databaseProxy);
+NActors::IActor* CreatePGConnection(const TActorId& listenerActorId, TIntrusivePtr<TSocketDescriptor> socket, TNetworkConfig::TSocketAddressType address, const TActorId& databaseProxy) {
+    return new TPGConnection(listenerActorId, std::move(socket), std::move(address), databaseProxy);
 }
 
 }

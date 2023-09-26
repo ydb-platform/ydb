@@ -9,7 +9,9 @@ namespace NKafka {
 
 using namespace NKikimr::NRawSocket;
 
-NActors::IActor* CreateKafkaConnection(TIntrusivePtr<TSocketDescriptor> socket, TNetworkConfig::TSocketAddressType address,
+NActors::IActor* CreateKafkaConnection(const TActorId& listenerActorId,
+                                       TIntrusivePtr<TSocketDescriptor> socket,
+                                       TNetworkConfig::TSocketAddressType address,
                                        const NKikimrConfig::TKafkaProxyConfig& config);
 
 } // namespace NKafka

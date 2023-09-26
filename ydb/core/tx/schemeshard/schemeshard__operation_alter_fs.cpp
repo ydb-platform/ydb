@@ -167,7 +167,16 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
+        const auto oldFileStoreSpace = fs->GetFileStoreSpace();
+
         fs->FinishAlter();
+
+        const auto newFileStoreSpace = fs->GetFileStoreSpace();
+
+        // Decrease in occupied space is applied on tx finish
+        auto domainDir = context.SS->PathsById.at(context.SS->ResolvePathIdForDomain(path));
+        Y_VERIFY(domainDir);
+        domainDir->ChangeFileStoreSpaceCommit(newFileStoreSpace, oldFileStoreSpace);
 
         context.SS->PersistFileStoreInfo(db, pathId, fs);
         context.SS->PersistRemoveFileStoreAlter(db, pathId);
@@ -375,7 +384,23 @@ THolder<TProposeResponse> TAlterFileStore::Propose(
         return result;
     }
 
+    const auto oldFileStoreSpace = fs->GetFileStoreSpace();
+
     fs->PrepareAlter(*alterConfig);
+
+    const auto newFileStoreSpace = fs->GetFileStoreSpace();
+
+    auto domainDir = context.SS->PathsById.at(path.GetPathIdForDomain());
+    Y_VERIFY(domainDir);
+
+    if (!domainDir->CheckFileStoreSpaceChange(newFileStoreSpace, oldFileStoreSpace, errStr)) {
+        result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
+        fs->ForgetAlter();
+        return result;
+    }
+
+    // Increase in occupied space is applied immediately
+    domainDir->ChangeFileStoreSpaceBegin(newFileStoreSpace, oldFileStoreSpace);
 
     PrepareChanges(OperationId, path.Base(), fs, storeChannelsBinding, context);
 

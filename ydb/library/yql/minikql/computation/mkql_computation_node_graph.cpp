@@ -775,6 +775,11 @@ public:
         : Codegen(opts.OptLLVM != "OFF" || GetEnv(TString("MKQL_FORCE_USE_LLVM")) ? NYql::NCodegen::ICodegen::Make(NYql::NCodegen::ETarget::Native) : NYql::NCodegen::ICodegen::TPtr())
 #endif
     {
+    /// TODO: Enable JIT for AARCH64
+#if defined(__aarch64__)
+        Codegen = {};
+#endif
+
         const auto& nodes = builder->GetNodes();
         for (const auto& node : nodes)
             node->PrepareStageOne();

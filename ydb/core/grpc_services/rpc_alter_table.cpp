@@ -167,7 +167,8 @@ public:
                 NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
         }
 
-        switch (*ops.begin()) {
+        OpType = *ops.begin();
+        switch (OpType) {
         case EOp::Common:
             // Altering table settings will need table profiles
             SendConfigRequest(ctx);
@@ -222,7 +223,7 @@ public:
             break;
 
         case EOp::Attribute:
-            AlterUserAttributes(ctx);
+            PrepareAlterUserAttrubutes();
             break;
 
         case EOp::RenameIndex:
@@ -242,6 +243,7 @@ private:
     void AlterStateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
            HFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
+           HFunc(TEvTxUserProxy::TEvGetProxyServicesResponse, Handle);
            HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
            HFunc(NSchemeShard::TEvIndexBuilder::TEvCreateResponse, Handle);
            default: TBase::StateWork(ev);
@@ -305,15 +307,22 @@ private:
 
         const auto* msg = ev->Get();
         TxId = msg->TxId;
-        SchemeCache = msg->Services.SchemeCache;
         TxProxyMon = msg->TxProxyMon;
         LogPrefix = TStringBuilder() << "[AlterTableAddIndex " << SelfId() << " TxId# " << TxId << "] ";
 
-        AlterTableAddIndexOp(ctx);
+        Navigate(msg->Services.SchemeCache, ctx);
     }
 
-    void AlterTableAddIndexOp(const TActorContext& ctx) {
+    void PrepareAlterUserAttrubutes() {
         using namespace NTxProxy;
+        Send(MakeTxProxyID(), new TEvTxUserProxy::TEvGetProxyServicesRequest);
+    }
+
+    void Handle(TEvTxUserProxy::TEvGetProxyServicesResponse::TPtr& ev, const TActorContext& ctx) {
+        Navigate(ev->Get()->Services.SchemeCache, ctx);
+    }
+
+    void Navigate(const TActorId& schemeCache, const TActorContext& ctx) {
         DatabaseName = Request_->GetDatabaseName()
             .GetOrElse(DatabaseFromDomain(AppData()));
 
@@ -333,7 +342,7 @@ private:
             entry.Path = paths;
         }
 
-        Send(SchemeCache, ev);
+        Send(schemeCache, ev);
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
@@ -358,6 +367,19 @@ private:
             return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
         }
 
+        switch (OpType) {
+        case EOp::AddIndex:
+            return AlterTableAddIndexOp(resp, ctx);
+        case EOp::Attribute:
+            Y_VERIFY(!resp->ResultSet.empty());
+            return AlterUserAttributes(resp->ResultSet.back().TableId.PathId, ctx);
+        default:
+            TXLOG_E("Got unexpected cache response");
+            return Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx);
+        }
+    }
+
+    void AlterTableAddIndexOp(const NSchemeCache::TSchemeCacheNavigate* resp, const TActorContext& ctx) {
         if (UserToken && !CheckAccess(*UserToken, resp)) {
             TXLOG_W("Access check failed");
             return Reply(Ydb::StatusIds::UNAUTHORIZED, ctx);
@@ -370,7 +392,6 @@ private:
         }
 
         SchemeshardId = domainInfo->ExtractSchemeShard();
-
         SSPipeClient = CreatePipeClient(SchemeshardId, ctx);
         SendAddIndexOpToSS(ctx);
     }
@@ -600,7 +621,7 @@ private:
         ctx.Send(MakeTxProxyID(), proposeRequest.release());
     }
 
-    void AlterUserAttributes(const TActorContext &ctx) {
+    void AlterUserAttributes(const TPathId& pathId, const TActorContext &ctx) {
         const auto req = GetProtoRequest();
 
         std::pair<TString, TString> pathPair;
@@ -619,6 +640,7 @@ private:
 
         modifyScheme.SetWorkingDir(workingDir);
         modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterUserAttributes);
+        modifyScheme.AddApplyIf()->SetPathId(pathId.LocalPathId);
 
         auto& alter = *modifyScheme.MutableAlterUserAttributes();
         alter.SetPathName(name);
@@ -667,15 +689,16 @@ private:
         Request_->ReplyWithYdbStatus(status);
         Die(ctx);
     }
+
     ui64 TxId = 0;
     ui64 SchemeshardId = 0;
-    TActorId SchemeCache;
     TString DatabaseName;
     TIntrusivePtr<NTxProxy::TTxProxyMon> TxProxyMon;
     TString LogPrefix;
     TActorId SSPipeClient;
     THolder<const NACLib::TUserToken> UserToken;
     TTableProfiles Profiles;
+    EOp OpType;
 };
 
 void DoAlterTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {

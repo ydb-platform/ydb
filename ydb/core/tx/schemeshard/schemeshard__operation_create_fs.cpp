@@ -392,10 +392,20 @@ THolder<TProposeResponse> TCreateFileStore::Propose(
         return result;
     }
 
+    auto domainDir = context.SS->PathsById.at(dstPath.GetPathIdForDomain());
+    Y_VERIFY(domainDir);
+
+    const auto newFileStoreSpace = fs->GetFileStoreSpace();
+    if (!domainDir->CheckFileStoreSpaceChange(newFileStoreSpace, { }, errStr)) {
+        result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
+        return result;
+    }
+
     dstPath.MaterializeLeaf(owner);
     result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
     context.SS->TabletCounters->Simple()[COUNTER_FILESTORE_COUNT].Add(1);
+    domainDir->ChangeFileStoreSpaceBegin(newFileStoreSpace, { });
 
     const TTxState& txState = PrepareChanges(
         OperationId,

@@ -277,6 +277,11 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
 
         AuditLogModifySchemeTransaction(record, Response->Record, Self, UserSID);
 
+        //NOTE: Double audit output into the common log as a way to ease
+        // transition to a new auditlog stream.
+        // Should be removed when no longer needed.
+        AuditLogModifySchemeTransactionDeprecated(record, Response->Record, Self, UserSID);
+
         const TActorId sender = Request->Sender;
         const ui64 cookie = Request->Cookie;
         ctx.Send(sender, Response.Release(), 0, cookie);

@@ -27,18 +27,23 @@ public:
     TPollerToken::TPtr PollerToken;
     THashSet<TActorId> Connections;
 
+    EErrorAction ErrorAction;
+
     TSocketListener(const TActorId& poller, const TListenerSettings& settings, const TConnectionCreator& connectionCreator,
-                    NKikimrServices::EServiceKikimr service)
+                    NKikimrServices::EServiceKikimr service, EErrorAction errorAction)
         : Poller(poller)
         , Settings(settings)
         , ConnectionCreator(connectionCreator)
-        , Service(service) {
+        , Service(service)
+        , ErrorAction(errorAction) {
     }
 
     STATEFN(StateWorking) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NActors::TEvPollerRegisterResult, Handle);
             hFunc(NActors::TEvPollerReady, Handle);
+            hFunc(TEvents::TEvUnsubscribe, Handle);
+            sFunc(TEvents::TEvPoison, PassAway);
         }
     }
 
@@ -63,17 +68,34 @@ public:
                 Send(Poller, new NActors::TEvPollerRegister(Socket, SelfId(), SelfId()));
                 Become(&TThis::StateWorking);
                 return;
+            } else {
+                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Failed to listen on " << bindAddress->ToString() << ". Error: " << strerror(-err));
             }
+        } else {
+            LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Failed to bind " << bindAddress->ToString() << ". Error: " << strerror(-err));
         }
-        LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Failed to listen on " << bindAddress->ToString());
-        //abort();
-        PassAway();
+
+        switch(ErrorAction) {
+            case EErrorAction::Abort:
+                Cerr << "Failed to set up listener on port " << Settings.Port
+                                << " errno# " << -err << " (" << strerror(-err) << ")" << Endl;
+                abort();
+                break;
+            
+            case EErrorAction::Ignore:
+                PassAway();
+                break;
+        }
     }
 
     void PassAway() override {
         for (const NActors::TActorId& connection : Connections) {
-            Send(connection, new NActors::TEvents::TEvPoisonPill());
+            Send(connection, new NActors::TEvents::TEvPoison());
         }
+    }
+
+    void Handle(TEvents::TEvUnsubscribe::TPtr ev) {
+        Connections.erase(ev->Sender);
     }
 
     void Handle(NActors::TEvPollerRegisterResult::TPtr ev) {
@@ -88,7 +110,7 @@ public:
             if (!socket) {
                 break;
             }
-            NActors::IActor* connectionSocket = ConnectionCreator(socket, addr);
+            NActors::IActor* connectionSocket = ConnectionCreator(SelfId(), socket, addr);
             NActors::TActorId connectionId = Register(connectionSocket);
             Send(Poller, new TEvPollerRegister(socket, connectionId, connectionId));
             Connections.emplace(connectionId);
@@ -102,8 +124,9 @@ public:
 };
 
 NActors::IActor* CreateSocketListener(const NActors::TActorId& poller, const TListenerSettings& settings,
-                                      TConnectionCreator connectionCreator, NKikimrServices::EServiceKikimr service) {
-    return new TSocketListener(poller, settings, connectionCreator, service);
+                                      TConnectionCreator connectionCreator, NKikimrServices::EServiceKikimr service,
+                                      EErrorAction errorAction) {
+    return new TSocketListener(poller, settings, connectionCreator, service, errorAction);
 }
 
 } // namespace NKikimr::NRawSocket

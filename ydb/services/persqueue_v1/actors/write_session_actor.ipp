@@ -177,7 +177,7 @@ TWriteSessionActor<UseMigrationProtocol>::TWriteSessionActor(
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const TMaybe<TString> clientDC,
         const NPersQueue::TTopicsListController& topicsController
 )
-    : TRlHelpers(request, WRITE_BLOCK_SIZE, TDuration::Minutes(1))
+    : TRlHelpers({}, request, WRITE_BLOCK_SIZE, false)
     , Request(request)
     , State(ES_CREATED)
     , SchemeCache(schemeCache)
@@ -411,15 +411,18 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPt
             return;
         }
     } else {
-        // TODO (ildar-khisam@): support other cases of producer_id / message_group_id / partition_id settings
-        // For now exactly two scenarios supported:
-        //    1. Non-empty producer_id == message_group_id
-        //    2. Non-empty producer_id && non-empty valid partition_id (explicit partitioning)
-        //    3. Empty producer id (no deduplication).
-        bool isScenarioSupported = (!InitRequest.producer_id().empty() && InitRequest.has_message_group_id() &&
-                                        InitRequest.message_group_id() == InitRequest.producer_id())
-                                || (!InitRequest.producer_id().empty() && InitRequest.has_partition_id()
-                                || InitRequest.producer_id().empty());
+        // Supported scenarios:
+        //    1. Non-empty producer_id
+        //      1.1. producer_id == message_group_id (partition is selected using hash from message_group_id)
+        //      1.2. non-empty partition_id (explicit partitioning)
+        //      1.3. non-empty partition_with_generation (explicit partitioning && direct write to partition host)
+        //    2. Empty producer id (no deduplication, partition is selected using round-robin).
+        bool isScenarioSupported = 
+            !InitRequest.producer_id().empty() && (
+                InitRequest.has_message_group_id() && InitRequest.message_group_id() == InitRequest.producer_id() || 
+                InitRequest.has_partition_id() ||
+                InitRequest.has_partition_with_generation()) ||
+            InitRequest.producer_id().empty();
 
         if (!isScenarioSupported) {
             CloseSession("unsupported producer_id / message_group_id / partition_id settings in init request",
@@ -450,7 +453,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPt
         }
     }();
 
-    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session request cookie: " << Cookie << " " << InitRequest << " from " << PeerName);
+    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session request cookie: " << Cookie << " " << InitRequest.ShortDebugString() << " from " << PeerName);
     if (!UseDeduplication) {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session request cookie: " << Cookie << ". Disable deduplication for empty producer id");
     }
@@ -480,6 +483,12 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPt
     } else {
         if (InitRequest.has_partition_id()) {
             PreferedPartition = InitRequest.partition_id();
+            LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session to partition: " << PreferedPartition);
+        }
+        else if (InitRequest.has_partition_with_generation()) {
+            PreferedPartition = InitRequest.partition_with_generation().partition_id();
+            ExpectedGeneration = InitRequest.partition_with_generation().generation();
+            LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session to partition: " << PreferedPartition << ", generation: " << ExpectedGeneration);
         }
     }
 }
@@ -1013,8 +1022,7 @@ void TWriteSessionActor<UseMigrationProtocol>::ProceedPartition(const ui32 parti
     auto it = PartitionToTablet.find(Partition);
 
     ui64 PartitionTabletId = it != PartitionToTablet.end() ? it->second : 0;
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session cookie: " << Cookie << " sessionId: " << OwnerCookie
-                                                       << " partition: " << Partition);
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "ProceedPartition. session cookie: " << Cookie << " sessionId: " << OwnerCookie << " partition: " << Partition << " expectedGeneration: " << ExpectedGeneration);
 
     if (!PartitionTabletId) {
         CloseSession(
@@ -1026,8 +1034,8 @@ void TWriteSessionActor<UseMigrationProtocol>::ProceedPartition(const ui32 parti
     }
 
     Writer = ctx.RegisterWithSameMailbox(NPQ::CreatePartitionWriter(
-            ctx.SelfID, PartitionTabletId, Partition, SourceId,
-            TPartitionWriterOpts().WithDeduplication(UseDeduplication)
+            ctx.SelfID, {}, PartitionTabletId, Partition, ExpectedGeneration,
+            SourceId, TPartitionWriterOpts().WithDeduplication(UseDeduplication)
     ));
     State = ES_WAIT_WRITER_INIT;
 
@@ -1417,6 +1425,8 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
 
     ui64 maxMessageMetadataSize = 0;
     auto addData = [&](const Topic::StreamWriteMessage::WriteRequest& writeRequest, const i32 messageIndex) {
+        const auto& msg = writeRequest.messages(messageIndex);
+
         auto w = request.MutablePartitionRequest()->AddCmdWrite();
         w->SetData(GetSerializedData(InitMeta, writeRequest, messageIndex));
         if (UseDeduplication) {
@@ -1424,14 +1434,15 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
         } else {
             w->SetDisableDeduplication(true);
         }
-        w->SetSeqNo(writeRequest.messages(messageIndex).seq_no());
+        w->SetSeqNo(msg.seq_no());
         SeqNoInflight.push_back(w->GetSeqNo());
-        w->SetCreateTimeMS(::google::protobuf::util::TimeUtil::TimestampToMilliseconds(writeRequest.messages(messageIndex).created_at()));
-        w->SetUncompressedSize(writeRequest.messages(messageIndex).uncompressed_size());
+        w->SetCreateTimeMS(::google::protobuf::util::TimeUtil::TimestampToMilliseconds(msg.created_at()));
+        w->SetUncompressedSize(msg.uncompressed_size());
         w->SetClientDC(ClientDC);
         w->SetIgnoreQuotaDeadline(true);
+
         payloadSize += w->GetData().size() + w->GetSourceId().size();
-        const auto& msg = writeRequest.messages(messageIndex);
+
         ui64 currMetadataSize = 0;
         for (const auto& metaItem : msg.metadata_items()) {
             currMetadataSize += metaItem.key().size() + metaItem.value().size();
@@ -1760,6 +1771,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvents::TEvWakeup::TPtr& 
             break;
 
         case EWakeupTag::RlNoResource:
+        case EWakeupTag::RlInitNoResource:
             if (PendingQuotaRequest) {
                 Y_VERIFY(MaybeRequestQuota(PendingQuotaRequest->RequiredQuota, EWakeupTag::RlAllowed, ctx));
             } else {

@@ -45,6 +45,9 @@
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/base/user_registry.h>
 #include <ydb/core/health_check/health_check.h>
+#include <ydb/core/kafka_proxy/actors/kafka_metrics_actor.h>
+#include <ydb/core/kafka_proxy/kafka_listener.h>
+#include <ydb/core/kafka_proxy/kafka_metrics.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
@@ -103,6 +106,7 @@
 #include <ydb/library/folder_service/mock/mock_folder_service_adapter.h>
 
 #include <ydb/core/client/server/msgbus_server_tracer.h>
+#include <ydb/core/client/server/ic_nodes_cache_service.h>
 
 #include <library/cpp/actors/interconnect/interconnect.h>
 
@@ -846,7 +850,11 @@ namespace Tests {
                 }
             }
         }
-
+        {
+            IActor* icNodeCache = NIcNodeCache::CreateICNodesInfoCacheService(Runtime->GetDynamicCounters());
+            TActorId icCacheId = Runtime->Register(icNodeCache, nodeIdx);
+            Runtime->RegisterService(NIcNodeCache::CreateICNodesInfoCacheServiceId(), icCacheId, nodeIdx);
+        }
         {
             auto driverConfig = NYdb::TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << Settings->GrpcPort);
             if (!Driver) {
@@ -898,6 +906,28 @@ namespace Tests {
             IActor* netClassifier = NNetClassifier::CreateNetClassifier();
             TActorId netClassifierId = Runtime->Register(netClassifier, nodeIdx);
             Runtime->RegisterService(NNetClassifier::MakeNetClassifierID(), netClassifierId, nodeIdx);
+        }
+
+        {
+            IActor* actor = CreatePollerActor();
+            TActorId actorId = Runtime->Register(actor, nodeIdx);
+            Runtime->RegisterService(MakePollerActorId(), actorId, nodeIdx);
+        }
+
+        if (Settings->AppConfig.GetKafkaProxyConfig().GetEnableKafkaProxy()) {
+            NKafka::TListenerSettings settings;
+            settings.Port = Settings->AppConfig.GetKafkaProxyConfig().GetListeningPort();
+            if (Settings->AppConfig.GetKafkaProxyConfig().HasSslCertificate()) {
+                settings.SslCertificatePem = Settings->AppConfig.GetKafkaProxyConfig().GetSslCertificate();
+            }
+
+            IActor* actor = NKafka::CreateKafkaListener(MakePollerActorId(), settings, Settings->AppConfig.GetKafkaProxyConfig());
+            TActorId actorId = Runtime->Register(actor, nodeIdx);
+            Runtime->RegisterService(TActorId{}, actorId, nodeIdx);
+
+            IActor* metricsActor = CreateKafkaMetricsActor(NKafka::TKafkaMetricsSettings{Runtime->GetAppData().Counters->GetSubgroup("counters", "kafka_proxy")});
+            TActorId metricsActorId = Runtime->Register(metricsActor, nodeIdx);
+            Runtime->RegisterService(NKafka::MakeKafkaMetricsServiceID(), metricsActorId, nodeIdx);
         }
 
         if (Settings->EnableYq) {
@@ -2452,7 +2482,7 @@ namespace Tests {
     Ydb::StatusIds::StatusCode TClient::AddQuoterResource(TTestActorRuntime* runtime, const TString& kesusPath, const TString& resourcePath, const NKikimrKesus::THierarchicalDRRResourceConfig& props) {
         THolder<NKesus::TEvKesus::TEvAddQuoterResource> request = MakeHolder<NKesus::TEvKesus::TEvAddQuoterResource>();
         request->Record.MutableResource()->SetResourcePath(resourcePath);
-        *request->Record.MutableResource()->MutableHierarhicalDRRResourceConfig() = props;
+        *request->Record.MutableResource()->MutableHierarchicalDRRResourceConfig() = props;
 
         TActorId sender = runtime->AllocateEdgeActor(0);
         ForwardToTablet(*runtime, GetKesusTabletId(kesusPath), sender, request.Release(), 0);

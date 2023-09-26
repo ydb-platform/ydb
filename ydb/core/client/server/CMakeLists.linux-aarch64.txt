@@ -96,4 +96,5 @@ target_sources(core-client-server PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/client/server/msgbus_server_whoami.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/client/server/grpc_server.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/client/server/grpc_proxy_status.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/client/server/ic_nodes_cache_service.cpp
 )

@@ -24,6 +24,9 @@ class TAccessService : public NActors::TActor<TAccessService>, TGrpcServiceClien
             if (r.iam_token()) {
                 r.set_iam_token(MaskToken(r.iam_token()));
             }
+            if (r.api_key()) {
+                r.set_api_key(MaskToken(r.api_key()));
+            }
             r.clear_iam_cookie();
             return r;
         }
@@ -46,6 +49,9 @@ class TAccessService : public NActors::TActor<TAccessService>, TGrpcServiceClien
             yandex::cloud::priv::servicecontrol::v1::AuthorizeRequest r(p);
             if (r.iam_token()) {
                 r.set_iam_token(MaskToken(r.iam_token()));
+            }
+            if (r.api_key()) {
+                r.set_api_key(MaskToken(r.api_key()));
             }
             return r;
         }

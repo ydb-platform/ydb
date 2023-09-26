@@ -262,7 +262,7 @@ private:
 
     void Configure(const NKikimrKesus::TStreamingQuoterResource& props) {
         const auto& accCfg = props.GetAccountingConfig();
-        const auto& resCfg = props.GetHierarhicalDRRResourceConfig();
+        const auto& resCfg = props.GetHierarchicalDRRResourceConfig();
         ProvisionedBucket.SetRate(accCfg.GetProvisionedUnitsPerSecond());
         ProvisionedBucket.SetCapacity(accCfg.GetProvisionedUnitsPerSecond() * accCfg.GetProvisionedCoefficient());
         OnDemandBucket.SetRate(resCfg.GetMaxUnitsPerSecond());

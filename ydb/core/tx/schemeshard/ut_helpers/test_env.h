@@ -41,7 +41,6 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnablePersistentPartitionStats, std::nullopt);
         OPTION(std::optional<bool>, AllowUpdateChannelsBindingOfSolomonPartitions, std::nullopt);
         OPTION(std::optional<bool>, EnableNotNullColumns, std::nullopt);
-        OPTION(std::optional<bool>, EnableOlapSchemaOperations, true);
         OPTION(std::optional<bool>, EnableProtoSourceIdInfo, std::nullopt);
         OPTION(std::optional<bool>, EnablePqBilling, std::nullopt);
         OPTION(std::optional<bool>, EnableBackgroundCompaction, std::nullopt);

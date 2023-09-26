@@ -46,6 +46,8 @@ TString GetSerializedData(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEv
     for (const auto& item : message.GetMeta()->Fields) {
         if (item.first == "_ip") {
             proto.SetIp(item.second);
+        } else if (item.first == "_encoded_producer_id") {
+            // Skip.
         } else {
             SetMetaField(proto, item.first, item.second);
         }

@@ -21,6 +21,7 @@ message TEvConnectResult {
     optional NActorsProto.TActorId ServerId = 4;
     optional bool Leader = 5 [default = true];
     optional bool SupportsDataInPayload = 6;
+    optional uint32 Generation = 7;
 };
 
 message TEvPush {

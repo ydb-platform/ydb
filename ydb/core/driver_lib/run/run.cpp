@@ -1273,6 +1273,12 @@ void TKikimrRunner::InitializeActorSystem(
     if (Monitoring) {
         setup->LocalServices.emplace_back(NCrossRef::MakeCrossRefActorId(), TActorSetupCmd(NCrossRef::CreateCrossRefActor(),
             TMailboxType::HTSwap, AppData->SystemPoolId));
+        setup->LocalServices.emplace_back(MakeMonVDiskStreamId(), TActorSetupCmd(CreateMonVDiskStreamActor(),
+            TMailboxType::HTSwap, AppData->SystemPoolId));
+        setup->LocalServices.emplace_back(MakeMonGetBlobId(), TActorSetupCmd(CreateMonGetBlobActor(),
+            TMailboxType::HTSwap, AppData->SystemPoolId));
+        setup->LocalServices.emplace_back(MakeMonBlobRangeId(), TActorSetupCmd(CreateMonBlobRangeActor(),
+            TMailboxType::HTSwap, AppData->SystemPoolId));
     }
 
     ApplyLogSettings(runConfig);
@@ -1320,9 +1326,29 @@ void TKikimrRunner::InitializeActorSystem(
                 MakeBlobStorageFailureInjectionID(runConfig.NodeId));
         }
 
-        Monitoring->Register(CreateMonGetBlobPage("get_blob", ActorSystem.Get()));
-        Monitoring->Register(CreateMonBlobRangePage("blob_range", ActorSystem.Get()));
-        Monitoring->Register(CreateMonVDiskStreamPage("vdisk_stream", ActorSystem.Get()));
+        Monitoring->RegisterActorPage(
+                nullptr,
+                "get_blob",
+                TString(),
+                false,
+                ActorSystem.Get(),
+                MakeMonGetBlobId());
+
+        Monitoring->RegisterActorPage(
+                nullptr,
+                "blob_range",
+                TString(),
+                false,
+                ActorSystem.Get(),
+                MakeMonBlobRangeId());
+
+        Monitoring->RegisterActorPage(
+                nullptr,
+                "vdisk_stream",
+                TString(),
+                false,
+                ActorSystem.Get(),
+                MakeMonVDiskStreamId());
 
         Monitoring->RegisterActorPage(
                 ActorsMonPage->RegisterIndexPage("interconnect", "Interconnect"),
@@ -1459,6 +1485,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TPersQueueClusterTrackerInitializer(runConfig));
     }
     
+    if (serviceMask.EnableIcNodeCacheService) {
+        sil->AddServiceInitializer(new TIcNodeCacheServiceInitializer(runConfig));
+    }
+
     if (BusServer && serviceMask.EnableMessageBusServices) {
         sil->AddServiceInitializer(new TMessageBusServicesInitializer(runConfig, *BusServer));
     }

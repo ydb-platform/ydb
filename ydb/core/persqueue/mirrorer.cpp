@@ -9,6 +9,7 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <library/cpp/time_provider/time_provider.h>
+#include <library/cpp/string_utils/base64/base64.h>
 
 #include <google/protobuf/util/message_differencer.h>
 
@@ -90,7 +91,7 @@ void TMirrorer::StartInit(const TActorContext& ctx) {
 void TMirrorer::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
     LOG_NOTICE_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription() << " killed");
     if (ReadSession)
-        ReadSession->Close();
+        ReadSession->Close(TDuration::Zero());
     ReadSession = nullptr;
     PartitionStream = nullptr;
     CredentialsProvider = nullptr;
@@ -115,7 +116,14 @@ bool TMirrorer::AddToWriteRequest(
 
     auto write = request.AddCmdWrite();
     write->SetData(GetSerializedData(message));
-    write->SetSourceId(NSourceIdEncoding::EncodeSimple(message.GetProducerId()));
+    TString producerId = message.GetProducerId();
+    for (const auto& item : message.GetMeta()->Fields) {
+        if (item.first == "_encoded_producer_id") {
+            producerId = Base64Decode(item.second);
+            break;
+        }
+    }
+    write->SetSourceId(NSourceIdEncoding::EncodeSimple(producerId));
     write->SetSeqNo(message.GetSeqNo());
     write->SetCreateTimeMS(message.GetCreateTime().MilliSeconds());
     if (Config.GetSyncWriteTime()) {
@@ -176,6 +184,8 @@ void TMirrorer::ProcessWriteResponse(
         << ". First expected offset= " << (WriteInFlight.empty() ? -1 : WriteInFlight.front().GetOffset())
         << " response: " << response);
 
+    NYdb::NTopic::TDeferredCommit deferredCommit;
+
     for (auto& result : response.GetCmdWriteResult()) {
         if (result.GetAlreadyWritten()) {
             Y_VERIFY_S(
@@ -199,9 +209,11 @@ void TMirrorer::ProcessWriteResponse(
         EndOffset = offset + 1;
         BytesInFlight -= writtenMessageInfo.GetData().size();
 
-        WriteInFlight.front().Commit();
+        deferredCommit.Add(writtenMessageInfo.GetPartitionSession(), offset);
         WriteInFlight.pop_front();
     }
+
+    deferredCommit.Commit();
     AfterSuccesWrite(ctx);
 }
 
@@ -444,7 +456,7 @@ void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorCont
         }
     }
     if (ReadSession) {
-        ReadSession->Close();
+        ReadSession->Close(TDuration::Zero());
     }
     ReadSession.reset();
     PartitionStream.Reset();
@@ -464,7 +476,7 @@ void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorCont
 
     try {
         if (ReadSession) {
-            ReadSession->Close();
+            ReadSession->Close(TDuration::Zero());
         }
         ReadSession = factory->GetReadSession(Config, Partition, CredentialsProvider, MAX_BYTES_IN_FLIGHT, log);
     } catch(...) {
@@ -521,7 +533,7 @@ void TMirrorer::AddMessagesToQueue(TVector<TPersQueueReadEvent::TDataReceivedEve
 void TMirrorer::ScheduleConsumerCreation(const TActorContext& ctx) {
     LastInitStageTimestamp = ctx.Now();
     if (ReadSession)
-        ReadSession->Close();
+        ReadSession->Close(TDuration::Zero());
     ReadSession = nullptr;
     PartitionStream = nullptr;
     ReadFuturesInFlight = 0;

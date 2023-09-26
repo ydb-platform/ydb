@@ -78,6 +78,7 @@ private:
         hFunc(TEvScriptLeaseUpdateResponse, Handle);
         hFunc(TEvSaveScriptResultMetaFinished, Handle);
         hFunc(TEvSaveScriptResultFinished, Handle);
+        hFunc(TEvCheckAliveRequest, Handle);
     )
 
     void SendToKqpProxy(THolder<NActors::IEventBase> ev) {
@@ -133,6 +134,15 @@ private:
         SendToKqpProxy(std::move(ev));
     }
 
+    void Handle(TEvCheckAliveRequest::TPtr& ev) {
+        Send(ev->Sender, new TEvCheckAliveResponse());
+    }
+
+    void RunLeaseUpdater() {
+        Register(CreateScriptLeaseUpdateActor(SelfId(), Database, ExecutionId, LeaseDuration));
+        LeaseUpdateQueryRunning = true;
+    }
+
     // TODO: remove this after there will be a normal way to store results and generate execution id
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev) {
         switch (ev->Get()->Tag) {
@@ -143,15 +153,9 @@ private:
             break;
 
         case EWakeUp::UpdateLeaseEvent:
-            if (RunState == ERunState::Cancelled || RunState == ERunState::Cancelling || RunState == ERunState::Finished || RunState == ERunState::Finishing) {
-                break;
+            if (IsExecuting() && !FinalStatusIsSaved) {
+                RunLeaseUpdater();
             }
-
-            if (!LeaseUpdateQueryRunning && !FinalStatusIsSaved) {
-                Register(CreateScriptLeaseUpdateActor(SelfId(), Database, ExecutionId, LeaseDuration));
-                LeaseUpdateQueryRunning = true;
-            }
-            Schedule(LeaseDuration / LEASE_UPDATE_FREQUENCY, new NActors::TEvents::TEvWakeup(EWakeUp::UpdateLeaseEvent));
             break;
         }
     }
@@ -191,6 +195,15 @@ private:
             RunScriptExecutionFinisher();
         } else if (IsExecuting() && ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             Finish(ev->Get()->Status);
+        }
+
+        if (IsExecuting()) {
+            TInstant leaseUpdateTime = ev->Get()->CurrentDeadline - LeaseDuration / LEASE_UPDATE_FREQUENCY;
+            if (TInstant::Now() >= leaseUpdateTime) {
+                RunLeaseUpdater();
+            } else {
+                Schedule(leaseUpdateTime, new NActors::TEvents::TEvWakeup(EWakeUp::UpdateLeaseEvent));
+            }
         }
     }
 

@@ -6,6 +6,7 @@
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/persqueue/config/config.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include <ydb/core/metering/metering.h>
@@ -28,7 +29,7 @@ static constexpr TDuration TOTAL_TIMEOUT = TDuration::Seconds(120);
 static constexpr char TMP_REQUEST_MARKER[] = "__TMP__REQUEST__MARKER__";
 static constexpr ui32 CACHE_SIZE = 100_MB;
 static constexpr ui32 MAX_BYTES = 25_MB;
-static constexpr ui32 MAX_SOURCE_ID_LENGTH = 10_KB;
+static constexpr ui32 MAX_SOURCE_ID_LENGTH = 2048;
 
 struct TPartitionInfo {
     TPartitionInfo(const TActorId& actor, TMaybe<TPartitionKeyRange>&& keyRange,
@@ -1766,11 +1767,21 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
             errorStr = "TotalSize must be filled for first part";
         } else if (cmd.HasTotalSize() && static_cast<size_t>(cmd.GetTotalSize()) <= cmd.GetData().size()) { // TotalSize must be > size of each part
             errorStr = "TotalSize is incorrect";
-        } else if (cmd.GetSourceId().size() > MAX_SOURCE_ID_LENGTH) {
-            errorStr = "Too big SourceId";
         } else if (mirroredPartition && !cmd.GetDisableDeduplication()) {
             errorStr = "Write to mirrored topic is forbiden";
+        } else if (cmd.HasSourceId() && !cmd.GetSourceId().empty()) {
+            TString decoded = NPQ::NSourceIdEncoding::Decode(cmd.GetSourceId());
+            if (decoded.length() > MAX_SOURCE_ID_LENGTH) {
+                if (LongSourceIdNextWarnTime < ctx.Now()) {
+                    LOG_WARN_S(ctx, NKikimrServices::PERSQUEUE, "SourceID length greater than 2048 chars. Topic='" << TopicPath << "', SourceId='" << decoded << "'");
+                    LongSourceIdNextWarnTime = ctx.Now() + TDuration::Minutes(1);
+                }
+                if (cmd.GetSourceId().length() > 4000) {
+                    errorStr = "Too big SourceId";
+                }
+            }
         }
+
         ui64 createTimestampMs = 0, writeTimestampMs = 0;
         if (cmd.HasCreateTimeMS() && cmd.GetCreateTimeMS() >= 0)
             createTimestampMs = cmd.GetCreateTimeMS();
@@ -2127,7 +2138,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
     ui32 partition = req.GetPartition();
     auto it = Partitions.find(partition);
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " got client message batch for topic " << TopicConverter->GetClientsideName() << " partition " << partition << "\n");
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " got client message batch for topic " << TopicConverter->GetClientsideName() << " partition " << partition);
 
     if (it == Partitions.end()) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::WRONG_PARTITION_NUMBER,
@@ -2833,7 +2844,11 @@ void TPersQueue::ScheduleProposeTransactionResult(const TDistributedTransaction&
     event->Record.SetMinStep(tx.MinStep);
     event->Record.SetMaxStep(tx.MaxStep);
 
-    if (ProcessingParams) {
+    // If you have sent a list of preferred coordinators, then we will use them.
+    // Otherwise, we take the list of coordinators from the domain description
+    if (tx.Coordinators) {
+        event->Record.MutableDomainCoordinators()->Add(tx.Coordinators.begin(), tx.Coordinators.end());
+    } else if (ProcessingParams) {
         event->Record.MutableDomainCoordinators()->CopyFrom(ProcessingParams->GetCoordinators());
     }
 

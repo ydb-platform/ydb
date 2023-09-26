@@ -823,11 +823,17 @@ protected:
     double GetUsage() const;
 
     struct THiveStats {
+        struct TNodeStat {
+            TNodeId NodeId;
+            double Usage;
+        };
+
         double MinUsage;
         TNodeId MinUsageNodeId;
         double MaxUsage;
         TNodeId MaxUsageNodeId;
         double Scatter;
+        std::vector<TNodeStat> Values;
     };
 
     THiveStats GetStats() const;

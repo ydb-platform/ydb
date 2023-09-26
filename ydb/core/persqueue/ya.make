@@ -5,6 +5,7 @@ SRCS(
     blob.cpp
     cluster_tracker.cpp
     event_helpers.cpp
+    fetch_request_actor.cpp
     header.cpp
     metering_sink.cpp
     mirrorer.cpp
@@ -20,6 +21,7 @@ SRCS(
     pq_database.cpp
     pq_impl.cpp
     pq_l2_cache.cpp
+    pq_rl_helpers.cpp
     quota_tracker.cpp
     read_balancer.cpp
     read_speed_limiter.cpp

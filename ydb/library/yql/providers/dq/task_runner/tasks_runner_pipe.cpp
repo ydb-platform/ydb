@@ -1376,6 +1376,10 @@ public:
         return TaskParams;
     }
 
+    const TVector<TString>& GetReadRanges() const override {
+        return ReadRanges;
+    }
+
     TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator(TMaybe<ui64> memoryLimit) override {
         auto guard = AllocatedHolder->TypeEnv.BindAllocator();
         if (memoryLimit) {
@@ -1445,6 +1449,10 @@ private:
         for (const auto& x : taskMeta.GetTaskParams()) {
             TaskParams[x.first] = x.second;
         }
+
+        for (const auto& readRange : taskMeta.GetReadRanges()) {
+            ReadRanges.push_back(readRange);
+        }
     }
 
 private:
@@ -1452,6 +1460,7 @@ private:
     NDqProto::TDqTask Task;
     THashMap<TString, TString> SecureParams;
     THashMap<TString, TString> TaskParams;
+    TVector<TString> ReadRanges;
 
     std::shared_ptr <NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 
@@ -1603,6 +1612,10 @@ public:
 
     const THashMap<TString, TString>& GetTaskParams() const override {
         return Delegate->GetTaskParams();
+    }
+
+    const TVector<TString>& GetReadRanges() const override {
+        return Delegate->GetReadRanges();
     }
 
     TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator(TMaybe<ui64> memoryLimit) override {

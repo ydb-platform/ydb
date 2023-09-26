@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/library/yql/core/yql_execution.h>
-#include <library//cpp/yson/writer.h>
+#include <library/cpp/yson/writer.h>
 
 namespace NYql {
 

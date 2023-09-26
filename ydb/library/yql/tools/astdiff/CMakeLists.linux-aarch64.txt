@@ -13,6 +13,7 @@ target_link_libraries(astdiff PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-getopt
+  library-cpp-svnversion
   library-yql-ast
   yql-utils-backtrace
 )

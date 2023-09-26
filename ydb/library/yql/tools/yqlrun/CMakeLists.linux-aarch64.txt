@@ -19,6 +19,7 @@ target_link_libraries(yqlrun PUBLIC
   contrib-libs-protobuf
   library-cpp-getopt
   library-cpp-yson
+  library-cpp-svnversion
   yql-sql-pg
   yql-core-facade
   yql-core-file_storage

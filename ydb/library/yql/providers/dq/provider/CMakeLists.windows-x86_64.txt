@@ -19,6 +19,9 @@ target_link_libraries(providers-dq-provider PUBLIC
   cpp-grpc-client
   cpp-threading-task_scheduler
   cpp-threading-future
+  library-cpp-svnversion
+  cpp-yson-node
+  library-cpp-yson
   public-lib-yson_value
   cpp-client-ydb_driver
   library-yql-core

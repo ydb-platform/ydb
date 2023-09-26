@@ -15,8 +15,9 @@ target_link_libraries(dq-provider-exec PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-grpc-client
-  cpp-threading-task_scheduler
+  cpp-yson-node
+  library-cpp-svnversion
+  cpp-digest-md5
   public-lib-yson_value
   cpp-client-ydb_driver
   library-yql-core

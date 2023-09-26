@@ -30,6 +30,9 @@ PEERDIR(
     library/cpp/grpc/client
     library/cpp/threading/task_scheduler
     library/cpp/threading/future
+    library/cpp/svnversion
+    library/cpp/yson/node
+    library/cpp/yson
     ydb/public/lib/yson_value
     ydb/public/sdk/cpp/client/ydb_driver
     ydb/library/yql/core

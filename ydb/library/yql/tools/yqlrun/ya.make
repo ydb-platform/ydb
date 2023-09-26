@@ -17,6 +17,7 @@ PEERDIR(
     contrib/libs/protobuf
     library/cpp/getopt
     library/cpp/yson
+    library/cpp/svnversion
     ydb/library/yql/sql/pg
     ydb/library/yql/core/facade
     ydb/library/yql/core/file_storage

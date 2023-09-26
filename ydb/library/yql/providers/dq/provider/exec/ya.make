@@ -6,8 +6,9 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/grpc/client
-    library/cpp/threading/task_scheduler
+    library/cpp/yson/node
+    library/cpp/svnversion
+    library/cpp/digest/md5
     ydb/public/lib/yson_value
     ydb/public/sdk/cpp/client/ydb_driver
     ydb/library/yql/core

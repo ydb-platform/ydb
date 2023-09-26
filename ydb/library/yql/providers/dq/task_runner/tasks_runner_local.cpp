@@ -15,7 +15,6 @@
 
 #include <library/cpp/yson/node/node.h>
 #include <library/cpp/yson/node/node_io.h>
-#include <library/cpp/svnversion/svnversion.h>
 
 #include <util/system/env.h>
 #include <util/stream/file.h>

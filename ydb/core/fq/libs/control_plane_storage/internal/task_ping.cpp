@@ -16,7 +16,7 @@ namespace NFq {
 
 namespace {
 
-bool CheckIssuesCode(const NYql::TIssues& issues, ::NYql::TIssuesIds::EIssueCode code) {
+bool HasIssuesCode(const NYql::TIssues& issues, ::NYql::TIssuesIds::EIssueCode code) {
     for (const auto& issue: issues) {
         bool found = false;
         NYql::WalkThroughIssues(issue, false, [&found, code](const auto& issue, ui16) {
@@ -601,7 +601,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvFinalStatus
         return;
     }
 
-    if (CheckIssuesCode(event.Issues, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE) || CheckIssuesCode(event.TransientIssues, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE)) {
+    if (HasIssuesCode(event.Issues, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE) || HasIssuesCode(event.TransientIssues, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE)) {
         Counters.GetFinalStatusCounters(event.CloudId, event.Scope)->Unavailable->Inc();
     }
 

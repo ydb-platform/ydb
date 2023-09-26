@@ -488,6 +488,11 @@ public:
             auto resolvedLinksFuture = getFolderFuture.Apply([options, this, session] (const TFuture<TBatchFolderResult>& f) {
                 TVector<IYtGateway::TResolveOptions::TItemWithReqAttrs> resolveItems;
                 auto res = f.GetValue();
+
+                if (!res.Success()) {
+                    YQL_CLOG(INFO, ProviderYt) << "Skipping resolve for unsuccessful batch folder list call";
+                    return res;
+                }
                 if (res.Items.empty()) {
                     YQL_CLOG(INFO, ProviderYt) << "Skipping resolve for empty batch folder result";
                     return res;
@@ -515,10 +520,16 @@ public:
                 const ui32 countLimit = execCtx->Options_.Config()->FolderInlineItemsLimit.Get().GetOrElse(100);
                 const ui64 sizeLimit = execCtx->Options_.Config()->FolderInlineDataLimit.Get().GetOrElse(100_KB);
 
+                auto resolveRes = f.GetValue();
+
                 TFolderResult res;
+                if (!resolveRes.Success()) {
+                    res.AddIssues(resolveRes.Issues());
+                    res.SetStatus(resolveRes.Status());
+                    return res;
+                }
                 res.SetSuccess();
 
-                auto resolveRes = f.GetValue();
                 YQL_CLOG(INFO, ProviderYt) << "Batch get command got: " << resolveRes.Items.size() << " items";
 
                 TVector<TFolderResult::TFolderItem> items;

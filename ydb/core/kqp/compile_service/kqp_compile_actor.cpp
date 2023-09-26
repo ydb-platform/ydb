@@ -426,12 +426,12 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.EnableSequences = serviceConfig.GetEnableSequences();
     kqpConfig.BindingsMode = RemapBindingsMode(serviceConfig.GetBindingsMode());
     kqpConfig.PredicateExtract20 = serviceConfig.GetPredicateExtract20();
-    kqpConfig.EnableIndexAutoChooser = serviceConfig.GetEnableIndexAutoChooser();
+    kqpConfig.IndexAutoChooserMode = serviceConfig.GetIndexAutoChooseMode();
 }
 
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
-    const TTableServiceConfig& tableServiceConfig, 
-    const TQueryServiceConfig& queryServiceConfig, 
+    const TTableServiceConfig& tableServiceConfig,
+    const TQueryServiceConfig& queryServiceConfig,
     const TMetadataProviderConfig& metadataProviderConfig,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
     const TString& uid, const TKqpQueryId& query, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
@@ -440,7 +440,7 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState)
 {
     return new TKqpCompileActor(owner, kqpSettings, tableServiceConfig, queryServiceConfig, metadataProviderConfig,
-                                moduleResolverState, counters,  
+                                moduleResolverState, counters,
                                 uid, query, userToken, dbCounters,
                                 federatedQuerySetup, userRequestContext,
                                 std::move(traceId), std::move(tempTablesState));

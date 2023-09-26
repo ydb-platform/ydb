@@ -256,30 +256,46 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
     bool prepareSuccess = extractor->Prepare(flatmap.Lambda().Ptr(), *mainTableDesc.SchemeNode, possibleKeys, ctx, typesCtx);
     YQL_ENSURE(prepareSuccess);
 
-    if (!indexName.IsValid() && !readSettings.ForcePrimary && kqpCtx.Config->EnableIndexAutoChooser) {
-        TVector<std::tuple<size_t, size_t, TMaybe<TString>>> indices;
-        {
-            auto buildResult = extractor->BuildComputeNode(mainTableDesc.Metadata->KeyColumnNames, ctx, typesCtx);
-            indices.push_back(std::make_tuple(
-                    buildResult.UsedPrefixLen,
-                    buildResult.PointPrefixLen,
-                    TMaybe<TString>()));
-        }
-        for (auto& index : mainTableDesc.Metadata->Indexes) {
-            if (index.Type == TIndexDescription::EType::GlobalSync) {
-                auto buildResult = extractor->BuildComputeNode(index.KeyColumns, ctx, typesCtx);
-                indices.push_back(std::make_tuple(
-                        buildResult.UsedPrefixLen,
-                        buildResult.PointPrefixLen,
-                        TMaybe<TString>(index.Name)));
+    if (!indexName.IsValid() && !readSettings.ForcePrimary && kqpCtx.Config->IndexAutoChooserMode != NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_DISABLED) {
+        using TIndexComparisonKey = std::tuple<bool, size_t, bool, size_t, bool>;
+        auto calcKey = [&](NYql::IPredicateRangeExtractor::TBuildResult buildResult, size_t descriptionKeyColumns, bool needsJoin) -> TIndexComparisonKey {
+
+            return std::make_tuple(
+                buildResult.PointPrefixLen >= descriptionKeyColumns,
+                buildResult.PointPrefixLen,
+                buildResult.UsedPrefixLen >= descriptionKeyColumns,
+                buildResult.UsedPrefixLen,
+                needsJoin);
+        };
+
+        TMaybe<TString> chosenIndex;
+        auto primaryBuildResult = extractor->BuildComputeNode(mainTableDesc.Metadata->KeyColumnNames, ctx, typesCtx);
+
+        if (primaryBuildResult.PointPrefixLen < mainTableDesc.Metadata->KeyColumnNames.size()) {
+            auto maxKey = calcKey(primaryBuildResult, mainTableDesc.Metadata->KeyColumnNames.size(), false);
+            for (auto& index : mainTableDesc.Metadata->Indexes) {
+                if (index.Type != TIndexDescription::EType::GlobalAsync) {
+                    auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, mainTableDesc.Metadata->GetIndexMetadata(TString(index.Name)).first->Name);
+                    auto buildResult = extractor->BuildComputeNode(tableDesc.Metadata->KeyColumnNames, ctx, typesCtx);
+
+                    if (kqpCtx.Config->IndexAutoChooserMode == NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_ONLY_FULL_KEY && buildResult.PointPrefixLen < index.KeyColumns.size()) {
+                        continue;
+                    }
+                    if (kqpCtx.Config->IndexAutoChooserMode == NKikimrConfig::TTableServiceConfig_EIndexAutoChooseMode_ONLY_POINTS && buildResult.PointPrefixLen == 0) {
+                        continue;
+                    }
+
+                    auto key = calcKey(buildResult, index.KeyColumns.size(), true);
+                    if (key > maxKey) {
+                        maxKey = key;
+                        chosenIndex = index.Name;
+                    }
+                }
             }
         }
-        if (!indices.empty()) {
-            auto it = std::max_element(indices.begin(), indices.end());
-            auto name = std::get<TMaybe<TString>>(*it);
-            if (name) {
-                indexName = ctx.NewAtom(read.Pos(), *name);
-            }
+
+        if (chosenIndex) {
+            indexName = ctx.NewAtom(read.Pos(), *chosenIndex);
         }
     }
 

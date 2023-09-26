@@ -406,7 +406,7 @@ private:
         bool defaultSyntaxVersion = TableServiceConfig.GetSqlVersion();
         bool enableKqpImmediateEffects = TableServiceConfig.GetEnableKqpImmediateEffects();
 
-        bool indexAutoChooser = TableServiceConfig.GetEnableIndexAutoChooser();
+        auto indexAutoChooser = TableServiceConfig.GetIndexAutoChooseMode();
 
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
@@ -425,7 +425,7 @@ private:
             TableServiceConfig.GetPredicateExtract20() != predicateExtract20 ||
             TableServiceConfig.GetEnableSequentialReads() != enableSequentialReads ||
             TableServiceConfig.GetEnableKqpImmediateEffects() != enableKqpImmediateEffects ||
-            TableServiceConfig.GetEnableIndexAutoChooser() != indexAutoChooser) {
+            TableServiceConfig.GetIndexAutoChooseMode() != indexAutoChooser) {
 
             LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
                 "Iterator read flags was changed. StreamLookup from " << enableKqpDataQueryStreamLookup <<
@@ -767,7 +767,7 @@ private:
     }
 
     void StartCompilation(TKqpCompileRequest&& request, const TActorContext& ctx) {
-        auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, TableServiceConfig, QueryServiceConfig, MetadataProviderConfig, ModuleResolverState, Counters, 
+        auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, TableServiceConfig, QueryServiceConfig, MetadataProviderConfig, ModuleResolverState, Counters,
              request.Uid, request.Query, request.UserToken, FederatedQuerySetup, request.DbCounters, request.UserRequestContext,
              request.CompileServiceSpan.GetTraceId(), std::move(request.TempTablesState));
         auto compileActorId = ctx.ExecutorThread.RegisterActor(compileActor, TMailboxType::HTSwap,

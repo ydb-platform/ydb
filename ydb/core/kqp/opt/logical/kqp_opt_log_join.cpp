@@ -188,7 +188,7 @@ TMaybeNode<TKqlKeyInc> GetRightTableKeyPrefix(const TKqlKeyRange& range) {
 
 TExprBase BuildLookupIndex(TExprContext& ctx, const TPositionHandle pos,
     const TKqpTable& table, const TCoAtomList& columns,
-    const TExprBase& keysToLookup, const TVector<TCoAtom>& lookupNames, const TString& indexName,
+    const TExprBase& keysToLookup, const TVector<TCoAtom>& skipNullColumns, const TString& indexName,
     const TKqpOptimizeContext& kqpCtx)
 {
     if (kqpCtx.IsScanQuery()) {
@@ -198,7 +198,7 @@ TExprBase BuildLookupIndex(TExprContext& ctx, const TPositionHandle pos,
             .LookupKeys<TCoSkipNullMembers>()
                 .Input(keysToLookup)
                 .Members()
-                    .Add(lookupNames)
+                    .Add(skipNullColumns)
                     .Build()
                 .Build()
             .Columns(columns)
@@ -212,7 +212,7 @@ TExprBase BuildLookupIndex(TExprContext& ctx, const TPositionHandle pos,
         .LookupKeys<TCoSkipNullMembers>()
             .Input(keysToLookup)
             .Members()
-                .Add(lookupNames)
+                .Add(skipNullColumns)
                 .Build()
             .Build()
         .Columns(columns)
@@ -223,7 +223,7 @@ TExprBase BuildLookupIndex(TExprContext& ctx, const TPositionHandle pos,
 
 TExprBase BuildLookupTable(TExprContext& ctx, const TPositionHandle pos,
     const TKqpTable& table, const TCoAtomList& columns,
-    const TExprBase& keysToLookup, const TVector<TCoAtom>& lookupNames, const TKqpOptimizeContext& kqpCtx)
+    const TExprBase& keysToLookup, const TVector<TCoAtom>& skipNullColumns, const TKqpOptimizeContext& kqpCtx)
 {
     if (kqpCtx.IsScanQuery()) {
         YQL_ENSURE(kqpCtx.Config->EnableKqpScanQueryStreamIdxLookupJoin, "Stream lookup is not enabled for index lookup join");
@@ -232,7 +232,7 @@ TExprBase BuildLookupTable(TExprContext& ctx, const TPositionHandle pos,
             .LookupKeys<TCoSkipNullMembers>()
                 .Input(keysToLookup)
                 .Members()
-                    .Add(lookupNames)
+                    .Add(skipNullColumns)
                     .Build()
                 .Build()
             .Columns(columns)
@@ -245,7 +245,7 @@ TExprBase BuildLookupTable(TExprContext& ctx, const TPositionHandle pos,
             .LookupKeys<TCoSkipNullMembers>()
                 .Input(keysToLookup)
                 .Members()
-                    .Add(lookupNames)
+                    .Add(skipNullColumns)
                     .Build()
                 .Build()
             .Columns(columns)
@@ -257,7 +257,7 @@ TExprBase BuildLookupTable(TExprContext& ctx, const TPositionHandle pos,
         .LookupKeys<TCoSkipNullMembers>()
             .Input(keysToLookup)
             .Members()
-                .Add(lookupNames)
+                .Add(skipNullColumns)
                 .Build()
             .Build()
         .Columns(columns)
@@ -475,7 +475,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
         .Done();
 
     TVector<TExprBase> lookupMembers;
-    TVector<TCoAtom> lookupNames;
+    TVector<TCoAtom> skipNullColumns;
     ui32 fixedPrefix = 0;
     TSet<TString> deduplicateLeftColumns;
     for (auto& rightColumnName : rightTableDesc.Metadata->KeyColumnNames) {
@@ -544,7 +544,10 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
                 .Add<TCoAtom>().Build(rightColumnName)
                 .Add(member)
                 .Done());
-        lookupNames.emplace_back(ctx.NewAtom(join.Pos(), rightColumnName));
+
+        if (leftColumn) {
+            skipNullColumns.emplace_back(ctx.NewAtom(join.Pos(), rightColumnName));
+        }
     }
 
     if (lookupMembers.size() <= fixedPrefix) {
@@ -613,8 +616,8 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
         .Done();
 
     TExprBase lookup = indexName
-        ? BuildLookupIndex(ctx, join.Pos(), rightRead.Table(), rightRead.Columns(), keysToLookup, lookupNames, indexName, kqpCtx)
-        : BuildLookupTable(ctx, join.Pos(), rightRead.Table(), rightRead.Columns(), keysToLookup, lookupNames, kqpCtx);
+        ? BuildLookupIndex(ctx, join.Pos(), rightRead.Table(), rightRead.Columns(), keysToLookup, skipNullColumns, indexName, kqpCtx)
+        : BuildLookupTable(ctx, join.Pos(), rightRead.Table(), rightRead.Columns(), keysToLookup, skipNullColumns, kqpCtx);
 
     // Skip null keys in lookup part as for equijoin semantics null != null,
     // so we can't have nulls in lookup part

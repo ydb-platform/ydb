@@ -1384,7 +1384,7 @@ void TRequestQueue::AcquireThrottlers(const TServiceBase::TServiceContextPtr& co
 
 void TRequestQueue::SubscribeToThrottlers()
 {
-    if (Throttled_.load(std::memory_order::relaxed) || Throttled_.exchange(true, std::memory_order::acquire)) {
+    if (Throttled_.load(std::memory_order::relaxed) || Throttled_.exchange(true)) {
         return;
     }
 

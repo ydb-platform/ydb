@@ -4,11 +4,11 @@
 UPDATE <название_таблицы> SET <название_столбца> = <новое_значение> WHERE <название_столбца_для_поиска> = <искомое_значение>;
 ```
 
-`UPDATE` работает так: сначала задаётся название таблицы, в которой будет произведена замена данных в строке (строках), затем указывается название столбца, где следует произвести замену данных, задаются новые данные, далее указывается оператор `WHERE` и после задаются условия поиска строки. Например, чтобы скорректировать длительность фильма "Star Wars: Episode I - The Phantom Menace" нужно применить следующую запись:
+`UPDATE` работает так: сначала задаётся название таблицы, в которой будет произведено обновление данных. Затем указываются названия столбцов для обновления и их новые значения. Далее указывается оператор `WHERE` и после задаются условия поиска строки. Например, чтобы скорректировать длительность фильма "Space Battles: Episode One - The Ghostly Threat" нужно применить следующую запись:
 ```sql
-UPDATE movies 
-SET length = INTERVAL '02:11:00' 
-WHERE title = 'Star Wars: Episode I - The Phantom Menace';
+UPDATE movies
+SET length = INTERVAL '02:11:00'
+WHERE title = 'Space Battles: Episode One - The Ghostly Threat';
 ```
 
 Для одновременного обновления разных значений в разных строках можно использовать инструкция `CASE ... END`, с вложенными условиями выборки данных `WHEN <название столбца> <оператор сравнения> THEN <новое значение>`. Далее следует конструкция `WHERE <название колонки> IN (<значение колонки>)`, которая позволяет задать список значений, по которым будет выполнено условие.
@@ -17,7 +17,7 @@ WHERE title = 'Star Wars: Episode I - The Phantom Menace';
 
 ```sql
 UPDATE movies
-SET length = CASE 
+SET length = CASE
                WHEN title = 'Indiana Johns and the Final Quest' THEN INTERVAL '2 hours 10 minutes'
                WHEN title = 'Space Battles: Episode One - The Ghostly Threat' THEN INTERVAL '2 hours 19 minutes'
              END

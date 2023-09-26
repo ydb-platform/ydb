@@ -38,22 +38,5 @@ VALUES
 ```sql
 INSERT INTO movies (title, director, production_date, star, length) 
 VALUES
-('Indiana Johns and the Final Quest', 'Steven Spielberg', '1989-05-24'::date, 'Harrison Ford', INTERVAL '2 hours 7 minutes');
-```
-
-Помимо конструкции `INSERT INTO`, которая вставляет строки в таблицу, существует и её расширенная версия для выборки данных из другой таблицы и вставки их в новую (указанную) таблицу – `INSERT INTO ... SELECT ... FROM ...`. Последовательность столбцов и типы данных должны совпадать в конструкциях `INSERT INTO` и `SELECT`. 
-
-Пример вставки нескольких фильмов из таблицы "movies" в таблицу "movies_2" (копия таблицы "movies"):
-```sql
-INSERT INTO movies_2 (title, director, production_date, star, length)
-SELECT title, director, production_date, star, length
-FROM movies
-WHERE production_date < '1980-01-01'::date;
-```
-В этом примере из таблицы "movies" делается выборка фильмов произведенных до 1980 года и данные вставляются в таблицу "movies_2". В данном примере в обеих таблицах используются все столбцы, но выборка может быть сделана и по меньшему количеству столбцов. При вставки данных, можно не указывать перечень столбцов у `INSERT INTO`:
-```sql
-INSERT INTO movies_2
-SELECT title, director, production_date, star
-FROM movies
-WHERE production_date < '1980-01-01'::date;
+('Indiana Johns and the Next Quest', 'Steven Spielberg', '1990-05-24'::date, 'Harrison Ford', INTERVAL '2 hours 7 minutes');
 ```

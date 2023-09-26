@@ -1,4 +1,4 @@
-YQL_UDF(pire_udf)
+YQL_UDF_YDB(pire_udf)
 
 YQL_ABI_VERSION(
     2

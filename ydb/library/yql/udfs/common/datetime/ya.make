@@ -1,4 +1,4 @@
-YQL_UDF(datetime_udf)
+YQL_UDF_YDB(datetime_udf)
 
 YQL_ABI_VERSION(
     2

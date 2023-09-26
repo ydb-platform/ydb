@@ -1,4 +1,4 @@
-YQL_UDF(hyperloglog_udf)
+YQL_UDF_YDB(hyperloglog_udf)
 
 YQL_ABI_VERSION(
     2

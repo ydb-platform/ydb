@@ -1,4 +1,4 @@
-YQL_UDF(re2_udf)
+YQL_UDF_YDB(re2_udf)
 
 YQL_ABI_VERSION(
     2

@@ -1,11 +1,5 @@
 LIBRARY(run)
 
-IF (PROFILE_MEMORY_ALLOCATIONS)
-    CFLAGS(
-        -DPROFILE_MEMORY_ALLOCATIONS
-    )
-ENDIF()
-
 SRCS(
     auto_config_initializer.cpp
     config.cpp

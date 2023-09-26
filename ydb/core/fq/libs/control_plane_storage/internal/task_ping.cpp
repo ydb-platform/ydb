@@ -2,16 +2,36 @@
 
 #include <util/datetime/base.h>
 
-#include <ydb/core/metering/metering.h>
 #include <ydb/core/fq/libs/control_plane_storage/util.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
+#include <ydb/core/metering/metering.h>
 #include <ydb/library/protobuf_printer/size_printer.h>
+#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
 
 #include <google/protobuf/util/time_util.h>
 
 #include <util/system/hostname.h>
 
 namespace NFq {
+
+namespace {
+
+bool CheckIssuesCode(const NYql::TIssues& issues, ::NYql::TIssuesIds::EIssueCode code) {
+    for (const auto& issue: issues) {
+        bool found = false;
+        NYql::WalkThroughIssues(issue, false, [&found, code](const auto& issue, ui16) {
+            if (issue.GetCode() == static_cast<NYql::TIssueCode>(code)) {
+                found = true;
+            }
+        });
+        if (found) {
+            return found;
+        }
+    }
+    return false;
+}
+
+}
 
 struct TPingTaskParams {
     TString Query;
@@ -581,12 +601,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvFinalStatus
         return;
     }
 
-    static const TString unavailablePattern = "Kikimr cluster or one of its subsystems was unavailable";
-    if (event.Issues.ToOneLineString().Contains(unavailablePattern) || event.TransientIssues.ToOneLineString().Contains(unavailablePattern)) {
+    if (CheckIssuesCode(event.Issues, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE) || CheckIssuesCode(event.TransientIssues, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE)) {
         Counters.GetFinalStatusCounters(event.CloudId, event.Scope)->Unavailable->Inc();
     }
+
     Counters.GetFinalStatusCounters(event.CloudId, event.Scope)->IncByStatus(event.Status);
     LOG_YQ_AUDIT_SERVICE_INFO("FinalStatus: cloud id: [" << event.CloudId  << "], scope: [" << event.Scope << "], query id: [" << event.QueryId << "], job id: [" << event.JobId << "], status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(event.Status));
 }
+
 
 } // NFq

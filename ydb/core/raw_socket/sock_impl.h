@@ -135,9 +135,19 @@ public:
         }
         size_t left = length - possible;
         if (left >= BufferSize) {
-            Buffer.Reserve(left);
-            Buffer.Append(src + possible, left);
-            flush();
+            if (Chunks.empty()) {
+                // optimization for reduce memory copy
+                ssize_t res = Socket->Send(src + possible, left);
+                if (res > 0) {
+                    left -= res;
+                    possible += res;
+                }
+            }
+            if (left > 0) {
+                Buffer.Reserve(left);
+                Buffer.Append(src + possible, left);
+                flush();
+            }
         } else if (left > 0) {
             Buffer.Append(src + possible, left);
         }

@@ -12,11 +12,11 @@ namespace {
 struct TNfaSetup {
     TNfaSetup(const TRowPattern& pattern)
         : Setup(GetAuxCallableFactory())
-        , Graph(InitComutationGrah(pattern))
+        , Graph(InitComputationGrah(pattern))
         , Nfa(InitNfa(pattern))
     {}
 
-    THolder<IComputationGraph> InitComutationGrah(const TRowPattern& pattern) {
+    THolder<IComputationGraph> InitComputationGrah(const TRowPattern& pattern) {
         auto& env = *Setup.Env;
         TStructTypeBuilder indexRangeTypeBuilder(env);
         indexRangeTypeBuilder.Add("From", TDataType::Create(NUdf::TDataType<ui64>::Id, env));
@@ -95,13 +95,17 @@ struct TNfaSetup {
 } //namespace
 
 Y_UNIT_TEST_SUITE(MatchRecognizeNfa) {
+    //Tests for NFA-based engine for MATCH_RECOGNIZE
+    //In the full implementation pattern variables are calculated as lambda predicates on input partition
+    //For the sake of simplificationa in these tests predicates are replaced with bool literal values,
+    //that can be set explicitly in the tests body. So, the values of input rows are irrelevat and not used.
     TMemoryUsageInfo memUsage("MatchedVars");
     Y_UNIT_TEST(SingleVarAcceptNothing) {
         TScopedAlloc alloc(__LOCATION__);
         THolderFactory holderFactory(alloc.Ref(), memUsage);
-        const TRowPattern pattern{{TRowPatternFactor{"A", 1 ,1, false, false}}};
+        const TRowPattern pattern{{TRowPatternFactor{"A", 1, 1, false, false}}};
         TNfaSetup setup{pattern};
-        auto& defineA = setup.Defines[0];
+        auto& defineA = setup.Defines.at(0);
         auto& ctx = setup.Ctx();
         defineA->SetValue(ctx, NUdf::TUnboxedValuePod{false});
         TSparseList list;
@@ -113,9 +117,9 @@ Y_UNIT_TEST_SUITE(MatchRecognizeNfa) {
     Y_UNIT_TEST(SingleVarAcceptEveryRow) {
         TScopedAlloc alloc(__LOCATION__);
         THolderFactory holderFactory(alloc.Ref(), memUsage);
-        const TRowPattern pattern{{TRowPatternFactor{"A", 1 ,1, false, false}}};
+        const TRowPattern pattern{{TRowPatternFactor{"A", 1, 1, false, false}}};
         TNfaSetup setup{pattern};
-        auto& defineA = setup.Defines[0];
+        auto& defineA = setup.Defines.at(0);
         auto& ctx = setup.Ctx();
         defineA->SetValue(ctx, NUdf::TUnboxedValuePod{true});
         TSparseList list;
@@ -127,9 +131,9 @@ Y_UNIT_TEST_SUITE(MatchRecognizeNfa) {
     Y_UNIT_TEST(SingleAlternatedVarAcceptEven) {
         TScopedAlloc alloc(__LOCATION__);
         THolderFactory holderFactory(alloc.Ref(), memUsage);
-        const TRowPattern pattern{{TRowPatternFactor{"A", 1 ,1, false, false}}};
+        const TRowPattern pattern{{TRowPatternFactor{"A", 1, 1, false, false}}};
         TNfaSetup setup{pattern};
-        auto& defineA = setup.Defines[0];
+        auto& defineA = setup.Defines.at(0);
         auto& ctx = setup.Ctx();
         TSparseList list;
         for (size_t i = 0; i != 100; ++i) {
@@ -137,6 +141,99 @@ Y_UNIT_TEST_SUITE(MatchRecognizeNfa) {
             defineA->SetValue(ctx, NUdf::TUnboxedValuePod{i % 2});
             setup.Nfa.ProcessRow(list.Append(NUdf::TUnboxedValue{}), ctx);
             UNIT_ASSERT_VALUES_EQUAL(i % 2,  setup.GetMatchedCount());
+        }
+    }
+    Y_UNIT_TEST(SingleVarRepeatedAndCheckRanges) {
+        TScopedAlloc alloc(__LOCATION__);
+        THolderFactory holderFactory(alloc.Ref(), memUsage);
+        // "A{4, 6}"
+        const TRowPattern pattern{{TRowPatternFactor{"A", 4, 6, false, false}}};
+        TNfaSetup setup{pattern};
+        auto& defineA = setup.Defines.at(0);
+        auto& ctx = setup.Ctx();
+        defineA->SetValue(ctx, NUdf::TUnboxedValuePod{true});
+        TSparseList list;
+        for (size_t i = 0; i != 100; ++i) {
+            setup.Nfa.ProcessRow(list.Append(NUdf::TUnboxedValue{}), ctx);
+            if (i < 3) {
+                UNIT_ASSERT_VALUES_EQUAL(0, setup.GetMatchedCount());
+            } else if (i <= 5) {
+                UNIT_ASSERT_VALUES_EQUAL(i - 2, setup.GetMatchedCount());
+            } else { //expect 3 matches
+                THashSet<size_t> expectedFrom{i - 5, i - 4, i - 3};
+                for (size_t c = 0; c != 3; ++c) {
+                    auto m = setup.Nfa.GetMatched();
+                    UNIT_ASSERT(m);
+                    UNIT_ASSERT_VALUES_EQUAL(1, m->size()); //single var
+                    auto v = m->at(0);
+                    UNIT_ASSERT_VALUES_EQUAL(1, v.size()); //single range
+                    expectedFrom.erase(v[0].From());
+                    UNIT_ASSERT_VALUES_EQUAL(i, v[0].To());
+                }
+                UNIT_ASSERT_VALUES_EQUAL(0, expectedFrom.size());
+            }
+        }
+    }
+    Y_UNIT_TEST(SingleVarDuplicated) {
+        TScopedAlloc alloc(__LOCATION__);
+        THolderFactory holderFactory(alloc.Ref(), memUsage);
+        // "A A A"
+        const TRowPattern pattern{{
+            TRowPatternFactor{"A", 1, 1, false, false},
+            TRowPatternFactor{"A", 1, 1, false, false},
+            TRowPatternFactor{"A", 1, 1, false, false}
+        }};
+        TNfaSetup setup{pattern};
+        auto& defineA = setup.Defines.at(0);
+        auto& ctx = setup.Ctx();
+        defineA->SetValue(ctx, NUdf::TUnboxedValuePod{true});
+        TSparseList list;
+        for (size_t i = 0; i != 100; ++i) {
+            setup.Nfa.ProcessRow(list.Append(NUdf::TUnboxedValue{}), ctx);
+            const auto expected = (i < 2) ? 0 : 1;
+            UNIT_ASSERT_VALUES_EQUAL(expected, setup.GetMatchedCount()); //expect matches starting with the 2nd row
+        }
+    }
+
+    Y_UNIT_TEST(TwoSeqAlternatedVarsAcceptEven) {
+        TScopedAlloc alloc(__LOCATION__);
+        THolderFactory holderFactory(alloc.Ref(), memUsage);
+        //"A B"
+        const TRowPattern pattern{{
+                TRowPatternFactor{"A", 1, 1, false, false},
+                TRowPatternFactor{"B", 1, 1, false, false},
+        }};
+        TNfaSetup setup{pattern};
+        auto& defineA = setup.Defines.at(0);
+        auto& defineB = setup.Defines.at(1);
+        auto& ctx = setup.Ctx();
+        TSparseList list;
+        for (size_t i = 0; i != 100; ++i) {
+            defineA->SetValue(ctx, NUdf::TUnboxedValuePod{i % 2 == 0});
+            defineB->SetValue(ctx, NUdf::TUnboxedValuePod{i % 2 == 1});
+            setup.Nfa.ProcessRow(list.Append(NUdf::TUnboxedValue{}), ctx);
+            UNIT_ASSERT_VALUES_EQUAL(i % 2, setup.GetMatchedCount());
+        }
+    }
+
+    Y_UNIT_TEST(TwoORedAlternatedVarsAcceptEvery) {
+        TScopedAlloc alloc(__LOCATION__);
+        THolderFactory holderFactory(alloc.Ref(), memUsage);
+        //"A | B"
+        const TRowPattern pattern{
+              {TRowPatternFactor{"A", 1, 1, false, false}},
+              {TRowPatternFactor{"B", 1, 1, false, false}},
+        };
+        TNfaSetup setup{pattern};
+        auto& defineA = setup.Defines.at(0);
+        auto& defineB = setup.Defines.at(1);
+        auto& ctx = setup.Ctx();
+        TSparseList list;
+        for (size_t i = 0; i != 100; ++i) {
+            defineA->SetValue(ctx, NUdf::TUnboxedValuePod{i % 2 == 0});
+            defineB->SetValue(ctx, NUdf::TUnboxedValuePod{i % 2 == 1});
+            setup.Nfa.ProcessRow(list.Append(NUdf::TUnboxedValue{}), ctx);
+            UNIT_ASSERT_VALUES_EQUAL(1, setup.GetMatchedCount());
         }
     }
 }

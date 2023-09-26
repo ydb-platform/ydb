@@ -1192,11 +1192,11 @@ Some examples:
 
 ```sql
 'abcd' ~ 'bc'     → true
-'abcd' ~ 'a.c'    → true -- dot matches any character
-'abcd' ~ 'a.*d'   → true --* repeats the preceding pattern item
-'abcd' ~ '(b|x)'  → true --| means OR, parentheses group
-'abcd' ~ '^a'     → true -- ^ anchors to start of string
-'abcd' ~ '^(b|c)' → false --  would match except for anchoring
+'abcd' ~ 'a.c'    → true /* dot matches any character */
+'abcd' ~ 'a.*d'   → true /* * repeats the preceding pattern item */
+'abcd' ~ '(b|x)'  → true /* | means OR, parentheses group */
+'abcd' ~ '^a'     → true /* ^ anchors to start of string */
+'abcd' ~ '^(b|c)' → false /* would match except for anchoring */
 ```
 The POSIX pattern language is described in much greater detail below.
 
@@ -2128,7 +2128,7 @@ All the date/time data types also accept the special literal value now to specif
 ```sql
 SELECT CURRENT_TIMESTAMP;
 SELECT now();
-SELECT TIMESTAMP 'now';  -- but see tip below
+SELECT TIMESTAMP 'now';  /* but see tip below */
 ```
 
 Tip
@@ -2706,3 +2706,1149 @@ Sets the 7th bit of the address to one, creating what is known as modified EUI-6
 macaddr8_set7bit(macaddr8 '00:34:56:ab:cd:ef') → 02:34:56:ff:fe:ab:cd:ef
 ```||
 |#
+
+
+# 9.13. Text Search Functions and Operators (NOT SUPPORTED)
+
+# 9.14. UUID Functions
+
+PostgreSQL includes one function to generate a UUID:
+
+gen_random_uuid () → uuid
+
+This function returns a version 4 (random) UUID. This is the most commonly used type of UUID and is appropriate for most applications.
+
+# 9.15. XML Functions
+
+The functions and function-like expressions described in this section operate on values of type xml. See Section 8.13 for information about the xml type. The function-like expressions xmlparse and xmlserialize for converting to and from type xml are documented there, not in this section.
+
+Use of most of these functions requires PostgreSQL to have been built with configure --with-libxml.
+
+9.15.1. Producing XML Content
+
+A set of functions and function-like expressions is available for producing XML content from SQL data. As such, they are particularly suitable for formatting query results into XML documents for processing in client applications.
+
+9.15.1.1. Xmlcomment
+
+xmlcomment ( text ) → xml
+
+The function xmlcomment creates an XML value containing an XML comment with the specified text as content. The text cannot contain “--” or end with a “-”, otherwise the resulting construct would not be a valid XML comment. If the argument is null, the result is null.
+
+Example:
+```sql
+xmlcomment('hello') → <!--hello-->
+```
+
+9.15.1.2. Xmlconcat
+
+xmlconcat ( xml [, ...] ) → xml (NOT SUPPORTED)
+
+The function xmlconcat concatenates a list of individual XML values to create a single value containing an XML content fragment. Null values are omitted; the result is only null if there are no nonnull arguments.
+
+Example:
+```sql
+#xmlconcat('<abc/>', '<bar>foo</bar>') → <abc/><bar>foo</bar>
+```
+
+XML declarations, if present, are combined as follows. If all argument values have the same XML version declaration, that version is used in the result, else no version is used. If all argument values have the standalone declaration value “yes”, then that value is used in the result. If all argument values have a standalone declaration value and at least one is “no”, then that is used in the result. Else the result will have no standalone declaration. If the result is determined to require a standalone declaration but no version declaration, a version declaration with version 1.0 will be used because XML requires an XML declaration to contain a version declaration. Encoding declarations are ignored and removed in all cases.
+
+Example:
+```sql
+#xmlconcat('<?xml version="1.1"?><foo/>', '<?xml version="1.1" standalone="no"?><bar/>') → <?xml version="1.1"?><foo/><bar/>
+```
+
+9.15.1.3. Xmlelement
+
+xmlelement ( NAME name [, XMLATTRIBUTES ( attvalue [ AS attname ] [, ...] ) ] [, content [, ...]] ) → xml (NOT SUPPORTED)
+
+```sql
+#xmlelement(name foo) → <foo/>
+#xmlelement(name foo, xmlattributes('xyz' as bar)) → <foo bar="xyz"/>
+#xmlelement(name foo, xmlattributes(current_date as bar), 'cont', 'ent') ~→ <foo bar="2007-01-26">content</foo>
+```
+
+Element and attribute names that are not valid XML names are escaped by replacing the offending characters by the sequence _xHHHH_, where HHHH is the character's Unicode codepoint in hexadecimal notation. For example:
+
+```sql
+#xmlelement(name "foo$bar", xmlattributes('xyz' as "a&b")) → <foo_x0024_bar a_x0026_b="xyz"/>
+```
+
+An explicit attribute name need not be specified if the attribute value is a column reference, in which case the column's name will be used as the attribute name by default. In other cases, the attribute must be given an explicit name. So this example is valid:
+
+Element content, if specified, will be formatted according to its data type. If the content is itself of type xml, complex XML documents can be constructed. For example:
+
+```sql
+#xmlelement(name foo, xmlattributes('xyz' as bar), xmlelement(name abc), xmlcomment('test'), xmlelement(name xyz)) → <foo bar="xyz"><abc/><!--test--><xyz/></foo>
+```
+
+Content of other types will be formatted into valid XML character data. This means in particular that the characters <, >, and & will be converted to entities. Binary data (data type bytea) will be represented in base64 or hex encoding, depending on the setting of the configuration parameter xmlbinary. The particular behavior for individual data types is expected to evolve in order to align the PostgreSQL mappings with those specified in SQL:2006 and later, as discussed in Section D.3.1.3.
+
+9.15.1.4. Xmlforest
+
+xmlforest ( content [ AS name ] [, ...] ) → xml (NOT SUPPORTED)
+
+9.15.1.5. Xmlpi
+
+xmlpi ( NAME name [, content ] ) → xml (NOT SUPPORTED)
+
+9.15.1.6. Xmlroot
+
+xmlroot ( xml, VERSION {text|NO VALUE} [, STANDALONE {YES|NO|NO VALUE} ] ) → xml (NOT SUPPORTED)
+
+9.15.1.7. Xmlagg
+
+xmlagg ( xml ) → xml
+
+The function xmlagg is, unlike the other functions described here, an aggregate function. It concatenates the input values to the aggregate function call, much like xmlconcat does, except that concatenation occurs across rows rather than across expressions in a single row. See Section 9.21 for additional information about aggregate functions.
+
+Example:
+```sql
+SELECT xmlagg(x::xml) from (values ('<a/>'),('<b/>')) a(x) → <a/><b/>
+```
+
+9.15.2. XML Predicates
+The expressions described in this section check properties of xml values.
+
+9.15.2.1. IS DOCUMENT
+
+xml IS DOCUMENT → boolean (NOT SUPPORTED)
+
+The expression IS DOCUMENT returns true if the argument XML value is a proper XML document, false if it is not (that is, it is a content fragment), or null if the argument is null. See Section 8.13 about the difference between documents and content fragments.
+
+9.15.2.2. IS NOT DOCUMENT
+
+xml IS NOT DOCUMENT → boolean (NOT SUPPORTED)
+
+The expression IS NOT DOCUMENT returns false if the argument XML value is a proper XML document, true if it is not (that is, it is a content fragment), or null if the argument is null.
+
+9.15.2.3. XMLEXISTS
+
+XMLEXISTS ( text PASSING [BY {REF|VALUE}] xml [BY {REF|VALUE}] ) → boolean
+
+The function xmlexists evaluates an XPath 1.0 expression (the first argument), with the passed XML value as its context item. The function returns false if the result of that evaluation yields an empty node-set, true if it yields any other value. The function returns null if any argument is null. A nonnull value passed as the context item must be an XML document, not a content fragment or any non-XML value.
+
+Example:
+```sql
+xmlexists('//town[text() = ''Toronto'']' PASSING BY VALUE '<towns><town>Toronto</town><town>Ottawa</town></towns>') → true
+```
+
+9.15.2.4. Xml_is_well_formed (NOT SUPPORTED)
+
+xml_is_well_formed ( text ) → boolean
+xml_is_well_formed_document ( text ) → boolean
+xml_is_well_formed_content ( text ) → boolean
+
+9.15.3. Processing XML
+To process values of data type xml, PostgreSQL offers the functions xpath and xpath_exists, which evaluate XPath 1.0 expressions, and the XMLTABLE table function.
+
+9.15.3.1. Xpath
+
+xpath ( xpath text, xml xml [, nsarray text[] ] ) → xml[] (NOT SUPPORTED)
+
+
+9.15.3.2. Xpath_exists
+
+xpath_exists ( xpath text, xml xml [, nsarray text[] ] ) → boolean
+
+The function xpath_exists is a specialized form of the xpath function. Instead of returning the individual XML values that satisfy the XPath 1.0 expression, this function returns a Boolean indicating whether the query was satisfied or not (specifically, whether it produced any value other than an empty node-set). This function is equivalent to the XMLEXISTS predicate, except that it also offers support for a namespace mapping argument.
+
+Example:
+```sql
+xpath_exists('/my:a/text()', '<my:a xmlns:my="http://example.com">test</my:a>',ARRAY[ARRAY['my', 'http://example.com']]) → true
+```
+
+9.15.3.3. Xmltable
+
+XMLTABLE (
+    [ XMLNAMESPACES ( namespace_uri AS namespace_name [, ...] ), ]
+    row_expression PASSING [BY {REF|VALUE}] document_expression [BY {REF|VALUE}]
+    COLUMNS name { type [PATH column_expression] [DEFAULT default_expression] [NOT NULL | NULL]
+                  | FOR ORDINALITY }
+            [, ...]
+) → setof record (NOT SUPPORTED)
+
+9.15.4. Mapping Tables to XML (NOT SUPPORTED)
+
+The following functions map the contents of relational tables to XML values. They can be thought of as XML export functionality:
+
+table_to_xml ( table regclass, nulls boolean,
+               tableforest boolean, targetns text ) → xml
+query_to_xml ( query text, nulls boolean,
+               tableforest boolean, targetns text ) → xml
+cursor_to_xml ( cursor refcursor, count integer, nulls boolean,
+                tableforest boolean, targetns text ) → xml
+
+# 9.16. JSON Functions and Operators
+
+This section describes:
+
+functions and operators for processing and creating JSON data
+
+the SQL/JSON path language
+
+To learn more about the SQL/JSON standard, see [sqltr-19075-6]. For details on JSON types supported in PostgreSQL, see Section 8.14.
+
+9.16.1. Processing and Creating JSON Data
+
+Table 9.44 shows the operators that are available for use with JSON data types (see Section 8.14). In addition, the usual comparison operators shown in Table 9.1 are available for jsonb, though not for json. The comparison operators follow the ordering rules for B-tree operations outlined in Section 8.14.4. See also Section 9.21 for the aggregate function json_agg which aggregates record values as JSON, the aggregate function json_object_agg which aggregates pairs of values into a JSON object, and their jsonb equivalents, jsonb_agg and jsonb_object_agg.
+
+Table 9.44. json and jsonb Operators
+
+#|
+||Operator|Description|Example(s)||
+||json -> integer → json  
+jsonb -> integer → jsonb|
+Extracts n'th element of JSON array (array elements are indexed from zero, but negative integers count from the end).|
+```sql
+'[{"a":"foo"},{"b":"bar"},{"c":"baz"}]'::json -> 2 → {"c":"baz"}
+'[{"a":"foo"},{"b":"bar"},{"c":"baz"}]'::json -> -3 → {"a":"foo"}
+```||
+||json -> text → json  
+jsonb -> text → jsonb|
+Extracts JSON object field with the given key.|
+```sql
+'{"a": {"b":"foo"}}'::json -> 'a' → {"b":"foo"}
+```||
+||json ->> integer → text  
+jsonb ->> integer → text|
+Extracts n'th element of JSON array, as text.|
+```sql
+'[1,2,3]'::json ->> 2 → 3
+```||
+||json ->> text → text  
+jsonb ->> text → text|
+Extracts JSON object field with the given key, as text.|
+```sql
+'{"a":1,"b":2}'::json ->> 'b' → 2
+```||
+||json #> text[] → json  
+jsonb #> text[] → jsonb|
+Extracts JSON sub-object at the specified path, where path elements can be either field keys or array indexes. (NOT SUPPORTED)|
+```sql
+#'{"a": {"b": ["foo","bar"]}}'::json #> '{a,b,1}' → "bar"
+```||
+||json #>> text[] → text  
+jsonb #>> text[] → text|
+Extracts JSON sub-object at the specified path as text. (NOT SUPPORTED)|
+```sql
+#'{"a": {"b": ["foo","bar"]}}'::json #>> '{a,b,1}' → bar
+```||
+|#
+
+Note
+The field/element/path extraction operators return NULL, rather than failing, if the JSON input does not have the right structure to match the request; for example if no such key or array element exists.
+
+Some further operators exist only for jsonb, as shown in Table 9.45. Section 8.14.4 describes how these operators can be used to effectively search indexed jsonb data.
+
+Table 9.45. Additional jsonb Operators
+
+#|
+||Operator|Description|Example(s)||
+||jsonb @> jsonb → boolean|
+Does the first JSON value contain the second? (See Section 8.14.3 for details about containment.)|
+```sql
+'{"a":1, "b":2}'::jsonb @> '{"b":2}'::jsonb → true
+```||
+||jsonb <@ jsonb → boolean|
+Is the first JSON value contained in the second?|
+```sql
+'{"b":2}'::jsonb <@ '{"a":1, "b":2}'::jsonb → true
+```||
+||jsonb ? text → boolean|
+Does the text string exist as a top-level key or array element within the JSON value?|
+```sql
+'{"a":1, "b":2}'::jsonb ? 'b' → true
+'["a", "b", "c"]'::jsonb ? 'b' → true
+```||
+||jsonb ?\| text[] → boolean|
+Do any of the strings in the text array exist as top-level keys or array elements?|
+```sql
+'{"a":1, "b":2, "c":3}'::jsonb ?| array['b', 'd'] → true
+```||
+||jsonb ?& text[] → boolean|
+Do all of the strings in the text array exist as top-level keys or array elements?|
+```sql
+'["a", "b", "c"]'::jsonb ?& array['a', 'b'] → true
+```||
+||jsonb \|\| jsonb → jsonb|
+Concatenates two jsonb values. Concatenating two arrays generates an array containing all the elements of each input. Concatenating two objects generates an object containing the union of their keys, taking the second object's value when there are duplicate keys. All other cases are treated by converting a non-array input into a single-element array, and then proceeding as for two arrays. Does not operate recursively: only the top-level array or object structure is merged.|
+```sql
+'["a", "b"]'::jsonb || '["a", "d"]'::jsonb → ["a", "b", "a", "d"]
+'{"a": "b"}'::jsonb || '{"c": "d"}'::jsonb → {"a": "b", "c": "d"}
+'[1, 2]'::jsonb || '3'::jsonb → [1, 2, 3]
+'{"a": "b"}'::jsonb || '42'::jsonb → [{"a": "b"}, 42]
+```
+
+To append an array to another array as a single entry, wrap it in an additional layer of array, for example:
+
+```sql
+#'[1, 2]'::jsonb || jsonb_build_array('[3, 4]'::jsonb) → [1, 2, [3, 4]]
+```||
+||jsonb - text → jsonb|
+Deletes a key (and its value) from a JSON object, or matching string value(s) from a JSON array.|
+```sql
+'{"a": "b", "c": "d"}'::jsonb - 'a' → {"c": "d"}
+'["a", "b", "c", "b"]'::jsonb - 'b' → ["a", "c"]
+```||
+||jsonb - text[] → jsonb|
+Deletes all matching keys or array elements from the left operand. (NOT SUPPORTED)|
+```sql
+#'{"a": "b", "c": "d"}'::jsonb - '{a,c}'::text[] → {}
+```||
+||jsonb - integer → jsonb|
+Deletes the array element with specified index (negative integers count from the end). Throws an error if JSON value is not an array.|
+```sql
+'["a", "b"]'::jsonb - 1 → ["a"]
+```||
+||jsonb #- text[] → jsonb|
+Deletes the field or array element at the specified path, where path elements can be either field keys or array indexes.|
+```sql
+'["a", {"b":1}]'::jsonb #- '{1,b}' → ["a", {}]
+```||
+||jsonb @? jsonpath → boolean|
+Does JSON path return any item for the specified JSON value?|
+```sql
+'{"a":[1,2,3,4,5]}'::jsonb @? '$.a[*] ? (@ > 2)' → true
+```||
+||jsonb @@ jsonpath → boolean|
+Returns the result of a JSON path predicate check for the specified JSON value. Only the first item of the result is taken into account. If the result is not Boolean, then NULL is returned.|
+```sql
+'{"a":[1,2,3,4,5]}'::jsonb @@ '$.a[*] > 2' → true
+```||
+|#
+
+Note
+The jsonpath operators @? and @@ suppress the following errors: missing object field or array element, unexpected JSON item type, datetime and numeric errors. The jsonpath-related functions described below can also be told to suppress these types of errors. This behavior might be helpful when searching JSON document collections of varying structure.
+
+Table 9.46 shows the functions that are available for constructing json and jsonb values.
+
+Table 9.46. JSON Creation Functions
+
+#|
+||Function|Description|Example(s)||
+||to_json ( anyelement ) → json  
+to_jsonb ( anyelement ) → jsonb|
+Converts any SQL value to json or jsonb. Arrays and composites are converted recursively to arrays and objects (multidimensional arrays become arrays of arrays in JSON). Otherwise, if there is a cast from the SQL data type to json, the cast function will be used to perform the conversion;[a] otherwise, a scalar JSON value is produced. For any scalar other than a number, a Boolean, or a null value, the text representation will be used, with escaping as necessary to make it a valid JSON string value. (NOT SUPPORTED)|
+```sql
+#to_json('Fred said "Hi."'::text) → "Fred said \"Hi.\""
+#to_jsonb(row(42, 'Fred said "Hi."'::text)) → {"f1": 42, "f2": "Fred said \"Hi.\""}
+```||
+||array_to_json ( anyarray [, boolean ] ) → json|
+Converts an SQL array to a JSON array. The behavior is the same as to_json except that line feeds will be added between top-level array elements if the optional boolean parameter is true. (NOT SUPPORTED)|
+```sql
+#array_to_json('{{1,5},{99,100}}'::int[]) → [[1,5],[99,100]]
+```||
+||row_to_json ( record [, boolean ] ) → json|
+Converts an SQL composite value to a JSON object. The behavior is the same as to_json except that line feeds will be added between top-level elements if the optional boolean parameter is true. (NOT SUPPORTED)|
+```sql
+#row_to_json(row(1,'foo')) → {"f1":1,"f2":"foo"}
+```||
+||json_build_array ( VARIADIC "any" ) → json  
+jsonb_build_array ( VARIADIC "any" ) → jsonb|
+Builds a possibly-heterogeneously-typed JSON array out of a variadic argument list. Each argument is converted as per to_json or to_jsonb. (NOT SUPPORTED)|
+```sql
+#json_build_array(1, 2, 'foo', 4, 5) → [1, 2, "foo", 4, 5]
+```||
+||json_build_object ( VARIADIC "any" ) → json  
+jsonb_build_object ( VARIADIC "any" ) → jsonb|
+Builds a JSON object out of a variadic argument list. By convention, the argument list consists of alternating keys and values. Key arguments are coerced to text; value arguments are converted as per to_json or to_jsonb. (NOT SUPPORTED)|
+```sql
+#json_build_object('foo', 1, 2, row(3,'bar')) → {"foo" : 1, "2" : {"f1":3,"f2":"bar"}}
+```||
+||json_object ( text[] ) → json  
+jsonb_object ( text[] ) → jsonb|
+Builds a JSON object out of a text array. The array must have either exactly one dimension with an even number of members, in which case they are taken as alternating key/value pairs, or two dimensions such that each inner array has exactly two elements, which are taken as a key/value pair. All values are converted to JSON strings.|
+```sql
+json_object('{a, 1, b, "def", c, 3.5}') → {"a" : "1", "b" : "def", "c" : "3.5"}
+json_object('{{a, 1}, {b, "def"}, {c, 3.5}}') → {"a" : "1", "b" : "def", "c" : "3.5"}
+```||
+||json_object ( keys text[], values text[] ) → json  
+jsonb_object ( keys text[], values text[] ) → jsonb|
+This form of json_object takes keys and values pairwise from separate text arrays. Otherwise it is identical to the one-argument form.|
+```sql
+json_object('{a,b}', '{1,2}') → {"a" : "1", "b" : "2"}
+```||
+|#
+
+Table 9.47 shows the functions that are available for processing json and jsonb values.
+
+Table 9.47. JSON Processing Functions
+
+#|
+||Function|Description|Example(s)||
+||json_array_elements ( json ) → setof json  
+jsonb_array_elements ( jsonb ) → setof jsonb|
+Expands the top-level JSON array into a set of JSON values. (NOT SUPPORTED)|
+```sql
+#SELECT * FROM json_array_elements('[1,true, [2,false]]') as a → [
+1
+true
+[2,false]
+]
+```||
+||json_array_elements_text ( json ) → setof text  
+jsonb_array_elements_text ( jsonb ) → setof text|
+Expands the top-level JSON array into a set of text values. (NOT SUPPORTED)|
+```sql
+#SELECT * FROM json_array_elements_text('["foo", "bar"]') as a → [
+foo
+bar
+]
+```||
+||json_array_length ( json ) → integer  
+jsonb_array_length ( jsonb ) → integer|
+Returns the number of elements in the top-level JSON array.|
+```sql
+json_array_length('[1,2,3,{"f1":1,"f2":[5,6]},4]') → 5
+jsonb_array_length('[]') → 0
+```||
+||json_each ( json ) → setof record ( key text, value json )  
+jsonb_each ( jsonb ) → setof record ( key text, value jsonb )|
+Expands the top-level JSON object into a set of key/value pairs. (NOT SUPPORTED)|
+
+```sql
+#SELECT * FROM json_each('{"a":"foo", "b":"bar"}') as a → [
+a,"foo"
+b,"bar"
+]
+```||
+||json_each_text ( json ) → setof record ( key text, value text )  
+jsonb_each_text ( jsonb ) → setof record ( key text, value text )|
+Expands the top-level JSON object into a set of key/value pairs. The returned values will be of type text. (NOT SUPPORTED)|
+```sql
+#SELECT * FROM json_each_text('{"a":"foo", "b":"bar"}') as a → [
+a,foo
+b,bar
+]
+```||
+||json_extract_path ( from_json json, VARIADIC path_elems text[] ) → json  
+jsonb_extract_path ( from_json jsonb, VARIADIC path_elems text[] ) → jsonb|
+Extracts JSON sub-object at the specified path. (This is functionally equivalent to the #> operator, but writing the path out as a variadic list can be more convenient in some cases.) (NOT SUPPORTED)|
+```sql
+#json_extract_path('{"f2":{"f3":1},"f4":{"f5":99,"f6":"foo"}}', 'f4', 'f6') → "foo"
+```||
+||json_extract_path_text ( from_json json, VARIADIC path_elems text[] ) → text  
+jsonb_extract_path_text ( from_json jsonb, VARIADIC path_elems text[] ) → text|
+Extracts JSON sub-object at the specified path as text. (This is functionally equivalent to the #>> operator.) (NOT SUPPORTED)|
+```sql
+#json_extract_path_text('{"f2":{"f3":1},"f4":{"f5":99,"f6":"foo"}}', 'f4', 'f6') → foo
+```||
+||json_object_keys ( json ) → setof text  
+jsonb_object_keys ( jsonb ) → setof text|
+Returns the set of keys in the top-level JSON object.|
+```sql
+SELECT * FROM json_object_keys('{"f1":"abc","f2":{"f3":"a", "f4":"b"}}') as a → [
+f1
+f2
+]
+```||
+||json_populate_record ( base anyelement, from_json json ) → anyelement  
+jsonb_populate_record ( base anyelement, from_json jsonb ) → anyelement|
+Expands the top-level JSON object to a row having the composite type of the base argument. The JSON object is scanned for fields whose names match column names of the output row type, and their values are inserted into those columns of the output. (Fields that do not correspond to any output column name are ignored.) In typical use, the value of base is just NULL, which means that any output columns that do not match any object field will be filled with nulls. However, if base isn't NULL then the values it contains will be used for unmatched columns. (NOT SUPPORTED)
+
+To convert a JSON value to the SQL type of an output column, the following rules are applied in sequence:
+
+A JSON null value is converted to an SQL null in all cases.
+
+If the output column is of type json or jsonb, the JSON value is just reproduced exactly.
+
+If the output column is a composite (row) type, and the JSON value is a JSON object, the fields of the object are converted to columns of the output row type by recursive application of these rules.
+
+Likewise, if the output column is an array type and the JSON value is a JSON array, the elements of the JSON array are converted to elements of the output array by recursive application of these rules.
+
+Otherwise, if the JSON value is a string, the contents of the string are fed to the input conversion function for the column's data type.
+
+Otherwise, the ordinary text representation of the JSON value is fed to the input conversion function for the column's data type.
+
+While the example below uses a constant JSON value, typical use would be to reference a json or jsonb column laterally from another table in the query's FROM clause. Writing json_populate_record in the FROM clause is good practice, since all of the extracted columns are available for use without duplicate function calls.
+
+```sql
+#CREATE TYPE subrowtype as (d int, e text); 
+#CREATE type myrowtype as (a int, b text[], c subrowtype);
+#SELECT * FROM json_populate_record(null::myrowtype, '{"a": 1, "b": ["2", "a b"], "c": {"d": 4, "e": "a b c"}, "x": "foo"}') → 1,{2,"a b"},(4,"a b c")
+```||
+||json_populate_recordset ( base anyelement, from_json json ) → setof anyelement  
+jsonb_populate_recordset ( base anyelement, from_json jsonb ) → setof anyelement|
+Expands the top-level JSON array of objects to a set of rows having the composite type of the base argument. Each element of the JSON array is processed as described above for json[b]_populate_record. (NOT SUPPORTED)|
+```sql
+#CREATE TYPE twoints as (a int, b int);
+#SELECT * FROM json_populate_recordset(null::twoints, '[{"a":1,"b":2}, {"a":3,"b":4}]') → [
+1,2
+3,4
+]
+```||
+||json_to_record ( json ) → record  
+jsonb_to_record ( jsonb ) → record|
+Expands the top-level JSON object to a row having the composite type defined by an AS clause. (As with all functions returning record, the calling query must explicitly define the structure of the record with an AS clause.) The output record is filled from fields of the JSON object, in the same way as described above for json[b]_populate_record. Since there is no input record value, unmatched columns are always filled with nulls. (NOT SUPPORTED)|
+```sql
+#CREATE TYPE myrowtype as (a int, b text);
+#SELECT * FROM json_to_record('{"a":1,"b":[1,2,3],"c":[1,2,3],"e":"bar","r": {"a": 123, "b": "a b c"}}') as x(a int, b text, c int[], d text, r myrowtype) → 1,[1,2,3],{1,2,3},(123,"a b c")
+```||
+||json_to_recordset ( json ) → setof record  
+jsonb_to_recordset ( jsonb ) → setof record|
+Expands the top-level JSON array of objects to a set of rows having the composite type defined by an AS clause. (As with all functions returning record, the calling query must explicitly define the structure of the record with an AS clause.) Each element of the JSON array is processed as described above for json[b]_populate_record. (NOT SUPPORTED)|
+```SQL
+#SELECT * from json_to_recordset('[{"a":1,"b":"foo"}, {"a":"2","c":"bar"}]') as x(a int, b text) → [
+1,foo
+2,
+]
+```||
+||jsonb_set ( target jsonb, path text[], new_value jsonb [, create_if_missing boolean ] ) → jsonb|
+Returns target with the item designated by path replaced by new_value, or with new_value added if create_if_missing is true (which is the default) and the item designated by path does not exist. All earlier steps in the path must exist, or the target is returned unchanged. As with the path oriented operators, negative integers that appear in the path count from the end of JSON arrays. If the last path step is an array index that is out of range, and create_if_missing is true, the new value is added at the beginning of the array if the index is negative, or at the end of the array if it is positive.|
+```sql
+jsonb_set('[{"f1":1,"f2":null},2,null,3]', '{0,f1}', '[2,3,4]', false) → [{"f1": [2, 3, 4], "f2": null}, 2, null, 3]
+#jsonb_set('[{"f1":1,"f2":null},2]', '{0,f3}', '[2,3,4]') → [{"f1": 1, "f2": null, "f3": [2, 3, 4]}, 2]
+```||
+||jsonb_set_lax ( target jsonb, path text[], new_value jsonb [, create_if_missing boolean [, null_value_treatment text ]] ) → jsonb|
+If new_value is not NULL, behaves identically to jsonb_set. Otherwise behaves according to the value of null_value_treatment which must be one of 'raise_exception', 'use_json_null', 'delete_key', or 'return_target'. The default is 'use_json_null'.|
+```sql
+#jsonb_set_lax('[{"f1":1,"f2":null},2,null,3]', '{0,f1}', null) → [{"f1": null, "f2": null}, 2, null, 3]
+jsonb_set_lax('[{"f1":99,"f2":null},2]', '{0,f3}', null, true, 'return_target') → [{"f1": 99, "f2": null}, 2]
+```||
+||jsonb_insert ( target jsonb, path text[], new_value jsonb [, insert_after boolean ] ) → jsonb|
+Returns target with new_value inserted. If the item designated by the path is an array element, new_value will be inserted before that item if insert_after is false (which is the default), or after it if insert_after is true. If the item designated by the path is an object field, new_value will be inserted only if the object does not already contain that key. All earlier steps in the path must exist, or the target is returned unchanged. As with the path oriented operators, negative integers that appear in the path count from the end of JSON arrays. If the last path step is an array index that is out of range, the new value is added at the beginning of the array if the index is negative, or at the end of the array if it is positive.|
+```sql
+#jsonb_insert('{"a": [0,1,2]}', '{a, 1}', '"new_value"') → {"a": [0, "new_value", 1, 2]}
+jsonb_insert('{"a": [0,1,2]}', '{a, 1}', '"new_value"', true) → {"a": [0, 1, "new_value", 2]}
+```||
+||json_strip_nulls ( json ) → json  
+jsonb_strip_nulls ( jsonb ) → jsonb|
+Deletes all object fields that have null values from the given JSON value, recursively. Null values that are not object fields are untouched.|
+```sql
+json_strip_nulls('[{"f1":1, "f2":null}, 2, null, 3]') → [{"f1":1},2,null,3]
+```||
+||jsonb_path_exists ( target jsonb, path jsonpath [, vars jsonb [, silent boolean ]] ) → boolean|
+Checks whether the JSON path returns any item for the specified JSON value. If the vars argument is specified, it must be a JSON object, and its fields provide named values to be substituted into the jsonpath expression. If the silent argument is specified and is true, the function suppresses the same errors as the @? and @@ operators do.|
+```sql
+jsonb_path_exists('{"a":[1,2,3,4,5]}', '$.a[*] ? (@ >= $min && @ <= $max)', '{"min":2, "max":4}', false) → true
+```||
+||jsonb_path_match ( target jsonb, path jsonpath [, vars jsonb [, silent boolean ]] ) → boolean|
+Returns the result of a JSON path predicate check for the specified JSON value. Only the first item of the result is taken into account. If the result is not Boolean, then NULL is returned. The optional vars and silent arguments act the same as for jsonb_path_exists.|
+```sql
+jsonb_path_match('{"a":[1,2,3,4,5]}', 'exists($.a[*] ? (@ >= $min && @ <= $max))', '{"min":2, "max":4}', false) → true
+```||
+||jsonb_path_query ( target jsonb, path jsonpath [, vars jsonb [, silent boolean ]] ) → setof jsonb|
+Returns all JSON items returned by the JSON path for the specified JSON value. The optional vars and silent arguments act the same as for jsonb_path_exists.|
+```sql
+SELECT * FROM jsonb_path_query('{"a":[1,2,3,4,5]}', '$.a[*] ? (@ >= $min && @ <= $max)', '{"min":2, "max":4}', false) as a → [
+2
+3
+4
+]
+```||
+||jsonb_path_query_array ( target jsonb, path jsonpath [, vars jsonb [, silent boolean ]] ) → jsonb|
+Returns all JSON items returned by the JSON path for the specified JSON value, as a JSON array. The optional vars and silent arguments act the same as for jsonb_path_exists.|
+```sql
+jsonb_path_query_array('{"a":[1,2,3,4,5]}', '$.a[*] ? (@ >= $min && @ <= $max)', '{"min":2, "max":4}', false) → [2, 3, 4]
+```||
+||jsonb_path_query_first ( target jsonb, path jsonpath [, vars jsonb [, silent boolean ]] ) → jsonb|
+Returns the first JSON item returned by the JSON path for the specified JSON value. Returns NULL if there are no results. The optional vars and silent arguments act the same as for jsonb_path_exists.|
+```sql
+jsonb_path_query_first('{"a":[1,2,3,4,5]}', '$.a[*] ? (@ >= $min && @ <= $max)', '{"min":2, "max":4}', false) → 2
+```||
+||jsonb_path_exists_tz ( target jsonb, path jsonpath [, vars jsonb [, silent boolean ]] ) → boolean  
+jsonb_path_match_tz ( target jsonb, path jsonpath [, vars jsonb [, silent boolean ]] ) → boolean  
+jsonb_path_query_tz ( target jsonb, path jsonpath [, vars jsonb [, silent boolean ]] ) → setof jsonb  
+jsonb_path_query_array_tz ( target jsonb, path jsonpath [, vars jsonb [, silent boolean ]] ) → jsonb  
+jsonb_path_query_first_tz ( target jsonb, path jsonpath [, vars jsonb [, silent boolean ]] ) → jsonb|
+These functions act like their counterparts described above without the _tz suffix, except that these functions support comparisons of date/time values that require timezone-aware conversions. The example below requires interpretation of the date-only value 2015-08-02 as a timestamp with time zone, so the result depends on the current TimeZone setting. Due to this dependency, these functions are marked as stable, which means these functions cannot be used in indexes. Their counterparts are immutable, and so can be used in indexes; but they will throw errors if asked to make such comparisons. (NOT SUPPORTED)|
+```sql
+#jsonb_path_exists_tz('["2015-08-01 12:00:00-05"]', '$[*] ? (@.datetime() < "2015-08-02".datetime())', '{}', false) → true
+```||
+||jsonb_pretty ( jsonb ) → text|
+Converts the given JSON value to pretty-printed, indented text.|
+```sql
+jsonb_pretty('[{"f1":1,"f2":null}, 2]') → """[
+    {
+        "f1": 1,
+        "f2": null
+    },
+    2
+]"""
+```||
+||json_typeof ( json ) → text  
+jsonb_typeof ( jsonb ) → text|
+Returns the type of the top-level JSON value as a text string. Possible types are object, array, string, number, boolean, and null. (The null result should not be confused with an SQL NULL; see the examples.)|
+```sql
+json_typeof('-123.4') → number
+json_typeof('null'::json) → null
+json_typeof(NULL::json) IS NULL → true
+```||
+|#
+
+9.16.2. The SQL/JSON Path Language
+
+SQL/JSON path expressions specify the items to be retrieved from the JSON data, similar to XPath expressions used for SQL access to XML. In PostgreSQL, path expressions are implemented as the jsonpath data type and can use any elements described in Section 8.14.7.
+
+JSON query functions and operators pass the provided path expression to the path engine for evaluation. If the expression matches the queried JSON data, the corresponding JSON item, or set of items, is returned. Path expressions are written in the SQL/JSON path language and can include arithmetic expressions and functions.
+
+A path expression consists of a sequence of elements allowed by the jsonpath data type. The path expression is normally evaluated from left to right, but you can use parentheses to change the order of operations. If the evaluation is successful, a sequence of JSON items is produced, and the evaluation result is returned to the JSON query function that completes the specified computation.
+
+To refer to the JSON value being queried (the context item), use the $ variable in the path expression. It can be followed by one or more accessor operators, which go down the JSON structure level by level to retrieve sub-items of the context item. Each operator that follows deals with the result of the previous evaluation step.
+
+For example, suppose you have some JSON data from a GPS tracker that you would like to parse, such as:
+
+{
+  "track": {
+    "segments": [
+      {
+        "location":   [ 47.763, 13.4034 ],
+        "start time": "2018-10-14 10:05:14",
+        "HR": 73
+      },
+      {
+        "location":   [ 47.706, 13.2635 ],
+        "start time": "2018-10-14 10:39:21",
+        "HR": 135
+      }
+    ]
+  }
+}
+To retrieve the available track segments, you need to use the .key accessor operator to descend through surrounding JSON objects:
+
+$.track.segments
+To retrieve the contents of an array, you typically use the [*] operator. For example, the following path will return the location coordinates for all the available track segments:
+
+$.track.segments[*].location
+To return the coordinates of the first segment only, you can specify the corresponding subscript in the [] accessor operator. Recall that JSON array indexes are 0-relative:
+
+$.track.segments[0].location
+The result of each path evaluation step can be processed by one or more jsonpath operators and methods listed in Section 9.16.2.2. Each method name must be preceded by a dot. For example, you can get the size of an array:
+
+$.track.segments.size()
+More examples of using jsonpath operators and methods within path expressions appear below in Section 9.16.2.2.
+
+When defining a path, you can also use one or more filter expressions that work similarly to the WHERE clause in SQL. A filter expression begins with a question mark and provides a condition in parentheses:
+
+? (condition)
+Filter expressions must be written just after the path evaluation step to which they should apply. The result of that step is filtered to include only those items that satisfy the provided condition. SQL/JSON defines three-valued logic, so the condition can be true, false, or unknown. The unknown value plays the same role as SQL NULL and can be tested for with the is unknown predicate. Further path evaluation steps use only those items for which the filter expression returned true.
+
+The functions and operators that can be used in filter expressions are listed in Table 9.49. Within a filter expression, the @ variable denotes the value being filtered (i.e., one result of the preceding path step). You can write accessor operators after @ to retrieve component items.
+
+For example, suppose you would like to retrieve all heart rate values higher than 130. You can achieve this using the following expression:
+
+$.track.segments[*].HR ? (@ > 130)
+To get the start times of segments with such values, you have to filter out irrelevant segments before returning the start times, so the filter expression is applied to the previous step, and the path used in the condition is different:
+
+$.track.segments[*] ? (@.HR > 130)."start time"
+You can use several filter expressions in sequence, if required. For example, the following expression selects start times of all segments that contain locations with relevant coordinates and high heart rate values:
+
+$.track.segments[*] ? (@.location[1] < 13.4) ? (@.HR > 130)."start time"
+Using filter expressions at different nesting levels is also allowed. The following example first filters all segments by location, and then returns high heart rate values for these segments, if available:
+
+$.track.segments[*] ? (@.location[1] < 13.4).HR ? (@ > 130)
+You can also nest filter expressions within each other:
+
+$.track ? (exists(@.segments[*] ? (@.HR > 130))).segments.size()
+This expression returns the size of the track if it contains any segments with high heart rate values, or an empty sequence otherwise.
+
+PostgreSQL's implementation of the SQL/JSON path language has the following deviations from the SQL/JSON standard:
+
+A path expression can be a Boolean predicate, although the SQL/JSON standard allows predicates only in filters. This is necessary for implementation of the @@ operator. For example, the following jsonpath expression is valid in PostgreSQL:
+
+$.track.segments[*].HR < 70
+There are minor differences in the interpretation of regular expression patterns used in like_regex filters, as described in Section 9.16.2.3.
+
+9.16.2.1. Strict And Lax Modes
+
+When you query JSON data, the path expression may not match the actual JSON data structure. An attempt to access a non-existent member of an object or element of an array results in a structural error. SQL/JSON path expressions have two modes of handling structural errors:
+
+lax (default) — the path engine implicitly adapts the queried data to the specified path. Any remaining structural errors are suppressed and converted to empty SQL/JSON sequences.
+
+strict — if a structural error occurs, an error is raised.
+
+The lax mode facilitates matching of a JSON document structure and path expression if the JSON data does not conform to the expected schema. If an operand does not match the requirements of a particular operation, it can be automatically wrapped as an SQL/JSON array or unwrapped by converting its elements into an SQL/JSON sequence before performing this operation. Besides, comparison operators automatically unwrap their operands in the lax mode, so you can compare SQL/JSON arrays out-of-the-box. An array of size 1 is considered equal to its sole element. Automatic unwrapping is not performed only when:
+
+The path expression contains type() or size() methods that return the type and the number of elements in the array, respectively.
+
+The queried JSON data contain nested arrays. In this case, only the outermost array is unwrapped, while all the inner arrays remain unchanged. Thus, implicit unwrapping can only go one level down within each path evaluation step.
+
+For example, when querying the GPS data listed above, you can abstract from the fact that it stores an array of segments when using the lax mode:
+
+lax $.track.segments.location
+In the strict mode, the specified path must exactly match the structure of the queried JSON document to return an SQL/JSON item, so using this path expression will cause an error. To get the same result as in the lax mode, you have to explicitly unwrap the segments array:
+
+strict $.track.segments[*].location
+The .\*\* accessor can lead to surprising results when using the lax mode. For instance, the following query selects every HR value twice:
+
+lax $.\*\*.HR
+This happens because the .\*\* accessor selects both the segments array and each of its elements, while the .HR accessor automatically unwraps arrays when using the lax mode. To avoid surprising results, we recommend using the .\*\* accessor only in the strict mode. The following query selects each HR value just once:
+
+strict $.\*\*.HR
+
+9.16.2.2. SQL/JSON Path Operators And Methods
+
+Table 9.48 shows the operators and methods available in jsonpath. Note that while the unary operators and methods can be applied to multiple values resulting from a preceding path step, the binary operators (addition etc.) can only be applied to single values.
+
+Table 9.48. jsonpath Operators and Methods
+
+#|
+||Operator/Method|Description|Example(s)||
+||number + number → number|
+Addition|
+```sql
+jsonb_path_query_array('[2]', '$[0] + 3', '{}', false) → [5]
+```||
+||\+ number → number|
+Unary plus (no operation); unlike addition, this can iterate over multiple values|
+```sql
+jsonb_path_query_array('{"x": [2,3,4]}', '+ $.x', '{}', false) → [2, 3, 4]
+```||
+||number - number → number|
+Subtraction|
+```sql
+jsonb_path_query_array('[2]', '7 - $[0]', '{}', false) → [5]
+```||
+||\- number → number|
+Negation; unlike subtraction, this can iterate over multiple values|
+```sql
+jsonb_path_query_array('{"x": [2,3,4]}', '- $.x', '{}', false) → [-2, -3, -4]
+```||
+||number * number → number|
+Multiplication|
+```sql
+jsonb_path_query_array('[4]', '2 * $[0]', '{}', false) → [8]
+```||
+||number / number → number|
+Division|
+```sql
+jsonb_path_query_array('[8.5]', '$[0] / 2', '{}', false) → [4.2500000000000000]
+```||
+||number % number → number|
+Modulo (remainder)|
+```sql
+jsonb_path_query_array('[32]', '$[0] % 10', '{}', false) → [2]
+```||
+||value . type() → string|
+Type of the JSON item (see json_typeof)|
+```sql
+jsonb_path_query_array('[1, "2", {}]', '$[*].type()', '{}', false) → ["number", "string", "object"]
+```||
+||value . size() → number|
+Size of the JSON item (number of array elements, or 1 if not an array)|
+```sql
+jsonb_path_query_array('{"m": [11, 15]}', '$.m.size()', '{}', false) → [2]
+```||
+||value . double() → number|
+Approximate floating-point number converted from a JSON number or string|
+```sql
+jsonb_path_query_array('{"len": "1.9"}', '$.len.double() * 2', '{}', false) → [3.8]
+```||
+||number . ceiling() → number|
+Nearest integer greater than or equal to the given number|
+```sql
+jsonb_path_query_array('{"h": 1.3}', '$.h.ceiling()', '{}', false) → [2]
+```||
+||number . floor() → number|
+Nearest integer less than or equal to the given number|
+```sql
+jsonb_path_query_array('{"h": 1.7}', '$.h.floor()', '{}', false) → [1]
+```||
+||number . abs() → number|
+Absolute value of the given number|
+```sql
+jsonb_path_query_array('{"z": -0.3}', '$.z.abs()', '{}', false) → [0.3]
+```||
+||string . datetime() → datetime_type (see note)|
+Date/time value converted from a string (NOT SUPPORTED)|
+```sql
+#jsonb_path_query_array('["2015-8-1", "2015-08-12"]', '$[*] ? (@.datetime() < "2015-08-2".datetime())', '{}', false) → ["2015-8-1"]
+```||
+||string . datetime(template) → datetime_type (see note)|
+Date/time value converted from a string using the specified to_timestamp template (NOT SUPPORTED)|
+```sql
+#jsonb_path_query_array('["12:30", "18:40"]', '$[*].datetime("HH24:MI")', '{}', false) → ["12:30:00", "18:40:00"]
+```||
+||object . keyvalue() → array|
+The object's key-value pairs, represented as an array of objects containing three fields: "key", "value", and "id"; "id" is a unique identifier of the object the key-value pair belongs to|
+```sql
+jsonb_path_query_array('{"x": "20", "y": 32}', '$.keyvalue()', '{}', false) → [{"id": 0, "key": "x", "value": "20"}, {"id": 0, "key": "y", "value": 32}]
+```||
+|#
+
+Note
+The result type of the datetime() and datetime(template) methods can be date, timetz, time, timestamptz, or timestamp. Both methods determine their result type dynamically.
+
+The datetime() method sequentially tries to match its input string to the ISO formats for date, timetz, time, timestamptz, and timestamp. It stops on the first matching format and emits the corresponding data type.
+
+The datetime(template) method determines the result type according to the fields used in the provided template string.
+
+The datetime() and datetime(template) methods use the same parsing rules as the to_timestamp SQL function does (see Section 9.8), with three exceptions. First, these methods don't allow unmatched template patterns. Second, only the following separators are allowed in the template string: minus sign, period, solidus (slash), comma, apostrophe, semicolon, colon and space. Third, separators in the template string must exactly match the input string.
+
+If different date/time types need to be compared, an implicit cast is applied. A date value can be cast to timestamp or timestamptz, timestamp can be cast to timestamptz, and time to timetz. However, all but the first of these conversions depend on the current TimeZone setting, and thus can only be performed within timezone-aware jsonpath functions.
+
+Table 9.49 shows the available filter expression elements.
+
+Table 9.49. jsonpath Filter Expression Elements
+
+#|
+||Predicate/Value|Description|Example(s)||
+||value == value → boolean|
+Equality comparison (this, and the other comparison operators, work on all JSON scalar values)|
+```sql
+jsonb_path_query_array('[1, "a", 1, 3]', '$[*] ? (@ == 1)', '{}', false) → [1, 1]
+jsonb_path_query_array('[1, "a", 1, 3]', '$[*] ? (@ == "a")', '{}', false) → ["a"]
+```||
+||value != value → boolean  
+value <> value → boolean|
+Non-equality comparison|
+```sql
+jsonb_path_query_array('[1, 2, 1, 3]', '$[*] ? (@ != 1)', '{}', false) → [2, 3]
+jsonb_path_query_array('["a", "b", "c"]', '$[*] ? (@ <> "b")', '{}', false) → ["a", "c"]
+```||
+||value < value → boolean|
+Less-than comparison|
+```sql
+jsonb_path_query_array('[1, 2, 3]', '$[*] ? (@ < 2)', '{}', false) → [1]
+```||
+||value <= value → boolean|
+Less-than-or-equal-to comparison|
+```sql
+jsonb_path_query_array('["a", "b", "c"]', '$[*] ? (@ <= "b")', '{}', false) → ["a", "b"]
+```||
+||value > value → boolean|
+Greater-than comparison|
+```sql
+jsonb_path_query_array('[1, 2, 3]', '$[*] ? (@ > 2)', '{}', false) → [3]
+```||
+||value >= value → boolean|
+Greater-than-or-equal-to comparison|
+```sql
+jsonb_path_query_array('[1, 2, 3]', '$[*] ? (@ >= 2)', '{}', false) → [2, 3]
+```||
+||true → boolean|
+JSON constant true|
+```sql
+jsonb_path_query_array('[{"name": "John", "parent": false}, {"name": "Chris", "parent": true}]', '$[*] ? (@.parent == true)', '{}', false) → [{"name": "Chris", "parent": true}]
+```||
+||false → boolean|
+JSON constant false|
+```sql
+jsonb_path_query_array('[{"name": "John", "parent": false}, {"name": "Chris", "parent": true}]', '$[*] ? (@.parent == false)', '{}', false) → [{"name": "John", "parent": false}]
+```||
+||null → value|
+JSON constant null (note that, unlike in SQL, comparison to null works normally)|
+```sql
+jsonb_path_query_array('[{"name": "Mary", "job": null}, {"name": "Michael", "job": "driver"}]', '$[*] ? (@.job == null) .name', '{}', false) → ["Mary"]
+```||
+||boolean && boolean → boolean|
+Boolean AND|
+```sql
+jsonb_path_query_array('[1, 3, 7]', '$[*] ? (@ > 1 && @ < 5)', '{}', false) → [3]
+```||
+||boolean \|\| boolean → boolean|
+Boolean OR|
+```sql
+jsonb_path_query_array('[1, 3, 7]', '$[*] ? (@ < 1 || @ > 5)', '{}', false) → [7]
+```||
+||! boolean → boolean|
+Boolean NOT|
+```sql
+jsonb_path_query_array('[1, 3, 7]', '$[*] ? (!(@ < 5))', '{}', false) → [7]
+```||
+||boolean is unknown → boolean|
+Tests whether a Boolean condition is unknown.|
+```sql
+jsonb_path_query_array('[-1, 2, 7, "foo"]', '$[*] ? ((@ > 0) is unknown)', '{}', false) → ["foo"]
+```||
+||string like_regex string [ flag string ] → boolean|
+Tests whether the first operand matches the regular expression given by the second operand, optionally with modifications described by a string of flag characters (see Section 9.16.2.3).|
+```sql
+jsonb_path_query_array('["abc", "abd", "aBdC", "abdacb", "babc"]', '$[*] ? (@ like_regex "^ab.*c")', '{}', false) → ["abc", "abdacb"]
+jsonb_path_query_array('["abc", "abd", "aBdC", "abdacb", "babc"]', '$[*] ? (@ like_regex "^ab.*c" flag "i")', '{}', false) → ["abc", "aBdC", "abdacb"]
+```||
+||string starts with string → boolean|
+Tests whether the second operand is an initial substring of the first operand.|
+```sql
+jsonb_path_query_array('["John Smith", "Mary Stone", "Bob Johnson"]', '$[*] ? (@ starts with "John")', '{}', false) → ["John Smith"]
+```||
+||exists ( path_expression ) → boolean|
+Tests whether a path expression matches at least one SQL/JSON item. Returns unknown if the path expression would result in an error; the second example uses this to avoid a no-such-key error in strict mode.|
+```sql
+jsonb_path_query_array('{"x": [1, 2], "y": [2, 4]}', 'strict $.* ? (exists (@ ? (@[*] > 2)))', '{}', false) → [[2, 4]]
+jsonb_path_query_array('{"value": 41}', 'strict $ ? (exists (@.name)) .name', '{}', false) → []
+```||
+|#
+
+9.16.2.3. SQL/JSON Regular Expressions
+SQL/JSON path expressions allow matching text to a regular expression with the like_regex filter. For example, the following SQL/JSON path query would case-insensitively match all strings in an array that start with an English vowel:
+
+$[*] ? (@ like_regex "^[aeiou]" flag "i")
+
+The optional flag string may include one or more of the characters i for case-insensitive match, m to allow ^ and $ to match at newlines, s to allow . to match a newline, and q to quote the whole pattern (reducing the behavior to a simple substring match).
+
+The SQL/JSON standard borrows its definition for regular expressions from the LIKE_REGEX operator, which in turn uses the XQuery standard. PostgreSQL does not currently support the LIKE_REGEX operator. Therefore, the like_regex filter is implemented using the POSIX regular expression engine described in Section 9.7.3. This leads to various minor discrepancies from standard SQL/JSON behavior, which are cataloged in Section 9.7.3.8. Note, however, that the flag-letter incompatibilities described there do not apply to SQL/JSON, as it translates the XQuery flag letters to match what the POSIX engine expects.
+
+Keep in mind that the pattern argument of like_regex is a JSON path string literal, written according to the rules given in Section 8.14.7. This means in particular that any backslashes you want to use in the regular expression must be doubled. For example, to match string values of the root document that contain only digits:
+
+$.* ? (@ like_regex "^\\d+$")
+
+# 9.17. Sequence Manipulation Functions (NOT SUPPORTED)
+
+# 9.18. Conditional Expressions
+
+9.18.1. CASE
+The SQL CASE expression is a generic conditional expression, similar to if/else statements in other programming languages:
+
+CASE WHEN condition THEN result
+     [WHEN ...]
+     [ELSE result]
+END
+CASE clauses can be used wherever an expression is valid. Each condition is an expression that returns a boolean result. If the condition's result is true, the value of the CASE expression is the result that follows the condition, and the remainder of the CASE expression is not processed. If the condition's result is not true, any subsequent WHEN clauses are examined in the same manner. If no WHEN condition yields true, the value of the CASE expression is the result of the ELSE clause. If the ELSE clause is omitted and no condition is true, the result is null.
+
+An example:
+
+```sql
+SELECT a,
+       CASE WHEN a=1 THEN 'one'
+            WHEN a=2 THEN 'two'
+            ELSE 'other'
+       END as case
+    FROM (VALUES (1),(2),(3)) as x(a)
+
+ a | case
+---+-------
+ 1 | one
+ 2 | two
+ 3 | other
+```
+
+The data types of all the result expressions must be convertible to a single output type. See Section 10.5 for more details.
+
+There is a “simple” form of CASE expression that is a variant of the general form above:
+
+CASE expression
+    WHEN value THEN result
+    [WHEN ...]
+    [ELSE result]
+END
+
+The first expression is computed, then compared to each of the value expressions in the WHEN clauses until one is found that is equal to it. If no match is found, the result of the ELSE clause (or a null value) is returned. This is similar to the switch statement in C.
+
+The example above can be written using the simple CASE syntax:
+
+```sql
+SELECT a,
+       CASE a WHEN 1 THEN 'one'
+              WHEN 2 THEN 'two'
+              ELSE 'other'
+       END as case
+    FROM (VALUES (1),(2),(3)) as x(a)
+
+ a | case
+---+-------
+ 1 | one
+ 2 | two
+ 3 | other
+```
+
+A CASE expression does not evaluate any subexpressions that are not needed to determine the result. For example, this is a possible way of avoiding a division-by-zero failure:
+
+```sql
+SELECT ... WHERE CASE WHEN x <> 0 THEN y/x > 1.5 ELSE false END;
+```
+
+Note
+As described in Section 4.2.14, there are various situations in which subexpressions of an expression are evaluated at different times, so that the principle that “CASE evaluates only necessary subexpressions” is not ironclad. For example a constant 1/0 subexpression will usually result in a division-by-zero failure at planning time, even if it's within a CASE arm that would never be entered at run time.
+
+9.18.2. COALESCE
+
+COALESCE(value [, ...])
+The COALESCE function returns the first of its arguments that is not null. Null is returned only if all arguments are null. It is often used to substitute a default value for null values when data is retrieved for display, for example:
+
+```sql
+SELECT COALESCE(description, short_description, '(none)') ...
+```
+
+This returns description if it is not null, otherwise short_description if it is not null, otherwise (none).
+
+The arguments must all be convertible to a common data type, which will be the type of the result (see Section 10.5 for details).
+
+Like a CASE expression, COALESCE only evaluates the arguments that are needed to determine the result; that is, arguments to the right of the first non-null argument are not evaluated. This SQL-standard function provides capabilities similar to NVL and IFNULL, which are used in some other database systems.
+
+9.18.3. NULLIF
+
+NULLIF(value1, value2) (NOT SUPPORTED)
+The NULLIF function returns a null value if value1 equals value2; otherwise it returns value1. This can be used to perform the inverse operation of the COALESCE example given above:
+
+```sql
+SELECT NULLIF(value, '(none)') ...
+```
+
+In this example, if value is (none), null is returned, otherwise the value of value is returned.
+
+The two arguments must be of comparable types. To be specific, they are compared exactly as if you had written value1 = value2, so there must be a suitable = operator available.
+
+The result has the same type as the first argument — but there is a subtlety. What is actually returned is the first argument of the implied = operator, and in some cases that will have been promoted to match the second argument's type. For example, NULLIF(1, 2.2) yields numeric, because there is no integer = numeric operator, only numeric = numeric.
+
+9.18.4. GREATEST and LEAST
+
+GREATEST(value [, ...])
+LEAST(value [, ...])
+
+The GREATEST and LEAST functions select the largest or smallest value from a list of any number of expressions. The expressions must all be convertible to a common data type, which will be the type of the result (see Section 10.5 for details). NULL values in the list are ignored. The result will be NULL only if all the expressions evaluate to NULL. (NOT SUPPORTED)
+
+Note that GREATEST and LEAST are not in the SQL standard, but are a common extension. Some other databases make them return NULL if any argument is NULL, rather than only when all are NULL.
+
+# 9.19. Array Functions and Operators
+
+Table 9.51 shows the specialized operators available for array types. In addition to those, the usual comparison operators shown in Table 9.1 are available for arrays. The comparison operators compare the array contents element-by-element, using the default B-tree comparison function for the element data type, and sort based on the first difference. In multidimensional arrays the elements are visited in row-major order (last subscript varies most rapidly). If the contents of two arrays are equal but the dimensionality is different, the first difference in the dimensionality information determines the sort order.
+
+Table 9.51. Array Operators
+
+#|
+||Operator|Description|Example(s)||
+||anyarray @> anyarray → boolean|
+Does the first array contain the second, that is, does each element appearing in the second array equal some element of the first array? (Duplicates are not treated specially, thus ARRAY[1] and ARRAY[1,1] are each considered to contain the other.)|
+```sql
+ARRAY[1,4,3] @> ARRAY[3,1,3] → true
+```||
+||anyarray <@ anyarray → boolean|
+Is the first array contained by the second?|
+```sql
+ARRAY[2,2,7] <@ ARRAY[1,7,4,2,6] → true
+```||
+||anyarray && anyarray → boolean|
+Do the arrays overlap, that is, have any elements in common?|
+```sql
+ARRAY[1,4,3] && ARRAY[2,1] → true
+```||
+||anycompatiblearray \|\| anycompatiblearray → anycompatiblearray|
+Concatenates the two arrays. Concatenating a null or empty array is a no-op; otherwise the arrays must have the same number of dimensions (as illustrated by the first example) or differ in number of dimensions by one (as illustrated by the second). If the arrays are not of identical element types, they will be coerced to a common type (see Section 10.5). (NOT SUPPORTED)|
+```sql
+#ARRAY[1,2,3] || ARRAY[4,5,6,7] → {1,2,3,4,5,6,7}
+#ARRAY[1,2,3] || ARRAY[[4,5,6],[7,8,9.9]] → {{1,2,3},{4,5,6},{7,8,9.9}}
+```||
+||anycompatible \|\| anycompatiblearray → anycompatiblearray|
+Concatenates an element onto the front of an array (which must be empty or one-dimensional). (NOT SUPPORTED)|
+```sql
+#3 || ARRAY[4,5,6] → {3,4,5,6}
+```||
+||anycompatiblearray \|\| anycompatible → anycompatiblearray|
+Concatenates an element onto the end of an array (which must be empty or one-dimensional). (NOT SUPPORTED)|
+```sql
+#ARRAY[4,5,6] || 7 → {4,5,6,7}
+```||
+|#
+
+See Section 8.15 for more details about array operator behavior. See Section 11.2 for more details about which operators support indexed operations.
+
+Table 9.52 shows the functions available for use with array types. See Section 8.15 for more information and examples of the use of these functions.
+
+Table 9.52. Array Functions
+#|
+||Function|Description|Example(s)||
+||array_append ( anycompatiblearray, anycompatible ) → anycompatiblearray|
+Appends an element to the end of an array (same as the anycompatiblearray || anycompatible operator). (NOT SUPPORTED)|
+```sql
+#array_append(ARRAY[1,2], 3) → {1,2,3}
+```||
+||array_cat ( anycompatiblearray, anycompatiblearray ) → anycompatiblearray|
+Concatenates two arrays (same as the anycompatiblearray \|\| anycompatiblearray operator). (NOT SUPPORTED)|
+```sql
+#array_cat(ARRAY[1,2,3], ARRAY[4,5]) → {1,2,3,4,5}
+```||
+||array_dims ( anyarray ) → text|
+Returns a text representation of the array's dimensions.|
+```sql
+array_dims(ARRAY[[1,2,3], [4,5,6]]) → [1:2][1:3]
+```||
+||array_fill ( anyelement, integer[] [, integer[] ] ) → anyarray|
+Returns an array filled with copies of the given value, having dimensions of the lengths specified by the second argument. The optional third argument supplies lower-bound values for each dimension (which default to all 1). (NOT SUPPORTED)|
+```sql
+#array_fill(11, ARRAY[2,3]) → {{11,11,11},{11,11,11}}
+#array_fill(7, ARRAY[3], ARRAY[2]) → [2:4]={7,7,7}
+```||
+||array_length ( anyarray, integer ) → integer|
+Returns the length of the requested array dimension. (Produces NULL instead of 0 for empty or missing array dimensions.)|
+```sql
+array_length(array[1,2,3], 1) → 3
+#array_length(array[]::int[], 1) → NULL
+array_length(array['text'], 2) → NULL
+```||
+||array_lower ( anyarray, integer ) → integer|
+Returns the lower bound of the requested array dimension.|
+```sql
+array_lower('[0:2]={1,2,3}'::integer[], 1) → 0
+```||
+||array_ndims ( anyarray ) → integer|
+Returns the number of dimensions of the array.|
+```sql
+array_ndims(ARRAY[[1,2,3], [4,5,6]]) → 2
+```||
+||array_position ( anycompatiblearray, anycompatible [, integer ] ) → integer|
+Returns the subscript of the first occurrence of the second argument in the array, or NULL if it's not present. If the third argument is given, the search begins at that subscript. The array must be one-dimensional. Comparisons are done using IS NOT DISTINCT FROM semantics, so it is possible to search for NULL. (NOT SUPPORTED)|
+```sql
+#array_position(ARRAY['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'], 'mon') → 2
+```||
+||array_positions ( anycompatiblearray, anycompatible ) → integer[]|
+Returns an array of the subscripts of all occurrences of the second argument in the array given as first argument. The array must be one-dimensional. Comparisons are done using IS NOT DISTINCT FROM semantics, so it is possible to search for NULL. NULL is returned only if the array is NULL; if the value is not found in the array, an empty array is returned. (NOT SUPPORTED)|
+```sql
+#array_positions(ARRAY['A','A','B','A'], 'A') → {1,2,4}
+```||
+||array_prepend ( anycompatible, anycompatiblearray ) → anycompatiblearray|
+Prepends an element to the beginning of an array (same as the anycompatible \|\| anycompatiblearray operator). (NOT SUPPORTED)|
+```sql
+#array_prepend(1, ARRAY[2,3]) → {1,2,3}
+```||
+||array_remove ( anycompatiblearray, anycompatible ) → anycompatiblearray|
+Removes all elements equal to the given value from the array. The array must be one-dimensional. Comparisons are done using IS NOT DISTINCT FROM semantics, so it is possible to remove NULLs. (NOT SUPPORTED)|
+```sql
+#array_remove(ARRAY[1,2,3,2], 2) → {1,3}
+```||
+||array_replace ( anycompatiblearray, anycompatible, anycompatible ) → anycompatiblearray|
+Replaces each array element equal to the second argument with the third argument. (NOT SUPPORTED)|
+```sql
+#array_replace(ARRAY[1,2,5,4], 5, 3) → {1,2,3,4}
+```||
+||array_to_string ( array anyarray, delimiter text [, null_string text ] ) → text|
+Converts each array element to its text representation, and concatenates those separated by the delimiter string. If null_string is given and is not NULL, then NULL array entries are represented by that string; otherwise, they are omitted.|
+```sql
+array_to_string(ARRAY[1, 2, 3, NULL, 5], ',', '*') → 1,2,3,*,5
+```||
+||array_upper ( anyarray, integer ) → integer|
+Returns the upper bound of the requested array dimension.|
+```sql
+array_upper(ARRAY[1,8,3,7], 1) → 4
+```||
+||cardinality ( anyarray ) → integer|
+Returns the total number of elements in the array, or 0 if the array is empty.|
+```sql
+cardinality(ARRAY[[1,2],[3,4]]) → 4
+```||
+||trim_array ( array anyarray, n integer ) → anyarray|
+Trims an array by removing the last n elements. If the array is multidimensional, only the first dimension is trimmed. (NOT SUPPORTED)|
+```sql
+#trim_array(ARRAY[1,2,3,4,5,6], 2) → {1,2,3,4}
+```||
+||unnest ( anyarray ) → setof anyelement|
+Expands an array into a set of rows. The array's elements are read out in storage order. (NOT SUPPORTED)|
+
+```sql
+#SELECT * FROM unnest(ARRAY[1,2]) as a → [
+1
+2
+]
+
+#SELECT * FROM unnest(ARRAY[['foo','bar'],['baz','quux']]) as a → [
+foo
+bar
+baz
+quux
+]
+```||
+||unnest ( anyarray, anyarray [, ... ] ) → setof anyelement, anyelement [, ... ]|
+Expands multiple arrays (possibly of different data types) into a set of rows. If the arrays are not all the same length then the shorter ones are padded with NULLs. This form is only allowed in a query's FROM clause; see Section 7.2.1.4. (NOT SUPPORTED)|
+```sql
+#SELECT * FROM unnest(ARRAY[1,2], ARRAY['foo','bar','baz']) as x(a,b) → [
+1,foo
+2,bar
+,baz
+]
+```||
+|#
+
+Note
+There are two differences in the behavior of string_to_array from pre-9.1 versions of PostgreSQL. First, it will return an empty (zero-element) array rather than NULL when the input string is of zero length. Second, if the delimiter string is NULL, the function splits the input into individual characters, rather than returning NULL as before.
+
+See also Section 9.21 about the aggregate function array_agg for use with arrays.

@@ -33,7 +33,9 @@ def run_one(item):
 
 def convert_value(data, output):
     cell = data[0]
-    if isinstance(cell, bytes):
+    if cell is None:
+        value = 'NULL'
+    elif isinstance(cell, bytes):
         if output.startswith("\\x"):
             value = "\\x" + binascii.hexlify(cell).decode("utf-8")
         else:
@@ -55,18 +57,29 @@ def test_doc():
     total = 0
     skipped = 0
     set_of = None
-    set_of_line = None
-    set_of_input = None
-    for line in doc_data:
-        line = line.strip()
+    original_line = None
+    original_input = None
+    multiline = None
+    for raw_line in doc_data:
+        line = raw_line.strip()
         if set_of is not None:
             if line.startswith("]"):
-                queue.append((set_of_line, set_of_input, set_of))
+                queue.append((original_line, original_input, set_of))
                 set_of = None
-                set_of_line = None
-                set_of_input = None
+                original_line = None
+                original_input = None
             else:
                 set_of.append(line)
+            continue
+        if multiline is not None:
+            if line.endswith('"""'):
+                multiline.append(line[0:line.index('"""')])
+                queue.append((original_line, original_input, "".join(multiline)))
+                multiline = None
+                original_line = None
+                original_input = None
+            else:
+                multiline.append(raw_line)
             continue
         if line.startswith("```sql"):
             in_code = True
@@ -86,14 +99,19 @@ def test_doc():
             continue
         if not input.startswith("SELECT"):
             input = "SELECT " + input
-        if "--" in output:
-            output = output[:output.index("--")].strip()
-        if output.startswith("'") and output.endswith("'"):
+        if "/*" in output:
+            output = output[:output.index("/*")].strip()
+        if output.startswith('"""'):
+            multiline = [output[output.index('"""') + 3:] + "\n"]
+            original_line = line
+            original_input = input
+            continue
+        elif output.startswith("'") and output.endswith("'"):
             output = output[1:-1]
         elif output.endswith("["):
             set_of = []
-            set_of_line = line
-            set_of_input = input
+            original_line = line
+            original_input = input
             continue
         queue.append((line, input, output))
     with ThreadPool(16) as pool:

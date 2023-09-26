@@ -22,6 +22,8 @@ message TActivationPercentage {
     repeated string Tags = 6;
     repeated string IncludeGroups = 7;
     repeated string ExcludeGroups = 8;
+    repeated string IncludeRevisions = 9;
+    repeated string ExcludeRevisions = 10;
 }
 
 message TAttr {
@@ -559,7 +561,7 @@ message TGenericClusterConfig {
     required NYql.NConnector.NApi.TCredentials Credentials = 10;
 
     // Credentials used to access MDB API.
-    // When working with data source instances deployed in a cloud, 
+    // When working with data source instances deployed in a cloud,
     // you should either set (ServiceAccountId, ServiceAccountIdSignature) pair,
     // or set IAM Token.
     // The names of these fields must satisfy this template function:
@@ -568,7 +570,7 @@ message TGenericClusterConfig {
     optional string ServiceAccountIdSignature = 7;
     optional string Token = 11;
 
-    // If true, the generic provider will ask connector server to use secure connections 
+    // If true, the generic provider will ask connector server to use secure connections
     // to access remote data sources.
     optional bool UseSsl = 12;
 
@@ -592,7 +594,7 @@ message TGenericConnectorConfig {
 }
 
 message TGenericGatewayConfig {
-    // Connector service network endpoint 
+    // Connector service network endpoint
     // TODO: replace with map<DataSourceKind, TGenericConnectorConfig>
     required TGenericConnectorConfig Connector = 5;
 

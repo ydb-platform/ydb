@@ -12,6 +12,7 @@ target_link_libraries(providers-common-activation PUBLIC
   contrib-libs-cxxsupp
   yutil
   providers-common-proto
+  library-cpp-svnversion
 )
 target_sources(providers-common-activation PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/common/activation/yql_activation.cpp

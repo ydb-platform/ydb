@@ -9,13 +9,13 @@ namespace NKikimr {
 namespace NHive {
 
 template<>
-void BalanceNodes<NKikimrConfig::THiveConfig::HIVE_NODE_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM>(std::vector<TNodeInfo*>& nodes) {
+void BalanceNodes<NKikimrConfig::THiveConfig::HIVE_NODE_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM>(std::vector<TNodeInfo*>& nodes, EResourceToBalance resourceToBalance) {
     auto& randGen = *TAppData::RandomProvider.Get();
     // weighted random shuffle
     std::vector<double> usages;
     usages.reserve(nodes.size());
     for (auto it = nodes.begin(); it != nodes.end(); ++it) {
-        usages.emplace_back((*it)->GetNodeUsage());
+        usages.emplace_back((*it)->GetNodeUsage(resourceToBalance));
     }
     auto itN = nodes.begin();
     auto itU = usages.begin();
@@ -31,12 +31,12 @@ void BalanceNodes<NKikimrConfig::THiveConfig::HIVE_NODE_BALANCE_STRATEGY_OLD_WEI
 }
 
 template<>
-void BalanceNodes<NKikimrConfig::THiveConfig::HIVE_NODE_BALANCE_STRATEGY_WEIGHTED_RANDOM>(std::vector<TNodeInfo*>& nodes) {
+void BalanceNodes<NKikimrConfig::THiveConfig::HIVE_NODE_BALANCE_STRATEGY_WEIGHTED_RANDOM>(std::vector<TNodeInfo*>& nodes, EResourceToBalance resourceToBalance) {
     auto& randGen = *TAppData::RandomProvider.Get();
     std::vector<std::pair<double, TNodeInfo*>> weights;
     weights.reserve(nodes.size());
     for (TNodeInfo* node : nodes) {
-        double weight = node->GetNodeUsage();
+        double weight = node->GetNodeUsage(resourceToBalance);
         weights.emplace_back(weight * randGen(), node);
     }
     std::sort(weights.begin(), weights.end(), [](const auto& a, const auto& b) -> bool {
@@ -48,26 +48,26 @@ void BalanceNodes<NKikimrConfig::THiveConfig::HIVE_NODE_BALANCE_STRATEGY_WEIGHTE
 }
 
 template<>
-void BalanceNodes<NKikimrConfig::THiveConfig::HIVE_NODE_BALANCE_STRATEGY_HEAVIEST>(std::vector<TNodeInfo*>& nodes) {
-    std::sort(nodes.begin(), nodes.end(), [](const TNodeInfo* a, const TNodeInfo* b) -> bool {
-        return a->GetNodeUsage() > b->GetNodeUsage();
+void BalanceNodes<NKikimrConfig::THiveConfig::HIVE_NODE_BALANCE_STRATEGY_HEAVIEST>(std::vector<TNodeInfo*>& nodes, EResourceToBalance resourceToBalance) {
+    std::sort(nodes.begin(), nodes.end(), [resourceToBalance](const TNodeInfo* a, const TNodeInfo* b) -> bool {
+        return a->GetNodeUsage(resourceToBalance) > b->GetNodeUsage(resourceToBalance);
     });
 }
 
 template<>
-void BalanceNodes<NKikimrConfig::THiveConfig::HIVE_NODE_BALANCE_STRATEGY_RANDOM>(std::vector<TNodeInfo*>& nodes) {
+void BalanceNodes<NKikimrConfig::THiveConfig::HIVE_NODE_BALANCE_STRATEGY_RANDOM>(std::vector<TNodeInfo*>& nodes, EResourceToBalance) {
     auto& randGen = *TAppData::RandomProvider.Get();
     std::shuffle(nodes.begin(), nodes.end(), randGen);
 }
 
 template<>
-void BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM>(std::vector<TTabletInfo*>& tablets) {
+void BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM>(std::vector<TTabletInfo*>& tablets, EResourceToBalance resourceToBalance) {
     auto& randGen = *TAppData::RandomProvider.Get();
     // weighted random shuffle
     std::vector<double> weights;
     weights.reserve(tablets.size());
     for (auto it = tablets.begin(); it != tablets.end(); ++it) {
-        weights.emplace_back((*it)->Weight);
+        weights.emplace_back((*it)->GetWeight(resourceToBalance));
     }
     auto itT = tablets.begin();
     auto itW = weights.begin();
@@ -83,25 +83,25 @@ void BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_OLD
 }
 
 template<>
-void BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST>(std::vector<TTabletInfo*>& tablets) {
-    std::sort(tablets.begin(), tablets.end(), [](const TTabletInfo* a, const TTabletInfo* b) -> bool {
-        return a->Weight > b->Weight;
+void BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST>(std::vector<TTabletInfo*>& tablets, EResourceToBalance resourceToBalance) {
+    std::sort(tablets.begin(), tablets.end(), [resourceToBalance](const TTabletInfo* a, const TTabletInfo* b) -> bool {
+        return a->GetWeight(resourceToBalance) > b->GetWeight(resourceToBalance);
     });
 }
 
 template<>
-void BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_RANDOM>(std::vector<TTabletInfo*>& tablets) {
+void BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_RANDOM>(std::vector<TTabletInfo*>& tablets, EResourceToBalance) {
     auto& randGen = *TAppData::RandomProvider.Get();
     std::shuffle(tablets.begin(), tablets.end(), randGen);
 }
 
 template<>
-void BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM>(std::vector<TTabletInfo*>& tablets) {
+void BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM>(std::vector<TTabletInfo*>& tablets, EResourceToBalance resourceToBalance) {
     auto& randGen = *TAppData::RandomProvider.Get();
     std::vector<std::pair<double, TTabletInfo*>> weights;
     weights.reserve(tablets.size());
     for (TTabletInfo* tablet : tablets) {
-        double weight = tablet->Weight;
+        double weight = tablet->GetWeight(resourceToBalance);
         weights.emplace_back(weight * randGen(), tablet);
     }
     std::sort(weights.begin(), weights.end(), [](const auto& a, const auto& b) -> bool {
@@ -118,11 +118,8 @@ protected:
     THive* Hive;
     using TTabletId = TFullTabletId;
     ui64 KickInFlight;
-    ui64 MaxKickInFlight;
     int Movements;
-    int MaxMovements;
-    bool RecheckOnFinish;
-    std::vector<TNodeId> FilterNodeIds;
+    TBalancerSettings Settings;
 
     TString GetLogPrefix() const {
         return Hive->GetLogPrefix();
@@ -135,7 +132,7 @@ protected:
         if (Movements == 0) {
             Hive->TabletCounters->Cumulative()[NHive::COUNTER_BALANCER_FAILED].Increment(1);
             // we failed to balance specific nodes
-            for (TNodeId nodeId : FilterNodeIds) {
+            for (TNodeId nodeId : Settings.FilterNodeIds) {
                 TNodeInfo* node = Hive->FindNode(nodeId);
                 if (node != nullptr && node->IsOverloaded()) {
                     BLOG_D("Balancer suggests scale-up");
@@ -144,7 +141,7 @@ protected:
                 }
             }
         }
-        if (RecheckOnFinish && MaxMovements != 0 && Movements >= MaxMovements) {
+        if (Settings.RecheckOnFinish && Settings.MaxMovements != 0 && Movements >= Settings.MaxMovements) {
             BLOG_D("Balancer initiated recheck");
             Hive->ProcessTabletBalancer();
         } else {
@@ -158,12 +155,12 @@ protected:
     }
 
     bool CanKickNextTablet() const {
-        return KickInFlight < MaxKickInFlight;
+        return KickInFlight < Settings.MaxInFlight;
     }
 
     void UpdateProgress() {
-        if (MaxMovements != 0) {
-            Hive->BalancerProgress = Movements * 100 / MaxMovements;
+        if (Settings.MaxMovements != 0) {
+            Hive->BalancerProgress = Movements * 100 / Settings.MaxMovements;
         } else {
             if (Hive->TabletsTotal != 0) {
                 Hive->BalancerProgress = Movements * 100 / Hive->TabletsTotal;
@@ -177,7 +174,7 @@ protected:
         if (!CanKickNextTablet()) {
             return;
         }
-        if (MaxMovements != 0 && Movements >= MaxMovements) {
+        if (Settings.MaxMovements != 0 && Movements >= Settings.MaxMovements) {
             if (KickInFlight > 0) {
                 return;
             } else {
@@ -197,9 +194,9 @@ protected:
 
         TInstant now = TActivationContext::Now();
         std::vector<TNodeInfo*> nodes;
-        if (!FilterNodeIds.empty()) {
-            nodes.reserve(FilterNodeIds.size());
-            for (TNodeId nodeId : FilterNodeIds) {
+        if (!Settings.FilterNodeIds.empty()) {
+            nodes.reserve(Settings.FilterNodeIds.size());
+            for (TNodeId nodeId : Settings.FilterNodeIds) {
                 TNodeInfo* node = Hive->FindNode(nodeId);
                 if (node != nullptr && node->IsAlive()) {
                     nodes.emplace_back(node);
@@ -216,16 +213,16 @@ protected:
 
         switch (Hive->GetNodeBalanceStrategy()) {
         case NKikimrConfig::THiveConfig::HIVE_NODE_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM:
-            BalanceNodes<NKikimrConfig::THiveConfig::HIVE_NODE_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM>(nodes);
+            BalanceNodes<NKikimrConfig::THiveConfig::HIVE_NODE_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM>(nodes, Settings.ResourceToBalance);
             break;
         case NKikimrConfig::THiveConfig::HIVE_NODE_BALANCE_STRATEGY_WEIGHTED_RANDOM:
-            BalanceNodes<NKikimrConfig::THiveConfig::HIVE_NODE_BALANCE_STRATEGY_WEIGHTED_RANDOM>(nodes);
+            BalanceNodes<NKikimrConfig::THiveConfig::HIVE_NODE_BALANCE_STRATEGY_WEIGHTED_RANDOM>(nodes, Settings.ResourceToBalance);
             break;
         case NKikimrConfig::THiveConfig::HIVE_NODE_BALANCE_STRATEGY_HEAVIEST:
-            BalanceNodes<NKikimrConfig::THiveConfig::HIVE_NODE_BALANCE_STRATEGY_HEAVIEST>(nodes);
+            BalanceNodes<NKikimrConfig::THiveConfig::HIVE_NODE_BALANCE_STRATEGY_HEAVIEST>(nodes, Settings.ResourceToBalance);
             break;
         case NKikimrConfig::THiveConfig::HIVE_NODE_BALANCE_STRATEGY_RANDOM:
-            BalanceNodes<NKikimrConfig::THiveConfig::HIVE_NODE_BALANCE_STRATEGY_RANDOM>(nodes);
+            BalanceNodes<NKikimrConfig::THiveConfig::HIVE_NODE_BALANCE_STRATEGY_RANDOM>(nodes, Settings.ResourceToBalance);
             break;
         }
         for (const TNodeInfo* node : nodes) {
@@ -246,16 +243,16 @@ protected:
             if (!tablets.empty()) {
                 switch (Hive->GetTabletBalanceStrategy()) {
                 case NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM:
-                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM>(tablets);
+                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM>(tablets, Settings.ResourceToBalance);
                     break;
                 case NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM:
-                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM>(tablets);
+                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM>(tablets, Settings.ResourceToBalance);
                     break;
                 case NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST:
-                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST>(tablets);
+                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST>(tablets, Settings.ResourceToBalance);
                     break;
                 case NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_RANDOM:
-                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_RANDOM>(tablets);
+                    BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_RANDOM>(tablets, Settings.ResourceToBalance);
                     break;
                 }
                 for (TTabletInfo* tablet : tablets) {
@@ -301,14 +298,11 @@ public:
         return NKikimrServices::TActivity::HIVE_BALANCER_ACTOR;
     }
 
-    THiveBalancer(THive* hive, int maxMovements = 0, bool recheckOnFinish = false, ui64 maxInFlight = 1, const std::vector<TNodeId>& filterNodeIds = {})
+    THiveBalancer(THive* hive, TBalancerSettings settings)
         : Hive(hive)
         , KickInFlight(0)
-        , MaxKickInFlight(maxInFlight)
         , Movements(0)
-        , MaxMovements(maxMovements)
-        , RecheckOnFinish(recheckOnFinish)
-        , FilterNodeIds(filterNodeIds)
+        , Settings(std::move(settings))
     {}
 
     void Bootstrap() {
@@ -327,9 +321,9 @@ public:
     }
 };
 
-void THive::StartHiveBalancer(int maxMovements, bool recheckOnFinish, ui64 maxInFlight, const std::vector<TNodeId>& filterNodeIds) {
+void THive::StartHiveBalancer(TBalancerSettings settings) {
     if (BalancerProgress == -1) {
-        auto* balancer = new THiveBalancer(this, maxMovements, recheckOnFinish, maxInFlight, filterNodeIds);
+        auto* balancer = new THiveBalancer(this, std::move(settings));
         SubActors.emplace_back(balancer);
         BalancerProgress = -2;
         RegisterWithSameMailbox(balancer);

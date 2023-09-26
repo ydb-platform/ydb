@@ -152,6 +152,7 @@ public:
 protected:
     NKikimrTabletBase::TMetrics ResourceValues; // current values of various metrics
     TTabletMetricsAggregates ResourceMetricsAggregates;
+    TResourceNormalizedValues ResourceNormalizedValues;
 
 public:
     TVector<TActorId> ActorsToNotify; // ...OnCreation persistent
@@ -234,8 +235,19 @@ public:
     void FilterRawValues(TResourceNormalizedValues& values) const;
 
     template <typename ResourcesType>
-    static double GetUsage(const ResourcesType& current, const ResourcesType& maximum) {
-        return max(NormalizeRawValues(current, maximum));
+    static double GetUsage(const ResourcesType& current, const ResourcesType& maximum, EResourceToBalance resource = EResourceToBalance::Dominant) {
+        auto normValues = NormalizeRawValues(current, maximum);
+        return ExtractResourceUsage(normValues, resource);
+    }
+
+    static double ExtractResourceUsage(const TResourceNormalizedValues& normValues, EResourceToBalance resource = EResourceToBalance::Dominant) {
+        switch (resource) {
+        case EResourceToBalance::CPU: return std::get<NMetrics::EResource::CPU>(normValues);
+        case EResourceToBalance::Memory: return std::get<NMetrics::EResource::Memory>(normValues);
+        case EResourceToBalance::Network: return std::get<NMetrics::EResource::Network>(normValues);
+        case EResourceToBalance::Counter: return std::get<NMetrics::EResource::Counter>(normValues);
+        case EResourceToBalance::Dominant: return max(normValues);
+        }
     }
 
     void UpdateWeight() {
@@ -244,7 +256,12 @@ public:
         FilterRawValues(current);
         FilterRawValues(maximum);
 
-        Weight = GetUsage(current, maximum);
+        ResourceNormalizedValues = NormalizeRawValues(current, maximum);
+        Weight = ExtractResourceUsage(ResourceNormalizedValues);
+    }
+
+    double GetWeight(EResourceToBalance resourceToBalance) const {
+        return ExtractResourceUsage(ResourceNormalizedValues, resourceToBalance);
     }
 
     void PostponeStart(TInstant nextStart) {

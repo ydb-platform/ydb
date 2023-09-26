@@ -1,5 +1,7 @@
 #include "hive.h"
 
+#include <ydb/core/util/tuples.h>
+
 namespace NKikimr {
 namespace NHive {
 
@@ -35,29 +37,25 @@ TString EBalancerTypeName(EBalancerType value) {
     }
 }
 
+EResourceToBalance ToResourceToBalance(NMetrics::EResource resource) {
+    switch (resource) {
+        case NMetrics::EResource::CPU: return EResourceToBalance::CPU;
+        case NMetrics::EResource::Memory: return EResourceToBalance::Memory;
+        case NMetrics::EResource::Network: return EResourceToBalance::Network;
+        case NMetrics::EResource::Counter: return EResourceToBalance::Counter;
+    }
+}
+
 TResourceNormalizedValues NormalizeRawValues(const TResourceRawValues& values, const TResourceRawValues& maximum) {
-    TResourceNormalizedValues normValues = {};
-    if (std::get<NMetrics::EResource::Counter>(maximum) != 0) {
-        std::get<NMetrics::EResource::Counter>(normValues) =
-                static_cast<double>(std::get<NMetrics::EResource::Counter>(values)) / std::get<NMetrics::EResource::Counter>(maximum);
-    }
-    if (std::get<NMetrics::EResource::CPU>(maximum) != 0) {
-        std::get<NMetrics::EResource::CPU>(normValues) =
-                static_cast<double>(std::get<NMetrics::EResource::CPU>(values)) / std::get<NMetrics::EResource::CPU>(maximum);
-    }
-    if (std::get<NMetrics::EResource::Memory>(maximum) != 0) {
-        std::get<NMetrics::EResource::Memory>(normValues) =
-                static_cast<double>(std::get<NMetrics::EResource::Memory>(values)) / std::get<NMetrics::EResource::Memory>(maximum);
-    }
-    if (std::get<NMetrics::EResource::Network>(maximum) != 0) {
-        std::get<NMetrics::EResource::Network>(normValues) =
-                static_cast<double>(std::get<NMetrics::EResource::Network>(values)) / std::get<NMetrics::EResource::Network>(maximum);
-    }
-    return normValues;
+    return safe_div(values, maximum);
 }
 
 NMetrics::EResource GetDominantResourceType(const TResourceRawValues& values, const TResourceRawValues& maximum) {
     TResourceNormalizedValues normValues = NormalizeRawValues(values, maximum);
+    return GetDominantResourceType(normValues);
+}
+
+NMetrics::EResource GetDominantResourceType(const TResourceNormalizedValues& normValues) {
     NMetrics::EResource dominant = NMetrics::EResource::Counter;
     auto value = std::get<NMetrics::EResource::Counter>(normValues);
     if (std::get<NMetrics::EResource::CPU>(normValues) > value) {
@@ -74,6 +72,5 @@ NMetrics::EResource GetDominantResourceType(const TResourceRawValues& values, co
     }
     return dominant;
 }
-
 }
 }

@@ -378,12 +378,17 @@ double TNodeInfo::GetNodeUsageForTablet(const TTabletInfo& tablet) const {
     return usage;
 }
 
-double TNodeInfo::GetNodeUsage() const {
-    double usage = TTabletInfo::GetUsage(GetResourceCurrentValues(), GetResourceMaximumValues());
-    if (AveragedNodeTotalUsage.IsValueStable()) {
+double TNodeInfo::GetNodeUsage(const TResourceNormalizedValues& normValues, EResourceToBalance resource) const {
+    double usage = TTabletInfo::ExtractResourceUsage(normValues, resource);
+    if (resource == EResourceToBalance::Dominant && AveragedNodeTotalUsage.IsValueStable()) {
         usage = std::max(usage, AveragedNodeTotalUsage.GetValue());
     }
     return usage;
+}
+
+double TNodeInfo::GetNodeUsage(EResourceToBalance resource) const {
+    auto normValues = NormalizeRawValues(GetResourceCurrentValues(), GetResourceMaximumValues());
+    return GetNodeUsage(normValues, resource);
 }
 
 ui64 TNodeInfo::GetTabletsRunningByType(TTabletTypes::EType tabletType) const {

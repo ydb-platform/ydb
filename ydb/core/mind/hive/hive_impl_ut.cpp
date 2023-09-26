@@ -109,7 +109,8 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
 
         auto CheckSpeedAndDistribution = [](
             std::unordered_map<ui64, TLeaderTabletInfo>& allTablets,
-            std::function<void(std::vector<TTabletInfo*>&)> func) -> void {
+            std::function<void(std::vector<TTabletInfo*>&, EResourceToBalance)> func,
+            EResourceToBalance resource) -> void {
 
             std::vector<TTabletInfo*> tablets;
             for (auto& [id, tab] : allTablets) {
@@ -118,7 +119,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
 
             TProfileTimer timer;
 
-            func(tablets);
+            func(tablets, resource);
 
             double passed = timer.Get().SecondsFloat();
 
@@ -134,11 +135,12 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
             size_t revs = 0;
             double prev = 0;
             for (size_t n = 0; n < tablets.size(); ++n) {
-                buckets[n / (NUM_TABLETS / NUM_BUCKETS)] += tablets[n]->Weight;
-                if (n != 0 && tablets[n]->Weight >= prev) {
+                double weight = tablets[n]->GetWeight(resource);
+                buckets[n / (NUM_TABLETS / NUM_BUCKETS)] += weight;
+                if (n != 0 && weight >= prev) {
                     ++revs;
                 }
-                prev = tablets[n]->Weight;
+                prev = weight;
             }
 
             Ctest << "Indirection=" << revs * 100 / NUM_TABLETS << "%" << Endl;
@@ -176,19 +178,21 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
 
         for (ui64 i = 0; i < NUM_TABLETS; ++i) {
             TLeaderTabletInfo& tablet = allTablets.emplace(std::piecewise_construct, std::tuple<TTabletId>(i), std::tuple<TTabletId, THive&>(i, hive)).first->second;
-            tablet.Weight = RandomNumber<double>();
+            NKikimrTabletBase::TMetrics metrics;
+            metrics.SetMemory(RandomNumber<double>());
+            tablet.UpdateResourceUsage(metrics);
         }
 
         Ctest << "HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST" << Endl;
-        CheckSpeedAndDistribution(allTablets, BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST>);
+        CheckSpeedAndDistribution(allTablets, BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST>, EResourceToBalance::Memory);
 
         //Ctest << "HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM" << Endl;
         //CheckSpeedAndDistribution(allTablets, BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM>);
 
         Ctest << "HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM" << Endl;
-        CheckSpeedAndDistribution(allTablets, BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM>);
+        CheckSpeedAndDistribution(allTablets, BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM>, EResourceToBalance::Memory);
 
         Ctest << "HIVE_TABLET_BALANCE_STRATEGY_RANDOM" << Endl;
-        CheckSpeedAndDistribution(allTablets, BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_RANDOM>);
+        CheckSpeedAndDistribution(allTablets, BalanceTablets<NKikimrConfig::THiveConfig::HIVE_TABLET_BALANCE_STRATEGY_RANDOM>, EResourceToBalance::Memory);
     }
 }

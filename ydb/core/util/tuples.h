@@ -135,6 +135,19 @@ operator /(const std::tuple<A...>& a, const std::tuple<B...>& b) {
     return div(std::make_index_sequence<sizeof...(A)>(), a, b);
 }
 
+// safe_div: same as operator/, but casts everything to double & returns 0 when denominator is 0
+
+template <std::size_t... I, typename... A, typename... B>
+auto safe_div(std::index_sequence<I...>, const std::tuple<A...>& a, const std::tuple<B...>& b) {
+    return std::make_tuple(std::get<I>(b) ? static_cast<double>(std::get<I>(a)) / static_cast<double>(std::get<I>(b)) : double(0)...);
+}
+
+template <typename... A, typename... B>
+auto safe_div(const std::tuple<A...> a, const std::tuple<B...> b) {
+    static_assert(sizeof...(A) == sizeof...(B), "Tuples should be the same size");
+    return safe_div(std::make_index_sequence<sizeof...(A)>(), a, b);
+}
+
 /////
 
 template <std::size_t... I, typename... A, typename V>
@@ -227,6 +240,7 @@ decltype(sqrt(std::make_index_sequence<sizeof...(T)>(), std::tuple<T...>())) sqr
 }
 
 // convert(tuple<>, f) - converts every tuple element using f
+// convert(tuple<> a, tuple<> b, f) - returns a tuple of f(a_i, b_i)
 
 template <std::size_t... I, typename...T, typename F>
 decltype(std::make_tuple((*(F*)(nullptr))(std::get<I>(std::tuple<T...>()))...)) convert(std::index_sequence<I...>, const std::tuple<T...>& a, F f) {
@@ -236,6 +250,16 @@ decltype(std::make_tuple((*(F*)(nullptr))(std::get<I>(std::tuple<T...>()))...)) 
 template <typename... T, typename F>
 decltype(convert(std::make_index_sequence<sizeof...(T)>(), std::tuple<T...>(), *(F*)(nullptr))) convert(const std::tuple<T...>& a, F f) {
     return convert(std::make_index_sequence<sizeof...(T)>(), a, f);
+}
+
+template<std::size_t... I, typename... T, typename... U, typename F>
+auto convert(std::index_sequence<I...>, const std::tuple<T...>& a, const std::tuple<U...>& b, F f) {
+    return std::make_tuple(f(std::get<I>(a), std::get<I>(b))...);
+}
+
+template <typename... T, typename... U, typename F>
+auto convert(const std::tuple<T...>& a, const std::tuple<T...>& b, F f) {
+    return convert(std::make_index_sequence<sizeof...(T)>(), a, b, f);
 }
 
 template <typename... T>
@@ -357,5 +381,23 @@ template <std::size_t... I, typename... Ts>
 inline std::tuple<Ts...> piecewise_max(std::index_sequence<I...>, const std::tuple<Ts...>& a, const std::tuple<Ts...>& b) { return std::tuple<Ts...>({std::max<Ts>(std::get<I>(a), std::get<I>(b))...}); }
 template <typename... Ts>
 inline std::tuple<Ts...> piecewise_max(const std::tuple<Ts...>& a, const std::tuple<Ts...>& b) { return piecewise_max(std::make_index_sequence<sizeof...(Ts)>(), a, b); }
+
+// piecewise_min(tuple<>, tuple<>)
+
+template <std::size_t... I, typename... Ts>
+inline std::tuple<Ts...> piecewise_min(std::index_sequence<I...>, const std::tuple<Ts...>& a, const std::tuple<Ts...>& b) { return std::tuple<Ts...>({std::min<Ts>(std::get<I>(a), std::get<I>(b))...}); }
+template <typename... Ts>
+inline std::tuple<Ts...> piecewise_min(const std::tuple<Ts...>& a, const std::tuple<Ts...>& b) { return piecewise_min(std::make_index_sequence<sizeof...(Ts)>(), a, b); }
+
+// piecewise_compare(tuple<>, tuple<>) -> tuple<ordering>
+
+template <std::size_t... I, typename... Ts>
+inline auto piecewise_compare(std::index_sequence<I...>, const std::tuple<Ts...>&a, const std::tuple<Ts...>& b) {
+    return std::make_tuple((std::get<I>(a) <=> std::get<I>(b))...);
+}
+template <typename... Ts>
+inline auto piecewise_compare(const std::tuple<Ts...>& a, const std::tuple<Ts...>& b) {
+    return piecewise_compare(std::make_index_sequence<sizeof...(Ts)>(), a, b);
+}
 
 }

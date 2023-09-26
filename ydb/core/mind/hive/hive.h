@@ -82,6 +82,16 @@ enum class EBalancerType {
 
 TString EBalancerTypeName(EBalancerType value);
 
+enum class EResourceToBalance {
+    Dominant,
+    CPU,
+    Memory,
+    Network,
+    Counter,
+};
+
+EResourceToBalance ToResourceToBalance(NMetrics::EResource resource);
+
 struct ISubActor {
     virtual void Cleanup() = 0;
 };
@@ -165,6 +175,7 @@ struct TSideEffects : TCompleteNotifications, TCompleteActions {
 
 TResourceNormalizedValues NormalizeRawValues(const TResourceRawValues& values, const TResourceRawValues& maximum);
 NMetrics::EResource GetDominantResourceType(const TResourceRawValues& values, const TResourceRawValues& maximum);
+NMetrics::EResource GetDominantResourceType(const TResourceNormalizedValues& normValues);
 
 template <typename... ResourceTypes>
 inline std::tuple<ResourceTypes...> GetStDev(const TVector<std::tuple<ResourceTypes...>>& values) {
@@ -227,6 +238,14 @@ struct TDrainSettings {
     bool Persist = true;
     bool KeepDown = false;
     ui32 DrainInFlight = 0;
+};
+
+struct TBalancerSettings {
+    int MaxMovements = 0;
+    bool RecheckOnFinish = false;
+    ui64 MaxInFlight = 1;
+    const std::vector<TNodeId> FilterNodeIds = {};
+    EResourceToBalance ResourceToBalance = EResourceToBalance::Dominant;
 };
 
 } // NHive

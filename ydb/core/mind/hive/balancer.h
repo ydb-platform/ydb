@@ -6,10 +6,10 @@ namespace NKikimr {
 namespace NHive {
 
 template<NKikimrConfig::THiveConfig::EHiveNodeBalanceStrategy EHiveNodeBalanceStrategy>
-void BalanceNodes(std::vector<TNodeInfo*>& nodes);
+void BalanceNodes(std::vector<TNodeInfo*>& nodes, EResourceToBalance resourceTobalance);
 
 template<NKikimrConfig::THiveConfig::EHiveTabletBalanceStrategy EHiveTabletBalanceStrategy>
-void BalanceTablets(std::vector<TTabletInfo*>& tablets);
+void BalanceTablets(std::vector<TTabletInfo*>& tablets, EResourceToBalance resourceToBalance);
 
 }
 }

@@ -2089,7 +2089,8 @@ THive::THiveStats THive::GetStats() const {
     stats.Values.reserve(Nodes.size());
     for (const auto& ni : Nodes) {
         if (ni.second.IsAlive() && !ni.second.Down) {
-            stats.Values.push_back({ni.first, ni.second.GetNodeUsage()});
+            auto nodeValues = NormalizeRawValues(ni.second.ResourceValues, ni.second.GetResourceMaximumValues());
+            stats.Values.emplace_back(ni.first, ni.second.GetNodeUsage(nodeValues), nodeValues);
         }
     }
     if (stats.Values.empty()) {
@@ -2102,14 +2103,21 @@ THive::THiveStats THive::GetStats() const {
     stats.MaxUsageNodeId = it.second->NodeId;
     stats.MinUsage = it.first->Usage;
     stats.MinUsageNodeId = it.first->NodeId;
-    if (stats.MaxUsage > 0) {
-        double minUsageToBalance = GetMinNodeUsageToBalance();
-        double minUsage = std::max(stats.MinUsage, minUsageToBalance);
-        double maxUsage = std::max(stats.MaxUsage, minUsageToBalance);
-        stats.Scatter = (maxUsage - minUsage) / maxUsage;
-    } else {
-        stats.Scatter = 0;
+
+    TResourceNormalizedValues minValues = stats.Values.front().ResourceNormValues;
+    TResourceNormalizedValues maxValues = stats.Values.front().ResourceNormValues;
+    for (size_t i = 1; i < stats.Values.size(); ++i) {
+        minValues = piecewise_min(minValues, stats.Values[i].ResourceNormValues);
+        maxValues = piecewise_max(maxValues, stats.Values[i].ResourceNormValues);
     }
+
+
+    auto minValuesToBalance = GetMinNodeUsageToBalance();
+    maxValues = piecewise_max(maxValues, minValuesToBalance);
+    minValues = piecewise_max(minValues, minValuesToBalance);
+    stats.ScatterByResource = safe_div(maxValues - minValues, maxValues);
+    stats.Scatter = max(stats.ScatterByResource);
+
     return stats;
 }
 
@@ -2121,6 +2129,24 @@ double THive::GetScatter() const {
 double THive::GetUsage() const {
     THiveStats stats = GetStats();
     return stats.MaxUsage;
+}
+
+std::optional<EResourceToBalance> THive::CheckScatter(const TResourceNormalizedValues& scatterByResource) const {
+    auto minScatterToBalance = GetMinScatterToBalance();
+    auto cmp = piecewise_compare(scatterByResource, minScatterToBalance);
+    if (std::get<NMetrics::EResource::Counter>(cmp) == std::partial_ordering::greater) {
+        return EResourceToBalance::Counter;
+    }
+    if (std::get<NMetrics::EResource::CPU>(cmp) == std::partial_ordering::greater) {
+        return EResourceToBalance::CPU;
+    }
+    if (std::get<NMetrics::EResource::Memory>(cmp) == std::partial_ordering::greater) {
+        return EResourceToBalance::Memory;
+    }
+    if (std::get<NMetrics::EResource::Network>(cmp) == std::partial_ordering::greater) {
+        return EResourceToBalance::Network;
+    }
+    return std::nullopt;
 }
 
 void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
@@ -2158,20 +2184,33 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
         if (!overloadedNodes.empty()) {
             BLOG_D("Nodes " << overloadedNodes << " with usage over limit " << GetMaxNodeUsageToKick() << " - starting balancer");
             LastBalancerTrigger = EBalancerType::Emergency;
-            StartHiveBalancer(CurrentConfig.GetMaxMovementsOnEmergencyBalancer(), CurrentConfig.GetContinueEmergencyBalancer(), GetEmergencyBalancerInflight(), overloadedNodes);
+            TBalancerSettings emergencySettings{
+                .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnEmergencyBalancer(),
+                .RecheckOnFinish = CurrentConfig.GetContinueEmergencyBalancer(),
+                .MaxInFlight = GetEmergencyBalancerInflight(),
+                .FilterNodeIds = overloadedNodes,
+            };
+            StartHiveBalancer(std::move(emergencySettings));
             return;
         }
     }
 
-    if (stats.MaxUsage < GetMinNodeUsageToBalance()) {
+    if (stats.MaxUsage < CurrentConfig.GetMinNodeUsageToBalance()) {
         TabletCounters->Cumulative()[NHive::COUNTER_SUGGESTED_SCALE_DOWN].Increment(1);
     }
 
-    if (stats.Scatter >= GetMinScatterToBalance()) {
-        BLOG_TRACE("Scatter " << stats.Scatter << " over limit "
+    auto scatteredResource = CheckScatter(stats.ScatterByResource);
+    if (scatteredResource) {
+        BLOG_TRACE("Scatter " << stats.ScatterByResource << " over limit "
                    << GetMinScatterToBalance() << " - starting balancer");
         LastBalancerTrigger = EBalancerType::Scatter;
-        StartHiveBalancer(CurrentConfig.GetMaxMovementsOnAutoBalancer(), CurrentConfig.GetContinueAutoBalancer(), GetBalancerInflight());
+        TBalancerSettings scatterSettings{
+            .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnAutoBalancer(),
+            .RecheckOnFinish = CurrentConfig.GetContinueAutoBalancer(),
+            .MaxInFlight = GetBalancerInflight(),
+            .ResourceToBalance = *scatteredResource,
+        };
+        StartHiveBalancer(std::move(scatterSettings));
     }
 }
 

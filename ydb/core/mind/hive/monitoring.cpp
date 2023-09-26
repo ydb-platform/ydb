@@ -767,6 +767,10 @@ public:
         UpdateConfig(db, "MaxResourceNetwork", TSchemeIds::State::MaxResourceNetwork);
         UpdateConfig(db, "MaxResourceCounter", TSchemeIds::State::MaxResourceCounter);
         UpdateConfig(db, "MinScatterToBalance", TSchemeIds::State::MinScatterToBalance);
+        UpdateConfig(db, "MinCPUScatterToBalance");
+        UpdateConfig(db, "MinMemoryScatterToBalance");
+        UpdateConfig(db, "MinNetworkScatterToBalance");
+        UpdateConfig(db, "MinCounterScatterToBalance");
         UpdateConfig(db, "MaxNodeUsageToKick", TSchemeIds::State::MaxNodeUsageToKick);
         UpdateConfig(db, "ResourceChangeReactionPeriod", TSchemeIds::State::ResourceChangeReactionPeriod);
         UpdateConfig(db, "TabletKickCooldownPeriod", TSchemeIds::State::TabletKickCooldownPeriod);
@@ -1045,6 +1049,10 @@ public:
         ShowConfig(out, "MaxBootBatchSize");
         ShowConfig(out, "DrainInflight");
         ShowConfig(out, "MinScatterToBalance");
+        ShowConfig(out, "MinCPUScatterToBalance");
+        ShowConfig(out, "MinMemoryScatterToBalance");
+        ShowConfig(out, "MinNetworkScatterToBalance");
+        ShowConfig(out, "MinCounterScatterToBalance");
         ShowConfig(out, "MinNodeUsageToBalance");
         ShowConfig(out, "MaxNodeUsageToKick");
         ShowConfig(out, "ResourceChangeReactionPeriod");
@@ -1360,7 +1368,7 @@ public:
             << convert(Self->GetStDevResourceValues(), [](double d) -> TString { return Sprintf("%.9f", d); }) << "</td></tr>";
         THive::THiveStats stats = Self->GetStats();
         out << "<tr><td>" << "Max usage:" << "<td id='maxUsage'>" << GetValueWithColoredGlyph(stats.MaxUsage, Self->GetMaxNodeUsageToKick()) << "</td></tr>";
-        out << "<tr><td>" << "Scatter:" << "<td id='scatter'>" << GetValueWithColoredGlyph(stats.Scatter, Self->GetMinScatterToBalance()) << "</td></tr>";
+        out << "<tr><td>" << "Scatter:" << "<td id='scatter'>" << convert(stats.ScatterByResource, Self->GetMinScatterToBalance(), GetValueWithColoredGlyph) << "</td></tr>";
         out << "</table>";
 
         out << "<table id='node_table' class='table simple-table2 table-hover table-condensed'>";
@@ -2064,7 +2072,7 @@ public:
         jsonData["WaitQueueSize"] = Self->BootQueue.WaitQueue.size();
         jsonData["BalancerProgress"] = GetBalancerProgressText(Self->BalancerProgress, Self->LastBalancerTrigger);
         jsonData["MaxUsage"] =  GetValueWithColoredGlyph(stats.MaxUsage, Self->GetMaxNodeUsageToKick()) ;
-        jsonData["Scatter"] = GetValueWithColoredGlyph(stats.Scatter, Self->GetMinScatterToBalance());
+        jsonData["Scatter"] = TStringBuilder() << convert(stats.ScatterByResource, Self->GetMinScatterToBalance(), GetValueWithColoredGlyph);
         jsonData["RunningTabletsText"] = GetRunningTabletsText(runningTablets, tablets, Self->WarmUp);
 
         TVector<TNodeInfo*> nodeInfos;
@@ -2347,7 +2355,7 @@ public:
 
     bool Execute(TTransactionContext&, const TActorContext&) override {
         Self->LastBalancerTrigger = EBalancerType::Manual;
-        Self->StartHiveBalancer(MaxMovements);
+        Self->StartHiveBalancer({.MaxMovements = MaxMovements});
         return true;
     }
 

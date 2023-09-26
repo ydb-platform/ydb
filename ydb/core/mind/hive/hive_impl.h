@@ -228,7 +228,7 @@ protected:
 
     friend struct TStoragePoolInfo;
 
-    void StartHiveBalancer(int maxMovements = 0, bool recheckOnFinish = false, ui64 maxInFlight = 1, const std::vector<TNodeId>& filterNodeIds = {});
+    void StartHiveBalancer(TBalancerSettings settings);
     void StartHiveDrain(TNodeId nodeId, TDrainSettings settings);
     void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
     void CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
@@ -714,16 +714,46 @@ public:
         return CurrentConfig.GetMaxBootBatchSize();
     }
 
-    double GetMinScatterToBalance() const {
-        return CurrentConfig.GetMinScatterToBalance();
+    TResourceNormalizedValues GetMinScatterToBalance() const {
+        TResourceNormalizedValues minScatter;
+        std::get<NMetrics::EResource::CPU>(minScatter) = CurrentConfig.GetMinCPUScatterToBalance();
+        std::get<NMetrics::EResource::Memory>(minScatter) = CurrentConfig.GetMinMemoryScatterToBalance();
+        std::get<NMetrics::EResource::Network>(minScatter) = CurrentConfig.GetMinNetworkScatterToBalance();
+        std::get<NMetrics::EResource::Counter>(minScatter) = CurrentConfig.GetMinCounterScatterToBalance();
+
+        if (CurrentConfig.HasMinScatterToBalance()) {
+            if (!CurrentConfig.HasMinCPUScatterToBalance()) {
+                std::get<NMetrics::EResource::CPU>(minScatter) = CurrentConfig.GetMinScatterToBalance();
+            }
+            if (!CurrentConfig.HasMinNetworkScatterToBalance()) {
+                std::get<NMetrics::EResource::Network>(minScatter) = CurrentConfig.GetMinScatterToBalance();
+            }
+            if (!CurrentConfig.HasMinMemoryScatterToBalance()) {
+                std::get<NMetrics::EResource::Memory>(minScatter) = CurrentConfig.GetMinScatterToBalance();
+            }
+        }
+
+        return minScatter;
     }
 
     double GetMaxNodeUsageToKick() const {
         return CurrentConfig.GetMaxNodeUsageToKick();
     }
 
-    double GetMinNodeUsageToBalance() const {
-        return CurrentConfig.GetMinNodeUsageToBalance();
+    TResourceNormalizedValues GetMinNodeUsageToBalance() const {
+        // MinNodeUsageToBalance is needed so that small fluctuations in metrics do not cause scatter
+        // when cluster load is low. Counter does not fluctuate, so it does not need it.
+        // However, we still do not want a difference of 1 in Counter to be able to cause scatter.
+        double minUsageToBalance = CurrentConfig.GetMinNodeUsageToBalance();
+        TResourceNormalizedValues minValuesToBalance;
+        std::get<NMetrics::EResource::CPU>(minValuesToBalance) = minUsageToBalance;
+        std::get<NMetrics::EResource::Memory>(minValuesToBalance) = minUsageToBalance;
+        std::get<NMetrics::EResource::Network>(minValuesToBalance) = minUsageToBalance;
+        auto counterScatterThreshold = std::get<NMetrics::EResource::Counter>(GetMinScatterToBalance());
+        if (counterScatterThreshold != 0 && CurrentConfig.GetMaxResourceCounter() != 0) {
+            std::get<NMetrics::EResource::Counter>(minValuesToBalance) = 1.0 / (counterScatterThreshold * CurrentConfig.GetMaxResourceCounter());
+        }
+        return minValuesToBalance;
     }
 
     ui64 GetMaxTabletsScheduled() const {
@@ -852,11 +882,21 @@ protected:
     TResourceRawValues GetDefaultResourceInitialMaximumValues();
     double GetScatter() const;
     double GetUsage() const;
+    // If the scatter is considered okay, returns nullopt. Otherwise, returns the resource that should be better balanced.
+    std::optional<EResourceToBalance> CheckScatter(const TResourceNormalizedValues& scatterByResource) const;
 
     struct THiveStats {
         struct TNodeStat {
             TNodeId NodeId;
             double Usage;
+            TResourceNormalizedValues ResourceNormValues;
+
+            TNodeStat(TNodeId node, double usage, TResourceNormalizedValues values)
+                : NodeId(node)
+                , Usage(usage)
+                , ResourceNormValues(values)
+            {
+            }
         };
 
         double MinUsage;
@@ -864,6 +904,7 @@ protected:
         double MaxUsage;
         TNodeId MaxUsageNodeId;
         double Scatter;
+        TResourceNormalizedValues ScatterByResource;
         std::vector<TNodeStat> Values;
     };
 

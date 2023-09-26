@@ -10,6 +10,14 @@
 namespace NFq {
 namespace NPrivate {
 
+enum class ETaskCompletionStatus {
+    NONE,
+    SUCCESS,
+    SKIPPED,
+    ROLL_BACKED,
+    ERROR
+};
+
 /// Connection manipulation actors
 NActors::IActor* MakeCreateConnectionActor(
     const NActors::TActorId& proxyActorId,

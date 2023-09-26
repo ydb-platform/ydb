@@ -1,3 +1,4 @@
+#include "ydb_schema_query_actor.h"
 #include "base_actor.h"
 #include "query_utils.h"
 
@@ -32,10 +33,14 @@ struct TBaseActorTypeTag<TSchemaQueryYDBActor<TEventRequest, TEventResponse>> {
 using TScheduleErrorRecoverySQLGeneration =
     std::function<bool(NActors::TActorId sender, const TStatus& issues)>;
 
+using TShouldSkipStepOnError =
+    std::function<bool(const TStatus& issues)>;
+
 struct TSchemaQueryTask {
     TString SQL;
     TMaybe<TString> RollbackSQL;
     TScheduleErrorRecoverySQLGeneration ScheduleErrorRecoverySQLGeneration;
+    TShouldSkipStepOnError ShouldSkipStepOnError;
 };
 
 struct TEvPrivate {
@@ -109,6 +114,7 @@ public:
         : TBaseActor<TSchemaQueryYDBActor<TEventRequest, TEventResponse>>(
               proxyActorId, std::move(request), requestTimeout, counters)
         , Tasks(tasksFactoryMethod(Request))
+        , CompletionStatuses(Tasks.size(), ETaskCompletionStatus::NONE)
         , ErrorMessageFactoryMethod(errorMessageFactoryMethod) { }
 
     static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY_YDB_SCHEMA_QUERY_ACTOR";
@@ -136,23 +142,35 @@ public:
         return Nothing();
     }
 
+    void NormalRecordCurrentProgressAndScheduleNextTask(ETaskCompletionStatus status) {
+        CompletionStatuses[CurrentTaskIndex] = status;
+        CurrentTaskIndex++;
+        ScheduleNextTask();
+    }
+
     void NormalHandleExecutionResponse(
         typename TEvPrivate::TEvQueryExecutionResponse::TPtr& event) {
         const auto& executeSchemeQueryStatus = event->Get()->Result;
 
         if (executeSchemeQueryStatus.IsSuccess()) {
-            CurrentTaskIndex++;
-            ScheduleNextTask();
+            NormalRecordCurrentProgressAndScheduleNextTask(ETaskCompletionStatus::SUCCESS);
         } else {
-            SaveIssues("Couldn't execute SQL script", executeSchemeQueryStatus);
-
             auto& task = Tasks[CurrentTaskIndex];
             if (task.ScheduleErrorRecoverySQLGeneration &&
                 task.ScheduleErrorRecoverySQLGeneration(SelfId(),
                                                         executeSchemeQueryStatus)) {
+                SaveIssues("Couldn't execute SQL script", executeSchemeQueryStatus);
                 TransitionToRecoveryState();
                 return;
             }
+
+            if (task.ShouldSkipStepOnError &&
+                task.ShouldSkipStepOnError(executeSchemeQueryStatus)) {
+                NormalRecordCurrentProgressAndScheduleNextTask(ETaskCompletionStatus::SKIPPED);
+                return;
+            }
+
+            SaveIssues("Couldn't execute SQL script", executeSchemeQueryStatus);
             TransitionToRollbackState();
         }
     }
@@ -173,7 +191,8 @@ public:
     TMaybe<TString> RollbackSelectTask() {
         while (CurrentTaskIndex >= 0) {
             const auto& maybeRollback = Tasks[CurrentTaskIndex].RollbackSQL;
-            if (maybeRollback) {
+            if (maybeRollback &&
+                CompletionStatuses[CurrentTaskIndex] == ETaskCompletionStatus::SUCCESS) {
                 return maybeRollback;
             }
             CurrentTaskIndex--;
@@ -186,6 +205,7 @@ public:
         const auto& executeSchemeQueryStatus = event->Get()->Result;
 
         if (executeSchemeQueryStatus.IsSuccess()) {
+            CompletionStatuses[CurrentTaskIndex] = ETaskCompletionStatus::ROLL_BACKED;
             CurrentTaskIndex--;
             ScheduleNextTask();
             return;
@@ -243,6 +263,7 @@ public:
     void TransitionToRollbackState() {
         CPP_LOG_I("TSchemaQueryYDBActor TransitionToRollbackState. Actor id: "
                   << TBase::SelfId());
+        CompletionStatuses[CurrentTaskIndex] = ETaskCompletionStatus::ERROR;
         CurrentTaskIndex--;
         Become(&TSchemaQueryYDBActor::RollbackStateFunc);
         ScheduleNextTask();
@@ -262,17 +283,15 @@ public:
     }
 
     void FinishSuccessfully() {
-        CPP_LOG_I("TSchemaQueryYDBActor Handling query execution response. Query finished successfully. Actor id: "
-                  << TBase::SelfId());
+        LogCurrentState("Query finished successfully");
         Request->Get()->ComputeYDBOperationWasPerformed = true;
         TBase::SendRequestToSender();
     }
 
     void SendError() {
-        CPP_LOG_I("TSchemaQueryYDBActor Handling query execution response. Query finished with issues. Actor id: "
-                  << TBase::SelfId());
+        Y_ENSURE(FirstStatus, "Status of first issue was not recorded");
+        LogCurrentState("Query finished with issues");
         TString errorMessage = ErrorMessageFactoryMethod(*FirstStatus, Issues);
-
         TBase::HandleError(errorMessage, *FirstStatus, std::move(Issues));
     }
 
@@ -318,8 +337,21 @@ public:
             });
     }
 
+    void LogCurrentState(const TString& message) {
+        using TEnumToString = TString(const ETaskCompletionStatus&);
+        CPP_LOG_I("TSchemaQueryYDBActor Logging current state. Message: '"
+                  << message << "', Actor id: " << TBase::SelfId()
+                  << ". CompletionStatuses: ["
+                  << JoinMapRange(", ",
+                                  CompletionStatuses.cbegin(),
+                                  CompletionStatuses.cend(),
+                                  (TEnumToString*)ToString<ETaskCompletionStatus>)
+                  << "], CurrentTaskIndex: " << CurrentTaskIndex);
+    }
+
 private:
     TTasks Tasks;
+    std::vector<ETaskCompletionStatus> CompletionStatuses;
     TErrorMessageFactoryMethod ErrorMessageFactoryMethod;
     i32 CurrentTaskIndex = 0;
     TMaybe<EStatus> FirstStatus;
@@ -460,6 +492,10 @@ private:
     TPermissions Permissions;
 };
 
+bool IsPathDoesNotExistIssue(const TStatus& status) {
+    return status.GetIssues().ToOneLineString().Contains("Path does not exist");
+}
+
 /// Connection actors
 NActors::IActor* MakeCreateConnectionActor(
     const TActorId& proxyActorId,
@@ -576,21 +612,23 @@ NActors::IActor* MakeModifyConnectionActor(
                     [&oldConnectionContent](const FederatedQuery::BindingContent& binding) {
                         return MakeCreateExternalDataTableQuery(binding,
                                                                 oldConnectionContent.name());
-                    })});
+                    }),
+                .ShouldSkipStepOnError = IsPathDoesNotExistIssue});
         };
 
         statements.push_back(TSchemaQueryTask{
             .SQL = TString{MakeDeleteExternalDataSourceQuery(oldConnectionContent.name())},
-            .RollbackSQL = TString{MakeCreateExternalDataSourceQuery(
-                oldConnectionContent, objectStorageEndpoint, signer)}});
+            .RollbackSQL           = TString{MakeCreateExternalDataSourceQuery(
+                oldConnectionContent, objectStorageEndpoint, signer)},
+            .ShouldSkipStepOnError = IsPathDoesNotExistIssue});
 
         if (dropOldSecret) {
-            statements.push_back(
-                TSchemaQueryTask{.SQL         = *dropOldSecret,
-                                 .RollbackSQL = CreateSecretObjectQuery(
-                                     oldConnectionContent.setting(),
-                                     oldConnectionContent.name(),
-                                     signer)});
+            statements.push_back(TSchemaQueryTask{
+                .SQL         = *dropOldSecret,
+                .RollbackSQL = CreateSecretObjectQuery(oldConnectionContent.setting(),
+                                                       oldConnectionContent.name(),
+                                                       signer),
+                .ShouldSkipStepOnError = IsPathDoesNotExistIssue});
         }
         if (createNewSecret) {
             statements.push_back(
@@ -621,7 +659,7 @@ NActors::IActor* MakeModifyConnectionActor(
                                  [](const FederatedQuery::BindingContent& binding) {
                                      return MakeDeleteExternalDataTableQuery(binding.name());
                                  })});
-        };
+        }
 
         return statements;
     };
@@ -662,16 +700,18 @@ NActors::IActor* MakeDeleteConnectionActor(
 
         std::vector<TSchemaQueryTask> statements = {TSchemaQueryTask{
             .SQL = TString{MakeDeleteExternalDataSourceQuery(connectionContent.name())},
-            .RollbackSQL = MakeCreateExternalDataSourceQuery(connectionContent,
+            .RollbackSQL           = MakeCreateExternalDataSourceQuery(connectionContent,
                                                              objectStorageEndpoint,
-                                                             signer)}};
+                                                             signer),
+            .ShouldSkipStepOnError = IsPathDoesNotExistIssue}};
         if (dropSecret) {
             statements.push_back(
-                TSchemaQueryTask{.SQL         = *dropSecret,
-                                 .RollbackSQL = CreateSecretObjectQuery(
-                                     connectionContent.setting(),
-                                     connectionContent.name(),
-                                     signer)});
+                TSchemaQueryTask{.SQL = *dropSecret,
+                                 .RollbackSQL =
+                                     CreateSecretObjectQuery(connectionContent.setting(),
+                                                             connectionContent.name(),
+                                                             signer),
+                                 .ShouldSkipStepOnError = IsPathDoesNotExistIssue});
         }
         return statements;
     };
@@ -770,7 +810,9 @@ NActors::IActor* MakeModifyBindingActor(
         auto createNewEntities =
             MakeCreateExternalDataTableQuery(request->Get()->Request.content(), sourceName);
 
-        return {TSchemaQueryTask{.SQL = deleteOldEntities, .RollbackSQL = createOldEntities},
+        return {TSchemaQueryTask{.SQL                   = deleteOldEntities,
+                                 .RollbackSQL           = createOldEntities,
+                                 .ShouldSkipStepOnError = IsPathDoesNotExistIssue},
                 TSchemaQueryTask{.SQL = createNewEntities}};
     };
 
@@ -797,8 +839,10 @@ NActors::IActor* MakeDeleteBindingActor(
     TDuration requestTimeout,
     TCounters& counters) {
     auto queryFactoryMethod =
-        [](const TEvControlPlaneProxy::TEvDeleteBindingRequest::TPtr& request) -> TString {
-        return MakeDeleteExternalDataTableQuery(*request->Get()->OldBindingName);
+        [](const TEvControlPlaneProxy::TEvDeleteBindingRequest::TPtr& request)
+        -> std::vector<TSchemaQueryTask> {
+        return {{.SQL = MakeDeleteExternalDataTableQuery(*request->Get()->OldBindingName),
+                 .ShouldSkipStepOnError = IsPathDoesNotExistIssue}};
     };
 
     auto errorMessageFactoryMethod = [](const EStatus status,

@@ -17,6 +17,8 @@ PEERDIR(
     ydb/library/db_pool/protos
 )
 
+GENERATE_ENUM_SERIALIZATION(ydb_schema_query_actor.h)
+
 YQL_LAST_ABI_VERSION()
 
 END()

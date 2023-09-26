@@ -996,7 +996,8 @@ public:
 
         TOutput output;
         output.Input = &Input;
-        BuildOutput(&output, result.get());
+        TVector<int> scope;
+        BuildOutput(&output, result.get(), scope);
         output.Rows = result->Stats->Nrows;
         output.TotalCost = *result->Stats->Cost;
         if (Log) {
@@ -1006,24 +1007,26 @@ public:
     }
 
 private:
-    int BuildOutput(TOutput* output, IBaseOptimizerNode* node) {
+    int BuildOutput(TOutput* output, IBaseOptimizerNode* node, TVector<int>& scope) {
         int index = (int)output->Nodes.size();
         TJoinNode r = output->Nodes.emplace_back();
         switch (node->Kind) {
         case EOptimizerNodeKind::RelNodeType: {
             // leaf
             TRelOptimizerNode* n = static_cast<TRelOptimizerNode*>(node);
-            r.Rels.emplace_back(FromString<int>(n->Label));
+            int relId = FromString<int>(n->Label);
+            r.Rels.emplace_back(relId);
+            scope.emplace_back(relId);
             break;
         }
         case EOptimizerNodeKind::JoinNodeType: {
             // node
             r.Mode = IOptimizer::EJoinType::Inner;
             TJoinOptimizerNode* n = static_cast<TJoinOptimizerNode*>(node);
-            r.Outer = BuildOutput(output, n->LeftArg.get());
-            r.Inner = BuildOutput(output, n->RightArg.get());
+            int index = scope.size();
+            r.Outer = BuildOutput(output, n->LeftArg.get(), scope);
+            r.Inner = BuildOutput(output, n->RightArg.get(), scope);
 
-            std::set<int> rels;
             for (auto& [col1, col2] : n->JoinConditions) {
                 int relId1 = FromString<int>(col1.RelName);
                 int colId1 = FromString<int>(col1.AttributeName);
@@ -1032,13 +1035,10 @@ private:
 
                 r.LeftVars.emplace_back(std::make_tuple(relId1, colId1));
                 r.RightVars.emplace_back(std::make_tuple(relId2, colId2));
-
-                rels.emplace(relId1);
-                rels.emplace(relId2);
             }
 
-            r.Rels.reserve(rels.size());
-            r.Rels.insert(r.Rels.end(), rels.begin(), rels.end());
+            r.Rels.reserve(scope.size());
+            r.Rels.insert(r.Rels.end(), scope.begin() + index, scope.end());
             break;
         }
         default:

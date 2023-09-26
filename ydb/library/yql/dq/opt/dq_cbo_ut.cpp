@@ -36,6 +36,89 @@ Y_UNIT_TEST(Empty) {
     std::unique_ptr<IOptimizer> optimizer = std::unique_ptr<IOptimizer>(NDq::MakeNativeOptimizer(input, {}));
 }
 
+Y_UNIT_TEST(JoinSearch2Rels) {
+    IOptimizer::TRel rel1 = {100000, 1000000, {{'a'}}};
+    IOptimizer::TRel rel2 = {1000000, 9000009, {{'b'}}};
+    IOptimizer::TInput input = {{rel1, rel2}, {}, {}, {}};
+
+    input.EqClasses.emplace_back(IOptimizer::TEq {
+        {{1, 1}, {2, 1}}
+    });
+
+    auto log = [](const TString& str) {
+        Cerr << str << "\n";
+    };
+
+    auto optimizer = std::unique_ptr<IOptimizer>(MakeNativeOptimizer(input, log));
+
+    auto res = optimizer->JoinSearch();
+    UNIT_ASSERT(res.Rows > 0);
+    UNIT_ASSERT(res.TotalCost > 0);
+    auto resStr = res.ToString(false);
+    Cerr << resStr;
+    TString expected = R"__({
+ Inner Join
+ Rels: [2,1]
+ Op: b = a
+ {
+  Node
+  Rels: [2]
+ }
+ {
+  Node
+  Rels: [1]
+ }
+}
+)__";
+    UNIT_ASSERT_STRINGS_EQUAL(expected, resStr);
+}
+
+Y_UNIT_TEST(JoinSearch3Rels) {
+    IOptimizer::TRel rel1 = {100000, 1000000, {{'a'}}};
+    IOptimizer::TRel rel2 = {1000000, 9000009, {{'b'}}};
+    IOptimizer::TRel rel3 = {10000, 9009, {{'c'}}};
+    IOptimizer::TInput input = {{rel1, rel2, rel3}, {}, {}, {}};
+
+    input.EqClasses.emplace_back(IOptimizer::TEq {
+        {{1, 1}, {2, 1}, {3, 1}}
+    });
+
+    auto log = [](const TString& str) {
+        Cerr << str << "\n";
+    };
+
+    auto optimizer = std::unique_ptr<IOptimizer>(MakeNativeOptimizer(input, log));
+    auto res = optimizer->JoinSearch();
+    UNIT_ASSERT(res.Rows > 0);
+    UNIT_ASSERT(res.TotalCost > 0);
+    auto resStr = res.ToString(false);
+    Cerr << resStr;
+    TString expected = R"__({
+ Inner Join
+ Rels: [1,3,2]
+ Op: a = b
+ {
+  Inner Join
+  Rels: [1,3]
+  Op: a = c
+  {
+   Node
+   Rels: [1]
+  }
+  {
+   Node
+   Rels: [3]
+  }
+ }
+ {
+  Node
+  Rels: [2]
+ }
+}
+)__";
+	UNIT_ASSERT_STRINGS_EQUAL(expected, resStr);
+}
+
 Y_UNIT_TEST(RelCollector) {
     TExprContext ctx;
     auto pos = ctx.AppendPosition({});

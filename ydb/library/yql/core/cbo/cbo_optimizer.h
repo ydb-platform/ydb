@@ -65,7 +65,7 @@ struct IOptimizer {
         double Rows = 0;
         double TotalCost = 0;
 
-        TString ToString() const;
+        TString ToString(bool printCost = true) const;
     };
 
     virtual ~IOptimizer() = default;

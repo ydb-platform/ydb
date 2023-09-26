@@ -1857,6 +1857,11 @@ public:
         Y_ENSURE(QueryState);
         if (QueryState->CompileResult) {
             AddQueryIssues(*response, QueryState->CompileResult->Issues);
+
+            auto preparedQuery = QueryState->CompileResult->PreparedQuery;
+            if (preparedQuery && QueryState->ReportStats() && QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
+                response->SetQueryAst(preparedQuery->GetPhysicalQuery().GetQueryAst());
+            }
         }
 
         if (issues) {

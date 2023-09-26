@@ -1887,8 +1887,7 @@ public:
     TGetScriptExecutionResultQuery(const TString& database, const TString& executionId, i32 resultSetIndex, i64 offset, i64 limit)
         : Database(database), ExecutionId(executionId), ResultSetIndex(resultSetIndex), Offset(offset), Limit(limit)
     {
-        Response = MakeHolder<TEvKqp::TEvFetchScriptResultsResponse>();
-        Response->Record.SetResultSetIndex(ResultSetIndex);
+        Response.SetResultSetIndex(ResultSetIndex);
     }
 
     void OnRunQuery() override {
@@ -2012,11 +2011,13 @@ public:
             Ydb::Query::Internal::ResultSetMeta meta;
             NProtobufJson::Json2Proto(*metaValue, meta);
 
-            *Response->Record.MutableResultSet()->mutable_columns() = meta.columns();
-            Response->Record.MutableResultSet()->set_truncated(meta.truncated());
+            *Response.MutableResultSet()->mutable_columns() = meta.columns();
+            Response.MutableResultSet()->set_truncated(meta.truncated());
         }
 
         { // rows
+            Truncated = ResultSets[1].Truncated();
+
             NYdb::TResultSetParser result(ResultSets[1]);
 
             while (result.TryNextRow()) {
@@ -2027,7 +2028,7 @@ public:
                     return;
                 }
 
-                if (!Response->Record.MutableResultSet()->add_rows()->ParseFromString(*serializedRow)) {
+                if (!Response.MutableResultSet()->add_rows()->ParseFromString(*serializedRow)) {
                     Finish(Ydb::StatusIds::INTERNAL_ERROR, "Result set row is corrupted");
                     return;
                 }
@@ -2038,14 +2039,14 @@ public:
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
-        Response->Record.SetStatus(status);
+        Response.SetStatus(status);
         if (status != Ydb::StatusIds::SUCCESS) {
-            Response->Record.MutableResultSet()->Clear();
+            Response.MutableResultSet()->Clear();
         }
         if (issues) {
-            NYql::IssuesToMessage(issues, Response->Record.MutableIssues());
+            NYql::IssuesToMessage(issues, Response.MutableIssues());
         }
-        Send(Owner, std::move(Response));
+        Send(Owner, new TEvFetchScriptResultsQueryResponse(Truncated, std::move(Response)));
     }
 
 private:
@@ -2054,7 +2055,8 @@ private:
     const i32 ResultSetIndex;
     const i64 Offset;
     const i64 Limit;
-    THolder<TEvKqp::TEvFetchScriptResultsResponse> Response;
+    bool Truncated = false;
+    NKikimrKqp::TEvFetchScriptResultsResponse Response;
 };
 
 class TGetScriptExecutionResultActor : public TActorBootstrapped<TGetScriptExecutionResultActor> {
@@ -2062,20 +2064,53 @@ public:
     TGetScriptExecutionResultActor(const NActors::TActorId& replyActorId, const TString& database, const TString& executionId, i32 resultSetIndex, i64 offset, i64 limit)
         : ReplyActorId(replyActorId), Database(database), ExecutionId(executionId), ResultSetIndex(resultSetIndex), Offset(offset), Limit(limit)
     {
+        Response = MakeHolder<TEvKqp::TEvFetchScriptResultsResponse>();
+    }
+
+    void CreateFetchScriptExecutionResultQuery() {
+        Register(new TGetScriptExecutionResultQuery(Database, ExecutionId, ResultSetIndex, Offset, Limit));
     }
 
     void Bootstrap() {
-        Register(new TGetScriptExecutionResultQuery(Database, ExecutionId, ResultSetIndex, Offset, Limit));
-
+        CreateFetchScriptExecutionResultQuery();
         Become(&TGetScriptExecutionResultActor::StateFunc);
     }
 
     STRICT_STFUNC(StateFunc,
-        hFunc(TEvKqp::TEvFetchScriptResultsResponse, Handle);
+        hFunc(TEvFetchScriptResultsQueryResponse, Handle);
     )
 
-    void Handle(TEvKqp::TEvFetchScriptResultsResponse::TPtr& ev) {
-        Send(ev->Forward(ReplyActorId));
+    void RecordResults(NKikimrKqp::TEvFetchScriptResultsResponse&& results) {
+        if (!Response->Record.has_status()) {
+            Response->Record = std::move(results);
+            return;
+        }
+
+        const auto& rows = results.GetResultSet().get_arr_rows();
+        Response->Record.mutable_resultset()->mutable_rows()->Add(rows.begin(), rows.end());
+    }
+
+    void Handle(TEvFetchScriptResultsQueryResponse::TPtr& ev) {
+        if (ev->Get()->Results.GetStatus() != Ydb::StatusIds::SUCCESS) {
+            Response->Record = std::move(ev->Get()->Results);
+            Reply();
+            return;
+        }
+
+        i64 rowsCount = ev->Get()->Results.GetResultSet().rows_size();
+        RecordResults(std::move(ev->Get()->Results));
+
+        if (ev->Get()->Truncated) {
+            Offset += rowsCount;
+            Limit -= rowsCount;
+            CreateFetchScriptExecutionResultQuery();
+        } else {
+            Reply();
+        }
+    }
+
+    void Reply() {
+        Send(ReplyActorId, std::move(Response));
         PassAway();
     }
 
@@ -2084,8 +2119,9 @@ private:
     const TString Database;
     const TString ExecutionId;
     const i32 ResultSetIndex;
-    const i64 Offset;
-    const i64 Limit;
+    i64 Offset;
+    i64 Limit;
+    THolder<TEvKqp::TEvFetchScriptResultsResponse> Response;
 };
 
 } // anonymous namespace

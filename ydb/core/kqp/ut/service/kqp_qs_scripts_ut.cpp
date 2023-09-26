@@ -693,6 +693,31 @@ Y_UNIT_TEST_SUITE(KqpQueryServiceScripts) {
         
         UNIT_ASSERT(results.GetResultSet().Truncated());
     }
+
+    Y_UNIT_TEST(TestFetchMoreThanLimit) {
+        constexpr size_t NUMER_BATCHES = 5;
+        constexpr size_t ROWS_LIMIT = 20;
+        
+        NKikimrConfig::TAppConfig appCfg;
+        appCfg.MutableTableServiceConfig()->MutableQueryLimits()->set_resultrowslimit(ROWS_LIMIT);
+
+        auto kikimr = DefaultKikimrRunner({}, appCfg);
+        auto db = kikimr.GetQueryClient();
+        auto scriptExecutionOperation = CreateScriptExecutionOperation(NUMER_BATCHES * ROWS_LIMIT + 1, db, kikimr.GetDriver());
+
+        auto settings = TFetchScriptResultsSettings();
+        settings.RowsLimit(NUMER_BATCHES * ROWS_LIMIT);
+
+        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0, settings).ExtractValueSync();
+        UNIT_ASSERT_C(results.IsSuccess(), results.GetIssues().ToString());
+
+        TResultSetParser resultSet(results.ExtractResultSet());
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), NUMER_BATCHES * ROWS_LIMIT);
+        for (size_t i = 0; i < NUMER_BATCHES * ROWS_LIMIT; ++i) {
+            UNIT_ASSERT(resultSet.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetInt32(), i);
+        }
+    }
 }
 
 } // namespace NKqp

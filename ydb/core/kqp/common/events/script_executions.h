@@ -185,4 +185,15 @@ struct TEvSaveScriptResultFinished : public NActors::TEventLocal<TEvSaveScriptRe
     NYql::TIssues Issues;
 };
 
+struct TEvFetchScriptResultsQueryResponse : public NActors::TEventLocal<TEvFetchScriptResultsQueryResponse, TKqpScriptExecutionEvents::EvFetchScriptResultsQueryResponse> {
+    TEvFetchScriptResultsQueryResponse(bool truncated, NKikimrKqp::TEvFetchScriptResultsResponse&& results)
+        : Truncated(truncated)
+        , Results(std::move(results))
+    {
+    }
+
+    bool Truncated;
+    NKikimrKqp::TEvFetchScriptResultsResponse Results;
+};
+
 } // namespace NKikimr::NKqp

@@ -516,7 +516,7 @@ public:
 
     TTabletRequestsState TabletRequests;
 
-    TDuration Timeout = TDuration::MilliSeconds(10000);
+    TDuration Timeout = TDuration::MilliSeconds(20000);
     static constexpr TStringBuf STATIC_STORAGE_POOL_NAME = "static";
 
     bool IsSpecificDatabaseFilter() {
@@ -1344,17 +1344,20 @@ public:
             if (tablet.Database == databaseId) {
                 context.Location.mutable_compute()->clear_tablet();
                 auto& protoTablet = *context.Location.mutable_compute()->mutable_tablet();
-                if (tablet.IsUnresponsive || tablet.MaxResponseTime >= TDuration::MilliSeconds(1000)) {
+                auto timeoutMs = Timeout.MilliSeconds();
+                auto orangeTimeout = timeoutMs / 2;
+                auto yellowTimeout = timeoutMs / 10;
+                if (tablet.IsUnresponsive || tablet.MaxResponseTime >= TDuration::MilliSeconds(yellowTimeout)) {
                     if (tablet.Type != TTabletTypes::Unknown) {
                         protoTablet.set_type(TTabletTypes::EType_Name(tablet.Type));
                     }
                     protoTablet.add_id(ToString(tabletId));
                     if (tablet.IsUnresponsive) {
                         context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, TStringBuilder() << "System tablet is unresponsive", ETags::SystemTabletState);
-                    } else if (tablet.MaxResponseTime >= TDuration::MilliSeconds(5000)) {
-                        context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "System tablet response time is over 5000ms", ETags::SystemTabletState);
-                    } else if (tablet.MaxResponseTime >= TDuration::MilliSeconds(1000)) {
-                        context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "System tablet response time is over 1000ms", ETags::SystemTabletState);
+                    } else if (tablet.MaxResponseTime >= TDuration::MilliSeconds(orangeTimeout)) {
+                        context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, TStringBuilder() << "System tablet response time is over " << orangeTimeout << "ms", ETags::SystemTabletState);
+                    } else if (tablet.MaxResponseTime >= TDuration::MilliSeconds(yellowTimeout)) {
+                        context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, TStringBuilder() << "System tablet response time is over " << yellowTimeout << "ms", ETags::SystemTabletState);
                     }
                 }
             }

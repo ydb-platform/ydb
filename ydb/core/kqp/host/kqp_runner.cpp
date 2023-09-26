@@ -38,10 +38,10 @@ public:
     TPrepareNewEngineAsyncResult(const TString& cluster,
         const TKiDataQueryBlocks& dataQueryBlocks,
         TExprContext& ctx,
-        const TIntrusivePtr<TKqlTransformContext>& transformCtx,
-        const TIntrusivePtr<TKqpOptimizeContext>& optimizeCtx,
+        TKqlTransformContext& transformCtx,
+        TKqpOptimizeContext* optimizeCtx,
         TTypeAnnotationContext& typesCtx,
-        const TIntrusivePtr<TKqpBuildQueryContext>& buildQueryCtx,
+        TKqpBuildQueryContext& buildQueryCtx,
         const IKikimrQueryExecutor::TExecuteSettings& settings,
         bool sysColumnsEnabled,
         const NMiniKQL::IFunctionRegistry& funcRegistry,
@@ -118,7 +118,7 @@ private:
     }
 
     NThreading::TFuture<bool> Start() {
-        KqlQueryBlocks = BuildKqlQuery(DataQueryBlocks, *TransformCtx->Tables, ExprCtx, SysColumnsEnabled, OptimizeCtx, TypesCtx);
+        KqlQueryBlocks = BuildKqlQuery(DataQueryBlocks, *TransformCtx.Tables, ExprCtx, SysColumnsEnabled, OptimizeCtx, TypesCtx);
         if (!KqlQueryBlocks) {
             return SetResult(ResultFromErrors<TResult>(ExprCtx.IssueManager.GetIssues()));
         }
@@ -126,8 +126,8 @@ private:
         Query = KqlQueryBlocks->Ptr();
         YQL_CLOG(DEBUG, ProviderKqp) << "Initial KQL query: " << KqpExprToPrettyString(*Query, ExprCtx);
 
-        TransformCtx->Reset();
-        BuildQueryCtx->Reset();
+        TransformCtx.Reset();
+        BuildQueryCtx.Reset();
 
         OptimizedQuery = Query;
         return StartOptimization(OptimizeTransformer.Get(), OptimizedQuery);
@@ -193,7 +193,7 @@ private:
         YQL_CLOG(DEBUG, ProviderKqp) << "Physical KQL query: " << KqpExprToPrettyString(*OptimizedQuery, ExprCtx);
         YQL_CLOG(DEBUG, ProviderKqp) << "Physical KQL query after peephole: " << KqpExprToPrettyString(*PeepholeOptimizedQuery, ExprCtx);
 
-        auto& preparedQuery = *TransformCtx->QueryCtx->PreparingQuery;
+        auto& preparedQuery = *TransformCtx.QueryCtx->PreparingQuery;
         TKqpPhysicalQuery physicalQuery(PeepholeOptimizedQuery);
 
         auto compiler = CreateKqpQueryCompiler(Cluster, OptimizeCtx->Tables, FuncRegistry, TypesCtx, Config);
@@ -214,7 +214,7 @@ private:
 
         Result->SetSuccess();
         TVector<NKikimrMiniKQL::TResult*> results;
-        for (auto& phyResult : TransformCtx->PhysicalQueryResults) {
+        for (auto& phyResult : TransformCtx.PhysicalQueryResults) {
             auto result = google::protobuf::Arena::CreateMessage<NKikimrMiniKQL::TResult>(
                 Result->ProtobufArenaPtr.get());
 
@@ -222,7 +222,7 @@ private:
             results.push_back(result);
         }
 
-        Result->QueryStats.CopyFrom(TransformCtx->QueryStats);
+        Result->QueryStats.CopyFrom(TransformCtx.QueryStats);
         Result->Results = std::move(results);
         return NThreading::MakeFuture<bool>(true);
     }
@@ -231,10 +231,10 @@ private:
     TString Cluster;
     TKiDataQueryBlocks DataQueryBlocks;
     TExprContext& ExprCtx;
-    TIntrusivePtr<TKqlTransformContext> TransformCtx;
-    TIntrusivePtr<TKqpOptimizeContext> OptimizeCtx;
+    TKqlTransformContext& TransformCtx;
+    TKqpOptimizeContext* OptimizeCtx = nullptr;
     TTypeAnnotationContext& TypesCtx;
-    TIntrusivePtr<TKqpBuildQueryContext> BuildQueryCtx;
+    TKqpBuildQueryContext& BuildQueryCtx;
     IKikimrQueryExecutor::TExecuteSettings Settings;
     bool SysColumnsEnabled = false;
     const NMiniKQL::IFunctionRegistry& FuncRegistry;
@@ -454,10 +454,10 @@ private:
             Cluster,
             dataQueryBlocks,
             ctx,
-            TransformCtx,
-            OptimizeCtx,
+            *TransformCtx,
+            OptimizeCtx.Get(),
             TypesCtx,
-            BuildQueryCtx,
+            *BuildQueryCtx,
             settings,
             sysColumnsEnabled,
             FuncRegistry,

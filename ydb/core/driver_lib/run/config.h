@@ -73,6 +73,7 @@ union TBasicKikimrServicesMask {
         bool EnableConveyor: 1;
         bool EnableLocalPgWire:1;
         bool EnableKafkaProxy:1;
+        bool EnableIcNodeCacheService:1;
     };
 
     ui64 Raw;

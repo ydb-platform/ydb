@@ -294,6 +294,7 @@ public:
                 hFunc(TEvKqpExecuter::TEvShardsResolveStatus, HandleResolve);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, HandleRefreshSubscriberData);
+                hFunc(TEvPrivate::TEvResourcesSnapshot, HandleResolve);
                 default:
                     UnexpectedEvent("WaitResolveState", ev->GetTypeRewrite());
             }
@@ -1633,23 +1634,46 @@ private:
         YQL_ENSURE(result.second);
     }
 
-    void ExecuteAfterFetchingSecrets() {
-        bool waitSecretsSnapshot = false;
-        for (const auto& transaction : Request.Transactions) {
-            if (!transaction.Body->GetSecretNames().empty()) {
-                FetchSecrets();
-                waitSecretsSnapshot = true;
-                break;
-            }
+    void HandleResolve(TEvPrivate::TEvResourcesSnapshot::TPtr& ev) {
+        if (ev->Get()->Snapshot.empty()) {
+            LOG_E("Can not find default state storage group for database " << Database);
         }
-
-        if (!waitSecretsSnapshot) {
+        ResourceSnapshot = std::move(ev->Get()->Snapshot);
+        ResourceSnapshotRequired = false;
+        if (!SecretSnapshotRequired) {
             Execute();
         }
     }
 
+    void DoExecute() {
+        for (const auto& transaction : Request.Transactions) {
+            if (!transaction.Body->GetSecretNames().empty()) {                
+                SecretSnapshotRequired = true;
+            }
+            for (const auto& stage : transaction.Body->GetStages()) {
+                if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kExternalSource) {
+                    ResourceSnapshotRequired = true;
+                    HasExternalSources = true;
+                }                    
+            }
+        }
+
+        if (!SecretSnapshotRequired && !ResourceSnapshotRequired) {
+            return Execute();
+        }
+        if (SecretSnapshotRequired) {
+            FetchSecrets();
+        }
+        if (ResourceSnapshotRequired) {
+            GetResourcesSnapshot();
+        }
+    }
+
     void OnSecretsFetched() override {
-        Execute();
+        SecretSnapshotRequired = false;
+        if (!ResourceSnapshotRequired) {
+            Execute();
+        }
     }
 
     void Execute() {
@@ -1704,7 +1728,7 @@ private:
                             }
                             break;
                         case NKqpProto::TKqpSource::kExternalSource:
-                            BuildReadTasksFromSource(stageInfo, secureParams);
+                            BuildReadTasksFromSource(stageInfo, secureParams, ResourceSnapshot);
                             break;
                         default:
                             YQL_ENSURE(false, "unknown source type");
@@ -1851,7 +1875,7 @@ private:
 
     void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
         if (!TBase::HandleResolve(ev)) return;
-        ExecuteAfterFetchingSecrets();
+        DoExecute();
     }
 
     void HandleResolve(TEvKqpExecuter::TEvShardsResolveStatus::TPtr& ev) {
@@ -2129,9 +2153,15 @@ private:
             }
         }
 
-        Planner = CreateKqpPlanner(TasksGraph, TxId, SelfId(), {}, {}, GetSnapshot(),
+        const bool enableOptForTasks = !UnknownAffectedShardCount && !HasExternalSources;
+        bool dataQueryPool = true;
+        if (HasExternalSources && DatashardTxs.size() == 0) {
+            dataQueryPool = false;
+        }
+
+        Planner = CreateKqpPlanner(TasksGraph, TxId, SelfId(), GetSnapshot(),
             Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode, false, Nothing(),
-            ExecuterSpan, {}, ExecuterRetriesConfig, true /* isDataQuery */, Request.MkqlMemoryLimit, AsyncIoFactory, !UnknownAffectedShardCount);
+            ExecuterSpan, std::move(ResourceSnapshot), ExecuterRetriesConfig, dataQueryPool /* isDataQuery */, Request.MkqlMemoryLimit, AsyncIoFactory, enableOptForTasks);
 
         auto err = Planner->PlanExecution();
         if (err) {
@@ -2213,7 +2243,8 @@ private:
         THashMap<TActorId, THashSet<ui64>> updates;
         for (ui64 taskId : ComputeTasks) {
             auto& task = TasksGraph.GetTask(taskId);
-            CollectTaskChannelsUpdates(task, updates);
+            if (task.ComputeActorId)
+                CollectTaskChannelsUpdates(task, updates);
         }
         PropagateChannelsUpdates(updates);
 
@@ -2335,6 +2366,10 @@ private:
     bool StreamResult = false;
 
     bool UnknownAffectedShardCount = false;
+    bool HasExternalSources = false;
+    bool SecretSnapshotRequired = false;
+    bool ResourceSnapshotRequired = false;
+    TVector<NKikimrKqp::TKqpNodeResources> ResourceSnapshot;
 
     ui64 TxCoordinator = 0;
     THashMap<ui64, TShardState> ShardStates;

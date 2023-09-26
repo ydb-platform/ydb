@@ -81,7 +81,6 @@ PEERDIR(
     ydb/core/blobstorage/base
     ydb/core/blobstorage/groupinfo
     ydb/core/cms/console/validators
-    ydb/core/cms/console/yaml_config
     ydb/core/control
     ydb/core/engine/minikql
     ydb/core/mind
@@ -91,6 +90,7 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/util
     ydb/library/aclib
+    ydb/library/yaml_config
     ydb/public/api/protos
     ydb/public/lib/operation_id
 )
@@ -100,7 +100,6 @@ END()
 RECURSE(
     util
     validators
-    yaml_config
 )
 
 RECURSE_FOR_TESTS(

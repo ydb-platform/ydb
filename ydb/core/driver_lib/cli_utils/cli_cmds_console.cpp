@@ -1,7 +1,7 @@
 #include "cli.h"
 #include "cli_cmds.h"
 
-#include <ydb/core/cms/console/yaml_config/console_dumper.h>
+#include <ydb/library/yaml_config/console_dumper.h>
 
 #include <util/string/type.h>
 #include <util/string/split.h>
@@ -443,9 +443,7 @@ public:
 
     int Run(TConfig &) override
     {
-        auto item = NYamlConfig::DumpYamlConfigItem(Request, Domain);
-        NKikimrConsole::TConfigureRequest req;
-        req.AddActions()->MutableAddConfigItem()->MutableConfigItem()->CopyFrom(item);
+        NKikimrConsole::TConfigureRequest req = NYamlConfig::DumpYamlConfigRequest(Request, Domain);
         TString result;
         google::protobuf::TextFormat::PrintToString(req, &result);
         Cout << result;

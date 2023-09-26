@@ -742,6 +742,15 @@ public:
     using TBase = TRpcOperationRequestActor<TDerived, TRequest>;
     using TBase::TBase;
 
+    template<typename T, typename = void>
+    struct THasMsg: std::false_type
+    {};
+    template<typename T>
+    struct THasMsg<T, std::enable_if_t<std::is_same<decltype(std::declval<T>().msg()), void>::value>>: std::true_type
+    {};
+    template<typename T>
+    static constexpr bool HasMsgV = THasMsg<T>::value;
+
     friend class TBaseKeyValueRequest<TKeyValueRequestGrpc<TDerived, TRequest, TResultRecord, TKVRequest>>;
 
     void Bootstrap(const TActorContext& ctx) {
@@ -810,9 +819,14 @@ protected:
     }
 
     void Handle(typename TKVRequest::TResponse::TPtr &ev) {
+        auto status = PullStatus(ev->Get()->Record);
+        if constexpr (HasMsgV<decltype(ev->Get()->Record)>) {
+            if (status != Ydb::StatusIds::SUCCESS) {
+                this->Reply(status, ev->Get()->Record.msg(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR, this->ActorContext());
+            }
+        }
         TResultRecord result;
         CopyProtobuf(ev->Get()->Record, &result);
-        auto status = PullStatus(ev->Get()->Record);
         this->ReplyWithResult(status, result, TActivationContext::AsActorContext());
     }
 

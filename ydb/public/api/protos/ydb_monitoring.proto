@@ -27,6 +27,8 @@ message SelfCheckRequest {
     bool return_verbose_status = 2; // return detailed info about components checked with their statuses
     StatusFlag.Status minimum_status = 3; // minimum status of issues to return
     uint32 maximum_level = 4; // maximum level of issues to return
+    reserved 5; // do_not_cache
+    bool merge_records = 6; // combine similar records with similar status, message and level into one issue
 }
 
 message SelfCheckResponse {

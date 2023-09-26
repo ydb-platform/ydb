@@ -185,6 +185,7 @@ public:
         ui64 TaskId;
         const THashMap<TString, TString>& SecureParams;
         const THashMap<TString, TString>& TaskParams;
+        const TVector<TString>& ReadRanges;
         const NActors::TActorId& ComputeActorId;
         const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;

@@ -253,6 +253,7 @@ private:
 
             const auto& secureParams = ev->Get()->SecureParams;
             const auto& taskParams = ev->Get()->TaskParams;
+            const auto& readRanges = ev->Get()->ReadRanges;
             const auto& typeEnv = ev->Get()->TypeEnv;
             const auto& holderFactory = ev->Get()->HolderFactory;
 
@@ -272,6 +273,7 @@ private:
                                 .TaskId = Task.GetId(),
                                 .SecureParams = secureParams,
                                 .TaskParams = taskParams,
+                                .ReadRanges = readRanges,
                                 .ComputeActorId = SelfId(),
                                 .TypeEnv = typeEnv,
                                 .HolderFactory = holderFactory

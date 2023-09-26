@@ -214,6 +214,7 @@ namespace Tests {
             AddStoragePool("test", "/" + DomainName + ":test");
             AppConfig.MutableTableServiceConfig()->MutableResourceManager()->MutableShardsScanningPolicy()->SetParallelScanningAvailable(true);
             AppConfig.MutableTableServiceConfig()->MutableResourceManager()->MutableShardsScanningPolicy()->SetShardSplitFactor(16);
+            AppConfig.MutableHiveConfig()->SetWarmUpBootWaitingPeriod(10);
             FeatureFlags.SetEnableSeparationComputeActorsFromRead(true);
         }
 
@@ -223,7 +224,6 @@ namespace Tests {
         YDB_FLAG_ACCESSOR(EnableMetadataProvider, true);
         YDB_FLAG_ACCESSOR(EnableBackgroundTasks, false);
         YDB_FLAG_ACCESSOR(EnableExternalIndex, false);
-        
     };
 
     class TServer : public TThrRefBase, TMoveOnly {

@@ -473,14 +473,6 @@ private:
         }
     }
 
-    void GetResourcesSnapshot() {
-        GetKqpResourceManager()->RequestClusterResourcesInfo(
-            [as = TlsActivationContext->ActorSystem(), self = SelfId()](TVector<NKikimrKqp::TKqpNodeResources>&& resources) {
-                TAutoPtr<IEventHandle> eh = new IEventHandle(self, self, new TEvPrivate::TEvResourcesSnapshot(std::move(resources)));
-                as->Send(eh);
-            });
-    }
-
     void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
         if (!TBase::HandleResolve(ev)) return;
         TSet<ui64> shardIds;
@@ -655,9 +647,8 @@ public:
 
 private:
     void ExecuteScanTx(TVector<NKikimrKqp::TKqpNodeResources>&& snapshot) {
-        
-        Planner = CreateKqpPlanner(TasksGraph, TxId, SelfId(), {},
-            {}, GetSnapshot(),
+
+        Planner = CreateKqpPlanner(TasksGraph, TxId, SelfId(), GetSnapshot(),
             Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode, AppData()->EnableKqpSpilling,
             Request.RlPath, ExecuterSpan, std::move(snapshot), ExecuterRetriesConfig, false /* isDataQuery */, Request.MkqlMemoryLimit, nullptr, false);
         
@@ -693,15 +684,6 @@ private:
     }
 
     void PassAway() override {
-        for (auto channelPair: GetResultChannelProxies()) {
-            LOG_D("terminate result channel " << channelPair.first << " proxy at " << channelPair.second->SelfId());
-
-            TAutoPtr<IEventHandle> ev = new IEventHandle(
-                channelPair.second->SelfId(), SelfId(), new TEvents::TEvPoison
-            );
-            channelPair.second->Receive(ev);
-        }
-
         auto totalTime = TInstant::Now() - StartTime;
         Counters->Counters->ScanTxTotalTimeHistogram->Collect(totalTime.MilliSeconds());
 

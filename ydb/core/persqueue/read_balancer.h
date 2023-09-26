@@ -201,7 +201,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         StopWatchingSubDomainPathId();
 
         for (auto& pipe : TabletPipes) {
-            NTabletPipe::CloseClient(ctx, pipe.second);
+            NTabletPipe::CloseClient(ctx, pipe.second.PipeActor);
         }
         TabletPipes.clear();
         TActor<TPersQueueReadBalancer>::Die(ctx);
@@ -276,6 +276,9 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
     void HandleOnInit(TEvPersQueue::TEvRegisterReadSession::TPtr &ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvRegisterReadSession::TPtr &ev, const TActorContext& ctx);
 
+    void HandleOnInit(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev, const TActorContext& ctx);
+
     void Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr &ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvCheckACL::TPtr&, const TActorContext&);
     void Handle(TEvPersQueue::TEvGetPartitionIdForWrite::TPtr&, const TActorContext&);
@@ -293,7 +296,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
     TActorId GetPipeClient(const ui64 tabletId, const TActorContext&);
     void RequestTabletIfNeeded(const ui64 tabletId, const TActorContext&);
-    void RestartPipe(const ui64 tabletId, const TActorContext&);
+    void ClosePipe(const ui64 tabletId, const TActorContext&);
     void CheckStat(const TActorContext&);
     void UpdateCounters(const TActorContext&);
 
@@ -467,7 +470,14 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
     NMetrics::TResourceMetrics *ResourceMetrics;
 
-    THashMap<ui64, TActorId> TabletPipes;
+    struct TPipeLocation {
+        TActorId PipeActor;
+        TMaybe<ui64> NodeId;
+        TMaybe<ui32> Generation;
+    };
+
+    THashMap<ui64, TPipeLocation> TabletPipes;
+    THashSet<ui64> PipesRequested;
 
     bool WaitingForACL;
 
@@ -575,6 +585,7 @@ public:
             HFunc(TEvPersQueue::TEvGetPartitionIdForWrite, Handle);
             HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
+            HFunc(TEvPersQueue::TEvGetPartitionsLocation, HandleOnInit);
             default:
                 StateInitImpl(ev, SelfId());
                 break;
@@ -607,6 +618,7 @@ public:
             HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
             HFunc(TEvPersQueue::TEvStatus, Handle);
+            HFunc(TEvPersQueue::TEvGetPartitionsLocation, Handle);
 
             default:
                 HandleDefaultEvents(ev, SelfId());

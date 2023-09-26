@@ -681,7 +681,7 @@ void TCreateQueueSchemaActorV2::AddRPSQuota() {
     NKikimrKesus::TEvAddQuoterResource cmd;
     auto& res = *cmd.MutableResource();
     res.SetResourcePath(TStringBuilder() << RPS_QUOTA_NAME << "/" << QueuePath_.QueueName);
-    res.MutableHierarhicalDRRResourceConfig()->SetMaxUnitsPerSecond(Cfg().GetQuotingConfig().GetKesusQuoterConfig().GetDefaultLimits().GetStdSendMessageRate());
+    res.MutableHierarchicalDRRResourceConfig()->SetMaxUnitsPerSecond(Cfg().GetQuotingConfig().GetKesusQuoterConfig().GetDefaultLimits().GetStdSendMessageRate());
     AddQuoterResourceActor_ = RunAddQuoterResource(TStringBuilder() << QueuePath_.GetUserPath() << "/" << QUOTER_KESUS_NAME, cmd, RequestId_);
 }
 

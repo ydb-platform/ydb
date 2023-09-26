@@ -37,7 +37,7 @@ namespace NKikimr::NBlobDepot {
             if (group.StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)) {
                 yellowMove.insert(yellowMove.end(), group.Channels.begin(), group.Channels.end());
             } else if (group.StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop)) {
-                yellowStop.insert(yellowMove.end(), group.Channels.begin(), group.Channels.end());
+                yellowStop.insert(yellowStop.end(), group.Channels.begin(), group.Channels.end());
             }
         }
 

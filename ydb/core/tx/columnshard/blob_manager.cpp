@@ -609,7 +609,11 @@ bool TBlobManager::UpdateOneToOne(TEvictedBlob&& evict, IBlobManagerDb& db, bool
             Y_VERIFY(old.State == EEvictState::EVICTING);
             break;
         case EEvictState::EXTERN:
-            Y_VERIFY(old.State == EEvictState::EVICTING || old.State == EEvictState::SELF_CACHED);
+            if (old.State != EEvictState::EVICTING && old.State != EEvictState::SELF_CACHED) {
+                LOG_S_ERROR("Unexpected update '" << evict.Blob << "' state " << (ui32) old.State
+                    << " tier '" << meta.GetTierName() << "' at tablet " << TabletInfo->TabletID);
+                return false;
+            }
             break;
         default:
             break;

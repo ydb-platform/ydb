@@ -2,22 +2,11 @@
 
 #include "defs.h"
 
-#include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
-#include <ydb/core/erasure/erasure.h>
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/config.pb.h>
 
-#include <library/cpp/actors/core/log.h>
-
 #include <util/generic/hash.h>
-#include <util/generic/hash_set.h>
-#include <util/system/compiler.h>
-#include <util/system/yassert.h>
-
-#include <bitset>
-#include <sstream>
-#include <algorithm>
-#include <string>
+#include <util/string/builder.h>
 
 namespace NKikimr::NCms {
 
@@ -48,9 +37,7 @@ public:
     virtual void LockNode(ui32 nodeId) = 0;
     virtual void UnlockNode(ui32 nodeId) = 0;
 
-    virtual bool TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode) const = 0;
-
-    virtual std::string ReadableReason(ui32 nodeId, NKikimrCms::EAvailabilityMode mode) const = 0;
+    virtual bool TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, TString& reason) const = 0;
 };
 
 /**
@@ -66,9 +53,8 @@ public:
     TNodesCounterBase()
         : LockedNodesCount(0)
         , DownNodesCount(0)
-    {}
-
-    virtual ~TNodesCounterBase() = default;
+    {
+    }
 
     void AddNode(ui32 nodeId) override;
     void UpdateNode(ui32 nodeId, NKikimrCms::EState) override;
@@ -89,70 +75,50 @@ protected:
     ui32 DisabledNodesLimit;
     ui32 DisabledNodesRatioLimit;
 
+    virtual TString ReasonPrefix(ui32 nodeId) const = 0;
+
 public:
-    TNodesLimitsCounterBase(ui32 disabledNodesLimit, ui32 disabledNodesRatioLimit)
+    explicit TNodesLimitsCounterBase(ui32 disabledNodesLimit, ui32 disabledNodesRatioLimit)
         : DisabledNodesLimit(disabledNodesLimit)
         , DisabledNodesRatioLimit(disabledNodesRatioLimit)
     {
     }
-
-    virtual ~TNodesLimitsCounterBase() = default;
 
     void ApplyLimits(ui32 nodesLimit, ui32 ratioLimit) {
         DisabledNodesLimit = nodesLimit;
         DisabledNodesRatioLimit = ratioLimit;
     }
 
-    bool TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode) const override final;
+    bool TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, TString& reason) const override final;
 };
 
 class TTenantLimitsCounter : public TNodesLimitsCounterBase {
 private:
-    const std::string TenantName;
+    const TString TenantName;
+
+protected:
+    TString ReasonPrefix(ui32 nodeId) const override final {
+        return TStringBuilder() << "Cannot lock node '" << nodeId << "' of tenant '" << TenantName << "'";
+    }
 
 public:
-    TTenantLimitsCounter(const std::string &tenantName, ui32 disabledNodesLimit, ui32 disabledNodesRatioLimit)
+    explicit TTenantLimitsCounter(const TString& tenantName, ui32 disabledNodesLimit, ui32 disabledNodesRatioLimit)
         : TNodesLimitsCounterBase(disabledNodesLimit, disabledNodesRatioLimit)
         , TenantName(tenantName)
     {
     }
-
-    std::string ReadableReason(ui32 nodeId, NKikimrCms::EAvailabilityMode mode) const override final {
-        Y_UNUSED(mode);
-
-        std::stringstream reason;
-        reason << "Cannot lock node: " << nodeId
-               << ". Too many locked nodes for tenant " << TenantName
-               << "; locked: " << LockedNodesCount
-               << "; down: " << DownNodesCount
-               << "; total: " << NodeToState.size()
-               << "; limit: " << DisabledNodesLimit
-               << "; ratio limit: " << DisabledNodesRatioLimit << "%";
-
-        return reason.str();
-    }
 };
 
 class TClusterLimitsCounter : public TNodesLimitsCounterBase {
-public:
-    TClusterLimitsCounter(ui32 disabledNodesLimit, ui32 disabledNodesRatioLimit)
-        : TNodesLimitsCounterBase(disabledNodesLimit, disabledNodesRatioLimit)
-    {
+protected:
+    TString ReasonPrefix(ui32 nodeId) const override final {
+        return TStringBuilder() << "Cannot lock node '" << nodeId << "'";
     }
 
-    std::string ReadableReason(ui32 nodeId, NKikimrCms::EAvailabilityMode mode) const override final {
-        Y_UNUSED(mode);
-
-        std::stringstream reason;
-        reason << "Cannot lock node: " << nodeId
-               <<". Too many locked nodes in cluster"
-               << "; locked: " << LockedNodesCount
-               << "; down: " << DownNodesCount
-               << "; total: " << NodeToState.size()
-               << "; limit: " << DisabledNodesLimit
-               << "; ratio limit: " << DisabledNodesRatioLimit << "%";
-
-        return reason.str();
+public:
+    explicit TClusterLimitsCounter(ui32 disabledNodesLimit, ui32 disabledNodesRatioLimit)
+        : TNodesLimitsCounterBase(disabledNodesLimit, disabledNodesRatioLimit)
+    {
     }
 };
 
@@ -169,32 +135,10 @@ private:
 public:
     explicit TSysTabletsNodesCounter(NKikimrConfig::TBootstrap::ETabletType tabletType)
         : TabletType(tabletType)
-    {}
-
-    bool TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode) const override final;
-
-    std::string ReadableReason(ui32 nodeId, NKikimrCms::EAvailabilityMode mode) const override final {
-        std::stringstream reason;
-
-        if (mode == NKikimrCms::MODE_FORCE_RESTART) {
-            return reason.str();
-        }
-
-        reason << "Cannot lock node: " << nodeId
-               << ". Tablet "
-               << NKikimrConfig::TBootstrap_ETabletType_Name(TabletType)
-               << " has too many unavailable nodes. Locked: " << LockedNodesCount
-               << ". Down: " << DownNodesCount;
-        if (mode == NKikimrCms::MODE_MAX_AVAILABILITY) {
-            reason << ". Limit: " << NodeToState.size() / 2 << " (50%)";
-        }
-
-        if (mode == NKikimrCms::MODE_KEEP_AVAILABLE) {
-            reason << ". Limit: " << NodeToState.size() - 1; 
-        }
-
-        return reason.str();
+    {
     }
+
+    bool TryToLockNode(ui32 nodeId, NKikimrCms::EAvailabilityMode mode, TString& reason) const override final;
 };
 
 } // namespace NKikimr::NCms

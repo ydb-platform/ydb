@@ -830,6 +830,10 @@ public:
         return Settings.TaskParams;
     }
 
+    const TVector<TString>& GetReadRanges() const override {
+        return Settings.ReadRanges;
+    }
+
     IRandomProvider* GetRandomProvider() const override {
         return Context.RandomProvider;
     }

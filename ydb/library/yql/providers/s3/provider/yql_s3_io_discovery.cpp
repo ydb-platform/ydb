@@ -199,10 +199,10 @@ private:
                 const auto& listEntries = std::get<NS3Lister::TListEntries>(listResult);
 
                 for (auto& entry : listEntries.Objects) {
-                    listedPaths.emplace_back(entry.Path, entry.Size, false);
+                    listedPaths.emplace_back(entry.Path, entry.Size, false, dirIndex + i);
                 }
                 for (auto& path : listEntries.Directories) {
-                    listedPaths.emplace_back(path.Path, 0, true);
+                    listedPaths.emplace_back(path.Path, 0, true, dirIndex + i);
                 }
             }
 
@@ -358,7 +358,7 @@ private:
                     }
 
                     auto& pathList = pathsByExtraValues[extraValues];
-                    pathList.emplace_back(NS3Details::TPath{entry.Path, entry.Size, false});
+                    pathList.emplace_back(NS3Details::TPath{entry.Path, entry.Size, false, pathList.size()});
                     readSize += entry.Size;
                 }
                 for (auto& entry: listEntries.Directories) {
@@ -369,7 +369,7 @@ private:
                     }
 
                     auto& pathList = pathsByExtraValues[extraValues];
-                    pathList.emplace_back(NS3Details::TPath{entry.Path, 0, true});
+                    pathList.emplace_back(NS3Details::TPath{entry.Path, 0, true, pathList.size()});
                 }
 
                 YQL_CLOG(INFO, ProviderS3) << "Pattern " << req.S3Request.Pattern << " has " << listEntries.Size() << " items with total size " << readSize;

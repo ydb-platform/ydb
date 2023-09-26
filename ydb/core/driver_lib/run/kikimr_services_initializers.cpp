@@ -31,6 +31,7 @@
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/client/server/grpc_proxy_status.h>
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
+#include <ydb/core/client/server/ic_nodes_cache_service.h>
 #include <ydb/core/client/server/msgbus_server_tracer.h>
 
 #include <ydb/core/cms/cms.h>
@@ -64,6 +65,8 @@
 
 #include <ydb/core/health_check/health_check.h>
 
+#include <ydb/core/kafka_proxy/actors/kafka_metrics_actor.h>
+#include <ydb/core/kafka_proxy/kafka_metrics.h>
 #include <ydb/core/kafka_proxy/kafka_proxy.h>
 
 #include <ydb/core/kqp/common/kqp.h>
@@ -2593,17 +2596,41 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
     if (Config.GetKafkaProxyConfig().GetEnableKafkaProxy()) {
         NKafka::TListenerSettings settings;
         settings.Port = Config.GetKafkaProxyConfig().GetListeningPort();
-        if (Config.GetKafkaProxyConfig().HasSslCertificate()) {
-            settings.SslCertificatePem = Config.GetKafkaProxyConfig().GetSslCertificate();
-        }
+        settings.SslCertificatePem = Config.GetKafkaProxyConfig().GetSslCertificate();
+        settings.CertificateFile = Config.GetKafkaProxyConfig().GetCert();
+        settings.PrivateKeyFile = Config.GetKafkaProxyConfig().GetKey();
 
         setup->LocalServices.emplace_back(
             TActorId(),
             TActorSetupCmd(NKafka::CreateKafkaListener(MakePollerActorId(), settings, Config.GetKafkaProxyConfig()),
                 TMailboxType::HTSwap, appData->UserPoolId)
         );
+
+        IActor* metricsActor = CreateKafkaMetricsActor(NKafka::TKafkaMetricsSettings{appData->Counters});
+        setup->LocalServices.emplace_back(
+            NKafka::MakeKafkaMetricsServiceID(),
+            TActorSetupCmd(metricsActor,
+                TMailboxType::HTSwap, appData->UserPoolId)
+        );
     }
 }
+
+
+TIcNodeCacheServiceInitializer::TIcNodeCacheServiceInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{
+}
+
+void TIcNodeCacheServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    if (appData->FeatureFlags.GetEnableIcNodeCache()) {
+        setup->LocalServices.emplace_back(
+            NIcNodeCache::CreateICNodesInfoCacheServiceId(),
+            TActorSetupCmd(NIcNodeCache::CreateICNodesInfoCacheService(appData->Counters),
+                           TMailboxType::HTSwap, appData->UserPoolId)
+        );
+    }
+}
+
 
 } // namespace NKikimrServicesInitializers
 } // namespace NKikimr

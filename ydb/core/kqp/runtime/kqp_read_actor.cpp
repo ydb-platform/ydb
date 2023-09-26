@@ -758,7 +758,7 @@ public:
     }
 
     void RetryRead(ui64 id, bool allowInstantRetry = true) {
-        if (!Reads[id]) {
+        if (!Reads[id] || Reads[id].Finished) {
             return;
         }
 
@@ -787,7 +787,7 @@ public:
     }
 
     void DoRetryRead(ui64 id) {
-        if (!Reads[id]) {
+        if (!Reads[id] || Reads[id].Finished) {
             return;
         }
 

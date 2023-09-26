@@ -207,7 +207,7 @@ Y_UNIT_TEST_SUITE(QuoterWithKesusTest) {
 Y_UNIT_TEST_SUITE(KesusProxyTest) {
     void FillProps(NKikimrKesus::TStreamingQuoterResource* props, ui64 resId = 42, double speed = 100.0) {
         props->SetResourceId(resId);
-        auto* cfg = props->MutableHierarhicalDRRResourceConfig();
+        auto* cfg = props->MutableHierarchicalDRRResourceConfig();
         cfg->SetMaxUnitsPerSecond(speed);
     }
 
@@ -616,7 +616,7 @@ Y_UNIT_TEST_SUITE(KesusResourceAllocationStatisticsTest) {
     Y_UNIT_TEST(ReturnsDefaultValues) {
         TKesusResourceAllocationStatistics stat;
         NKikimrKesus::TStreamingQuoterResource props;
-        props.MutableHierarhicalDRRResourceConfig()->SetMaxUnitsPerSecond(42);
+        props.MutableHierarchicalDRRResourceConfig()->SetMaxUnitsPerSecond(42);
         stat.SetProps(props);
 
         CheckParams(stat, TDuration::MilliSeconds(100), 4.2);

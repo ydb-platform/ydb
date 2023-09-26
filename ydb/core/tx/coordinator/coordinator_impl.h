@@ -536,6 +536,7 @@ private:
     bool IcbRegistered = false;
     TControlWrapper EnableLeaderLeases;
     TControlWrapper MinLeaderLeaseDurationUs;
+    TControlWrapper PlanAheadTimeShiftMs;
 
     TVolatileState VolatileState;
     TConfig Config;

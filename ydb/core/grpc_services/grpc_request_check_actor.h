@@ -506,6 +506,36 @@ const TVector<TString>& TGrpcRequestCheckActor<TEvent>::GetPermissions() {
     return permissions;
 }
 
+// role yds.write permissions for PQv1
+template <>
+inline
+const TVector<TString>& TGrpcRequestCheckActor<TEvStreamPQWriteRequest>::GetPermissions() {
+    static const TVector<TString> permissions = {
+        "ydb.databases.list",
+        "ydb.databases.create",
+        "ydb.databases.connect",
+        "ydb.tables.select",
+        "ydb.schemas.getMetadata",
+        "ydb.streams.write"
+    };
+    return permissions;
+}
+
+// role yds.write permissions for Topic API
+template <>
+inline
+const TVector<TString>& TGrpcRequestCheckActor<TEvStreamTopicWriteRequest>::GetPermissions() {
+    static const TVector<TString> permissions = {
+        "ydb.databases.list",
+        "ydb.databases.create",
+        "ydb.databases.connect",
+        "ydb.tables.select",
+        "ydb.schemas.getMetadata",
+        "ydb.streams.write"
+    };
+    return permissions;
+}
+
 template <typename TEvent>
 IActor* CreateGrpcRequestCheckActor(
     const TActorId& owner,

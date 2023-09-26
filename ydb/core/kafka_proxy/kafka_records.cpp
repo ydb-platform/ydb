@@ -196,4 +196,94 @@ i32 TKafkaRecordBatch::Size(TKafkaVersion _version) const {
     return _collector.Size;
 }
 
+
+
+//
+// TKafkaRecordV0
+//
+const TKafkaRecordV0::KeyMeta::Type TKafkaRecordV0::KeyMeta::Default = std::nullopt;
+
+TKafkaRecordV0::TKafkaRecordV0()
+    : MessageSize(MessageSizeMeta::Default)
+    , Crc(CrcMeta::Default)
+    , Magic(MagicMeta::Default)
+    , Attributes(AttributesMeta::Default)
+    , Timestamp(TimestampMeta::Default)
+    , Key(KeyMeta::Default) {
+}
+
+void TKafkaRecordV0::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TKafkaRecordV0";
+    }
+    NPrivate::Read<MessageSizeMeta>(_readable, _version, MessageSize);
+    NPrivate::Read<CrcMeta>(_readable, _version, Crc);
+    NPrivate::Read<MagicMeta>(_readable, _version, Magic);
+    NPrivate::Read<AttributesMeta>(_readable, _version, Attributes);
+    NPrivate::Read<TimestampMeta>(_readable, _version, Timestamp);
+    NPrivate::Read<KeyMeta>(_readable, _version, Key);
+    NPrivate::Read<ValueMeta>(_readable, _version, Value);
+}
+
+void TKafkaRecordV0::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TKafkaRecordV0";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<MessageSizeMeta>(_collector, _writable, _version, MessageSize);
+    NPrivate::Write<CrcMeta>(_collector, _writable, _version, Crc);
+    NPrivate::Write<MagicMeta>(_collector, _writable, _version, Magic);
+    NPrivate::Write<AttributesMeta>(_collector, _writable, _version, Attributes);
+    NPrivate::Write<TimestampMeta>(_collector, _writable, _version, Timestamp);
+    NPrivate::Write<KeyMeta>(_collector, _writable, _version, Key);
+    NPrivate::Write<ValueMeta>(_collector, _writable, _version, Value);
+}
+
+i32 TKafkaRecordV0::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<MessageSizeMeta>(_collector, _version, MessageSize);
+    NPrivate::Size<CrcMeta>(_collector, _version, Crc);
+    NPrivate::Size<MagicMeta>(_collector, _version, Magic);
+    NPrivate::Size<AttributesMeta>(_collector, _version, Attributes);
+    NPrivate::Size<TimestampMeta>(_collector,  _version, Timestamp);
+    NPrivate::Size<KeyMeta>(_collector, _version, Key);
+    NPrivate::Size<ValueMeta>(_collector, _version, Value);
+
+    return _collector.Size;
+}
+
+
+
+//
+// TKafkaRecordV0
+//
+TKafkaRecordBatchV0::TKafkaRecordBatchV0()
+    : Offset(OffsetMeta::Default) {
+}
+
+void TKafkaRecordBatchV0::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TKafkaRecordBatchV0";
+    }
+    NPrivate::Read<OffsetMeta>(_readable, _version, Offset);
+    NPrivate::Read<RecordMeta>(_readable, _version, Record);
+}
+
+void TKafkaRecordBatchV0::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TKafkaRecordBatchV0";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<OffsetMeta>(_collector, _writable, _version, Offset);
+    NPrivate::Write<RecordMeta>(_collector, _writable, _version, Record);
+}
+
+i32 TKafkaRecordBatchV0::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<OffsetMeta>(_collector, _version, Offset);
+    NPrivate::Size<RecordMeta>(_collector, _version, Record);
+
+    return _collector.Size;
+}
+
 } // namespace NKafka

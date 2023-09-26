@@ -484,6 +484,7 @@ private:
                 auto event = MakeHolder<TEvTaskRunnerCreateFinished>(
                     taskRunner->GetSecureParams(),
                     taskRunner->GetTaskParams(),
+                    taskRunner->GetReadRanges(),
                     taskRunner->GetTypeEnv(),
                     taskRunner->GetHolderFactory(),
                     sensors);

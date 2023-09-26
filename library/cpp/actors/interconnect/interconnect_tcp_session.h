@@ -82,7 +82,6 @@ namespace NActors {
         const ui64 UpperLimit;
     };
 
-    static constexpr TDuration DEFAULT_CLOSE_ON_IDLE_TIMEOUT = TDuration::Seconds(90);
     static constexpr TDuration DEFAULT_DEADPEER_TIMEOUT = TDuration::Seconds(10);
     static constexpr TDuration DEFAULT_LOST_CONNECTION_TIMEOUT = TDuration::Seconds(10);
     static constexpr ui32 DEFAULT_MAX_INFLIGHT_DATA = 10240 * 1024;

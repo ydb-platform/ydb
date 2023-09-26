@@ -1,4 +1,5 @@
 #include "tablet_impl.h"
+#include "quoter_constants.h"
 
 #include <util/system/datetime.h>
 
@@ -22,6 +23,10 @@ public:
 
     void Send(ui64 resourceId, double amount, const NKikimrKesus::TStreamingQuoterResource* props) override {
         Kesus->QuoterResourceSessionsAccumulator.Accumulate(Actor, resourceId, amount, props);
+    }
+
+    void Sync(ui64 resourceId, ui32 lastReportId, double available) override {
+        Kesus->QuoterResourceSessionsAccumulator.Sync(Actor, resourceId, lastReportId, available);
     }
 
     void CloseSession(ui64 resourceId, Ydb::StatusIds::StatusCode status, const TString& reason) override {
@@ -61,6 +66,26 @@ void TKesusTablet::TQuoterResourceSessionsAccumulator::Accumulate(const TActorId
     }
 }
 
+void TKesusTablet::TQuoterResourceSessionsAccumulator::Sync(const TActorId& recipient, ui64 resourceId, ui32 lastReportId, double amount) {
+    TSendSyncInfo& info = SendSyncInfos[recipient];
+    if (!info.Event) {
+        info.Event = MakeHolder<TEvKesus::TEvSyncResources>();
+    }
+    auto [indexIt, insertedNew] = info.ResIdIndex.try_emplace(resourceId, info.Event->Record.ResourcesInfoSize());
+    NKikimrKesus::TEvSyncResources::TResourceInfo* resInfo = nullptr;
+    if (insertedNew) {
+        resInfo = info.Event->Record.AddResourcesInfo();
+        resInfo->SetResourceId(resourceId);
+        resInfo->SetAvailable(amount);
+        resInfo->SetLastReportId(lastReportId);
+    } else {
+        Y_VERIFY(indexIt->second < info.Event->Record.ResourcesInfoSize());
+        resInfo = info.Event->Record.MutableResourcesInfo(indexIt->second);
+        resInfo->SetAvailable(amount);
+        resInfo->SetLastReportId(lastReportId);
+    }
+}
+
 void TKesusTablet::TQuoterResourceSessionsAccumulator::SendAll(const TActorContext& ctx, ui64 tabletId) {
     for (auto infoIter = SendInfos.begin(), infoEnd = SendInfos.end(); infoIter != infoEnd; ++infoIter) {
         const TActorId& recipientId = infoIter->first;
@@ -69,13 +94,23 @@ void TKesusTablet::TQuoterResourceSessionsAccumulator::SendAll(const TActorConte
         ctx.Send(recipientId, std::move(info.Event));
     }
     SendInfos.clear();
+
+    for (auto infoIter = SendSyncInfos.begin(), infoEnd = SendSyncInfos.end(); infoIter != infoEnd; ++infoIter) {
+        const TActorId& recipientId = infoIter->first;
+        auto& info = infoIter->second;
+        TRACE_LOG_EVENT(tabletId, "TEvSyncResources", info.Event->Record, recipientId, 0);
+        ctx.Send(recipientId, std::move(info.Event));
+    }
+    SendSyncInfos.clear();
 }
 
 void TKesusTablet::Handle(TEvKesus::TEvSubscribeOnResources::TPtr& ev) {
     THolder<TEvKesus::TEvSubscribeOnResourcesResult> reply = MakeHolder<TEvKesus::TEvSubscribeOnResourcesResult>();
     const TActorId clientId = ActorIdFromProto(ev->Get()->Record.GetActorID());
     const TActorId pipeServerId = ev->Recipient;
+    const ui32 clientVersion = ev->Get()->Record.GetProtocolVersion();
     reply->Record.MutableResults()->Reserve(ev->Get()->Record.ResourcesSize());
+    reply->Record.SetProtocolVersion(NQuoter::KESUS_PROTOCOL_VERSION);
     IResourceSink::TPtr sink = new TQuoterResourceSink(ev->Sender, this);
     const TInstant now = TActivationContext::Now();
     TTickProcessorQueue queue;
@@ -86,14 +121,14 @@ void TKesusTablet::Handle(TEvKesus::TEvSubscribeOnResources::TPtr& ev) {
         TQuoterResourceTree* resourceTree = QuoterResources.FindPath(resource.GetResourcePath());
         if (resourceTree) {
             ++subscriptions;
-            TQuoterSession* session = QuoterResources.GetOrCreateSession(clientId, resourceTree);
+            TQuoterSession* session = QuoterResources.GetOrCreateSession(clientId, clientVersion, resourceTree);
             session->SetResourceSink(sink);
             const NActors::TActorId prevPipeServerId = session->SetPipeServerId(pipeServerId);
             QuoterResources.SetPipeServerId(TQuoterSessionId(clientId, resourceTree->GetResourceId()), prevPipeServerId, pipeServerId);
             session->UpdateConsumptionState(resource.GetStartConsuming(), resource.GetInitialAmount(), queue, now);
 
             result->MutableError()->SetStatus(Ydb::StatusIds::SUCCESS);
-            result->SetResourceId(resourceTree->GetResourceId());
+            resourceTree->FillSubscribeResult(*result);
             *result->MutableEffectiveProps() = resourceTree->GetEffectiveProps();
         } else {
             ++unknownSubscriptions;
@@ -191,6 +226,31 @@ void TKesusTablet::Handle(TEvKesus::TEvAccountResources::TPtr& ev) {
 
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::KESUS_TABLET,
         "[" << TabletID() << "] Account quoter resources (sender=" << ev->Sender
+            << ", cookie=" << ev->Cookie << ")");
+
+    HandleQuoterTick();
+}
+
+void TKesusTablet::Handle(TEvKesus::TEvReportResources::TPtr& ev) {
+    auto ack = MakeHolder<TEvKesus::TEvReportResourcesAck>();
+    const TActorId clientId = ActorIdFromProto(ev->Get()->Record.GetActorID());
+    const TInstant now = TActivationContext::Now();
+    TTickProcessorQueue queue;
+    for (const NKikimrKesus::TEvReportResources::TResourceInfo& resource : ev->Get()->Record.GetResourcesInfo()) {
+        auto* result = ack->Record.AddResourcesInfo();
+        result->SetResourceId(resource.GetResourceId());
+        if (TQuoterSession* session = QuoterResources.FindSession(clientId, resource.GetResourceId())) {
+            session->ReportConsumed(resource.GetReportId(), resource.GetTotalConsumed(), queue, now);
+        } else {
+            TEvKesus::FillError(result->MutableStateNotification(), Ydb::StatusIds::BAD_SESSION, "No such session exists.");
+        }
+    }
+    QuoterTickProcessorQueue.Merge(std::move(queue));
+    TRACE_LOG_EVENT(TabletID(), "TEvReportResourcesAck", ack->Record, ev->Sender, ev->Cookie);
+    Send(ev->Sender, std::move(ack), 0, ev->Cookie);
+
+    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::KESUS_TABLET,
+        "[" << TabletID() << "] Report quoter resources (sender=" << ev->Sender
             << ", cookie=" << ev->Cookie << ")");
 
     HandleQuoterTick();

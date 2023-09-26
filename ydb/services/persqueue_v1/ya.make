@@ -27,7 +27,7 @@ PEERDIR(
     ydb/core/ydb_convert
     ydb/library/aclib
     ydb/library/persqueue/obfuscate
-    ydb/library/persqueue/tests
+#    ydb/library/persqueue/tests
     ydb/library/persqueue/topic_parser
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
@@ -46,4 +46,5 @@ RECURSE(
 RECURSE_FOR_TESTS(
     ut
     ut/new_schemecache_ut
+    ut/describes_ut
 )

@@ -312,6 +312,12 @@ message TAccountingConfig {
     TMetric Overshoot = 10;
 }
 
+message TReplicatedBucketSettings {
+    // Interval between syncs from kesus and between consumption reports in Ms
+    // Default value is inherited from parent or equals 5000 ms for root.
+    optional uint64 ReportIntervalMs = 1;
+}
+
 message THierarchicalDRRResourceConfig {
     // Resource consumption speed limit.
     // Value is required for root resource.
@@ -343,6 +349,16 @@ message THierarchicalDRRResourceConfig {
     // Must be nonnegative and less than or equal to 1.
     double PrefetchWatermark = 7;
 
+    // Prevents bucket from going too deep in negative values. If somebody reports value that will exceed
+    // this limit the final amount in bucket will be equal to this limit
+    // Should be negative value
+    // Zero means no limit
+    optional double ImmediatelyFillUpTo = 8;
+
+    oneof LeafBehavior {
+        TReplicatedBucketSettings ReplicatedBucket = 9;
+    }
+
     // deprecated settings {
     message TSpeedSettings {
         double MaxUnitsPerSecond = 1; // Max resource consuming speed (== quota).
@@ -361,9 +377,10 @@ message TStreamingQuoterResource {
     string ResourcePath = 2;
 
     oneof AlgorithmSpecificConfig {
-        // For Hierarhical DRR algorithm.
-        THierarchicalDRRResourceConfig HierarhicalDRRResourceConfig = 3;
+        // For Hierarchical DRR algorithm.
+        THierarchicalDRRResourceConfig HierarchicalDRRResourceConfig = 3;
     }
+
     TAccountingConfig AccountingConfig = 4;
 }
 
@@ -422,6 +439,7 @@ message TEvSubscribeOnResources {
     }
     repeated TResourceSubscribeInfo Resources = 1;
     NActorsProto.TActorId ActorID = 2;
+    uint32 ProtocolVersion = 3;
 }
 
 message TEvSubscribeOnResourcesResult {
@@ -429,8 +447,10 @@ message TEvSubscribeOnResourcesResult {
         uint64 ResourceId = 1;
         TKesusError Error = 2;
         TStreamingQuoterResource EffectiveProps = 3;
+        double InitialAvailable = 4;
     }
     repeated TResourceSubscribeResult Results = 1; // Resources are in the same order that they were specified in request.
+    uint32 ProtocolVersion = 2;
 }
 
 // Notification about resources consumption state update.
@@ -500,4 +520,38 @@ message TEvAccountResourcesAck {
         TKesusError StateNotification = 4; // Resource can be deleted before accounting. In this case Kesus will send an error for resource.
     }
     repeated TResourceInfo ResourcesInfo = 1;
+}
+
+// Account consumed resources into metering.
+// Event is sent from client to Kesus.
+message TEvReportResources {
+    message TResourceInfo {
+        uint64 ResourceId = 1;
+        double TotalConsumed = 2;
+        uint32 ReportId = 3;
+    }
+    repeated TResourceInfo ResourcesInfo = 1;
+    NActorsProto.TActorId ActorID = 2;
+}
+
+// Ack for TEvAccountResources event.
+message TEvReportResourcesAck {
+    message TResourceInfo {
+        uint64 ResourceId = 1;
+        TKesusError StateNotification = 4; // Resource can be deleted before accounting. In this case Kesus will send an error for resource.
+    }
+    repeated TResourceInfo ResourcesInfo = 1;
+}
+
+message TEvSyncResources {
+    message TResourceInfo {
+        uint64 ResourceId = 1;
+        double Available = 2;
+        uint32 LastReportId = 3; // Last ack report id for this session
+    }
+    repeated TResourceInfo ResourcesInfo = 1;
+}
+
+// Ack for TEvResourcesSync event.
+message TEvSyncResourcesAck {
 }

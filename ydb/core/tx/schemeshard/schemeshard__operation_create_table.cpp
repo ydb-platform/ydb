@@ -420,6 +420,12 @@ public:
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
+        if (AppData()->DataShardConfig.GetDisabledOnSchemeShard()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "OLTP schema operations are not supported");
+            return result;
+        }
+
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();

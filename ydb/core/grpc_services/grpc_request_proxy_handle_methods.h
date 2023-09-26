@@ -29,6 +29,7 @@ protected:
     static void Handle(TEvAlterTopicRequest::TPtr& ev, const TActorContext& ctx);
     static void Handle(TEvDescribeTopicRequest::TPtr& ev, const TActorContext& ctx);
     static void Handle(TEvDescribeConsumerRequest::TPtr& ev, const TActorContext& ctx);
+    static void Handle(TEvDescribePartitionRequest::TPtr& ev, const TActorContext& ctx);
 };
 
 }

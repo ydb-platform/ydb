@@ -10,10 +10,10 @@
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/pq_rl_helpers.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
-#include <ydb/services/lib/actors/pq_rl_helpers.h>
 #include <ydb/services/metadata/service.h>
 
 
@@ -26,7 +26,7 @@ inline TActorId GetPQWriteServiceActorID() {
 template<bool UseMigrationProtocol>
 class TWriteSessionActor
     : public NActors::TActorBootstrapped<TWriteSessionActor<UseMigrationProtocol>>
-    , private TRlHelpers
+    , private NPQ::TRlHelpers
 {
     using TSelf = TWriteSessionActor<UseMigrationProtocol>;
     using TClientMessage = std::conditional_t<UseMigrationProtocol, PersQueue::V1::StreamingWriteClientMessage,
@@ -228,6 +228,8 @@ private:
     NPersQueue::TTopicConverterPtr FullConverter;
     ui32 Partition;
     ui32 PreferedPartition;
+    std::optional<ui32> ExpectedGeneration;
+
     bool PartitionFound = false;
     // 'SourceId' is called 'MessageGroupId' since gRPC data plane API v1
     TString SourceId; // TODO: Replace with 'MessageGroupId' everywhere
@@ -288,9 +290,7 @@ private:
     TInstant LogSessionDeadline;
 
     ui64 BalancerTabletId;
-    ui64 PartitionTabletId;
     TActorId PipeToBalancer;
-    TActorId PipeToPartition;
 
     // PQ tablet configuration that we get at the time of session initialization
     NKikimrPQ::TPQTabletConfig InitialPQTabletConfig;

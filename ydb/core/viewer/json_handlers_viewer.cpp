@@ -20,6 +20,7 @@
 #include "json_pqconsumerinfo.h"
 #include "json_tabletcounters.h"
 #include "json_storage.h"
+#include "json_storage_usage.h"
 #include "json_metainfo.h"
 #include "json_browse.h"
 #include "json_cluster.h"
@@ -59,6 +60,7 @@ void TViewerJsonHandlers::Init() {
     JsonHandlers["/json/pqconsumerinfo"] = new TJsonHandler<TJsonPQConsumerInfo>();
     JsonHandlers["/json/tabletcounters"] = new TJsonHandler<TJsonTabletCounters>;
     JsonHandlers["/json/storage"] = new TJsonHandler<TJsonStorage>;
+    JsonHandlers["/json/storage_usage"] = new TJsonHandler<TJsonStorageUsage>;
     JsonHandlers["/json/metainfo"] = new TJsonHandler<TJsonMetaInfo>;
     JsonHandlers["/json/browse"] = new TJsonHandler<TJsonBrowse>;
     JsonHandlers["/json/cluster"] = new TJsonHandler<TJsonCluster>;

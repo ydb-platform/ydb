@@ -56,6 +56,7 @@ SRCS(
     grpc_server.h
     grpc_proxy_status.h
     grpc_proxy_status.cpp
+    ic_nodes_cache_service.cpp
 )
 
 PEERDIR(

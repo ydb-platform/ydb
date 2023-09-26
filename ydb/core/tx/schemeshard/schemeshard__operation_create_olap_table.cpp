@@ -586,6 +586,14 @@ public:
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(opTxId), ui64(ssId));
 
+        if (context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS))) {
+            if (AppData()->ColumnShardConfig.GetDisabledOnSchemeShard()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                    "OLAP schema operations are not supported");
+                return result;
+            }
+        }
+
         TOlapStoreInfo::TPtr storeInfo;
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
@@ -670,18 +678,6 @@ public:
             return result;
         }
 
-        if (!AppData()->FeatureFlags.GetEnableOlapSchemaOperations()) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                "Olap schema operations are not supported");
-            return result;
-        }
-
-        if (context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS))) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                "Olap schema operations are not supported in serverless db");
-            return result;
-        }
-
         TProposeErrorCollector errors(*result);
         TColumnTableInfo::TPtr tableInfo;
         if (storeInfo) {
@@ -724,11 +720,11 @@ public:
         dstPath.Base()->PathState = TPathElement::EPathState::EPathStateCreate;
         dstPath.Base()->PathType = TPathElement::EPathType::EPathTypeColumnTable;
 
-        NIceDb::TNiceDb db(context.GetDB());
-
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateColumnTable, pathId);
 
         if (storeInfo) {
+            NIceDb::TNiceDb db(context.GetDB());
+
             auto olapStorePath = parentPath.FindOlapStore();
 
             txState.State = TTxState::ConfigureParts;
@@ -802,6 +798,7 @@ public:
 
             context.SS->SetPartitioning(pathId, tableInfo);
 
+            NIceDb::TNiceDb db(context.GetDB());
             for (auto shard : txState.Shards) {
                 context.SS->PersistShardMapping(db, shard.Idx, InvalidTabletId, pathId, opTxId, shard.TabletType);
                 context.SS->PersistChannelsBinding(db, shard.Idx, channelsBindings);
@@ -822,6 +819,7 @@ public:
             }
         }
 
+        NIceDb::TNiceDb db(context.GetDB());
         context.SS->PersistTxState(db, OperationId);
         context.SS->PersistPath(db, dstPath.Base()->PathId);
 

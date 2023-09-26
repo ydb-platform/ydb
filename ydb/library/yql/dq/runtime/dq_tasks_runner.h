@@ -263,6 +263,7 @@ struct TDqTaskRunnerSettings {
     TString OptLLVM = "";
     THashMap<TString, TString> SecureParams;
     THashMap<TString, TString> TaskParams;
+    TVector<TString> ReadRanges;
 };
 
 struct TDqTaskRunnerMemoryLimits {
@@ -391,6 +392,10 @@ public:
         return Task_->GetTaskParams();
     }
 
+    const ::google::protobuf::RepeatedPtrField<TString>& GetReadRanges() const {
+        return Task_->GetReadRanges();
+    }
+
     const ::google::protobuf::Map<TProtoStringType, TProtoStringType>& GetSecureParams() const {
         return Task_->GetSecureParams();
     }
@@ -452,6 +457,7 @@ public:
 
     virtual const THashMap<TString, TString>& GetSecureParams() const = 0;
     virtual const THashMap<TString, TString>& GetTaskParams() const = 0;
+    virtual const TVector<TString>& GetReadRanges() const = 0;
 
     virtual void UpdateStats() = 0;
     virtual const TDqTaskRunnerStats* GetStats() const = 0;

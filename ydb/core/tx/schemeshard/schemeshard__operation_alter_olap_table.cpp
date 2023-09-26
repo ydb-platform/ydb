@@ -121,6 +121,10 @@ public:
             }
             alterData->Description.MutableTtlSettings()->SetVersion(currentTtlVersion + 1);
         }
+
+        if (!currentSchema.ValidateTtlSettings(alterData->Description.GetTtlSettings(), errors)) {
+            return nullptr;
+        }
         return alterData;
     }
 
@@ -172,7 +176,7 @@ private:
     bool ParseFromDSRequest(const NKikimrSchemeOp::TColumnDescription& dsColumn, NKikimrSchemeOp::TOlapColumnDescription& olapColumn, IErrorCollector& errors) const {
         olapColumn.SetName(dsColumn.GetName());
         olapColumn.SetType(dsColumn.GetType());
-        if (dsColumn.HasTypeId()) { 
+        if (dsColumn.HasTypeId()) {
             olapColumn.SetTypeId(dsColumn.GetTypeId());
         }
         if (dsColumn.HasTypeInfo()) {
@@ -224,8 +228,8 @@ public:
                    DebugHint() << " ProgressState"
                    << " at tabletId# " << ssId);
 
-        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterColumnTable); 
-        
+        TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterColumnTable);
+
         TPathId pathId = txState->TargetPathId;
         TPath path = TPath::Init(pathId, context.SS);
         TString pathString = path.PathString();
@@ -245,7 +249,7 @@ public:
             auto seqNo = context.SS->StartRound(*txState);
             NKikimrTxColumnShard::TSchemaTxBody tx;
             context.SS->FillSeqNo(tx, seqNo);
-            
+
             auto* alter = tx.MutableAlterTable();
 
             alter->SetPathId(pathId.LocalPathId);
@@ -337,7 +341,7 @@ public:
                      << ", stepId: " << step);
 
         TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterColumnTable); 
-        
+
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
@@ -490,7 +494,7 @@ public:
         const TTabletId ssId = context.SS->SelfTabletId();
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
- 
+
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = Transaction.HasAlterColumnTable() ? Transaction.GetAlterColumnTable().GetName() : Transaction.GetAlterTable().GetName();
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

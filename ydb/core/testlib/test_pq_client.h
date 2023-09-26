@@ -806,7 +806,7 @@ public:
     ui32 GetTopicVersionFromPath(const TString& name) {
         TAutoPtr<NMsgBusProxy::TBusResponse> res = Ls("/Root/PQ/" + name);
         ui32 version = res->Record.GetPathDescription().GetPersQueueGroup().GetAlterVersion();
-        Cerr << "GetTopicVersionFromPath: " << " record " <<  res->Record  << " name " << name << " version" << version << "\n";
+        Cerr << "GetTopicVersionFromPath: " << " record " <<  res->Record.DebugString()  << "\n name " << name << " version" << version << "\n";
         return version;
     }
 

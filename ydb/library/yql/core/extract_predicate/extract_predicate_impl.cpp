@@ -585,7 +585,7 @@ bool IsMemberListBinOpNode(const TExprNode& node) {
     return IsListOfMembers(node.Head()) || IsListOfMembers(node.Tail());
 }
 
-TExprNode::TPtr OptimizeNodeForRangeExtraction(const TExprNode::TPtr& node, TExprContext& ctx) {
+TExprNode::TPtr OptimizeNodeForRangeExtraction(const TExprNode::TPtr& node, const TExprNode::TPtr& parent, TExprContext& ctx) {
     auto it = node->IsCallable() ? SupportedBinOps.find(node->Content()) : SupportedBinOps.end();
     if (it != SupportedBinOps.end()) {
         TExprNode::TPtr toExpand;
@@ -606,8 +606,6 @@ TExprNode::TPtr OptimizeNodeForRangeExtraction(const TExprNode::TPtr& node, TExp
             YQL_CLOG(DEBUG, Core) << node->Content() << " over tuple";
             return ExpandTupleBinOp(*toExpand, ctx);
         }
-
-        return node;
     }
 
     if (node->IsCallable("Not")) {
@@ -699,11 +697,53 @@ TExprNode::TPtr OptimizeNodeForRangeExtraction(const TExprNode::TPtr& node, TExp
         }
     }
 
+    if (node->IsCallable("!=")) {
+        TExprNode::TPtr litArg;
+        TExprNode::TPtr anyArg;
+
+        if (node->Child(1)->IsCallable("Bool")) {
+            litArg = node->Child(1);
+            anyArg = node->Child(0);
+        }
+
+        if (node->Child(0)->IsCallable("Bool")) {
+            litArg = node->Child(0);
+            anyArg = node->Child(1);
+        }
+
+        if (litArg && anyArg) {
+            return ctx.Builder(node->Pos())
+                .Callable("==")
+                    .Add(0, anyArg)
+                    .Add(1, MakeBool(node->Pos(), !FromString<bool>(litArg->Head().Content()), ctx))
+                .Seal()
+                .Build();
+        }
+    }
+
+    if (node->IsCallable("Member") && (!parent || parent->IsCallable({"And", "Or", "Not", "Coalesce"}))) {
+        auto* typeAnn = node->GetTypeAnn();
+        if (typeAnn->GetKind() == ETypeAnnotationKind::Optional) {
+            typeAnn = typeAnn->Cast<TOptionalExprType>()->GetItemType();
+        }
+        if (typeAnn->GetKind() == ETypeAnnotationKind::Data &&
+            typeAnn->Cast<TDataExprType>()->GetSlot() == EDataSlot::Bool)
+        {
+            YQL_CLOG(DEBUG, Core) << "Replace raw Member with explicit bool comparison";
+            return ctx.Builder(node->Pos())
+                .Callable("==")
+                    .Add(0, node)
+                    .Add(1, MakeBool(node->Pos(), true, ctx))
+                .Seal()
+                .Build();
+        }
+    }
+
     return node;
 }
 
-void DoOptimizeForRangeExtraction(const TExprNode::TPtr& input, TExprNode::TPtr& output, bool topLevel, TExprContext& ctx) {
-    output = OptimizeNodeForRangeExtraction(input, ctx);
+void DoOptimizeForRangeExtraction(const TExprNode::TPtr& input, TExprNode::TPtr& output, bool topLevel, TExprContext& ctx, const TExprNode::TPtr& parent = nullptr) {
+    output = OptimizeNodeForRangeExtraction(input, parent, ctx);
     if (output != input) {
         return;
     }
@@ -715,7 +755,7 @@ void DoOptimizeForRangeExtraction(const TExprNode::TPtr& input, TExprNode::TPtr&
             continue;
         }
         TExprNode::TPtr newChild = child;
-        DoOptimizeForRangeExtraction(child, newChild, false, ctx);
+        DoOptimizeForRangeExtraction(child, newChild, false, ctx, input);
         if (newChild != child) {
             changed = true;
             child = std::move(newChild);

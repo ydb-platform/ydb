@@ -30,8 +30,8 @@ class TJsonCluster : public TViewerPipeClient<TJsonCluster> {
     THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
     TSet<TNodeId> NodesAlive;
     TJsonSettings JsonSettings;
-    ui32 Timeout;
-    ui32 TenantsNumber;
+    ui32 Timeout = 0;
+    ui32 TenantsNumber = 0;
     bool Tablets = false;
 
 public:

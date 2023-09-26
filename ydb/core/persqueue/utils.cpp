@@ -27,4 +27,13 @@ ui64 TopicPartitionReserveThroughput(const NKikimrPQ::TPQTabletConfig& config) {
     return config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
 }
 
+static constexpr ui64 PUT_UNIT_SIZE = 40960u; // 40Kb
+
+ui64 PutUnitsSize(const ui64 size) {
+    ui64 putUnitsCount = size / PUT_UNIT_SIZE;
+    if (size % PUT_UNIT_SIZE != 0)
+        ++putUnitsCount;    
+    return putUnitsCount;        
+}
+
 } // NKikimr::NPQ

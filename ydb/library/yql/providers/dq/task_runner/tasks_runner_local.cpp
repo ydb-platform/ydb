@@ -167,6 +167,10 @@ public:
         return Runner->GetTaskParams();
     }
 
+    const TVector<TString>& GetReadRanges() const override {
+        return Runner->GetReadRanges();
+    }
+
     const THashMap<TString,TString>& GetSecureParams() const override {
         return Runner->GetSecureParams();
     }
@@ -276,6 +280,10 @@ public:
 
         for (const auto& x : taskMeta.GetTaskParams()) {
             settings.TaskParams[x.first] = x.second;
+        }
+
+        for (const auto& readRange : taskMeta.GetReadRanges()) {
+            settings.ReadRanges.push_back(readRange);
         }
         auto ctx = ExecutionContext;
         ctx.FuncProvider = TaskTransformFactory(settings.TaskParams, ctx.FuncRegistry);

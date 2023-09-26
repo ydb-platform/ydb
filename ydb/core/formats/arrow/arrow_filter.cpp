@@ -146,7 +146,7 @@ bool TColumnFilter::IsTotalAllowFilter() const {
     if (DefaultFilterValue && Filter.empty()) {
         return true;
     }
-    if (Filter.size() == 1 && CurrentValue) {
+    if (Filter.size() == 1 && LastValue) {
         return true;
     }
     return false;
@@ -156,7 +156,7 @@ bool TColumnFilter::IsTotalDenyFilter() const {
     if (!DefaultFilterValue && Filter.empty()) {
         return true;
     }
-    if (Filter.size() == 1 && !CurrentValue) {
+    if (Filter.size() == 1 && !LastValue) {
         return true;
     }
     return false;
@@ -173,9 +173,9 @@ void TColumnFilter::Add(const bool value, const ui32 count) {
     if (!count) {
         return;
     }
-    if (Y_UNLIKELY(CurrentValue != value || !Count)) {
+    if (Y_UNLIKELY(LastValue != value || !Count)) {
         Filter.emplace_back(count);
-        CurrentValue = value;
+        LastValue = value;
     } else {
         Filter.back() += count;
     }
@@ -350,7 +350,7 @@ public:
             bool curCurrent = false;
             ui32 count = 0;
 
-            while (it1 != Filter1.Filter.end() && it2 != Filter2.Filter.cend()) {
+            while (it1 != Filter1.Filter.cend() && it2 != Filter2.Filter.cend()) {
                 const ui32 delta = TColumnFilter::CrossSize(pos2, pos2 + *it2, pos1, pos1 + *it1);
                 if (delta) {
                     if (!count || curCurrent != TMergePolicy::Calc(curValue1, curValue2)) {
@@ -372,6 +372,8 @@ public:
                 } else {
                     curValue2 = !curValue2;
                     curValue1 = !curValue1;
+                    pos1 += *it1;
+                    pos2 += *it2;
                     ++it1;
                     ++it2;
                 }
@@ -379,7 +381,7 @@ public:
             Y_VERIFY(it1 == Filter1.Filter.end() && it2 == Filter2.Filter.cend());
             TColumnFilter result = TColumnFilter::BuildAllowFilter();
             std::swap(resultFilter, result.Filter);
-            std::swap(curCurrent, result.CurrentValue);
+            std::swap(curCurrent, result.LastValue);
             std::swap(count, result.Count);
             return result;
         }
@@ -443,6 +445,8 @@ TColumnFilter TColumnFilter::CombineSequentialAnd(const TColumnFilter& extFilter
             } else {
                 curExt = !curExt;
                 curSelf = !curSelf;
+                selfPos += *itSelf;
+                extPos += *itExt;
                 ++itSelf;
                 ++itExt;
             }
@@ -450,7 +454,7 @@ TColumnFilter TColumnFilter::CombineSequentialAnd(const TColumnFilter& extFilter
         Y_VERIFY(itSelf == Filter.end() && itExt == extFilter.Filter.cend());
         TColumnFilter result = TColumnFilter::BuildAllowFilter();
         std::swap(resultFilter, result.Filter);
-        std::swap(curCurrent, result.CurrentValue);
+        std::swap(curCurrent, result.LastValue);
         std::swap(count, result.Count);
         return result;
     }

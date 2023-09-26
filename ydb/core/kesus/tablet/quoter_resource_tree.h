@@ -108,6 +108,8 @@ public:
     // Successful resource allocation notification.
     virtual void Send(ui64 resourceId, double amount, const NKikimrKesus::TStreamingQuoterResource* props) = 0;
 
+    virtual void Sync(ui64 resourceId, ui32 lastReportId, double available) { Y_UNUSED(resourceId, lastReportId, available); }
+
     // Notification about resource allocation error. For example, when resource was deleted during usage.
     // This notification means, that Kesus will not process resource with given id.
     // Other resources from this client will be continued processing as usual.
@@ -117,7 +119,7 @@ public:
 // Common interface for session to resource.
 class TQuoterSession : public TTickProcessor {
 public:
-    TQuoterSession(const NActors::TActorId& clientId, TQuoterResourceTree* resource);
+    TQuoterSession(const NActors::TActorId& clientId, ui32 clientVersion, TQuoterResourceTree* resource);
 
     virtual ~TQuoterSession() = default;
 
@@ -141,11 +143,15 @@ public:
 
     virtual void Send(double spent);
 
+    virtual void Sync(double available);
+
     // Reaction for quoter runtime events: TEvSubscribeOnResources and TEvUpdateConsumptionState.
     virtual void UpdateConsumptionState(bool consume, double amount, TTickProcessorQueue& queue, TInstant now) = 0;
 
     // Reaction for quoter runtime event TEvAccountResources.
     virtual TInstant Account(TInstant start, TDuration interval, const double* values, size_t size, TTickProcessorQueue& queue, TInstant now) = 0;
+
+    virtual double ReportConsumed(ui32 reportId, double consumed, TTickProcessorQueue& queue, TInstant now);
 
     // Close session when resource is deleted.
     virtual void CloseSession(Ydb::StatusIds::StatusCode status, const TString& reason);
@@ -155,8 +161,16 @@ public:
         return Active;
     }
 
+    virtual double GetTotalSent() const {
+        return TotalSent;
+    }
+
     virtual double GetTotalConsumed() const {
         return TotalConsumed;
+    }
+
+    virtual void ResetTotalConsumed() {
+        TotalConsumed = 0.0;
     }
 
     virtual double GetAmountRequested() const {
@@ -178,6 +192,10 @@ public:
         return PipeServerId;
     }
 
+    ui32 GetClientVersion() const {
+        return ClientVersion;
+    }
+
 protected:
     void AddAllocatedCounter(double spent);
 
@@ -186,10 +204,13 @@ protected:
     NActors::TActorId ClientId;
     NActors::TActorId PipeServerId;
     double AmountRequested = 0.0;
-    double TotalConsumed = 0.0; // Only for session statistics. Accuracy of this variable will degrade in time.
+    double TotalSent = 0.0; // Only for session statistics. Accuracy of this variable will degrade in time.
+    double TotalConsumed = 0.0;
+    ui32 LastReportId;
     bool Active = false;
     bool NeedSendChangedProps = false;
     IResourceSink::TPtr ResourceSink;
+    ui32 ClientVersion = 0;
 };
 
 // Common interface for hierarchical quoter resource.
@@ -202,6 +223,12 @@ public:
     virtual ~TQuoterResourceTree() = default;
 
     virtual void SetResourceCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> resourceCounters);
+
+    virtual void FillSubscribeResult(NKikimrKesus::TEvSubscribeOnResourcesResult::TResourceSubscribeResult& result) const {
+        result.SetResourceId(GetResourceId());
+    }
+
+    virtual void HtmlDebugInfo(IOutputStream& out) const { Y_UNUSED(out); }
 
     ui64 GetResourceId() const {
         return ResourceId;
@@ -235,6 +262,8 @@ public:
         return Children;
     }
 
+    virtual void ReportConsumed(double consumed, TTickProcessorQueue& queue, TInstant now) = 0;
+
     // Static children manipulation.
     virtual void AddChild(TQuoterResourceTree* child);
     virtual void RemoveChild(TQuoterResourceTree* child);
@@ -246,12 +275,12 @@ public:
     // Runtime algorithm entry points.
     virtual void CalcParameters(); // Recursively calculates all parameters for runtime algorithm.
 
-    virtual THolder<TQuoterSession> DoCreateSession(const NActors::TActorId& clientId) = 0;
+    virtual THolder<TQuoterSession> DoCreateSession(const NActors::TActorId& clientId, ui32 clientVersion) = 0;
 
-    THolder<TQuoterSession> CreateSession(const NActors::TActorId& clientId) {
-        THolder<TQuoterSession> session = DoCreateSession(clientId);
+    THolder<TQuoterSession> CreateSession(const NActors::TActorId& clientId, ui32 clientVersion) {
+        THolder<TQuoterSession> session = DoCreateSession(clientId, clientVersion);
         if (session) {
-            Sessions.insert(clientId);
+            Sessions[clientId] = session.Get(); // it is safe - we store it outside
             if (Counters.Sessions) {
                 Counters.Sessions->Inc();
             }
@@ -259,7 +288,11 @@ public:
         return session;
     }
 
-    const THashSet<NActors::TActorId>& GetSessions() const {
+    THashMap<NActors::TActorId, TQuoterSession*>& GetSessions() {
+        return Sessions;
+    }
+
+    const THashMap<NActors::TActorId, TQuoterSession*>& GetSessions() const {
         return Sessions;
     }
 
@@ -320,7 +353,7 @@ protected:
     size_t ResourceLevel = 0;
     TQuoterResourceTree* Parent = nullptr;
     THashSet<TQuoterResourceTree*> Children;
-    THashSet<NActors::TActorId> Sessions;
+    THashMap<NActors::TActorId, TQuoterSession*> Sessions;
     NKikimrKesus::TStreamingQuoterResource Props;
     NKikimrKesus::TStreamingQuoterResource EffectiveProps; // Props with actual values taken from Props or from parent's Props or from defaults.
     TCounters Counters;
@@ -371,7 +404,7 @@ public:
 
     void ProcessTick(const TTickProcessorTask& task, TTickProcessorQueue& queue);
 
-    TQuoterSession* GetOrCreateSession(const NActors::TActorId& clientId, TQuoterResourceTree* resource);
+    TQuoterSession* GetOrCreateSession(const NActors::TActorId& clientId, ui32 clientVersion, TQuoterResourceTree* resource);
     TQuoterSession* FindSession(const NActors::TActorId& clientId, ui64 resourceId);
     const TQuoterSession* FindSession(const NActors::TActorId& clientId, ui64 resourceId) const;
     void DisconnectSession(const NActors::TActorId& pipeServerId);

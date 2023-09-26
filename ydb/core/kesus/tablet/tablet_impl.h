@@ -218,6 +218,7 @@ private:
 
     struct TQuoterResourceSessionsAccumulator {
         void Accumulate(const TActorId& recipient, ui64 resourceId, double amount, const NKikimrKesus::TStreamingQuoterResource* props);
+        void Sync(const TActorId& recipient, ui64 resourceId, ui32 lastReportId, double amount);
         void SendAll(const TActorContext& ctx, ui64 tabletId);
 
         struct TSendInfo {
@@ -225,7 +226,13 @@ private:
             THashMap<ui64, size_t> ResIdIndex;
         };
 
+        struct TSendSyncInfo {
+            THolder<TEvKesus::TEvSyncResources> Event;
+            THashMap<ui64, size_t> ResIdIndex;
+        };
+
         THashMap<TActorId, TSendInfo> SendInfos;
+        THashMap<TActorId, TSendSyncInfo> SendSyncInfos;
     };
 
     struct TEvPrivate {
@@ -408,6 +415,7 @@ private:
     void Handle(TEvKesus::TEvSubscribeOnResources::TPtr& ev);
     void Handle(TEvKesus::TEvUpdateConsumptionState::TPtr& ev);
     void Handle(TEvKesus::TEvAccountResources::TPtr& ev);
+    void Handle(TEvKesus::TEvReportResources::TPtr& ev);
     void Handle(TEvKesus::TEvResourcesAllocatedAck::TPtr& ev);
     void Handle(TEvKesus::TEvGetQuoterResourceCounters::TPtr& ev);
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev);

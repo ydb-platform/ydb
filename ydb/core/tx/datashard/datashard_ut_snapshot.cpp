@@ -3639,6 +3639,140 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             "{ items { uint32_value: 2 } items { uint32_value: 2 } items { uint32_value: 22 } }");
     }
 
+    Y_UNIT_TEST(ReadIteratorLocalSnapshotThenRestart) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(true);
+
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+        auto opts = TShardedTableOptions()
+                        .Shards(1)
+                        .Columns({
+                            {"key", "Uint32", true, false},
+                            {"value", "Uint32", false, false}});
+        CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        CreateShardedTable(server, sender, "/Root", "table-2", opts);
+
+        const auto shards1 = GetTableShards(server, sender, "/Root/table-1");
+
+        // Perform a snapshot read, this will persist "reads from snapshots" flag
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, Q_(R"(
+                SELECT key, value
+                FROM `/Root/table-1`
+                UNION ALL
+                SELECT key, value
+                FROM `/Root/table-2`
+                )")),
+            "");
+
+        // Insert rows using a single-shard write
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3)"));
+
+        bool haveReadResult = false;
+        bool haveReadResultSnapshot = false;
+        bool blockReads = false;
+        bool blockReadAcks = true;
+        bool blockReadResults = true;
+        std::vector<std::unique_ptr<IEventHandle>> reads;
+        std::vector<std::unique_ptr<IEventHandle>> readAcks;
+        std::vector<std::unique_ptr<IEventHandle>> readResults;
+        auto observer = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+            switch (ev->GetTypeRewrite()) {
+                case TEvDataShard::TEvRead::EventType: {
+                    auto* msg = ev->Get<TEvDataShard::TEvRead>();
+                    if (blockReads) {
+                        reads.emplace_back(ev.Release());
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    msg->Record.SetMaxRowsInResult(1);
+                    break;
+                }
+                case TEvDataShard::TEvReadResult::EventType: {
+                    auto* msg = ev->Get<TEvDataShard::TEvReadResult>();
+                    if (!haveReadResult) {
+                        haveReadResult = true;
+                        haveReadResultSnapshot = msg->Record.HasSnapshot();
+                        break;
+                    }
+                    if (blockReadResults) {
+                        readResults.emplace_back(ev.Release());
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    break;
+                }
+                case TEvDataShard::TEvReadAck::EventType: {
+                    if (blockReadAcks) {
+                        readAcks.emplace_back(ev.Release());
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        auto prevObserver = runtime.SetObserverFunc(observer);
+
+        TString sessionId = CreateSessionRPC(runtime, "/Root");
+        auto readFuture = SendRequest(runtime,
+            MakeSimpleRequestRPC("SELECT key, value FROM `/Root/table-1` ORDER BY key", sessionId, "", true /* commitTx */),
+            "/Root");
+
+        auto waitFor = [&](const auto& condition, const TString& description) {
+            if (!condition()) {
+                Cerr << "... waiting for " << description << Endl;
+                TDispatchOptions options;
+                options.CustomFinalCondition = [&]() {
+                    return condition();
+                };
+                runtime.DispatchEvents(options);
+                UNIT_ASSERT_C(condition(), "... failed to wait for " << description);
+            }
+        };
+
+        waitFor([&]{ return haveReadResult; }, "read result");
+        UNIT_ASSERT(haveReadResultSnapshot);
+
+        blockReads = true;
+        RebootTablet(runtime, shards1.at(0), sender);
+        waitFor([&]{ return reads.size() > 0; }, "read retry");
+        UNIT_ASSERT_VALUES_EQUAL(reads.size(), 1u);
+
+        // Update all keys in a single operation
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33)"));
+
+        blockReads = false;
+        blockReadAcks = false;
+        blockReadResults = false;
+        readAcks.clear();
+        readResults.clear();
+        for (auto& ev : reads) {
+            runtime.Send(ev.release(), 0, true);
+        }
+        reads.clear();
+
+        auto readResponse = AwaitResponse(runtime, std::move(readFuture));
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResult(readResponse),
+            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 2 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 3 } }");
+    }
+
 }
 
 } // namespace NKikimr

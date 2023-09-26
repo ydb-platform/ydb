@@ -548,9 +548,8 @@ bool TCms::CheckSysTabletsNode(const TActionOptions &opts,
     }
 
     for (auto &tabletType : ClusterInfo->NodeToTabletTypes[node.NodeId]) {
-        if (!ClusterInfo->SysNodesCheckers[tabletType]->TryToLockNode(node.NodeId, opts.AvailabilityMode)) {
+        if (!ClusterInfo->SysNodesCheckers[tabletType]->TryToLockNode(node.NodeId, opts.AvailabilityMode, error.Reason)) {
             error.Code = TStatus::DISALLOW_TEMP;
-            error.Reason = ClusterInfo->SysNodesCheckers[tabletType]->ReadableReason(node.NodeId, opts.AvailabilityMode);
             error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
             return false;
         }
@@ -567,23 +566,18 @@ bool TCms::TryToLockNode(const TAction& action,
     TDuration duration = TDuration::MicroSeconds(action.GetDuration());
     duration += opts.PermissionDuration;
 
-    if (!ClusterInfo->ClusterNodes->TryToLockNode(node.NodeId, opts.AvailabilityMode))
-    {
+    if (!ClusterInfo->ClusterNodes->TryToLockNode(node.NodeId, opts.AvailabilityMode, error.Reason)) {
         error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = ClusterInfo->ClusterNodes->ReadableReason(node.NodeId, opts.AvailabilityMode);
         error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
-
         return false;
     }
 
     if (node.Tenant
         && opts.TenantPolicy != NONE
-        && !ClusterInfo->TenantNodesChecker[node.Tenant]->TryToLockNode(node.NodeId, opts.AvailabilityMode))
+        && !ClusterInfo->TenantNodesChecker[node.Tenant]->TryToLockNode(node.NodeId, opts.AvailabilityMode, error.Reason))
     {
         error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = ClusterInfo->TenantNodesChecker[node.Tenant]->ReadableReason(node.NodeId, opts.AvailabilityMode);
         error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
-
         return false;
     }
 
@@ -1228,7 +1222,10 @@ void TCms::EnqueueRequest(TAutoPtr<IEventHandle> ev, const TActorContext &ctx)
 
 void TCms::StartCollecting()
 {
-    Y_VERIFY(Queue.empty());
+    if (!Queue.empty()) {
+        return;
+    }
+
     std::swap(NextQueue, Queue);
 
     InfoCollectorStartTime = TActivationContext::Now();
@@ -1325,13 +1322,11 @@ void TCms::ProcessQueue()
         Queue.pop();
     }
 
-    // Process events received while collecting and processing queue
-    if (Queue.empty() && !NextQueue.empty()) {
-        StartCollecting();
-    }
-
     if (!Queue.empty()) {
         Send(SelfId(), new TEvPrivate::TEvProcessQueue);
+    } else if (!NextQueue.empty()) {
+        // Process events received while collecting and processing queue
+        StartCollecting();
     }
 }
 

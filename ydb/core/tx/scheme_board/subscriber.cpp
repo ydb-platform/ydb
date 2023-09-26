@@ -3,6 +3,7 @@
 #include "monitorable_actor.h"
 #include "subscriber.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/protos/scheme_board.pb.h>
@@ -1051,6 +1052,18 @@ public:
 };
 
 } // NSchemeBoard
+
+IActor* CreateSchemeBoardSubscriber(
+    const TActorId& owner,
+    const TString& path
+) {
+    auto& domains = AppData()->DomainsInfo->Domains;
+    Y_VERIFY(!domains.empty());
+    auto& domain = domains.begin()->second;
+    ui32 schemeBoardGroup = domain->DefaultSchemeBoardGroup;
+    ui64 domainOwnerId = domain->SchemeRoot;
+    return CreateSchemeBoardSubscriber(owner, path, schemeBoardGroup, domainOwnerId);
+}
 
 IActor* CreateSchemeBoardSubscriber(
     const TActorId& owner,

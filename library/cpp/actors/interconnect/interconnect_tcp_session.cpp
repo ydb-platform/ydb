@@ -1043,7 +1043,7 @@ namespace NActors {
     }
 
     TDuration TInterconnectSessionTCP::GetCloseOnIdleTimeout() const {
-        return Coalesce(Proxy->Common->Settings.CloseOnIdle, DEFAULT_CLOSE_ON_IDLE_TIMEOUT);
+        return Proxy->Common->Settings.CloseOnIdle;
     }
 
     TDuration TInterconnectSessionTCP::GetLostConnectionTimeout() const {

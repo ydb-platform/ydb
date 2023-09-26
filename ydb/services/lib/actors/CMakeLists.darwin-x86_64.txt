@@ -27,5 +27,4 @@ target_link_libraries(services-lib-actors PUBLIC
 )
 target_sources(services-lib-actors PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/lib/actors/pq_schema_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/lib/actors/pq_rl_helpers.cpp
 )

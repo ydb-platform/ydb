@@ -810,7 +810,7 @@ message TFeatureFlags {
     optional bool EnableSeparationComputeActorsFromRead = 90 [default = false];
     optional bool EnablePQConfigTransactionsAtSchemeShard = 91 [default = false];
     optional bool EnableScriptExecutionOperations = 92 [default = false];
-    optional bool EnableImplicitQueryParameterTypes = 93 [default = true];
+    optional bool EnableImplicitQueryParameterTypes = 93 [default = false];
     optional bool EnableForceImmediateEffectsExecution = 94 [default = false];
     optional bool EnableTopicSplitMerge = 95 [default = false];
     optional bool EnableChangefeedDynamoDBStreamsFormat = 96 [default = true];
@@ -818,6 +818,7 @@ message TFeatureFlags {
     optional bool EnableSubscriptionsInDiscovery = 98 [default = false];
     optional bool EnableGetNodeLabels = 99 [default = false];
     optional bool EnableTopicMessageMeta = 100 [default = false];
+    optional bool EnableIcNodeCache = 101 [default = true];
 }
 
 message THttpProxyConfig {
@@ -1315,7 +1316,7 @@ message TTableServiceConfig {
     reserved 25; // optional bool EnableKqpPatternCacheCompute = 25 [default = false];
 
     optional bool EnableKqpScanQuerySourceRead = 26 [default = false];
-    optional bool EnableKqpDataQuerySourceRead = 27 [default = false];
+    optional bool EnableKqpDataQuerySourceRead = 27 [default = true];
     optional uint64 SessionIdleDurationSeconds = 28 [default = 600];
     optional TAggregationConfig AggregationConfig = 29;
     optional bool EnableKqpScanQueryStreamLookup = 30 [default = true];
@@ -1498,6 +1499,11 @@ message TImmediateControlsConfig {
             MinValue: 1000,
             MaxValue: 5000000,
             DefaultValue: 250000 }];
+        optional uint64 PlanAheadTimeShiftMs = 4 [(ControlOptions) = {
+            Description: "Wall-clock time shift in milliseconds when planning ahead (50ms for compatibility with older versions)",
+            MinValue: 0,
+            MaxValue: 86400000,
+            DefaultValue: 50 }];
     }
 
     message TSchemeShardControls {
@@ -1705,6 +1711,7 @@ message TDataShardConfig {
     optional uint64 RestoreReadBufferSizeLimit = 16 [default = 268435456]; // 256 MB
     optional string CdcInitialScanTaskName = 17 [default = "cdc_initial_scan"];
     optional uint32 CdcInitialScanTaskPriority = 18 [default = 10];
+    optional bool DisabledOnSchemeShard = 19 [default = false];
 }
 
 message TColumnShardConfig {
@@ -1722,6 +1729,7 @@ message TColumnShardConfig {
 
     }
     optional TTablesStorageLayoutPolicy TablesStorageLayoutPolicy = 1;
+    optional bool DisabledOnSchemeShard = 2 [default = true];
 }
 
 message TSchemeShardConfig {
@@ -1870,11 +1878,23 @@ message TKafkaProxyConfig {
     optional bool EnableKafkaProxy = 1 [default = false];
 
     optional int32 ListeningPort = 2 [default = 9092];
-    optional string SslCertificate = 3;
 
-    optional uint64 MaxMessageSize = 4 [default = 268435456];
-    optional uint64 MaxInflightSize = 5 [default = 268435456];
+    // You can either specify the path to the certificate, which will contain both the certificate and the private key,
+    // or specify them separately in parameters Cert and Key.
+    optional string SslCertificate = 3;
+    optional string Cert = 8;
+    optional string Key = 9;
+
+    optional uint64 MaxMessageSize = 4 [default = 16777216];
+    optional uint64 MaxInflightSize = 5 [default = 16777216];
     optional uint64 PacketSize = 6 [default = 1500];
+
+    message TProxy {
+        optional string Hostname = 1;
+        optional int32 Port = 2 [default = 9092];
+    }
+
+    optional TProxy Proxy = 7;
 }
 
 message TAwsCompatibilityConfig {

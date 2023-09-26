@@ -1,6 +1,7 @@
 #include "quoter_resource_tree.h"
 
 #include "probes.h"
+#include "quoter_constants.h"
 
 #include <ydb/core/base/path.h>
 
@@ -145,27 +146,48 @@ public:
 };
 
 // Resource in case of hierarchical DRR algorithm.
-class THierarhicalDRRQuoterResourceTree : public TQuoterResourceTree, public THierarchicalDRRResourceConsumer {
+class THierarchicalDRRQuoterResourceTree : public TQuoterResourceTree, public THierarchicalDRRResourceConsumer {
 public:
     using TQuoterResourceTree::TQuoterResourceTree;
 
-    THierarhicalDRRQuoterResourceTree* GetParent() {
-        return static_cast<THierarhicalDRRQuoterResourceTree*>(Parent);
+    THierarchicalDRRQuoterResourceTree* GetParent() {
+        return static_cast<THierarchicalDRRQuoterResourceTree*>(Parent);
     }
 
-    const THierarhicalDRRQuoterResourceTree* GetParent() const {
-        return static_cast<const THierarhicalDRRQuoterResourceTree*>(Parent);
+    const THierarchicalDRRQuoterResourceTree* GetParent() const {
+        return static_cast<const THierarchicalDRRQuoterResourceTree*>(Parent);
     }
 
     bool ValidateProps(const NKikimrKesus::TStreamingQuoterResource& props, TString& errorMessage) override;
 
     void CalcParameters() override;
     void CalcParametersForAccounting();
+    void CalcParametersForReplication();
 
-    THolder<TQuoterSession> DoCreateSession(const NActors::TActorId& clientId) override;
+    THolder<TQuoterSession> DoCreateSession(const NActors::TActorId& clientId, ui32 clientVersion) override;
 
-    void AddActiveChild(THierarchicalDRRResourceConsumer* child, TTickProcessorQueue& queue, TInstant now);
-    void RemoveActiveChild(THierarchicalDRRResourceConsumer* child);
+    void ReportConsumed(double consumed, TTickProcessorQueue& queue, TInstant now) override;
+
+    void HtmlDebugInfo(IOutputStream& out) const override {
+        if (ReplicationEnabled) {
+            out << "TotalConsumed: " << GetTotalConsumed() << "\n";
+            out << "Available: " << GetAvailable() << "\n";
+            out << "BucketSize: " << GetBucketSize() << "\n";
+            out << "ReplicatedBucketPouringFraction: " << GetReplicatedBucketPouringFraction() << "\n";
+        }
+    }
+
+    void FillSubscribeResult(NKikimrKesus::TEvSubscribeOnResourcesResult::TResourceSubscribeResult& result) const override {
+        TQuoterResourceTree::FillSubscribeResult(result);
+        result.SetInitialAvailable(GetAvailable());
+    }
+
+    double GetReplicatedBucketPouringFraction() const {
+        return ActiveChildrenCount ? (double)ActiveV1ChildrenCount / ActiveChildrenCount : 0;
+    }
+
+    void AddActiveChild(THierarchicalDRRResourceConsumer* child, ui32 version, TTickProcessorQueue& queue, TInstant now);
+    void RemoveActiveChild(THierarchicalDRRResourceConsumer* child, ui32 version);
 
     double GetBurst() const {
         return Burst;
@@ -214,6 +236,28 @@ public:
 
     TInstant Report(const NActors::TActorId& clientId, ui64 resourceId, TInstant start, TDuration interval, const double* values, size_t size, TTickProcessorQueue& queue, TInstant now);
     void RunAccounting();
+    void RunReplication();
+
+    double GetTotalConsumed() const {
+        return TotalConsumed;
+    }
+
+    double GetAvailable() const {
+        return Available;
+    }
+
+    double GetBucketSize() const {
+        return BucketSize;
+    }
+
+    bool GetReplicationEnabled() const {
+        return ReplicationEnabled;
+    }
+
+    TDuration GetReplicationPeriod() const {
+        auto interval = GetEffectiveProps().GetHierarchicalDRRResourceConfig().GetReplicatedBucket().GetReportIntervalMs();
+        return TDuration::MilliSeconds(interval ? interval : NKesus::NQuoter::REPLICATION_PERIOD_MS_DEFAULT);
+    }
 
 private:
     double MaxUnitsPerSecond = 0.0;
@@ -229,10 +273,17 @@ private:
 
     double ResourceFillingEpsilon = 0.0;
     double FreeResource = 0.0;
+    double ImmediatelyFillUpTo = 0.0;
+
+    bool ReplicationEnabled = false;
+    double TotalConsumed = 0.0;
+    double Available = 0.0;
+    double BucketSize = 0.0;
 
     bool Active = false;
     THierarchicalDRRResourceConsumer* CurrentActiveChild = nullptr;
     size_t ActiveChildrenCount = 0;
+    size_t ActiveV1ChildrenCount = 0;
 
     THolder<TRateAccounting> RateAccounting;
     bool ActiveAccounting = false;
@@ -240,23 +291,23 @@ private:
 
 THolder<TQuoterResourceTree> CreateResource(ui64 resourceId, ui64 parentId, NActors::TActorId kesus, const IBillSink::TPtr& billSink, const NKikimrKesus::TStreamingQuoterResource& props) {
     Y_VERIFY(resourceId != parentId);
-    return MakeHolder<THierarhicalDRRQuoterResourceTree>(resourceId, parentId, kesus, billSink, props);
+    return MakeHolder<THierarchicalDRRQuoterResourceTree>(resourceId, parentId, kesus, billSink, props);
 }
 
 // Session in case of hierarchical DRR algorithm.
-class THierarhicalDRRQuoterSession : public TQuoterSession, public THierarchicalDRRResourceConsumer {
+class THierarchicalDRRQuoterSession : public TQuoterSession, public THierarchicalDRRResourceConsumer {
 public:
-    THierarhicalDRRQuoterSession(const NActors::TActorId& clientId, THierarhicalDRRQuoterResourceTree* resource)
-        : TQuoterSession(clientId, resource)
+    THierarchicalDRRQuoterSession(const NActors::TActorId& clientId, ui32 clientVersion, THierarchicalDRRQuoterResourceTree* resource)
+        : TQuoterSession(clientId, clientVersion, resource)
     {
     }
 
-    THierarhicalDRRQuoterResourceTree* GetResource() {
-        return static_cast<THierarhicalDRRQuoterResourceTree*>(Resource);
+    THierarchicalDRRQuoterResourceTree* GetResource() {
+        return static_cast<THierarchicalDRRQuoterResourceTree*>(Resource);
     }
 
-    const THierarhicalDRRQuoterResourceTree* GetResource() const {
-        return static_cast<const THierarhicalDRRQuoterResourceTree*>(Resource);
+    const THierarchicalDRRQuoterResourceTree* GetResource() const {
+        return static_cast<const THierarchicalDRRQuoterResourceTree*>(Resource);
     }
 
     void UpdateConsumptionState(bool consume, double amount, TTickProcessorQueue& queue, TInstant now) override;
@@ -286,7 +337,7 @@ public:
                 GetResource()->GetPath(),
                 ClientId);
         Active = true;
-        GetResource()->AddActiveChild(this, queue, now);
+        GetResource()->AddActiveChild(this, ClientVersion, queue, now);
         const ::NMonitoring::TDynamicCounters::TCounterPtr& activeSessions = GetResource()->GetCounters().ActiveSessions;
         if (activeSessions) {
             activeSessions->Inc();
@@ -301,7 +352,7 @@ public:
                 ClientId);
         Active = false;
         AmountRequested = 0.0;
-        GetResource()->RemoveActiveChild(this);
+        GetResource()->RemoveActiveChild(this, ClientVersion);
         const ::NMonitoring::TDynamicCounters::TCounterPtr& activeSessions = GetResource()->GetCounters().ActiveSessions;
         if (activeSessions) {
             activeSessions->Dec();
@@ -325,9 +376,10 @@ public:
 
 private:
     double FreeResource = 0.0;
+    TInstant LastReplication;
 };
 
-double THierarhicalDRRQuoterSession::AccumulateResource(double amount, TInstant now) {
+double THierarchicalDRRQuoterSession::AccumulateResource(double amount, TInstant now) {
     const double newFreeResource = Min(FreeResource + amount, AmountRequested + GetBurst());
     double spent = newFreeResource - FreeResource;
     FreeResource = newFreeResource;
@@ -350,14 +402,14 @@ double THierarhicalDRRQuoterSession::AccumulateResource(double amount, TInstant 
     return spent;
 }
 
-void THierarhicalDRRQuoterSession::CloseSession(Ydb::StatusIds::StatusCode status, const TString& reason) {
+void THierarchicalDRRQuoterSession::CloseSession(Ydb::StatusIds::StatusCode status, const TString& reason) {
     TQuoterSession::CloseSession(status, reason);
     if (Active) {
         Deactivate();
     }
 }
 
-void THierarhicalDRRQuoterSession::UpdateConsumptionState(bool consume, double amount, TTickProcessorQueue& queue, TInstant now) {
+void THierarchicalDRRQuoterSession::UpdateConsumptionState(bool consume, double amount, TTickProcessorQueue& queue, TInstant now) {
     LWPROBE(SessionUpdateConsumptionState,
             GetResource()->GetQuoterPath(),
             GetResource()->GetPath(),
@@ -381,13 +433,18 @@ void THierarhicalDRRQuoterSession::UpdateConsumptionState(bool consume, double a
             ScheduleNextTick(queue, now);
         }
     }
+
+    if (ClientVersion >= 1 && GetResource()->GetReplicationEnabled()) {
+        Sync(GetResource()->GetAvailable());
+        ScheduleNextTick(queue, now);
+    }
 }
 
-TInstant THierarhicalDRRQuoterSession::Account(TInstant start, TDuration interval, const double* values, size_t size, TTickProcessorQueue& queue, TInstant now) {
+TInstant THierarchicalDRRQuoterSession::Account(TInstant start, TDuration interval, const double* values, size_t size, TTickProcessorQueue& queue, TInstant now) {
     return GetResource()->Report(ClientId, GetResource()->GetResourceId(), start, interval, values, size, queue, now);
 }
 
-void THierarhicalDRRQuoterSession::SendAvailableResource() {
+void THierarchicalDRRQuoterSession::SendAvailableResource() {
     if (FreeResource >= GetResource()->GetResourceFillingEpsilon()) {
         if (AmountRequested >= GetResource()->GetResourceFillingEpsilon()) {
             const double spent = Min(AmountRequested, FreeResource);
@@ -405,7 +462,7 @@ void THierarhicalDRRQuoterSession::SendAvailableResource() {
     }
 }
 
-void THierarhicalDRRQuoterSession::DoProcess(TTickProcessorQueue& queue, TInstant now) {
+void THierarchicalDRRQuoterSession::DoProcess(TTickProcessorQueue& queue, TInstant now) {
     LWPROBE(SessionProcess,
             GetResource()->GetQuoterPath(),
             GetResource()->GetPath(),
@@ -418,22 +475,29 @@ void THierarhicalDRRQuoterSession::DoProcess(TTickProcessorQueue& queue, TInstan
             ScheduleNextTick(queue, now);
         }
     }
+
+    if (ClientVersion >= 1 && GetResource()->GetReplicationEnabled() && (LastReplication + GetResource()->GetReplicationPeriod()) <= now) {
+        Sync(GetResource()->GetAvailable());
+        LastReplication = now;
+        Schedule(queue, NextTick(now + GetResource()->GetReplicationPeriod(), GetResource()->GetTickSize()));
+    }
 }
 
-void THierarhicalDRRQuoterSession::ScheduleNextTick(TTickProcessorQueue& queue, TInstant now) {
+void THierarchicalDRRQuoterSession::ScheduleNextTick(TTickProcessorQueue& queue, TInstant now) {
     Schedule(queue, NextTick(now, GetResource()->GetTickSize()));
 }
 
-void THierarhicalDRRQuoterSession::OnPropsChanged() {
+void THierarchicalDRRQuoterSession::OnPropsChanged() {
     FreeResource = Min(FreeResource, AmountRequested + GetBurst());
     TQuoterSession::OnPropsChanged();
 }
 
 } // anonymous namespace
 
-TQuoterSession::TQuoterSession(const NActors::TActorId& clientId, TQuoterResourceTree* resource)
+TQuoterSession::TQuoterSession(const NActors::TActorId& clientId, ui32 clientVersion, TQuoterResourceTree* resource)
     : Resource(resource)
     , ClientId(clientId)
+    , ClientVersion(clientVersion)
 {
 }
 
@@ -449,8 +513,12 @@ void TQuoterSession::Send(double spent) {
             spent);
     ResourceSink->Send(Resource->GetResourceId(), spent, NeedSendChangedProps ? &GetResource()->GetEffectiveProps() : nullptr);
     NeedSendChangedProps = false;
-    TotalConsumed += spent;
+    TotalSent += spent;
     AddAllocatedCounter(spent);
+}
+
+void TQuoterSession::Sync(double available) {
+    ResourceSink->Sync(Resource->GetResourceId(), LastReportId, available);
 }
 
 void TQuoterSession::AddAllocatedCounter(double spent) {
@@ -460,6 +528,14 @@ void TQuoterSession::AddAllocatedCounter(double spent) {
         resource->GetCounters().AddAllocated(spent);
         resource = resource->GetParent();
     } while (resource != nullptr);
+}
+
+double TQuoterSession::ReportConsumed(ui32 reportId, double consumed, TTickProcessorQueue& queue, TInstant now) {
+    double diff = std::clamp(consumed - TotalConsumed, 0.0, std::numeric_limits<double>::max());
+    TotalConsumed = consumed;
+    LastReportId = reportId;
+    Resource->ReportConsumed(diff, queue, now);
+    return diff;
 }
 
 TQuoterResourceTree::TQuoterResourceTree(ui64 resourceId, ui64 parentId, NActors::TActorId kesus, const IBillSink::TPtr& billSink, const NKikimrKesus::TStreamingQuoterResource& props)
@@ -571,12 +647,12 @@ void TQuoterResourceTree::TCounters::SetLimit(TMaybe<double> limit) {
     }
 }
 
-bool THierarhicalDRRQuoterResourceTree::ValidateProps(const NKikimrKesus::TStreamingQuoterResource& props, TString& errorMessage) {
-    if (!props.HasHierarhicalDRRResourceConfig()) {
-        errorMessage = "No HierarhicalDRRResourceConfig specified.";
+bool THierarchicalDRRQuoterResourceTree::ValidateProps(const NKikimrKesus::TStreamingQuoterResource& props, TString& errorMessage) {
+    if (!props.HasHierarchicalDRRResourceConfig()) {
+        errorMessage = "No HierarchicalDRRResourceConfig specified.";
         return false;
     }
-    const auto& hdrrConfig = props.GetHierarhicalDRRResourceConfig();
+    const auto& hdrrConfig = props.GetHierarchicalDRRResourceConfig();
     const double maxUnitsPerSecond = hdrrConfig.GetMaxUnitsPerSecond() ?
         hdrrConfig.GetMaxUnitsPerSecond() : hdrrConfig.GetSpeedSettings().GetMaxUnitsPerSecond();
     if (!std::isfinite(maxUnitsPerSecond)) {
@@ -620,15 +696,15 @@ bool THierarhicalDRRQuoterResourceTree::ValidateProps(const NKikimrKesus::TStrea
     return TQuoterResourceTree::ValidateProps(props, errorMessage);
 }
 
-void THierarhicalDRRQuoterResourceTree::CalcParameters() {
+void THierarchicalDRRQuoterResourceTree::CalcParameters() {
     // compatibility
-    if (!Props.GetHierarhicalDRRResourceConfig().GetMaxUnitsPerSecond() && Props.GetHierarhicalDRRResourceConfig().GetSpeedSettings().GetMaxUnitsPerSecond()) {
-        Props.MutableHierarhicalDRRResourceConfig()->SetMaxUnitsPerSecond(Props.GetHierarhicalDRRResourceConfig().GetSpeedSettings().GetMaxUnitsPerSecond());
+    if (!Props.GetHierarchicalDRRResourceConfig().GetMaxUnitsPerSecond() && Props.GetHierarchicalDRRResourceConfig().GetSpeedSettings().GetMaxUnitsPerSecond()) {
+        Props.MutableHierarchicalDRRResourceConfig()->SetMaxUnitsPerSecond(Props.GetHierarchicalDRRResourceConfig().GetSpeedSettings().GetMaxUnitsPerSecond());
     }
 
     // speed settings
-    THierarhicalDRRQuoterResourceTree* const parent = GetParent();
-    const auto& config = GetProps().GetHierarhicalDRRResourceConfig();
+    THierarchicalDRRQuoterResourceTree* const parent = GetParent();
+    const auto& config = GetProps().GetHierarchicalDRRResourceConfig();
     if (config.GetMaxUnitsPerSecond()) {
         MaxUnitsPerSecond = config.GetMaxUnitsPerSecond();
     } else if (parent) {
@@ -656,6 +732,11 @@ void THierarhicalDRRQuoterResourceTree::CalcParameters() {
     TickSize = TDuration::Seconds(1) / TICKS_PER_SECOND;
 
     Burst = ResourceTickQuantum * RESOURCE_BURST_COEFFICIENT;
+    if (config.HasImmediatelyFillUpTo()) {
+        ImmediatelyFillUpTo = config.GetImmediatelyFillUpTo();
+    } else {
+        ImmediatelyFillUpTo = 0.0;
+    }
 
     const ui32 oldWeight = Weight;
     Weight = config.GetWeight() ? config.GetWeight() : 1;
@@ -667,21 +748,26 @@ void THierarhicalDRRQuoterResourceTree::CalcParameters() {
     FreeResource = Min(FreeResource, HasActiveChildren() ? ResourceTickQuantum : GetBurst());
 
     // Update in props
-    auto* effectiveConfig = EffectiveProps.MutableHierarhicalDRRResourceConfig();
+    auto* effectiveConfig = EffectiveProps.MutableHierarchicalDRRResourceConfig();
     effectiveConfig->SetMaxUnitsPerSecond(MaxUnitsPerSecond);
     effectiveConfig->SetWeight(Weight);
     effectiveConfig->SetMaxBurstSizeCoefficient(1);
     effectiveConfig->SetPrefetchCoefficient(PrefetchCoefficient);
     effectiveConfig->SetPrefetchWatermark(PrefetchWatermark);
+    if (effectiveConfig->HasImmediatelyFillUpTo()) {
+        effectiveConfig->SetImmediatelyFillUpTo(ImmediatelyFillUpTo);
+    }
 
     SetLimitCounter();
 
     CalcParametersForAccounting();
 
+    CalcParametersForReplication();
+
     TQuoterResourceTree::CalcParameters(); // recalc for children
 }
 
-void THierarhicalDRRQuoterResourceTree::CalcParametersForAccounting() {
+void THierarchicalDRRQuoterResourceTree::CalcParametersForAccounting() {
     const auto* accCfgParent = Parent ? &Parent->GetEffectiveProps().GetAccountingConfig() : nullptr;
     auto* accCfg = EffectiveProps.MutableAccountingConfig();
 
@@ -737,16 +823,43 @@ void THierarhicalDRRQuoterResourceTree::CalcParametersForAccounting() {
     }
 }
 
-void THierarhicalDRRQuoterResourceTree::RemoveChild(TQuoterResourceTree* childBase) {
-    THierarhicalDRRQuoterResourceTree* child = static_cast<THierarhicalDRRQuoterResourceTree*>(childBase);
+void THierarchicalDRRQuoterResourceTree::CalcParametersForReplication() {
+    // Create/update/delete replication
+    if (EffectiveProps.GetHierarchicalDRRResourceConfig().HasReplicatedBucket()) {
+        if (!EffectiveProps.GetHierarchicalDRRResourceConfig().GetReplicatedBucket().HasReportIntervalMs()) {
+            EffectiveProps.MutableHierarchicalDRRResourceConfig()->MutableReplicatedBucket()->SetReportIntervalMs(5000);
+        }
+        ReplicationEnabled = true;
+        const auto& cfg = EffectiveProps.GetHierarchicalDRRResourceConfig();
+        const double speed = cfg.GetMaxUnitsPerSecond();
+        const double prefetch = cfg.GetPrefetchCoefficient() ? cfg.GetPrefetchCoefficient() : NQuoter::PREFETCH_COEFFICIENT_DEFAULT;
+        BucketSize = Max(0.0, speed * prefetch) + 1;
+        // Available can be equal exactly zero only at init. It's almost impossible to have exactly zero in other cases
+        // So threat this state as initial and fill up bucket.
+        // It is better than always filling full quota because it  will help us avoid abuse with continuous quota change to refill
+        Available = Available == 0.0 ? BucketSize : Min(Available, BucketSize); // TODO: add explicit behavior for alter
+
+        for (auto& [_, session] : Sessions) {
+            session->ResetTotalConsumed();
+        }
+    } else {
+        ReplicationEnabled = false;
+        BucketSize = 0.0;
+        Available = 0.0;
+        TotalConsumed = 0.0;
+    }
+}
+
+void THierarchicalDRRQuoterResourceTree::RemoveChild(TQuoterResourceTree* childBase) {
+    THierarchicalDRRQuoterResourceTree* child = static_cast<THierarchicalDRRQuoterResourceTree*>(childBase);
     if (child->Active) {
         child->Active = false;
-        RemoveActiveChild(child);
+        RemoveActiveChild(child, 1);
     }
     TQuoterResourceTree::RemoveChild(childBase);
 }
 
-void THierarhicalDRRQuoterResourceTree::DeactivateIfFull(TInstant now) {
+void THierarchicalDRRQuoterResourceTree::DeactivateIfFull(TInstant now) {
     if (!HasActiveChildren() && IsFull()) {
         Active = false;
         LWPROBE(ResourceDeactivate,
@@ -754,12 +867,12 @@ void THierarhicalDRRQuoterResourceTree::DeactivateIfFull(TInstant now) {
                 GetPath());
         StopActiveTime(now);
         if (GetParent()) {
-            GetParent()->RemoveActiveChild(this);
+            GetParent()->RemoveActiveChild(this, 1);
         }
     }
 }
 
-double THierarhicalDRRQuoterResourceTree::AccumulateResource(double amount, TInstant now) {
+double THierarchicalDRRQuoterResourceTree::AccumulateResource(double amount, TInstant now) {
     amount = Min(amount, ResourceTickQuantum);
     const double newFreeResource = Min(FreeResource + amount, HasActiveChildren() ? ResourceTickQuantum : GetBurst());
     double spent = newFreeResource - FreeResource;
@@ -779,7 +892,7 @@ double THierarhicalDRRQuoterResourceTree::AccumulateResource(double amount, TIns
     return spent;
 }
 
-void THierarhicalDRRQuoterResourceTree::DoProcess(TTickProcessorQueue& queue, TInstant now) {
+void THierarchicalDRRQuoterResourceTree::DoProcess(TTickProcessorQueue& queue, TInstant now) {
     LWPROBE(ResourceProcess,
             QuoterPath,
             GetPath(),
@@ -835,12 +948,16 @@ void THierarhicalDRRQuoterResourceTree::DoProcess(TTickProcessorQueue& queue, TI
         RunAccounting();
     }
 
-    if (Active || ActiveAccounting) {
+    if (ReplicationEnabled) {
+        RunReplication();
+    }
+
+    if (Active || ActiveAccounting || ReplicationEnabled) {
         ScheduleNextTick(queue, now);
     }
 }
 
-TInstant THierarhicalDRRQuoterResourceTree::Report(
+TInstant THierarchicalDRRQuoterResourceTree::Report(
     const NActors::TActorId& clientId,
     ui64 resourceId,
     TInstant start,
@@ -863,7 +980,7 @@ TInstant THierarhicalDRRQuoterResourceTree::Report(
     }
 }
 
-void THierarhicalDRRQuoterResourceTree::RunAccounting() {
+void THierarchicalDRRQuoterResourceTree::RunAccounting() {
     if (RateAccounting) {
         ActiveAccounting = RateAccounting->RunAccounting();
     } else {
@@ -871,11 +988,20 @@ void THierarhicalDRRQuoterResourceTree::RunAccounting() {
     }
 }
 
-void THierarhicalDRRQuoterResourceTree::AddActiveChild(THierarchicalDRRResourceConsumer* child, TTickProcessorQueue& queue, TInstant now) {
+void THierarchicalDRRQuoterResourceTree::RunReplication() {
+    if (ReplicationEnabled) {
+        if (Available < BucketSize) {
+            Available = Min(Available + ResourceTickQuantum * GetReplicatedBucketPouringFraction(), BucketSize);
+        }
+    }
+}
+
+void THierarchicalDRRQuoterResourceTree::AddActiveChild(THierarchicalDRRResourceConsumer* child, ui32 version, TTickProcessorQueue& queue, TInstant now) {
     UpdateActiveTime(now);
     if (!HasActiveChildren()) {
         CurrentActiveChild = child;
         ActiveChildrenCount = 1;
+        ActiveV1ChildrenCount = version >= 1 ? 1 : 0;
 
         Active = true;
         LWPROBE(ResourceActivate,
@@ -884,7 +1010,7 @@ void THierarhicalDRRQuoterResourceTree::AddActiveChild(THierarchicalDRRResourceC
 
         ScheduleNextTick(queue, now);
         if (GetParent()) {
-            GetParent()->AddActiveChild(this, queue, now);
+            GetParent()->AddActiveChild(this, version, queue, now);
         }
 
         // Update sum of active children weights
@@ -895,6 +1021,7 @@ void THierarhicalDRRQuoterResourceTree::AddActiveChild(THierarchicalDRRResourceC
         if (child->GetNext<THierarchicalDRRResourceConsumer>() == child && CurrentActiveChild != child) { // Not in list.
             CurrentActiveChild->InsertBeforeInRoundRobinList(child);
             ++ActiveChildrenCount;
+            ActiveV1ChildrenCount += version >= 1 ? 1 : 0;
 
             // Update sum of active children weights
             ActiveChildrenWeight += child->GetWeight();
@@ -902,7 +1029,7 @@ void THierarhicalDRRQuoterResourceTree::AddActiveChild(THierarchicalDRRResourceC
     }
 }
 
-void THierarhicalDRRQuoterResourceTree::RemoveActiveChild(THierarchicalDRRResourceConsumer* child) {
+void THierarchicalDRRQuoterResourceTree::RemoveActiveChild(THierarchicalDRRResourceConsumer* child, ui32 version) {
     if (HasActiveChildren()) {
         if (child == CurrentActiveChild) {
             CurrentActiveChild = CurrentActiveChild->GetNext<THierarchicalDRRResourceConsumer>();
@@ -917,19 +1044,32 @@ void THierarhicalDRRQuoterResourceTree::RemoveActiveChild(THierarchicalDRRResour
         // Update sum of active children weights
         Y_ASSERT(ActiveChildrenWeight >= child->GetWeight());
         ActiveChildrenWeight -= child->GetWeight();
+        ActiveV1ChildrenCount -= version >= 1 ? 1 : 0;
+
         Y_ASSERT(ActiveChildrenCount > 0 || ActiveChildrenWeight == 0);
     }
 }
 
-void THierarhicalDRRQuoterResourceTree::ScheduleNextTick(TTickProcessorQueue& queue, TInstant now) {
+void THierarchicalDRRQuoterResourceTree::ScheduleNextTick(TTickProcessorQueue& queue, TInstant now) {
     Schedule(queue, NextTick(now, TickSize));
 }
 
-THolder<TQuoterSession> THierarhicalDRRQuoterResourceTree::DoCreateSession(const NActors::TActorId& clientId) {
-    return MakeHolder<THierarhicalDRRQuoterSession>(clientId, this);
+void THierarchicalDRRQuoterResourceTree::ReportConsumed(double consumed, TTickProcessorQueue& queue, TInstant now) {
+    if (ReplicationEnabled) {
+        TotalConsumed += consumed;
+        Available -= consumed;
+        if (ImmediatelyFillUpTo < 0.0) {
+            Available = Max(Available, ImmediatelyFillUpTo);
+        }
+        ScheduleNextTick(queue, now);
+    }
 }
 
-void THierarhicalDRRQuoterResourceTree::SetResourceCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> resourceCounters) {
+THolder<TQuoterSession> THierarchicalDRRQuoterResourceTree::DoCreateSession(const NActors::TActorId& clientId, ui32 clientVersion) {
+    return MakeHolder<THierarchicalDRRQuoterSession>(clientId, clientVersion, this);
+}
+
+void THierarchicalDRRQuoterResourceTree::SetResourceCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> resourceCounters) {
     TQuoterResourceTree::SetResourceCounters(std::move(resourceCounters));
     if (RateAccounting) {
         RateAccounting->SetResourceCounters(Counters.ResourceCounters);
@@ -937,8 +1077,8 @@ void THierarhicalDRRQuoterResourceTree::SetResourceCounters(TIntrusivePtr<::NMon
     SetLimitCounter();
 }
 
-void THierarhicalDRRQuoterResourceTree::SetLimitCounter() {
-    const double speedLimit = GetProps().GetHierarhicalDRRResourceConfig().GetMaxUnitsPerSecond();
+void THierarchicalDRRQuoterResourceTree::SetLimitCounter() {
+    const double speedLimit = GetProps().GetHierarchicalDRRResourceConfig().GetMaxUnitsPerSecond();
     if (speedLimit) {
         Counters.SetLimit(speedLimit);
     } else {
@@ -1032,7 +1172,7 @@ bool TQuoterResources::DeleteResource(TQuoterResourceTree* resource, TString& er
     const auto sessions = resource->GetSessions();
     TStringBuilder closeReason;
     closeReason << "Resource \"" << resource->GetPath() << "\" was deleted.";
-    for (const NActors::TActorId& clientId : sessions) {
+    for (const auto& [clientId, _] : sessions) {
         const auto sessionId = TQuoterSessionId{clientId, resource->GetResourceId()};
         const auto sessionIt = Sessions.find(sessionId);
         Y_VERIFY(sessionIt != Sessions.end());
@@ -1117,12 +1257,12 @@ void TQuoterResources::ProcessTick(const TTickProcessorTask& task, TTickProcesso
     }
 }
 
-TQuoterSession* TQuoterResources::GetOrCreateSession(const NActors::TActorId& clientId, TQuoterResourceTree* resource) {
+TQuoterSession* TQuoterResources::GetOrCreateSession(const NActors::TActorId& clientId, ui32 clientVersion, TQuoterResourceTree* resource) {
     const ui64 resourceId = resource->GetResourceId();
     if (TQuoterSession* session = FindSession(clientId, resourceId)) {
         return session;
     } else {
-        const auto newSessionIt = Sessions.emplace(TQuoterSessionId{clientId, resourceId}, resource->CreateSession(clientId)).first;
+        const auto newSessionIt = Sessions.emplace(TQuoterSessionId{clientId, resourceId}, resource->CreateSession(clientId, clientVersion)).first;
         return newSessionIt->second.Get();
     }
 }
@@ -1139,7 +1279,7 @@ const TQuoterSession* TQuoterResources::FindSession(const NActors::TActorId& cli
 
 void TQuoterResources::OnUpdateResourceProps(TQuoterResourceTree* rootResource) {
     const ui64 resId = rootResource->GetResourceId();
-    for (const NActors::TActorId& sessionActor : rootResource->GetSessions()) {
+    for (const auto& [sessionActor, _] : rootResource->GetSessions()) {
         TQuoterSession* session = FindSession(sessionActor, resId);
         Y_VERIFY(session);
         session->OnPropsChanged();

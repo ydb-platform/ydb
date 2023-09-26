@@ -12,8 +12,11 @@ TScanCounters::TScanCounters(const TString& module)
     , PriorityFetchCount(TBase::GetDeriviative("PriorityFetch/Count"))
     , GeneralFetchBytes(TBase::GetDeriviative("GeneralFetch/Bytes"))
     , GeneralFetchCount(TBase::GetDeriviative("GeneralFetch/Count"))
+    , HasResultsAckRequest(TBase::GetDeriviative("HasResultsAckRequest"))
     , NoResultsAckRequest(TBase::GetDeriviative("NoResultsAckRequest"))
     , AckWaitingDuration(TBase::GetDeriviative("AckWaitingDuration"))
+    , ScanDuration(TBase::GetDeriviative("ScanDuration"))
+
     , PortionBytes(TBase::GetDeriviative("PortionBytes"))
     , FilterBytes(TBase::GetDeriviative("FilterBytes"))
     , PostFilterBytes(TBase::GetDeriviative("PostFilterBytes"))
@@ -39,13 +42,13 @@ TScanCounters::TScanCounters(const TString& module)
 
     , Hanging(TBase::GetDeriviative("Hanging"))
 
-    , HistogramCacheBlobsCountDuration(TBase::GetHistogram("CacheBlobsCountDurationMs", NMonitoring::ExponentialHistogram(13, 2)))
-    , HistogramMissCacheBlobsCountDuration(TBase::GetHistogram("MissCacheBlobsCountDurationMs", NMonitoring::ExponentialHistogram(13, 2)))
-    , HistogramCacheBlobBytesDuration(TBase::GetHistogram("CacheBlobBytesDurationMs", NMonitoring::ExponentialHistogram(13, 2)))
-    , HistogramMissCacheBlobBytesDuration(TBase::GetHistogram("MissCacheBlobBytesDurationMs", NMonitoring::ExponentialHistogram(13, 2)))
+    , HistogramCacheBlobsCountDuration(TBase::GetHistogram("CacheBlobsCountDurationMs", NMonitoring::ExponentialHistogram(18, 2, 8)))
+    , HistogramMissCacheBlobsCountDuration(TBase::GetHistogram("MissCacheBlobsCountDurationMs", NMonitoring::ExponentialHistogram(18, 2, 8)))
+    , HistogramCacheBlobBytesDuration(TBase::GetHistogram("CacheBlobBytesDurationMs", NMonitoring::ExponentialHistogram(18, 2, 8)))
+    , HistogramMissCacheBlobBytesDuration(TBase::GetHistogram("MissCacheBlobBytesDurationMs", NMonitoring::ExponentialHistogram(18, 2, 8)))
 
     , BlobsWaitingDuration(TBase::GetDeriviative("BlobsWaitingDuration"))
-    , HistogramBlobsWaitingDuration(TBase::GetHistogram("BlobsWaitingDuration", NMonitoring::ExponentialHistogram(13, 2, 256)))
+    , HistogramBlobsWaitingDuration(TBase::GetHistogram("BlobsWaitingDuration", NMonitoring::ExponentialHistogram(20, 2, 256)))
 
     , BlobsReceivedCount(TBase::GetDeriviative("BlobsReceivedCount"))
     , BlobsReceivedBytes(TBase::GetDeriviative("BlobsReceivedBytes")) {

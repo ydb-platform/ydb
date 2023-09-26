@@ -9,10 +9,10 @@
 #include <ydb/core/grpc_services/rpc_deferrable.h>
 #include <ydb/core/grpc_services/rpc_scheme_base.h>
 #include <ydb/core/persqueue/partition.h>
+#include <ydb/core/persqueue/pq_rl_helpers.h>
 #include <ydb/core/persqueue/write_meta.h>
 
 #include <ydb/public/api/protos/ydb_topic.pb.h>
-#include <ydb/services/lib/actors/pq_rl_helpers.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 #include <ydb/services/lib/sharding/sharding.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
@@ -81,7 +81,7 @@ namespace NKikimr::NDataStreams::V1 {
         void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
                                 const TString& workingDir, const TString& name);
         void StateWork(TAutoPtr<IEventHandle>& ev);
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
+        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
         void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx);
     };
 
@@ -97,9 +97,8 @@ namespace NKikimr::NDataStreams::V1 {
         Become(&TCreateStreamActor::StateWork);
     }
 
-    void TCreateStreamActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
+    void TCreateStreamActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         Y_UNUSED(ev);
-        Y_UNUSED(ctx);
     }
 
 
@@ -208,8 +207,7 @@ namespace NKikimr::NDataStreams::V1 {
         void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const TActorContext& ctx,
                                 const TString& workingDir, const TString& name);
 
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev,
-                                         const TActorContext& ctx);
+        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
 
     private:
         bool EnforceDeletion;
@@ -238,9 +236,8 @@ namespace NKikimr::NDataStreams::V1 {
         modifyScheme.MutableDrop()->SetName(name);
     }
 
-    void TDeleteStreamActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev,
-                                                         const TActorContext& ctx) {
-        if (ReplyIfNotTopic(ev, ctx)) {
+    void TDeleteStreamActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        if (ReplyIfNotTopic(ev)) {
             return;
         }
 
@@ -251,10 +248,10 @@ namespace NKikimr::NDataStreams::V1 {
         if (readRules.size() > 0 && EnforceDeletion == false) {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::IN_USE),
                                   TStringBuilder() << "Stream has registered consumers" <<
-                                  "and EnforceConsumerDeletion flag is false", ctx);
+                                  "and EnforceConsumerDeletion flag is false", ActorContext());
         }
 
-        SendProposeRequest(ctx);
+        SendProposeRequest(ActorContext());
     }
     //-----------------------------------------------------------------------------------------------------------
 
@@ -568,7 +565,7 @@ namespace NKikimr::NDataStreams::V1 {
         void Bootstrap(const NActors::TActorContext& ctx);
 
         void StateWork(TAutoPtr<IEventHandle>& ev);
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
+        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
 
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
             if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {
@@ -629,13 +626,13 @@ namespace NKikimr::NDataStreams::V1 {
         }
     }
 
-    void TDescribeStreamActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
+    void TDescribeStreamActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
         Y_VERIFY(result->ResultSet.size() == 1); // describe only one topic
         const auto& response = result->ResultSet.front();
         const TString path = JoinSeq("/", response.Path);
 
-        if (ReplyIfNotTopic(ev, ctx)) {
+        if (ReplyIfNotTopic(ev)) {
             return;
         }
 
@@ -648,7 +645,7 @@ namespace NKikimr::NDataStreams::V1 {
             tabletIds.insert(partition.GetTabletId());
         }
         if (tabletIds.size() == 0) {
-            ReplyAndDie(ctx);
+            ReplyAndDie(ActorContext());
         }
 
         RequestsInfly = tabletIds.size();
@@ -663,9 +660,9 @@ namespace NKikimr::NDataStreams::V1 {
         };
 
         for (auto& tabletId : tabletIds) {
-            Pipes.push_back(ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig)));
+            Pipes.push_back(ActorContext().Register(NTabletPipe::CreateClient(ActorContext().SelfID, tabletId, clientConfig)));
             TAutoPtr<TEvPersQueue::TEvOffsets> req(new TEvPersQueue::TEvOffsets);
-            NTabletPipe::SendData(ctx, Pipes.back(), req.Release());
+            NTabletPipe::SendData(ActorContext(), Pipes.back(), req.Release());
         }
     }
 
@@ -730,7 +727,8 @@ namespace NKikimr::NDataStreams::V1 {
             }
         }
         if (!startShardFound) {
-            return ReplyWithResult(Ydb::StatusIds::BAD_REQUEST, ctx);
+            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST,
+                                  TStringBuilder() << "Bad shard id " << GetProtoRequest()->exclusive_start_shard_id(), ctx);
         }
         return ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
     }
@@ -913,7 +911,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         void Bootstrap(const NActors::TActorContext& ctx);
         void StateWork(TAutoPtr<IEventHandle>& ev);
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
+        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
 
     protected:
         void SendResponse(const TActorContext& ctx, const std::vector<std::pair<TString, ui64>>& readRules, ui32 leftToRead);
@@ -976,11 +974,11 @@ namespace NKikimr::NDataStreams::V1 {
         }
     }
 
-    void TListStreamConsumersActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
+    void TListStreamConsumersActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
         Y_VERIFY(result->ResultSet.size() == 1); // describe only one topic
 
-        if (ReplyIfNotTopic(ev, ctx)) {
+        if (ReplyIfNotTopic(ev)) {
             return;
         }
 
@@ -995,7 +993,7 @@ namespace NKikimr::NDataStreams::V1 {
         if (alreadyRead > (ui32)streamReadRulesNames.size()) {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT),
                                   TStringBuilder() << "Provided next_token is malformed - " <<
-                                  "everything is already read", ctx);
+                                  "everything is already read", ActorContext());
         }
 
         const auto rulesToRead = std::min(streamReadRulesNames.size() - alreadyRead, MaxResults);
@@ -1007,7 +1005,7 @@ namespace NKikimr::NDataStreams::V1 {
         }
         leftToRead = streamReadRulesNames.size() - alreadyRead - rulesToRead;
 
-        SendResponse(ctx, readRules, leftToRead);
+        SendResponse(ActorContext(), readRules, leftToRead);
     }
 
     void TListStreamConsumersActor::SendResponse(const TActorContext& ctx, const std::vector<std::pair<TString, ui64>>& readRules, ui32 leftToRead) {
@@ -1180,7 +1178,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         void Bootstrap(const NActors::TActorContext& ctx);
         void StateWork(TAutoPtr<IEventHandle>& ev);
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
+        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
 
 
     private:
@@ -1257,15 +1255,15 @@ namespace NKikimr::NDataStreams::V1 {
         }
     }
 
-    void TGetShardIteratorActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
-        if (ReplyIfNotTopic(ev, ctx)) {
+    void TGetShardIteratorActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        if (ReplyIfNotTopic(ev)) {
             return;
         }
 
         const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
         auto topicInfo = navigate->ResultSet.begin();
         StreamName = NKikimr::CanonizePath(topicInfo->Path);
-        if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (AppData(ActorContext())->PQConfig.GetRequireCredentialsInNewProtocol()) {
             NACLib::TUserToken token(this->Request_->GetSerializedToken());
 
             if (!topicInfo->SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow,
@@ -1275,7 +1273,7 @@ namespace NKikimr::NDataStreams::V1 {
                                             TStringBuilder() << "Access to stream "
                                             << this->GetProtoRequest()->stream_name()
                                             << " is denied for subject "
-                                            << token.GetUserSID(), ctx);
+                                            << token.GetUserSID(), ActorContext());
             }
         }
 
@@ -1285,16 +1283,18 @@ namespace NKikimr::NDataStreams::V1 {
             TString shardName = GetShardName(partitionId);
             if (shardName == ShardId) {
                 if (topicInfo->ShowPrivatePath) {
-                    SendResponse(ctx, TShardIterator::Cdc(StreamName, StreamName, partitionId, ReadTimestampMs, SequenceNumber));
+                    SendResponse(ActorContext(),
+                                 TShardIterator::Cdc(StreamName, StreamName, partitionId, ReadTimestampMs, SequenceNumber));
                 } else {
-                    SendResponse(ctx, TShardIterator::Common(StreamName, StreamName, partitionId, ReadTimestampMs, SequenceNumber));
+                    SendResponse(ActorContext(),
+                                 TShardIterator::Common(StreamName, StreamName, partitionId, ReadTimestampMs, SequenceNumber));
                 }
                 return;
             }
         }
 
         ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::NOT_FOUND),
-                       TStringBuilder() << "No such shard: " << ShardId, ctx);
+                       TStringBuilder() << "No such shard: " << ShardId, ActorContext());
     }
 
     void TGetShardIteratorActor::SendResponse(const TActorContext& ctx, const TShardIterator& shardIt) {
@@ -1315,7 +1315,7 @@ namespace NKikimr::NDataStreams::V1 {
     //-----------------------------------------------------------------------------------
 
     class TGetRecordsActor : public TPQGrpcSchemaBase<TGetRecordsActor, TEvDataStreamsGetRecordsRequest>
-                           , private TRlHelpers
+                           , private NPQ::TRlHelpers
                            , public TCdcStreamCompatible
     {
         using TBase = TPQGrpcSchemaBase<TGetRecordsActor, TEvDataStreamsGetRecordsRequest>;
@@ -1331,7 +1331,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         void Bootstrap(const NActors::TActorContext& ctx);
         void StateWork(TAutoPtr<IEventHandle>& ev);
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
+        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
         void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx);
         void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx);
@@ -1355,7 +1355,7 @@ namespace NKikimr::NDataStreams::V1 {
         : TBase(request, TShardIterator(GetRequest<TProtoRequest>(request)->shard_iterator()).IsValid()
                 ? TShardIterator(GetRequest<TProtoRequest>(request)->shard_iterator()).GetStreamName()
                 : "undefined")
-        , TRlHelpers(request, 8_KB, TDuration::Seconds(1))
+        , TRlHelpers({}, request, 8_KB, false, TDuration::Seconds(1))
         , ShardIterator{GetRequest<TProtoRequest>(request)->shard_iterator()}
         , StreamName{ShardIterator.IsValid() ? ShardIterator.GetStreamName() : "undefined"}
         , TabletId{0}
@@ -1399,7 +1399,7 @@ namespace NKikimr::NDataStreams::V1 {
         );
 
         NKikimrClient::TPersQueueRequest request;
-        request.MutablePartitionRequest()->SetTopic(this->GetTopicPath(ctx));
+        request.MutablePartitionRequest()->SetTopic(this->GetTopicPath());
         request.MutablePartitionRequest()->SetPartition(ShardIterator.GetShardId());
         ActorIdToProto(PipeClient, request.MutablePartitionRequest()->MutablePipeClient());
 
@@ -1426,12 +1426,11 @@ namespace NKikimr::NDataStreams::V1 {
         }
     }
 
-    void TGetRecordsActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev,
-                                  const TActorContext& ctx) {
+    void TGetRecordsActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto &result = ev->Get()->Request.Get();
         const auto response = result->ResultSet.front();
 
-        if (AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
+        if (AppData(ActorContext())->PQConfig.GetRequireCredentialsInNewProtocol()) {
             NACLib::TUserToken token(this->Request_->GetSerializedToken());
 
             if (!response.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow,
@@ -1441,7 +1440,7 @@ namespace NKikimr::NDataStreams::V1 {
                                       TStringBuilder() << "Access to stream "
                                       << ShardIterator.GetStreamName()
                                       << " is denied for subject "
-                                      << token.GetUserSID(), ctx);
+                                      << token.GetUserSID(), ActorContext());
             }
         }
 
@@ -1453,13 +1452,13 @@ namespace NKikimr::NDataStreams::V1 {
                 auto partitionId = partition.GetPartitionId();
                 if (partitionId == ShardIterator.GetShardId()) {
                     TabletId = partition.GetTabletId();
-                    return SendReadRequest(ctx);
+                    return SendReadRequest(ActorContext());
                 }
             }
         }
 
         ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::NOT_FOUND),
-                       TStringBuilder() << "No such shard: " << ShardIterator.GetShardId(), ctx);
+                       TStringBuilder() << "No such shard: " << ShardIterator.GetShardId(), ActorContext());
     }
 
     void TGetRecordsActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
@@ -1540,7 +1539,7 @@ namespace NKikimr::NDataStreams::V1 {
             case EWakeupTag::RlAllowed:
                 return SendResponse(ctx);
             case EWakeupTag::RlNoResource:
-                return ReplyWithResult(Ydb::StatusIds::OVERLOADED, ctx);
+                return RespondWithCode(Ydb::StatusIds::OVERLOADED);
             default:
                 return HandleWakeup(ev, ctx);
         }
@@ -1584,8 +1583,7 @@ namespace NKikimr::NDataStreams::V1 {
         void Handle(TEvPersQueue::TEvOffsetsResponse::TPtr& ev, const TActorContext& ctx);
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx);
         void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx);
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev,
-                                         const TActorContext& ctx);
+        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
         void Die(const TActorContext& ctx) override;
 
     private:
@@ -1675,10 +1673,11 @@ namespace NKikimr::NDataStreams::V1 {
         }
     }
 
-    void TListShardsActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
-        if (ReplyIfNotTopic(ev, ctx)) {
+    void TListShardsActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        if (ReplyIfNotTopic(ev)) {
             return;
         }
+        auto ctx = ActorContext();
 
         const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
         auto topicInfo = navigate->ResultSet.front();
@@ -1692,7 +1691,7 @@ namespace NKikimr::NDataStreams::V1 {
                                             TStringBuilder() << "Access to stream "
                                             << this->GetProtoRequest()->stream_name()
                                             << " is denied for subject "
-                                            << token.GetUserSID(), ctx);
+                                            << token.GetUserSID(), ActorContext());
             }
         }
 
@@ -1864,8 +1863,7 @@ namespace NKikimr::NDataStreams::V1 {
         void Bootstrap(const NActors::TActorContext& ctx);
 
         void StateWork(TAutoPtr<IEventHandle>& ev);
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev,
-                                         const TActorContext& ctx);
+        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
 
     private:
         void SendResponse(const TActorContext& ctx);
@@ -1894,9 +1892,9 @@ namespace NKikimr::NDataStreams::V1 {
     }
 
     void TDescribeStreamSummaryActor::HandleCacheNavigateResponse(
-        TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx
+        TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev
     ) {
-        if (ReplyIfNotTopic(ev, ctx)) {
+        if (ReplyIfNotTopic(ev)) {
             return;
         }
 
@@ -1909,7 +1907,7 @@ namespace NKikimr::NDataStreams::V1 {
         PQGroup = response.PQGroupInfo->Description;
         SelfInfo = response.Self->Info;
 
-        SendResponse(ctx);
+        SendResponse(ActorContext());
     }
 
     void TDescribeStreamSummaryActor::SendResponse(const TActorContext& ctx) {

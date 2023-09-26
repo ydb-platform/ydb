@@ -9,7 +9,6 @@
 add_subdirectory(ut)
 add_subdirectory(util)
 add_subdirectory(validators)
-add_subdirectory(yaml_config)
 
 add_library(core-cms-console)
 target_link_libraries(core-cms-console PUBLIC
@@ -24,7 +23,6 @@ target_link_libraries(core-cms-console PUBLIC
   core-blobstorage-base
   core-blobstorage-groupinfo
   cms-console-validators
-  cms-console-yaml_config
   ydb-core-control
   core-engine-minikql
   ydb-core-mind
@@ -34,6 +32,7 @@ target_link_libraries(core-cms-console PUBLIC
   ydb-core-tablet_flat
   ydb-core-util
   ydb-library-aclib
+  ydb-library-yaml_config
   api-protos
   public-lib-operation_id
 )

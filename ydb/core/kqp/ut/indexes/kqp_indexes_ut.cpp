@@ -158,6 +158,110 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
         }
     }
 
+    void TestNoReadFromMainTableBeforeJoin(bool UseExtractPredicates) {
+        using namespace NYql;
+        using namespace NYql::NNodes;
+
+        TKikimrSettings settings;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetPredicateExtract20(UseExtractPredicates);
+        settings.SetAppConfig(appConfig);
+
+        TKikimrRunner kikimr(settings);
+
+        auto& server = kikimr.GetTestServer();
+        auto gateway = GetIcGateway(server);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            const TString createTableSql(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/tg` (
+                    id Utf8, b Utf8, am Decimal(22, 9), cur Utf8, pa_id Utf8, system_date Timestamp, status Utf8, type Utf8, product Utf8,
+                    PRIMARY KEY (b, id),
+                    INDEX tg_index GLOBAL SYNC ON (`b`, `pa_id`, `system_date`, `id`)
+                    COVER(status, type, product, am)
+                );)");
+            auto result = session.ExecuteSchemeQuery(createTableSql).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // core optimizer should inject CoExtractMembert over KqlReadTableIndex with columns set based on ORDER BY
+        // after that KqlReadTableIndex has all columns present in index and should be rewriten in to index read
+        // limit must be applied in to this (index read) stage.
+        // As result we have limited numbers of lookups from main table
+
+        {
+            const TString query(Q1_(R"(
+                --!syntax_v1
+
+                DECLARE $b_1 AS Text;
+                DECLARE $pa_id_1 AS Text;
+                DECLARE $b_2 AS Text;
+                DECLARE $constant_param_1 AS Timestamp;
+                DECLARE $constant_param_2 AS Text;
+                DECLARE $type_1 AS List<Text>;
+                DECLARE $status_1 AS Text;
+                DECLARE $am_1 AS Decimal(22, 9);
+
+                SELECT *
+                FROM tg
+                WHERE (`tg`.`b` = $b_1) AND (`tg`.`id` IN (
+                    SELECT `id`
+                    FROM (
+                        SELECT *
+                        FROM `/Root/tg` VIEW tg_index AS tg
+                        WHERE (`tg`.`pa_id` = $pa_id_1)
+                            AND (`tg`.`b` = $b_2)
+                            AND ((`tg`.`system_date`, `tg`.`id`) <= ($constant_param_1, $constant_param_2))
+                            AND (`tg`.`type` NOT IN $type_1)
+                            AND (`tg`.`status` <> $status_1)
+                            AND (`tg`.`am` <> $am_1)
+                        ORDER BY
+                            `tg`.`b` DESC,
+                            `tg`.`pa_id` DESC,
+                            `tg`.`system_date` DESC,
+                            `tg`.`id` DESC
+                        LIMIT 11)
+                    ))
+                ORDER BY
+                    `tg`.`system_date` DESC,
+                    `tg`.`id` DESC
+
+            )"));
+
+            auto explainResult = session.ExplainDataQuery(query).GetValueSync();
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+
+            Cerr << explainResult.GetAst() << Endl;
+            UNIT_ASSERT_C(explainResult.GetAst().Contains("'('\"Reverse\")"), explainResult.GetAst());
+            UNIT_ASSERT_C(explainResult.GetAst().Contains("'('\"Sorted\")"), explainResult.GetAst());
+
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(explainResult.GetPlan(), &plan, true);
+            UNIT_ASSERT(ValidatePlanNodeIds(plan));
+            Cerr << plan << Endl;
+            auto mainTableAccess = CountPlanNodesByKv(plan, "Table", "tg");
+            UNIT_ASSERT_VALUES_EQUAL(mainTableAccess, 1);
+
+            auto indexTableAccess = CountPlanNodesByKv(plan, "Table", "tg/tg_index/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(indexTableAccess, 1);
+
+            auto filterOnIndex = CountPlanNodesByKv(plan, "Node Type", "Limit-Filter-TablePointLookup");
+            UNIT_ASSERT_VALUES_EQUAL(filterOnIndex, 1);
+
+            auto limitFilterNode = FindPlanNodeByKv(plan, "Node Type", "Limit-Filter-TablePointLookup");
+            auto val = FindPlanNodes(limitFilterNode, "Limit");
+            UNIT_ASSERT_VALUES_EQUAL(val.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(val[0], "11");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(TestNoReadFromMainTableBeforeJoin, ExtractPredicate) {
+        TestNoReadFromMainTableBeforeJoin(ExtractPredicate);
+    }
+
     Y_UNIT_TEST(HandleWriteOnlyIndex) {
         using namespace NYql;
         using namespace NYql::NNodes;

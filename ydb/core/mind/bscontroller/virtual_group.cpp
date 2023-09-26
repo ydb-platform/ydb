@@ -216,6 +216,7 @@ namespace NKikimr::NBsController {
         TBlobStorageController *Self;
         const TActorId ControllerId;
         const TGroupId GroupId;
+        const std::optional<TBlobDepotDeleteQueueInfo> DeleteInfo;
 
     private:
         class TTxUpdateGroup : public TTransactionBase<TBlobStorageController> {
@@ -269,6 +270,48 @@ namespace NKikimr::NBsController {
             }
         };
 
+        class TTxDeleteBlobDepot : public TTransactionBase<TBlobStorageController> {
+            TVirtualGroupSetupMachine* const Machine;
+            const TActorId MachineId;
+            const TGroupId GroupId;
+            const std::weak_ptr<TToken> Token;
+            std::optional<TConfigState> State;
+
+        public:
+            TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_DELETE_BLOB_DEPOT; }
+
+            TTxDeleteBlobDepot(TVirtualGroupSetupMachine *machine)
+                : TTransactionBase(machine->Self)
+                , Machine(machine)
+                , MachineId(Machine->SelfId())
+                , GroupId(Machine->GroupId)
+                , Token(Machine->Token)
+            {}
+
+            bool Execute(TTransactionContext& txc, const TActorContext&) override {
+                if (Token.expired()) {
+                    return true; // actor is already dead
+                }
+                State.emplace(*Self, Self->HostRecords, TActivationContext::Now());
+                const size_t n = State->BlobDepotDeleteQueue.Unshare().erase(GroupId);
+                Y_VERIFY(n == 1);
+                TString error;
+                if (State->Changed() && !Self->CommitConfigUpdates(*State, true, true, true, txc, &error)) {
+                    STLOG(PRI_ERROR, BS_CONTROLLER, BSCVG17, "failed to commit update", (VirtualGroupId, GroupId), (Error, error));
+                    State->Rollback();
+                    State.reset();
+                }
+                return true;
+            }
+
+            void Complete(const TActorContext&) override {
+                if (State) {
+                    State->ApplyConfigUpdates();
+                }
+                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Bootstrap, 0, MachineId, {}, nullptr, 0));
+            }
+        };
+
     public:
         TVirtualGroupSetupMachine(TBlobStorageController *self, TGroupInfo& group)
             : Self(self)
@@ -276,10 +319,29 @@ namespace NKikimr::NBsController {
             , GroupId(group.ID)
         {}
 
+        TVirtualGroupSetupMachine(TBlobStorageController *self, ui32 groupId, const TBlobDepotDeleteQueueInfo& info)
+            : Self(self)
+            , ControllerId(Self->SelfId())
+            , GroupId(groupId)
+            , DeleteInfo(info)
+        {}
+
         void Bootstrap() {
             Become(&TThis::StateFunc);
             if (Expired()) { // BS_CONTROLLER is already dead
                 return PassAway();
+            }
+
+            if (DeleteInfo) {
+                Y_VERIFY(Self->BlobDepotDeleteQueue.contains(GroupId));
+                STLOG(PRI_DEBUG, BS_CONTROLLER, BSCVG19, "Bootstrap for delete", (GroupId, GroupId),
+                    (HiveId, DeleteInfo->HiveId), (BlobDepotId, DeleteInfo->BlobDepotId));
+                if (DeleteInfo->HiveId) {
+                    HiveDelete(*DeleteInfo->HiveId, DeleteInfo->BlobDepotId);
+                } else {
+                    OnBlobDepotDeleted();
+                }
+                return;
             }
 
             TGroupInfo *group = GetGroup();
@@ -514,16 +576,20 @@ namespace NKikimr::NBsController {
                 return DeleteBlobDepot();
             }
 
+            HiveDelete(*group->HiveId, config.HasTabletId() ? MakeMaybe(config.GetTabletId()) : Nothing());
+        }
+
+        void HiveDelete(ui64 hiveId, TMaybe<ui64> tabletId) {
             Y_VERIFY(!HivePipeId);
-            Y_VERIFY(group->HiveId);
-            HivePipeId = Register(NTabletPipe::CreateClient(SelfId(), *group->HiveId, NTabletPipe::TClientRetryPolicy::WithRetries()));
+            Y_VERIFY(hiveId);
+            HivePipeId = Register(NTabletPipe::CreateClient(SelfId(), hiveId, NTabletPipe::TClientRetryPolicy::WithRetries()));
 
-            auto ev = config.HasTabletId()
-                ? std::make_unique<TEvHive::TEvDeleteTablet>(Self->TabletID(), group->ID, config.GetTabletId(), 0)
-                : std::make_unique<TEvHive::TEvDeleteTablet>(Self->TabletID(), group->ID, 0);
+            auto ev = tabletId
+                ? std::make_unique<TEvHive::TEvDeleteTablet>(Self->TabletID(), GroupId, *tabletId, 0)
+                : std::make_unique<TEvHive::TEvDeleteTablet>(Self->TabletID(), GroupId, 0);
 
-            STLOG(PRI_INFO, BS_CONTROLLER, BSCVG12, "sending TEvDeleteTablet", (GroupId, group->ID),
-                (HiveId, *group->HiveId), (Msg, ev->Record));
+            STLOG(PRI_INFO, BS_CONTROLLER, BSCVG12, "sending TEvDeleteTablet", (GroupId, GroupId),
+                (HiveId, hiveId), (Msg, ev->Record));
 
             NTabletPipe::SendData(SelfId(), HivePipeId, ev.release());
         }
@@ -535,7 +601,7 @@ namespace NKikimr::NBsController {
 
             if (ev->Get()->Status != NKikimrProto::OK) {
                 OnPipeError(ev->Get()->ClientId);
-            } else if (ev->Get()->ClientId == HivePipeId) {
+            } else if (ev->Get()->ClientId == HivePipeId && !DeleteInfo) {
                 TGroupInfo *group = GetGroup();
                 if (group->VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::NEW) {
                     auto& config = GetConfig(group);
@@ -618,7 +684,11 @@ namespace NKikimr::NBsController {
         void Handle(TEvHive::TEvDeleteTabletReply::TPtr ev) {
             STLOG(PRI_INFO, BS_CONTROLLER, BSCVG13, "received TEvDeleteTabletReply", (GroupId, GroupId),
                 (Msg, ev->Get()->Record));
-            DeleteBlobDepot();
+            if (DeleteInfo) {
+                OnBlobDepotDeleted();
+            } else {
+                DeleteBlobDepot();
+            }
         }
 
         void ConfigureBlobDepot() {
@@ -652,6 +722,11 @@ namespace NKikimr::NBsController {
                     return false;
                 }
             }));
+        }
+
+        void OnBlobDepotDeleted() {
+            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCVG18, "OnBlobDepotDeleted", (GroupId, GroupId));
+            Self->Execute(std::make_unique<TTxDeleteBlobDepot>(this));
         }
 
         void Handle(TEvBlobDepot::TEvApplyConfigResult::TPtr /*ev*/) {
@@ -688,7 +763,7 @@ namespace NKikimr::NBsController {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         void PassAway() override {
-            if (!Expired()) {
+            if (!Expired() && !DeleteInfo) {
                 TGroupInfo *group = GetGroup();
                 group->VirtualGroupSetupMachineId = {};
             }
@@ -723,6 +798,7 @@ namespace NKikimr::NBsController {
         }
 
         TGroupInfo *GetGroup() {
+            Y_VERIFY(!DeleteInfo);
             TGroupInfo *res = Self->FindGroup(GroupId);
             Y_VERIFY(res);
             return res;
@@ -731,6 +807,8 @@ namespace NKikimr::NBsController {
         bool Expired() const {
             if (!TlsActivationContext->Mailbox.FindActor(ControllerId.LocalId())) { // BS_CONTROLLER died
                 return true;
+            } else if (DeleteInfo) {
+                return !Self->BlobDepotDeleteQueue.contains(GroupId);
             } else if (const TGroupInfo *group = Self->FindGroup(GroupId); !group) { // group is deleted
                 return true;
             } else if (group->VirtualGroupSetupMachineId != SelfId()) { // another machine is started
@@ -773,11 +851,24 @@ namespace NKikimr::NBsController {
                 startSetupMachine(restartNeeded);
             }
         }
+
+        if (state.BlobDepotDeleteQueue.Changed()) {
+            for (const auto& [prev, cur] : Diff(&BlobDepotDeleteQueue, &state.BlobDepotDeleteQueue.Unshare())) {
+                if (!prev) { // a new item was just inserted, start delete machine
+                    StartVirtualGroupDeleteMachine(cur->first, cur->second);
+                }
+            }
+        }
     }
 
     void TBlobStorageController::StartVirtualGroupSetupMachine(TGroupInfo *group) {
         Y_VERIFY(!group->VirtualGroupSetupMachineId);
         group->VirtualGroupSetupMachineId = RegisterWithSameMailbox(new TVirtualGroupSetupMachine(this, *group));
+    }
+
+    void TBlobStorageController::StartVirtualGroupDeleteMachine(ui32 groupId, TBlobDepotDeleteQueueInfo& info) {
+        Y_VERIFY(!info.VirtualGroupSetupMachineId);
+        info.VirtualGroupSetupMachineId = RegisterWithSameMailbox(new TVirtualGroupSetupMachine(this, groupId, info));
     }
 
     void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerGroupDecommittedNotify::TPtr ev) {

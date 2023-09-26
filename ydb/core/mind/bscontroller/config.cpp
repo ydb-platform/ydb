@@ -343,10 +343,21 @@ namespace NKikimr::NBsController {
                 state.PDisks.DeleteExistingEntry(pdiskId);
             }
 
-            MakeTableMerger<Schema::HostConfig>(&HostConfigs, &state.HostConfigs.Get(), this)(txc);
-            MakeTableMerger<Schema::Box>(&Boxes, &state.Boxes.Get(), this)(txc);
-            MakeTableMerger<Schema::BoxStoragePool>(&StoragePools, &state.StoragePools.Get(), this)(txc);
-            MakeTableMerger<Schema::Node>(&Nodes, &state.Nodes.Get(), this)(txc);
+            if (state.HostConfigs.Changed()) {
+                MakeTableMerger<Schema::HostConfig>(&HostConfigs, &state.HostConfigs.Get(), this)(txc);
+            }
+            if (state.Boxes.Changed()) {
+                MakeTableMerger<Schema::Box>(&Boxes, &state.Boxes.Get(), this)(txc);
+            }
+            if (state.StoragePools.Changed()) {
+                MakeTableMerger<Schema::BoxStoragePool>(&StoragePools, &state.StoragePools.Get(), this)(txc);
+            }
+            if (state.Nodes.Changed()) {
+                MakeTableMerger<Schema::Node>(&Nodes, &state.Nodes.Get(), this)(txc);
+            }
+            if (state.BlobDepotDeleteQueue.Changed()) {
+                MakeTableMerger<Schema::BlobDepotDeleteQueue>(&BlobDepotDeleteQueue, &state.BlobDepotDeleteQueue.Get(), this)(txc);
+            }
 
             // apply overlay maps to their respective tables
             state.PDisks.ApplyToTable(this, txc);

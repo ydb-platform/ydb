@@ -409,35 +409,45 @@ struct Schema : NIceDb::Schema {
 
     // struct VirtualGroupPool : Table<130> {};
 
+    struct BlobDepotDeleteQueue : Table<131> {
+        struct GroupId : Column<1, NScheme::NTypeIds::Uint32> {}; // PK
+        struct HiveId : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct BlobDepotId : Column<3, NScheme::NTypeIds::Uint64> {}; // may be null if creation wasn't confirmed
+
+        using TKey = TableKey<GroupId>;
+        using TColumns = TableColumns<GroupId, HiveId, BlobDepotId>;
+    };
+
     using TTables = SchemaTables<
-                                Node,
-                                PDisk,
-                                Group,
-                                State,
-                                VSlot,
-                                VDiskMetrics,
-                                PDiskMetrics,
-                                GroupLatencies,
-                                Box,
-                                BoxUser,
-                                HostConfig,
-                                HostConfigDrive,
-                                BoxHostV2,
-                                BoxStoragePool,
-                                BoxStoragePoolUser,
-                                BoxStoragePoolPDiskFilter,
-                                GroupStoragePool,
-                                OperationLog,
-                                MigrationPlan,
-                                MigrationEntry,
-                                ScrubState,
-                                DriveSerial
-                                >;
+        Node,
+        PDisk,
+        Group,
+        State,
+        VSlot,
+        VDiskMetrics,
+        PDiskMetrics,
+        GroupLatencies,
+        Box,
+        BoxUser,
+        HostConfig,
+        HostConfigDrive,
+        BoxHostV2,
+        BoxStoragePool,
+        BoxStoragePoolUser,
+        BoxStoragePoolPDiskFilter,
+        GroupStoragePool,
+        OperationLog,
+        MigrationPlan,
+        MigrationEntry,
+        ScrubState,
+        DriveSerial,
+        BlobDepotDeleteQueue
+    >;
 
     using TSettings = SchemaSettings<
-                                    ExecutorLogBatching<true>,
-                                    ExecutorLogFlushPeriod<TDuration::MicroSeconds(512).GetValue()>
-                                    >;
+        ExecutorLogBatching<true>,
+        ExecutorLogFlushPeriod<TDuration::MicroSeconds(512).GetValue()>
+    >;
 };
 
 } // NBsController

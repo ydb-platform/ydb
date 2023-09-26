@@ -236,7 +236,7 @@ public:
     void Complete(const TActorContext& ctx) override {
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXM02, "Complete tx", (IncompatibleData, IncompatibleData));
         if (IncompatibleData) {
-            STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXM03, "CompatibilityInfo check failed", (ErrorReason, CompatibilityError));
+            STLOG(PRI_ALERT, BS_CONTROLLER, BSCTXM00, "CompatibilityInfo check failed", (ErrorReason, CompatibilityError));
             ctx.Send(new IEventHandle(TEvents::TSystem::Poison, 0, Self->SelfId(), {}, nullptr, 0));
         } else {
             Self->Execute(new TTxQueue(Self, std::move(Queue)));

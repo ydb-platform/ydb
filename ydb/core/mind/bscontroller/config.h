@@ -59,6 +59,7 @@ namespace NKikimr {
             TCowHolder<TMap<TBoxId, TBoxInfo>> Boxes;
             TCowHolder<TMap<TBoxStoragePoolId, TStoragePoolInfo>> StoragePools;
             TCowHolder<TMultiMap<TBoxStoragePoolId, TGroupId>> StoragePoolGroups;
+            TCowHolder<TMap<TGroupId, TBlobDepotDeleteQueueInfo>> BlobDepotDeleteQueue;
 
             // system-level configuration
             TOverlayMap<TPDiskId, TPDiskInfo> PDisks;
@@ -123,6 +124,7 @@ namespace NKikimr {
                 , Boxes(&controller.Boxes)
                 , StoragePools(&controller.StoragePools)
                 , StoragePoolGroups(&controller.StoragePoolGroups)
+                , BlobDepotDeleteQueue(&controller.BlobDepotDeleteQueue)
                 , PDisks(controller.PDisks)
                 , DrivesSerials(controller.DrivesSerials)
                 , Nodes(&controller.Nodes)
@@ -151,6 +153,7 @@ namespace NKikimr {
                 Boxes.Commit();
                 StoragePools.Commit();
                 StoragePoolGroups.Commit();
+                BlobDepotDeleteQueue.Commit();
                 PDisks.Commit();
                 DrivesSerials.Commit();
                 Nodes.Commit();
@@ -171,9 +174,10 @@ namespace NKikimr {
 
             bool Changed() const {
                 return HostConfigs.Changed() || Boxes.Changed() || StoragePools.Changed() ||
-                    StoragePoolGroups.Changed() || PDisks.Changed() || DrivesSerials.Changed() || Nodes.Changed() ||
-                    VSlots.Changed() || Groups.Changed() || IndexGroupSpeciesToGroup.Changed() || NextGroupId.Changed() ||
-                    NextStoragePoolId.Changed() || SerialManagementStage.Changed() || NextVirtualGroupId.Changed();
+                    StoragePoolGroups.Changed() || BlobDepotDeleteQueue.Changed() || PDisks.Changed() ||
+                    DrivesSerials.Changed() || Nodes.Changed() || VSlots.Changed() || Groups.Changed() ||
+                    IndexGroupSpeciesToGroup.Changed() || NextGroupId.Changed() || NextStoragePoolId.Changed() ||
+                    SerialManagementStage.Changed() || NextVirtualGroupId.Changed();
             }
 
             bool NormalizeHostKey(NKikimrBlobStorage::THostKey *host) const {
@@ -240,6 +244,20 @@ namespace NKikimr {
             }
 
             void DeleteExistingGroup(TGroupId groupId) {
+                const TGroupInfo *group = Groups.Find(groupId);
+                Y_VERIFY(group);
+                if (group->VirtualGroupState) { // this was a BlobDepot-based group, enqueue BlobDepot for deletion
+                    // parse blob depot config to figure out whether hive was contacted; if not, skip the HiveId field
+                    Y_VERIFY(group->BlobDepotConfig);
+                    NKikimrBlobDepot::TBlobDepotConfig config;
+                    const bool success = config.ParseFromString(*group->BlobDepotConfig);
+                    Y_VERIFY(success);
+                    if (config.GetHiveContacted()) {
+                        const auto [it, inserted] = BlobDepotDeleteQueue.Unshare().try_emplace(groupId, group->HiveId,
+                            config.HasTabletId() ? MakeMaybe(config.GetTabletId()) : Nothing());
+                        Y_VERIFY(inserted);
+                    }
+                }
                 Groups.DeleteExistingEntry(groupId);
                 GroupContentChanged.erase(groupId);
                 GroupFailureModelChanged.erase(groupId);

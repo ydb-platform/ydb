@@ -86,7 +86,7 @@ TString TPGParse::Dump() const {
     TPGStreamInput stream(*this);
     TStringBuf name;
     stream >> name;
-    return TStringBuilder() << "Name: " << name;
+    return TStringBuilder() << "Statement: \"" << name << "\"";
 }
 
 TPGParse::TQueryData TPGParse::GetQueryData() const {
@@ -146,11 +146,7 @@ TString TPGBind::Dump() const {
     TStringBuf statementName;
     stream >> portalName;
     stream >> statementName;
-    if (portalName) {
-        text << "Portal: '" << portalName << "'";
-    } else if (statementName) {
-        text << "Statement: '" << statementName << "'";
-    }
+    text << "Statement: \"" << statementName << "\"" << " Portal: \"" << portalName << "\"";
     uint16_t numberOfParameterFormats = 0;
     stream >> numberOfParameterFormats;
     std::vector<uint16_t> parameterFormats;
@@ -230,7 +226,7 @@ TString TPGDescribe::Dump() const {
     text << "Type: " << describeType;
     TStringBuf name;
     stream >> name;
-    text << " Name: " << name;
+    text << " Name: \"" << name << "\"";
     return text;
 }
 
@@ -247,14 +243,9 @@ TString TPGExecute::Dump() const {
     TStringBuf name;
     uint32_t maxRows = 0;
     stream >> name >> maxRows;
-    if (name) {
-        text << "Name: " << name;
-    }
+    text << "Portal: \"" << name << "\"";
     if (maxRows) {
-        if (!text.empty()) {
-            text << ' ';
-        }
-        text << "MaxRows: " << maxRows;
+        text << " MaxRows: " << maxRows;
     }
     return text;
 }
@@ -265,15 +256,8 @@ TPGClose::TCloseData TPGClose::GetCloseData() const {
     char type;
     TString name;
     stream >> type;
-    stream >> name;
-    switch (type) {
-        case 'S':
-            closeData.StatementName = name;
-            break;
-        case 'P':
-            closeData.PortalName = name;
-            break;
-    }
+    closeData.Type = static_cast<TCloseData::ECloseType>(type);
+    stream >> closeData.Name;
     return closeData;
 }
 

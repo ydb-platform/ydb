@@ -168,6 +168,7 @@ struct TEvPGEvents {
 
     struct TEvBindResponse : NActors::TEventLocal<TEvBindResponse, EvBindResponse> {
         std::unique_ptr<TPGBind> OriginalMessage;
+        std::vector<std::pair<char, TString>> ErrorFields;
 
         TEvBindResponse(std::unique_ptr<TPGBind> originalMessage)
             : OriginalMessage(std::move(originalMessage))

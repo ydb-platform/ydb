@@ -579,7 +579,8 @@ protected:
     void HandleConnected(TEvPGEvents::TEvDescribeResponse::TPtr& ev) {
         if (IsEventExpected(ev)) {
             if (ev->Get()->ErrorFields.empty()) {
-                if (ev->Get()->ParameterTypes.size() > 0) { // parameterDescription
+                if (ev->Get()->ParameterTypes.size() > 0) {
+                    // parameterDescription (statement only)
                     TPGStreamOutput<TPGParameterDescription> parameterDescription;
                     parameterDescription << uint16_t(ev->Get()->ParameterTypes.size()); // number of fields
                     for (auto type : ev->Get()->ParameterTypes) {
@@ -659,8 +660,12 @@ protected:
 
     void HandleConnected(TEvPGEvents::TEvBindResponse::TPtr& ev) {
         if (IsEventExpected(ev)) {
-            TPGStreamOutput<TPGBindComplete> bindComplete;
-            SendStream(bindComplete);
+            if (ev->Get()->ErrorFields.empty()) {
+                TPGStreamOutput<TPGBindComplete> bindComplete;
+                SendStream(bindComplete);
+            } else {
+                SendErrorResponse(ev->Get()->ErrorFields);
+            }
             ++OutgoingSequenceNumber;
             BecomeReadyForQuery();
         } else {

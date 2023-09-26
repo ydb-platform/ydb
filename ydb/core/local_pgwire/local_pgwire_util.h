@@ -31,9 +31,17 @@ struct TConnectionState {
 
 struct TParsedStatement {
     NPG::TPGParse::TQueryData QueryData;
-    NPG::TPGBind::TBindData BindData;
     std::vector<Ydb::Type> ParameterTypes;
     std::vector<NPG::TEvPGEvents::TRowDescriptionField> DataFields;
+};
+
+struct TPortal : TParsedStatement {
+    NPG::TPGBind::TBindData BindData;
+
+    void Construct(const TParsedStatement& parsedStatement, NPG::TPGBind::TBindData&& bindData) {
+        (TParsedStatement&)(*this) = parsedStatement;
+        BindData = std::move(bindData);
+    }
 };
 
 enum EFormatType : int16_t {

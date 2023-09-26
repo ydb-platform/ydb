@@ -211,7 +211,7 @@ public:
 
     void Handle(NPG::TEvPGEvents::TEvClose::TPtr& ev) {
         auto closeData = ev->Get()->Message->GetCloseData();
-        ParsedStatements.erase(closeData.StatementName);
+        ParsedStatements.erase(closeData.Name);
         CurrentStatement.clear();
         BLOG_D("TEvClose CurrentStatement changed to <empty>");
 

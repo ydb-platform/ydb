@@ -235,8 +235,12 @@ struct TPGExecute : TPGMessageType<'E'> {
 
 struct TPGClose : TPGMessageType<'C'> {
     struct TCloseData {
-        TString PortalName;
-        TString StatementName;
+        enum class ECloseType : char {
+            Portal = 'P',
+            Statement = 'S',
+        };
+        ECloseType Type;
+        TString Name;
     };
 
     TCloseData GetCloseData() const;

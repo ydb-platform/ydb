@@ -27,7 +27,7 @@ class TPgYdbConnection : public TActor<TPgYdbConnection> {
 
     std::unordered_map<TString, TString> ConnectionParams;
     std::unordered_map<TString, TParsedStatement> ParsedStatements;
-    TString CurrentStatement;
+    std::unordered_map<TString, TPortal> Portals;
     TConnectionState Connection;
     std::deque<TAutoPtr<IEventHandle>> Events;
     ui32 Inflight = 0;
@@ -89,64 +89,86 @@ public:
     }
 
     void Handle(NPG::TEvPGEvents::TEvBind::TPtr& ev) {
+        BLOG_D("TEvBind " << ev->Sender);
         auto bindData = ev->Get()->Message->GetBindData();
-        ParsedStatements[bindData.StatementName].BindData = bindData;
-        CurrentStatement = bindData.StatementName;
-        BLOG_D("TEvBind CurrentStatement changed to " << CurrentStatement);
-
-        auto bindComplete = ev->Get()->Reply();
-        Send(ev->Sender, bindComplete.release());
+        auto statementName(bindData.StatementName);
+        auto itParsedStatement = ParsedStatements.find(statementName);
+        auto bindResponse = ev->Get()->Reply();
+        if (itParsedStatement == ParsedStatements.end()) {
+            bindResponse->ErrorFields.push_back({'E', "ERROR"});
+            bindResponse->ErrorFields.push_back({'M', TStringBuilder() << "Parsed statement \"" << statementName << "\" not found"});
+        } else {
+            auto portalName(bindData.PortalName);
+            // TODO(xenoxeno): performance hit
+            Portals[portalName].Construct(itParsedStatement->second, std::move(bindData));
+            BLOG_D("Created portal \"" << portalName << "\" from statement \"" << statementName <<"\"");
+        }
+        Send(ev->Sender, bindResponse.release(), 0, ev->Cookie);
     }
 
     void Handle(NPG::TEvPGEvents::TEvClose::TPtr& ev) {
         auto closeData = ev->Get()->Message->GetCloseData();
-        ParsedStatements.erase(closeData.StatementName);
-        CurrentStatement.clear();
-        BLOG_D("TEvClose CurrentStatement changed to <empty>");
-
+        switch (closeData.Type) {
+            case NPG::TPGClose::TCloseData::ECloseType::Statement:
+                ParsedStatements.erase(closeData.Name);
+                break;
+            case NPG::TPGClose::TCloseData::ECloseType::Portal:
+                Portals.erase(closeData.Name);
+                break;
+            default:
+                BLOG_ERROR("Unknown close type \"" << static_cast<char>(closeData.Type) << "\"");
+                break;
+        }
         auto closeComplete = ev->Get()->Reply();
         Send(ev->Sender, closeComplete.release());
     }
 
     void Handle(NPG::TEvPGEvents::TEvDescribe::TPtr& ev) {
         BLOG_D("TEvDescribe " << ev->Sender);
-
-        TString statementName = ev->Get()->Message->GetDescribeData().Name;
-        if (statementName.empty()) {
-            statementName = CurrentStatement;
-            BLOG_W("TEvDescribe changed empty statement to " << CurrentStatement);
-        }
-        auto it = ParsedStatements.find(statementName);
-        if (it == ParsedStatements.end()) {
-            auto errorResponse = std::make_unique<NPG::TEvPGEvents::TEvDescribeResponse>();
-            errorResponse->ErrorFields.push_back({'E', "ERROR"});
-            errorResponse->ErrorFields.push_back({'M', TStringBuilder() << "Parsed statement \"" << statementName << "\" not found"});
-            Send(ev->Sender, errorResponse.release(), 0, ev->Cookie);
-            return;
-        }
-
         auto response = std::make_unique<NPG::TEvPGEvents::TEvDescribeResponse>();
-        for (const auto& ydbType : it->second.ParameterTypes) {
-            response->ParameterTypes.push_back(GetPgOidFromYdbType(ydbType));
+        auto describeData = ev->Get()->Message->GetDescribeData();
+        switch (describeData.Type) {
+            case NPG::TPGDescribe::TDescribeData::EDescribeType::Statement: {
+                auto it = ParsedStatements.find(describeData.Name);
+                if (it == ParsedStatements.end()) {
+                    response->ErrorFields.push_back({'E', "ERROR"});
+                    response->ErrorFields.push_back({'M', TStringBuilder() << "Parsed statement \"" << describeData.Name << "\" not found"});
+                } else {
+                    for (const auto& ydbType : it->second.ParameterTypes) {
+                        response->ParameterTypes.push_back(GetPgOidFromYdbType(ydbType));
+                    }
+                    response->DataFields = it->second.DataFields;
+                }
+            }
+            break;
+            case NPG::TPGDescribe::TDescribeData::EDescribeType::Portal: {
+                auto it = Portals.find(describeData.Name);
+                if (it == Portals.end()) {
+                    response->ErrorFields.push_back({'E', "ERROR"});
+                    response->ErrorFields.push_back({'M', TStringBuilder() << "Portal \"" << describeData.Name << "\" not found"});
+                } else {
+                    response->DataFields = it->second.DataFields;
+                }
+            }
+            break;
+            default: {
+                response->ErrorFields.push_back({'E', "ERROR"});
+                response->ErrorFields.push_back({'M', TStringBuilder() << "Unknown describe type \"" << static_cast<char>(describeData.Type) << "\""});
+            }
+            break;
         }
-        response->DataFields = it->second.DataFields;
-
-        Send(ev->Sender, response.release());
+        Send(ev->Sender, response.release(), 0, ev->Cookie);
     }
 
     void Handle(NPG::TEvPGEvents::TEvExecute::TPtr& ev) {
         BLOG_D("TEvExecute " << ev->Sender);
 
-        TString statementName = ev->Get()->Message->GetExecuteData().PortalName;
-        if (statementName.empty()) {
-            statementName = CurrentStatement;
-            BLOG_W("TEvExecute changed empty statement to " << CurrentStatement);
-        }
-        auto it = ParsedStatements.find(statementName);
-        if (it == ParsedStatements.end()) {
+        TString portalName = ev->Get()->Message->GetExecuteData().PortalName;
+        auto it = Portals.find(portalName);
+        if (it == Portals.end()) {
             auto errorResponse = std::make_unique<NPG::TEvPGEvents::TEvExecuteResponse>();
             errorResponse->ErrorFields.push_back({'E', "ERROR"});
-            errorResponse->ErrorFields.push_back({'M', TStringBuilder() << "Parsed statement \"" << statementName << "\" not found"});
+            errorResponse->ErrorFields.push_back({'M', TStringBuilder() << "Portal \"" << portalName << "\" not found"});
             Send(ev->Sender, errorResponse.release(), 0, ev->Cookie);
             return;
         }
@@ -167,7 +189,9 @@ public:
         --Inflight;
         BLOG_D("Received TEvProxyCompleted");
         if (ev->Get()->ParsedStatement) {
-            ParsedStatements[ev->Get()->ParsedStatement.value().QueryData.Name] = ev->Get()->ParsedStatement.value();
+            auto name(ev->Get()->ParsedStatement.value().QueryData.Name);
+            BLOG_D("Updating ParsedStatement \"" << name << "\"");
+            ParsedStatements[name] = ev->Get()->ParsedStatement.value();
         }
         if (ev->Get()->Connection) {
             auto& connection(ev->Get()->Connection.value());

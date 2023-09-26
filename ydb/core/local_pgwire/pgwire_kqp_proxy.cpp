@@ -388,14 +388,14 @@ class TPgwireKqpProxyExecute : public TPgwireKqpProxy<TPgwireKqpProxyExecute> {
     using TBase = TPgwireKqpProxy<TPgwireKqpProxyExecute>;
 
     NPG::TEvPGEvents::TEvExecute::TPtr EventExecute_;
-    TParsedStatement Statement_;
+    TPortal Portal_;
     std::size_t RowsSelected_ = 0;
 
 public:
-    TPgwireKqpProxyExecute(const TActorId& owner, std::unordered_map<TString, TString> params, const TConnectionState& connection, NPG::TEvPGEvents::TEvExecute::TPtr&& evExecute, const TParsedStatement& statement)
+    TPgwireKqpProxyExecute(const TActorId& owner, std::unordered_map<TString, TString> params, const TConnectionState& connection, NPG::TEvPGEvents::TEvExecute::TPtr&& evExecute, const TPortal& portal)
         : TPgwireKqpProxy(owner, std::move(params), connection)
         , EventExecute_(std::move(evExecute))
-        , Statement_(statement)
+        , Portal_(portal)
     {
     }
 
@@ -404,20 +404,20 @@ public:
         NKikimrKqp::TQueryRequest& request = *event->Record.MutableRequest();
 
         // HACK
-        ConvertQueryToRequest(Statement_.QueryData.Query, request);
+        ConvertQueryToRequest(Portal_.QueryData.Query, request);
         request.SetUsePublicResponseDataFormat(true);
         if (request.HasAction()) {
-            for (unsigned int paramNum = 0; paramNum < Statement_.BindData.ParametersValue.size(); ++paramNum) {
-                if (paramNum >= Statement_.ParameterTypes.size()) {
+            for (unsigned int paramNum = 0; paramNum < Portal_.BindData.ParametersValue.size(); ++paramNum) {
+                if (paramNum >= Portal_.ParameterTypes.size()) {
                     // TODO(xenoxeno): report error
                     break;
                 }
-                Ydb::Type type = Statement_.ParameterTypes[paramNum];
+                Ydb::Type type = Portal_.ParameterTypes[paramNum];
                 int16_t format = 0; // text
-                if (paramNum < Statement_.BindData.ParametersFormat.size()) {
-                    format = Statement_.BindData.ParametersFormat[paramNum];
+                if (paramNum < Portal_.BindData.ParametersFormat.size()) {
+                    format = Portal_.BindData.ParametersFormat[paramNum];
                 }
-                Ydb::TypedValue value = GetTypedValueFromParam(format, Statement_.BindData.ParametersValue[paramNum], type);
+                Ydb::TypedValue value = GetTypedValueFromParam(format, Portal_.BindData.ParametersValue[paramNum], type);
                 request.MutableYdbParameters()->insert({TStringBuilder() << "$p" << paramNum + 1, value});
             }
             ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
@@ -440,7 +440,7 @@ public:
     void Handle(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev) {
         NYdb::TResultSet resultSet(std::move(*ev->Get()->Record.MutableResultSet()));
         auto response = MakeResponse();
-        FillResultSet(resultSet, response.get()->DataRows, Statement_.BindData.ResultsFormat);
+        FillResultSet(resultSet, response.get()->DataRows, Portal_.BindData.ResultsFormat);
         response->CommandCompleted = false;
         response->ReadyForQuery = false;
 
@@ -513,8 +513,8 @@ NActors::IActor* CreatePgwireKqpProxyExecute(const TActorId& owner,
                                              std::unordered_map<TString, TString> params,
                                              const TConnectionState& connection,
                                              NPG::TEvPGEvents::TEvExecute::TPtr&& evExecute,
-                                             const TParsedStatement& statement) {
-    return new TPgwireKqpProxyExecute(owner, std::move(params), connection, std::move(evExecute), statement);
+                                             const TPortal& portal) {
+    return new TPgwireKqpProxyExecute(owner, std::move(params), connection, std::move(evExecute), portal);
 }
 
 } //namespace NLocalPgwire

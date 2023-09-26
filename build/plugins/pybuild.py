@@ -148,6 +148,8 @@ def add_python_lint_checks(unit, py_ver, files):
             "market/report/lite/",  # MARKETOUT-38662, deadline: 2021-08-12
             "passport/backend/oauth/",  # PASSP-35982
             "testenv/",  # CI-3229
+            "yt/yt/",  # YT-20053
+            "yt/python/",  # YT-20053
         )
 
         upath = unit.path()[3:]

@@ -11,28 +11,28 @@ namespace NPrivate {
 using namespace NActors;
 
 /// Discover connection_name
-NActors::IActor* MakeDiscoverYDBConnectionNameActor(
-    const TActorId& proxyActorId,
-    const TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr& request,
-    TCounters& counters,
-    TDuration requestTimeout,
-    TPermissions permissions);
-
-NActors::IActor* MakeDiscoverYDBConnectionNameActor(
+NActors::IActor* MakeDiscoverYDBConnectionContentActor(
     const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr& request,
     TCounters& counters,
     TDuration requestTimeout,
     TPermissions permissions);
 
-NActors::IActor* MakeDiscoverYDBConnectionNameActor(
+NActors::IActor* MakeDiscoverYDBConnectionContentActor(
     const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvDeleteConnectionRequest::TPtr& request,
     TCounters& counters,
     TDuration requestTimeout,
     TPermissions permissions);
 
-NActors::IActor* MakeDiscoverYDBConnectionNameActor(
+NActors::IActor* MakeDiscoverYDBConnectionContentActor(
+    const TActorId& proxyActorId,
+    const TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr& request,
+    TCounters& counters,
+    TDuration requestTimeout,
+    TPermissions permissions);
+
+NActors::IActor* MakeDiscoverYDBConnectionContentActor(
     const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr& request,
     TCounters& counters,
@@ -41,14 +41,14 @@ NActors::IActor* MakeDiscoverYDBConnectionNameActor(
 
 /// Discover binding_name
 
-NActors::IActor* MakeDiscoverYDBBindingNameActor(
+NActors::IActor* MakeDiscoverYDBBindingContentActor(
     const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr& request,
     TCounters& counters,
     TDuration requestTimeout,
     TPermissions permissions);
 
-NActors::IActor* MakeDiscoverYDBBindingNameActor(
+NActors::IActor* MakeDiscoverYDBBindingContentActor(
     const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvDeleteBindingRequest::TPtr& request,
     TCounters& counters,

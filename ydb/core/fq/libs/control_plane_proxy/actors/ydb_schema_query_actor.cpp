@@ -745,7 +745,7 @@ NActors::IActor* MakeCreateBindingActor(
          &counters, permissions](const TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr& request)
         -> std::vector<TSchemaQueryTask> {
         auto& bindingContent     = request->Get()->Request.content();
-        auto& externalSourceName = *request->Get()->ConnectionName;
+        auto& externalSourceName = request->Get()->ConnectionContent->name();
         std::vector<TSchemaQueryTask> statements;
 
         TScheduleErrorRecoverySQLGeneration alreadyExistRecoveryActorFactoryMethod =
@@ -800,7 +800,7 @@ NActors::IActor* MakeModifyBindingActor(
     auto queryFactoryMethod =
         [](const TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr& request)
         -> std::vector<TSchemaQueryTask> {
-        auto sourceName   = *request->Get()->ConnectionName;
+        auto sourceName   = request->Get()->ConnectionContent->name();
         auto oldTableName = request->Get()->OldBindingContent->name();
 
         auto deleteOldEntities = MakeDeleteExternalDataTableQuery(oldTableName);
@@ -841,7 +841,7 @@ NActors::IActor* MakeDeleteBindingActor(
     auto queryFactoryMethod =
         [](const TEvControlPlaneProxy::TEvDeleteBindingRequest::TPtr& request)
         -> std::vector<TSchemaQueryTask> {
-        return {{.SQL = MakeDeleteExternalDataTableQuery(*request->Get()->OldBindingName),
+        return {{.SQL = MakeDeleteExternalDataTableQuery(request->Get()->OldBindingContent->name()),
                  .ShouldSkipStepOnError = IsPathDoesNotExistIssue}};
     };
 

@@ -136,8 +136,26 @@ public:
                YdbComputeControlPlaneEnabled(scope);
     }
 
+    bool IsYDBSchemaOperationsEnabled(
+        const TString& scope,
+        const FederatedQuery::BindingSetting::BindingCase& bindingCase) const {
+        return IsBindingCaseEnabled(bindingCase) &&
+               YdbComputeControlPlaneEnabled(scope);
+    }
+
     const NFq::NConfig::TComputeConfig& GetProto() const {
         return ComputeConfig;
+    }
+
+    bool IsBindingCaseEnabled(
+        const FederatedQuery::BindingSetting::BindingCase& bindingCase) const {
+        switch (bindingCase) {
+            case FederatedQuery::BindingSetting::kObjectStorage:
+                return true;
+            case FederatedQuery::BindingSetting::kDataStreams:
+            case FederatedQuery::BindingSetting::BINDING_NOT_SET:
+                return false;
+        }
     }
 
     bool IsConnectionCaseEnabled(

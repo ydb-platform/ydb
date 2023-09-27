@@ -143,12 +143,12 @@ public:
             ReplyErrorAndPassAway(issues, "Error getting a list of bindings at the synchronization stage");
             return;
         }
-    
+
         const auto& result = ev->Get()->Result;
         for (const auto& binding: result.binding()) {
             const auto& id = binding.meta().id();
             LOG_I("Received binding id: scope = " << Scope << " , id = " << id << ", type = " << FederatedQuery::BindingSetting::BindingType_Name(binding.type()));
-            
+
             BindingIds.insert(binding.meta().id());
         }
 
@@ -310,6 +310,7 @@ private:
             if (!ComputeConfig.IsConnectionCaseEnabled(setting.connection_case())) {
                 LOG_I("Exclude connection by type: scope = " << Scope << " , id = " << meta.id() << ", type = " << static_cast<int>(setting.connection_case()));
                 excludeIds.push_back(meta.id());
+                continue;
             }
 
             switch (content.acl().visibility()) {
@@ -321,6 +322,7 @@ private:
                 case FederatedQuery::Acl_Visibility_Acl_Visibility_INT_MAX_SENTINEL_DO_NOT_USE_:
                 LOG_I("Exclude connection by visibility: scope = " << Scope << " , id = " << meta.id() << ", visibility = " << FederatedQuery::Acl::Visibility_Name(content.acl().visibility()));
                 excludeIds.push_back(meta.id());
+                continue;
             }
 
             const auto authCase = GetAuth(connection).identity_case();
@@ -352,14 +354,10 @@ private:
                 continue;
             }
 
-            switch (setting.binding_case()) {
-            case FederatedQuery::BindingSetting::kObjectStorage:
-            break;
-            case FederatedQuery::BindingSetting::kDataStreams:
-            case FederatedQuery::BindingSetting::BINDING_NOT_SET:
+            if (!ComputeConfig.IsBindingCaseEnabled(setting.binding_case())) {
                 LOG_I("Exclude binding by type: scope = " << Scope << " , id = " << meta.id() << ", type = " << static_cast<int>(setting.binding_case()));
                 excludeIds.push_back(meta.id());
-            break;
+                continue;
             }
 
             switch (content.acl().visibility()) {
@@ -392,12 +390,12 @@ private:
         for (const auto& connection: Connections) {
             FederatedQuery::CreateConnectionRequest proto;
             *proto.mutable_content() = connection.second.content();
-            TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr request = 
+            TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr request =
                 (NActors::TEventHandle<TEvControlPlaneProxy::TEvCreateConnectionRequest>*)
                 new IEventHandle(SelfId(), SelfId(), new TEvControlPlaneProxy::TEvCreateConnectionRequest{{}, proto, {}, {}, {}});
 
             request.Get()->Get()->YDBClient = Client;
-            
+
             Register(NFq::NPrivate::MakeCreateConnectionActor(
                 SelfId(),
                 request,
@@ -417,17 +415,17 @@ private:
         for (const auto& binding: Bindings) {
             FederatedQuery::CreateBindingRequest proto;
             *proto.mutable_content() = binding.second.content();
-            TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr request = 
+            TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr request =
                 (NActors::TEventHandle<TEvControlPlaneProxy::TEvCreateBindingRequest>*)
                 new IEventHandle(SelfId(), SelfId(), new TEvControlPlaneProxy::TEvCreateBindingRequest{{}, proto, {}, {}, {}});
-            
+
             request.Get()->Get()->YDBClient = Client;
             auto it = Connections.find(binding.second.content().connection_id());
             if (it == Connections.end()) {
                 ReplyErrorAndPassAway(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Can't find conection id = " << binding.second.content().connection_id()}});
                 return;
             }
-            request.Get()->Get()->ConnectionName = it->second.content().name();
+            request.Get()->Get()->ConnectionContent = it->second.content();
 
             Register(NFq::NPrivate::MakeCreateBindingActor(
                 SelfId(),
@@ -461,7 +459,7 @@ private:
         auto request = CreateListRequest<FederatedQuery::ListConnectionsRequest>(PageToken);
         TPermissions permissions = CreateSuperUserPermissions();
         std::unique_ptr<TEvControlPlaneStorage::TEvListConnectionsRequest> event{new TEvControlPlaneStorage::TEvListConnectionsRequest{
-                Scope, request, "internal@user", "internal@token", {}, 
+                Scope, request, "internal@user", "internal@token", {},
                 permissions, {}, {}, {}
             }};
         event->ExtractSensitiveFields = true;
@@ -473,7 +471,7 @@ private:
         auto request = CreateListRequest<FederatedQuery::ListBindingsRequest>(PageToken);
         TPermissions permissions = CreateSuperUserPermissions();
         std::unique_ptr<TEvControlPlaneStorage::TEvListBindingsRequest> event{new TEvControlPlaneStorage::TEvListBindingsRequest{
-                Scope, request, "internal@user", "internal@token", {}, 
+                Scope, request, "internal@user", "internal@token", {},
                 permissions, {}, {}, {}
             }};
         event->ExtractSensitiveFields = true;
@@ -498,7 +496,7 @@ private:
         request.set_binding_id(bindingId);
         TPermissions permissions = CreateSuperUserPermissions();
         std::unique_ptr<TEvControlPlaneStorage::TEvDescribeBindingRequest> event{new TEvControlPlaneStorage::TEvDescribeBindingRequest{
-                Scope, request, "internal@user", "internal@token", {}, 
+                Scope, request, "internal@user", "internal@token", {},
                 permissions, {}, {}, {}
             }};
         event->ExtractSensitiveFields = true;
@@ -581,7 +579,7 @@ class TSynchronizatinServiceActor : public NActors::TActorBootstrapped<TSynchron
 
     struct TSynchtonizationCounters {
         struct TCounters : public virtual TThrRefBase  {
-            TCounters(const ::NMonitoring::TDynamicCounterPtr& counters, bool derivative = true) 
+            TCounters(const ::NMonitoring::TDynamicCounterPtr& counters, bool derivative = true)
                 : SynchronizationOk(counters->GetCounter("Ok", derivative))
                 , SynchronizationFailed(counters->GetCounter("Failed", derivative))
             {}
@@ -590,7 +588,7 @@ class TSynchronizatinServiceActor : public NActors::TActorBootstrapped<TSynchron
         };
 
         using TCountersPtr  = TIntrusivePtr<TCounters>;
-        
+
         TSynchtonizationCounters(const ::NMonitoring::TDynamicCounterPtr& counters)
             : Counters(counters)
             , SubgroupCounters(Counters->GetSubgroup("step", "Synchronization"))
@@ -686,7 +684,7 @@ public:
             LOG_E("Response: not found for scope " << ev->Get()->Scope);
             return;
         }
-    
+
         for (const auto& request: it->second.Requests) {
             Send(request->Sender, new TEvYdbCompute::TEvSynchronizeResponse{ev->Get()->Scope, ev->Get()->Issues, ev->Get()->Status});
         }

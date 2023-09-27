@@ -132,7 +132,7 @@ TString DescribeConnectionErrorMessageFactoryMethod(const NYql::TIssues& issues)
     return "Couldn't resolve connection";
 };
 
-NActors::IActor* MakeDiscoverYDBConnectionNameActor(
+NActors::IActor* MakeDiscoverYDBConnectionContentActor(
     const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr& request,
     TCounters& counters,
@@ -148,7 +148,7 @@ NActors::IActor* MakeDiscoverYDBConnectionNameActor(
     auto entityNameExtractorFactoryMethod =
         [](const TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr& event,
            const FederatedQuery::DescribeConnectionResult& result) {
-            event->Get()->ConnectionName = result.connection().content().name();
+            event->Get()->ConnectionContent = result.connection().content();
         };
 
     return new TControlPlaneStorageRequesterActor<TEvControlPlaneProxy::TEvCreateBindingRequest,
@@ -165,7 +165,7 @@ NActors::IActor* MakeDiscoverYDBConnectionNameActor(
         entityNameExtractorFactoryMethod);
 }
 
-NActors::IActor* MakeDiscoverYDBConnectionNameActor(
+NActors::IActor* MakeDiscoverYDBConnectionContentActor(
     const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr& request,
     TCounters& counters,
@@ -198,7 +198,7 @@ NActors::IActor* MakeDiscoverYDBConnectionNameActor(
         entityNameExtractorFactoryMethod);
 }
 
-NActors::IActor* MakeDiscoverYDBConnectionNameActor(
+NActors::IActor* MakeDiscoverYDBConnectionContentActor(
     const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvDeleteConnectionRequest::TPtr& request,
     TCounters& counters,
@@ -231,7 +231,7 @@ NActors::IActor* MakeDiscoverYDBConnectionNameActor(
         entityNameExtractorFactoryMethod);
 }
 
-NActors::IActor* MakeDiscoverYDBConnectionNameActor(
+NActors::IActor* MakeDiscoverYDBConnectionContentActor(
     const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr& request,
     TCounters& counters,
@@ -247,7 +247,7 @@ NActors::IActor* MakeDiscoverYDBConnectionNameActor(
     auto entityNameExtractorFactoryMethod =
         [](const TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr& event,
            const FederatedQuery::DescribeConnectionResult& result) {
-            event->Get()->ConnectionName = result.connection().content().name();
+            event->Get()->ConnectionContent = result.connection().content();
         };
 
     return new TControlPlaneStorageRequesterActor<TEvControlPlaneProxy::TEvModifyBindingRequest,
@@ -266,7 +266,7 @@ NActors::IActor* MakeDiscoverYDBConnectionNameActor(
 
 /// Discover binding_name
 
-NActors::IActor* MakeDiscoverYDBBindingNameActor(
+NActors::IActor* MakeDiscoverYDBBindingContentActor(
     const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr& request,
     TCounters& counters,
@@ -281,7 +281,7 @@ NActors::IActor* MakeDiscoverYDBBindingNameActor(
 
     auto errorMessageFactoryMethod = [](const NYql::TIssues& issues) -> TString {
         Y_UNUSED(issues);
-        return "Couldn't resolve binding name";
+        return "Couldn't resolve binding content";
     };
     auto entityNameExtractorFactoryMethod =
         [](const TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr& event,
@@ -303,7 +303,7 @@ NActors::IActor* MakeDiscoverYDBBindingNameActor(
         entityNameExtractorFactoryMethod);
 }
 
-NActors::IActor* MakeDiscoverYDBBindingNameActor(
+NActors::IActor* MakeDiscoverYDBBindingContentActor(
     const TActorId& proxyActorId,
     const TEvControlPlaneProxy::TEvDeleteBindingRequest::TPtr& request,
     TCounters& counters,
@@ -318,12 +318,12 @@ NActors::IActor* MakeDiscoverYDBBindingNameActor(
 
     auto errorMessageFactoryMethod = [](const NYql::TIssues& issues) -> TString {
         Y_UNUSED(issues);
-        return "Couldn't resolve binding name";
+        return "Couldn't resolve binding content";
     };
     auto entityNameExtractorFactoryMethod =
         [](const TEvControlPlaneProxy::TEvDeleteBindingRequest::TPtr& event,
            const FederatedQuery::DescribeBindingResult& result) {
-            event->Get()->OldBindingName = result.binding().content().name();
+            event->Get()->OldBindingContent = result.binding().content();
         };
 
     return new TControlPlaneStorageRequesterActor<TEvControlPlaneProxy::TEvDeleteBindingRequest,

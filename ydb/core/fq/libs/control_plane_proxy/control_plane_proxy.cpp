@@ -1606,7 +1606,7 @@ private:
 
         if (isYDBOperationEnabled && !ev->Get()->OldConnectionContent) {
             auto permissions = ExtractPermissions(ev, availablePermissions);
-            Register(MakeDiscoverYDBConnectionNameActor(
+            Register(MakeDiscoverYDBConnectionContentActor(
                 ControlPlaneProxyActorId(), ev, Counters, Config.RequestTimeout, permissions));
             return;
         }
@@ -1728,7 +1728,7 @@ private:
 
         if (Config.ComputeConfig.YdbComputeControlPlaneEnabled(ev->Get()->Scope) && !ev->Get()->ConnectionContent) {
             auto permissions = ExtractPermissions(ev, availablePermissions);
-            Register(MakeDiscoverYDBConnectionNameActor(
+            Register(MakeDiscoverYDBConnectionContentActor(
                 ControlPlaneProxyActorId(), ev, Counters, Config.RequestTimeout, permissions));
             return;
         }
@@ -1787,7 +1787,7 @@ private:
         const TString subjectType = ev->Get()->SubjectType;
         const TString scope = ev->Get()->Scope;
         TString user = ev->Get()->User;
-        TString token = ev->Get()->Token; 
+        TString token = ev->Get()->Token;
         const int byteSize = request.ByteSize();
         TActorId sender = ev->Sender;
         ui64 cookie = ev->Cookie;
@@ -1931,11 +1931,17 @@ private:
             | TPermissions::TPermission::MANAGE_PRIVATE
         };
 
-        if (Config.ComputeConfig.YdbComputeControlPlaneEnabled(ev->Get()->Scope) && !ydbOperationWasPerformed) {
-            if (!ev->Get()->ConnectionName) {
+        if (Config.ComputeConfig.IsYDBSchemaOperationsEnabled(
+                ev->Get()->Scope,
+                ev->Get()->Request.content().setting().binding_case()) &&
+            !ydbOperationWasPerformed) {
+            if (!ev->Get()->ConnectionContent) {
                 auto permissions = ExtractPermissions(ev, availablePermissions);
-                Register(MakeDiscoverYDBConnectionNameActor(
-                    ControlPlaneProxyActorId(), ev, Counters, Config.RequestTimeout, permissions));
+                Register(MakeDiscoverYDBConnectionContentActor(ControlPlaneProxyActorId(),
+                                                               std::move(ev),
+                                                               Counters,
+                                                               Config.RequestTimeout,
+                                                               permissions));
                 return;
             }
 
@@ -1946,8 +1952,11 @@ private:
                                                             CredentialsProviderFactory);
             }
 
-            Register(MakeCreateBindingActor(
-                ControlPlaneProxyActorId(), std::move(ev), Config.RequestTimeout, Counters, availablePermissions));
+            Register(MakeCreateBindingActor(ControlPlaneProxyActorId(),
+                                            std::move(ev),
+                                            Config.RequestTimeout,
+                                            Counters,
+                                            availablePermissions));
             return;
         }
 
@@ -2185,25 +2194,29 @@ private:
             | TPermissions::TPermission::VIEW_PRIVATE
         };
 
-        if (Config.ComputeConfig.YdbComputeControlPlaneEnabled(ev->Get()->Scope)) {
-            if (!ev->Get()->OldBindingContent) {
-                auto permissions = ExtractPermissions(ev, availablePermissions);
-                Register(MakeDiscoverYDBBindingNameActor(
-                    ControlPlaneProxyActorId(), ev, Counters, Config.RequestTimeout, permissions));
-                return;
-            }
-            if (!ev->Get()->ConnectionName) {
-                auto permissions = ExtractPermissions(ev, availablePermissions);
-                Register(MakeDiscoverYDBConnectionNameActor(
-                    ControlPlaneProxyActorId(), ev, Counters, Config.RequestTimeout, permissions));
-                return;
-            }
+        auto isComputeYDBSyncEnabled = Config.ComputeConfig.IsYDBSchemaOperationsEnabled(
+            ev->Get()->Scope, ev->Get()->Request.content().setting().binding_case());
+
+        if (isComputeYDBSyncEnabled && !ev->Get()->OldBindingContent) {
+            auto permissions = ExtractPermissions(ev, availablePermissions);
+            Register(MakeDiscoverYDBBindingContentActor(ControlPlaneProxyActorId(),
+                                                        ev,
+                                                        Counters,
+                                                        Config.RequestTimeout,
+                                                        permissions));
+            return;
+        }
+        if (isComputeYDBSyncEnabled && !ev->Get()->ConnectionContent) {
+            auto permissions = ExtractPermissions(ev, availablePermissions);
+            Register(MakeDiscoverYDBConnectionContentActor(ControlPlaneProxyActorId(),
+                                                           ev,
+                                                           Counters,
+                                                           Config.RequestTimeout,
+                                                           permissions));
+            return;
         }
 
-        const bool controlPlaneYDBOperationWasPerformed = ev->Get()->ControlPlaneYDBOperationWasPerformed;
-        if (!controlPlaneYDBOperationWasPerformed) {
-            auto shouldReplyWithResponse =
-                !Config.ComputeConfig.YdbComputeControlPlaneEnabled(ev->Get()->Scope);
+        if (!ev->Get()->ControlPlaneYDBOperationWasPerformed) {
             Register(new TRequestActor<FederatedQuery::ModifyBindingRequest,
                                        TEvControlPlaneStorage::TEvModifyBindingRequest,
                                        TEvControlPlaneStorage::TEvModifyBindingResponse,
@@ -2215,27 +2228,24 @@ private:
                 requestCounters,
                 probe,
                 availablePermissions,
-                shouldReplyWithResponse));
+                !isComputeYDBSyncEnabled));
             return;
         }
 
-        if (Config.ComputeConfig.YdbComputeControlPlaneEnabled(ev->Get()->Scope)) {
+        if (isComputeYDBSyncEnabled) {
             if (!ev->Get()->YDBClient) {
                 ev->Get()->YDBClient = CreateNewTableClient(ev,
                                                             Config.ComputeConfig,
                                                             YqSharedResources,
                                                             CredentialsProviderFactory);
             }
-
             if (!ev->Get()->ComputeYDBOperationWasPerformed) {
-                Register(MakeModifyBindingActor(
-                    ControlPlaneProxyActorId(),
-                    std::move(ev),
-                    Config.RequestTimeout,
-                    Counters));
+                Register(MakeModifyBindingActor(ControlPlaneProxyActorId(),
+                                                std::move(ev),
+                                                Config.RequestTimeout,
+                                                Counters));
                 return;
             }
-
             Send(sender, ev->Get()->Response.release());
         }
     }
@@ -2305,17 +2315,20 @@ private:
         };
 
         if (Config.ComputeConfig.YdbComputeControlPlaneEnabled(ev->Get()->Scope) &&
-            !ev->Get()->OldBindingName) {
+            !ev->Get()->OldBindingContent) {
             auto permissions = ExtractPermissions(ev, availablePermissions);
-            Register(MakeDiscoverYDBBindingNameActor(
+            Register(MakeDiscoverYDBBindingContentActor(
                 ControlPlaneProxyActorId(), ev, Counters, Config.RequestTimeout, permissions));
             return;
         }
 
-        const bool controlPlaneYDBOperationWasPerformed = ev->Get()->ControlPlaneYDBOperationWasPerformed;
-        if (!controlPlaneYDBOperationWasPerformed) {
-            auto shouldReplyWithResponse =
-                !Config.ComputeConfig.YdbComputeControlPlaneEnabled(ev->Get()->Scope);
+        auto bindingCase = ev->Get()->OldBindingContent
+                               ? ev->Get()->OldBindingContent->setting().binding_case()
+                               : FederatedQuery::BindingSetting::BINDING_NOT_SET;
+        auto isComputeYDBSyncEnabled =
+            Config.ComputeConfig.IsYDBSchemaOperationsEnabled(ev->Get()->Scope,
+                                                              bindingCase);
+        if (!ev->Get()->ControlPlaneYDBOperationWasPerformed) {
             Register(new TRequestActor<FederatedQuery::DeleteBindingRequest,
                                        TEvControlPlaneStorage::TEvDeleteBindingRequest,
                                        TEvControlPlaneStorage::TEvDeleteBindingResponse,
@@ -2327,11 +2340,11 @@ private:
                 requestCounters,
                 probe,
                 availablePermissions,
-                shouldReplyWithResponse));
+                !isComputeYDBSyncEnabled));
             return;
         }
 
-        if (Config.ComputeConfig.YdbComputeControlPlaneEnabled(ev->Get()->Scope)) {
+        if (isComputeYDBSyncEnabled) {
             if (!ev->Get()->YDBClient) {
                 ev->Get()->YDBClient = CreateNewTableClient(ev,
                                                             Config.ComputeConfig,
@@ -2340,8 +2353,10 @@ private:
             }
 
             if (!ev->Get()->ComputeYDBOperationWasPerformed) {
-                Register(MakeDeleteBindingActor(
-                    ControlPlaneProxyActorId(), std::move(ev), Config.RequestTimeout, Counters));
+                Register(MakeDeleteBindingActor(ControlPlaneProxyActorId(),
+                                                std::move(ev),
+                                                Config.RequestTimeout,
+                                                Counters));
                 return;
             }
 

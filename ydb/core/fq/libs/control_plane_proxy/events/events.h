@@ -355,7 +355,7 @@ struct TEvControlPlaneProxy {
             FederatedQuery::CreateBindingRequest,
             EvCreateBindingRequest>::TBaseControlPlaneRequest;
 
-        TMaybe<TString> ConnectionName;
+        TMaybe<FederatedQuery::ConnectionContent> ConnectionContent;
     };
 
     template<>
@@ -369,7 +369,7 @@ struct TEvControlPlaneProxy {
             EvModifyBindingRequest>::TBaseControlPlaneRequest;
 
         TMaybe<FederatedQuery::BindingContent> OldBindingContent;
-        TMaybe<TString> ConnectionName;
+        TMaybe<FederatedQuery::ConnectionContent> ConnectionContent;
     };
 
     template<>
@@ -382,7 +382,7 @@ struct TEvControlPlaneProxy {
             FederatedQuery::DeleteBindingRequest,
             EvDeleteBindingRequest>::TBaseControlPlaneRequest;
 
-        TMaybe<TString> OldBindingName;
+        TMaybe<FederatedQuery::BindingContent> OldBindingContent;
     };
 };
 

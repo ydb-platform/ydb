@@ -71,6 +71,7 @@ private:
     ui32 TableIndex_ = 0;
     TMaybe<ui64> RowIndex_;
     TMaybe<ui32> RangeIndex_;
+    ui32 RangeIndexShift_ = 0;
     TMaybe<i64> TabletIndex_;
     bool IsEndOfStream_ = false;
     bool AtStart_ = true;

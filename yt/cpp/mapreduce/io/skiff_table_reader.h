@@ -55,6 +55,7 @@ private:
     bool AfterKeySwitch_ = false;
     bool Finished_ = false;
     TMaybe<ui64> RangeIndex_;
+    ui64 RangeIndexShift_ = 0;
     TMaybe<ui64> RowIndex_;
     ui32 TableIndex_ = 0;
 };

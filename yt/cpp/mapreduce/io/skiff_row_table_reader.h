@@ -59,6 +59,7 @@ private:
 
     TMaybe<ui64> RowIndex_;
     TMaybe<ui32> RangeIndex_;
+    ui32 RangeIndexShift_ = 0;
     ui32 TableIndex_ = 0;
 };
 

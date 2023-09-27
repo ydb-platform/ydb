@@ -42,6 +42,9 @@ bool TSkiffRowTableReader::Retry()
 bool TSkiffRowTableReader::PrepareRetry()
 {
     if (Input_.Retry(RangeIndex_, RowIndex_)) {
+        if (RangeIndex_) {
+            RangeIndexShift_ += *RangeIndex_;
+        }
         RowIndex_.Clear();
         RangeIndex_.Clear();
         BufferedInput_ = TBufferedInput(&Input_);
@@ -188,7 +191,7 @@ ui32 TSkiffRowTableReader::GetTableIndex() const
 ui32 TSkiffRowTableReader::GetRangeIndex() const
 {
     CheckValidity();
-    return RangeIndex_.GetOrElse(0);
+    return RangeIndex_.GetOrElse(0) + RangeIndexShift_;
 }
 
 ui64 TSkiffRowTableReader::GetRowIndex() const

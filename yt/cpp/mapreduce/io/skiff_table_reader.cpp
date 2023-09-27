@@ -105,6 +105,9 @@ void TSkiffTableReader::Next()
             }
             BufferedInput_ = TBufferedInput(&Input_);
             Parser_.emplace(NSkiff::TUncheckedSkiffParser(&BufferedInput_));
+            if (RangeIndex_) {
+                RangeIndexShift_ += *RangeIndex_;
+            }
             RangeIndex_.Clear();
             RowIndex_.Clear();
         }
@@ -120,7 +123,7 @@ ui32 TSkiffTableReader::GetTableIndex() const
 ui32 TSkiffTableReader::GetRangeIndex() const
 {
     EnsureValidity();
-    return RangeIndex_.GetOrElse(0);
+    return RangeIndex_.GetOrElse(0) + RangeIndexShift_;
 }
 
 ui64 TSkiffTableReader::GetRowIndex() const

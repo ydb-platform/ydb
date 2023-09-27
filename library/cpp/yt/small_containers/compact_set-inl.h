@@ -4,7 +4,7 @@
 #include "compact_set.h"
 #endif
 
-#include <library/cpp/yt/assert//assert.h>
+#include <library/cpp/yt/assert/assert.h>
 
 namespace NYT {
 
@@ -34,7 +34,7 @@ private:
         , Small(false)
     { }
 
-    template <class TOther>
+    template <typename TOther>
     void ConstructFrom(TOther&& rhs)
     {
         YT_ASSERT(Small == rhs.Small);
@@ -46,7 +46,7 @@ private:
         }
     }
 
-    template <class TOther>
+    template <typename TOther>
     const_iterator& AssignFrom(TOther&& rhs)
     {
         if (this == &rhs) {

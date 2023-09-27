@@ -298,6 +298,10 @@ public:
             alter->SetDatabaseQuotas(settings.GetDatabaseQuotas());
         }
 
+        if (settings.HasAuditSettings()) {
+            alter->SetAuditSettings(settings.GetAuditSettings());
+        }
+
         Y_VERIFY(!context.SS->SubDomains.contains(newNode->PathId));
         auto& subDomainInfo = context.SS->SubDomains[newNode->PathId];
         subDomainInfo = new TSubDomainInfo();

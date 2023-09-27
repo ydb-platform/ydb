@@ -290,6 +290,13 @@ public:
             alterData->SetDatabaseQuotas(settings.GetDatabaseQuotas());
         }
 
+        if (const auto& auditSettings = subDomainInfo->GetAuditSettings()) {
+            alterData->SetAuditSettings(*auditSettings);
+        }
+        if (settings.HasAuditSettings()) {
+            alterData->ApplyAuditSettings(settings.GetAuditSettings());
+        }
+
         NIceDb::TNiceDb db(context.GetDB());
 
         subDomain->LastTxId = OperationId.GetTxId();

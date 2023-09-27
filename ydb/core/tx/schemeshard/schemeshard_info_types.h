@@ -1684,7 +1684,6 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         CountDiskSpaceQuotas(counters, GetDiskSpaceQuotas(), AlterData->GetDiskSpaceQuotas());
         CountStreamShardsQuota(counters, GetStreamShardsQuota(), AlterData->GetStreamShardsQuota());
         CountStreamReservedStorageQuota(counters, GetStreamReservedStorageQuota(), AlterData->GetStreamReservedStorageQuota());
-
     }
 
     ui64 GetStreamShardsQuota() const {
@@ -2105,6 +2104,18 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         ++SecurityStateVersion;
     }
 
+    using TMaybeAuditSettings = TMaybe<NKikimrSubDomains::TAuditSettings, NMaybe::TPolicyUndefinedFail>;
+
+    void SetAuditSettings(const NKikimrSubDomains::TAuditSettings& value) {
+        AuditSettings.ConstructInPlace(value);
+    }
+
+    const TMaybeAuditSettings& GetAuditSettings() const {
+        return AuditSettings;
+    }
+
+    void ApplyAuditSettings(const TMaybeAuditSettings& diff);
+
 private:
     bool InitiatedAsGlobal = false;
     NKikimrSubDomains::TProcessingParams ProcessingParams;
@@ -2137,6 +2148,8 @@ private:
 
     NLoginProto::TSecurityState SecurityState;
     ui64 SecurityStateVersion = 0;
+
+    TMaybeAuditSettings AuditSettings;
 
     TVector<TTabletId> FilterPrivateTablets(TTabletTypes::EType type, const THashMap<TShardIdx, TShardInfo>& allShards) const {
         TVector<TTabletId> tablets;
@@ -2985,7 +2998,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     TString IndexName;
     TVector<TString> IndexColumns;
     TVector<TString> DataColumns;
-    
+
     TVector<TColumnBuildInfo> BuildColumns;
 
     TString ImplTablePath;

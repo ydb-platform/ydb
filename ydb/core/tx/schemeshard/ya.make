@@ -1,4 +1,5 @@
 RECURSE_FOR_TESTS(
+    ut_auditsettings
     ut_backup
     ut_base
     ut_base_reboots

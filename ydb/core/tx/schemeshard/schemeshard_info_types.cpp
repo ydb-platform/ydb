@@ -20,6 +20,30 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
+void TSubDomainInfo::ApplyAuditSettings(const TSubDomainInfo::TMaybeAuditSettings& diff) {
+    if (diff.Defined()) {
+        const auto& input = diff.GetRef();
+        if (AuditSettings.Defined()) {
+            NKikimrSubDomains::TAuditSettings next = AuditSettings.GetRef();
+            if (input.HasEnableDmlAudit()) {
+                next.SetEnableDmlAudit(input.GetEnableDmlAudit());
+            }
+            if (input.ExpectedSubjectsSize() > 0) {
+                next.ClearExpectedSubjects();
+                // instead of CopyFrom, manually copy all but empty elements
+                for (const auto& i : input.GetExpectedSubjects()) {
+                    if (!i.empty()) {
+                        next.AddExpectedSubjects(i);
+                    }
+                }
+            }
+            AuditSettings = next;
+        } else {
+            AuditSettings = input;
+        }
+    }
+}
+
 TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     TPtr source,
     NKikimrSchemeOp::TTableDescription& op,

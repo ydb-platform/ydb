@@ -22,6 +22,7 @@ message TSubDomainSettings {
     optional bool ExternalSysViewProcessor = 10 [default = false];
     optional TSchemeQuotas DeclaredSchemeQuotas = 11;
     optional Ydb.Cms.DatabaseQuotas DatabaseQuotas = 12;
+    optional TAuditSettings AuditSettings = 13;
 }
 
 message TProcessingParams {
@@ -66,7 +67,7 @@ message TDomainState {
 }
 
 message TAuditSettings {
-    optional bool EnableDmlAudit = 1;
+    optional bool EnableDmlAudit = 1 [default = false];
     repeated string ExpectedSubjects = 2;
 }
 

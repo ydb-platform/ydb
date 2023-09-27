@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut_auditsettings)
 add_subdirectory(ut_backup)
 add_subdirectory(ut_base)
 add_subdirectory(ut_base_reboots)

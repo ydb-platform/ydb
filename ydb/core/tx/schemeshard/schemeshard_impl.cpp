@@ -54,7 +54,7 @@ bool ResolvePoolNames(
     return true;
 }
 
-}   // namespace
+}   // anonymous namespace
 
 const TSchemeLimits TSchemeShard::DefaultLimits = {};
 
@@ -1878,6 +1878,8 @@ void TSchemeShard::PersistSubDomainAlter(NIceDb::TNiceDb& db, const TPathId& pat
                 NIceDb::TNull<Schema::SubDomainsAlterData::DatabaseQuotas>());
     }
 
+    PersistSubDomainAuditSettingsAlter(db, pathId, subDomain);
+
     for (auto shardIdx: subDomain.GetPrivateShards()) {
         db.Table<Schema::SubDomainShardsAlterData>().Key(pathId.LocalPathId, shardIdx.GetLocalId()).Update();
     }
@@ -1938,6 +1940,8 @@ void TSchemeShard::PersistSubDomain(NIceDb::TNiceDb& db, const TPathId& pathId, 
     PersistSubDomainDeclaredSchemeQuotas(db, pathId, subDomain);
     PersistSubDomainDatabaseQuotas(db, pathId, subDomain);
     PersistSubDomainState(db, pathId, subDomain);
+
+    PersistSubDomainAuditSettings(db, pathId, subDomain);
 
     db.Table<Schema::SubDomainsAlterData>().Key(pathId.LocalPathId).Delete();
 
@@ -2038,6 +2042,26 @@ void TSchemeShard::PersistRemoveSubDomain(NIceDb::TNiceDb& db, const TPathId& pa
         SubDomains.erase(it);
         DecrementPathDbRefCount(pathId);
     }
+}
+
+template <class Table>
+void PersistSubDomainAuditSettingsImpl(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo::TMaybeAuditSettings& value) {
+    using Field = typename Table::AuditSettings;
+    if (value) {
+        TString serialized;
+        Y_VERIFY(value->SerializeToString(&serialized));
+        db.Table<Table>().Key(pathId.LocalPathId).Update(NIceDb::TUpdate<Field>(serialized));
+    } else {
+        db.Table<Table>().Key(pathId.LocalPathId).template UpdateToNull<Field>();
+    }
+}
+
+void TSchemeShard::PersistSubDomainAuditSettings(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain) {
+    PersistSubDomainAuditSettingsImpl<Schema::SubDomains>(db, pathId, subDomain.GetAuditSettings());
+}
+
+void TSchemeShard::PersistSubDomainAuditSettingsAlter(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain) {
+    PersistSubDomainAuditSettingsImpl<Schema::SubDomainsAlterData>(db, pathId, subDomain.GetAuditSettings());
 }
 
 void TSchemeShard::PersistACL(NIceDb::TNiceDb& db, const TPathElement::TPtr path) {
@@ -6060,8 +6084,8 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev,
                 "Message:\n" << ev->Get()->Record.ShortDebugString());
 
     const auto txId = TTxId(ev->Get()->Record.GetTxId());
-    bool executed = false; 
-   
+    bool executed = false;
+
     if (TxIdToExport.contains(txId) || TxIdToDependentExport.contains(txId)) {
         Execute(CreateTxProgressExport(txId), ctx);
         executed = true;

@@ -8,7 +8,6 @@ namespace NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
-
 struct TSchemeShard::TTxSyncTenant : public TSchemeShard::TRwTxBase {
     TPathId PathId;
     TSideEffects SideEffects;
@@ -112,6 +111,11 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
                 subdomain->SetDatabaseQuotas(record.GetDatabaseQuotas(), Self);
                 // Note: subdomain version is persisted in PersistStoragePools below
                 Self->PersistSubDomainDatabaseQuotas(db, Self->RootPathId(), *subdomain);
+            }
+
+            if (record.HasAuditSettings()) {
+                subdomain->SetAuditSettings(record.GetAuditSettings());
+                Self->PersistSubDomainAuditSettings(db, Self->RootPathId(), *subdomain);
             }
 
             Self->PersistStoragePools(db, Self->RootPathId(), *subdomain);

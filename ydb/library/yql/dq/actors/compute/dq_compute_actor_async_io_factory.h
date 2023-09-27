@@ -21,6 +21,11 @@ concept TSourceCreatorFunc = requires(T f, TProto&& settings, IDqAsyncIoFactory:
 };
 
 template <class T, class TProto>
+concept TSourceCreatorFuncMove = requires(T f, TProto* settings, IDqAsyncIoFactory::TSourceArguments&& args) {
+    { f(settings, std::move(args)) } -> TCastsToAsyncInputPair;
+};
+
+template <class T, class TProto>
 concept TInputTransformCreatorFunc = requires(T f, TProto&& settings, IDqAsyncIoFactory::TInputTransformArguments&& args) {
     { f(std::move(settings), std::move(args)) } -> TCastsToAsyncInputPair;
 };
@@ -48,6 +53,30 @@ public:
 
     // Registration
     void RegisterSource(const TString& type, TSourceCreatorFunction creator);
+
+
+    // This function expects to have Arena where SourceSettings are allocated or will be allocated
+    template <class TProtoMsg, TSourceCreatorFuncMove<TProtoMsg> TCreatorFunc>
+    void RegisterSourceWithPtr(const TString& type, TCreatorFunc creator) {  // WithArena
+        RegisterSource(type,
+            [creator = std::move(creator), type](TSourceArguments&& args)
+            {
+                YQL_ENSURE(args.Arena, "args are expected to have Arena for SourceSettings");
+                if (args.SourceSettings != nullptr) {
+                    const TProtoMsg* settingsPtr = dynamic_cast<const TProtoMsg*>(args.SourceSettings);
+                    YQL_ENSURE(settingsPtr);
+                    return creator(settingsPtr, std::move(args));
+                } else {
+                    const google::protobuf::Any& settingsAny = args.InputDesc.GetSource().GetSettings();
+                    YQL_ENSURE(settingsAny.Is<TProtoMsg>(),
+                        "Source \"" << type << "\" settings are expected to have protobuf type " << TProtoMsg::descriptor()->full_name()
+                        << ", but got " << settingsAny.type_url());
+                    TProtoMsg* settingsPtr = args.Arena->Allocate<TProtoMsg>();
+                    YQL_ENSURE(settingsAny.UnpackTo(settingsPtr), "Failed to unpack settings of type \"" << type << "\"");
+                    return creator(std::move(settingsPtr), std::move(args));
+                }
+        });
+    }
 
     template <class TProtoMsg, TSourceCreatorFunc<TProtoMsg> TCreatorFunc>
     void RegisterSource(const TString& type, TCreatorFunc creator) {

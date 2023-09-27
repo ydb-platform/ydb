@@ -9,6 +9,8 @@
 
 #include <util/generic/set.h>
 
+#include <ydb/core/kqp/compute_actor/kqp_pure_compute_actor.h>
+
 using namespace NActors;
 
 namespace NKikimr::NKqp {
@@ -151,7 +153,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
 
     for (ui64 taskId : requestData.TaskIds) {
         const auto& task = TasksGraph.GetTask(taskId);
-        NYql::NDqProto::TDqTask* serializedTask = ArenaSerializeTaskToProto(TasksGraph, task);
+        NYql::NDqProto::TDqTask* serializedTask = ArenaSerializeTaskToProto(TasksGraph, task, /* serializeAsyncIoSettings = */ true);
         request.AddTasks()->Swap(serializedTask);
     }
 
@@ -293,10 +295,12 @@ const IKqpGateway::TKqpSnapshot& TKqpPlanner::GetSnapshot() const {
     return TasksGraph.GetMeta().Snapshot;
 }
 
-void TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, bool shareMailbox) {
+// optimizeProtoForLocalExecution - if we want to execute compute actor locally and don't want to serialize & then deserialize proto message
+// instead we just give ptr to proto message and after that we swap/copy it
+void TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, bool shareMailbox, bool optimizeProtoForLocalExecution) {
 
     auto& task = TasksGraph.GetTask(taskId);
-    NYql::NDqProto::TDqTask* taskDesc = ArenaSerializeTaskToProto(TasksGraph, task);
+    NYql::NDqProto::TDqTask* taskDesc = ArenaSerializeTaskToProto(TasksGraph, task, /* serializeAsyncIoSettings = */ !optimizeProtoForLocalExecution);
 
     NYql::NDq::TComputeRuntimeSettings settings;
     if (Deadline) {
@@ -322,6 +326,17 @@ void TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, bool shareMailbox) {
 
     auto computeActor = NKikimr::NKqp::CreateKqpComputeActor(ExecuterId, TxId, taskDesc, AsyncIoFactory,
         AppData()->FunctionRegistry, settings, limits, NWilson::TTraceId(), TasksGraph.GetMeta().GetArenaIntrusivePtr());
+
+    if (optimizeProtoForLocalExecution) {
+        TVector<google::protobuf::Message*>& taskSourceSettings = static_cast<TKqpComputeActor*>(computeActor)->MutableTaskSourceSettings();
+        taskSourceSettings.assign(task.Inputs.size(), nullptr);
+        for (size_t i = 0; i < task.Inputs.size(); ++i) {
+            const auto input = task.Inputs[i];
+            if (input.Type() == NYql::NDq::TTaskInputType::Source && Y_LIKELY(input.Meta.SourceSettings)) {
+                taskSourceSettings[i] = (&(*input.Meta.SourceSettings));
+            }
+        }
+    }
 
     auto computeActorId = shareMailbox ? TlsActivationContext->AsActorContext().RegisterWithSameMailbox(computeActor) : TlsActivationContext->AsActorContext().Register(computeActor);
     task.ComputeActorId = computeActorId;
@@ -365,7 +380,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
     if (IsDataQuery) {
         bool shareMailbox = (ComputeTasks.size() <= 1);
         for (ui64 taskId : ComputeTasks) {
-            ExecuteDataComputeTask(taskId, shareMailbox);
+            ExecuteDataComputeTask(taskId, shareMailbox, /* optimizeProtoForLocalExecution = */ true);
         }
         ComputeTasks.clear();
     }
@@ -373,9 +388,9 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
     if (nComputeTasks == 0 && TasksPerNode.size() == 1 && (AsyncIoFactory != nullptr) && DoOptimization && IsDataQuery) {
         // query affects a single key or shard, so it might be more effective
         // to execute this task locally so we can avoid useless overhead for remote task launching.
-        for(auto& [shardId, tasks]: TasksPerNode) {
-            for(ui64 taskId: tasks) {
-                ExecuteDataComputeTask(taskId, true);
+        for (auto& [shardId, tasks]: TasksPerNode) {
+            for (ui64 taskId: tasks) {
+                ExecuteDataComputeTask(taskId, true, /* optimizeProtoForLocalExecution = */ true);
             }
         }
 

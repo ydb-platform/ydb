@@ -383,10 +383,11 @@ public:
 
 public:
     TKqpReadActor(
-        NKikimrTxDataShard::TKqpReadRangesSourceSettings&& settings,
+        const NKikimrTxDataShard::TKqpReadRangesSourceSettings* settings,
         const NYql::NDq::TDqAsyncIoFactory::TSourceArguments& args,
         TIntrusivePtr<TKqpCounters> counters)
-        : Settings(std::move(settings))
+        : Settings(settings)
+        , Arena(args.Arena)
         , LogPrefix(TStringBuilder() << "TxId: " << args.TxId << ", task: " << args.TaskId << ", CA Id " << args.ComputeActorId << ". ")
         , ComputeActorId(args.ComputeActorId)
         , InputIndex(args.InputIndex)
@@ -397,14 +398,17 @@ public:
         , UseFollowers(false)
         , PipeCacheId(MainPipeCacheId)
     {
+        Y_VERIFY(Arena);
+        Y_VERIFY(settings->GetArena() == Arena->Get());
+
         TableId = TTableId(
-            Settings.GetTable().GetTableId().GetOwnerId(),
-            Settings.GetTable().GetTableId().GetTableId(),
-            Settings.GetTable().GetSysViewInfo(),
-            Settings.GetTable().GetTableId().GetSchemaVersion()
+            Settings->GetTable().GetTableId().GetOwnerId(),
+            Settings->GetTable().GetTableId().GetTableId(),
+            Settings->GetTable().GetSysViewInfo(),
+            Settings->GetTable().GetTableId().GetSchemaVersion()
         );
 
-        if (Settings.GetUseFollowers() && !Snapshot.IsValid()) {
+        if (Settings->GetUseFollowers() && !Snapshot.IsValid()) {
             // reading from followers is allowed only of snapshot is not specified and
             // specific flag is set. otherwise we always read from main replicas.
             PipeCacheId = FollowersPipeCacheId;
@@ -413,22 +417,22 @@ public:
 
         InitResultColumns();
 
-        KeyColumnTypes.reserve(Settings.GetKeyColumnTypes().size());
-        for (size_t i = 0; i < Settings.KeyColumnTypesSize(); ++i) {
-            auto typeId = Settings.GetKeyColumnTypes(i);
+        KeyColumnTypes.reserve(Settings->GetKeyColumnTypes().size());
+        for (size_t i = 0; i < Settings->KeyColumnTypesSize(); ++i) {
+            auto typeId = Settings->GetKeyColumnTypes(i);
             KeyColumnTypes.push_back(
                 NScheme::TTypeInfo(
                     (NScheme::TTypeId)typeId,
                     (typeId == NScheme::NTypeIds::Pg) ?
                         NPg::TypeDescFromPgTypeId(
-                            Settings.GetKeyColumnTypeInfos(i).GetPgTypeId()
+                            Settings->GetKeyColumnTypeInfos(i).GetPgTypeId()
                         ) : nullptr));
         }
         Counters->ReadActorsCount->Inc();
-        Snapshot = IKqpGateway::TKqpSnapshot(Settings.GetSnapshot().GetStep(), Settings.GetSnapshot().GetTxId());
+        Snapshot = IKqpGateway::TKqpSnapshot(Settings->GetSnapshot().GetStep(), Settings->GetSnapshot().GetTxId());
 
-        if (Settings.HasMaxInFlightShards()) {
-            MaxInFlight = Settings.GetMaxInFlightShards();
+        if (Settings->HasMaxInFlightShards()) {
+            MaxInFlight = Settings->GetMaxInFlightShards();
         }
     }
 
@@ -464,28 +468,28 @@ public:
 
     void StartTableScan() {
         ScanStarted = true;
-        THolder<TShardState> stateHolder = MakeHolder<TShardState>(Settings.GetShardIdHint());
+        THolder<TShardState> stateHolder = MakeHolder<TShardState>(Settings->GetShardIdHint());
         PendingShards.PushBack(stateHolder.Get());
         auto& state = *stateHolder.Release();
 
-        if (Settings.HasFullRange()) {
-            state.AddRange(TSerializedTableRange(Settings.GetFullRange()));
+        if (Settings->HasFullRange()) {
+            state.AddRange(TSerializedTableRange(Settings->GetFullRange()));
         } else {
-            YQL_ENSURE(Settings.HasRanges());
-            if (Settings.GetRanges().KeyRangesSize() > 0) {
-                YQL_ENSURE(Settings.GetRanges().KeyPointsSize() == 0);
-                for (const auto& range : Settings.GetRanges().GetKeyRanges()) {
+            YQL_ENSURE(Settings->HasRanges());
+            if (Settings->GetRanges().KeyRangesSize() > 0) {
+                YQL_ENSURE(Settings->GetRanges().KeyPointsSize() == 0);
+                for (const auto& range : Settings->GetRanges().GetKeyRanges()) {
                     state.AddRange(TSerializedTableRange(range));
                 }
             } else {
-                YQL_ENSURE(Settings.GetRanges().KeyPointsSize() > 0);
-                for (const auto& point : Settings.GetRanges().GetKeyPoints()) {
+                YQL_ENSURE(Settings->GetRanges().KeyPointsSize() > 0);
+                for (const auto& point : Settings->GetRanges().GetKeyPoints()) {
                     state.AddPoint(TSerializedCellVec(point));
                 }
             }
         }
 
-        if (!Settings.HasShardIdHint()) {
+        if (!Settings->HasShardIdHint()) {
             InFlightShards.PushBack(&state);
             ResolveShard(&state);
         } else {
@@ -495,15 +499,15 @@ public:
     }
 
     bool StartShards() {
-        const ui32 maxAllowedInFlight = Settings.GetSorted() ? 1 : MaxInFlight;
-        CA_LOG_D("effective maxinflight " << maxAllowedInFlight << " sorted " << Settings.GetSorted());
+        const ui32 maxAllowedInFlight = Settings->GetSorted() ? 1 : MaxInFlight;
+        CA_LOG_D("effective maxinflight " << maxAllowedInFlight << " sorted " << Settings->GetSorted());
         bool isFirst = true;
         while (!PendingShards.Empty() && RunningReads() + 1 <= maxAllowedInFlight) {
             if (isFirst) {
                 CA_LOG_D("BEFORE: " << PendingShards.Size() << "." << RunningReads());
                 isFirst = false;
             }
-            if (Settings.GetReverse()) {
+            if (Settings->GetReverse()) {
                 auto state = THolder<TShardState>(PendingShards.PopBack());
                 InFlightShards.PushBack(state.Get());
                 StartRead(state.Release());
@@ -525,7 +529,7 @@ public:
 
     void ResolveShard(TShardState* state) {
         if (state->ResolveAttempt >= ::MaxShardResolves()) {
-            RuntimeError(TStringBuilder() << "Table '" << Settings.GetTable().GetTablePath() << "' resolve limit exceeded",
+            RuntimeError(TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' resolve limit exceeded",
                 NDqProto::StatusIds::UNAVAILABLE);
             return;
         }
@@ -533,7 +537,7 @@ public:
         Counters->IteratorsShardResolve->Inc();
         state->ResolveAttempt++;
 
-        auto range = state->GetBounds(Settings.GetReverse());
+        auto range = state->GetBounds(Settings->GetReverse());
         TVector<TKeyDesc::TColumnOp> columns;
         columns.reserve(ResultColumns.size());
         for (const auto& column : ResultColumns) {
@@ -547,7 +551,7 @@ public:
         auto keyDesc = MakeHolder<TKeyDesc>(TableId, range, TKeyDesc::ERowOperation::Read,
             KeyColumnTypes, columns);
 
-        CA_LOG_D("Sending TEvResolveKeySet update for table '" << Settings.GetTable().GetTablePath() << "'"
+        CA_LOG_D("Sending TEvResolveKeySet update for table '" << Settings->GetTable().GetTablePath() << "'"
             << ", range: " << DebugPrintRange(KeyColumnTypes, range, *AppData()->TypeRegistry)
             << ", attempt #" << state->ResolveAttempt);
 
@@ -563,7 +567,7 @@ public:
     }
 
     void HandleResolve(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
-        CA_LOG_D("Received TEvResolveKeySetResult update for table '" << Settings.GetTable().GetTablePath() << "'");
+        CA_LOG_D("Received TEvResolveKeySetResult update for table '" << Settings->GetTable().GetTablePath() << "'");
 
         auto* request = ev->Get()->Request.Get();
         THolder<TShardState> state;
@@ -575,7 +579,7 @@ public:
         }
 
         if (request->ErrorCount > 0 || !state) {
-            CA_LOG_E("Resolve request failed for table '" << Settings.GetTable().GetTablePath() << "', ErrorCount# " << request->ErrorCount);
+            CA_LOG_E("Resolve request failed for table '" << Settings->GetTable().GetTablePath() << "', ErrorCount# " << request->ErrorCount);
 
             auto statusCode = NDqProto::StatusIds::UNAVAILABLE;
             TString error;
@@ -588,19 +592,19 @@ public:
                     switch (x.Status) {
                         case NSchemeCache::TSchemeCacheRequest::EStatus::PathErrorNotExist:
                             statusCode = NDqProto::StatusIds::SCHEME_ERROR;
-                            error = TStringBuilder() << "Table '" << Settings.GetTable().GetTablePath() << "' not exists.";
+                            error = TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' not exists.";
                             break;
                         case NSchemeCache::TSchemeCacheRequest::EStatus::TypeCheckError:
                             statusCode = NDqProto::StatusIds::SCHEME_ERROR;
-                            error = TStringBuilder() << "Table '" << Settings.GetTable().GetTablePath() << "' scheme changed.";
+                            error = TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' scheme changed.";
                             break;
                         case NSchemeCache::TSchemeCacheRequest::EStatus::LookupError:
                             statusCode = NDqProto::StatusIds::UNAVAILABLE;
-                            error = TStringBuilder() << "Failed to resolve table '" << Settings.GetTable().GetTablePath() << "'.";
+                            error = TStringBuilder() << "Failed to resolve table '" << Settings->GetTable().GetTablePath() << "'.";
                             break;
                         default:
                             statusCode = NDqProto::StatusIds::SCHEME_ERROR;
-                            error = TStringBuilder() << "Unresolved table '" << Settings.GetTable().GetTablePath() << "'. Status: " << x.Status;
+                            error = TStringBuilder() << "Unresolved table '" << Settings->GetTable().GetTablePath() << "'. Status: " << x.Status;
                             break;
                     }
                 }
@@ -628,7 +632,7 @@ public:
         }
 
         if (keyDesc->GetPartitions().empty()) {
-            TString error = TStringBuilder() << "No partitions to read from '" << Settings.GetTable().GetTablePath() << "'";
+            TString error = TStringBuilder() << "No partitions to read from '" << Settings->GetTable().GetTablePath() << "'";
             CA_LOG_E(error);
             return RuntimeError(error, NDqProto::StatusIds::SCHEME_ERROR);
         }
@@ -638,17 +642,17 @@ public:
         TVector<THolder<TShardState>> newShards;
         newShards.reserve(keyDesc->GetPartitions().size());
 
-        auto bounds = state->GetBounds(Settings.GetReverse());
+        auto bounds = state->GetBounds(Settings->GetReverse());
         size_t pointIndex = 0;
         size_t rangeIndex = 0;
         TVector<TSerializedTableRange> ranges;
         if (state->HasRanges()) {
-            state->FillUnprocessedRanges(ranges, KeyColumnTypes, Settings.GetReverse());
+            state->FillUnprocessedRanges(ranges, KeyColumnTypes, Settings->GetReverse());
         }
 
         TVector<TSerializedCellVec> points;
         if (state->HasPoints()) {
-            state->FillUnprocessedPoints(points, Settings.GetReverse());
+            state->FillUnprocessedPoints(points, Settings->GetReverse());
         }
 
         for (ui64 idx = 0; idx < keyDesc->GetPartitions().size(); ++idx) {
@@ -717,7 +721,7 @@ public:
 
         YQL_ENSURE(!newShards.empty());
         Counters->IteratorsReadSplits->Add(newShards.size() - 1);
-        if (Settings.GetReverse()) {
+        if (Settings->GetReverse()) {
             for (size_t i = 0; i < newShards.size(); ++i) {
                 PendingShards.PushBack(newShards[i].Release());
             }
@@ -766,7 +770,7 @@ public:
         TotalRetries += 1;
         auto limit = ::MaxTotalRetries();
         if (limit && TotalRetries > *limit) {
-            return RuntimeError(TStringBuilder() << "Table '" << Settings.GetTable().GetTablePath() << "' retry limit exceeded",
+            return RuntimeError(TStringBuilder() << "Table '" << Settings->GetTable().GetTablePath() << "' retry limit exceeded",
                 NDqProto::StatusIds::UNAVAILABLE);
         }
 
@@ -812,8 +816,8 @@ public:
 
     void StartRead(TShardState* state) {
         TMaybe<ui64> limit;
-        if (Settings.GetItemsLimit()) {
-            limit = Settings.GetItemsLimit() - Min(Settings.GetItemsLimit(), ReceivedRowCount);
+        if (Settings->GetItemsLimit()) {
+            limit = Settings->GetItemsLimit() - Min(Settings->GetItemsLimit(), ReceivedRowCount);
 
             if (*limit == 0) {
                 return;
@@ -823,8 +827,8 @@ public:
         auto ev = ::DefaultReadSettings();
         auto& record = ev->Record;
 
-        state->FillEvRead(*ev, KeyColumnTypes, Settings.GetReverse());
-        for (const auto& column : Settings.GetColumns()) {
+        state->FillEvRead(*ev, KeyColumnTypes, Settings->GetReverse());
+        for (const auto& column : Settings->GetColumns()) {
             if (!IsSystemColumn(column.GetId())) {
                 record.AddColumns(column.GetId());
             }
@@ -848,34 +852,34 @@ public:
 
         record.SetReadId(id);
 
-        record.MutableTableId()->SetOwnerId(Settings.GetTable().GetTableId().GetOwnerId());
-        record.MutableTableId()->SetTableId(Settings.GetTable().GetTableId().GetTableId());
-        record.MutableTableId()->SetSchemaVersion(Settings.GetTable().GetSchemaVersion());
+        record.MutableTableId()->SetOwnerId(Settings->GetTable().GetTableId().GetOwnerId());
+        record.MutableTableId()->SetTableId(Settings->GetTable().GetTableId().GetTableId());
+        record.MutableTableId()->SetSchemaVersion(Settings->GetTable().GetSchemaVersion());
 
-        record.SetReverse(Settings.GetReverse());
+        record.SetReverse(Settings->GetReverse());
         if (limit) {
             record.SetMaxRows(*limit);
             record.SetTotalRowsLimit(*limit);
         }
         record.SetMaxBytes(Min<ui64>(record.GetMaxBytes(), BufSize));
 
-        record.SetResultFormat(Settings.GetDataFormat());
+        record.SetResultFormat(Settings->GetDataFormat());
 
-        if (Settings.HasLockTxId() && BrokenLocks.empty()) {
-            record.SetLockTxId(Settings.GetLockTxId());
+        if (Settings->HasLockTxId() && BrokenLocks.empty()) {
+            record.SetLockTxId(Settings->GetLockTxId());
         }
 
-        if (Settings.HasLockNodeId()) {
-            record.SetLockNodeId(Settings.GetLockNodeId());
+        if (Settings->HasLockNodeId()) {
+            record.SetLockNodeId(Settings->GetLockNodeId());
         }
 
-        CA_LOG_D(TStringBuilder() << "Send EvRead to shardId: " << state->TabletId << ", tablePath: " << Settings.GetTable().GetTablePath()
+        CA_LOG_D(TStringBuilder() << "Send EvRead to shardId: " << state->TabletId << ", tablePath: " << Settings->GetTable().GetTablePath()
             << ", ranges: " << DebugPrintRanges(KeyColumnTypes, ev->Ranges, *AppData()->TypeRegistry)
             << ", limit: " << limit
             << ", readId = " << id
             << ", reverse = " << record.GetReverse()
-            << " snapshot = (txid=" << Settings.GetSnapshot().GetTxId() << ",step=" << Settings.GetSnapshot().GetStep() << ")"
-            << " lockTxId = " << Settings.GetLockTxId());
+            << " snapshot = (txid=" << Settings->GetSnapshot().GetTxId() << ",step=" << Settings->GetSnapshot().GetStep() << ")"
+            << " lockTxId = " << Settings->GetLockTxId());
 
         Counters->CreatedIterators->Inc();
         ReadIdByTabletId[state->TabletId].push_back(id);
@@ -1065,7 +1069,7 @@ public:
             return {};
         }
         YQL_ENSURE(packed == 0);
-        if (Settings.ColumnsSize() == 0) {
+        if (Settings->ColumnsSize() == 0) {
             batch->resize(result->Get()->GetRowsCount(), HolderFactory.GetEmptyContainer());
         } else {
             TVector<NUdf::TUnboxedValue*> editAccessors(result->Get()->GetRowsCount());
@@ -1073,7 +1077,7 @@ public:
 
             for (ui64 rowIndex = 0; rowIndex < result->Get()->GetRowsCount(); ++rowIndex) {
                 batch->emplace_back(HolderFactory.CreateDirectArrayHolder(
-                    Settings.columns_size(),
+                    Settings->columns_size(),
                     editAccessors[rowIndex])
                 );
             }
@@ -1111,7 +1115,7 @@ public:
         }
         TStringBuilder builder;
         TVector<NScheme::TTypeInfo> types;
-        for (auto& column : Settings.GetColumns()) {
+        for (auto& column : Settings->GetColumns()) {
             types.push_back(NScheme::TTypeInfo((NScheme::TTypeId)column.GetType()));
         }
 
@@ -1130,7 +1134,7 @@ public:
         for (size_t rowIndex = packed; rowIndex < result->Get()->GetRowsCount(); ++rowIndex) {
             const auto& row = result->Get()->GetCells(rowIndex);
             NUdf::TUnboxedValue* rowItems = nullptr;
-            batch->emplace_back(HolderFactory.CreateDirectArrayHolder(Settings.ColumnsSize(), rowItems));
+            batch->emplace_back(HolderFactory.CreateDirectArrayHolder(Settings->ColumnsSize(), rowItems));
 
             i64 rowSize = 0;
             size_t columnIndex = 0;
@@ -1167,7 +1171,7 @@ public:
     }
 
     bool LimitReached() const {
-        return Settings.GetItemsLimit() && ProcessedRowCount >= Settings.GetItemsLimit();
+        return Settings->GetItemsLimit() && ProcessedRowCount >= Settings->GetItemsLimit();
     }
 
     i64 GetAsyncInputData(
@@ -1210,7 +1214,7 @@ public:
                 resultBatch.push_back(std::move((*batch)[result.ProcessedRows]));
                 ProcessedRowCount += 1;
                 bytes += rowSize.AllocatedBytes;
-                if (ProcessedRowCount == Settings.GetItemsLimit()) {
+                if (ProcessedRowCount == Settings->GetItemsLimit()) {
                     finished = true;
                     CA_LOG_D(TStringBuilder() << " returned async data because limit reached");
                     return bytes;
@@ -1223,8 +1227,8 @@ public:
                 auto& record = msg.Record;
                 if (!Reads[id].Finished) {
                     TMaybe<ui64> limit;
-                    if (Settings.GetItemsLimit()) {
-                        limit = Settings.GetItemsLimit() - Min(Settings.GetItemsLimit(), ReceivedRowCount);
+                    if (Settings->GetItemsLimit()) {
+                        limit = Settings->GetItemsLimit() - Min(Settings->GetItemsLimit(), ReceivedRowCount);
                     }
 
                     if (!limit || *limit > 0) {
@@ -1276,7 +1280,7 @@ public:
             << " running reads " << RunningReads()
             << " pending shards " << PendingShards.Size()
             << " finished = " << finished
-            << " has limit " << (Settings.GetItemsLimit() != 0)
+            << " has limit " << (Settings->GetItemsLimit() != 0)
             << " limit reached " << LimitReached());
 
         return bytes;
@@ -1287,13 +1291,13 @@ public:
             NDqProto::TDqTableStats* tableStats = nullptr;
             for (size_t i = 0; i < stats->TablesSize(); ++i) {
                 auto* table = stats->MutableTables(i);
-                if (table->GetTablePath() == Settings.GetTable().GetTablePath()) {
+                if (table->GetTablePath() == Settings->GetTable().GetTablePath()) {
                     tableStats = table;
                 }
             }
             if (!tableStats) {
                 tableStats = stats->AddTables();
-                tableStats->SetTablePath(Settings.GetTable().GetTablePath());
+                tableStats->SetTablePath(Settings->GetTable().GetTablePath());
 
             }
 
@@ -1368,9 +1372,9 @@ private:
     }
 
     void InitResultColumns() {
-        ResultColumns.reserve(Settings.ColumnsSize());
-        for (size_t resultColumnIndex = 0; resultColumnIndex < Settings.ColumnsSize(); ++resultColumnIndex) {
-            const auto& srcColumn = Settings.GetColumns(resultColumnIndex);
+        ResultColumns.reserve(Settings->ColumnsSize());
+        for (size_t resultColumnIndex = 0; resultColumnIndex < Settings->ColumnsSize(); ++resultColumnIndex) {
+            const auto& srcColumn = Settings->GetColumns(resultColumnIndex);
             TResultColumn column;
             column.Tag = srcColumn.GetId();
             column.TypeInfo = MakeTypeInfo(srcColumn);
@@ -1386,7 +1390,8 @@ private:
         NScheme::TTypeInfo TypeInfo;
     };
 
-    NKikimrTxDataShard::TKqpReadRangesSourceSettings Settings;
+    const NKikimrTxDataShard::TKqpReadRangesSourceSettings* Settings;
+    TIntrusivePtr<NActors::TProtoArenaHolder> Arena;
 
     TVector<TResultColumn> ResultColumns;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
@@ -1436,10 +1441,10 @@ private:
 
 
 void RegisterKqpReadActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<TKqpCounters> counters) {
-    factory.RegisterSource<NKikimrTxDataShard::TKqpReadRangesSourceSettings>(
+    factory.RegisterSourceWithPtr<NKikimrTxDataShard::TKqpReadRangesSourceSettings>(
         TString(NYql::KqpReadRangesSourceName),
-        [counters] (NKikimrTxDataShard::TKqpReadRangesSourceSettings&& settings, NYql::NDq::TDqAsyncIoFactory::TSourceArguments&& args) {
-            auto* actor = new TKqpReadActor(std::move(settings), args, counters);
+        [counters] (const NKikimrTxDataShard::TKqpReadRangesSourceSettings* settings, NYql::NDq::TDqAsyncIoFactory::TSourceArguments&& args) {
+            auto* actor = new TKqpReadActor(settings, args, counters);
             return std::make_pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*>(actor, actor);
         });
 }

@@ -192,6 +192,8 @@ public:
         ::NMonitoring::TDynamicCounterPtr TaskCounters;
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
         IMemoryQuotaManager::TPtr MemoryQuotaManager;
+        const google::protobuf::Message* SourceSettings = nullptr;  // used only in case if we execute compute actor locally
+        TIntrusivePtr<NActors::TProtoArenaHolder> Arena;  // Arena for SourceSettings
     };
 
     struct TSinkArguments {

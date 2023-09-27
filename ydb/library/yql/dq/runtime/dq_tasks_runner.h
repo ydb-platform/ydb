@@ -392,6 +392,18 @@ public:
         return Task_->HasUseLlvm();
     }
 
+    const TVector<google::protobuf::Message*>& GetSourceSettings() const {
+        return SourceSettings;
+    }
+
+    TVector<google::protobuf::Message*>& MutableSourceSettings() {
+        return SourceSettings;
+    }
+
+    const TIntrusivePtr<NActors::TProtoArenaHolder>& GetArena() const {
+        return Arena;
+    }
+
 private:
 
     // external callback to retrieve parameter value.
@@ -399,6 +411,7 @@ private:
     NDqProto::TDqTask* Task_ = nullptr;
     std::unique_ptr<NDqProto::TDqTask> HeapTask_;
     TIntrusivePtr<NActors::TProtoArenaHolder> Arena;
+    TVector<google::protobuf::Message*> SourceSettings;  // used only in case if we execute compute actor locally
 };
 
 class IDqTaskRunner : public TSimpleRefCount<IDqTaskRunner>, private TNonCopyable {

@@ -1513,6 +1513,12 @@ protected:
         return MemoryLimits;
     }
 
+public:
+
+    TVector<google::protobuf::Message*>& MutableTaskSourceSettings() {
+        return Task.MutableSourceSettings();
+    }
+
 protected:
     void SetTaskRunner(const TIntrusivePtr<IDqTaskRunner>& taskRunner) {
         TaskRunner = taskRunner;
@@ -1559,6 +1565,8 @@ protected:
             Y_VERIFY(inputDesc.HasSource());
             source.Type = inputDesc.GetSource().GetType();
             const ui64 i = inputIndex; // Crutch for clang
+            const auto& settings = Task.GetSourceSettings();
+            Y_VERIFY(settings.empty() || inputIndex < settings.size());
             CA_LOG_D("Create source for input " << i << " " << inputDesc);
             try {
                 std::tie(source.AsyncInput, source.Actor) = AsyncIoFactory->CreateDqSource(
@@ -1574,7 +1582,9 @@ protected:
                         .HolderFactory = holderFactory,
                         .TaskCounters = TaskCounters,
                         .Alloc = TaskRunner ? TaskRunner->GetAllocatorPtr() : nullptr,
-                        .MemoryQuotaManager = MemoryLimits.MemoryQuotaManager
+                        .MemoryQuotaManager = MemoryLimits.MemoryQuotaManager,
+                        .SourceSettings = (!settings.empty() ? settings.at(inputIndex) : nullptr),
+                        .Arena = Task.GetArena()
                     });
             } catch (const std::exception& ex) {
                 throw yexception() << "Failed to create source " << inputDesc.GetSource().GetType() << ": " << ex.what();

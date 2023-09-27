@@ -63,7 +63,7 @@ public:
 private:
     
     const IKqpGateway::TKqpSnapshot& GetSnapshot() const;
-    void ExecuteDataComputeTask(ui64 taskId, bool shareMailbox);
+    void ExecuteDataComputeTask(ui64 taskId, bool shareMailbox, bool optimizeProtoForLocalExecution);
     void PrepareToProcess();
     TString GetEstimationsInfo() const;
 

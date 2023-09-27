@@ -1783,7 +1783,7 @@ private:
         for (auto& task : TasksGraph.GetTasks()) {
             auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
             if (task.Meta.ShardId && (task.Meta.Reads || task.Meta.Writes)) {
-                NYql::NDqProto::TDqTask* protoTask = ArenaSerializeTaskToProto(TasksGraph, task);
+                NYql::NDqProto::TDqTask* protoTask = ArenaSerializeTaskToProto(TasksGraph, task, true);
                 datashardTasks[task.Meta.ShardId].emplace_back(protoTask);
             } else if (stageInfo.Meta.IsSysView()) {
                 computeTasks.emplace_back(task.Id);

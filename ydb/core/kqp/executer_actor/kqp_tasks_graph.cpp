@@ -997,7 +997,7 @@ void FillOutputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskOutpu
     }
 }
 
-void FillInputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskInput& inputDesc, const TTaskInput& input) {
+void FillInputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskInput& inputDesc, const TTaskInput& input, bool serializeAsyncIoSettings) {
     const auto& snapshot = tasksGraph.GetMeta().Snapshot;
     const auto& lockTxId = tasksGraph.GetMeta().LockTxId;
 
@@ -1015,7 +1015,9 @@ void FillInputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskInput&
                     input.Meta.SourceSettings->SetUseFollowers(tasksGraph.GetMeta().UseFollowers);
                 }
 
-                inputDesc.MutableSource()->MutableSettings()->PackFrom(*input.Meta.SourceSettings);
+                if (serializeAsyncIoSettings) {
+                    inputDesc.MutableSource()->MutableSettings()->PackFrom(*input.Meta.SourceSettings);
+                }
             } else {
                 YQL_ENSURE(input.SourceSettings);
                 inputDesc.MutableSource()->MutableSettings()->CopyFrom(*input.SourceSettings);
@@ -1066,7 +1068,7 @@ void FillInputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskInput&
     }
 }
 
-void SerializeTaskToProto(const TKqpTasksGraph& tasksGraph, const TTask& task, NYql::NDqProto::TDqTask* result) {
+void SerializeTaskToProto(const TKqpTasksGraph& tasksGraph, const TTask& task, NYql::NDqProto::TDqTask* result, bool serializeAsyncIoSettings) {
     auto& stageInfo = tasksGraph.GetStageInfo(task.StageId);
     ActorIdToProto(task.Meta.ExecuterId, result->MutableExecuter()->MutableActorId());
     result->SetId(task.Id);
@@ -1089,7 +1091,7 @@ void SerializeTaskToProto(const TKqpTasksGraph& tasksGraph, const TTask& task, N
     }
 
     for (const auto& input : task.Inputs) {
-        FillInputDesc(tasksGraph, *result->AddInputs(), input);
+        FillInputDesc(tasksGraph, *result->AddInputs(), input, serializeAsyncIoSettings);
     }
 
     for (const auto& output : task.Outputs) {
@@ -1110,9 +1112,9 @@ void SerializeTaskToProto(const TKqpTasksGraph& tasksGraph, const TTask& task, N
     FillTaskMeta(stageInfo, task, *result);
 }
 
-NYql::NDqProto::TDqTask* ArenaSerializeTaskToProto(TKqpTasksGraph& tasksGraph, const TTask& task) {
+NYql::NDqProto::TDqTask* ArenaSerializeTaskToProto(TKqpTasksGraph& tasksGraph, const TTask& task, bool serializeAsyncIoSettings) {
     NYql::NDqProto::TDqTask* result = tasksGraph.GetMeta().Allocate<NYql::NDqProto::TDqTask>();
-    SerializeTaskToProto(tasksGraph, task, result);
+    SerializeTaskToProto(tasksGraph, task, result, serializeAsyncIoSettings);
     return result;
 }
 

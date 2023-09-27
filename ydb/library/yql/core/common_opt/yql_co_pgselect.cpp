@@ -2286,6 +2286,56 @@ TExprNode::TPtr BuildWindows(TPositionHandle pos, const TExprNode::TPtr& list, c
                             .Add(1, extractor)
                         .Seal()
                         .Build();
+                } else if (name == "first_value" || name == "last_value") {
+                    auto arg = ctx.NewArgument(pos, "row");
+                    auto arguments = ctx.NewArguments(pos, { arg });
+                    auto root = p.first->TailPtr();
+                    RewriteAggsPartial(root, arg, aggId, ctx, optCtx, false);
+                    auto extractor = ctx.NewLambda(pos, std::move(arguments),
+                        ctx.ReplaceNode(std::move(root), *p.second, arg));
+
+                    TExprNode::TPtr updater;
+                    if (name == "first_value") {
+                        updater = ctx.Builder(pos)
+                            .Lambda()
+                                .Param("item")
+                                .Param("state")
+                                .Arg("state")
+                            .Seal()
+                            .Build();
+                    } else {
+                        updater = ctx.Builder(pos)
+                            .Lambda()
+                                .Param("item")
+                                .Param("state")
+                                .Apply(extractor)
+                                    .With(0, "item")
+                                .Seal()
+                            .Seal()
+                            .Build();
+                    }
+
+                    value = ctx.Builder(pos)
+                        .Callable("WindowTraits")
+                            .Callable(0, "ListItemType")
+                                .Add(0, listTypeNode)
+                            .Seal()
+                            .Add(1, extractor)
+                            .Add(2, updater)
+                            .Lambda(3)
+                                .Param("item")
+                                .Param("state")
+                                .Callable("Void")
+                                .Seal()
+                            .Seal()
+                            .Lambda(4)
+                                .Param("state")
+                                .Arg("state")
+                            .Seal()
+                            .Callable(5, "Null")
+                            .Seal()
+                        .Seal()
+                        .Build();
                 } else {
                     ythrow yexception() << "Not supported function: " << name;
                 }

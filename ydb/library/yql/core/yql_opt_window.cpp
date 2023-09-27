@@ -1233,7 +1233,7 @@ private:
 
         if (defaultValue->IsCallable("Null")) {
             auto resultingType = RawOutputType;
-            if (resultingType->GetKind() != ETypeAnnotationKind::Optional) {
+            if (!resultingType->IsOptionalOrNull()) {
                 resultingType = ctx.MakeType<TOptionalExprType>(resultingType);
             }
 

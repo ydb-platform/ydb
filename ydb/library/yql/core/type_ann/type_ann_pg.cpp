@@ -504,6 +504,19 @@ IGraphTransformer::TStatus PgWindowCallWrapper(const TExprNode::TPtr& input, TEx
         } else {
             input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(arg));
         }
+    } else if (name == "first_value" || name == "last_value") {
+        if (input->ChildrenSize() != 4) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                TStringBuilder() << "Expected one argument in function" << name));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto arg = input->Child(3)->GetTypeAnn();
+        if (arg->IsOptionalOrNull()) {
+            input->SetTypeAnn(arg);
+        } else {
+            input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(arg));
+        }
     } else if (name == "row_number" || name == "rank" || name == "dense_rank") {
         if (input->ChildrenSize() != 3) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),

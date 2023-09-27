@@ -5,6 +5,7 @@ from multiprocessing.pool import ThreadPool
 import time
 import base64
 import binascii
+from yql_utils import get_param
 
 
 def run_one(item):
@@ -49,6 +50,9 @@ def convert_value(data, output):
 
 
 def test_doc():
+    skip_before = get_param("skip_before")
+    if skip_before is not None:
+        print("WILL SKIP TESTS BEFORE: ", skip_before)
     doc_src = yatest.common.source_path("ydb/library/yql/parser/pg_wrapper/functions.md")
     with open(doc_src) as f:
         doc_data = f.readlines()
@@ -60,8 +64,13 @@ def test_doc():
     original_line = None
     original_input = None
     multiline = None
+    skip_in_progress = skip_before is not None
     for raw_line in doc_data:
         line = raw_line.strip()
+        if skip_in_progress:
+            if line.startswith("# " + skip_before):
+                skip_in_progress = False
+            continue
         if set_of is not None:
             if line.startswith("]"):
                 queue.append((original_line, original_input, set_of))
@@ -133,5 +142,5 @@ def test_doc():
                 value, output = convert_value(data[0], output)
             print("VALUE: ", value)
             assert value == output, f"Expected '{output}' but got '{value}', test: {line}"
-    print("TOTAL TESTS:", total)
-    print("SKIPPED TESTS:", skipped)
+    print("TOTAL TESTS: ", total)
+    print("SKIPPED TESTS: ", skipped)

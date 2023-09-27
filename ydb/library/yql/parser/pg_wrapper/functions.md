@@ -3736,10 +3736,11 @@ See Section 8.15 for more details about array operator behavior. See Section 11.
 Table 9.52 shows the functions available for use with array types. See Section 8.15 for more information and examples of the use of these functions.
 
 Table 9.52. Array Functions
+
 #|
 ||Function|Description|Example(s)||
 ||array_append ( anycompatiblearray, anycompatible ) → anycompatiblearray|
-Appends an element to the end of an array (same as the anycompatiblearray || anycompatible operator). (NOT SUPPORTED)|
+Appends an element to the end of an array (same as the anycompatiblearray \|\| anycompatible operator). (NOT SUPPORTED)|
 ```sql
 #array_append(ARRAY[1,2], 3) → {1,2,3}
 ```||
@@ -3852,3 +3853,452 @@ Note
 There are two differences in the behavior of string_to_array from pre-9.1 versions of PostgreSQL. First, it will return an empty (zero-element) array rather than NULL when the input string is of zero length. Second, if the delimiter string is NULL, the function splits the input into individual characters, rather than returning NULL as before.
 
 See also Section 9.21 about the aggregate function array_agg for use with arrays.
+
+# 9.20. Range/Multirange Functions and Operators (NOT SUPPORTED)
+
+# 9.21. Aggregate Functions
+
+Aggregate functions compute a single result from a set of input values. The built-in general-purpose aggregate functions are listed in Table 9.57 while statistical aggregates are in Table 9.58. The built-in within-group ordered-set aggregate functions are listed in Table 9.59 while the built-in within-group hypothetical-set ones are in Table 9.60. Grouping operations, which are closely related to aggregate functions, are listed in Table 9.61. The special syntax considerations for aggregate functions are explained in Section 4.2.7. Consult Section 2.7 for additional introductory information.
+
+Aggregate functions that support Partial Mode are eligible to participate in various optimizations, such as parallel aggregation.
+
+Table 9.57. General-Purpose Aggregate Functions
+
+#|
+||Function|Description|Partial Mode|Example||
+||array_agg ( anynonarray ) → anyarray|
+Collects all the input values, including nulls, into an array. (NOT SUPPORTED)|
+No|
+```sql
+#SELECT array_agg(x) FROM (VALUES (1),(2)) a(x) → {1,2}
+```||
+||array_agg ( anyarray ) → anyarray|
+Concatenates all the input arrays into an array of one higher dimension. (The inputs must all have the same dimensionality, and cannot be empty or null.) (NOT SUPPORTED)|
+No|
+```sql
+#SELECT array_agg(x) FROM (VALUES (Array[1,2]),(Array[3,4])) a(x) → {{1,2},{3,4}}
+```||
+||avg ( smallint ) → numeric  
+avg ( integer ) → numeric  
+avg ( bigint ) → numeric  
+avg ( numeric ) → numeric  
+avg ( real ) → double precision  
+avg ( double precision ) → double precision  
+avg ( interval ) → interval|
+Computes the average (arithmetic mean) of all the non-null input values.|
+Yes|
+```sql
+SELECT avg(x::smallint) FROM (VALUES (1),(2),(3)) a(x) → 2.0000000000000000
+SELECT avg(x::integer) FROM (VALUES (1),(2),(3)) a(x) → 2.0000000000000000
+SELECT avg(x::bigint) FROM (VALUES (1),(2),(3)) a(x) → 2.0000000000000000
+SELECT avg(x::numeric) FROM (VALUES (1),(2),(3)) a(x) → 2.0000000000000000
+SELECT avg(x::real) FROM (VALUES (1),(2),(3)) a(x) → 2
+SELECT avg(x::double precision) FROM (VALUES (1),(2),(3)) a(x) → 2
+SELECT avg(cast(x as interval day)) FROM (VALUES ('1'),('2'),('3')) a(x) → 2 days
+```||
+||bit_and ( smallint ) → smallint  
+bit_and ( integer ) → integer  
+bit_and ( bigint ) → bigint  
+bit_and ( bit ) → bit|
+Computes the bitwise AND of all non-null input values.|
+Yes|
+```sql
+SELECT bit_and(x::smallint) FROM (VALUES (5),(6),(7)) a(x) → 4
+SELECT bit_and(x::integer) FROM (VALUES (5),(6),(7)) a(x) → 4
+SELECT bit_and(x::bigint) FROM (VALUES (5),(6),(7)) a(x) → 4
+SELECT bit_and(x::bit(3)) FROM (VALUES ('101'),('110'),('111')) a(x) → 100
+```||
+||bit_or ( smallint ) → smallint  
+bit_or ( integer ) → integer  
+bit_or ( bigint ) → bigint  
+bit_or ( bit ) → bit|
+Computes the bitwise OR of all non-null input values.|
+Yes|
+```sql
+SELECT bit_or(x::smallint) FROM (VALUES (4),(5),(6)) a(x) → 7
+SELECT bit_or(x::integer) FROM (VALUES (4),(5),(6)) a(x) → 7
+SELECT bit_or(x::bigint) FROM (VALUES (4),(5),(6)) a(x) → 7
+SELECT bit_or(x::bit(3)) FROM (VALUES ('100'),('101'),('110')) a(x) → 111
+```||
+||bit_xor ( smallint ) → smallint  
+bit_xor ( integer ) → integer  
+bit_xor ( bigint ) → bigint  
+bit_xor ( bit ) → bit|
+Computes the bitwise exclusive OR of all non-null input values. Can be useful as a checksum for an unordered set of values.|
+Yes|
+```sql
+SELECT bit_xor(x::smallint) FROM (VALUES (5),(6),(6)) a(x) → 5
+SELECT bit_xor(x::integer) FROM (VALUES (5),(6),(6)) a(x) → 5
+SELECT bit_xor(x::bigint) FROM (VALUES (5),(6),(6)) a(x) → 5
+SELECT bit_xor(x::bit(3)) FROM (VALUES ('101'),('110'),('110')) a(x) → 101
+```||
+||bool_and ( boolean ) → boolean|
+Returns true if all non-null input values are true, otherwise false.|
+Yes|
+```sql
+SELECT bool_and(x) FROM (VALUES (null),(false),(true)) a(x) → false
+SELECT bool_and(x) FROM (VALUES (null),(true),(true)) a(x) → true
+SELECT bool_and(x) FROM (VALUES (null::bool),(null::bool),(null::bool)) a(x) → NULL
+```||
+||bool_or ( boolean ) → boolean|
+Returns true if any non-null input value is true, otherwise false.|
+Yes|
+```sql
+SELECT bool_or(x) FROM (VALUES (null),(false),(false)) a(x) → false
+SELECT bool_or(x) FROM (VALUES (null),(false),(true)) a(x) → true
+SELECT bool_or(x) FROM (VALUES (null::bool),(null::bool),(null::bool)) a(x) → NULL
+```||
+||count ( * ) → bigint|
+Computes the number of input rows.|
+Yes|
+```sql
+SELECT count(*) FROM (VALUES (4),(5),(6)) a(x) → 3
+```||
+||count ( any ) → bigint|
+Computes the number of input rows in which the input value is not null.|
+Yes|
+```sql
+SELECT count(x) FROM (VALUES (4),(null),(6)) a(x) → 2
+```||
+||every ( boolean ) → boolean|
+This is the SQL standard's equivalent to bool_and|
+Yes|
+```sql
+SELECT every(x) FROM (VALUES (null),(false),(true)) a(x) → false
+SELECT every(x) FROM (VALUES (null),(true),(true)) a(x) → true
+SELECT every(x) FROM (VALUES (null::bool),(null::bool),(null::bool)) a(x) → NULL
+```||
+||json_agg ( anyelement ) → json  
+jsonb_agg ( anyelement ) → jsonb|
+Collects all the input values, including nulls, into a JSON array. Values are converted to JSON as per to_json or to_jsonb. (NOT SUPPORTED)|
+No|
+```sql
+#SELECT json_agg(x) FROM (VALUES (1),(2),(3)) a(x) → [1,2,3]
+#SELECT jsonb_agg(x) FROM (VALUES ('a'),('b'),('c')) a(x) → ["a","b","c"]
+```||
+||json_object_agg ( key any, value any ) → json  
+jsonb_object_agg ( key any, value any ) → jsonb|
+Collects all the key/value pairs into a JSON object. Key arguments are coerced to text; value arguments are converted as per to_json or to_jsonb. Values can be null, but not keys.|
+No|
+```sql
+#SELECT json_object_agg(x,y) FROM (VALUES ('a',1),('b',2),('c',3)) a(x,y) → {"a":1,"b":2,"c":3}
+#SELECT jsonb_object_agg(x,y) FROM (VALUES ('x','a'),('y','b'),('z','c')) a(x,y) → {"x":"a","y":"b","z":"c"}
+```||
+||max ( see text ) → same as input type|
+Computes the maximum of the non-null input values. Available for any numeric, string, date/time, or enum type, as well as inet, interval, money, oid, pg_lsn, tid, and arrays of any of these types. (Arrays aren't supported)|
+Yes|
+```sql
+SELECT max(x::smallint) FROM (VALUES (1),(2),(3)) a(x) → 3
+SELECT max(x::integer) FROM (VALUES (1),(2),(3)) a(x) → 3
+SELECT max(x::bigint) FROM (VALUES (1),(2),(3)) a(x) → 3
+SELECT max(x::real) FROM (VALUES (1),(2),(3)) a(x) → 3
+SELECT max(x::double precision) FROM (VALUES (1),(2),(3)) a(x) → 3
+SELECT max(x::numeric) FROM (VALUES (1),(2),(3)) a(x) → 3
+SELECT max(x) FROM (VALUES ('a'),('b'),('c')) a(x) → 'c'
+SELECT max(x::date) FROM (VALUES ('2001-01-01'),('2001-02-03'),('2002-01-01')) a(x) → 2002-01-01
+SELECT max(x::timestamp) FROM (VALUES ('2001-01-01 23:05:04'),('2001-01-01 23:06:03'),('2001-01-01 23:59:00')) a(x) → 2001-01-01 23:59:00
+SELECT max(x::time) FROM (VALUES ('10:00:05'),('11:00:01'),('12:50:00')) a(x) → 12:50:00
+SELECT max(x) FROM (VALUES (interval '1' day),(interval '2' day),(interval '3' day)) a(x) → 3 days
+
+#SELECT max(array[x,x]::smallint[]) FROM (VALUES (1),(2),(3)) a(x) → {3,3}
+#SELECT max(array[x,x]::integer[]) FROM (VALUES (1),(2),(3)) a(x) → {3,3}
+#SELECT max(array[x,x]::bigint[]) FROM (VALUES (1),(2),(3)) a(x) → {3,3}
+#SELECT max(array[x,x]::real[]) FROM (VALUES (1),(2),(3)) a(x) → {3.0,3.0}
+#SELECT max(array[x,x]::double precision[]) FROM (VALUES (1),(2),(3)) a(x) → {3.0,3.0}
+#SELECT max(array[x,x]::numeric[]) FROM (VALUES (1),(2),(3)) a(x) → {3,3}
+#SELECT max(array[x,x]) FROM (VALUES ('a'),('b'),('c')) a(x) → {"c","c"}
+#SELECT max(array[x,x]::date[]) FROM (VALUES ('2001-01-01'),('2001-02-03'),('2002-01-01')) a(x) → {"2002-01-01","2002-01-01"}
+#SELECT max(array[x,x]::timestamp[]) FROM (VALUES ('2001-01-01 23:05:04'),('2001-01-01 23:06:03'),('2001-01-01 23:59:00')) a(x) → {"2001-01-01 23:59:00","2001-01-01 23:59:00"}
+#SELECT max(array[x,x]::time[]) FROM (VALUES ('10:00:05'),('11:00:01'),('12:50:00')) a(x) → {"12:50:00","12:50:00"}
+#SELECT max(array[x,x]) FROM (VALUES (interval '1' day),(interval '2' day),(interval '3' day)) a(x) → {"3 days","3 days"}
+```||
+||min ( see text ) → same as input type|
+Computes the minimum of the non-null input values. Available for any numeric, string, date/time, or enum type, as well as inet, interval, money, oid, pg_lsn, tid, and arrays of any of these types. (Arrays aren't supported)|
+Yes|
+```sql
+SELECT min(x::smallint) FROM (VALUES (1),(2),(3)) a(x) → 1
+SELECT min(x::integer) FROM (VALUES (1),(2),(3)) a(x) → 1
+SELECT min(x::bigint) FROM (VALUES (1),(2),(3)) a(x) → 1
+SELECT min(x::real) FROM (VALUES (1),(2),(3)) a(x) → 1
+SELECT min(x::double precision) FROM (VALUES (1),(2),(3)) a(x) → 1
+SELECT min(x::numeric) FROM (VALUES (1),(2),(3)) a(x) → 1
+SELECT min(x) FROM (VALUES ('a'),('b'),('c')) a(x) → 'a'
+SELECT min(x::date) FROM (VALUES ('2001-01-01'),('2001-02-03'),('2002-01-01')) a(x) → 2001-01-01
+SELECT min(x::timestamp) FROM (VALUES ('2001-01-01 23:05:04'),('2001-01-01 23:06:03'),('2001-01-01 23:59:00')) a(x) → 2001-01-01 23:05:04
+SELECT min(x::time) FROM (VALUES ('10:00:05'),('11:00:01'),('12:50:00')) a(x) → 10:00:05
+SELECT min(x) FROM (VALUES (interval '1' day),(interval '2' day),(interval '3' day)) a(x) → 1 day
+
+#SELECT min(array[x,x]::smallint[]) FROM (VALUES (1),(2),(3)) a(x) → {1,1}
+#SELECT min(array[x,x]::integer[]) FROM (VALUES (1),(2),(3)) a(x) → {1,1}
+#SELECT min(array[x,x]::bigint[]) FROM (VALUES (1),(2),(3)) a(x) → {1,1}
+#SELECT min(array[x,x]::real[]) FROM (VALUES (1),(2),(3)) a(x) → {1.0,1.0}
+#SELECT min(array[x,x]::double precision[]) FROM (VALUES (1),(2),(3)) a(x) → {1.0,1.0}
+#SELECT min(array[x,x]::numeric[]) FROM (VALUES (1),(2),(3)) a(x) → {1,1}
+#SELECT min(array[x,x]) FROM (VALUES ('a'),('b'),('c')) a(x) → {"a","a"}
+#SELECT min(array[x,x]::date[]) FROM (VALUES ('2001-01-01'),('2001-02-03'),('2002-01-01')) a(x) → {"2001-01-01","2001-01-01"}
+#SELECT min(array[x,x]::timestamp[]) FROM (VALUES ('2001-01-01 23:05:04'),('2001-01-01 23:06:03'),('2001-01-01 23:59:00')) a(x) → {"2001-01-01 23:05:04","2001-01-01 23:05:04"}
+#SELECT min(array[x,x]::time[]) FROM (VALUES ('10:00:05'),('11:00:01'),('12:50:00')) a(x) → {"10:00:05","10:00:05"}
+#SELECT min(array[x,x]) FROM (VALUES (interval '1' day),(interval '2' day),(interval '3' day)) a(x) → {"1 day","1 day"}
+```||
+||range_agg ( value anyrange ) → anymultirange|
+Computes the union of the non-null input values. (NOT SUPPORTED)|
+No|
+||
+||range_intersect_agg ( value anyrange ) → anyrange  
+range_intersect_agg ( value anymultirange ) → anymultirange|
+Computes the intersection of the non-null input values. (NOT SUPPORTED)|
+No|
+||
+||string_agg ( value text, delimiter text ) → text  
+string_agg ( value bytea, delimiter bytea ) → bytea|
+Concatenates the non-null input values into a string. Each value after the first is preceded by the corresponding delimiter (if it's not null).|
+No|
+```sql
+SELECT string_agg(x,'') FROM (VALUES ('a'),('b'),('c')) a(x) → abc
+SELECT string_agg(x::bytea,','::bytea) FROM (VALUES ('a'),('b'),('c')) a(x) → a,b,c
+```||
+||sum ( smallint ) → bigint  
+sum ( integer ) → bigint  
+sum ( bigint ) → numeric  
+sum ( numeric ) → numeric  
+sum ( real ) → real  
+sum ( double precision ) → double precision  
+sum ( interval ) → interval  
+sum ( money ) → money|
+Computes the sum of the non-null input values.|
+Yes|
+```sql
+SELECT sum(x::smallint) FROM (VALUES (1),(2),(3)) a(x) → 6
+SELECT sum(x::integer) FROM (VALUES (1),(2),(3)) a(x) → 6
+SELECT sum(x::bigint) FROM (VALUES (1),(2),(3)) a(x) → 6
+SELECT sum(x::real) FROM (VALUES (1),(2),(3)) a(x) → 6
+SELECT sum(x::double precision) FROM (VALUES (1),(2),(3)) a(x) → 6
+SELECT sum(x::numeric) FROM (VALUES (1),(2),(3)) a(x) → 6
+SELECT sum(x) FROM (VALUES (interval '1' day),(interval '2' day),(interval '3' day)) a(x) → 6 days
+```||
+||xmlagg ( xml ) → xml|
+Concatenates the non-null XML input values (see Section 9.15.1.7).|
+No|
+||
+|#
+
+It should be noted that except for count, these functions return a null value when no rows are selected. In particular, sum of no rows returns null, not zero as one might expect, and array_agg returns null rather than an empty array when there are no input rows. The coalesce function can be used to substitute zero or an empty array for null when necessary.
+
+The aggregate functions array_agg, json_agg, jsonb_agg, json_object_agg, jsonb_object_agg, string_agg, and xmlagg, as well as similar user-defined aggregate functions, produce meaningfully different result values depending on the order of the input values. This ordering is unspecified by default, but can be controlled by writing an ORDER BY clause within the aggregate call, as shown in Section 4.2.7. Alternatively, supplying the input values from a sorted subquery will usually work. For example:
+
+```sql
+SELECT xmlagg(x) FROM (SELECT x FROM test ORDER BY y DESC) AS tab;
+```
+
+Beware that this approach can fail if the outer query level contains additional processing, such as a join, because that might cause the subquery's output to be reordered before the aggregate is computed.
+
+Note
+The boolean aggregates bool_and and bool_or correspond to the standard SQL aggregates every and any or some. PostgreSQL supports every, but not any or some, because there is an ambiguity built into the standard syntax:
+
+```sql
+SELECT b1 = ANY((SELECT b2 FROM t2 ...)) FROM t1 ...;
+```
+
+Here ANY can be considered either as introducing a subquery, or as being an aggregate function, if the subquery returns one row with a Boolean value. Thus the standard name cannot be given to these aggregates.
+
+Note
+Users accustomed to working with other SQL database management systems might be disappointed by the performance of the count aggregate when it is applied to the entire table. A query like:
+
+SELECT count(*) FROM sometable;
+will require effort proportional to the size of the table: PostgreSQL will need to scan either the entire table or the entirety of an index that includes all rows in the table.
+
+Table 9.58 shows aggregate functions typically used in statistical analysis. (These are separated out merely to avoid cluttering the listing of more-commonly-used aggregates.) Functions shown as accepting numeric_type are available for all the types smallint, integer, bigint, numeric, real, and double precision. Where the description mentions N, it means the number of input rows for which all the input expressions are non-null. In all cases, null is returned if the computation is meaningless, for example when N is zero.
+
+Table 9.58. Aggregate Functions for Statistics
+
+#|
+||Function|Description|Partial Mode|Examples||
+||corr ( Y double precision, X double precision ) → double precision|
+Computes the correlation coefficient.|
+Yes|
+```sql
+SELECT corr(x,y) FROM (VALUES (1,2),(2,3),(3,1)) a(x,y) → -0.5
+```||
+||covar_pop ( Y double precision, X double precision ) → double precision|
+Computes the population covariance.|
+Yes|
+```sql
+SELECT covar_pop(x,y) FROM (VALUES (1,2),(2,3),(3,1)) a(x,y) → -0.3333333333333333
+```||
+||covar_samp ( Y double precision, X double precision ) → double precision|
+Computes the sample covariance.|
+Yes|
+```sql
+SELECT covar_samp(x,y) FROM (VALUES (1,2),(2,3),(3,1)) a(x,y) → -0.5
+```||
+||regr_avgx ( Y double precision, X double precision ) → double precision|
+Computes the average of the independent variable, sum(X)/N.|
+Yes|
+```sql
+SELECT regr_avgx(x,y) FROM (VALUES (1,2),(2,3),(3,1)) a(x,y) → 2
+```||
+||regr_avgy ( Y double precision, X double precision ) → double precision|
+Computes the average of the dependent variable, sum(Y)/N.|
+Yes|
+```sql
+SELECT regr_avgy(x,y) FROM (VALUES (1,2),(2,3),(3,1)) a(x,y) → 2
+```||
+||regr_count ( Y double precision, X double precision ) → bigint|
+Computes the number of rows in which both inputs are non-null.|
+Yes|
+```sql
+SELECT regr_count(x,y) FROM (VALUES (1,2),(2,3),(3,1)) a(x,y) → 3
+```||
+||regr_intercept ( Y double precision, X double precision ) → double precision|
+Computes the y-intercept of the least-squares-fit linear equation determined by the (X, Y) pairs.|
+Yes|
+```sql
+SELECT regr_intercept(x,y) FROM (VALUES (1,2),(2,3),(3,1)) a(x,y) → 3
+```||
+||regr_r2 ( Y double precision, X double precision ) → double precision|
+Computes the square of the correlation coefficient.|
+Yes|
+```sql
+SELECT regr_r2(x,y) FROM (VALUES (1,2),(2,3),(3,1)) a(x,y) → 0.25
+```||
+||regr_slope ( Y double precision, X double precision ) → double precision|
+Computes the slope of the least-squares-fit linear equation determined by the (X, Y) pairs.|
+Yes|
+```sql
+SELECT regr_slope(x,y) FROM (VALUES (1,2),(2,3),(3,1)) a(x,y) → -0.5
+```||
+||regr_sxx ( Y double precision, X double precision ) → double precision|
+Computes the “sum of squares” of the independent variable, sum(X^2) - sum(X)^2/N.|
+Yes|
+```sql
+SELECT regr_sxx(x,y) FROM (VALUES (1,2),(2,3),(3,1)) a(x,y) → 2
+```||
+||regr_sxy ( Y double precision, X double precision ) → double precision|
+Computes the “sum of products” of independent times dependent variables, sum(X*Y) - sum(X) * sum(Y)/N.|
+Yes|
+```sql
+SELECT regr_sxy(x,y) FROM (VALUES (1,2),(2,3),(3,1)) a(x,y) → -1
+```||
+||regr_syy ( Y double precision, X double precision ) → double precision|
+Computes the “sum of squares” of the dependent variable, sum(Y^2) - sum(Y)^2/N.|
+Yes|
+```sql
+SELECT regr_syy(x,y) FROM (VALUES (1,2),(2,3),(3,1)) a(x,y) → 2
+```||
+||stddev ( numeric_type ) → double precision for real or double precision, otherwise numeric|
+This is a historical alias for stddev_samp.|
+Yes|
+```sql
+SELECT stddev(x) FROM (VALUES (1),(2),(3)) a(x) → 1.00000000000000000000
+```||
+||stddev_pop ( numeric_type ) → double precision for real or double precision, otherwise numeric|
+Computes the population standard deviation of the input values.|
+Yes|
+```sql
+SELECT stddev_pop(x) FROM (VALUES (1),(2),(3)) a(x) → 0.81649658092772603273
+```||
+||stddev_samp ( numeric_type ) → double precision for real or double precision, otherwise numeric|
+Computes the sample standard deviation of the input values.|
+Yes|
+```sql
+SELECT stddev_samp(x) FROM (VALUES (1),(2),(3)) a(x) → 1.00000000000000000000
+```||
+||variance ( numeric_type ) → double precision for real or double precision, otherwise numeric|
+This is a historical alias for var_samp.|
+Yes|
+```sql
+SELECT variance(x) FROM (VALUES (1),(2),(3)) a(x) → 1.00000000000000000000
+```||
+||var_pop ( numeric_type ) → double precision for real or double precision, otherwise numeric|
+Computes the population variance of the input values (square of the population standard deviation).|
+Yes|
+```sql
+SELECT var_pop(x) FROM (VALUES (1),(2),(3)) a(x) → 0.66666666666666666667
+```||
+||var_samp ( numeric_type ) → double precision for real or double precision, otherwise numeric|
+Computes the sample variance of the input values (square of the sample standard deviation).|
+Yes|
+```sql
+SELECT var_samp(x) FROM (VALUES (1),(2),(3)) a(x) → 1.00000000000000000000
+```||
+|#
+
+Table 9.59 shows some aggregate functions that use the ordered-set aggregate syntax. These functions are sometimes referred to as “inverse distribution” functions. Their aggregated input is introduced by ORDER BY, and they may also take a direct argument that is not aggregated, but is computed only once. All these functions ignore null values in their aggregated input. For those that take a fraction parameter, the fraction value must be between 0 and 1; an error is thrown if not. However, a null fraction value simply produces a null result.
+
+Table 9.59. Ordered-Set Aggregate Functions (NOT SUPPORTED)
+
+#|
+||Function|Description|Partial Mode||
+||mode () WITHIN GROUP ( ORDER BY anyelement ) → anyelement|
+Computes the mode, the most frequent value of the aggregated argument (arbitrarily choosing the first one if there are multiple equally-frequent values). The aggregated argument must be of a sortable type.|
+No||
+||percentile_cont ( fraction double precision ) WITHIN GROUP ( ORDER BY double precision ) → double precision  
+percentile_cont ( fraction double precision ) WITHIN GROUP ( ORDER BY interval ) → interval|
+Computes the continuous percentile, a value corresponding to the specified fraction within the ordered set of aggregated argument values. This will interpolate between adjacent input items if needed.|
+No||
+||percentile_cont ( fractions double precision[] ) WITHIN GROUP ( ORDER BY double precision ) → double precision[]  
+percentile_cont ( fractions double precision[] ) WITHIN GROUP ( ORDER BY interval ) → interval[]|
+Computes multiple continuous percentiles. The result is an array of the same dimensions as the fractions parameter, with each non-null element replaced by the (possibly interpolated) value corresponding to that percentile.|
+No||
+||percentile_disc ( fraction double precision ) WITHIN GROUP ( ORDER BY anyelement ) → anyelement|
+Computes the discrete percentile, the first value within the ordered set of aggregated argument values whose position in the ordering equals or exceeds the specified fraction. The aggregated argument must be of a sortable type.|
+No||
+||percentile_disc ( fractions double precision[] ) WITHIN GROUP ( ORDER BY anyelement ) → anyarray|
+Computes multiple discrete percentiles. The result is an array of the same dimensions as the fractions parameter, with each non-null element replaced by the input value corresponding to that percentile. The aggregated argument must be of a sortable type.|
+No||
+|#
+
+Each of the “hypothetical-set” aggregates listed in Table 9.60 is associated with a window function of the same name defined in Section 9.22. In each case, the aggregate's result is the value that the associated window function would have returned for the “hypothetical” row constructed from args, if such a row had been added to the sorted group of rows represented by the sorted_args. For each of these functions, the list of direct arguments given in args must match the number and types of the aggregated arguments given in sorted_args. Unlike most built-in aggregates, these aggregates are not strict, that is they do not drop input rows containing nulls. Null values sort according to the rule specified in the ORDER BY clause.
+
+Table 9.60. Hypothetical-Set Aggregate Functions (NOT SUPPORTED)
+
+#|
+||Function|Description|Partial Mode||
+||rank ( args ) WITHIN GROUP ( ORDER BY sorted_args ) → bigint|
+Computes the rank of the hypothetical row, with gaps; that is, the row number of the first row in its peer group.|
+No||
+||dense_rank ( args ) WITHIN GROUP ( ORDER BY sorted_args ) → bigint|
+Computes the rank of the hypothetical row, without gaps; this function effectively counts peer groups.|
+No||
+||percent_rank ( args ) WITHIN GROUP ( ORDER BY sorted_args ) → double precision|
+Computes the relative rank of the hypothetical row, that is (rank - 1) / (total rows - 1). The value thus ranges from 0 to 1 inclusive.|
+No||
+||cume_dist ( args ) WITHIN GROUP ( ORDER BY sorted_args ) → double precision|
+Computes the cumulative distribution, that is (number of rows preceding or peers with hypothetical row) / (total rows). The value thus ranges from 1/N to 1.|
+No||
+|#
+
+Table 9.61. Grouping Operations
+
+#|
+||Function|Description||
+||GROUPING ( group_by_expression(s) ) → integer|
+Returns a bit mask indicating which GROUP BY expressions are not included in the current grouping set. Bits are assigned with the rightmost argument corresponding to the least-significant bit; each bit is 0 if the corresponding expression is included in the grouping criteria of the grouping set generating the current result row, and 1 if it is not included. (NOT SUPPORTED)||
+|#
+
+The grouping operations shown in Table 9.61 are used in conjunction with grouping sets (see Section 7.2.4) to distinguish result rows. The arguments to the GROUPING function are not actually evaluated, but they must exactly match expressions given in the GROUP BY clause of the associated query level. For example:
+
+```sql
+=> SELECT * FROM items_sold;
+ make  | model | sales
+-------+-------+-------
+ Foo   | GT    |  10
+ Foo   | Tour  |  20
+ Bar   | City  |  15
+ Bar   | Sport |  5
+(4 rows)
+
+=> SELECT make, model, GROUPING(make,model), sum(sales) FROM items_sold GROUP BY ROLLUP(make,model);
+ make  | model | grouping | sum
+-------+-------+----------+-----
+ Foo   | GT    |        0 | 10
+ Foo   | Tour  |        0 | 20
+ Bar   | City  |        0 | 15
+ Bar   | Sport |        0 | 5
+ Foo   |       |        1 | 30
+ Bar   |       |        1 | 20
+       |       |        3 | 50
+(7 rows)
+```
+
+Here, the grouping value 0 in the first four rows shows that those have been grouped normally, over both the grouping columns. The value 1 indicates that model was not grouped by in the next-to-last two rows, and the value 3 indicates that neither make nor model was grouped by in the last row (which therefore is an aggregate over all the input rows).

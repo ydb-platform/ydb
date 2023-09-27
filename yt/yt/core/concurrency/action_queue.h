@@ -92,14 +92,6 @@ ISuspendableInvokerPtr CreateSuspendableInvoker(IInvokerPtr underlyingInvoker);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Creates an invoker that runs each callback within a memory context defined by a
-//! given memory tag. Every allocation performed by a callback will be properly tagged.
-IInvokerPtr CreateMemoryTaggingInvoker(
-    IInvokerPtr underlyingInvoker,
-    TMemoryTag memoryTag);
-
-////////////////////////////////////////////////////////////////////////////////
-
 //! Creates an invoker that creates a codicil guard with a given string before each
 //! callback invocation.
 IInvokerPtr CreateCodicilGuardedInvoker(

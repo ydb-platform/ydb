@@ -11,10 +11,17 @@ namespace {
 
 using namespace NTracing;
 using namespace NConcurrency;
+using namespace NYTProf;
 
 ////////////////////////////////////////////////////////////////////////////////
 
 #if !defined(_asan_enabled_) && !defined(_msan_enabled_) && defined(_linux_)
+
+////////////////////////////////////////////////////////////////////////////////
+
+constexpr auto MemoryAllocationTag = "memory_tag";
+
+////////////////////////////////////////////////////////////////////////////////
 
 template <class TImpl>
 using TRpcTest = TTestBase<TImpl>;
@@ -25,9 +32,9 @@ TYPED_TEST(TRpcTest, ResponseWithAllocationTags)
     static TMemoryTag testMemoryTag = 1 << 20;
     testMemoryTag++;
 
-    NYTProf::EnableMemoryProfilingTags();
+    EnableMemoryProfilingTags();
 
-    auto initialMemoryUsage = NYTProf::GetEstimatedMemoryUsage()[testMemoryTag];
+    auto initialMemoryUsage = CollectMemoryUsageSnapshot()->GetUsage(MemoryAllocationTag, ToString(testMemoryTag));
 
     auto actionQueue = New<TActionQueue>();
 
@@ -41,7 +48,7 @@ TYPED_TEST(TRpcTest, ResponseWithAllocationTags)
     for (int i = 0; i < numberOfLoops; ++i) {
         auto context = CreateTraceContextFromCurrent("ResponseWithAllocationTags");
         auto contextGuard = TTraceContextGuard(context);
-        context->SetAllocationTag(MemoryTagLiteral, testMemoryTag);
+        context->SetAllocationTag(MemoryAllocationTag, testMemoryTag);
 
         auto req1 = proxy.AllocationCall();
         req1->set_size(size);
@@ -61,21 +68,21 @@ TYPED_TEST(TRpcTest, ResponseWithAllocationTags)
                 auto localContext = TryGetCurrentTraceContext();
                 EXPECT_NE(localContext, nullptr);
                 if (localContext) {
-                    EXPECT_EQ(localContext->FindAllocationTag<TMemoryTag>(MemoryTagLiteral).value_or(NullMemoryTag), testMemoryTag);
+                    EXPECT_EQ(localContext->FindAllocationTag<TMemoryTag>(MemoryAllocationTag).value_or(NullMemoryTag), testMemoryTag);
                 }
                 return res;
             }).AsyncVia(actionQueue->GetInvoker()));
         responses.push_back(rspFutureProp);
     }
 
-    auto memoryUsageBefore = NYTProf::GetEstimatedMemoryUsage()[testMemoryTag];
+    auto memoryUsageBefore = CollectMemoryUsageSnapshot()->GetUsage(MemoryAllocationTag, ToString(testMemoryTag));
     EXPECT_LE(memoryUsageBefore, numberOfLoops * 1536_KB);
 
     for (const auto& rsp : responses) {
         WaitFor(rsp).ValueOrThrow();
     }
 
-    auto memoryUsageAfter = NYTProf::GetEstimatedMemoryUsage()[testMemoryTag];
+    auto memoryUsageAfter = CollectMemoryUsageSnapshot()->GetUsage(MemoryAllocationTag, ToString(testMemoryTag));
     auto deltaMemoryUsage = memoryUsageAfter - initialMemoryUsage - memoryUsageBefore;
     EXPECT_GE(deltaMemoryUsage, numberOfLoops * size * 6 / 5)
         << "InitialUsage: " << initialMemoryUsage << std::endl

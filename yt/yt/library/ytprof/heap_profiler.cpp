@@ -2,22 +2,22 @@
 
 #include "symbolize.h"
 
-#include <library/cpp/yt/memory/leaky_singleton.h>
-
-#include <library/cpp/yt/threading/spin_lock.h>
-
 #include <library/cpp/yt/backtrace/cursors/libunwind/libunwind_cursor.h>
+
+#include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
+#include <library/cpp/yt/memory/leaky_singleton.h>
+#include <library/cpp/yt/memory/new.h>
+
+#include <library/cpp/yt/threading/rw_spin_lock.h>
 
 #include <util/generic/hash_set.h>
 #include <util/string/join.h>
 
 #include <tcmalloc/malloc_extension.h>
 
+#include <thread>
+
 namespace NYT {
-
-////////////////////////////////////////////////////////////////////////////////
-
-using namespace NTracing;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -54,12 +54,9 @@ Y_WEAK void StartAllocationTagsCleanupThread(TDuration /*cleanupInterval*/)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT
-
-namespace NYT::NYTProf {
+namespace NYTProf {
 
 using namespace NThreading;
-using namespace NTracing;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -159,49 +156,61 @@ NProto::Profile ReadHeapProfile(tcmalloc::ProfileType profileType)
     return ConvertAllocationProfile(snapshot);
 }
 
-THashMap<TMemoryTag, ui64> GetEstimatedMemoryUsage()
+TMemoryUsageSnapshot::TMemoryUsageSnapshot(TMemoryUsageSnapshot::TData&& data) noexcept
+    : Data_(std::move(data))
+{ }
+
+const THashMap<TString, size_t>& TMemoryUsageSnapshot::GetUsage(const TString& tagName) const noexcept
 {
-    THashMap<TMemoryTag, ui64> usage;
+    if (auto it = Data_.find(tagName)) {
+        return it->second;
+    }
+
+    return EmptyHashMap_;
+}
+
+size_t TMemoryUsageSnapshot::GetUsage(const TString& tagName, const TString& tag) const noexcept
+{
+    if (auto it = Data_.find(tagName)) {
+        if (auto usageIt = it->second.find(tag)) {
+            return usageIt->second;
+        }
+    }
+
+    return 0;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TMemoryUsageSnapshotStorage
+{
+    TAtomicIntrusivePtr<TMemoryUsageSnapshot> Snapshot{New<TMemoryUsageSnapshot>()};
+};
+
+TMemoryUsageSnapshotPtr CollectMemoryUsageSnapshot()
+{
+    TMemoryUsageSnapshot::TData usage;
 
     auto snapshot = tcmalloc::MallocExtension::SnapshotCurrent(tcmalloc::ProfileType::kHeap);
     snapshot.Iterate([&] (const tcmalloc::Profile::Sample& sample) {
-        auto maybeMemoryTagStr = FindTagValue(
-            ReadAllocationTagsData(sample.user_data),
-            MemoryTagLiteral);
-
-        if (maybeMemoryTagStr) {
-            auto memoryTag = FromString<TMemoryTag>(maybeMemoryTagStr.value());
-            if (memoryTag != NullMemoryTag) {
-                usage[memoryTag] += sample.sum;
-            }
+        for (const auto& [tagName, tag] : ReadAllocationTagsData(sample.user_data)) {
+            usage[tagName][tag] += sample.sum;
         }
     });
 
-    return usage;
+    return New<TMemoryUsageSnapshot>(std::move(usage));
 }
 
-struct TMemoryUsageSnapshot
+void UpdateMemoryUsageSnapshot(TMemoryUsageSnapshotPtr usageSnapshot)
 {
-    TSpinLock Lock;
-    THashMap<TMemoryTag, ui64> Snapshot;
-};
-
-void UpdateMemoryUsageSnapshot(THashMap<TMemoryTag, ui64> usageSnapshot)
-{
-    auto snapshot = LeakySingleton<TMemoryUsageSnapshot>();
-    auto guard = Guard(snapshot->Lock);
-    snapshot->Snapshot = std::move(usageSnapshot);
+    auto snapshot = LeakySingleton<TMemoryUsageSnapshotStorage>();
+    snapshot->Snapshot.Store(std::move(usageSnapshot));
 }
 
-i64 GetEstimatedMemoryUsage(TMemoryTag tag)
+TMemoryUsageSnapshotPtr GetMemoryUsageSnapshot()
 {
-    auto snapshot = LeakySingleton<TMemoryUsageSnapshot>();
-    auto guard = Guard(snapshot->Lock);
-    auto it = snapshot->Snapshot.find(tag);
-    if (it != snapshot->Snapshot.end()) {
-        return it->second;
-    }
-    return 0;
+    const auto snapshot = LeakySingleton<TMemoryUsageSnapshotStorage>();
+    return snapshot->Snapshot.Acquire();
 }
 
 int AbslStackUnwinder(
@@ -233,15 +242,34 @@ int AbslStackUnwinder(
     return count;
 }
 
-void EnableMemoryProfilingTags()
+void EnableMemoryProfilingTags(std::optional<TDuration> updateSnapshotPeriod)
 {
     StartAllocationTagsCleanupThread(TDuration::Seconds(1));
     tcmalloc::MallocExtension::SetSampleUserDataCallbacks(
         &CreateAllocationTagsData,
         &CopyAllocationTagsData,
         &DestroyAllocationTagsData);
+
+    if (updateSnapshotPeriod) {
+        std::thread backgroundThread([updateSnapshotPeriod] {
+            TInstant lastUpdateTime;
+            TInstant currentTime;
+
+            while (true) {
+                lastUpdateTime = Now();
+                UpdateMemoryUsageSnapshot(CollectMemoryUsageSnapshot());
+
+                currentTime = Now();
+                if (lastUpdateTime + updateSnapshotPeriod.value() > currentTime) {
+                    Sleep(lastUpdateTime + updateSnapshotPeriod.value() - currentTime);
+                }
+            }
+        });
+        backgroundThread.detach();
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NYTProf
+} // namespace NYTProf
+} // namespace NYT

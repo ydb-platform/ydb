@@ -1,8 +1,10 @@
 #pragma once
 
+#include "public.h"
+
 #include <yt/yt/library/ytprof/profile.pb.h>
 
-#include <yt/yt/core/tracing/public.h>
+#include <util/datetime/base.h>
 
 #include <util/generic/hash.h>
 
@@ -21,15 +23,43 @@ int AbslStackUnwinder(void** frames, int*,
                       const void*,
                       int*);
 
-using TMemoryTag = uintptr_t;
+////////////////////////////////////////////////////////////////////////////////
 
-THashMap<TMemoryTag, ui64> GetEstimatedMemoryUsage();
+class TMemoryUsageSnapshot
+    : public virtual TRefCounted
+{
+public:
+    using TData = THashMap<TString, THashMap<TString, size_t>>;
 
-void UpdateMemoryUsageSnapshot(THashMap<TMemoryTag, ui64> usageSnapshot);
+    TMemoryUsageSnapshot() = default;
 
-i64 GetEstimatedMemoryUsage(TMemoryTag tag);
+    TMemoryUsageSnapshot(TMemoryUsageSnapshot&& other) noexcept = default;
 
-void EnableMemoryProfilingTags();
+    explicit TMemoryUsageSnapshot(TData&& data) noexcept;
+
+    const THashMap<TString, size_t>& GetUsage(const TString& tagName) const noexcept;
+
+    size_t GetUsage(const TString& tagName, const TString& tag) const noexcept;
+
+private:
+    const TData Data_;
+    static inline const THashMap<TString, size_t> EmptyHashMap_;
+};
+
+DEFINE_REFCOUNTED_TYPE(TMemoryUsageSnapshot)
+
+////////////////////////////////////////////////////////////////////////////////
+
+TMemoryUsageSnapshotPtr CollectMemoryUsageSnapshot();
+
+//! Update snapshot in LeakySingleton.
+void UpdateMemoryUsageSnapshot(TMemoryUsageSnapshotPtr usageSnapshot);
+
+//! Get snapshot from LeakySingleton.
+TMemoryUsageSnapshotPtr GetMemoryUsageSnapshot();
+
+//! If put updateSnapshotPeriod will start updating snapshot in LeakySingleton.
+void EnableMemoryProfilingTags(std::optional<TDuration> updateSnapshotPeriod = std::nullopt);
 
 ////////////////////////////////////////////////////////////////////////////////
 

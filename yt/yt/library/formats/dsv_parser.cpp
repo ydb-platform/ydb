@@ -229,7 +229,7 @@ std::unique_ptr<IParser> CreateParserForDsv(
     TDsvFormatConfigPtr config,
     bool wrapWithMap)
 {
-    return std::unique_ptr<IParser>(new TDsvParser(consumer, config, wrapWithMap));
+    return std::make_unique<TDsvParser>(consumer, config, wrapWithMap);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

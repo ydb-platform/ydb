@@ -12,6 +12,10 @@
 
 #include <arrow/compute/exec_internal.h>
 
+extern "C" uint64_t GetBlockCount(const NYql::NUdf::TUnboxedValuePod data) {
+    return NKikimr::NMiniKQL::TArrowBlock::From(data).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+}
+
 namespace NKikimr::NMiniKQL {
 
 namespace {

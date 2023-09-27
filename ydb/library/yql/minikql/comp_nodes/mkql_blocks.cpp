@@ -18,10 +18,6 @@
 #include <arrow/array.h>
 #include <arrow/datum.h>
 
-extern "C" size_t GetCount(const NYql::NUdf::TUnboxedValuePod data) {
-    return NKikimr::NMiniKQL::TArrowBlock::From(data).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
-}
-
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -173,7 +169,6 @@ public:
         const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
         const auto countPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetCount() }, "count_ptr", block);
-
 
         BranchInst::Create(loop, block);
 
@@ -540,7 +535,7 @@ public:
                 return result;
 
             s.Index_ = 0;
-            s.Count_ = GetCount(s.Values_.back());
+            s.Count_ = GetBlockCount(s.Values_.back());
         } while (!s.Count_);
 
         s.Current_ = s.Index_;
@@ -573,8 +568,8 @@ public:
         const auto stateOnStack = new AllocaInst(statePtrType, 0U, "state_on_stack", &ctx.Func->getEntryBlock().back());
         new StoreInst(ConstantPointerNull::get(statePtrType), stateOnStack, &ctx.Func->getEntryBlock().back());
 
-        const auto name = "GetCount";
-        ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&GetCount));
+        const auto name = "GetBlockCount";
+        ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&GetBlockCount));
         const auto getCountType = NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget() ?
             FunctionType::get(indexType, { valueType }, false):
             FunctionType::get(indexType, { ptrValueType }, false);
@@ -1007,7 +1002,7 @@ public:
         const auto statusType = Type::getInt32Ty(context);
         const auto indexType = Type::getInt64Ty(context);
         const auto arrayType = ArrayType::get(valueType, Width_);
-        const auto ptrValuesType = PointerType::getUnqual(ArrayType::get(valueType, Width_));
+        const auto ptrValuesType = PointerType::getUnqual(arrayType);
 
         TLLVMFieldsStructureState stateFields(context, Width_);
         const auto stateType = StructType::get(context, stateFields.GetFieldsArray());
@@ -1025,8 +1020,8 @@ public:
         new StoreInst(ConstantInt::get(indexType, 0), heightPtr, atTop);
         new StoreInst(ConstantPointerNull::get(statePtrType), stateOnStack, atTop);
 
-        const auto name = "GetCount";
-        ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&GetCount));
+        const auto name = "GetBlockCount";
+        ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&GetBlockCount));
         const auto getCountType = NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget() ?
             FunctionType::get(indexType, { valueType }, false):
             FunctionType::get(indexType, { ptrValueType }, false);

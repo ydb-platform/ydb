@@ -11,6 +11,8 @@
 #include <arrow/datum.h>
 #include <arrow/compute/kernel.h>
 
+extern "C" uint64_t GetBlockCount(const NYql::NUdf::TUnboxedValuePod data);
+
 namespace NKikimr::NMiniKQL {
 
 arrow::Datum ConvertScalar(TType* type, const NUdf::TUnboxedValuePod& value, arrow::MemoryPool& pool);

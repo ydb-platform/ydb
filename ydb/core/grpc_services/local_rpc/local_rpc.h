@@ -179,7 +179,7 @@ public:
         Y_FAIL("Unimplemented for local rpc");
     }
 
-    void FinishStream() override {
+    void FinishStream(ui32) override {
         Y_FAIL("Unimplemented for local rpc");
     }
 

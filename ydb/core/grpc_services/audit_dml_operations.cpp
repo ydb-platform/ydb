@@ -1,4 +1,6 @@
 #include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/public/api/protos/ydb_scripting.pb.h>
+#include <ydb/public/api/protos/ydb_query.pb.h>
 
 #include "base/base.h"
 
@@ -17,6 +19,22 @@ namespace {
             while (SubstGlobal(text, "  ", " ") > 0) {}
         }
         return CollapseInPlace(StripInPlace(text), MAX_QUERY_TEXT_LEN);
+    }
+
+    template <class TxControl>
+    void AddAuditLogTxControlPart(NKikimr::NGRpcService::IRequestCtx* ctx, const TxControl& tx_control)
+    {
+        switch (tx_control.tx_selector_case()) {
+            case TxControl::kTxId:
+                ctx->AddAuditLogPart("tx_id", tx_control.tx_id());
+                break;
+            case TxControl::kBeginTx:
+                ctx->AddAuditLogPart("begin_tx", "1");
+                break;
+            case TxControl::TX_SELECTOR_NOT_SET:
+                break;
+        }
+        ctx->AddAuditLogPart("commit_tx", ToString(tx_control.commit_tx()));
     }
 }
 
@@ -38,7 +56,7 @@ void AuditContextEnd(IRequestCtxBase* ctx) {
 //
 template <>
 void AuditContextAppend(IRequestCtx* ctx, const Ydb::Table::ExecuteDataQueryRequest& request) {
-    // yql_text or prepared_query_id
+    // query_text or prepared_query_id
     {
         auto query = request.query();
         if (query.has_yql_text()) {
@@ -49,20 +67,7 @@ void AuditContextAppend(IRequestCtx* ctx, const Ydb::Table::ExecuteDataQueryRequ
     }
     // tx_id, explicit
     // begin_tx, commit_tx flags
-    {
-        auto tx_control = request.tx_control();
-        switch (tx_control.tx_selector_case()) {
-            case Ydb::Table::TransactionControl::kTxId:
-                ctx->AddAuditLogPart("tx_id", tx_control.tx_id());
-                break;
-            case Ydb::Table::TransactionControl::kBeginTx:
-                ctx->AddAuditLogPart("begin_tx", "1");
-                break;
-            case Ydb::Table::TransactionControl::TX_SELECTOR_NOT_SET:
-                break;
-        }
-        ctx->AddAuditLogPart("commit_tx", ToString(tx_control.commit_tx()));
-    }
+    AddAuditLogTxControlPart(ctx, request.tx_control());
 }
 template <>
 void AuditContextAppend(IRequestCtx* ctx, const Ydb::Table::ExecuteDataQueryRequest& request, const Ydb::Table::ExecuteQueryResult& result) {
@@ -70,7 +75,7 @@ void AuditContextAppend(IRequestCtx* ctx, const Ydb::Table::ExecuteDataQueryRequ
     if (request.tx_control().tx_selector_case() == Ydb::Table::TransactionControl::kBeginTx) {
         ctx->AddAuditLogPart("tx_id", result.tx_meta().id());
     }
-    // log updated_row_count from ExecuteQueryResult.query_stats?
+    // log updated_row_count collected from ExecuteQueryResult.query_stats?
 }
 
 // PrepareDataQuery
@@ -99,7 +104,7 @@ template <>
 void AuditContextAppend(IRequestCtx* ctx, const Ydb::Table::CommitTransactionRequest& request) {
     ctx->AddAuditLogPart("tx_id", request.tx_id());
 }
-// log updated_row_count by CommitTransactionResult.query_stats?
+// log updated_row_count collected from CommitTransactionResult.query_stats?
 
 // RollbackTransaction
 //
@@ -118,5 +123,46 @@ void AuditContextAppend(IRequestCtx* ctx, const Ydb::Table::BulkUpsertRequest& r
     // see rpc_load_rows.cpp
     ctx->AddAuditLogPart("row_count", ToString(request.rows().value().items_size()));
 }
+
+// ExecuteYqlScript, StreamExecuteYqlScript
+//
+template <>
+void AuditContextAppend(IRequestCtx* ctx, const Ydb::Scripting::ExecuteYqlRequest& request) {
+    ctx->AddAuditLogPart("query_text", PrepareText(request.script()));
+}
+// log updated_row_count collected from ExecuteYqlResult.query_stats?
+
+// ExecuteQuery
+//
+template <>
+void AuditContextAppend(IRequestCtx* ctx, const Ydb::Query::ExecuteQueryRequest& request) {
+    if (request.exec_mode() != Ydb::Query::EXEC_MODE_EXECUTE) {
+        return;
+    }
+    // query_text
+    {
+        switch(request.query_case()) {
+            case Ydb::Query::ExecuteQueryRequest::kQueryContent:
+                ctx->AddAuditLogPart("query_text", PrepareText(request.query_content().text()));
+                break;
+            case Ydb::Query::ExecuteQueryRequest::QUERY_NOT_SET:
+                break;
+        }
+    }
+    // tx_id
+    // begin_tx, commit_tx flags
+    AddAuditLogTxControlPart(ctx, request.tx_control());
+}
+// log updated_row_count collected from ExecuteQueryResponsePart.exec_stats?
+
+// ExecuteSrcipt
+template <>
+void AuditContextAppend(IRequestCtx* ctx, const Ydb::Query::ExecuteScriptRequest& request) {
+    if (request.exec_mode() != Ydb::Query::EXEC_MODE_EXECUTE) {
+        return;
+    }
+    ctx->AddAuditLogPart("query_text", PrepareText(request.script_content().text()));
+}
+// log updated_row_count collected from ExecuteScriptMetadata.exec_stats?
 
 } // namespace NKikimr::NGRpcService

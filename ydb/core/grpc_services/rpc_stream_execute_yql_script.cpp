@@ -1,5 +1,6 @@
 #include "service_yql_scripting.h"
 #include "rpc_kqp_base.h"
+#include "audit_dml_operations.h"
 
 #include <ydb/public/api/protos/ydb_scripting.pb.h>
 
@@ -151,6 +152,8 @@ private:
 
         auto req = GetProtoRequest();
         const auto traceId = Request_->GetTraceId();
+
+        AuditContextAppend(Request_.get(), *req);
 
         auto script = req->script();
 
@@ -352,6 +355,8 @@ private:
                 response.mutable_result()->mutable_query_stats()->set_query_plan(kqpResponse.GetQueryPlan());
             }
 
+            AuditContextAppend(Request_.get(), *GetProtoRequest(), response);
+
             Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
             RequestPtr()->SendSerializedResult(std::move(out), record.GetYdbStatus());
         }
@@ -444,7 +449,7 @@ private:
             RequestPtr()->SendSerializedResult(std::move(out), status);
         }
 
-        RequestPtr()->FinishStream();
+        RequestPtr()->FinishStream(status);
         this->PassAway();
     }
 

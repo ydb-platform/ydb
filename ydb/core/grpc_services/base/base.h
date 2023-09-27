@@ -344,7 +344,7 @@ public:
 struct TRequestAuxSettings {
     TRateLimiterMode RlMode = TRateLimiterMode::Off;
     void (*CustomAttributeProcessor)(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, ICheckerIface*) = nullptr;
-    TAuditMode AuditMode = TAuditMode::Off; 
+    TAuditMode AuditMode = TAuditMode::Off;
 };
 
 // grpc_request_proxy part
@@ -407,7 +407,7 @@ public:
     virtual void SetCostInfo(float consumed_units) = 0;
 
     virtual void SetStreamingNotify(NGrpc::IRequestContextBase::TOnNextReply&& cb) = 0;
-    virtual void FinishStream() = 0;
+    virtual void FinishStream(ui32 status) = 0;
 
     virtual void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status) = 0;
 
@@ -896,7 +896,7 @@ public:
         }
         auto resp = self->CreateResponseMessage();
         resp->mutable_operation()->CopyFrom(operation);
-        self->Ctx_->Reply(resp, operation.status());
+        self->Reply(resp, operation.status());
     }
 
     void SendResult(Ydb::StatusIds::StatusCode status,
@@ -1209,7 +1209,9 @@ public:
         return Ctx_->IsClientLost();
     }
 
-    void FinishStream() override {
+    void FinishStream(ui32 status) override {
+        // End Of Request for streaming requests
+        AuditLogRequestEnd(status);
         Ctx_->FinishStreamingOk();
     }
 
@@ -1270,14 +1272,24 @@ public:
 
 private:
     void Reply(NProtoBuf::Message *resp, ui32 status) override {
-        if (RequestFinished && AuditLogHook) {
-            AuditLogHook(status, GetAuditLogParts());
+        // End Of Request for non streaming requests
+        if (RequestFinished) {
+            AuditLogRequestEnd(status);
         }
         if (RespHook) {
             TRespHook hook = std::move(RespHook);
             return hook(MakeIntrusive<TRespHookCtx>(Ctx_, resp, GetRequestName(), Ru, status));
         }
         return Ctx_->Reply(resp, status);
+    }
+
+    void AuditLogRequestEnd(ui32 status) {
+        if (AuditLogHook) {
+            AuditLogHook(status, GetAuditLogParts());
+            // Drop hook to avoid double logging in case when operation implemention
+            // invokes both FinishRequest() (indirectly) and FinishStream()
+            AuditLogHook = nullptr;
+        }
     }
 
     TResponse* CreateResponseMessage() {

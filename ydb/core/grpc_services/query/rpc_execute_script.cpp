@@ -4,6 +4,7 @@
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/rpc_kqp_base.h>
+#include <ydb/core/grpc_services/audit_dml_operations.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
@@ -92,6 +93,8 @@ public:
             return Reply(Ydb::StatusIds::BAD_REQUEST, issues);
         }
 
+        AuditContextAppend(Request_.get(), request);
+
         Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS;
         if (auto scriptRequest = MakeScriptRequest(issues, status)) {
             if (Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), scriptRequest.Release())) {
@@ -161,6 +164,8 @@ private:
         }
 
         result.set_status(status);
+
+        AuditContextAppend(Request_.get(), *Request_->GetProtoRequest(), result);
 
         TString serializedResult;
         Y_PROTOBUF_SUPPRESS_NODISCARD result.SerializeToString(&serializedResult);

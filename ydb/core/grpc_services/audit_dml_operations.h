@@ -1,7 +1,32 @@
 #pragma once
 #include "defs.h"
 
-#include <ydb/public/api/protos/ydb_table.pb.h>
+namespace Ydb::Table {
+
+class ExecuteDataQueryRequest;
+class ExecuteQueryResult;
+class PrepareDataQueryRequest;
+class PrepareQueryResult;
+class BeginTransactionRequest;
+class BeginTransactionResult;
+class CommitTransactionRequest;
+class RollbackTransactionRequest;
+class BulkUpsertRequest;
+
+}
+
+namespace Ydb::Scripting {
+
+class ExecuteYqlRequest;
+
+}
+
+namespace Ydb::Query {
+
+class ExecuteQueryRequest;
+class ExecuteScriptRequest;
+
+}
 
 namespace NKikimr::NGRpcService {
 
@@ -46,5 +71,14 @@ template <> void AuditContextAppend(IRequestCtx* ctx, const Ydb::Table::Rollback
 
 // BulkUpsert
 template <> void AuditContextAppend(IRequestCtx* ctx, const Ydb::Table::BulkUpsertRequest& request);
+
+// ExecuteYqlScript, StreamExecuteYqlScript
+template <> void AuditContextAppend(IRequestCtx* ctx, const Ydb::Scripting::ExecuteYqlRequest& request);
+
+// ExecuteQuery
+template <> void AuditContextAppend(IRequestCtx* ctx, const Ydb::Query::ExecuteQueryRequest& request);
+
+// ExecuteSrcipt
+template <> void AuditContextAppend(IRequestCtx* ctx, const Ydb::Query::ExecuteScriptRequest& request);
 
 } // namespace NKikimr::NGRpcService

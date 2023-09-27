@@ -5,6 +5,7 @@
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/rpc_kqp_base.h>
+#include <ydb/core/grpc_services/audit_dml_operations.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
 
@@ -242,6 +243,8 @@ private:
             }
         }
 
+        AuditContextAppend(Request_.get(), *req);
+
         auto queryType = req->concurrent_result_sets()
             ? NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY
             : NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY;
@@ -361,6 +364,8 @@ private:
             auto& kqpResponse = record.GetResponse();
             FillQueryStats(*response.mutable_exec_stats(), kqpResponse);
 
+            AuditContextAppend(Request_.get(), *Request_->GetProtoRequest(), response);
+
             TString out;
             Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
             Request_->SendSerializedResult(std::move(out), record.GetYdbStatus());
@@ -425,7 +430,7 @@ private:
             Request_->SendSerializedResult(std::move(out), status);
         }
 
-        Request_->FinishStream();
+        Request_->FinishStream(status);
         this->PassAway();
     }
 

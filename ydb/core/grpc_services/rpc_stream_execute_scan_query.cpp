@@ -475,7 +475,7 @@ private:
             Request_->SendSerializedResult(std::move(out), status);
         }
 
-        Request_->FinishStream();
+        Request_->FinishStream(status);
         this->PassAway();
     }
 

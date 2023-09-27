@@ -407,9 +407,12 @@ namespace NKikimr::NBsController {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         TActorId HivePipeId;
+        TActorId TenantHivePipeId;
         TActorId BlobDepotPipeId;
         TActorId SchemeshardPipeId;
         ui64 RootHiveId = 0;
+        bool TenantHiveInvalidated = false;
+        bool TenantHiveInvalidateInProgress = false;
 
         void HiveCreate(TGroupInfo *group) {
             auto& config = GetConfig(group);
@@ -417,9 +420,19 @@ namespace NKikimr::NBsController {
                 ConfigureBlobDepot();
             } else if (!group->HiveId) {
                 HiveResolve(group);
+            } else if (TenantHiveInvalidateInProgress && TenantHivePipeId) {
+                // tenant hive storage pool invalidation still in progress, wait
+            } else if (config.GetIsDecommittingGroup() && config.HasTenantHiveId() && !TenantHiveInvalidated) {
+                TenantHivePipeId = Register(NTabletPipe::CreateClient(SelfId(), config.GetTenantHiveId(),
+                    NTabletPipe::TClientRetryPolicy::WithRetries()));
+                HiveInvalidateGroups(TenantHivePipeId, group);
+                TenantHiveInvalidateInProgress = true;
             } else if (!HivePipeId) {
                 Y_VERIFY(group->HiveId);
                 HivePipeId = Register(NTabletPipe::CreateClient(SelfId(), *group->HiveId, NTabletPipe::TClientRetryPolicy::WithRetries()));
+                if (config.GetIsDecommittingGroup()) {
+                    HiveInvalidateGroups(HivePipeId, group);
+                }
             } else {
                 HiveCreateTablet(group);
             }
@@ -436,14 +449,11 @@ namespace NKikimr::NBsController {
             const auto& domainsInfo = AppData()->DomainsInfo;
             for (const auto& [_, domain] : domainsInfo->Domains) {
                 const TString domainPath = TStringBuilder() << '/' << domain->Name;
-                if (database == domainPath) { // database is domain root
+                if (database == domainPath || database.StartsWith(TStringBuilder() << domainPath << '/')) {
                     RootHiveId = domainsInfo->GetHive(domain->DefaultHiveUid);
                     if (RootHiveId == TDomainsInfo::BadTabletId) {
                         return CreateFailed(TStringBuilder() << "failed to resolve Hive -- BadTabletId for Database# " << database);
                     }
-                    schemeshardId = domain->SchemeRoot;
-                    break;
-                } else if (database.StartsWith(TStringBuilder() << domainPath << '/')) { // database is subdomain
                     schemeshardId = domain->SchemeRoot;
                     break;
                 }
@@ -503,69 +513,60 @@ namespace NKikimr::NBsController {
                     return CreateFailed("failed to resolve Hive -- Hive is zero");
                 }
 
-                NKikimrSubDomains::TDomainKey domainKey;
-                domainKey.CopyFrom(domain.GetDomainKey());
-
                 Self->Execute(std::make_unique<TTxUpdateGroup>(this, [=](TGroupInfo& group, TConfigState&) {
                     auto& config = GetConfig(&group);
-                    config.MutableHiveParams()->MutableObjectDomain()->CopyFrom(domainKey);
+                    if (hiveId != RootHiveId) {
+                        config.SetTenantHiveId(hiveId);
+                    }
                     TString data;
                     const bool success = config.SerializeToString(&data);
                     Y_VERIFY(success);
                     group.BlobDepotConfig = data;
-                    group.HiveId = hiveId;
+                    group.HiveId = RootHiveId;
                     return true;
                 }));
             }
         }
 
         void HiveCreateTablet(TGroupInfo *group) {
-            TChannelsBindings bindings;
-            std::unordered_set<TString> names;
-            auto invalidateEv = std::make_unique<TEvHive::TEvInvalidateStoragePools>();
-            auto& record = invalidateEv->Record;
+            auto ev = std::make_unique<TEvHive::TEvCreateTablet>(Self->TabletID(), group->ID, TTabletTypes::BlobDepot,
+                TChannelsBindings());
 
             auto& config = GetConfig(group);
-
-            auto ev = std::make_unique<TEvHive::TEvCreateTablet>(Self->TabletID(), group->ID, TTabletTypes::BlobDepot, bindings);
-            if (config.HasHiveParams()) {
-                ev->Record.CopyFrom(config.GetHiveParams());
-            }
-            ev->Record.SetOwner(Self->TabletID());
-            ev->Record.SetOwnerIdx(group->ID);
-            ev->Record.SetTabletType(TTabletTypes::BlobDepot);
-            auto *channels = ev->Record.MutableBindedChannels();
-            channels->Clear();
-
             for (const auto& item : config.GetChannelProfiles()) {
-                for (ui32 i = 0; i < item.GetCount(); ++i) {
-                    const TString& storagePoolName = item.GetStoragePoolName();
-
-                    NKikimrStoragePool::TChannelBind binding;
-                    binding.SetStoragePoolName(storagePoolName);
-                    if (config.GetIsDecommittingGroup()) {
-                        binding.SetPhysicalGroupsOnly(true);
-                        if (i == 0 && names.insert(storagePoolName).second) {
-                            record.AddStoragePoolName(storagePoolName);
-                        }
-                    }
-
-                    channels->Add()->CopyFrom(binding);
+                const TString& storagePoolName = item.GetStoragePoolName();
+                NKikimrStoragePool::TChannelBind binding;
+                binding.SetStoragePoolName(storagePoolName);
+                if (config.GetIsDecommittingGroup()) {
+                    binding.SetPhysicalGroupsOnly(true);
                 }
-            }
-
-            if (!names.empty()) {
-                NTabletPipe::SendData(SelfId(), HivePipeId, invalidateEv.release());
-            }
-
-            if (config.GetIsDecommittingGroup()) {
-                NTabletPipe::SendData(SelfId(), HivePipeId, new TEvHive::TEvReassignOnDecommitGroup(group->ID));
+                for (ui32 i = 0; i < item.GetCount(); ++i) {
+                    ev->Record.AddBindedChannels()->CopyFrom(binding);
+                }
             }
 
             STLOG(PRI_INFO, BS_CONTROLLER, BSCVG00, "sending TEvCreateTablet", (GroupId, group->ID),
                 (HiveId, *group->HiveId), (Msg, ev->Record));
 
             NTabletPipe::SendData(SelfId(), HivePipeId, ev.release());
+        }
+
+        void HiveInvalidateGroups(TActorId pipeId, TGroupInfo *group) {
+            auto& config = GetConfig(group);
+            Y_VERIFY(config.GetIsDecommittingGroup());
+
+            auto invalidateEv = std::make_unique<TEvHive::TEvInvalidateStoragePools>();
+            auto& record = invalidateEv->Record;
+            std::unordered_set<TString> names;
+            for (const auto& item : config.GetChannelProfiles()) {
+                const TString& storagePoolName = item.GetStoragePoolName();
+                if (names.insert(storagePoolName).second) {
+                    record.AddStoragePoolName(storagePoolName);
+                }
+            }
+            NTabletPipe::SendData(SelfId(), pipeId, invalidateEv.release());
+
+            NTabletPipe::SendData(SelfId(), pipeId, new TEvHive::TEvReassignOnDecommitGroup(GroupId));
         }
 
         void HiveDelete(TGroupInfo *group) {
@@ -625,7 +626,7 @@ namespace NKikimr::NBsController {
         }
 
         void OnPipeError(TActorId clientId) {
-            for (auto *pipeId : {&HivePipeId, &BlobDepotPipeId, &SchemeshardPipeId}) {
+            for (auto *pipeId : {&HivePipeId, &TenantHivePipeId, &BlobDepotPipeId, &SchemeshardPipeId}) {
                 if (*pipeId == clientId) {
                     *pipeId = {};
                     Bootstrap();
@@ -642,6 +643,12 @@ namespace NKikimr::NBsController {
         void Handle(TEvHive::TEvReassignOnDecommitGroupReply::TPtr ev) {
             STLOG(PRI_INFO, BS_CONTROLLER, BSCVG07, "received TEvReassignOnDecommitGroupReply", (GroupId, GroupId),
                 (Msg, ev->Get()->Record));
+            if (TenantHiveInvalidateInProgress) {
+                NTabletPipe::CloseAndForgetClient(SelfId(), TenantHivePipeId);
+                TenantHiveInvalidateInProgress = false;
+                TenantHiveInvalidated = true;
+                Bootstrap();
+            }
         }
 
         void Handle(TEvHive::TEvCreateTabletReply::TPtr ev) {

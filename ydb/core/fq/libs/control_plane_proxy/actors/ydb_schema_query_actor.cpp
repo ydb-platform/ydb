@@ -21,14 +21,20 @@ using namespace NThreading;
 using namespace NYdb;
 using namespace NYdb::NTable;
 
+namespace {
+
 template<class TEventRequest, class TEventResponse>
 class TSchemaQueryYDBActor;
+
+}
 
 template<class TEventRequest, class TEventResponse>
 struct TBaseActorTypeTag<TSchemaQueryYDBActor<TEventRequest, TEventResponse>> {
     using TRequest  = TEventRequest;
     using TResponse = TEventResponse;
 };
+
+namespace {
 
 using TScheduleErrorRecoverySQLGeneration =
     std::function<bool(NActors::TActorId sender, const TStatus& issues)>;
@@ -496,6 +502,12 @@ bool IsPathDoesNotExistIssue(const TStatus& status) {
     return status.GetIssues().ToOneLineString().Contains("Path does not exist");
 }
 
+bool IsPathExistsIssue(const TStatus& status) {
+    return status.GetIssues().ToOneLineString().Contains("error: path exist");
+}
+
+}
+
 /// Connection actors
 NActors::IActor* MakeCreateConnectionActor(
     const TActorId& proxyActorId,
@@ -504,12 +516,13 @@ NActors::IActor* MakeCreateConnectionActor(
     TCounters& counters,
     TPermissions permissions,
     const NConfig::TCommonConfig& commonConfig,
-    TSigner::TPtr signer) {
+    TSigner::TPtr signer,
+    bool withoutRollback) {
     auto queryFactoryMethod =
         [objectStorageEndpoint = commonConfig.GetObjectStorageEndpoint(),
          signer                = std::move(signer),
          requestTimeout,
-         &counters, permissions](const TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr& request)
+         &counters, permissions, withoutRollback](const TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr& request)
         -> std::vector<TSchemaQueryTask> {
         auto& connectionContent = request->Get()->Request.content();
 
@@ -522,12 +535,13 @@ NActors::IActor* MakeCreateConnectionActor(
         if (createSecretStatement) {
             statements.push_back(
                 TSchemaQueryTask{.SQL         = *createSecretStatement,
-                                 .RollbackSQL = DropSecretObjectQuery(connectionContent.name())});
+                                 .RollbackSQL = withoutRollback ? TMaybe<TString>{} : DropSecretObjectQuery(connectionContent.name()),
+                                 .ShouldSkipStepOnError = withoutRollback ? IsPathExistsIssue : TShouldSkipStepOnError{}});
         }
 
         TScheduleErrorRecoverySQLGeneration alreadyExistRecoveryActorFactoryMethod =
             [&request, requestTimeout, &counters, permissions](NActors::TActorId sender,
-                                                  const TStatus& status) {
+                                                const TStatus& status) {
                 if (status.GetStatus() == NYdb::EStatus::ALREADY_EXISTS ||
                     status.GetIssues().ToOneLineString().Contains("error: path exist")) {
                     TActivationContext::ActorSystem()->Register(
@@ -544,9 +558,9 @@ NActors::IActor* MakeCreateConnectionActor(
             };
         statements.push_back(
             TSchemaQueryTask{.SQL = TString{MakeCreateExternalDataSourceQuery(
-                                 connectionContent, objectStorageEndpoint, signer)},
-                             .ScheduleErrorRecoverySQLGeneration =
-                                 alreadyExistRecoveryActorFactoryMethod});
+                                connectionContent, objectStorageEndpoint, signer)},
+                            .ScheduleErrorRecoverySQLGeneration = withoutRollback ? TScheduleErrorRecoverySQLGeneration{} : alreadyExistRecoveryActorFactoryMethod,
+                            .ShouldSkipStepOnError = withoutRollback ? IsPathExistsIssue : TShouldSkipStepOnError{}});
         return statements;
     };
 
@@ -739,10 +753,11 @@ NActors::IActor* MakeCreateBindingActor(
     TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr request,
     TDuration requestTimeout,
     TCounters& counters,
-    TPermissions permissions) {
+    TPermissions permissions,
+    bool withoutRollback) {
     auto queryFactoryMethod =
         [requestTimeout,
-         &counters, permissions](const TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr& request)
+         &counters, permissions, withoutRollback](const TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr& request)
         -> std::vector<TSchemaQueryTask> {
         auto& bindingContent     = request->Get()->Request.content();
         auto& externalSourceName = request->Get()->ConnectionContent->name();
@@ -768,7 +783,8 @@ NActors::IActor* MakeCreateBindingActor(
         statements.push_back(TSchemaQueryTask{
             .SQL = TString{MakeCreateExternalDataTableQuery(bindingContent,
                                                             externalSourceName)},
-            .ScheduleErrorRecoverySQLGeneration = alreadyExistRecoveryActorFactoryMethod});
+            .ScheduleErrorRecoverySQLGeneration = withoutRollback ? TScheduleErrorRecoverySQLGeneration{} :alreadyExistRecoveryActorFactoryMethod,
+            .ShouldSkipStepOnError = withoutRollback ? IsPathExistsIssue : TShouldSkipStepOnError{}});
         return statements;
     };
 

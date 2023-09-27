@@ -403,7 +403,8 @@ private:
                 Counters,
                 TPermissions{},
                 CommonConfig,
-                Signer
+                Signer,
+                true
             ));
         }
         if (Connections.empty()) {
@@ -432,7 +433,8 @@ private:
                 request,
                 TDuration::Seconds(30),
                 Counters,
-                TPermissions{}
+                TPermissions{},
+                true
             ));
         }
 

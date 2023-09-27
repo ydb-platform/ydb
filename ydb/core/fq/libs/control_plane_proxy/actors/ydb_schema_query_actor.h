@@ -26,7 +26,8 @@ NActors::IActor* MakeCreateConnectionActor(
     TCounters& counters,
     TPermissions permissions,
     const NConfig::TCommonConfig& commonConfig,
-    TSigner::TPtr signer);
+    TSigner::TPtr signer,
+    bool withoutRollback = false);
 
 NActors::IActor* MakeModifyConnectionActor(
     const NActors::TActorId& proxyActorId,
@@ -50,7 +51,8 @@ NActors::IActor* MakeCreateBindingActor(
     TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr request,
     TDuration requestTimeout,
     TCounters& counters,
-    TPermissions permissions);
+    TPermissions permissions,
+    bool withoutRollback = false);
 
 NActors::IActor* MakeModifyBindingActor(
     const NActors::TActorId& proxyActorId,

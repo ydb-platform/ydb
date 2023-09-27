@@ -28,6 +28,7 @@
   - stdlib.h:     contrib/libs/cxxsupp/libcxx/include/stdlib.h
   - string.h:     contrib/libs/cxxsupp/libcxx/include/string.h
   - tgmath.h:     contrib/libs/cxxsupp/libcxx/include/tgmath.h
+  - uchar.h:      contrib/libs/cxxsupp/libcxx/include/uchar.h
   - wchar.h:      contrib/libs/cxxsupp/libcxx/include/wchar.h
   - wctype.h:     contrib/libs/cxxsupp/libcxx/include/wctype.h
 
@@ -82,6 +83,7 @@
   - cstring:                   contrib/libs/cxxsupp/libcxx/include/cstring
   - ctgmath:                   contrib/libs/cxxsupp/libcxx/include/ctgmath
   - ctime:                     contrib/libs/cxxsupp/libcxx/include/ctime
+  - cuchar:                    contrib/libs/cxxsupp/libcxx/include/cuchar
   - cwchar:                    contrib/libs/cxxsupp/libcxx/include/cwchar
   - cwctype:                   contrib/libs/cxxsupp/libcxx/include/cwctype
   - deque:                     contrib/libs/cxxsupp/libcxx/include/deque
@@ -247,7 +249,12 @@
   - __algorithm/pop_heap.h:                       contrib/libs/cxxsupp/libcxx/include/__algorithm/pop_heap.h
   - __algorithm/prev_permutation.h:               contrib/libs/cxxsupp/libcxx/include/__algorithm/prev_permutation.h
   - __algorithm/push_heap.h:                      contrib/libs/cxxsupp/libcxx/include/__algorithm/push_heap.h
+  - __algorithm/ranges_find.h:                    contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_find.h
+  - __algorithm/ranges_find_if.h:                 contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_find_if.h
+  - __algorithm/ranges_find_if_not.h:             contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_find_if_not.h
+  - __algorithm/ranges_max_element.h:             contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_max_element.h
   - __algorithm/ranges_min_element.h:             contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_min_element.h
+  - __algorithm/ranges_mismatch.h:                contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_mismatch.h
   - __algorithm/ranges_swap_ranges.h:             contrib/libs/cxxsupp/libcxx/include/__algorithm/ranges_swap_ranges.h
   - __algorithm/remove.h:                         contrib/libs/cxxsupp/libcxx/include/__algorithm/remove.h
   - __algorithm/remove_copy.h:                    contrib/libs/cxxsupp/libcxx/include/__algorithm/remove_copy.h

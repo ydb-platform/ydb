@@ -25,6 +25,9 @@ enum ESimpleCounters {
     COUNTER_EVENTQUEUE_SIZE = 15 [(CounterOpts) = {Name: "EventQueueSize"}];
     COUNTER_NODES_TOTAL = 16 [(CounterOpts) = {Name: "NodesTotal"}];
     COUNTER_NODES_CONNECTED = 17 [(CounterOpts) = {Name: "NodesConnected"}];
+    COUNTER_BALANCE_OBJECT_IMBALANCE = 18 [(CounterOpts) = {Name: "BalanceObjectImbalance"}];
+    COUNTER_IMBALANCED_OBJECTS = 19 [(CounterOpts) = {Name: "ImbalancedObjects"}];
+    COUNTER_WORST_OBJECT_VARIANCE = 20 [(CounterOpts) = {Name: "WorstObjectVariance"}];
 }
 
 enum ECumulativeCounters {
@@ -135,4 +138,5 @@ enum ETxTypes {
     TXTYPE_REASSIGN_GROUPS_ON_DECOMMIT = 60               [(TxTypeOpts) = {Name: "TxReassignGroupsOnDecommit"}];
     TXTYPE_UPDATE_TABLETS_OBJECT = 61                     [(TxTypeOpts) = {Name: "TxUpdateTabletsObject"}];
     TXTYPE_MON_REBALANCE_FROM_SCRATCH = 62                [(TxTypeOpts) = {Name: "TxMonRebalanceFromScratch"}];
+    TXTYPE_MON_OBJECT_STATS = 63                          [(TxTypeOpts) = {Name: "TxMonObjectStats"}];
 }

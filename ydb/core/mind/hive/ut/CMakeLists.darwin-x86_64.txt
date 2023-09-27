@@ -35,6 +35,7 @@ target_link_options(ydb-core-mind-hive-ut PRIVATE
   CoreFoundation
 )
 target_sources(ydb-core-mind-hive-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/object_distribution_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/sequencer_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/storage_pool_info_ut.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/hive/hive_ut.cpp

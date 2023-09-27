@@ -53,6 +53,7 @@
 #include "storage_pool_info.h"
 #include "sequencer.h"
 #include "boot_queue.h"
+#include "object_distribution.h"
 
 #define DEPRECATED_CTX (ActorContext())
 #define DEPRECATED_NOW (TActivationContext::Now())
@@ -197,6 +198,7 @@ protected:
     friend class TTxMonEvent_InitMigration;
     friend class TTxMonEvent_QueryMigration;
     friend class TTxMonEvent_RebalanceFromScratch;
+    friend class TTxMonEvent_ObjectStats;
     friend class TTxKillNode;
     friend class TTxLoadEverything;
     friend class TTxRestartTablet;
@@ -313,6 +315,7 @@ protected:
     ui64 TabletsAlive = 0;
     ui32 DataCenters = 1;
     ui32 RegisteredDataCenters = 1;
+    TObjectDistributions ObjectDistributions;
 
     bool AreWeRootHive() const { return RootHiveId == HiveId; }
     bool AreWeSubDomainHive() const { return RootHiveId != HiveId; }
@@ -650,6 +653,8 @@ public:
     void ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffects);
     void UpdateTabletFollowersNumber(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db, TSideEffects& sideEffects);
     TDuration GetBalancerCooldown() const;
+    void UpdateObjectCount(TObjectId object, TNodeId node, i64 diff);
+    ui64 GetObjectImbalance(TObjectId object);
 
     ui32 GetEventPriority(IEventHandle* ev);
     void PushProcessIncomingEvent();
@@ -813,6 +818,14 @@ public:
 
     bool GetCheckMoveExpediency() const {
         return CurrentConfig.GetCheckMoveExpediency();
+    }
+
+    ui64 GetObjectImbalanceToBalance() {
+        if (GetSpreadNeighbours()) {
+            return CurrentConfig.GetObjectImbalanceToBalance();
+        } else {
+            return std::numeric_limits<ui64>::max();
+        }
     }
 
     const std::unordered_map<TTabletTypes::EType, NKikimrConfig::THiveTabletLimit>& GetTabletLimit() const {

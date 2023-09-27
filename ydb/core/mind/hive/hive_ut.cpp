@@ -4143,7 +4143,12 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
     Y_UNIT_TEST(TestSpreadNeighboursWithUpdateTabletsObject) {
         TTestBasicRuntime runtime(2, false);
-        Setup(runtime, true);
+        Setup(runtime, true, 1, [](TAppPrepare& app) {
+            app.HiveConfig.SetResourceChangeReactionPeriod(0);
+            app.HiveConfig.SetTabletKickCooldownPeriod(0);
+            app.HiveConfig.SetMinNodeUsageToBalance(0);
+            app.HiveConfig.SetMinScatterToBalance(0.4);
+        });
         const int nodeBase = runtime.GetNodeId(0);
         TActorId senderA = runtime.AllocateEdgeActor();
         const ui64 hiveTablet = MakeDefaultHiveID(0);
@@ -4161,9 +4166,9 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                     nodeTablets[tablet.GetNodeID() - nodeBase].push_back(tablet.GetTabletID());
                 }
             }
-            // Check even distribution: each node must have 2 tablets
-            UNIT_ASSERT_VALUES_EQUAL(nodeTablets[0].size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(nodeTablets[1].size(), 2);
+            // Check even distribution: each node must have 4 tablets
+            UNIT_ASSERT_VALUES_EQUAL(nodeTablets[0].size(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(nodeTablets[1].size(), 4);
             return nodeTablets;
         };
 
@@ -4178,7 +4183,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         TVector<ui64> tablets;
-        for (int i = 0; i < 4; ++i) {
+        for (int i = 0; i < 8; ++i) {
             THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + i, tabletType, BINDED_CHANNELS));
             ev->Record.SetObjectId(0);
             ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
@@ -4186,9 +4191,9 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             MakeSureTabletIsUp(runtime, tabletId, 0);
         }
 
-        // update objects, so that distribution of objects on nodes becomes {0, 0}, {1, 1}
+        // update objects, so that distribution of objects on nodes becomes {0, 0, 0, 1}, {0, 1, 1, 1}
         auto initialDistribution = getDistribution();
-        auto tabletsToUpdate = initialDistribution[1];
+        TVector<ui64> tabletsToUpdate = {initialDistribution[0][0], initialDistribution[1][0], initialDistribution[1][1], initialDistribution[1][2]};
         auto wasTabletUpdated = [&tabletsToUpdate](ui64 tablet) {
             return std::find(tabletsToUpdate.begin(), tabletsToUpdate.end(), tablet) != tabletsToUpdate.end();
         };
@@ -4205,8 +4210,26 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
         Ctest << "Reassigned objects\n";
 
-        // we want the distribution to become {0, 1}, {0, 1}, but
-        // we don't (yet) have a balancer trigger on object imbalance, so we will just kill all tablets
+        // we want the distribution to become {0, 0, 0, 1}, {0, 0, 0, 1}
+
+        // touch metrics to alert balancer
+        {
+            THolder<TEvHive::TEvTabletMetrics> metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
+            NKikimrHive::TTabletMetrics* metric = metrics->Record.AddTabletMetrics();
+            metric->SetTabletID(tablets[0]);
+            metric->MutableResourceUsage()->SetCounter(0);
+            runtime.SendToPipe(hiveTablet, senderA, metrics.Release());
+            TAutoPtr<IEventHandle> handle;
+            auto* response = runtime.GrabEdgeEvent<TEvLocal::TEvTabletMetricsAck>(handle);
+            Y_UNUSED(response);
+        }
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(NHive::TEvPrivate::EvBalancerOut);
+            runtime.DispatchEvents(options);
+        }
+
+        /*
         for (ui64 node = 0; node < 2; ++node) {
             for (auto tablet : initialDistribution[node]) {
                 runtime.Register(CreateTabletKiller(tablet, runtime.GetNodeId(node)));
@@ -4221,9 +4244,14 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             WaitForTabletIsUp(runtime, tablet, 0);
             Ctest << "Tablet " << tablet << " is up\n";
         }
+        */
 
         auto newDistribution = getDistribution();
-        UNIT_ASSERT_VALUES_UNEQUAL(wasTabletUpdated(newDistribution[0][0]), wasTabletUpdated(newDistribution[0][1]));
+        ui64 updatedOnFirstNode = 0;
+        for (auto tablet : newDistribution[0]) {
+            updatedOnFirstNode += wasTabletUpdated(tablet);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(updatedOnFirstNode, 2);
     }
 
     Y_UNIT_TEST(TestHiveBalancerDifferentResources) {

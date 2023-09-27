@@ -26,6 +26,7 @@ SRCS(
     monitoring.cpp
     node_info.cpp
     node_info.h
+    object_distribution.h
     sequencer.cpp
     sequencer.h
     follower_group.h

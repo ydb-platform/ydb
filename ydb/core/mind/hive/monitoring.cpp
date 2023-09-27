@@ -806,6 +806,7 @@ public:
         UpdateConfig(db, "WarmUpBootWaitingPeriod");
         UpdateConfig(db, "MaxWarmUpPeriod");
         UpdateConfig(db, "WarmUpEnabled");
+        UpdateConfig(db, "ObjectImbalanceToBalance");
 
         if (params.contains("BalancerIgnoreTabletTypes")) {
             TVector<TString> tabletTypeNames = SplitString(params.Get("BalancerIgnoreTabletTypes"), ";");
@@ -1088,6 +1089,7 @@ public:
         ShowConfig(out, "WarmUpBootWaitingPeriod");
         ShowConfig(out, "MaxWarmUpPeriod");
         ShowConfig(out, "WarmUpEnabled");
+        ShowConfig(out, "ObjectImbalanceToBalance");
         ShowConfigForBalancerIgnoreTabletTypes(out);
 
         out << "<div class='row' style='margin-top:40px'>";
@@ -3290,6 +3292,46 @@ public:
     }
 };
 
+class TTxMonEvent_ObjectStats : public TTransactionBase<THive> {
+public:
+    NJson::TJsonValue Result;
+    const TActorId Source;
+
+    TTxMonEvent_ObjectStats(const TActorId& source, TSelf* hive)
+        : TBase(hive)
+        , Source(source)
+    {
+    }
+
+    TTxType GetTxType() const override { return NHive::TXTYPE_MON_OBJECT_STATS; }
+
+    bool Execute(TTransactionContext&, const TActorContext&) override {
+        std::map<ui64, std::vector<std::pair<ui64, ui64>>> distributionOfObjects;
+        for (const auto& node : Self->Nodes) {
+            for (const auto& obj : node.second.TabletsOfObject) {
+                distributionOfObjects[obj.first].emplace_back(node.first, obj.second.size());
+            }
+        }
+
+        Result.SetType(NJson::JSON_ARRAY);
+        for (const auto& [key, val] : distributionOfObjects) {
+            NJson::TJsonValue listItem;
+            listItem["objectId"] = key;
+            NJson::TJsonValue& distribution = listItem["distribution"];
+            for (const auto& [node, cnt] : val) {
+                distribution[TStringBuilder() << node] = cnt;
+            }
+            Result.AppendValue(listItem);
+        }
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(NJson::WriteJson(Result, false)));
+    }
+
+};
+
 class TTxMonEvent_ResetTablet : public TTransactionBase<THive> {
     class TResetter : public TActorBootstrapped<TResetter> {
         TIntrusivePtr<TTabletStorageInfo> Info;
@@ -3817,6 +3859,9 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     }
     if (page == "TabletInfo") {
         return Execute(new TTxMonEvent_TabletInfo(ev->Sender, ev, this), ctx);
+    }
+    if (page == "ObjectStats") {
+        return Execute(new TTxMonEvent_ObjectStats(ev->Sender, this), ctx);
     }
     if (page == "ResetTablet") {
         return Execute(new TTxMonEvent_ResetTablet(ev->Sender, ev, this), ctx);

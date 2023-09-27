@@ -1766,6 +1766,7 @@ message THiveConfig {
     optional double MinMemoryScatterToBalance = 63 [default = 0.5];
     optional double MinNetworkScatterToBalance = 64 [default = 0.5];
     optional double MinCounterScatterToBalance = 65 [default = 0.01];
+    optional uint64 ObjectImbalanceToBalance = 66 [default = 0];
 }
 
 message TDataShardConfig {

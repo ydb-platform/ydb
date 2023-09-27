@@ -78,6 +78,7 @@ enum class EBalancerType {
     Scatter,
     Emergency,
     Manual,
+    SpreadNeighbours,
 };
 
 TString EBalancerTypeName(EBalancerType value);
@@ -246,6 +247,7 @@ struct TBalancerSettings {
     ui64 MaxInFlight = 1;
     const std::vector<TNodeId> FilterNodeIds = {};
     EResourceToBalance ResourceToBalance = EResourceToBalance::Dominant;
+    std::optional<TObjectId> FilterObjectId;
 };
 
 } // NHive

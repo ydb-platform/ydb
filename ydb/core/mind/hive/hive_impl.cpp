@@ -1642,6 +1642,11 @@ bool THive::IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& no
                    << " is forcefully expedient because source node is overloaded");
         return true;
     }
+    if (GetSpreadNeighbours() && tablet.Node->GetTabletNeighboursCount(tablet) > node.GetTabletNeighboursCount(tablet)) {
+        BLOG_TRACE("[TME] Move of tablet " << tablet.ToString() << " from " << tablet.NodeId << " to " << node.Id
+                   << " is expedient because it spreads neighbours");
+        return true;
+    }
 
     if (!GetCheckMoveExpediency()) {
         BLOG_TRACE("[TME] Move of tablet " << tablet.ToString() << " from " << tablet.NodeId << " to " << node.Id
@@ -2188,7 +2193,7 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
                 .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnEmergencyBalancer(),
                 .RecheckOnFinish = CurrentConfig.GetContinueEmergencyBalancer(),
                 .MaxInFlight = GetEmergencyBalancerInflight(),
-                .FilterNodeIds = overloadedNodes,
+                .FilterNodeIds = std::move(overloadedNodes),
             };
             StartHiveBalancer(std::move(emergencySettings));
             return;
@@ -2211,7 +2216,24 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
             .ResourceToBalance = *scatteredResource,
         };
         StartHiveBalancer(std::move(scatterSettings));
+        return;
     }
+
+    if (ObjectDistributions.GetTotalImbalance() > GetObjectImbalanceToBalance()) {
+        LastBalancerTrigger = EBalancerType::SpreadNeighbours;
+        auto objectToBalance = ObjectDistributions.GetObjectToBalance();
+        TBalancerSettings neighboursSettings{
+            .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnAutoBalancer(),
+            .RecheckOnFinish = CurrentConfig.GetContinueAutoBalancer(),
+            .MaxInFlight = GetBalancerInflight(),
+            .FilterNodeIds = std::move(objectToBalance.Nodes),
+            .FilterObjectId = objectToBalance.ObjectId,
+        };
+        StartHiveBalancer(std::move(neighboursSettings));
+        return;
+    }
+
+    Send(SelfId(), new TEvPrivate::TEvBalancerOut());
 }
 
 void THive::UpdateTotalResourceValues(
@@ -2499,12 +2521,28 @@ TDuration THive::GetBalancerCooldown() const {
         case EBalancerType::None:
             return TDuration::Seconds(0);
         case EBalancerType::Scatter:
+        case EBalancerType::SpreadNeighbours:
             return GetMinPeriodBetweenBalance();
         case EBalancerType::Emergency:
             return GetMinPeriodBetweenEmergencyBalance();
         case EBalancerType::Manual:
             return TDuration::Seconds(1);
     }
+}
+
+void THive::UpdateObjectCount(TObjectId object, TNodeId node, i64 diff) {
+    ObjectDistributions.UpdateCount(object, node, diff);
+    TabletCounters->Simple()[NHive::COUNTER_BALANCE_OBJECT_IMBALANCE].Set(ObjectDistributions.GetTotalImbalance());
+    TabletCounters->Simple()[NHive::COUNTER_IMBALANCED_OBJECTS].Set(ObjectDistributions.GetImbalancedObjectsCount());
+    TabletCounters->Simple()[NHive::COUNTER_WORST_OBJECT_VARIANCE].Set(ObjectDistributions.GetWorstObjectVariance());
+}
+
+ui64 THive::GetObjectImbalance(TObjectId object) {
+    auto it = ObjectDistributions.Distributions.find(object);
+    if (it == ObjectDistributions.Distributions.end()) {
+        return 0;
+    }
+    return it->second->GetImbalance();
 }
 
 THive::THive(TTabletStorageInfo *info, const TActorId &tablet)

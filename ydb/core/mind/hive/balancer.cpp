@@ -235,7 +235,8 @@ protected:
             std::vector<TTabletInfo*> tablets;
             tablets.reserve(nodeTablets.size());
             for (TTabletInfo* tablet : nodeTablets) {
-                if (tablet->IsGoodForBalancer(now)) {
+                if (tablet->IsGoodForBalancer(now) && (!Settings.FilterObjectId || tablet->GetObjectId() == *Settings.FilterObjectId)) {
+                    tablet->UpdateWeight();
                     tablets.emplace_back(tablet);
                 }
             }

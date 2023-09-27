@@ -34,6 +34,7 @@ TString EBalancerTypeName(EBalancerType value) {
         case EBalancerType::Scatter: return "Scatter";
         case EBalancerType::Emergency: return "Emergency";
         case EBalancerType::Manual: return "Manual";
+        case EBalancerType::SpreadNeighbours: return "SpreadNeighbours";
     }
 }
 

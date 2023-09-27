@@ -98,6 +98,14 @@ public:
         return TryGetIndex();
     }
 
+    std::optional<NPage::TLabel> TryGetLabel() {
+        auto index = TryGetIndex();
+        if (!index) {
+            return { };
+        }
+        return index->Label();
+    }
+
 public:
     TRowId GetEndRowId() const {
         return EndRowId;

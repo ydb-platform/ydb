@@ -1,6 +1,6 @@
 #include "flat_part_dump.h"
 #include "flat_part_iface.h"
-#include "flat_page_index.h"
+#include "flat_part_index_iter.h"
 #include "flat_page_data.h"
 #include "flat_page_frames.h"
 #include "flat_page_blobs.h"
@@ -51,10 +51,20 @@ namespace {
         Index(part, depth);
 
         if (depth > 2) {
-            for (auto iter = part.Index->Begin(); iter; ++iter) {
+            auto index = TPartIndexIt(&part, Env, { });
+            
+            for (ssize_t i = 0; ; i++) {
+                auto ready = i == 0 ? index.Seek(0) : index.Next();
+                if (ready != EReady::Data) {
+                    if (ready == EReady::Page) {
+                        Out << " | -- the rest of the index rows aren't loaded" << Endl;
+                    }
+                    break;
+                }
+
                 Out << Endl;
 
-                DataPage(part, iter->GetPageId());
+                DataPage(part, index.GetPageId());
             }
         }
     }
@@ -90,15 +100,21 @@ namespace {
     {
         Key.reserve(part.Scheme->Groups[0].KeyTypes.size());
 
-        auto label = part.Index.Label();
+        auto index = TPartIndexIt(&part, Env, { });
+        auto label = index.TryGetLabel();
 
-        const auto items = (part.Index->End() - part.Index->Begin() + 1);
-
-        Out
-            << " + Index{" << (ui16)label.Type << " rev "
-            << label.Format << ", " << label.Size << "b}"
-            << " " << items << " rec" << Endl
-            << " |  Page     Row    Bytes  (";
+        if (label) {
+            Out
+                << " + Index{" << (ui16)label->Type << " rev "
+                << label->Format << ", " << label->Size << "b}"
+                << Endl
+                << " |  Page     Row    Bytes  (";
+        } else {
+            Out
+                << " + Index{unknown}"
+                << Endl
+                << " |  Page     Row    Bytes  (";
+        }
 
         for (auto off : xrange(part.Scheme->Groups[0].KeyTypes.size())) {
             Out << (off ? ", " : "");
@@ -108,20 +124,24 @@ namespace {
 
         Out << ")" << Endl;
 
-        ssize_t seen = 0;
-
-        for (ssize_t i = 0; i < items; i++) {
+        for (ssize_t i = 0; ; i++) {
             Key.clear();
 
-            if (depth < 2 && (seen += 1) > 10) {
-                Out
-                    << " | -- skipped " << (items - Min(items, seen - 1))
-                    << " entries, depth level " << depth << Endl;
-
+            if (depth < 2 && i >= 10) {
+                Out << " | -- skipped the rest entries, depth level " << depth << Endl;
                 break;
             }
 
-            auto record = part.Index.At(i);
+            // prints without LastKeyRecord, but it seems ok for now
+            auto ready = i == 0 ? index.Seek(0) : index.Next();
+            if (ready != EReady::Data) {
+                if (ready == EReady::Page) {
+                    Out << " | -- the rest of the index rows aren't loaded" << Endl;
+                }
+                break;
+            }
+
+            auto record = index.GetRecord();
             for (const auto &info: part.Scheme->Groups[0].ColsKeyIdx)
                 Key.push_back(record->Cell(info));
 

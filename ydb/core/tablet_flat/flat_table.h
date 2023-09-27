@@ -303,7 +303,7 @@ public:
         for (const auto& flat : Flatten) {
             if (const TPartView &partView = flat.second) {
                 size += partView->DataSize();
-                rows += partView->Index.Rows();
+                rows += partView.Part->Stat.Rows;
             }
         }
 

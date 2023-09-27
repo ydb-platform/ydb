@@ -409,7 +409,6 @@ namespace NKikimr::NBsController {
         TActorId HivePipeId;
         TActorId TenantHivePipeId;
         TActorId BlobDepotPipeId;
-        TActorId SchemeshardPipeId;
         ui64 RootHiveId = 0;
         bool TenantHiveInvalidated = false;
         bool TenantHiveInvalidateInProgress = false;
@@ -443,9 +442,6 @@ namespace NKikimr::NBsController {
             Y_VERIFY(!group->HiveId);
             const TString& database = *group->Database;
 
-            // find schemeshard serving this database
-            ui64 schemeshardId = 0;
-
             const auto& domainsInfo = AppData()->DomainsInfo;
             for (const auto& [_, domain] : domainsInfo->Domains) {
                 const TString domainPath = TStringBuilder() << '/' << domain->Name;
@@ -454,36 +450,34 @@ namespace NKikimr::NBsController {
                     if (RootHiveId == TDomainsInfo::BadTabletId) {
                         return CreateFailed(TStringBuilder() << "failed to resolve Hive -- BadTabletId for Database# " << database);
                     }
-                    schemeshardId = domain->SchemeRoot;
                     break;
                 }
             }
 
-            if (!schemeshardId) {
-                return CreateFailed(TStringBuilder() << "failed to resolve Hive -- Schemeshard not found for Database# " << database);
-            }
-
-            Y_VERIFY(!SchemeshardPipeId);
-            SchemeshardPipeId = Register(NTabletPipe::CreateClient(SelfId(), schemeshardId, NTabletPipe::TClientRetryPolicy::WithRetries()));
-            NTabletPipe::SendData(SelfId(), SchemeshardPipeId, new NSchemeShard::TEvSchemeShard::TEvDescribeScheme(database));
+            auto req = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+            auto& item = req->ResultSet.emplace_back();
+            item.Path = NKikimr::SplitPath(database);
+            item.RedirectRequired = false;
+            item.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
+            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(req));
         }
 
-        void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr ev) {
-            NTabletPipe::CloseAndForgetClient(SelfId(), SchemeshardPipeId);
-            const auto& record = ev->Get()->GetRecord();
-            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCVG16, "TEvDescribeSchemeResult", (GroupId, GroupId), (Record, record));
-            if (record.GetStatus() != NKikimrScheme::StatusSuccess) {
-                return CreateFailed(TStringBuilder() << "failed to resolve Hive -- Status# "
-                    << NKikimrScheme::EStatus_Name(record.GetStatus()) << " Reason# " << record.GetReason());
-            } else if (!record.HasPathDescription()) {
-                return CreateFailed("failed to resolve Hive -- no PathDescription in TEvDescribeSchemeResult");
-            } else if (const auto& path = record.GetPathDescription(); !path.HasDomainDescription()) {
-                return CreateFailed("failed to resolve Hive -- database path is not a domain");
-            } else if (const auto& domain = path.GetDomainDescription(); !domain.HasProcessingParams()) {
-                return CreateFailed("failed to resolve Hive -- no ProcessingParams in TEvDescribeSchemeResult");
-            } else if (const auto& params = domain.GetProcessingParams(); !params.HasHive() && !RootHiveId) {
-                return CreateFailed("failed to resolve Hive -- no Hive in TEvDescribeSchemeResult");
+        void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr ev) {
+            auto& response = *ev->Get()->Request;
+            Y_VERIFY(response.ResultSet.size() == 1);
+            auto& item = response.ResultSet.front();
+            auto& domainInfo = item.DomainInfo;
+
+            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCVG16, "TEvDescribeSchemeResult", (GroupId, GroupId),
+                (Result, response.ToString(*AppData()->TypeRegistry)));
+
+            if (item.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok || !domainInfo || !item.DomainDescription) {
+                return CreateFailed(TStringBuilder() << "failed to resolve Hive -- erroneous reply from SchemeCache or not a domain");
+            } else if (const auto& params = domainInfo->Params; !params.HasHive() && !RootHiveId) {
+                return CreateFailed("failed to resolve Hive -- no Hive in SchemeCache reply");
             } else {
+                auto& domain = item.DomainDescription->Description;
+
                 THashSet<std::tuple<TString, TString>> storagePools; // name, kind
                 THashSet<TString> storagePoolNames;
                 for (const auto& item : domain.GetStoragePools()) {
@@ -513,11 +507,14 @@ namespace NKikimr::NBsController {
                     return CreateFailed("failed to resolve Hive -- Hive is zero");
                 }
 
+                auto descr = item.DomainDescription;
+
                 Self->Execute(std::make_unique<TTxUpdateGroup>(this, [=](TGroupInfo& group, TConfigState&) {
                     auto& config = GetConfig(&group);
                     if (hiveId != RootHiveId) {
                         config.SetTenantHiveId(hiveId);
                     }
+                    config.MutableHiveParams()->MutableObjectDomain()->CopyFrom(descr->Description.GetDomainKey());
                     TString data;
                     const bool success = config.SerializeToString(&data);
                     Y_VERIFY(success);
@@ -529,10 +526,17 @@ namespace NKikimr::NBsController {
         }
 
         void HiveCreateTablet(TGroupInfo *group) {
-            auto ev = std::make_unique<TEvHive::TEvCreateTablet>(Self->TabletID(), group->ID, TTabletTypes::BlobDepot,
-                TChannelsBindings());
+            auto ev = std::make_unique<TEvHive::TEvCreateTablet>();
 
             auto& config = GetConfig(group);
+			if (config.HasHiveParams()) {
+                ev->Record.CopyFrom(config.GetHiveParams());
+            }
+            ev->Record.SetOwner(Self->TabletID());
+            ev->Record.SetOwnerIdx(GroupId);
+            ev->Record.SetTabletType(TTabletTypes::BlobDepot);
+            ev->Record.ClearBindedChannels();
+
             for (const auto& item : config.GetChannelProfiles()) {
                 const TString& storagePoolName = item.GetStoragePoolName();
                 NKikimrStoragePool::TChannelBind binding;
@@ -598,7 +602,7 @@ namespace NKikimr::NBsController {
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
             STLOG(PRI_DEBUG, BS_CONTROLLER, BSCVG02, "received TEvClientConnected", (GroupId, GroupId),
                 (Status, ev->Get()->Status), (ClientId, ev->Get()->ClientId), (HivePipeId, HivePipeId),
-                (BlobDepotPipeId, BlobDepotPipeId), (SchemeshardPipeId, SchemeshardPipeId));
+                (BlobDepotPipeId, BlobDepotPipeId));
 
             if (ev->Get()->Status != NKikimrProto::OK) {
                 OnPipeError(ev->Get()->ClientId);
@@ -619,14 +623,13 @@ namespace NKikimr::NBsController {
 
         void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
             STLOG(PRI_DEBUG, BS_CONTROLLER, BSCVG03, "received TEvClientDestroyed", (GroupId, GroupId),
-                (ClientId, ev->Get()->ClientId), (HivePipeId, HivePipeId), (BlobDepotPipeId, BlobDepotPipeId),
-                (SchemeshardPipeId, SchemeshardPipeId));
+                (ClientId, ev->Get()->ClientId), (HivePipeId, HivePipeId), (BlobDepotPipeId, BlobDepotPipeId));
 
             OnPipeError(ev->Get()->ClientId);
         }
 
         void OnPipeError(TActorId clientId) {
-            for (auto *pipeId : {&HivePipeId, &TenantHivePipeId, &BlobDepotPipeId, &SchemeshardPipeId}) {
+            for (auto *pipeId : {&HivePipeId, &TenantHivePipeId, &BlobDepotPipeId}) {
                 if (*pipeId == clientId) {
                     *pipeId = {};
                     Bootstrap();
@@ -777,7 +780,6 @@ namespace NKikimr::NBsController {
 
             NTabletPipe::CloseClient(SelfId(), HivePipeId);
             NTabletPipe::CloseClient(SelfId(), BlobDepotPipeId);
-            NTabletPipe::CloseClient(SelfId(), SchemeshardPipeId);
 
             TActorBootstrapped::PassAway();
         }
@@ -791,7 +793,7 @@ namespace NKikimr::NBsController {
                 cFunc(TEvents::TSystem::Bootstrap, Bootstrap);
                 hFunc(TEvTabletPipe::TEvClientConnected, Handle);
                 hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-                hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
                 hFunc(TEvHive::TEvCreateTabletReply, Handle);
                 hFunc(TEvHive::TEvTabletCreationResult, Handle);
                 hFunc(TEvHive::TEvInvalidateStoragePoolsReply, Handle);

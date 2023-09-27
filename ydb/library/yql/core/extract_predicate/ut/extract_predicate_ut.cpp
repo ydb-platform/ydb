@@ -587,7 +587,7 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
             "(let $4 (RangeFor '>= (Int32 '0) $2))\n"
             "(let $5 (RangeFor '< (Int32 '\"-10\") $2))\n"
             "(let $6 '((Nothing (OptionalType $2)) (Int32 '0)))\n"
-            "(return (RangeFinalize (RangeMultiply (Uint64 '10000) (RangeUnion (RangeMultiply (Uint64 '10000) (RangeUnion (RangeIntersect (RangeIntersect $3 $4)) $5) (AsRange '($6 $6)))))))\n"
+            "(return (RangeFinalize (RangeMultiply (Uint64 '10000) (RangeUnion (RangeMultiply (Uint64 '10000) (RangeUnion (RangeIntersect $3 $4) $5) (AsRange '($6 $6)))))))\n"
             ")\n";
 
         TExprContext exprCtx;
@@ -968,6 +968,101 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
             "(return (lambda '($1) (OptionalIf (Bool 'true) $1)))\n"
             ")\n";
         auto lambda = DumpNode(*buildResult.PrunedLambda, exprCtx);
+
+        UNIT_ASSERT_EQUAL(lambda, canonicalLambda);
+    }
+
+    Y_UNIT_TEST(LookupAnd) {
+        TString prog = GetNonOptionsSrc4() +
+            "insert into Output with truncate\n"
+            "select * from as_table($src) where (x, y) > (1, 2) and x in [0, 1, 2, 3];";
+
+        TExprContext exprCtx;
+        TTypeAnnotationContextPtr typesCtx;
+        TExprNode::TPtr exprRoot = ParseAndOptimize(prog, exprCtx, typesCtx);
+        TExprNode::TPtr filterLambda = LocateFilterLambda(exprRoot);
+
+        THashSet<TString> usedColumns;
+        using NDetail::TPredicateRangeExtractor;
+
+        auto extractor = MakePredicateRangeExtractor({});
+        UNIT_ASSERT(extractor->Prepare(filterLambda, *filterLambda->Head().Head().GetTypeAnn(), usedColumns, exprCtx, *typesCtx));
+
+        auto buildResult = extractor->BuildComputeNode({ "x", "y" }, exprCtx, *typesCtx);
+        UNIT_ASSERT(buildResult.ComputeNode);
+
+        auto canonicalRanges =
+            "(\n"
+            "(let $1 (Int32 '1))\n"
+            "(let $2 (Int32 '\"2\"))\n"
+            "(let $3 (DataType 'Int32))\n"
+            "(let $4 (OptionalType $3))\n"
+            "(let $5 (IfPresent (Map (Just (AsList (Int32 '0) $1 $2 (Int32 '\"3\"))) (lambda '($13) $13)) (lambda '($14) (block '(\n"
+            "  (let $15 (Collect (Take (FlatMap $14 (lambda '($17) (block '(\n"
+            "    (let $18 (RangeFor '== $17 $3))\n"
+            "    (return (RangeMultiply (Uint64 '10000) $18))\n"
+            "  )))) (Uint64 '10001))))\n"
+            "  (let $16 '((Nothing $4) (Int32 '0)))\n"
+            "  (return (IfStrict (> (Length $15) (Uint64 '10000)) (AsRange '($16 $16)) (RangeUnion $15)))\n"
+            "))) (RangeEmpty $3)))\n"
+            "(let $6 '((Nothing $4) (Int32 '0)))\n"
+            "(let $7 (RangeMultiply (Uint64 '10000) $5 (AsRange '($6 $6))))\n"
+            "(let $8 (RangeFor '> $1 $3))\n"
+            "(let $9 '((Nothing $4) (Int32 '0)))\n"
+            "(let $10 (RangeMultiply (Uint64 '10000) $8 (AsRange '($9 $9))))\n"
+            "(let $11 (RangeFor '== $1 $3))\n"
+            "(let $12 (RangeFor '> $2 $3))\n"
+            "(return (RangeFinalize (RangeMultiply (Uint64 '10000) (RangeUnion (RangeIntersect $7 (RangeUnion $10 (RangeIntersect (RangeMultiply (Uint64 '10000) $11 $12))))))))\n"
+            ")\n"
+            ;
+        auto ranges = DumpNode(*buildResult.ComputeNode, exprCtx);
+        Cerr << ranges;
+
+        auto canonicalLambda =
+            "(\n"
+            "(return (lambda '($1) (OptionalIf (Bool 'true) $1)))\n"
+            ")\n";
+        auto lambda = DumpNode(*buildResult.PrunedLambda, exprCtx);
+        Cerr << lambda;
+
+        UNIT_ASSERT_EQUAL(ranges, canonicalRanges);
+        UNIT_ASSERT_EQUAL(lambda, canonicalLambda);
+
+        TString expectedExecuteResult = R"__({"Write"=[{"Data"=[[[["1"];["2"];"0"];[["1"];#;"1"]];[[["2"];#;"1"];[["2"];#;"1"]];[[["3"];#;"1"];[["3"];#;"1"]]]}]})__";
+        ExecuteAndCheckRanges(ranges, expectedExecuteResult);
+    }
+
+    Y_UNIT_TEST(MixedAnd) {
+        TString prog = GetNonOptionsSrc4() +
+            "insert into Output with truncate\n"
+            "select * from as_table($src) where (x in [1, 2]) and (x, y) in [(2, 3), (3, 4)] and (z, t) < (4, 5) and (y, z, t) > (0,0,0);";
+
+        TExprContext exprCtx;
+        TTypeAnnotationContextPtr typesCtx;
+        TExprNode::TPtr exprRoot = ParseAndOptimize(prog, exprCtx, typesCtx);
+        TExprNode::TPtr filterLambda = LocateFilterLambda(exprRoot);
+
+        THashSet<TString> usedColumns;
+        using NDetail::TPredicateRangeExtractor;
+
+        auto extractor = MakePredicateRangeExtractor({});
+        UNIT_ASSERT(extractor->Prepare(filterLambda, *filterLambda->Head().Head().GetTypeAnn(), usedColumns, exprCtx, *typesCtx));
+
+        auto buildResult = extractor->BuildComputeNode({ "x", "y", "z", "t" }, exprCtx, *typesCtx);
+        UNIT_ASSERT(buildResult.ComputeNode);
+
+        auto ranges = DumpNode(*buildResult.ComputeNode, exprCtx);
+        Cerr << ranges;
+
+        auto canonicalLambda =
+            "(\n"
+            "(return (lambda '($1) (OptionalIf (Bool 'true) $1)))\n"
+            ")\n";
+        auto lambda = DumpNode(*buildResult.PrunedLambda, exprCtx);
+        Cerr << lambda;
+
+        TString expectedExecuteResult = R"__({"Write"=[{"Data"=[[[["2"];["3"];#;#;"1"];[["2"];["3"];["4"];["5"];"0"]]]}]})__";
+        ExecuteAndCheckRanges(ranges, expectedExecuteResult);
 
         UNIT_ASSERT_EQUAL(lambda, canonicalLambda);
     }

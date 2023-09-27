@@ -1207,48 +1207,72 @@ TExprNode::TPtr DoRebuildRangeForIndexKeys(const TStructExprType& rowType, const
         }
 
         TVector<TNodeAndIndexRange> rests;
-        TMap<TIndexRange, TVector<TNodeAndIndexRange>> children;
+        Sort(toRebuild.begin(), toRebuild.end(),
+            [&](const auto& fs, const auto& sc) {
+                return fs.IndexRange < sc.IndexRange;
+            });
+        TMap<size_t, TVector<TNodeAndIndexRange>> byBegin;
+        if (!toRebuild.empty()) {
+            byBegin[toRebuild[0].IndexRange.Begin] = {};
+        }
+
         for (auto& current : toRebuild) {
             if (current.IndexRange.IsEmpty()) {
                 YQL_ENSURE(current.Node->IsCallable("RangeRest"));
                 rests.emplace_back(std::move(current));
             } else {
-                children[current.IndexRange].push_back(std::move(current));
-            }
-        }
-
-        TVector<TVector<TNodeAndIndexRange>> childrenChains;
-        for (auto it = children.begin(); it != children.end(); ++it) {
-            if (!commonIndexRange) {
-                commonIndexRange = it->first;
-                childrenChains.emplace_back(std::move(it->second));
-                continue;
-            }
-            if (commonIndexRange->Begin == it->first.Begin) {
-                YQL_ENSURE(it->first.End > commonIndexRange->End);
-                for (auto& asRest : childrenChains) {
-                    rests.insert(rests.end(), asRest.begin(), asRest.end());
+                if (byBegin.contains(current.IndexRange.Begin)) {
+                    byBegin[current.IndexRange.Begin].push_back(current);
+                    byBegin[current.IndexRange.End] = {};
+                } else {
+                    rests.push_back(std::move(current));
                 }
-                childrenChains.clear();
-                childrenChains.push_back(std::move(it->second));
-                commonIndexRange = it->first;
-                continue;
-            }
-
-            if (commonIndexRange->End == it->first.Begin) {
-                commonIndexRange->End = it->first.End;
-                childrenChains.push_back(std::move(it->second));
-            } else {
-                rests.insert(rests.end(), it->second.begin(), it->second.end());
             }
         }
 
-        for (auto& chain : childrenChains) {
-            TExprNodeList chainNodes;
-            for (auto& entry : chain) {
-                chainNodes.push_back(entry.Node);
+        TMap<size_t, TNodeAndIndexRange> builtRange;
+        for (auto it = byBegin.rbegin(); it != byBegin.rend(); ++it) {
+            size_t end = 0;
+            size_t indexRangeEnd = 0;
+            TVector<TExprNode::TPtr> results;
+            TVector<TExprNode::TPtr> currents;
+            auto flush = [&] () {
+                if (!currents) {
+                    return;
+                }
+
+                TExprNode::TPtr toAdd = MakeRangeAnd(range->Pos(), std::move(currents), ctx);
+                if (auto ptr = builtRange.FindPtr(end)) {
+                    toAdd = MakeRangeAnd(range->Pos(), { toAdd, ptr->Node }, ctx);
+                    indexRangeEnd = std::max(indexRangeEnd, ptr->IndexRange.End);
+                }
+                results.push_back(toAdd);
+
+                indexRangeEnd = std::max(end, indexRangeEnd);
+                currents = {};
+            };
+            for (auto node : it->second) {
+                if (end != node.IndexRange.End) {
+                    flush();
+                    end = node.IndexRange.End;
+                }
+                currents.push_back(node.Node);
             }
-            rebuilt.push_back(MakeRangeAnd(range->Pos(), std::move(chainNodes), ctx));
+            if (currents) {
+                flush();
+            }
+            if (results) {
+                auto& built = builtRange[it->first];
+                built.Node = MakeRangeAnd(range->Pos(), std::move(results), ctx);
+                built.IndexRange.Begin = it->first;
+                built.IndexRange.End = indexRangeEnd;
+            }
+        }
+
+        if (builtRange) {
+            auto& first = *builtRange.begin();
+            rebuilt.push_back(first.second.Node);
+            commonIndexRange = first.second.IndexRange;
         }
 
         if (!rests.empty()) {
@@ -1264,7 +1288,7 @@ TExprNode::TPtr DoRebuildRangeForIndexKeys(const TStructExprType& rowType, const
         }
     }
 
-    TExprNode::TPtr result = ctx.ChangeChildren(*range, std::move(rebuilt));
+    TExprNode::TPtr result = rebuilt.size() == 1 ? rebuilt[0] : ctx.ChangeChildren(*range, std::move(rebuilt));
     if (commonIndexRange) {
         resultIndexRange = *commonIndexRange;
     } else {
@@ -2018,6 +2042,7 @@ bool TPredicateRangeExtractor::Prepare(const TExprNode::TPtr& filterLambdaNode, 
         }
         return node;
     }, ctx, settings);
+
     return status == IGraphTransformer::TStatus::Ok;
 }
 

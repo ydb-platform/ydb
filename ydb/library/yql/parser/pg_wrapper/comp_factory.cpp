@@ -386,10 +386,12 @@ struct TPgResolvedCallState : public TComputationValue<TPgResolvedCallState> {
     TPgResolvedCallState(TMemoryUsageInfo* memInfo, ui32 numArgs, const FmgrInfo* finfo)
         : TComputationValue(memInfo)
         , CallInfo(numArgs, finfo)
+        , Args(numArgs)
     {
     }
 
     TFunctionCallInfo CallInfo;
+    TUnboxedValueVector Args;
 };
 
 template <bool UseContext>
@@ -406,13 +408,15 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
         auto& state = this->GetState(compCtx);
         auto& callInfo = state.CallInfo.Ref();
+        auto& args = state.Args;
         if constexpr (UseContext) {
             callInfo.context = (Node*)TlsAllocState->CurrentContext;
         }
 
         callInfo.isnull = false;
         for (ui32 i = 0; i < this->ArgNodes.size(); ++i) {
-            auto value = this->ArgNodes[i]->GetValue(compCtx);
+            args[i] = std::move(this->ArgNodes[i]->GetValue(compCtx));
+            auto& value = args[i];
             NullableDatum argDatum = { 0, false };
             if (!value) {
                 if (this->FInfo.fn_strict) {

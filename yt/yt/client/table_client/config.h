@@ -161,6 +161,7 @@ public:
     TChunkWriterTestingOptionsPtr TestingOptions;
 
     TKeyFilterWriterConfigPtr KeyFilter;
+    TKeyPrefixFilterWriterConfigPtr KeyPrefixFilter;
 
     REGISTER_YSON_STRUCT(TChunkWriterConfig);
 
@@ -193,6 +194,20 @@ public:
 };
 
 DEFINE_REFCOUNTED_TYPE(TKeyFilterWriterConfig)
+
+class TKeyPrefixFilterWriterConfig
+    : public TKeyFilterWriterConfig
+{
+public:
+    //! Will produce filters for key prefix of specified lengths.
+    THashSet<int> PrefixLengths;
+
+    REGISTER_YSON_STRUCT(TKeyPrefixFilterWriterConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TKeyPrefixFilterWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

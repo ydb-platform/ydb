@@ -190,6 +190,7 @@ message TXorFilterSystemBlockMeta
     }
 
     optional bytes last_key = 1;
+    optional int32 key_prefix_length = 2;
 }
 
 message TSystemBlockMeta

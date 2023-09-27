@@ -162,6 +162,8 @@ void TChunkWriterConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("key_filter", &TThis::KeyFilter)
         .DefaultNew();
+    registrar.Parameter("key_prefix_filter", &TThis::KeyPrefixFilter)
+        .DefaultNew();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -204,6 +206,29 @@ void TKeyFilterWriterConfig::Register(TRegistrar registrar)
             config->EffectiveBitsPerKey = bitsPerKey;
         } else {
             config->EffectiveBitsPerKey = config->BitsPerKey.value_or(DefaultBitsPerKey);
+        }
+    });
+}
+
+void TKeyPrefixFilterWriterConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("prefix_lengths", &TThis::PrefixLengths)
+        .Default();
+
+    registrar.Postprocessor([] (TThis* config) {
+        if (config->Enable && config->PrefixLengths.empty()) {
+            THROW_ERROR_EXCEPTION("Parameter \"prefix_lengths\" cannot be empty");
+        }
+
+        for (auto length : config->PrefixLengths) {
+            if (length <= 0) {
+                THROW_ERROR_EXCEPTION("Values in \"prefix_lengths\" cannot be non-positive, found %v",
+                    length);
+            } else if (length > MaxKeyColumnCountInDynamicTable) {
+                THROW_ERROR_EXCEPTION("Values in \"prefix_lengths\" cannot exceed %v, found %v",
+                    MaxKeyColumnCountInDynamicTable,
+                    length);
+            }
         }
     });
 }

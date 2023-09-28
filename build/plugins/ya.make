@@ -5,7 +5,6 @@ PY2_LIBRARY()
 PY_SRCS(
     TOP_LEVEL
 
-    code_generator.py
     ssqls.py
 
     _common.py

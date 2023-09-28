@@ -212,6 +212,8 @@ public:
             resource.SetKind(unit.unit_kind());
             resource.SetCount(unit.count());
         }
+        Ydb::Cms::DatabaseQuotas& quotas = *tenant.MutableDatabaseQuotas();
+        quotas.MergeFrom(getTenantStatusResult.database_quotas());
 
         RequestDone();
     }
@@ -593,18 +595,21 @@ public:
                     if (itHiveStorageStats != HiveStorageStats.end()) {
                         const NKikimrHive::TEvResponseHiveStorageStats& record = itHiveStorageStats->second.Get()->Record;
                         uint64 storageAllocatedSize = 0;
+                        uint64 storageAvailableSize = 0;
                         uint64 storageMinAvailableSize = std::numeric_limits<ui64>::max();
                         uint64 storageGroups = 0;
                         for (const NKikimrHive::THiveStoragePoolStats& poolStat : record.GetPools()) {
                             if (poolStat.GetName().StartsWith(tenantBySubDomainKey.GetName())) {
                                 for (const NKikimrHive::THiveStorageGroupStats& groupStat : poolStat.GetGroups()) {
                                     storageAllocatedSize += groupStat.GetAllocatedSize();
+                                    storageAvailableSize += groupStat.GetAvailableSize();
                                     storageMinAvailableSize = std::min(storageMinAvailableSize, groupStat.GetAvailableSize());
                                     ++storageGroups;
                                 }
                             }
                         }
                         tenant.SetStorageAllocatedSize(storageAllocatedSize);
+                        tenant.SetStorageAllocatedLimit(storageAllocatedSize + storageAvailableSize);
                         tenant.SetStorageMinAvailableSize(storageMinAvailableSize);
                         tenant.SetStorageGroups(storageGroups);
                     }

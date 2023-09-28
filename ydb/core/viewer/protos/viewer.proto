@@ -359,6 +359,8 @@ message TTenant {
     uint64 MemoryLimit = 38;
     double CoresUsed = 39;
     uint64 StorageGroups = 40;
+    uint64 StorageAllocatedLimit = 41;
+    Ydb.Cms.DatabaseQuotas DatabaseQuotas = 42;
 }
 
 message TTenants {

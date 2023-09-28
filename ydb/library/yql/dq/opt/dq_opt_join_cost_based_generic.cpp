@@ -91,7 +91,7 @@ struct TState {
         }
     }
 
-    TExprNode::TPtr MakeLabel(TExprContext& ctx, const std::vector<IOptimizer::TVarId>& vars) const {
+    auto MakeLabel(TExprContext& ctx, const std::vector<IOptimizer::TVarId>& vars) const {
         TVector<TExprNodePtr> label; label.reserve(vars.size() * 2);
 
         for (auto [relId, varId] : vars) {
@@ -101,10 +101,7 @@ struct TState {
             label.emplace_back(ctx.NewAtom(Pos, column));
         }
     
-        return Build<TCoAtomList>(ctx, Pos)
-                .Add(label)
-                .Done()
-            .Ptr();
+        return label;
     }
 
     TExprBase BuildTree(TExprContext& ctx, int nodeId) {

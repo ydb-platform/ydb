@@ -160,6 +160,105 @@ Y_UNIT_TEST_SUITE(TIterator) {
         TWreck<TCheckReverseIt, TSubset, EDirection::Reverse>(Mass0, 666).Do(EWreck::Evicted, *subset);
     }
 
+    struct TFirstTimeFailEnv : public NTest::TTestEnv {
+        TFirstTimeFailEnv() = default;
+
+        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) noexcept override {
+            if (lob == ELargeObj::Extern) {
+                if (SeenExtern.insert(ref).second) {
+                    return { true, nullptr };
+                }
+            }
+
+            return NTest::TTestEnv::Locate(part, ref, lob);
+        }
+
+        const TSharedData* TryGetPage(const TPart* part, TPageId pageId, TGroupId groupId) override {
+            if (Seen[groupId].insert(pageId).second) {
+                return nullptr;
+            }
+
+            return NTest::TTestEnv::TryGetPage(part, pageId, groupId);
+        }
+
+        THashSet<ui64> SeenExtern;
+        THashMap<TGroupId, THashSet<TPageId>> Seen;
+    };
+
+    Y_UNIT_TEST(GetKey)
+    {
+        TLayoutCook lay;
+        lay
+            .Col(0, 0, NScheme::NTypeIds::String)
+            .Col(0, 1, NScheme::NTypeIds::String)
+            .Key({ 0 });
+
+        // Note: we use compressed pages because they are volatile and freed
+        // when advancing to the next page. We also force values to external
+        // blobs so page faults are triggered after each advance to the next
+        // page, which causes key reference to be invalidated unless key page
+        // is pinned in memory.
+        auto conf = NPage::TConf();
+        conf.Group(0).PageSize = 256;
+        conf.Group(0).Codec = NPage::ECodec::LZ4;
+        conf.LargeEdge = 24;
+
+        auto cook = TPartCook(lay, conf);
+        for (int i = 1; i <= 1000; ++i) {
+            TString key = Sprintf("not_inline_and_long_key_%04d", i);
+            TString value = Sprintf("not_inline_and_long_value_%04d", i);
+            cook.AddN(key, value);
+        }
+
+        auto cooked = cook.Finish();
+
+        TSubset subset(TEpoch::Zero(), cooked.Scheme);
+        for (const auto& part : cooked.Parts) {
+            subset.Flatten.push_back({ part, nullptr, part->Slices });
+        }
+
+        TCheckIt wrap(subset, { new TFirstTimeFailEnv });
+
+        // Must page fault the first couple of times
+        wrap.To(0).Seek({}, ESeek::Lower).Is(EReady::Page);
+        do {
+            wrap.Seek({}, ESeek::Lower);
+        } while (wrap.GetReady() == EReady::Page);
+        wrap.To(1).IsOpN(ERowOp::Upsert,
+            "not_inline_and_long_key_0001",
+            "not_inline_and_long_value_0001");
+
+        TString lastSeen = TString(wrap->GetKey().Cells().at(0).AsBuf());
+        UNIT_ASSERT_VALUES_EQUAL(lastSeen, "not_inline_and_long_key_0001");
+        int nextExpected = 2;
+        size_t pageFaults = 0;
+        for (;;) {
+            wrap.Next();
+
+            if (wrap.GetReady() == EReady::Gone) {
+                UNIT_ASSERT(wrap->GetKey().Cells().empty());
+                break;
+            }
+
+            TString currentKey = TString(wrap->GetKey().Cells().at(0).AsBuf());
+            if (wrap.GetReady() == EReady::Page) {
+                UNIT_ASSERT_VALUES_EQUAL(currentKey, lastSeen);
+                ++pageFaults;
+                continue;
+            }
+
+            wrap.To(nextExpected).IsOpN(ERowOp::Upsert,
+                Sprintf("not_inline_and_long_key_%04d", nextExpected),
+                Sprintf("not_inline_and_long_value_%04d", nextExpected));
+            UNIT_ASSERT_VALUES_EQUAL(currentKey, Sprintf("not_inline_and_long_key_%04d", nextExpected));
+            lastSeen = currentKey;
+            ++nextExpected;
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(nextExpected, 1001);
+        UNIT_ASSERT_C(pageFaults >= 3, "Not enough page faults: " << pageFaults);
+    }
+
 }
 
 }

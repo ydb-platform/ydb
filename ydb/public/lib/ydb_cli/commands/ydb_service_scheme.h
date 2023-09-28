@@ -164,13 +164,5 @@ public:
     virtual int Run(TConfig& config) override;
 };
 
-class TCommandPermissionList : public TYdbOperationCommand, public TCommandWithPath {
-public:
-    TCommandPermissionList();
-    virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
-    virtual int Run(TConfig& config) override;
-};
-
 }
 }

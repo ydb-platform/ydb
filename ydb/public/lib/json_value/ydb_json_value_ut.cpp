@@ -321,7 +321,6 @@ Y_UNIT_TEST_SUITE(JsonValueTest) {
     }
 
     Y_UNIT_TEST(EmptyList) {
-        TString binaryString;
         TValue value = TValueBuilder()
             .EmptyList(TTypeBuilder().Primitive(EPrimitiveType::Int64).Build())
             .Build();

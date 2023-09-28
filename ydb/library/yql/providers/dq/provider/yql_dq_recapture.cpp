@@ -99,7 +99,7 @@ public:
 
         IGraphTransformer::TStatus status = NDq::DqWrapRead(input, output, ctx, *State_->TypeCtx, *State_->Settings);
         if (input != output) {
-            YQL_CLOG(DEBUG, ProviderDq) << "DqsRecapture";
+            YQL_CLOG(INFO, ProviderDq) << "DqsRecapture";
             // TODO: Add before/after recapture transformers
             State_->TypeCtx->DqCaptured = true;
             // TODO: drop this after implementing DQS ConstraintTransformer

@@ -189,7 +189,7 @@ def add_python_lint_checks(unit, py_ver, files):
         resolved_files = get_resolved_files()
         if resolved_files:
             black_cfg = (
-                unit.get('STYLE_PYTHON_PYPROJECT_VALUE') or 'devtools/ya/handlers/style/python_style_config.toml'
+                unit.get('STYLE_PYTHON_PYPROJECT_VALUE') or 'build/config/tests/py_style/config.toml'
             )
             params = ['black', 'tools/black_linter/black_linter']
             params += ['FILES'] + resolved_files

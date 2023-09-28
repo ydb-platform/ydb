@@ -10,7 +10,7 @@ from library.python.testing.style import rules
 import library.python.resource as lpr
 
 
-STYLE_CONFIG_JSON = json.dumps(yaml.safe_load(lpr.find('/cpp_style/config')))
+STYLE_CONFIG_JSON = json.dumps(yaml.safe_load(lpr.find('resfs/file/config.clang-format')))
 
 RES_FILE_PREFIX = '/cpp_style/files/'
 CHECKED_PATHS = list(lpr.iterkeys(RES_FILE_PREFIX, strip_prefix=True))

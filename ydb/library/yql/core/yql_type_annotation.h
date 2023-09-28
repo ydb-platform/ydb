@@ -140,7 +140,7 @@ struct TYqlOperationOptions {
 };
 
 using TColumnOrder = TVector<TString>;
-TString FormatColumnOrder(const TMaybe<TColumnOrder>& columnOrder);
+TString FormatColumnOrder(const TMaybe<TColumnOrder>& columnOrder, TMaybe<size_t> maxColumns = {});
 ui64 AddColumnOrderHash(const TMaybe<TColumnOrder>& columnOrder, ui64 hash);
 
 class TColumnOrderStorage: public TThrRefBase {

@@ -501,6 +501,7 @@ private:
             contentColumnOrder = State_->Types->LookupColumnOrder(*content);
             if (content->IsCallable("AssumeColumnOrder")) {
                 YQL_ENSURE(contentColumnOrder);
+                YQL_CLOG(INFO, ProviderYt) << "Dropping top level " << content->Content() << " from WriteTable input";
                 content = content->HeadPtr();
             }
         }
@@ -520,6 +521,7 @@ private:
                 TYqlRowSpecInfo::TPtr nextRowSpec = (nextDescription.RowSpec = MakeIntrusive<TYqlRowSpecInfo>());
                 if (replaceMeta) {
                     nextRowSpec->SetType(itemType->Cast<TStructExprType>(), State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+                    YQL_CLOG(INFO, ProviderYt) << "Saving column order: " << FormatColumnOrder(contentColumnOrder, 10);
                     nextRowSpec->SetColumnOrder(contentColumnOrder);
                 } else {
                     nextRowSpec->CopyType(*description.RowSpec);
@@ -640,6 +642,7 @@ private:
                 description.RowSpec = MakeIntrusive<TYqlRowSpecInfo>();
             }
             description.RowSpec->SetType(itemType->Cast<TStructExprType>());
+            YQL_CLOG(INFO, ProviderYt) << "Saving column order: " << FormatColumnOrder(contentColumnOrder, 10);
             description.RowSpec->SetColumnOrder(contentColumnOrder);
         }
 

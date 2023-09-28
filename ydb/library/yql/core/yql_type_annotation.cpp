@@ -56,10 +56,14 @@ void TTypeAnnotationContext::Reset() {
     StatisticsMap.clear();
 }
 
-TString FormatColumnOrder(const TMaybe<TColumnOrder>& columnOrder) {
+TString FormatColumnOrder(const TMaybe<TColumnOrder>& columnOrder, TMaybe<size_t> maxColumns) {
     TStringStream ss;
     if (columnOrder) {
-        ss << "[" << JoinSeq(", ", *columnOrder) << "]";
+        if (maxColumns.Defined() && columnOrder->size() > *maxColumns) {
+            ss << "[" << JoinRange(", ", columnOrder->begin(), columnOrder->begin() + *maxColumns) << ", ... ]";
+        } else {
+            ss << "[" << JoinSeq(", ", *columnOrder) << "]";
+        }
     } else {
         ss << "default";
     }
@@ -137,7 +141,7 @@ IGraphTransformer::TStatus TTypeAnnotationContext::SetColumnOrder(const TExprNod
         return IGraphTransformer::TStatus::Error;
     }
 
-    YQL_CLOG(DEBUG, Core) << "Setting column order " << FormatColumnOrder(columnOrder) << " for " << node.Content() << "#" << node.UniqueId();
+    YQL_CLOG(DEBUG, Core) << "Setting column order " << FormatColumnOrder(columnOrder, 10) << " for " << node.Content() << "#" << node.UniqueId();
 
     ColumnOrderStorage->Set(node.UniqueId(), columnOrder);
     return IGraphTransformer::TStatus::Ok;

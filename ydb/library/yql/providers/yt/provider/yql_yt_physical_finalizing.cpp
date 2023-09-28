@@ -1629,8 +1629,8 @@ private:
             }
 
             const TYtOutputOpBase operation(x.first);
-            const bool canUpdateOp = !operation.Ref().StartsExecution() && !operation.Ref().HasResult()
-                && !operation.Maybe<TYtCopy>() && !operation.Maybe<TYtMerge>() && !operation.Maybe<TYtSort>();
+            const bool canUpdateOp = !operation.Ref().StartsExecution() && !operation.Ref().HasResult() && !operation.Maybe<TYtCopy>();
+            const bool canChangeNativeTypeForOp = !operation.Maybe<TYtMerge>() && !operation.Maybe<TYtSort>();
 
             auto origOutput = operation.Output().Ptr();
             auto newOutput = origOutput;
@@ -1660,7 +1660,7 @@ private:
                             TExprNode::TPtr newTable = ctx.ChangeChild(table.Ref(), TYtOutTable::idx_RowSpec,
                                 outRowSpec->ToExprNode(ctx, table.RowSpec().Pos()).Ptr());
 
-                            if (canUpdateOp && outUsage[opIndex] <= 1) {
+                            if (canUpdateOp && outUsage[opIndex] <= 1 && (!diffNativeType || canChangeNativeTypeForOp)) {
                                 YQL_CLOG(INFO, ProviderYt) << "AlignPublishTypes: change " << opIndex << " output of " << operation.Ref().Content();
                                 newOutput = ctx.ChangeChild(*newOutput, opIndex, std::move(newTable));
                             } else if (diffNativeType) {

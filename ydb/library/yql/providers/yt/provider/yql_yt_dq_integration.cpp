@@ -364,6 +364,7 @@ public:
                 }
             }
         }
+        stat.Cost = stat.Nrows * std::max(stat.Ncols, 1);
         return stat;
     }
 

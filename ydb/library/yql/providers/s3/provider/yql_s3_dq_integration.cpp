@@ -154,7 +154,7 @@ public:
             }
 
             rows = size / 1024; // magic estimate
-            return TOptimizerStatistics(rows, cols);
+            return TOptimizerStatistics(rows, cols, size);
         } else {
             return Nothing();
         }

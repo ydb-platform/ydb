@@ -506,7 +506,7 @@ private:
     {
         VERIFY_SPINLOCK_AFFINITY(SpinLock_);
         TFutureState<void>::SetResultError(error);
-        Result_ = error;
+        Result_.emplace(error);
     }
 
     bool DoUnsubscribe(TFutureCallbackCookie cookie, TGuard<NThreading::TSpinLock>* guard) override

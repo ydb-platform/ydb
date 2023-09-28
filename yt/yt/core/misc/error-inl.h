@@ -112,7 +112,7 @@ TErrorOr<T>::TErrorOr(const TErrorOr<T>& other)
     : TError(other)
 {
     if (IsOK()) {
-        Value_ = other.Value();
+        Value_.emplace(other.Value());
     }
 }
 
@@ -121,7 +121,7 @@ TErrorOr<T>::TErrorOr(TErrorOr<T>&& other) noexcept
     : TError(std::move(other))
 {
     if (IsOK()) {
-        Value_ = std::move(other.Value());
+        Value_.emplace(std::move(other.Value()));
     }
 }
 
@@ -131,7 +131,7 @@ TErrorOr<T>::TErrorOr(const TErrorOr<U>& other)
     : TError(other)
 {
     if (IsOK()) {
-        Value_ = other.Value();
+        Value_.emplace(other.Value());
     }
 }
 
@@ -141,7 +141,7 @@ TErrorOr<T>::TErrorOr(TErrorOr<U>&& other) noexcept
     : TError(other)
 {
     if (IsOK()) {
-        Value_ = std::move(other.Value());
+        Value_.emplace(std::move(other.Value()));
     }
 }
 

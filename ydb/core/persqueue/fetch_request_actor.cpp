@@ -92,7 +92,6 @@ public:
         , PartTabletsRequested(0)
         , RequesterId(requesterId)
     {
-        
         ui64 deadline = TAppData::TimeProvider->Now().MilliSeconds() + Min<ui32>(Settings.MaxWaitTimeMs, 30000);
         FetchRequestBytesLeft = Settings.TotalMaxBytes;
         for (const auto& p : Settings.Partitions) {
@@ -103,7 +102,8 @@ public:
                 Response = CreateErrorReply(Ydb::StatusIds::BAD_REQUEST, "No maxBytes for partition in fetch request");
                 return;
             }
-            bool res = TopicInfo[p.Topic].PartitionsToRequest.insert(p.Partition).second;
+            auto path = CanonizePath(p.Topic);
+            bool res = TopicInfo[path].PartitionsToRequest.insert(p.Partition).second;
             if (!res) {
                 Response = CreateErrorReply(Ydb::StatusIds::BAD_REQUEST, "Some partition specified multiple times in fetch request");
                 return;
@@ -112,7 +112,7 @@ public:
             fetchInfo->Record.SetPartition(p.Partition);
             fetchInfo->Record.SetOffset(p.Offset);
             fetchInfo->Record.SetDeadline(deadline);
-            TopicInfo[p.Topic].FetchInfo[p.Partition] = fetchInfo;
+            TopicInfo[path].FetchInfo[p.Partition] = fetchInfo;
         }
     }
     //savnik хендлить таймаут запроса
@@ -361,7 +361,7 @@ public:
         const auto& part = req.Partition;
         const auto& maxBytes = req.MaxBytes;
         const auto& readTimestampMs = req.ReadTimestampMs;
-        auto it = TopicInfo.find(topic);
+        auto it = TopicInfo.find(CanonizePath(topic));
         Y_VERIFY(it != TopicInfo.end());
         if (it->second.PartitionToTablet.find(part) == it->second.PartitionToTablet.end()) {
             return;

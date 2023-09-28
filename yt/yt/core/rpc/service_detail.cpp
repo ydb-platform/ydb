@@ -337,9 +337,20 @@ public:
         Run(handler);
     }
 
+    void MarkRequestRun()
+    {
+        RequestRun_ = true;
+    }
+
     void Run(const TLiteHandler& handler)
     {
-        RequestStarted_ = true;
+        // TODO(shakurov): replace with YT_VERIFY.
+        if (!RequestRun_) {
+            YT_LOG_ALERT("A request not marked as run has been run (RequestId: %v)",
+                RequestId_);
+            RequestRun_ = true;
+        }
+
         const auto& descriptor = RuntimeInfo_->Descriptor;
         // NB: Try to avoid contention on invoker ref-counter.
         IInvoker* invoker = nullptr;
@@ -570,7 +581,7 @@ private:
     std::atomic<bool> TimedOutLatch_ = false;
     std::atomic<bool> RunLatch_ = false;
     bool FinishLatch_ = false;
-    bool RequestStarted_ = false;
+    bool RequestRun_ = false;
     bool ActiveRequestCountIncremented_ = false;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, StreamsLock_);
@@ -939,7 +950,7 @@ private:
             return;
         }
 
-        if (RequestStarted_) {
+        if (RequestRun_) {
             RequestQueue_->OnRequestFinished();
         }
 
@@ -1279,7 +1290,13 @@ static thread_local bool ScheduleRequestsLatch = false;
 
 void TRequestQueue::ScheduleRequestsFromQueue()
 {
+    // COMPAT(shakurov): remove the latch after making sure it's unnecessary.
     if (ScheduleRequestsLatch) {
+        const auto& Logger = Service_ ? Service_->Logger : NLogging::TLogger();
+        YT_LOG_ALERT("Reentrant call to TRequestQueue::ScheduleRequestsFromQueue detected (ServiceId: %v, Method: %v, Queue: %v)",
+            Service_ ? Service_->GetServiceId() : TServiceId(),
+            RuntimeInfo_ ? RuntimeInfo_->Descriptor.Method : TString(),
+            GetName());
         return;
     }
 
@@ -1319,6 +1336,8 @@ void TRequestQueue::ScheduleRequestsFromQueue()
 
 void TRequestQueue::RunRequest(TServiceBase::TServiceContextPtr context)
 {
+    context->MarkRequestRun();
+
     AcquireThrottlers(context);
 
     auto options = RuntimeInfo_->Descriptor.Options;
@@ -1403,7 +1422,8 @@ void TRequestQueue::SubscribeToThrottlers()
                 Throttled_.store(false, std::memory_order::release);
                 ScheduleRequestsFromQueue();
             }
-        }));
+        })
+        .Via(GetCurrentInvoker()));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -329,18 +329,21 @@ std::vector<std::tuple<TExprNode::TPtr, bool, TExprNode::TPtr>> GetRenames(const
     return result;
 }
 
-TExprNode::TListType GetKeys(const TExprNode& side, const TExprNode& keys, TExprContext& ctx) {
-    TExprNode::TListType result;
+void GetKeys(const TJoinLabels& joinLabels, const TExprNode& keys, TExprContext& ctx,
+    TExprNode::TListType& result, TVector<ui32>& inputs) {
     result.reserve(keys.ChildrenSize() >> 1U);
+    inputs.reserve(keys.ChildrenSize() >> 1U);
 
-    const auto alias = side.IsAtom() ? side.Content() : "";
     for (auto i = 0U; i < keys.ChildrenSize(); ++i) {
-        if (const auto& al = keys.Child(i++)->Content(); al == alias)
-            result.emplace_back(keys.ChildPtr(i));
-        else
-            result.emplace_back(ctx.NewAtom(keys.Child(i)->Pos(), TStringBuilder() << al << '.' <<  keys.Child(i)->Content()));
+        auto alias = keys.Child(i++)->Content();
+        auto name = keys.Child(i)->Content();
+        auto inputIndex = joinLabels.FindInputIndex(alias);
+        YQL_ENSURE(inputIndex);
+        const auto& input = joinLabels.Inputs[*inputIndex];
+        auto memberName = input.MemberName(alias, name);
+        result.push_back(ctx.NewAtom(keys.Pos(), memberName));
+        inputs.push_back(*inputIndex);
     }
-    return result;
 }
 
 TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
@@ -389,11 +392,29 @@ TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
     const auto list1type = list1->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     const auto list2type = list2->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
 
-    auto keyMembers1 = GetKeys(node.Head().Tail(), *node.Child(2)->Child(3), ctx);
-    auto keyMembers2 = GetKeys(node.Child(1)->Tail(), *node.Child(2)->Child(4), ctx);
+    TJoinLabels joinLabels;
+    if (auto issue = joinLabels.Add(ctx, node.Child(0)->Tail(), list1type)) {
+        MKQL_ENSURE(false, issue->ToString());
+    }
+
+    if (auto issue = joinLabels.Add(ctx, node.Child(1)->Tail(), list2type)) {
+        MKQL_ENSURE(false, issue->ToString());
+    }
+
+    TExprNode::TListType keyMembers1;
+    TVector<ui32> keyMembers1Inputs;
+    GetKeys(joinLabels, *node.Child(2)->Child(3), ctx, keyMembers1, keyMembers1Inputs);
+    TExprNode::TListType keyMembers2;
+    TVector<ui32> keyMembers2Inputs;
+    GetKeys(joinLabels, *node.Child(2)->Child(4), ctx, keyMembers2, keyMembers2Inputs);
     std::vector<std::string_view> lKeys(keyMembers1.size()), rKeys(keyMembers2.size());
 
     MKQL_ENSURE(keyMembers1.size() == keyMembers2.size(), "Expected same key sizes.");
+    for (ui32 i = 0; i < keyMembers1.size(); ++i) {
+        if (keyMembers1Inputs[i] != 0) {
+            std::swap(keyMembers1[i], keyMembers2[i]);
+        }
+    }
 
     bool optKey = false, badKey = false;
     const bool filter = joinKind == "Inner" || joinKind.ends_with("Semi");

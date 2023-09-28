@@ -5,10 +5,17 @@ TEST_SRCS(
 )
 
 SIZE(MEDIUM)
+TIMEOUT(600)
+
+REQUIREMENTS(
+    cpu:4
+    ram:32
+)
 
 DATA(
     arcadia/ydb/library/yql/parser/pg_wrapper/functions.md
     arcadia/ydb/library/yql/cfg/udf_test
+    arcadia/ydb/library/yql/mount
 )
 
 PEERDIR(

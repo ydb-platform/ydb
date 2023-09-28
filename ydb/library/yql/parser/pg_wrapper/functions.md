@@ -4434,3 +4434,359 @@ When an aggregate function is used as a window function, it aggregates over the 
 
 Note
 The SQL standard defines a RESPECT NULLS or IGNORE NULLS option for lead, lag, first_value, last_value, and nth_value. This is not implemented in PostgreSQL: the behavior is always the same as the standard's default, namely RESPECT NULLS. Likewise, the standard's FROM FIRST or FROM LAST option for nth_value is not implemented: only the default FROM FIRST behavior is supported. (You can achieve the result of FROM LAST by reversing the ORDER BY ordering.)
+
+# 9.23. Subquery Expressions
+
+This section describes the SQL-compliant subquery expressions available in PostgreSQL. All of the expression forms documented in this section return Boolean (true/false) results.
+
+9.23.1. EXISTS
+
+EXISTS (subquery)
+The argument of EXISTS is an arbitrary SELECT statement, or subquery. The subquery is evaluated to determine whether it returns any rows. If it returns at least one row, the result of EXISTS is “true”; if the subquery returns no rows, the result of EXISTS is “false”.
+
+The subquery can refer to variables from the surrounding query, which will act as constants during any one evaluation of the subquery.
+
+The subquery will generally only be executed long enough to determine whether at least one row is returned, not all the way to completion. It is unwise to write a subquery that has side effects (such as calling sequence functions); whether the side effects occur might be unpredictable.
+
+Since the result depends only on whether any rows are returned, and not on the contents of those rows, the output list of the subquery is normally unimportant. A common coding convention is to write all EXISTS tests in the form EXISTS(SELECT 1 WHERE ...). There are exceptions to this rule however, such as subqueries that use INTERSECT.
+
+This simple example is like an inner join on col2, but it produces at most one output row for each tab1 row, even if there are several matching tab2 rows:
+
+```sql
+SELECT col1
+FROM tab1
+WHERE EXISTS (SELECT 1 FROM tab2 WHERE col2 = tab1.col2);
+```
+
+Example
+```sql
+SELECT x FROM (VALUES (1),(2),(3)) a(x) WHERE EXISTS (SELECT 1 FROM (VALUES (3),(4),(5)) b(y) WHERE x=y) → [
+3
+]
+```
+
+9.23.2. IN
+
+expression IN (subquery)
+
+The right-hand side is a parenthesized subquery, which must return exactly one column. The left-hand expression is evaluated and compared to each row of the subquery result. The result of IN is “true” if any equal subquery row is found. The result is “false” if no equal row is found (including the case where the subquery returns no rows).
+
+Note that if the left-hand expression yields null, or if there are no equal right-hand values and at least one right-hand row yields null, the result of the IN construct will be null, not false. This is in accordance with SQL's normal rules for Boolean combinations of null values.
+
+As with EXISTS, it's unwise to assume that the subquery will be evaluated completely.
+
+row_constructor IN (subquery) (NOT SUPPORTED)
+
+The left-hand side of this form of IN is a row constructor, as described in Section 4.2.13. The right-hand side is a parenthesized subquery, which must return exactly as many columns as there are expressions in the left-hand row. The left-hand expressions are evaluated and compared row-wise to each row of the subquery result. The result of IN is “true” if any equal subquery row is found. The result is “false” if no equal row is found (including the case where the subquery returns no rows).
+
+As usual, null values in the rows are combined per the normal rules of SQL Boolean expressions. Two rows are considered equal if all their corresponding members are non-null and equal; the rows are unequal if any corresponding members are non-null and unequal; otherwise the result of that row comparison is unknown (null). If all the per-row results are either unequal or null, with at least one null, then the result of IN is null.
+
+Example
+```sql
+SELECT x FROM (VALUES (1),(2),(3)) a(x) WHERE x IN (SELECT y FROM (VALUES (3),(4),(5)) b(y)) → [
+3
+]
+```
+
+9.23.3. NOT IN
+
+expression NOT IN (subquery)
+
+The right-hand side is a parenthesized subquery, which must return exactly one column. The left-hand expression is evaluated and compared to each row of the subquery result. The result of NOT IN is “true” if only unequal subquery rows are found (including the case where the subquery returns no rows). The result is “false” if any equal row is found.
+
+Note that if the left-hand expression yields null, or if there are no equal right-hand values and at least one right-hand row yields null, the result of the NOT IN construct will be null, not true. This is in accordance with SQL's normal rules for Boolean combinations of null values.
+
+As with EXISTS, it's unwise to assume that the subquery will be evaluated completely.
+
+row_constructor NOT IN (subquery) (NOT SUPPORTED)
+
+The left-hand side of this form of NOT IN is a row constructor, as described in Section 4.2.13. The right-hand side is a parenthesized subquery, which must return exactly as many columns as there are expressions in the left-hand row. The left-hand expressions are evaluated and compared row-wise to each row of the subquery result. The result of NOT IN is “true” if only unequal subquery rows are found (including the case where the subquery returns no rows). The result is “false” if any equal row is found.
+
+As usual, null values in the rows are combined per the normal rules of SQL Boolean expressions. Two rows are considered equal if all their corresponding members are non-null and equal; the rows are unequal if any corresponding members are non-null and unequal; otherwise the result of that row comparison is unknown (null). If all the per-row results are either unequal or null, with at least one null, then the result of NOT IN is null.
+
+Example
+```sql
+SELECT x FROM (VALUES (1),(2),(3)) a(x) WHERE x NOT IN (SELECT y FROM (VALUES (3),(4),(5)) b(y)) ORDER BY x → [
+1
+2
+]
+```
+
+9.23.4. ANY/SOME
+
+expression operator ANY (subquery)
+expression operator SOME (subquery)
+
+The right-hand side is a parenthesized subquery, which must return exactly one column. The left-hand expression is evaluated and compared to each row of the subquery result using the given operator, which must yield a Boolean result. The result of ANY is “true” if any true result is obtained. The result is “false” if no true result is found (including the case where the subquery returns no rows).
+
+SOME is a synonym for ANY. IN is equivalent to = ANY.
+
+Note that if there are no successes and at least one right-hand row yields null for the operator's result, the result of the ANY construct will be null, not false. This is in accordance with SQL's normal rules for Boolean combinations of null values.
+
+As with EXISTS, it's unwise to assume that the subquery will be evaluated completely.
+
+row_constructor operator ANY (subquery) (NOT SUPPORTED)
+row_constructor operator SOME (subquery) (NOT SUPPORTED)
+
+The left-hand side of this form of ANY is a row constructor, as described in Section 4.2.13. The right-hand side is a parenthesized subquery, which must return exactly as many columns as there are expressions in the left-hand row. The left-hand expressions are evaluated and compared row-wise to each row of the subquery result, using the given operator. The result of ANY is “true” if the comparison returns true for any subquery row. The result is “false” if the comparison returns false for every subquery row (including the case where the subquery returns no rows). The result is NULL if no comparison with a subquery row returns true, and at least one comparison returns NULL.
+
+See Section 9.24.5 for details about the meaning of a row constructor comparison.
+
+Example
+```sql
+SELECT x FROM (VALUES (1),(2),(3)) a(x) WHERE x = ANY (SELECT y FROM (VALUES (3),(4),(5)) b(y)) → [
+3
+]
+```
+
+9.23.5. ALL
+
+expression operator ALL (subquery)
+
+The right-hand side is a parenthesized subquery, which must return exactly one column. The left-hand expression is evaluated and compared to each row of the subquery result using the given operator, which must yield a Boolean result. The result of ALL is “true” if all rows yield true (including the case where the subquery returns no rows). The result is “false” if any false result is found. The result is NULL if no comparison with a subquery row returns false, and at least one comparison returns NULL.
+
+NOT IN is equivalent to <> ALL.
+
+As with EXISTS, it's unwise to assume that the subquery will be evaluated completely.
+
+row_constructor operator ALL (subquery) (NOT SUPPORTED)
+
+The left-hand side of this form of ALL is a row constructor, as described in Section 4.2.13. The right-hand side is a parenthesized subquery, which must return exactly as many columns as there are expressions in the left-hand row. The left-hand expressions are evaluated and compared row-wise to each row of the subquery result, using the given operator. The result of ALL is “true” if the comparison returns true for all subquery rows (including the case where the subquery returns no rows). The result is “false” if the comparison returns false for any subquery row. The result is NULL if no comparison with a subquery row returns false, and at least one comparison returns NULL.
+
+See Section 9.24.5 for details about the meaning of a row constructor comparison.
+
+Example
+```sql
+SELECT x FROM (VALUES (1),(2),(3)) a(x) WHERE x <> ALL (SELECT y FROM (VALUES (3),(4),(5)) b(y)) ORDER BY x → [
+1
+2
+]
+```
+
+9.23.6. Single-Row Comparison
+
+row_constructor operator (subquery) (NOT SUPPORTED)
+
+The left-hand side is a row constructor, as described in Section 4.2.13. The right-hand side is a parenthesized subquery, which must return exactly as many columns as there are expressions in the left-hand row. Furthermore, the subquery cannot return more than one row. (If it returns zero rows, the result is taken to be null.) The left-hand side is evaluated and compared row-wise to the single subquery result row.
+
+See Section 9.24.5 for details about the meaning of a row constructor comparison.
+
+# 9.24. Row and Array Comparisons
+
+This section describes several specialized constructs for making multiple comparisons between groups of values. These forms are syntactically related to the subquery forms of the previous section, but do not involve subqueries. The forms involving array subexpressions are PostgreSQL extensions; the rest are SQL-compliant. All of the expression forms documented in this section return Boolean (true/false) results.
+
+9.24.1. IN
+
+expression IN (value [, ...])
+The right-hand side is a parenthesized list of expressions. The result is “true” if the left-hand expression's result is equal to any of the right-hand expressions. This is a shorthand notation for
+
+expression = value1
+OR
+expression = value2
+OR
+...
+Note that if the left-hand expression yields null, or if there are no equal right-hand values and at least one right-hand expression yields null, the result of the IN construct will be null, not false. This is in accordance with SQL's normal rules for Boolean combinations of null values.
+
+Example
+```sql
+SELECT x FROM (VALUES (1),(2),(3)) a(x) WHERE x IN (1,2) ORDER BY x → [
+1
+2
+]
+
+SELECT x IN (y, z) FROM (VALUES (1,1,2),(2,3,null),(3,4,5),(4,null,null)) a(x,y,z) ORDER BY x → [
+true
+NULL
+false
+NULL
+]
+```
+
+9.24.2. NOT IN
+
+expression NOT IN (value [, ...])
+The right-hand side is a parenthesized list of expressions. The result is “true” if the left-hand expression's result is unequal to all of the right-hand expressions. This is a shorthand notation for
+
+expression <> value1
+AND
+expression <> value2
+AND
+...
+Note that if the left-hand expression yields null, or if there are no equal right-hand values and at least one right-hand expression yields null, the result of the NOT IN construct will be null, not true as one might naively expect. This is in accordance with SQL's normal rules for Boolean combinations of null values.
+
+Tip
+x NOT IN y is equivalent to NOT (x IN y) in all cases. However, null values are much more likely to trip up the novice when working with NOT IN than when working with IN. It is best to express your condition positively if possible.
+
+Example
+```sql
+SELECT x FROM (VALUES (1),(2),(3)) a(x) WHERE x NOT IN (1,2) ORDER BY x → [
+3
+]
+
+SELECT x NOT IN (y, z) FROM (VALUES (1,1,2),(2,3,null),(3,4,5),(4,null,null)) a(x,y,z) ORDER BY x → [
+false
+NULL
+true
+NULL
+]
+```
+
+9.24.3. ANY/SOME (array) (NOT SUPPORTED)
+
+expression operator ANY (array expression)
+expression operator SOME (array expression)
+
+The right-hand side is a parenthesized expression, which must yield an array value. The left-hand expression is evaluated and compared to each element of the array using the given operator, which must yield a Boolean result. The result of ANY is “true” if any true result is obtained. The result is “false” if no true result is found (including the case where the array has zero elements).
+
+If the array expression yields a null array, the result of ANY will be null. If the left-hand expression yields null, the result of ANY is ordinarily null (though a non-strict comparison operator could possibly yield a different result). Also, if the right-hand array contains any null elements and no true comparison result is obtained, the result of ANY will be null, not false (again, assuming a strict comparison operator). This is in accordance with SQL's normal rules for Boolean combinations of null values.
+
+SOME is a synonym for ANY.
+
+Example
+```sql
+#SELECT x FROM (VALUES (1),(2),(3)) a(x) WHERE x = ANY (array[1,2]) ORDER BY x → [
+1
+2
+]
+]
+```
+
+9.24.4. ALL (array) (NOT SUPPORTED)
+
+expression operator ALL (array expression)
+
+The right-hand side is a parenthesized expression, which must yield an array value. The left-hand expression is evaluated and compared to each element of the array using the given operator, which must yield a Boolean result. The result of ALL is “true” if all comparisons yield true (including the case where the array has zero elements). The result is “false” if any false result is found.
+
+If the array expression yields a null array, the result of ALL will be null. If the left-hand expression yields null, the result of ALL is ordinarily null (though a non-strict comparison operator could possibly yield a different result). Also, if the right-hand array contains any null elements and no false comparison result is obtained, the result of ALL will be null, not true (again, assuming a strict comparison operator). This is in accordance with SQL's normal rules for Boolean combinations of null values.
+
+Example
+```sql
+#SELECT x FROM (VALUES (1),(2),(3)) a(x) WHERE x <> ALL (array[1,2]) ORDER BY x → [
+3
+]
+]
+```
+
+9.24.5. Row Constructor Comparison (NOT SUPPORTED)
+
+row_constructor operator row_constructor
+
+Each side is a row constructor, as described in Section 4.2.13. The two row constructors must have the same number of fields. The given operator is applied to each pair of corresponding fields. (Since the fields could be of different types, this means that a different specific operator could be selected for each pair.) All the selected operators must be members of some B-tree operator class, or be the negator of an = member of a B-tree operator class, meaning that row constructor comparison is only possible when the operator is =, <>, <, <=, >, or >=, or has semantics similar to one of these.
+
+The = and <> cases work slightly differently from the others. Two rows are considered equal if all their corresponding members are non-null and equal; the rows are unequal if any corresponding members are non-null and unequal; otherwise the result of the row comparison is unknown (null).
+
+For the <, <=, > and >= cases, the row elements are compared left-to-right, stopping as soon as an unequal or null pair of elements is found. If either of this pair of elements is null, the result of the row comparison is unknown (null); otherwise comparison of this pair of elements determines the result. For example, ROW(1,2,NULL) < ROW(1,3,0) yields true, not null, because the third pair of elements are not considered.
+
+Note
+Prior to PostgreSQL 8.2, the <, <=, > and >= cases were not handled per SQL specification. A comparison like ROW(a,b) < ROW(c,d) was implemented as a < c AND b < d whereas the correct behavior is equivalent to a < c OR (a = c AND b < d).
+
+row_constructor IS DISTINCT FROM row_constructor
+
+This construct is similar to a <> row comparison, but it does not yield null for null inputs. Instead, any null value is considered unequal to (distinct from) any non-null value, and any two nulls are considered equal (not distinct). Thus the result will either be true or false, never null.
+
+row_constructor IS NOT DISTINCT FROM row_constructor
+
+This construct is similar to a = row comparison, but it does not yield null for null inputs. Instead, any null value is considered unequal to (distinct from) any non-null value, and any two nulls are considered equal (not distinct). Thus the result will always be either true or false, never null.
+
+9.24.6. Composite Type Comparison (NOT SUPPORTED)
+
+record operator record
+
+The SQL specification requires row-wise comparison to return NULL if the result depends on comparing two NULL values or a NULL and a non-NULL. PostgreSQL does this only when comparing the results of two row constructors (as in Section 9.24.5) or comparing a row constructor to the output of a subquery (as in Section 9.23). In other contexts where two composite-type values are compared, two NULL field values are considered equal, and a NULL is considered larger than a non-NULL. This is necessary in order to have consistent sorting and indexing behavior for composite types.
+
+Each side is evaluated and they are compared row-wise. Composite type comparisons are allowed when the operator is =, <>, <, <=, > or >=, or has semantics similar to one of these. (To be specific, an operator can be a row comparison operator if it is a member of a B-tree operator class, or is the negator of the = member of a B-tree operator class.) The default behavior of the above operators is the same as for IS [ NOT ] DISTINCT FROM for row constructors (see Section 9.24.5).
+
+To support matching of rows which include elements without a default B-tree operator class, the following operators are defined for composite type comparison: *=, *<>, *<, *<=, *>, and *>=. These operators compare the internal binary representation of the two rows. Two rows might have a different binary representation even though comparisons of the two rows with the equality operator is true. The ordering of rows under these comparison operators is deterministic but not otherwise meaningful. These operators are used internally for materialized views and might be useful for other specialized purposes such as replication and B-Tree deduplication (see Section 64.4.3). They are not intended to be generally useful for writing queries, though.
+
+# 9.25. Set Returning Functions
+
+This section describes functions that possibly return more than one row. The most widely used functions in this class are series generating functions, as detailed in Table 9.63 and Table 9.64. Other, more specialized set-returning functions are described elsewhere in this manual. See Section 7.2.1.4 for ways to combine multiple set-returning functions.
+
+Table 9.63. Series Generating Functions
+
+#|
+||Function|Description||
+||generate_series ( start integer, stop integer [, step integer ] ) → setof integer  
+generate_series ( start bigint, stop bigint [, step bigint ] ) → setof bigint  
+generate_series ( start numeric, stop numeric [, step numeric ] ) → setof numeric|
+Generates a series of values from start to stop, with a step size of step. step defaults to 1.||
+||generate_series ( start timestamp, stop timestamp, step interval ) → setof timestamp  
+generate_series ( start timestamp with time zone, stop timestamp with time zone, step interval ) → setof timestamp with time zone|
+Generates a series of values from start to stop, with a step size of step.||
+|#
+
+When step is positive, zero rows are returned if start is greater than stop. Conversely, when step is negative, zero rows are returned if start is less than stop. Zero rows are also returned if any input is NULL. It is an error for step to be zero. Some examples follow:
+
+```sql
+SELECT * FROM generate_series(2,4) a → [
+2
+3
+4
+]
+
+SELECT * FROM generate_series(5,1,-2) a → [
+5
+3
+1
+]
+
+SELECT * FROM generate_series(4,3) a → [
+]
+
+SELECT * FROM generate_series(1.1, 4, 1.3) a → [
+1.1
+2.4
+3.7
+]
+
+-- this example relies on the date-plus-integer operator:
+SELECT date '2004-02-05' + s.a AS dates FROM generate_series(0,14,7) AS s(a) → [
+2004-02-05
+2004-02-12
+2004-02-19
+]
+
+SELECT * FROM generate_series('2008-03-01 00:00'::timestamp, '2008-03-04 12:00', '10 hours') a → [
+2008-03-01 00:00:00
+2008-03-01 10:00:00
+2008-03-01 20:00:00
+2008-03-02 06:00:00
+2008-03-02 16:00:00
+2008-03-03 02:00:00
+2008-03-03 12:00:00
+2008-03-03 22:00:00
+2008-03-04 08:00:00
+]
+```
+
+Table 9.64. Subscript Generating Functions (NOT SUPPORTED)
+
+#|
+||Function|Description||
+||generate_subscripts ( array anyarray, dim integer ) → setof integer|
+Generates a series comprising the valid subscripts of the dim'th dimension of the given array.||
+||generate_subscripts ( array anyarray, dim integer, reverse boolean ) → setof integer|
+Generates a series comprising the valid subscripts of the dim'th dimension of the given array. When reverse is true, returns the series in reverse order.||
+|#
+
+```sql
+-- basic usage:
+#SELECT generate_subscripts('{NULL,1,NULL,2}'::int[], 1) AS s → [
+1
+2
+3
+4
+]
+
+SELECT a AS array, s AS subscript, a[s] AS value FROM (SELECT generate_subscripts(a, 1) AS s, a FROM (VALUES (array[-1,-2]),(array[100,200,300])) s(a)) foo;
+```
+
+# 9.26. System Information Functions and Operators (NOT SUPPORTED)
+
+# 9.27. System Administration Functions (NOT SUPPORTED)
+
+# 9.28. Trigger Functions (NOT SUPPORTED)
+
+# 9.29. Event Trigger Functions (NOT SUPPORTED)
+
+# 9.30. Statistics Information Functions (NOT SUPPORTED)

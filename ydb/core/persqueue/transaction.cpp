@@ -183,7 +183,7 @@ void TDistributedTransaction::OnPartitionResult(const E& event, EDecision decisi
 
     Y_VERIFY(Partitions.contains(event.Partition));
 
-    SetDecision(decision);
+    SetDecision(SelfDecision, decision);
 
     ++PartitionRepliesCount;
 }
@@ -192,17 +192,19 @@ void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
                                         const TActorId& sender,
                                         std::unique_ptr<TEvTxProcessing::TEvReadSetAck> ack)
 {
-    Y_VERIFY(event.HasStep() && (Step == event.GetStep()));
+    Y_VERIFY((Step == Max<ui64>()) || (event.HasStep() && (Step == event.GetStep())));
     Y_VERIFY(event.HasTxId() && (TxId == event.GetTxId()));
 
     if (Senders.contains(event.GetTabletProducer())) {
         NKikimrTx::TReadSetData data;
         Y_VERIFY(event.HasReadSet() && data.ParseFromString(event.GetReadSet()));
 
-        SetDecision(event.GetTabletProducer(), data.GetDecision());
+        SetDecision(ParticipantsDecision, data.GetDecision());
         ReadSetAcks[sender] = std::move(ack);
 
         ++ReadSetCount;
+    } else {
+        Y_VERIFY_DEBUG(false, "unknown sender tablet %" PRIu64, event.GetTabletProducer());
     }
 }
 
@@ -222,18 +224,6 @@ void TDistributedTransaction::OnTxCommitDone(const TEvPQ::TEvTxCommitDone& event
     Y_VERIFY(Partitions.contains(event.Partition));
 
     ++PartitionRepliesCount;
-}
-
-void TDistributedTransaction::SetDecision(NKikimrTx::TReadSetData::EDecision decision)
-{
-    SetDecision(SelfDecision, decision);
-}
-
-void TDistributedTransaction::SetDecision(ui64 tabletId, NKikimrTx::TReadSetData::EDecision decision)
-{
-    if (Senders.contains(tabletId)) {
-        SetDecision(ParticipantsDecision, decision);
-    }
 }
 
 auto TDistributedTransaction::GetDecision() const -> EDecision

@@ -2,75 +2,13 @@
 
 #include "topic_impl.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/impl_tracker.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/callback_context.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/counters_logger.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/read_session.h>
 
 namespace NYdb::NTopic {
 
-class TDummyReadSession: public IReadSession, public std::enable_shared_from_this<TDummyReadSession> {
-public:
-    TDummyReadSession() = default;
-
-    inline TDummyReadSession(const TReadSessionSettings& settings) {
-        (void)settings;
-    }
-
-    inline NThreading::TFuture<void> WaitEvent() override {
-        Y_VERIFY(false);
-
-        NThreading::TPromise<void> promise = NThreading::NewPromise<void>();
-        return promise.GetFuture();
-    }
-
-    inline TVector<TReadSessionEvent::TEvent> GetEvents(bool block, TMaybe<size_t> maxEventsCount, size_t maxByteSize) override {
-        Y_VERIFY(false);
-
-        (void)block;
-        (void)maxEventsCount;
-        (void)maxByteSize;
-        return {};
-    }
-
-    TVector<TReadSessionEvent::TEvent> GetEvents(const TReadSessionGetEventSettings& settings) override {
-        return GetEvents(settings.Block_,
-                         settings.MaxEventsCount_,
-                         settings.MaxByteSize_);
-    }
-
-    inline TMaybe<TReadSessionEvent::TEvent> GetEvent(bool block, size_t maxByteSize) override {
-        Y_VERIFY(false);
-
-        (void)block;
-        (void)maxByteSize;
-        return {};
-    }
-
-    TMaybe<TReadSessionEvent::TEvent> GetEvent(const TReadSessionGetEventSettings& settings) override {
-        return GetEvent(settings.Block_,
-                        settings.MaxByteSize_);
-    }
-
-    inline bool Close(TDuration timeout) override {
-        Y_VERIFY(false);
-
-        return !(bool)timeout;
-    }
-
-    inline TString GetSessionId() const override {
-        Y_VERIFY(false);
-
-        return "dummy_session_id";
-    }
-
-    inline TReaderCounters::TPtr GetCounters() const override {
-        Y_VERIFY(false);
-
-        return nullptr;
-    }
-};
-
 class TReadSession : public IReadSession,
-                     public NPersQueue::IUserRetrievedEventCallback<false>,
                      public std::enable_shared_from_this<TReadSession> {
 public:
     TReadSession(const TReadSessionSettings& settings,
@@ -113,11 +51,8 @@ private:
 
     void CreateClusterSessionsImpl(NPersQueue::TDeferredActions<false>& deferred);
 
-    void OnUserRetrievedEvent(i64 decompressedSize, size_t messagesCount) override;
-
     void MakeCountersIfNeeded();
-    void DumpCountersToLog(size_t timeNumber = 0);
-    void ScheduleDumpCountersToLog(size_t timeNumber = 0);
+    void SetupCountersLogger();
 
     // Shutdown.
     void Abort(EStatus statusCode, NYql::TIssues&& issues);
@@ -150,13 +85,14 @@ private:
     std::shared_ptr<TGRpcConnectionsImpl> Connections;
     TDbDriverStatePtr DbDriverState;
     TAdaptiveLock Lock;
-    std::shared_ptr<NPersQueue::TImplTracker> Tracker;
     std::shared_ptr<NPersQueue::TReadSessionEventsQueue<false>> EventsQueue;
 
     NPersQueue::TSingleClusterReadSessionImpl<false>::TPtr Session;
+    std::shared_ptr<NPersQueue::TCallbackContext<NPersQueue::TSingleClusterReadSessionImpl<false>>> CbContext;
     TVector<TTopicReadSettings> Topics;
 
-    NGrpc::IQueueClientContextPtr DumpCountersContext;
+    std::shared_ptr<NPersQueue::TCountersLogger<false>> CountersLogger;
+    std::shared_ptr<NPersQueue::TCallbackContext<NPersQueue::TCountersLogger<false>>> DumpCountersContext;
 
     // Exiting.
     bool Aborting = false;

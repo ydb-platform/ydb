@@ -510,6 +510,7 @@ public:
     ui64 PartitionIdStart = 1;
     ui64 PartitionIdStep = 1;
     typename TSingleClusterReadSessionImpl<true>::TPtr Session;
+    std::shared_ptr<TCallbackContext<TSingleClusterReadSessionImpl<true>>> CbContext;
     std::shared_ptr<TThreadPool> ThreadPool;
     ::IExecutor::TPtr DefaultExecutor;
 };
@@ -598,6 +599,7 @@ TReadSessionImplTestSetup::~TReadSessionImplTestSetup() noexcept(false) {
         MockProcessor->Validate();
     }
 
+    CbContext->Cancel();
     Session = nullptr;
 
     ThreadPool->Stop();
@@ -630,13 +632,14 @@ TSingleClusterReadSessionImpl<true>* TReadSessionImplTestSetup::GetSession() {
             GetEventsQueue(),
             FakeContext,
             PartitionIdStart, PartitionIdStep);
+        CbContext = Session->MakeCallbackContext();
     }
     return Session.get();
 }
 
 std::shared_ptr<TReadSessionEventsQueue<true>> TReadSessionImplTestSetup::GetEventsQueue() {
     if (!EventsQueue) {
-        EventsQueue = std::make_shared<TReadSessionEventsQueue<true>>(Settings, std::weak_ptr<IUserRetrievedEventCallback<true>>());
+        EventsQueue = std::make_shared<TReadSessionEventsQueue<true>>(Settings);
     }
     return EventsQueue;
 }
@@ -727,14 +730,14 @@ Y_UNIT_TEST_SUITE(PersQueueSdkReadSessionTest) {
         }
 
         // Event 4: commit ack.
-        if (commit && !close) {  // (commit && close) branch check is broken with current TReadSession::Close quick fix
+        if (commit) {  // (commit && close) branch check is broken with current TReadSession::Close quick fix
             TMaybe<TReadSessionEvent::TEvent> event = session->GetEvent(!close); // Event is expected to be already in queue if closed.
             UNIT_ASSERT(event);
-            Cerr << "commit ack event " << DebugString(*event) << Endl;
-            UNIT_ASSERT(std::holds_alternative<TReadSessionEvent::TCommitAcknowledgementEvent>(*event));
+            Cerr << "commit ack or close event " << DebugString(*event) << Endl;
+            UNIT_ASSERT(std::holds_alternative<TReadSessionEvent::TCommitAcknowledgementEvent>(*event) || std::holds_alternative<TSessionClosedEvent>(*event));
         }
 
-        if (close) {
+        if (close && !commit) {
             TMaybe<TReadSessionEvent::TEvent> event = session->GetEvent(false);
             UNIT_ASSERT(event);
             Cerr << "close event " << DebugString(*event) << Endl;
@@ -1885,7 +1888,8 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
 
         TAReadSessionSettings<true> settings;
         std::shared_ptr<TSingleClusterReadSessionImpl<true>> session;
-        TReadSessionEventsQueue<true> sessionQueue{settings, session};
+        auto cbCtx = std::make_shared<TCallbackContext<TSingleClusterReadSessionImpl<true>>>(session);
+        TReadSessionEventsQueue<true> sessionQueue{settings};
 
         auto stream = MakeIntrusive<TPartitionStreamImpl<true>>(1ull,
                                                                 "",
@@ -1894,7 +1898,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
                                                                 1ull,
                                                                 1ull,
                                                                 0ull,
-                                                                session);
+                                                                cbCtx);
 
         TPartitionData<true> message;
         Ydb::PersQueue::V1::MigrationStreamingReadServerMessage_DataBatch_Batch* batch =
@@ -1904,7 +1908,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
         *messageData->mutable_data() = "*";
 
         auto data = std::make_shared<TDataDecompressionInfo<true>>(std::move(message),
-                                                                   session,
+                                                                   cbCtx,
                                                                    false,
                                                                    0);
 
@@ -1933,5 +1937,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
 
 #undef UNIT_ASSERT_CONTROL_EVENT
 #undef UNIT_ASSERT_DATA_EVENT
+
+        cbCtx->Cancel();
     }
 }

@@ -67,8 +67,11 @@ TReadSession::~TReadSession() {
     Abort();
     ClearAllEvents();
 
-    if (Tracker) {
-        Tracker->AsyncComplete().Wait();
+    for (const auto& ctx : CbContexts) {
+        ctx->Cancel();
+    }
+    if (DumpCountersContext) {
+        DumpCountersContext->Cancel();
     }
 }
 
@@ -83,8 +86,7 @@ Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest TReadSession::MakeClus
 }
 
 void TReadSession::Start() {
-    Tracker = std::make_shared<TImplTracker>();
-    EventsQueue = std::make_shared<TReadSessionEventsQueue<true>>(Settings, weak_from_this(), Tracker);
+    EventsQueue = std::make_shared<TReadSessionEventsQueue<true>>(Settings);
 
     if (!ValidateSettings()) {
         return;
@@ -178,7 +180,7 @@ void TReadSession::ProceedWithoutClusterDiscovery() {
         clusterSessionInfo.Topics = Settings.Topics_;
         CreateClusterSessionsImpl(deferred);
     }
-    // ScheduleDumpCountersToLog();
+    SetupCountersLogger();
 }
 
 void TReadSession::CreateClusterSessionsImpl(TDeferredActions<true>& deferred) {
@@ -215,10 +217,10 @@ void TReadSession::CreateClusterSessionsImpl(TDeferredActions<true>& deferred) {
                 EventsQueue,
                 context,
                 partitionStreamIdStart++,
-                clusterSessionsCount,
-                Tracker);
+                clusterSessionsCount);
 
-        deferred.DeferStartSession(clusterSessionInfo.Session);
+        CbContexts.push_back(clusterSessionInfo.Session->MakeCallbackContext());
+        deferred.DeferStartSession(CbContexts.back());
     }
 }
 
@@ -320,7 +322,7 @@ void TReadSession::OnClusterDiscovery(const TStatus& status, const Ydb::PersQueu
 
         CreateClusterSessionsImpl(deferred);
     }
-    // ScheduleDumpCountersToLog();
+    SetupCountersLogger();
 }
 
 void TReadSession::RestartClusterDiscoveryImpl(TDuration delay, TDeferredActions<true>& deferred) {
@@ -350,7 +352,7 @@ void TReadSession::RestartClusterDiscoveryImpl(TDuration delay, TDeferredActions
 bool TReadSession::Close(TDuration timeout) {
     LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Closing read session. Close timeout: " << timeout);
     // Log final counters.
-    DumpCountersToLog();
+    CountersLogger->Stop();
 
     std::vector<TSingleClusterReadSessionImpl<true>::TPtr> sessions;
     NThreading::TPromise<bool> promise = NThreading::NewPromise<bool>();
@@ -528,15 +530,6 @@ void TReadSession::ResumeReadingData() {
     }
 }
 
-void TReadSession::OnUserRetrievedEvent(i64 decompressedSize, size_t messagesCount) {
-    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix()
-                          << "The application data is transferred to the client. Number of messages "
-                          << messagesCount
-                          << ", size "
-                          << decompressedSize
-                          << " bytes");
-}
-
 void TReadSession::MakeCountersIfNeeded() {
     if (!Settings.Counters_ || HasNullCounters(*Settings.Counters_)) {
         TReaderCounters::TPtr counters = MakeIntrusive<TReaderCounters>();
@@ -548,83 +541,12 @@ void TReadSession::MakeCountersIfNeeded() {
     }
 }
 
-void TReadSession::DumpCountersToLog(size_t timeNumber) {
-    const bool logCounters = timeNumber % 60 == 0; // Every 1 minute.
-    const bool dumpSessionsStatistics = timeNumber % 600 == 0; // Every 10 minutes.
-
-    *Settings.Counters_->CurrentSessionLifetimeMs = (TInstant::Now() - StartSessionTime).MilliSeconds();
-    std::vector<TSingleClusterReadSessionImpl<true>::TPtr> sessions;
-    with_lock (Lock) {
-        if (Closing || Aborting) {
-            return;
-        }
-
-        sessions.reserve(ClusterSessions.size());
-        for (auto& [cluster, sessionInfo] : ClusterSessions) {
-            if (sessionInfo.Session) {
-                sessions.emplace_back(sessionInfo.Session);
-            }
-        }
-    }
-
-    {
-        TMaybe<TLogElement> log;
-        if (dumpSessionsStatistics) {
-            log.ConstructInPlace(&Log, TLOG_INFO);
-            (*log) << "Read/commit by partition streams (cluster:topic:partition:stream-id:read-offset:committed-offset):";
-        }
-        for (const auto& session : sessions) {
-            session->UpdateMemoryUsageStatistics();
-            if (dumpSessionsStatistics) {
-                session->DumpStatisticsToLog(*log);
-            }
-        }
-    }
-
-#define C(counter)                                                      \
-    << " " Y_STRINGIZE(counter) ": "                                    \
-    << Settings.Counters_->counter->Val()                               \
-        /**/
-
-    if (logCounters) {
-        LOG_LAZY(Log, TLOG_INFO,
-            GetLogPrefix() << "Counters: {"
-            C(Errors)
-            C(CurrentSessionLifetimeMs)
-            C(BytesRead)
-            C(MessagesRead)
-            C(BytesReadCompressed)
-            C(BytesInflightUncompressed)
-            C(BytesInflightCompressed)
-            C(BytesInflightTotal)
-            C(MessagesInflight)
-            << " }"
-        );
-    }
-
-#undef C
-
-    // ScheduleDumpCountersToLog(timeNumber + 1);
-}
-
-void TReadSession::ScheduleDumpCountersToLog(size_t timeNumber) {
+void TReadSession::SetupCountersLogger() {
     with_lock(Lock) {
-        if (Aborting || Closing) {
-            return;
-        }
-        DumpCountersContext = Connections->CreateContext();
-        if (DumpCountersContext) {
-            auto callback = [self = weak_from_this(), timeNumber](bool ok) {
-                if (ok) {
-                    if (auto sharedSelf = self.lock()) {
-                        sharedSelf->DumpCountersToLog(timeNumber);
-                    }
-                }
-            };
-            Connections->ScheduleCallback(TDuration::Seconds(1),
-                                        std::move(callback),
-                                        DumpCountersContext);
-        }
+        CountersLogger = std::make_shared<TCountersLogger<true>>(Connections, CbContexts, Settings.Counters_, Log,
+                                                                 GetLogPrefix(), StartSessionTime);
+        DumpCountersContext = CountersLogger->MakeCallbackContext();
+        CountersLogger->Start();
     }
 }
 

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/impl_tracker.h>
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 
 #include <util/generic/queue.h>
@@ -314,10 +313,9 @@ protected:
 
     // Template for visitor implementation.
     struct TBaseHandlersVisitor {
-        TBaseHandlersVisitor(const TSettings& settings, TEvent& event, std::shared_ptr<TImplTracker> tracker)
+        TBaseHandlersVisitor(const TSettings& settings, TEvent& event)
             : Settings(settings)
             , Event(event)
-            , Tracker(tracker)
         {}
 
         template <class TEventType, class TFunc, class TCommonFunc>
@@ -336,7 +334,7 @@ protected:
         template <class TEventType, class TFunc>
         void PushSpecificHandler(TEvent&& event, const TFunc& f) {
             Post(Settings.EventHandlers_.HandlersExecutor_,
-                 [func = f, event = std::move(event), wire = Tracker->MakeTrackedWire()]() mutable {
+                 [func = f, event = std::move(event)]() mutable {
                      func(std::get<TEventType>(event));
                  });
         }
@@ -344,7 +342,7 @@ protected:
         template <class TFunc>
         void PushCommonHandler(TEvent&& event, const TFunc& f) {
             Post(Settings.EventHandlers_.HandlersExecutor_,
-                 [func = f, event = std::move(event), wire = Tracker->MakeTrackedWire()]() mutable { func(event); });
+                 [func = f, event = std::move(event)]() mutable { func(event); });
         }
 
         virtual void Post(const typename TExecutor::TPtr& executor, typename TExecutor::TFunction&& f) {
@@ -353,7 +351,6 @@ protected:
 
         const TSettings& Settings;
         TEvent& Event;
-        std::shared_ptr<TImplTracker> Tracker;
     };
 
 

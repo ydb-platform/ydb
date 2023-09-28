@@ -49,15 +49,13 @@ TWriteSessionImpl::TWriteSessionImpl(
         const TWriteSessionSettings& settings,
          std::shared_ptr<TTopicClient::TImpl> client,
          std::shared_ptr<TGRpcConnectionsImpl> connections,
-         TDbDriverStatePtr dbDriverState,
-         std::shared_ptr<NPersQueue::TImplTracker> tracker)
+         TDbDriverStatePtr dbDriverState)
     : Settings(settings)
     , Client(std::move(client))
     , Connections(std::move(connections))
     , DbDriverState(std::move(dbDriverState))
     , PrevToken(DbDriverState->CredentialsProvider ? DbDriverState->CredentialsProvider->GetAuthInfo() : "")
-    , Tracker(tracker)
-    , EventsQueue(std::make_shared<TWriteSessionEventsQueue>(Settings, Tracker))
+    , EventsQueue(std::make_shared<TWriteSessionEventsQueue>(Settings))
     , InitSeqNoPromise(NThreading::NewPromise<ui64>())
     , WakeupInterval(
             Settings.BatchFlushInterval_.GetOrElse(TDuration::Zero()) ?
@@ -77,7 +75,12 @@ TWriteSessionImpl::TWriteSessionImpl(
 
 }
 
+void TWriteSessionImpl::SetCallbackContext(std::shared_ptr<NPersQueue::TCallbackContext<TWriteSessionImpl>> ctx) {
+    CbContext = std::move(ctx);
+}
+
 void TWriteSessionImpl::Start(const TDuration& delay) {
+    Y_VERIFY(CbContext);
     ++ConnectionAttemptsDone;
     if (!Started) {
         with_lock(Lock) {
@@ -159,17 +162,22 @@ void TWriteSessionImpl::ConnectToPreferredPartitionLocation(const TDuration& del
     request.set_partition_id(*Settings.PartitionId_);
     request.set_include_location(true);
 
-    auto extractor = [sharedThis = shared_from_this(), wire = Tracker->MakeTrackedWire(), context = describePartitionContext](Ydb::Topic::DescribePartitionResponse* response, TPlainStatus status) mutable {
+    auto extractor = [cbContext = CbContext, context = describePartitionContext](Ydb::Topic::DescribePartitionResponse* response, TPlainStatus status) mutable {
         Ydb::Topic::DescribePartitionResult result;
         if (response)
             response->operation().result().UnpackTo(&result);
 
         TStatus st(std::move(status));
-        sharedThis->OnDescribePartition(st, result, context);
+        if (auto self = cbContext->LockShared()) {
+            self->OnDescribePartition(st, result, context);
+        }
     };
 
-    auto callback = [sharedThis = this->shared_from_this(), wire = Tracker->MakeTrackedWire(), req = std::move(request), extr = std::move(extractor), connections = std::shared_ptr<TGRpcConnectionsImpl>(Connections), dbState = DbDriverState, context = describePartitionContext]() mutable {
-        LOG_LAZY(dbState->Log, TLOG_DEBUG, sharedThis->LogPrefix() << " Getting partition location, partition " << sharedThis->Settings.PartitionId_);
+    auto callback = [req = std::move(request), extr = std::move(extractor),
+                     connections = std::shared_ptr<TGRpcConnectionsImpl>(Connections), dbState = DbDriverState,
+                     context = describePartitionContext, prefix = TString(LogPrefix()),
+                     partId = Settings.PartitionId_]() mutable {
+        LOG_LAZY(dbState->Log, TLOG_DEBUG, prefix + " Getting partition location, partition " + ToString(partId));
         connections->Run<Ydb::Topic::V1::TopicService, Ydb::Topic::DescribePartitionRequest, Ydb::Topic::DescribePartitionResponse>(
             std::move(req),
             std::move(extr),
@@ -189,10 +197,11 @@ void TWriteSessionImpl::OnDescribePartition(const TStatus& status, const Ydb::To
     THandleResult handleResult;
 
     with_lock (Lock) {
-        if (DescribePartitionContext == describePartitionContext)
+        if (DescribePartitionContext == describePartitionContext) {
             DescribePartitionContext = nullptr;
-        else 
+        } else {
             return;
+        }
     }
 
     if (!status.IsSuccess()) {
@@ -468,19 +477,18 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
 
         reqSettings = TRpcRequestSettings::Make(Settings, PreferredPartitionLocation.Endpoint);
 
-        connectCallback = [sharedThis = shared_from_this(),
-                                wire = Tracker->MakeTrackedWire(),
-                                connectContext = connectContext]
-                (TPlainStatus&& st, typename IProcessor::TPtr&& processor) {
-            sharedThis->OnConnect(std::move(st), std::move(processor), connectContext);
+        connectCallback = [cbContext = CbContext,
+                           connectContext = connectContext](TPlainStatus&& st, typename IProcessor::TPtr&& processor) {
+            if (auto self = cbContext->LockShared()) {
+                self->OnConnect(std::move(st), std::move(processor), connectContext);
+            }
         };
 
-        connectTimeoutCallback = [sharedThis = shared_from_this(),
-                                    wire = Tracker->MakeTrackedWire(),
-                                    connectTimeoutContext = connectTimeoutContext]
-                                    (bool ok) {
+        connectTimeoutCallback = [cbContext = CbContext, connectTimeoutContext = connectTimeoutContext](bool ok) {
             if (ok) {
-                sharedThis->OnConnectTimeout(connectTimeoutContext);
+                if (auto self = cbContext->LockShared()) {
+                    self->OnConnectTimeout(connectTimeoutContext);
+                }
             }
         };
     }
@@ -570,7 +578,7 @@ void TWriteSessionImpl::InitImpl() {
     auto* init = req.mutable_init_request();
     init->set_path(Settings.Path_);
     init->set_producer_id(Settings.ProducerId_);
-    
+
     if (Settings.PartitionId_.Defined()) {
         if (Settings.DirectWriteToPartition_) {
             auto* partitionWithGeneration = init->mutable_partition_with_generation();
@@ -604,10 +612,11 @@ void TWriteSessionImpl::WriteToProcessorImpl(TWriteSessionImpl::TClientMessage&&
     if (Aborting) {
         return;
     }
-    auto callback = [sharedThis = shared_from_this(),
-                     wire = Tracker->MakeTrackedWire(),
+    auto callback = [cbContext = CbContext,
                      connectionGeneration = ConnectionGeneration](NGrpc::TGrpcStatus&& grpcStatus) {
-        sharedThis->OnWriteDone(std::move(grpcStatus), connectionGeneration);
+        if (auto self = cbContext->LockShared()) {
+            self->OnWriteDone(std::move(grpcStatus), connectionGeneration);
+        }
     };
 
     Processor->Write(std::move(req), callback);
@@ -624,13 +633,14 @@ void TWriteSessionImpl::ReadFromProcessor() {
         }
         prc = Processor;
         generation = ConnectionGeneration;
-        callback = [sharedThis = shared_from_this(),
-                        wire = Tracker->MakeTrackedWire(),
-                        connectionGeneration = generation,
-                        processor = prc,
-                        serverMessage = ServerMessage]
-                        (NGrpc::TGrpcStatus&& grpcStatus) {
-            sharedThis->OnReadDone(std::move(grpcStatus), connectionGeneration);
+        callback = [cbContext = CbContext,
+                    connectionGeneration = generation,
+                    processor = prc,
+                    serverMessage = ServerMessage]
+                    (NGrpc::TGrpcStatus&& grpcStatus) {
+            if (auto self = cbContext->LockShared()) {
+                self->OnReadDone(std::move(grpcStatus), connectionGeneration);
+            }
         };
     }
     prc->Read(ServerMessage.get(), std::move(callback));
@@ -943,8 +953,7 @@ void TWriteSessionImpl::CompressImpl(TBlock&& block_) {
 
     std::shared_ptr<TBlock> blockPtr(std::make_shared<TBlock>());
     blockPtr->Move(block_);
-    auto lambda = [sharedThis = shared_from_this(),
-                   wire = Tracker->MakeTrackedWire(),
+    auto lambda = [cbContext = CbContext,
                    codec = Settings.Codec_,
                    level = Settings.CompressionLevel_,
                    isSyncCompression = !CompressionExecutor->IsAsync(),
@@ -957,8 +966,10 @@ void TWriteSessionImpl::CompressImpl(TBlock&& block_) {
         Y_VERIFY(!compressedData.Empty());
         blockPtr->Data = std::move(compressedData);
         blockPtr->Compressed = true;
-        blockPtr->CodecID = static_cast<ui32>(sharedThis->Settings.Codec_);
-        sharedThis->OnCompressed(std::move(*blockPtr), isSyncCompression);
+        blockPtr->CodecID = static_cast<ui32>(codec);
+        if (auto self = cbContext->LockShared()) {
+            self->OnCompressed(std::move(*blockPtr), isSyncCompression);
+        }
     };
 
     CompressionExecutor->Post(lambda);
@@ -1261,13 +1272,15 @@ void TWriteSessionImpl::HandleWakeUpImpl() {
     if (AtomicGet(Aborting)) {
         return;
     }
-    auto callback = [sharedThis = this->shared_from_this(), wire = Tracker->MakeTrackedWire()] (bool ok)
+    auto callback = [cbContext = CbContext] (bool ok)
     {
         if (!ok) {
             return;
         }
-        with_lock(sharedThis->Lock) {
-            sharedThis->HandleWakeUpImpl();
+        if (auto self = cbContext->LockShared()) {
+            with_lock(self->Lock) {
+                self->HandleWakeUpImpl();
+            }
         }
     };
     if (TInstant::Now() - LastTokenUpdate > UPDATE_TOKEN_PERIOD) {

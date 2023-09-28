@@ -3,7 +3,7 @@
 #include "topic_impl.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/common.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/impl_tracker.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/callback_context.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
 #include <util/generic/buffer.h>
@@ -26,10 +26,8 @@ class TWriteSessionEventsQueue: public NPersQueue::TBaseSessionEventsQueue<TWrit
     using TParent = TBaseSessionEventsQueue<TWriteSessionSettings, TWriteSessionEvent::TEvent, TSessionClosedEvent, IExecutor>;
 
 public:
-    TWriteSessionEventsQueue(const TWriteSessionSettings& settings,
-                             std::shared_ptr<NPersQueue::TImplTracker> tracker = std::make_shared<NPersQueue::TImplTracker>())
+    TWriteSessionEventsQueue(const TWriteSessionSettings& settings)
     : TParent(settings)
-    , Tracker(std::move(tracker))
     {}
 
     void PushEvent(TEventInfo eventInfo) {
@@ -126,7 +124,7 @@ private:
     };
 
     bool ApplyHandler(TEventInfo& eventInfo) {
-        THandlersVisitor visitor(Settings, eventInfo.Event, Tracker);
+        THandlersVisitor visitor(Settings, eventInfo.Event);
         return visitor.Visit();
     }
 
@@ -141,9 +139,6 @@ private:
         Y_ASSERT(CloseEvent);
         return {*CloseEvent};
     }
-
-private:
-    std::shared_ptr<NPersQueue::TImplTracker> Tracker;
 };
 
 struct TMemoryUsageChange {
@@ -325,8 +320,7 @@ public:
     TWriteSessionImpl(const TWriteSessionSettings& settings,
             std::shared_ptr<TTopicClient::TImpl> client,
             std::shared_ptr<TGRpcConnectionsImpl> connections,
-            TDbDriverStatePtr dbDriverState,
-            std::shared_ptr<NPersQueue::TImplTracker> tracker);
+            TDbDriverStatePtr dbDriverState);
 
     TMaybe<TWriteSessionEvent::TEvent> GetEvent(bool block = false) override;
     TVector<TWriteSessionEvent::TEvent> GetEvents(bool block = false,
@@ -360,6 +354,8 @@ public:
     TWriterCounters::TPtr GetCounters() override {Y_FAIL("Unimplemented"); } //ToDo - unimplemented;
 
     ~TWriteSessionImpl(); // will not call close - destroy everything without acks
+
+    void SetCallbackContext(std::shared_ptr<NPersQueue::TCallbackContext<TWriteSessionImpl>> ctx);
 
 private:
 
@@ -429,7 +425,7 @@ private:
     TStringType PrevToken;
     bool UpdateTokenInProgress = false;
     TInstant LastTokenUpdate = TInstant::Zero();
-    std::shared_ptr<NPersQueue::TImplTracker> Tracker;
+    std::shared_ptr<NPersQueue::TCallbackContext<TWriteSessionImpl>> CbContext;
     std::shared_ptr<TWriteSessionEventsQueue> EventsQueue;
     NGrpc::IQueueClientContextPtr ClientContext; // Common client context.
     NGrpc::IQueueClientContextPtr ConnectContext;

@@ -4,7 +4,7 @@
 #include "write_session_impl.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/common.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/impl_tracker.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/callback_context.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
 #include <util/generic/buffer.h>
@@ -55,9 +55,12 @@ private:
     void Start(const TDuration& delay);
 
 private:
-    std::shared_ptr<NPersQueue::TImplTracker> Tracker;
+    std::shared_ptr<NPersQueue::TCallbackContext<TWriteSessionImpl>> CbContext;
     std::shared_ptr<TWriteSessionImpl> Impl;
 };
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TSimpleBlockingWriteSession
 
 class TSimpleBlockingWriteSession : public ISimpleBlockingWriteSession {
 public:

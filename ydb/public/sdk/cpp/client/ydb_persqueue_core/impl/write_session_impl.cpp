@@ -45,15 +45,13 @@ TWriteSessionImpl::TWriteSessionImpl(
         const TWriteSessionSettings& settings,
          std::shared_ptr<TPersQueueClient::TImpl> client,
          std::shared_ptr<TGRpcConnectionsImpl> connections,
-         TDbDriverStatePtr dbDriverState,
-         std::shared_ptr<TImplTracker> tracker)
+         TDbDriverStatePtr dbDriverState)
     : Settings(settings)
     , Client(std::move(client))
     , Connections(std::move(connections))
     , DbDriverState(std::move(dbDriverState))
     , PrevToken(DbDriverState->CredentialsProvider ? DbDriverState->CredentialsProvider->GetAuthInfo() : "")
-    , Tracker(tracker)
-    , EventsQueue(std::make_shared<TWriteSessionEventsQueue>(Settings, Tracker))
+    , EventsQueue(std::make_shared<TWriteSessionEventsQueue>(Settings))
     , InitSeqNoPromise(NThreading::NewPromise<ui64>())
     , WakeupInterval(
             Settings.BatchFlushInterval_.GetOrElse(TDuration::Zero()) ?
@@ -77,7 +75,12 @@ TWriteSessionImpl::TWriteSessionImpl(
 
 }
 
+void TWriteSessionImpl::SetCallbackContext(std::shared_ptr<TCallbackContext<TWriteSessionImpl>> ctx) {
+    CbContext = std::move(ctx);
+}
+
 void TWriteSessionImpl::Start(const TDuration& delay) {
+    Y_VERIFY(CbContext);
     ++ConnectionAttemptsDone;
     if (!Started) {
         with_lock(Lock) {
@@ -143,14 +146,16 @@ void TWriteSessionImpl::DoCdsRequest(TDuration delay) {
             (Settings.ClusterDiscoveryMode_ == EClusterDiscoveryMode::Auto && !IsFederation(DbDriverState->DiscoveryEndpoint)));
 
         if (!cdsRequestIsUnnecessary) {
-            auto extractor = [sharedThis = shared_from_this(), wire = Tracker->MakeTrackedWire()]
+            auto extractor = [cbContext = CbContext]
                     (google::protobuf::Any* any, TPlainStatus status) mutable {
                 Ydb::PersQueue::ClusterDiscovery::DiscoverClustersResult result;
                 if (any) {
                     any->UnpackTo(&result);
                 }
                 TStatus st(std::move(status));
-                sharedThis->OnCdsResponse(st, result);
+                if (auto self = cbContext->LockShared()) {
+                    self->OnCdsResponse(st, result);
+                }
             };
 
             Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest req;
@@ -163,7 +168,7 @@ void TWriteSessionImpl::DoCdsRequest(TDuration delay) {
                 params->set_preferred_cluster_name(*Settings.PreferredCluster_);
 
             LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefix() << "Do schedule cds request after " << delay.MilliSeconds() << " ms\n");
-            auto cdsRequestCall = [wire = Tracker->MakeTrackedWire(), req_=std::move(req), extr=std::move(extractor), connections = std::shared_ptr<TGRpcConnectionsImpl>(Connections), dbState=DbDriverState, settings=Settings]() mutable {
+            auto cdsRequestCall = [req_=std::move(req), extr=std::move(extractor), connections = std::shared_ptr<TGRpcConnectionsImpl>(Connections), dbState=DbDriverState, settings=Settings]() mutable {
                 LOG_LAZY(dbState->Log, TLOG_INFO, TStringBuilder() << "MessageGroupId [" << settings.MessageGroupId_ << "] Running cds request ms\n");
                 connections->RunDeferred<Ydb::PersQueue::V1::ClusterDiscoveryService,
                                         Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest,
@@ -463,19 +468,18 @@ void TWriteSessionImpl::DoConnect(const TDuration& delay, const TString& endpoin
         Y_ASSERT(connectTimeoutContext);
         reqSettings = TRpcRequestSettings::Make(Settings);
 
-        connectCallback = [sharedThis = shared_from_this(),
-                                wire = Tracker->MakeTrackedWire(),
-                                connectContext = connectContext]
-                (TPlainStatus&& st, typename IProcessor::TPtr&& processor) {
-            sharedThis->OnConnect(std::move(st), std::move(processor), connectContext);
+        connectCallback = [cbContext = CbContext,
+                           connectContext = connectContext](TPlainStatus&& st, typename IProcessor::TPtr&& processor) {
+            if (auto self = cbContext->LockShared()) {
+                self->OnConnect(std::move(st), std::move(processor), connectContext);
+            }
         };
 
-        connectTimeoutCallback = [sharedThis = shared_from_this(),
-                                    wire = Tracker->MakeTrackedWire(),
-                                    connectTimeoutContext = connectTimeoutContext]
-                                    (bool ok) {
+        connectTimeoutCallback = [cbContext = CbContext, connectTimeoutContext = connectTimeoutContext](bool ok) {
             if (ok) {
-                sharedThis->OnConnectTimeout(connectTimeoutContext);
+                if (auto self = cbContext->LockShared()) {
+                    self->OnConnectTimeout(connectTimeoutContext);
+                }
             }
         };
     }
@@ -586,10 +590,11 @@ void TWriteSessionImpl::WriteToProcessorImpl(TWriteSessionImpl::TClientMessage&&
     if (Aborting) {
         return;
     }
-    auto callback = [sharedThis = shared_from_this(),
-                     wire = Tracker->MakeTrackedWire(),
+    auto callback = [cbContext = CbContext,
                      connectionGeneration = ConnectionGeneration](NGrpc::TGrpcStatus&& grpcStatus) {
-        sharedThis->OnWriteDone(std::move(grpcStatus), connectionGeneration);
+        if (auto self = cbContext->LockShared()) {
+            self->OnWriteDone(std::move(grpcStatus), connectionGeneration);
+        }
     };
 
     Processor->Write(std::move(req), std::move(callback));
@@ -606,13 +611,14 @@ void TWriteSessionImpl::ReadFromProcessor() {
         }
         prc = Processor;
         generation = ConnectionGeneration;
-        callback = [sharedThis = shared_from_this(),
-                        wire = Tracker->MakeTrackedWire(),
-                        connectionGeneration = generation,
-                        processor = prc,
-                        serverMessage = ServerMessage]
-                        (NGrpc::TGrpcStatus&& grpcStatus) {
-            sharedThis->OnReadDone(std::move(grpcStatus), connectionGeneration);
+        callback = [cbContext = CbContext,
+                    connectionGeneration = generation,
+                    processor = prc,
+                    serverMessage = ServerMessage]
+                    (NGrpc::TGrpcStatus&& grpcStatus) {
+            if (auto self = cbContext->LockShared()) {
+                self->OnReadDone(std::move(grpcStatus), connectionGeneration);
+            }
         };
     }
     prc->Read(ServerMessage.get(), std::move(callback));
@@ -896,8 +902,7 @@ void TWriteSessionImpl::CompressImpl(TBlock&& block_) {
 
     std::shared_ptr<TBlock> blockPtr(std::make_shared<TBlock>());
     blockPtr->Move(block_);
-    auto lambda = [sharedThis = shared_from_this(),
-                   wire = Tracker->MakeTrackedWire(),
+    auto lambda = [cbContext = CbContext,
                    codec = Settings.Codec_,
                    level = Settings.CompressionLevel_,
                    isSyncCompression = !CompressionExecutor->IsAsync(),
@@ -910,8 +915,10 @@ void TWriteSessionImpl::CompressImpl(TBlock&& block_) {
         Y_VERIFY(!compressedData.Empty());
         blockPtr->Data = std::move(compressedData);
         blockPtr->Compressed = true;
-        blockPtr->CodecID = GetCodecId(sharedThis->Settings.Codec_);
-        sharedThis->OnCompressed(std::move(*blockPtr), isSyncCompression);
+        blockPtr->CodecID = GetCodecId(codec);
+        if (auto self = cbContext->LockShared()) {
+            self->OnCompressed(std::move(*blockPtr), isSyncCompression);
+        }
     };
 
     CompressionExecutor->Post(std::move(lambda));
@@ -1272,13 +1279,16 @@ void TWriteSessionImpl::HandleWakeUpImpl() {
     if (AtomicGet(Aborting)) {
         return;
     }
-    auto callback = [sharedThis = this->shared_from_this(), wire = Tracker->MakeTrackedWire()] (bool ok)
+    auto callback = [cbContext = CbContext] (bool ok)
     {
         if (!ok) {
             return;
         }
-        with_lock(sharedThis->Lock) {
-            sharedThis->HandleWakeUpImpl();
+
+        if (auto self = cbContext->LockShared()) {
+            with_lock(self->Lock) {
+                self->HandleWakeUpImpl();
+            }
         }
     };
 

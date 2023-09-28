@@ -19,9 +19,10 @@ TWriteSession::TWriteSession(
          std::shared_ptr<TTopicClient::TImpl> client,
          std::shared_ptr<TGRpcConnectionsImpl> connections,
          TDbDriverStatePtr dbDriverState)
-    : Tracker(std::make_shared<NPersQueue::TImplTracker>())
-    , Impl(std::make_shared<TWriteSessionImpl>(settings, std::move(client), std::move(connections), std::move(dbDriverState), Tracker))
+    : Impl(std::make_shared<TWriteSessionImpl>(settings, std::move(client), std::move(connections), std::move(dbDriverState)))
 {
+    CbContext = std::make_shared<NPersQueue::TCallbackContext<TWriteSessionImpl>>(Impl);
+    Impl->SetCallbackContext(CbContext);
 }
 
 void TWriteSession::Start(const TDuration& delay) {
@@ -79,7 +80,7 @@ bool TWriteSession::Close(TDuration closeTimeout) {
 
 TWriteSession::~TWriteSession() {
     Impl->Close(TDuration::Zero());
-    Tracker->AsyncComplete().Wait();
+    CbContext->Cancel();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

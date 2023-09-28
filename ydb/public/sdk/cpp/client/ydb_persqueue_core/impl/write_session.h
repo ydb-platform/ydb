@@ -1,11 +1,11 @@
 #pragma once
 
 #include "common.h"
-#include "impl_tracker.h"
 #include "persqueue_impl.h"
 #include "write_session_impl.h"
 
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/callback_context.h>
 
 #include <util/generic/buffer.h>
 
@@ -58,7 +58,7 @@ private:
     void Start(const TDuration& delay);
 
 private:
-    std::shared_ptr<TImplTracker> Tracker;
+    std::shared_ptr<NPersQueue::TCallbackContext<TWriteSessionImpl>> CbContext;
     std::shared_ptr<TWriteSessionImpl> Impl;
 };
 

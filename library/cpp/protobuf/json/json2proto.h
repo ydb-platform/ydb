@@ -2,10 +2,12 @@
 
 #include "string_transform.h"
 #include "name_generator.h"
+#include "unknown_fields_collector.h"
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_value.h>
 
+#include <util/generic/ptr.h>
 #include <util/stream/input.h>
 #include <util/stream/str.h>
 #include <util/stream/mem.h>
@@ -115,6 +117,11 @@ namespace NProtobufJson {
             return *this;
         }
 
+        TSelf& SetUnknownFieldsCollector(TSimpleSharedPtr<IUnknownFieldsCollector> value) {
+            UnknownFieldsCollector = std::move(value);
+            return *this;
+        }
+
         FldNameMode FieldNameMode = FieldNameOriginalCase;
         bool AllowUnknownFields = true;
 
@@ -163,6 +170,9 @@ namespace NProtobufJson {
 
         /// Allow nonstandard conversions, e.g. google.protobuf.Duration from String
         bool AllowString2TimeConversion = false;
+
+        /// Stores information about unknown fields
+        TSimpleSharedPtr<IUnknownFieldsCollector> UnknownFieldsCollector = nullptr;
     };
 
     /// @throw yexception

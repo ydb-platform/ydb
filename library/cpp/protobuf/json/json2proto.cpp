@@ -275,6 +275,10 @@ Json2SingleField(const NJson::TJsonValue& json,
 
     const NJson::TJsonValue& fieldJson = name ? json[name] : json;
 
+    if (name && config.UnknownFieldsCollector) {
+        config.UnknownFieldsCollector->OnEnterMapItem(name);
+    }
+
     switch (field.cpp_type()) {
         JSON_TO_FIELD(CPPTYPE_INT32, field.name(), fieldJson, IsInteger, SetInt32, GetInteger);
         JSON_TO_FIELD(CPPTYPE_INT64, field.name(), fieldJson, IsInteger, SetInt64, GetInteger);
@@ -311,6 +315,10 @@ Json2SingleField(const NJson::TJsonValue& json,
         default:
             ythrow yexception() << "Unknown protobuf field type: "
                                 << static_cast<int>(field.cpp_type()) << ".";
+    }
+
+    if (name && config.UnknownFieldsCollector) {
+        config.UnknownFieldsCollector->OnLeaveMapItem();
     }
 }
 
@@ -414,6 +422,10 @@ Json2RepeatedField(const NJson::TJsonValue& json,
     if (fieldJson.GetType() == NJson::JSON_UNDEFINED || fieldJson.GetType() == NJson::JSON_NULL)
         return;
 
+    if (config.UnknownFieldsCollector) {
+        config.UnknownFieldsCollector->OnEnterMapItem(name);
+    }
+
     bool isMap = fieldJson.GetType() == NJson::JSON_MAP;
     if (isMap) {
         if (!config.MapAsObject) {
@@ -438,7 +450,13 @@ Json2RepeatedField(const NJson::TJsonValue& json,
         for (const auto& x : jsonMap) {
             const TString& key = x.first;
             const NJson::TJsonValue& jsonValue = x.second;
+            if (config.UnknownFieldsCollector) {
+                config.UnknownFieldsCollector->OnEnterMapItem(key);
+            }
             Json2RepeatedFieldValue(jsonValue, proto, field, config, reflection, key);
+            if (config.UnknownFieldsCollector) {
+                config.UnknownFieldsCollector->OnLeaveMapItem();
+            }
         }
     } else {
         if (config.ReplaceRepeatedFields) {
@@ -446,16 +464,36 @@ Json2RepeatedField(const NJson::TJsonValue& json,
         }
         if (fieldJson.GetType() == NJson::JSON_ARRAY) {
             const NJson::TJsonValue::TArray& jsonArray = fieldJson.GetArray();
+            ui64 id = 0;
             for (const NJson::TJsonValue& jsonValue : jsonArray) {
+                if (config.UnknownFieldsCollector) {
+                    config.UnknownFieldsCollector->OnEnterArrayItem(id);
+                }
                 Json2RepeatedFieldValue(jsonValue, proto, field, config, reflection);
+                if (config.UnknownFieldsCollector) {
+                    config.UnknownFieldsCollector->OnLeaveArrayItem();
+                }
+                ++id;
             }
         } else if (config.ValueVectorizer) {
+            ui64 id = 0;
             for (const NJson::TJsonValue& jsonValue : config.ValueVectorizer(fieldJson)) {
+                if (config.UnknownFieldsCollector) {
+                    config.UnknownFieldsCollector->OnEnterArrayItem(id);
+                }
                 Json2RepeatedFieldValue(jsonValue, proto, field, config, reflection);
+                if (config.UnknownFieldsCollector) {
+                    config.UnknownFieldsCollector->OnLeaveArrayItem();
+                }
+                ++id;
             }
         } else if (config.VectorizeScalars) {
             Json2RepeatedFieldValue(fieldJson, proto, field, config, reflection);
         }
+    }
+
+    if (config.UnknownFieldsCollector) {
+        config.UnknownFieldsCollector->OnLeaveMapItem();
     }
 }
 
@@ -480,14 +518,18 @@ namespace NProtobufJson {
             }
         }
 
-        if (!config.AllowUnknownFields) {
+        if (!config.AllowUnknownFields || config.UnknownFieldsCollector) {
             THashMap<TString, bool> knownFields;
             for (int f = 0, endF = descriptor->field_count(); f < endF; ++f) {
                 const google::protobuf::FieldDescriptor* field = descriptor->field(f);
                 knownFields[GetFieldName(*field, config)] = 1;
             }
             for (const auto& f : json.GetMap()) {
-                Y_ENSURE(knownFields.contains(f.first), "unknown field \"" << f.first << "\" for \"" << descriptor->full_name() << "\"");
+                const bool isFieldKnown = knownFields.contains(f.first);
+                Y_ENSURE(config.AllowUnknownFields || isFieldKnown, "unknown field \"" << f.first << "\" for \"" << descriptor->full_name() << "\"");
+                if (!isFieldKnown) {
+                    config.UnknownFieldsCollector->OnUnknownField(f.first, *descriptor);
+                }
             }
         }
     }

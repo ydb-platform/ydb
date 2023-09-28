@@ -5,7 +5,6 @@ OWNER(g:ymake)
 TEST_SRCS(
     test_common.py
     test_requirements.py
-    test_ssqls.py
 )
 
 PEERDIR(

@@ -5,8 +5,6 @@ PY2_LIBRARY()
 PY_SRCS(
     TOP_LEVEL
 
-    ssqls.py
-
     _common.py
     _requirements.py
 )

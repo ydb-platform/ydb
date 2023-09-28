@@ -726,6 +726,23 @@ void BuildUserJobFluently(
         .DoIf(userJobSpec.JobTimeLimit_.Defined(), [&] (TFluentMap fluentMap) {
             fluentMap.Item("job_time_limit").Value(userJobSpec.JobTimeLimit_->MilliSeconds());
         })
+        .DoIf(userJobSpec.DiskRequest_.Defined(), [&] (TFluentMap fluentMap) {
+            const auto& diskRequest = *userJobSpec.DiskRequest_;
+            TNode diskRequestNode = TNode::CreateMap();
+            if (diskRequest.DiskSpace_.Defined()) {
+                diskRequestNode["disk_space"] = *diskRequest.DiskSpace_;
+            }
+            if (diskRequest.InodeCount_.Defined()) {
+                diskRequestNode["inode_count"] = *diskRequest.InodeCount_;
+            }
+            if (diskRequest.Account_.Defined()) {
+                diskRequestNode["account"] = *diskRequest.Account_;
+            }
+            if (diskRequest.MediumName_.Defined()) {
+                diskRequestNode["medium_name"] = *diskRequest.MediumName_;
+            }
+            fluentMap.Item("disk_request").Value(diskRequestNode);
+        })
         .DoIf(userJobSpec.NetworkProject_.Defined(), [&] (TFluentMap fluentMap) {
             fluentMap.Item("network_project").Value(*userJobSpec.NetworkProject_);
         })

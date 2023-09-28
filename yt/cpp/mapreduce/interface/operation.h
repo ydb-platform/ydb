@@ -710,6 +710,33 @@ struct TJobProfilerSpec
     FLUENT_FIELD_OPTION(int, SamplingFrequency);
 };
 
+/////////////////////////////////////////////////////////////////////////////
+
+/// @brief Specification of a disk that will be available in job.
+///
+/// Disk request should be used in case job requires specific requirements for disk (i.e. it requires NVME or SSD).
+///
+/// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/operations-options#disk_request
+struct TDiskRequest
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TDiskRequest;
+    /// @endcond
+
+    /// Required disk space in bytes.
+    FLUENT_FIELD_OPTION(i64, DiskSpace);
+
+    /// Limit for inodes.
+    FLUENT_FIELD_OPTION(i64, InodeCount);
+
+    /// Account which quota is going to be used.
+    /// Account must have available quota for the specified medium.
+    FLUENT_FIELD_OPTION(TString, Account);
+
+    /// Name of the medium corresponding to required disk type.
+    FLUENT_FIELD_OPTION(TString, MediumName);
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 ///
@@ -844,6 +871,12 @@ struct TUserJobSpec
     ///
     /// @brief List of profilers to run.
     FLUENT_VECTOR_FIELD(TJobProfilerSpec, JobProfiler);
+
+    ///
+    /// @brief Specification of a disk required for job.
+    ///
+    /// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/operations-options#disk_request
+    FLUENT_FIELD_OPTION(TDiskRequest, DiskRequest);
 
 private:
     TVector<std::tuple<TLocalFilePath, TAddLocalFileOptions>> LocalFiles_;

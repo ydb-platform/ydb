@@ -2,6 +2,7 @@
 #include "actors/kqp_ic_gateway_actors.h"
 #include "actors/scheme.h"
 #include "kqp_metadata_loader.h"
+#include "local_rpc/helper.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
@@ -2073,24 +2074,8 @@ private:
     template<typename TRpc>
     TFuture<TGenericResult> SendLocalRpcRequestNoResult(typename TRpc::TRequest&& proto, const TString& databse, const TString& token, const TMaybe<TString>& requestType = {}) {
         return NRpcService::DoLocalRpc<TRpc>(std::move(proto), databse, token, requestType, ActorSystem).Apply([](NThreading::TFuture<typename TRpc::TResponse> future) {
-            auto r = future.ExtractValue();
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(r.operation().issues(), issues);
 
-            if (r.operation().ready() != true) {
-                issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, TStringBuilder()
-                    << "Unexpected operation for \"sync\" mode"));
-
-                const auto& yqlStatus = TIssuesIds::DEFAULT_ERROR;
-
-                auto result = ResultFromIssues<TGenericResult>(yqlStatus, issues);
-                return NThreading::MakeFuture(result);
-            }
-
-            const auto& yqlStatus = NYql::YqlStatusFromYdbStatus(r.operation().status());
-
-            auto result = ResultFromIssues<TGenericResult>(yqlStatus, issues);
-            return NThreading::MakeFuture(result);
+            return NThreading::MakeFuture(GenericResultFromSyncOperation(future.GetValue().operation()));
         });
     }
 

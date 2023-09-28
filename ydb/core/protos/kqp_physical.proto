@@ -9,6 +9,7 @@ import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
 import "ydb/public/api/protos/ydb_value.proto";
+import "ydb/public/api/protos/ydb_table.proto";
 
 message TKqpPhyExternalBinding {
 }
@@ -364,9 +365,14 @@ message TKqpPhyResult {
 }
 
 message TKqpSchemeOperation {
+    message TAlterTable {
+        Ydb.Table.AlterTableRequest Req = 1;
+        string Type = 2;
+    }
     oneof Operation {
         NKikimrSchemeOp.TModifyScheme CreateTable = 1;
         NKikimrSchemeOp.TModifyScheme DropTable = 2;
+        TAlterTable AlterTable = 3;
     }
 }
 

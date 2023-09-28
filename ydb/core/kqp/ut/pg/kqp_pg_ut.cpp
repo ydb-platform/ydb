@@ -1430,9 +1430,18 @@ Y_UNIT_TEST_SUITE(KqpPg) {
     }
 
     Y_UNIT_TEST(CreateIndex) {
-        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
-        auto client = kikimr.GetTableClient();
-        auto session = client.CreateSession().GetValueSync().GetSession();
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(
+            serverSettings.SetWithSampleTables(false));
+
+        auto client = kikimr.GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+        const auto txCtrl = NYdb::NQuery::TTxControl::NoTx();
         {
             const auto query = Q_(R"(
                 --!syntax_pg
@@ -1446,7 +1455,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 CREATE INDEX "test_fk_idx_cover" ON test (fk) INCLUDE(value);
                 )");
 
-            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            auto result = session.ExecuteQuery(query, txCtrl).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
         {
@@ -1455,7 +1464,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
                 CREATE INDEX "test_fk_idx" ON test (fk);
                 )");
 
-            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            auto result = session.ExecuteQuery(query, txCtrl).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
         }
 /*

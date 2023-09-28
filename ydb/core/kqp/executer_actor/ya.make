@@ -29,6 +29,7 @@ PEERDIR(
     ydb/core/kqp/query_compiler
     ydb/core/kqp/rm_service
     ydb/core/kqp/topics
+    ydb/core/kqp/gateway/local_rpc
     ydb/core/protos
     ydb/core/tx/long_tx_service/public
     ydb/core/ydb_convert

@@ -545,7 +545,26 @@ public:
     TFuture<TGenericResult> AlterTable(const TString& cluster, Ydb::Table::AlterTableRequest&& req,
         const TMaybe<TString>& requestType) override
     {
-        FORWARD_ENSURE_NO_PREPARE(AlterTable, cluster, std::move(req), requestType);
+        CHECK_PREPARED_DDL(AlterTable);
+
+        if (IsPrepare()) {
+            auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+            auto& phyTx = *phyQuery.AddTransactions();
+            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+            auto alter = phyTx.MutableSchemeOperation()->MutableAlterTable();
+            alter->MutableReq()->Swap(&req);
+            if (requestType) {
+                alter->SetType(*requestType);
+            }
+
+            auto promise = NewPromise<TGenericResult>();
+            TGenericResult result;
+            result.SetSuccess();
+            promise.SetValue(result);
+            return promise.GetFuture();
+        } else {
+            return Gateway->AlterTable(cluster, std::move(req), requestType);
+        }
     }
 
     TFuture<TGenericResult> RenameTable(const TString& src, const TString& dst, const TString& cluster) override {

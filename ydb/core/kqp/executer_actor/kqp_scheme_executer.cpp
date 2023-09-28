@@ -1,6 +1,7 @@
 #include "kqp_executer.h"
 
 #include <ydb/core/kqp/gateway/actors/scheme.h>
+#include <ydb/core/kqp/gateway/local_rpc/helper.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 
@@ -77,6 +78,27 @@ public:
                 break;
             }
 
+            case NKqpProto::TKqpSchemeOperation::kAlterTable: {
+                auto alter = schemeOp.GetAlterTable();
+                TMaybe<TString> token;
+                TMaybe<TString> type;
+
+                if (UserToken) {
+                    token = UserToken->GetSerializedToken();
+                }
+
+                if (auto t = alter.GetType()) {
+                    type = t;
+                }
+
+                auto cb = GetAlterTableRespHandler();
+                DoAlterTableSameMailbox(std::move(*alter.MutableReq()), std::move(cb),
+                    Database, token, type);
+
+                Become(&TKqpSchemeExecuter::ExecuteState);
+                return;
+            }
+
             default:
                 InternalError(TStringBuilder() << "Unexpected scheme operation: "
                     << (ui32) schemeOp.GetOperationCase());
@@ -133,6 +155,19 @@ public:
     }
 
 private:
+
+    std::function<void(const Ydb::Table::AlterTableResponse& r)> GetAlterTableRespHandler() const {
+        auto actorSystem = TlsActivationContext->AsActorContext().ExecutorThread.ActorSystem;
+        auto selfId = SelfId();
+
+        return [actorSystem, selfId] (const Ydb::Table::AlterTableResponse& r) {
+            auto ev = MakeHolder<TEvPrivate::TEvResult>();
+
+            ev->Result = GenericResultFromSyncOperation(r.operation());
+            actorSystem->Send(selfId, ev.Release());
+        };
+    }
+
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues) {
         google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> protoIssues;
         IssuesToMessage(issues, &protoIssues);

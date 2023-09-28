@@ -1046,10 +1046,6 @@ public:
         }
 
         if (auto maybeAlter = TMaybeNode<TKiAlterTable>(input)) {
-            if (!EnsureNotPrepare("ALTER TABLE", input->Pos(), SessionCtx->Query(), ctx)) {
-                return SyncError();
-            }
-
             auto requireStatus = RequireChild(*input, 0);
             if (requireStatus.Level != TStatus::Ok) {
                 return SyncStatus(requireStatus);
@@ -1495,28 +1491,24 @@ public:
             }
 
             NThreading::TFuture<IKikimrGateway::TGenericResult> future;
-            if (SessionCtx->Query().PrepareOnly) {
-                future = CreateDummySuccess();
-            } else {
-                bool isTableStore = (table.Metadata->TableType == ETableType::TableStore);
-                bool isColumn = (table.Metadata->StoreType == EStoreType::Column);
+            bool isTableStore = (table.Metadata->TableType == ETableType::TableStore);
+            bool isColumn = (table.Metadata->StoreType == EStoreType::Column);
 
-                if (isTableStore) {
-                    if (!isColumn) {
-                        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
-                            TStringBuilder() << "TABLESTORE with not COLUMN store"));
-                        return SyncError();
-                    }
-                    future = Gateway->AlterTableStore(cluster, ParseAlterTableStoreSettings(maybeAlter.Cast()));
-                } else if (isColumn) {
-                    future = Gateway->AlterColumnTable(cluster, ParseAlterColumnTableSettings(maybeAlter.Cast()));
-                } else {
-                    TMaybe<TString> requestType;
-                    if (!SessionCtx->Query().DocumentApiRestricted) {
-                        requestType = NKikimr::NDocApi::RequestType;
-                    }
-                    future = Gateway->AlterTable(cluster, std::move(alterTableRequest), requestType);
+            if (isTableStore) {
+                if (!isColumn) {
+                    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
+                        TStringBuilder() << "TABLESTORE with not COLUMN store"));
+                    return SyncError();
                 }
+                future = Gateway->AlterTableStore(cluster, ParseAlterTableStoreSettings(maybeAlter.Cast()));
+            } else if (isColumn) {
+                future = Gateway->AlterColumnTable(cluster, ParseAlterColumnTableSettings(maybeAlter.Cast()));
+            } else {
+                TMaybe<TString> requestType;
+                if (!SessionCtx->Query().DocumentApiRestricted) {
+                    requestType = NKikimr::NDocApi::RequestType;
+                }
+                future = Gateway->AlterTable(cluster, std::move(alterTableRequest), requestType);
             }
 
             return WrapFuture(future,

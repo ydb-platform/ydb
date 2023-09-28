@@ -11,6 +11,7 @@
 #include <ydb/core/tablet_flat/test/libs/table/test_wreck.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_mixer.h>
 #include <ydb/core/tablet_flat/test/libs/table/wrap_iter.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
 
 #include <util/generic/xrange.h>
 
@@ -161,11 +162,18 @@ Y_UNIT_TEST_SUITE(TIterator) {
     }
 
     struct TFirstTimeFailEnv : public NTest::TTestEnv {
-        TFirstTimeFailEnv() = default;
+        explicit TFirstTimeFailEnv(bool autoLoad = true)
+            : AutoLoad(autoLoad)
+        {}
 
         TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) noexcept override {
             if (lob == ELargeObj::Extern) {
-                if (SeenExtern.insert(ref).second) {
+                if (AutoLoad) {
+                    if (LoadedExtern.insert(ref).second) {
+                        return { true, nullptr };
+                    }
+                } else if (!LoadedExtern.contains(ref)) {
+                    SeenExtern.insert(ref);
                     return { true, nullptr };
                 }
             }
@@ -174,15 +182,45 @@ Y_UNIT_TEST_SUITE(TIterator) {
         }
 
         const TSharedData* TryGetPage(const TPart* part, TPageId pageId, TGroupId groupId) override {
-            if (Seen[groupId].insert(pageId).second) {
+            if (AutoLoad) {
+                if (Loaded[groupId].insert(pageId).second) {
+                    return nullptr;
+                }
+            } else if (!Loaded[groupId].contains(pageId)) {
+                Seen[groupId].insert(pageId);
                 return nullptr;
             }
 
             return NTest::TTestEnv::TryGetPage(part, pageId, groupId);
         }
 
+        void Load() {
+            for (ui64 ref : SeenExtern) {
+                LoadedExtern.insert(ref);
+            }
+            SeenExtern.clear();
+
+            for (auto& kv : Seen) {
+                auto& dst = Loaded[kv.first];
+                for (TPageId pageId : kv.second) {
+                    dst.insert(pageId);
+                }
+            }
+            Seen.clear();
+        }
+
+        void Unload() {
+            SeenExtern.clear();
+            LoadedExtern.clear();
+            Seen.clear();
+            Loaded.clear();
+        }
+
+        const bool AutoLoad;
         THashSet<ui64> SeenExtern;
+        THashSet<ui64> LoadedExtern;
         THashMap<TGroupId, THashSet<TPageId>> Seen;
+        THashMap<TGroupId, THashSet<TPageId>> Loaded;
     };
 
     Y_UNIT_TEST(GetKey)
@@ -257,6 +295,284 @@ Y_UNIT_TEST_SUITE(TIterator) {
 
         UNIT_ASSERT_VALUES_EQUAL(nextExpected, 1001);
         UNIT_ASSERT_C(pageFaults >= 3, "Not enough page faults: " << pageFaults);
+    }
+
+    struct Schema : NIceDb::Schema {
+        struct TestTable : Table<1> {
+            struct Key : Column<1, NScheme::NTypeIds::String> {};
+            struct Value : Column<2, NScheme::NTypeIds::String> {};
+
+            using TKey = TableKey<Key>;
+            using TColumns = TableColumns<Key, Value>;
+            using Precharge = NoAutoPrecharge;
+        };
+
+        using TTables = SchemaTables<TestTable>;
+    };
+
+    Y_UNIT_TEST(GetKeyWithEraseCache) {
+        TLayoutCook lay;
+        lay
+            .Col(0, 1, NScheme::NTypeIds::String)
+            .Col(0, 2, NScheme::NTypeIds::String)
+            .Key({ 1 });
+
+        auto conf = NPage::TConf();
+        conf.Group(0).PageRows = 4;
+        conf.Group(0).Codec = NPage::ECodec::LZ4;
+        conf.Final = false;
+
+        auto cook = TPartCook(lay, conf);
+        for (int i = 1; i <= 100; ++i) {
+            TString key = Sprintf("not_inline_and_long_key_%04d", i);
+            TString value = Sprintf("not_inline_and_long_value_%04d", i);
+            if (i <= 40) {
+                cook.AddOpN(ERowOp::Erase, key);
+            } else {
+                cook.AddN(key, value);
+            }
+        }
+        auto cooked = cook.Finish();
+
+        TDatabase DB;
+        NIceDb::TNiceDb db(DB);
+        TFirstTimeFailEnv env(/* autoLoad */ false);
+
+        {
+            DB.Begin(1, env);
+            db.Materialize<Schema>();
+            DB.Alter().SetEraseCache(1, true, /* minRows */ 2, /* maxBytes */ 8192);
+            DB.Commit(1, true);
+        }
+
+        for (const auto& part : cooked.Parts) {
+            DB.Merge(1, TPartView{ part, nullptr, part->Slices });
+        }
+
+        ui64 txId = 2;
+        TString lastKey;
+        bool lastKeyErase = true;
+        std::vector<TString> observed;
+        int iterations = 0;
+
+        // Note: this loop mimicks read iterator logic in datashard
+        for (;;) {
+            ++iterations;
+            DB.Begin(txId, env);
+
+            TKeyRange range;
+            std::vector<TRawTypeValue> minKey;
+            if (lastKey) {
+                minKey.push_back(NScheme::TString::ToRawTypeValue(lastKey));
+                range.MinKey = minKey;
+                range.MinInclusive = lastKeyErase;
+                // Cerr << "... starting from key " << lastKey << " inclusive=" << range.MinInclusive << Endl;
+            } else {
+                // Cerr << "... starting from empty key" << Endl;
+            }
+
+            std::vector<TTag> tags;
+            tags.push_back(2);
+
+            auto iter = DB.IterateRange(1, range, tags);
+
+            bool advanced = false;
+            while (iter->Next(ENext::Data) == EReady::Data) {
+                advanced = true;
+
+                auto key = iter->GetKey().Cells();
+                UNIT_ASSERT(key);
+                TString keyValue(key.at(0).AsBuf());
+                observed.push_back(keyValue);
+                // Cerr << "    ... observed key " << keyValue << Endl;
+
+                iter->Stats.DeletedRowSkips = 0;
+            }
+
+            auto key = iter->GetKey().Cells();
+            if (key && (advanced || iter->Stats.DeletedRowSkips >= 4) && iter->Last() == EReady::Page) {
+                TString keyValue(key.at(0).AsBuf());
+                UNIT_ASSERT_C(keyValue >= lastKey,
+                    "Page fault after key " << keyValue << " lastKey " << lastKey);
+                lastKey = keyValue;
+                lastKeyErase = iter->GetKeyState() == ERowOp::Erase;
+                advanced = true;
+                // Cerr << "    ... updated lastKey to " << lastKey << " inclusive=" << lastKeyErase << Endl;
+            }
+
+            bool restart = true;
+            if (advanced || iter->Last() != EReady::Page) {
+                // Instead of restarting (and loading missing pages) we will start a new transaction from a new key
+                restart = false;
+            }
+
+            if (iter->Last() == EReady::Page) {
+                DB.Commit(txId++, false);
+                if (restart) {
+                    // Cerr << "... restarting same tx (loading missing pages)" << Endl;
+                    env.Load();
+                } else {
+                    // Cerr << "... restarting new tx" << Endl;
+                }
+                continue;
+            }
+
+            DB.Commit(txId++, true);
+            // Cerr << "... finished" << Endl;
+            break;
+        }
+
+        for (int i = 41; i <= 100; ++i) {
+            size_t index = i - 41;
+            UNIT_ASSERT_C(index < observed.size(), "Row " << i << " was not observed");
+            TString key = Sprintf("not_inline_and_long_key_%04d", i);
+            UNIT_ASSERT_VALUES_EQUAL(observed[index], key);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(observed.size(), 60u);
+
+        // Note: one restart for index and then 2 transactions per page (since we don't precharge)
+        UNIT_ASSERT_C(iterations <= 51, "reading table took " << iterations << " transactions");
+
+        {
+            DB.Begin(txId, env);
+
+            TKeyRange range;
+            std::vector<TTag> tags;
+            tags.push_back(2);
+
+            auto iter = DB.IterateRange(1, range, tags);
+            while (iter->Next(ENext::Data) == EReady::Data) {
+                // nothing
+            }
+
+            // Should not have any page faults
+            UNIT_ASSERT_C(iter->Last() != EReady::Page, "Unexpected page fault");
+
+            // All erases should be in a single range in erase cache
+            UNIT_ASSERT_VALUES_EQUAL(iter->Stats.DeletedRowSkips, 1u);
+
+            DB.Commit(txId++, true);
+        }
+
+        env.Unload();
+
+        std::vector<TString> lastKeys;
+
+        for (;;) {
+            DB.Begin(txId, env);
+
+            TKeyRange range;
+            std::vector<TTag> tags;
+            tags.push_back(2);
+
+            auto iter = DB.IterateRange(1, range, tags);
+            while (iter->Next(ENext::Data) == EReady::Data) {
+                // nothing
+            }
+
+            if (iter->Last() == EReady::Page) {
+                if (auto key = iter->GetKey().Cells()) {
+                    TString keyValue(key.at(0).AsBuf());
+                    // Cerr << "... restarting after key " << keyValue << Endl;
+                    lastKeys.push_back(keyValue);
+                } else {
+                    // Cerr << "... restarting without last key" << Endl;
+                }
+                DB.Commit(txId++, false);
+                env.Load();
+                continue;
+            }
+
+            DB.Commit(txId++, true);
+            break;
+        }
+
+        // The first time we page fault we should get the last erased key in the cached range
+        UNIT_ASSERT(!lastKeys.empty());
+        UNIT_ASSERT_VALUES_EQUAL(lastKeys[0], "not_inline_and_long_key_0040");
+    }
+
+    Y_UNIT_TEST(GetKeyWithVersionSkips) {
+        TLayoutCook lay;
+        lay
+            .Col(0, 1, NScheme::NTypeIds::String)
+            .Col(0, 2, NScheme::NTypeIds::String)
+            .Key({ 1 });
+
+        auto conf = NPage::TConf();
+        conf.Group(0).PageRows = 4;
+        conf.Group(0).Codec = NPage::ECodec::LZ4;
+        conf.Final = false;
+
+        auto cook = TPartCook(lay, conf);
+        for (int i = 1; i <= 100; ++i) {
+            TString key = Sprintf("not_inline_and_long_key_%04d", i);
+            TString value = Sprintf("not_inline_and_long_value_%04d", i);
+            // Version 1:100 has all rows
+            // Version 1:90 has the last 90 rows, etc.
+            cook.Ver(TRowVersion(1, 101-i)).AddN(key, value);
+        }
+        auto cooked = cook.Finish();
+
+        TDatabase DB;
+        NIceDb::TNiceDb db(DB);
+        TFirstTimeFailEnv env(/* autoLoad */ false);
+
+        {
+            DB.Begin(1, env);
+            db.Materialize<Schema>();
+            DB.Alter().SetEraseCache(1, true, /* minRows */ 2, /* maxBytes */ 8192);
+            DB.Commit(1, true);
+        }
+
+        for (const auto& part : cooked.Parts) {
+            DB.Merge(1, TPartView{ part, nullptr, part->Slices });
+        }
+
+        ui64 txId = 2;
+        TString lastKey;
+        ui64 processedRows = 0;
+        ui64 deletedRows = 0;
+
+        for (;;) {
+            DB.Begin(txId, env);
+
+            TKeyRange range;
+            std::vector<TRawTypeValue> minKey;
+            if (lastKey) {
+                minKey.push_back(NScheme::TString::ToRawTypeValue(lastKey));
+                range.MinKey = minKey;
+                range.MinInclusive = false;
+                // Cerr << "... starting from key " << lastKey << " inclusive=" << range.MinInclusive << Endl;
+            } else {
+                // Cerr << "... starting from empty key" << Endl;
+            }
+
+            std::vector<TTag> tags;
+            tags.push_back(2);
+
+            auto iter = DB.IterateRange(1, range, tags, TRowVersion(1, 60));
+            while (iter->Next(ENext::Data) == EReady::Data) {
+                ++processedRows;
+            }
+
+            deletedRows += iter->Stats.DeletedRowSkips;
+            if (iter->Last() == EReady::Page) {
+                if (auto key = iter->GetKey().Cells()) {
+                    TString keyValue(key.at(0).AsBuf());
+                    lastKey = keyValue;
+                }
+                DB.Commit(txId++, false);
+                env.Load();
+                continue;
+            }
+
+            DB.Commit(txId++, true);
+            break;
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(processedRows, 60u);
+        UNIT_ASSERT_VALUES_EQUAL(deletedRows, 40u);
     }
 
 }

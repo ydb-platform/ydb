@@ -58,6 +58,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void IssueResolve() {
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA49, "IssueResolve", (AgentId, Agent.LogId), (QueryId, GetQueryId()));
                 Agent.Issue(Resolve, this, nullptr);
             }
 
@@ -65,8 +66,12 @@ namespace NKikimr::NBlobDepot {
                 if (std::holds_alternative<TTabletDisconnected>(response)) {
                     return EndWithError(NKikimrProto::ERROR, "BlobDepot tablet disconnected");
                 } else if (auto *p = std::get_if<TEvBlobStorage::TEvGetResult*>(&response)) {
+                    STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA50, "TEvGetResult", (AgentId, Agent.LogId),
+                        (QueryId, GetQueryId()), (Response, *p));
                     TQuery::HandleGetResult(context, **p);
                 } else if (auto *p = std::get_if<TEvBlobDepot::TEvResolveResult*>(&response)) {
+                    STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA51, "TEvResolveResult", (AgentId, Agent.LogId),
+                        (QueryId, GetQueryId()), (Response, (*p)->Record));
                     if (context) {
                         TQuery::HandleResolveResult(std::move(context), **p);
                     } else {

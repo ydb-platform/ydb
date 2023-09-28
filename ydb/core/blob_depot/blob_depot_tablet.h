@@ -27,8 +27,8 @@ namespace NKikimr::NBlobDepot {
                 EvCommitCertainKeys,
                 EvDoGroupMetricsExchange,
                 EvKickSpaceMonitor,
-                EvProcessRegisterAgentQ,
                 EvUpdateThroughputs,
+                EvDeliver,
             };
         };
 
@@ -78,7 +78,7 @@ namespace NKikimr::NBlobDepot {
             std::optional<ui32> NodeId; // as reported by RegisterAgent
             ui64 NextExpectedMsgId = 1;
             std::deque<std::unique_ptr<IEventHandle>> PostponeQ;
-            bool ProcessThroughQueue = false;
+            size_t InFlightDeliveries = 0;
         };
 
         THashMap<TActorId, TPipeServerContext> PipeServers;

@@ -670,6 +670,8 @@ def build_pdisk_usage_map(base_config, count_donors=False, storage_pool=None):
         pdisk_usage_map[pdisk_id] = pdisk.NumStaticSlots
 
     for vslot in base_config.VSlot:
+        if not (vslot.GroupId & 0x80000000):  # don't count vslots from static groups twice
+            continue
         pdisk_id = get_pdisk_id(vslot.VSlotId)
         if pdisk_id not in pdisk_usage_map:
             continue

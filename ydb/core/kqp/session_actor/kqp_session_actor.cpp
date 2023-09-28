@@ -1591,6 +1591,12 @@ public:
             }
             LWTRACK(KqpSessionReplyError, QueryState->Orbit, TStringBuilder() << status);
         }
+        
+        Counters->ReportResponseStatus(Settings.DbCounters, record.ByteSize(), record.GetYdbStatus());
+        for (auto& issue : record.GetResponse().GetQueryIssues()) {
+            Counters->ReportIssues(Settings.DbCounters, issue);
+        }
+
         Send(QueryState->Sender, QueryResponse.release(), 0, QueryState->ProxyRequestId);
         LOG_D("Sent query response back to proxy, proxyRequestId: " << QueryState->ProxyRequestId
             << ", proxyId: " << QueryState->Sender.ToString());

@@ -81,6 +81,8 @@ SRCS(
     concurrency/thread_pool.cpp
     concurrency/throughput_throttler.cpp
     concurrency/two_level_fair_share_thread_pool.cpp
+    concurrency/recurring_executor_base.cpp
+    concurrency/scheduled_executor.cpp
 
     crypto/config.cpp
     crypto/crypto.cpp

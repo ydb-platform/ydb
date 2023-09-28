@@ -1,18 +1,11 @@
 #include <yt/yt/core/test_framework/framework.h>
 
 #include <yt/yt/core/actions/invoker_util.h>
-#include <yt/yt/core/actions/future.h>
 
 #include <yt/yt/core/concurrency/action_queue.h>
 #include <yt/yt/core/concurrency/delayed_executor.h>
-#include <yt/yt/core/concurrency/periodic_executor.h>
-#include <yt/yt/core/concurrency/scheduler.h>
+#include <yt/yt/core/concurrency/scheduled_executor.h>
 
-#include <yt/yt/core/misc/lazy_ptr.h>
-
-#include <yt/yt/core/logging/log.h>
-
-#include <exception>
 #include <atomic>
 
 namespace NYT::NConcurrency {
@@ -20,49 +13,44 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TPeriodicTest
+class TScheduledExecutorTest
     : public ::testing::Test
 { };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST_W(TPeriodicTest, Simple)
+void CheckTimeSlotCorrectness(const TDuration& interval)
 {
-    std::atomic<int> count = {0};
-
-    auto callback = BIND([&] () {
-        TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(200));
-        ++count;
-    });
-
-    auto actionQueue = New<TActionQueue>();
-    auto executor = New<TPeriodicExecutor>(
-        actionQueue->GetInvoker(),
-        callback,
-        TDuration::MilliSeconds(100));
-
-    executor->Start();
-    TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(600));
-    WaitFor(executor->Stop())
-        .ThrowOnError();
-    EXPECT_EQ(2, count.load());
-
-    executor->Start();
-    TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(600));
-    WaitFor(executor->Stop())
-        .ThrowOnError();
-    EXPECT_EQ(4, count.load());
-
-    executor->Start();
-    TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(250));
-    WaitFor(executor->GetExecutedEvent())
-        .ThrowOnError();
-    EXPECT_EQ(6, count.load());
-    WaitFor(executor->Stop())
-        .ThrowOnError();
+    const auto& now = TInstant::Now();
+    auto lastTick = TInstant::FromValue((now.GetValue() / interval.GetValue()) * interval.GetValue());
+    YT_VERIFY(now - lastTick <= TDuration::MilliSeconds(10));
 }
 
-TEST_W(TPeriodicTest, SimpleScheduleOutOfBand)
+TEST_W(TScheduledExecutorTest, Simple)
+{
+    const auto& interval = TDuration::MilliSeconds(200);
+    std::atomic<int> count = {0};
+
+    auto callback = BIND([&] () {
+        CheckTimeSlotCorrectness(interval);
+        ++count;
+    });
+
+    auto actionQueue = New<TActionQueue>();
+    auto executor = New<TScheduledExecutor>(
+        actionQueue->GetInvoker(),
+        callback,
+        interval);
+
+    executor->Start();
+    TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(300));
+    WaitFor(executor->Stop())
+        .ThrowOnError();
+    EXPECT_LE(1, count.load());
+    EXPECT_GE(2, count.load());
+}
+
+TEST_W(TScheduledExecutorTest, SimpleScheduleOutOfBand)
 {
     std::atomic<int> count = {0};
 
@@ -71,40 +59,43 @@ TEST_W(TPeriodicTest, SimpleScheduleOutOfBand)
     });
 
     auto actionQueue = New<TActionQueue>();
-    auto executor = New<TPeriodicExecutor>(
+    auto executor = New<TScheduledExecutor>(
         actionQueue->GetInvoker(),
         callback,
         TDuration::MilliSeconds(300));
 
     executor->Start();
-    // Wait for first invocation.
-    TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(20));
-
-    auto future = executor->GetExecutedEvent();
-    const auto& now = TInstant::Now();
-    executor->ScheduleOutOfBand();
-    WaitFor(future)
-        .ThrowOnError();
-    auto executionDuration = TInstant::Now() - now;
-    EXPECT_LT(executionDuration, TDuration::MilliSeconds(20));
-    EXPECT_EQ(2, count.load());
+    TDuration executionDuration;
+    {
+        auto future1 = executor->GetExecutedEvent();
+        auto future2 = executor->GetExecutedEvent();
+        const auto& now = TInstant::Now();
+        executor->ScheduleOutOfBand();
+        WaitFor(AllSucceeded(std::vector<TFuture<void>>({future1, future2})))
+            .ThrowOnError();
+        executionDuration = TInstant::Now() - now;
+    }
+    EXPECT_EQ(1, count.load());
+    EXPECT_GT(TDuration::MilliSeconds(20), executionDuration);
 }
 
-TEST_W(TPeriodicTest, ParallelStop)
+TEST_W(TScheduledExecutorTest, ParallelStop)
 {
+    const auto& interval = TDuration::MilliSeconds(10);
     std::atomic<int> count = {0};
 
     auto callback = BIND([&] () {
+        CheckTimeSlotCorrectness(interval);
         ++count;
         TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(500));
         ++count;
     });
 
     auto actionQueue = New<TActionQueue>();
-    auto executor = New<TPeriodicExecutor>(
+    auto executor = New<TScheduledExecutor>(
         actionQueue->GetInvoker(),
         callback,
-        TDuration::MilliSeconds(10));
+        interval);
 
     executor->Start();
     TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(300));
@@ -128,20 +119,22 @@ TEST_W(TPeriodicTest, ParallelStop)
     EXPECT_EQ(2, count.load());
 }
 
-TEST_W(TPeriodicTest, ParallelOnExecuted1)
+TEST_W(TScheduledExecutorTest, ParallelOnExecuted1)
 {
+    const auto& interval = TDuration::MilliSeconds(10);
     std::atomic<int> count = 0;
 
     auto callback = BIND([&] () {
+        CheckTimeSlotCorrectness(interval);
         TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(500));
         ++count;
     });
 
     auto actionQueue = New<TActionQueue>();
-    auto executor = New<TPeriodicExecutor>(
+    auto executor = New<TScheduledExecutor>(
         actionQueue->GetInvoker(),
         callback,
-        TDuration::MilliSeconds(10));
+        interval);
 
     executor->Start();
     TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(300));
@@ -165,23 +158,25 @@ TEST_W(TPeriodicTest, ParallelOnExecuted1)
     EXPECT_EQ(4, count.load());
 }
 
-TEST_W(TPeriodicTest, ParallelOnExecuted2)
+TEST_W(TScheduledExecutorTest, ParallelOnExecuted2)
 {
+    const auto& interval = TDuration::MilliSeconds(400);
     std::atomic<int> count = 0;
 
     auto callback = BIND([&] () {
+        CheckTimeSlotCorrectness(interval);
         TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(100));
         ++count;
     });
 
     auto actionQueue = New<TActionQueue>();
-    auto executor = New<TPeriodicExecutor>(
+    auto executor = New<TScheduledExecutor>(
         actionQueue->GetInvoker(),
         callback,
-        TDuration::MilliSeconds(400));
+        interval);
 
     executor->Start();
-    TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(300));
+    TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(400));
     {
         auto future1 = executor->GetExecutedEvent();
         auto future2 = executor->GetExecutedEvent();
@@ -202,23 +197,25 @@ TEST_W(TPeriodicTest, ParallelOnExecuted2)
     EXPECT_EQ(3, count.load());
 }
 
-TEST_W(TPeriodicTest, OnExecutedEventCanceled)
+TEST_W(TScheduledExecutorTest, OnExecutedEventCanceled)
 {
+    const auto& interval = TDuration::MilliSeconds(50);
     std::atomic<int> count = 0;
 
     auto callback = BIND([&] () {
-        TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(100));
+        CheckTimeSlotCorrectness(interval);
+        TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(200));
         ++count;
     });
 
     auto actionQueue = New<TActionQueue>();
-    auto executor = New<TPeriodicExecutor>(
+    auto executor = New<TScheduledExecutor>(
         actionQueue->GetInvoker(),
         callback,
-        TDuration::MilliSeconds(400));
+        interval);
 
     executor->Start();
-    TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(300));
+    TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(100));
     {
         auto future1 = executor->GetExecutedEvent();
         auto future2 = executor->GetExecutedEvent();
@@ -233,20 +230,22 @@ TEST_W(TPeriodicTest, OnExecutedEventCanceled)
     EXPECT_EQ(2, count.load());
 }
 
-TEST_W(TPeriodicTest, Stop)
+TEST_W(TScheduledExecutorTest, Stop)
 {
+    const auto& interval = TDuration::MilliSeconds(20);
     auto neverSetPromise = NewPromise<void>();
     auto immediatelyCancelableFuture = neverSetPromise.ToFuture().ToImmediatelyCancelable();
 
     auto callback = BIND([&] {
+        CheckTimeSlotCorrectness(interval);
         WaitUntilSet(immediatelyCancelableFuture);
     });
 
     auto actionQueue = New<TActionQueue>();
-    auto executor = New<TPeriodicExecutor>(
+    auto executor = New<TScheduledExecutor>(
         actionQueue->GetInvoker(),
         callback,
-        TDuration::MilliSeconds(100));
+        interval);
 
     executor->Start();
     // Wait for the callback to enter WaitFor.

@@ -127,6 +127,8 @@ target_sources(yt-yt-core PRIVATE
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/thread_pool.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/throughput_throttler.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/two_level_fair_share_thread_pool.cpp
+  ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/recurring_executor_base.cpp
+  ${CMAKE_SOURCE_DIR}/yt/yt/core/concurrency/scheduled_executor.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/crypto/config.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/crypto/crypto.cpp
   ${CMAKE_SOURCE_DIR}/yt/yt/core/crypto/tls.cpp

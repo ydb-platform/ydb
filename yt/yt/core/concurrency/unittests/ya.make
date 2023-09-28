@@ -28,6 +28,7 @@ SRCS(
     periodic_ut.cpp
     propagating_storage_ut.cpp
     quantized_executor_ut.cpp
+    scheduled_executor_ut.cpp
     scheduler_ut.cpp
     suspendable_action_queue_ut.cpp
     thread_affinity_ut.cpp

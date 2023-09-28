@@ -7,7 +7,7 @@ using namespace NYson;
 ////////////////////////////////////////////////////////////////////////////////
 
 TReadRequestComplexityLimiter::TReadRequestComplexityLimiter(TReadRequestComplexity limits) noexcept
-    : Limits_{limits}
+    : Limits_(limits)
 { }
 
 void TReadRequestComplexityLimiter::Charge(TReadRequestComplexity usage) noexcept

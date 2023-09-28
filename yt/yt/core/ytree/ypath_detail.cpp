@@ -594,7 +594,7 @@ void OnAttributeRead(auto* context, auto* response, const TErrorOr<TYsonString>&
         return;
     }
 
-    auto yson = ysonOrError.Value().AsStringBuf();
+    auto yson = ysonOrError.Value().ToString();
 
     if (auto limiter = context->GetReadRequestComplexityLimiter()) {
         limiter->Charge({
@@ -607,7 +607,7 @@ void OnAttributeRead(auto* context, auto* response, const TErrorOr<TYsonString>&
         }
     }
 
-    response->set_value(TString(yson));
+    response->set_value(yson);
     context->Reply();
 }
 

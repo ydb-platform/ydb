@@ -34,9 +34,7 @@ void TReadRequestComplexityOverrides::Validate(TReadRequestComplexity max) const
     doCheck("node_count", NodeCount, max.NodeCount);
     doCheck("result_size", ResultSize, max.ResultSize);
 
-    if (!error.IsOK()) {
-        THROW_ERROR error;
-    }
+    error.ThrowOnError();
 }
 
 void FromProto(

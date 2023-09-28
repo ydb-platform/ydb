@@ -9,7 +9,7 @@ namespace NYT::NApi {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TReadCypressReqeustOptions
+struct TReadCypressRequestOptions
 {
     NYTree::TReadRequestComplexityOverrides ComplexityLimits;
 };
@@ -20,7 +20,7 @@ struct TGetNodeOptions
     , public TMasterReadOptions
     , public TSuppressableAccessTrackingOptions
     , public TPrerequisiteOptions
-    , public TReadCypressReqeustOptions
+    , public TReadCypressRequestOptions
 {
     // NB(eshcherbin): Used in profiling Orchid.
     NYTree::IAttributeDictionaryPtr Options;
@@ -65,7 +65,7 @@ struct TListNodeOptions
     , public TMasterReadOptions
     , public TSuppressableAccessTrackingOptions
     , public TPrerequisiteOptions
-    , public TReadCypressReqeustOptions
+    , public TReadCypressRequestOptions
 {
     NYTree::TAttributeFilter Attributes;
     std::optional<i64> MaxSize;

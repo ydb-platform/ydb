@@ -161,19 +161,26 @@ def add_python_lint_checks(unit, py_ver, files):
         resolved_files = get_resolved_files()
         if resolved_files:
             flake8_cfg = 'build/config/tests/flake8/flake8.conf'
+            migrations_cfg = 'build/rules/flake8/migrations.yaml'
             resource = "build/external_resources/flake8_py{}".format(py_ver)
             lint_name = "py{}_flake8".format(py_ver)
             params = [lint_name, "tools/flake8_linter/flake8_linter"]
             params += ["FILES"] + resolved_files
             params += ["GLOBAL_RESOURCES", resource]
-            params += ["CONFIGS", flake8_cfg, "build/rules/flake8/migrations.yaml"]
             params += [
                 "FILE_PROCESSING_TIME",
                 unit.get("FLAKE8_FILE_PROCESSING_TIME") or DEFAULT_FLAKE8_FILE_PROCESSING_TIME,
             ]
+
             extra_params = []
-            if unit.get("DISABLE_FLAKE8_MIGRATIONS") == "yes":
+            # Don't use migration config in opensource
+            if unit.get("OPENSOURCE") == "yes" or unit.get("DISABLE_FLAKE8_MIGRATIONS") == "yes":
                 extra_params.append("DISABLE_FLAKE8_MIGRATIONS=yes")
+                config_files = [flake8_cfg, '']
+            else:
+                config_files = [flake8_cfg, migrations_cfg]
+            params += ["CONFIGS"] + config_files
+
             if extra_params:
                 params += ["EXTRA_PARAMS"] + extra_params
             unit.on_add_linter_check(params)

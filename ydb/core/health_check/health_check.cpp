@@ -1328,6 +1328,15 @@ public:
                 << protoVSlotId.vslotid();
     }
 
+    static TString GetVDiskId(const NKikimrBlobStorage::TBaseConfig::TVSlot& protoVSlot) {
+        return TStringBuilder()
+                << protoVSlot.groupid() << '-'
+                << protoVSlot.groupgeneration() << '-'
+                << protoVSlot.failrealmidx() << '-'
+                << protoVSlot.faildomainidx() << '-'
+                << protoVSlot.vdiskidx();
+    }
+
     static TString GetPDiskId(const NKikimrBlobStorage::TBaseConfig::TPDisk& pDisk) {
         return TStringBuilder() << pDisk.nodeid() << "-" << pDisk.pdiskid();
     }
@@ -1505,7 +1514,7 @@ public:
         }
 
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_id()->Clear();
-        context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->add_id(vSlotId);
+        context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->add_id(GetVDiskId(*itVSlot->second));
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->clear_id(); // you can see VDisks Group Id in vSlotId field
 
         storageVDiskStatus.set_id(vSlotId);

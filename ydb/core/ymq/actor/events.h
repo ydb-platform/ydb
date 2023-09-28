@@ -195,6 +195,9 @@ struct TSqsEvents {
         bool UserExists = false;
         bool QueueExists = false;
 
+        // Event processing was throttled
+        bool Throttled = false;
+
         // Queue info
         ui32 TablesFormat = 0;
         ui64 QueueVersion = 0;
@@ -441,6 +444,7 @@ struct TSqsEvents {
             SessionError,
             QueueDoesNotExist,
             UserDoesNotExist,
+            Throttled,
         };
 
         NKikimrClient::TSqsResponse Record;
@@ -481,6 +485,7 @@ struct TSqsEvents {
             NoQueue,
             FailedToConnectToLeader,
             Error,
+            Throttled,
         };
 
         TString RequestId;
@@ -527,13 +532,16 @@ struct TSqsEvents {
     struct TEvQueueId : public NActors::TEventLocal<TEvQueueId, EvQueueId> {
         bool Exists = false;
         bool Failed = false;
+        // Event processing was throttled
+        bool Throttled = false;
         TString QueueId; // resource id in case of Yandex.Cloud mode and queue name in case of Yandex
         ui64 Version = 0; // last queue version registered in service actor
         ui64 ShardsCount = 0; // number of queue shards
         ui32 TablesFormat = 0;
 
-        TEvQueueId(const bool failed = false)
+        TEvQueueId(const bool failed = false, const bool throttled = false)
             : Failed(failed)
+            , Throttled(throttled)
         {
         }
 
@@ -563,11 +571,15 @@ struct TSqsEvents {
     struct TEvQueueFolderIdAndCustomName : public NActors::TEventLocal<TEvQueueFolderIdAndCustomName, EvQueueFolderIdAndCustomName> {
         bool Exists = false;
         bool Failed = false;
+        // Event processing was throttled
+        bool Throttled = false;
+
         TString QueueFolderId;
         TString QueueCustomName;
 
-        TEvQueueFolderIdAndCustomName(bool failed = false)
+        TEvQueueFolderIdAndCustomName(bool failed = false, bool throttled = false)
             : Failed(failed)
+            , Throttled(throttled)
         {
         }
 

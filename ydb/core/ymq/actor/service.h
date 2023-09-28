@@ -83,6 +83,7 @@ private:
 
     void AnswerNoUserToRequests();
     void AnswerNoQueueToRequests(const TUserInfoPtr& user);
+    void AnswerThrottledToRequests(const TUserInfoPtr& user);
 
     void AnswerErrorToRequests();
     void AnswerErrorToRequests(const TUserInfoPtr& user);
@@ -116,6 +117,8 @@ private:
     void AnswerNoQueueToRequests(const TUserInfoPtr& user, TMultimap& map);
     template <class TMultimap>
     void AnswerErrorToRequests(const TUserInfoPtr& user, TMultimap& map);
+    template <class TMultimap>
+    void AnswerThrottledToRequests(TMultimap& map);
 
     void AnswerNotExists(TSqsEvents::TEvGetLeaderNodeForQueueRequest::TPtr& ev, const TUserInfoPtr& userInfo);
     void AnswerNotExists(TSqsEvents::TEvGetConfiguration::TPtr& ev, const TUserInfoPtr& userInfo);
@@ -128,6 +131,11 @@ private:
     void AnswerFailed(TSqsEvents::TEvGetQueueId::TPtr& ev, const TUserInfoPtr& userInfo);
     void AnswerFailed(TSqsEvents::TEvGetQueueFolderIdAndCustomName::TPtr& ev, const TUserInfoPtr& userInfo);
     void AnswerFailed(TSqsEvents::TEvCountQueues::TPtr& ev, const TUserInfoPtr& userInfo);
+
+    void AnswerThrottled(TSqsEvents::TEvGetLeaderNodeForQueueRequest::TPtr& ev);
+    void AnswerThrottled(TSqsEvents::TEvGetConfiguration::TPtr& ev);
+    void AnswerThrottled(TSqsEvents::TEvGetQueueId::TPtr& ev);
+    void AnswerThrottled(TSqsEvents::TEvGetQueueFolderIdAndCustomName::TPtr& ev);
 
     void Answer(TSqsEvents::TEvGetQueueFolderIdAndCustomName::TPtr& ev, const TQueueInfoPtr& queueInfo);
 

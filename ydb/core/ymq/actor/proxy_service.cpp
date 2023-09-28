@@ -87,6 +87,8 @@ static TSqsEvents::TEvProxySqsResponse::EProxyStatus GetLeaderNodeForQueueStatus
         return TSqsEvents::TEvProxySqsResponse::EProxyStatus::QueueDoesNotExist;
     case TSqsEvents::TEvGetLeaderNodeForQueueResponse::EStatus::FailedToConnectToLeader:
         return TSqsEvents::TEvProxySqsResponse::EProxyStatus::SessionError;
+    case TSqsEvents::TEvGetLeaderNodeForQueueResponse::EStatus::Throttled:
+        return TSqsEvents::TEvProxySqsResponse::EProxyStatus::Throttled;
     case TSqsEvents::TEvGetLeaderNodeForQueueResponse::EStatus::Error:
     default:
         return TSqsEvents::TEvProxySqsResponse::EProxyStatus::LeaderResolvingError;

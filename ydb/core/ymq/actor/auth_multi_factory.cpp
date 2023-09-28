@@ -356,6 +356,13 @@ public:
     }
 
     void HandleQueueFolderIdAndCustomName(TSqsEvents::TEvQueueFolderIdAndCustomName::TPtr& ev) {
+        if (ev->Get()->Throttled) {
+            RLOG_SQS_INFO("Get queue folder id and custom name was throttled.");
+            SetError(NErrors::THROTTLING_EXCEPTION, "Too many requests for nonexistent queue");
+            SendReplyAndDie();
+            return;
+        }
+
         if (ev->Get()->Failed) {
             RLOG_SQS_INFO("Get queue folder id and custom name failed. Failed: " << ev->Get()->Failed << ". Exists: " << ev->Get()->Exists);
             SetError(NErrors::INTERNAL_FAILURE, "Internal folder service error.");

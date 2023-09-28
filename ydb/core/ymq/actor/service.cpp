@@ -537,7 +537,7 @@ void TSqsService::HandleGetLeaderNodeForQueueRequest(TSqsEvents::TEvGetLeaderNod
             RLOG_SQS_REQ_DEBUG(reqId, "Queue [" << userName << "/" << queueName << "] was not found in sqs service list. Requesting queues list");
             user->GetLeaderNodeRequests_.emplace(queueName, std::move(ev));
         } else {
-            Send(ev->Sender, new TSqsEvents::TEvGetLeaderNodeForQueueResponse(reqId, userName, queueName, TSqsEvents::TEvGetLeaderNodeForQueueResponse::EStatus::NoQueue));
+            AnswerThrottled(ev);
         }
         return;
     }
@@ -585,7 +585,7 @@ void TSqsService::HandleGetConfiguration(TSqsEvents::TEvGetConfiguration::TPtr& 
             RLOG_SQS_REQ_DEBUG(reqId, "Queue [" << userName << "/" << queueName << "] was not found in sqs service list. Requesting queues list");
             user->GetConfigurationRequests_.emplace(queueName, std::move(ev));
         } else {
-            AnswerNotExists(ev, user);
+            AnswerThrottled(ev);
         }
         return;
     }
@@ -671,6 +671,31 @@ void TSqsService::AnswerFailed(TSqsEvents::TEvGetQueueFolderIdAndCustomName::TPt
 
 void TSqsService::AnswerFailed(TSqsEvents::TEvCountQueues::TPtr& ev, const TUserInfoPtr&) {
     Send(ev->Sender, new TSqsEvents::TEvCountQueuesResponse(true));
+}
+
+void TSqsService::AnswerThrottled(TSqsEvents::TEvGetLeaderNodeForQueueRequest::TPtr& ev) {
+    const TString& reqId = ev->Get()->RequestId;
+    const TString& userName = ev->Get()->UserName;
+    const TString& queueName = ev->Get()->QueueName;
+    RLOG_SQS_REQ_DEBUG(reqId, "Throttled because of too many requests for nonexistent queue [" << queueName << "] for user [" << userName << "] while getting leader node");
+    Send(ev->Sender, new TSqsEvents::TEvGetLeaderNodeForQueueResponse(reqId, userName, queueName, TSqsEvents::TEvGetLeaderNodeForQueueResponse::EStatus::Throttled));
+}
+
+void TSqsService::AnswerThrottled(TSqsEvents::TEvGetConfiguration::TPtr& ev) {
+    RLOG_SQS_REQ_DEBUG(ev->Get()->RequestId, "Throttled because of too many requests for nonexistent queue [" << ev->Get()->QueueName << "] for user [" << ev->Get()->UserName << "] while getting configuration");
+    auto answer = MakeHolder<TSqsEvents::TEvConfiguration>();
+    answer->Throttled = true;
+    Send(ev->Sender, answer.Release());
+}
+
+void TSqsService::AnswerThrottled(TSqsEvents::TEvGetQueueId::TPtr& ev) {
+    RLOG_SQS_REQ_DEBUG(ev->Get()->RequestId, "Throttled because of too many requests for nonexistent queue [" << ev->Get()->CustomQueueName << "] for user [" << ev->Get()->UserName << "] while getting queue id");
+    Send(ev->Sender, new TSqsEvents::TEvQueueId(false, true));
+}
+
+void TSqsService::AnswerThrottled(TSqsEvents::TEvGetQueueFolderIdAndCustomName::TPtr& ev) {
+    RLOG_SQS_REQ_DEBUG(ev->Get()->RequestId, "Throttled because of too many requests for nonexistent queue [" << ev->Get()->QueueName << "] for user [" << ev->Get()->UserName << "] while getting folder id and custom name");
+    Send(ev->Sender, new TSqsEvents::TEvQueueFolderIdAndCustomName(false, true));
 }
 
 void TSqsService::Answer(TSqsEvents::TEvGetQueueFolderIdAndCustomName::TPtr& ev, const TQueueInfoPtr& queueInfo) {
@@ -772,9 +797,8 @@ void TSqsService::HandleGetQueueId(TSqsEvents::TEvGetQueueId::TPtr& ev) {
                                 << ev->Get()->FolderId << "] was not found in sqs service list for user ["
                                 << userName << "]. Requesting queues list");
             user->GetQueueIdRequests_.emplace(std::make_pair(ev->Get()->CustomQueueName, ev->Get()->FolderId), std::move(ev));
-        } else {
-            AnswerNotExists(ev, user);
-        }
+        } else
+            AnswerThrottled(ev);
         return;
     }
 
@@ -790,7 +814,8 @@ void TSqsService::HandleGetQueueId(TSqsEvents::TEvGetQueueId::TPtr& ev) {
     );
 }
 
-void TSqsService::HandleGetQueueFolderIdAndCustomName(TSqsEvents::TEvGetQueueFolderIdAndCustomName::TPtr& ev) {
+void TSqsService::HandleGetQueueFolderIdAndCustomName(
+    TSqsEvents::TEvGetQueueFolderIdAndCustomName::TPtr& ev) {
     TUserInfoPtr user = GetUserOrWait(ev);
     if (!user) {
         return;
@@ -806,7 +831,7 @@ void TSqsService::HandleGetQueueFolderIdAndCustomName(TSqsEvents::TEvGetQueueFol
             RLOG_SQS_REQ_DEBUG(reqId, "Queue [" << userName << "/" << queueName << "] was not found in sqs service list. Requesting queues list");
             user->GetQueueFolderIdAndCustomNameRequests_.emplace(queueName, std::move(ev));
         } else {
-            AnswerNotExists(ev, user);
+            AnswerThrottled(ev);
         }
         return;
     }
@@ -1301,6 +1326,13 @@ void TSqsService::AnswerNoQueueToRequests(const TUserInfoPtr& user) {
     AnswerNoQueueToRequests(user, user->GetQueueFolderIdAndCustomNameRequests_);
 }
 
+void TSqsService::AnswerThrottledToRequests(const TUserInfoPtr& user) {
+    AnswerThrottledToRequests(user->GetLeaderNodeRequests_);
+    AnswerThrottledToRequests(user->GetConfigurationRequests_);
+    AnswerThrottledToRequests(user->GetQueueIdRequests_);
+    AnswerThrottledToRequests(user->GetQueueFolderIdAndCustomNameRequests_);
+}
+
 void TSqsService::AnswerErrorToRequests() {
     AnswerErrorToRequests(nullptr, GetLeaderNodeRequests_);
     AnswerErrorToRequests(nullptr, GetConfigurationRequests_);
@@ -1496,6 +1528,15 @@ void TSqsService::AnswerNoQueueToRequests(const TUserInfoPtr& user, TMultimap& m
     for (auto& queueToRequest : map) {
         auto& req = queueToRequest.second;
         AnswerNotExists(req, user);
+    }
+    map.clear();
+}
+
+template <class TMultimap>
+void TSqsService::AnswerThrottledToRequests(TMultimap& map) {
+    for (auto& queueToRequest : map) {
+        auto& req = queueToRequest.second;
+        AnswerThrottled(req);
     }
     map.clear();
 }

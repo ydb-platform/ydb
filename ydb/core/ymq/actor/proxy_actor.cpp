@@ -99,6 +99,12 @@ void TProxyActor::HandleConfiguration(TSqsEvents::TEvConfiguration::TPtr& ev) {
         COLLECT_HISTOGRAM_COUNTER(detailedCounters, GetConfiguration_Duration, confDuration.MilliSeconds());
     }
 
+    if (ev->Get()->Throttled) {
+        RLOG_SQS_ERROR("Attempt to get configuration was throttled");
+        SendErrorAndDie(NErrors::THROTTLING_EXCEPTION, "Too many requests to nonexistent queue.");
+        return;
+    }
+
     if (ev->Get()->Fail) {
         RLOG_SQS_ERROR("Failed to get configuration");
         SendErrorAndDie(NErrors::INTERNAL_FAILURE, "Failed to get configuration.");
@@ -213,6 +219,8 @@ const TErrorClass& TProxyActor::GetErrorClass(TSqsEvents::TEvProxySqsResponse::E
     case EProxyStatus::QueueDoesNotExist:
     case EProxyStatus::UserDoesNotExist:
         return NErrors::NON_EXISTENT_QUEUE;
+    case EProxyStatus::Throttled:
+        return NErrors::THROTTLING_EXCEPTION;
     default:
         return NErrors::INTERNAL_FAILURE;
     }

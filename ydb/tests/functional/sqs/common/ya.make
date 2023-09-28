@@ -12,6 +12,7 @@ TEST_SRCS(
     test_queue_attributes_validation.py
     test_queues_managing.py
     test_format_without_version.py
+    test_throttling_nonexistent_queue.py
 )
 
 IF (SANITIZER_TYPE)

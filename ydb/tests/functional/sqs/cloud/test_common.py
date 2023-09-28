@@ -78,7 +78,8 @@ class CommonTests(KikimrSqsTestBase):
                         break
                     except RuntimeError as e:
                         last_error = e
-                        if "The specified queue doesn't exist" not in str(e):
+                        if ("The specified queue doesn't exist" not in str(e)
+                                and "<Code>ThrottlingException</Code>" not in str(e)):
                             raise e
                     time.sleep(1)
                 else:

@@ -58,7 +58,10 @@ private:
     }
 
     void HandleQueueId(TSqsEvents::TEvQueueId::TPtr& ev) {
-        if (ev->Get()->Failed) {
+        if (ev->Get()->Throttled) {
+            RLOG_SQS_WARN("Get queue id was throttled");
+            MakeError(MutableErrorDesc(), NErrors::THROTTLING_EXCEPTION);
+        } else if (ev->Get()->Failed) {
             RLOG_SQS_WARN("Get queue id failed");
             MakeError(MutableErrorDesc(), NErrors::INTERNAL_FAILURE);
         } else {

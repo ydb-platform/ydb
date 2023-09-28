@@ -27,13 +27,14 @@ TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, TPlainR
 
 bool TScanHead::BuildNextInterval() {
     while (BorderPoints.size()) {
-        Y_VERIFY(FrontEnds.size());
+//        Y_VERIFY(FrontEnds.size());
         auto position = BorderPoints.begin()->first;
         auto firstBorderPointInfo = std::move(BorderPoints.begin()->second);
         const bool isIncludeStart = CurrentSegments.empty();
 
         for (auto&& i : firstBorderPointInfo.GetStartSources()) {
-            CurrentSegments.emplace(i->GetSourceIdx(), i);
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("add_source", i->GetSourceIdx());
+            AFL_VERIFY(CurrentSegments.emplace(i->GetSourceIdx(), i).second)("idx", i->GetSourceIdx());
         }
 
         if (firstBorderPointInfo.GetStartSources().size() && firstBorderPointInfo.GetFinishSources().size()) {
@@ -44,20 +45,21 @@ bool TScanHead::BuildNextInterval() {
         }
 
         for (auto&& i : firstBorderPointInfo.GetFinishSources()) {
-            Y_VERIFY(CurrentSegments.erase(i->GetSourceIdx()));
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("remove_source", i->GetSourceIdx());
+            AFL_VERIFY(CurrentSegments.erase(i->GetSourceIdx()))("idx", i->GetSourceIdx());
         }
 
-        const bool isFirstFinished = (position == *FrontEnds.begin());
-        if (firstBorderPointInfo.GetFinishSources().size()) {
-            Y_VERIFY(isFirstFinished);
-            Y_VERIFY(FrontEnds.erase(position));
-        } else {
-            Y_VERIFY(!FrontEnds.erase(position));
-        }
+//        const bool isFirstFinished = (position == *FrontEnds.begin());
+//        if (firstBorderPointInfo.GetFinishSources().size()) {
+//            Y_VERIFY(isFirstFinished);
+//            Y_VERIFY(FrontEnds.erase(position));
+//        } else {
+//            Y_VERIFY(!FrontEnds.erase(position));
+//        }
 
-        if (isFirstFinished) {
-            DrainSources();
-        }
+//        if (isFirstFinished) {
+//            DrainSources();
+//        }
         CurrentStart = BorderPoints.begin()->first;
         BorderPoints.erase(BorderPoints.begin());
         if (CurrentSegments.size()) {
@@ -85,12 +87,9 @@ void TScanHead::DrainResults() {
 }
 
 void TScanHead::DrainSources() {
-    if (Sources.empty()) {
-        return;
-    }
-    while (Sources.size() && (FrontEnds.empty() || Sources.front()->GetStart().Compare(*FrontEnds.begin()) != std::partial_ordering::greater)) {
+    while (Sources.size()/* && (FrontEnds.empty() || Sources.front()->GetStart().Compare(*FrontEnds.begin()) != std::partial_ordering::greater)*/) {
         auto source = Sources.front();
-        FrontEnds.emplace(source->GetFinish());
+//        FrontEnds.emplace(source->GetFinish());
         BorderPoints[source->GetStart()].AddStart(source);
         BorderPoints[source->GetFinish()].AddFinish(source);
         Sources.pop_front();

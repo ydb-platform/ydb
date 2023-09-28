@@ -39,7 +39,7 @@ TPlainReadData::TPlainReadData(TReadMetadata::TConstPtr readMetadata, const TRea
             auto start = GetReadMetadata()->BuildSortedPosition((*itPortion)->IndexKeyStart());
             auto finish = GetReadMetadata()->BuildSortedPosition((*itPortion)->IndexKeyEnd());
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "portions_for_merge")("start", start.DebugJson())("finish", finish.DebugJson());
-            sources.emplace_back(std::make_shared<TPortionDataSource>(sourceIdx++, (*itPortion), *this, start, finish));
+            sources.emplace_back(std::make_shared<TPortionDataSource>(sourceIdx++, *itPortion, *this, start, finish));
             ++itPortion;
         } else {
             auto start = GetReadMetadata()->BuildSortedPosition(itCommitted->GetFirstVerified());

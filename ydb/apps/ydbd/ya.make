@@ -71,7 +71,6 @@ CHECK_DEPENDENT_DIRS(
     ALLOW_ONLY
     PEERDIRS
     arc/api/public
-    build/external_resources/antlr3
     build/platform
     certs
     contrib

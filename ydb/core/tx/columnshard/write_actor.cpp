@@ -19,7 +19,7 @@ class TWriteActor : public TActorBootstrapped<TWriteActor>, public TMonitoringOb
     TInstant Deadline;
 
 public:
-    TWriteActor(ui64 tabletId, IWriteController::TPtr writeController, const TInstant& deadline)
+    TWriteActor(ui64 tabletId, IWriteController::TPtr writeController, const TInstant deadline)
         : TabletId(tabletId)
         , WriteController(writeController)
         , Deadline(deadline)
@@ -74,6 +74,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
+        WriteController->OnStartSending();
         if (Deadline != TInstant::Max()) {
             TInstant now = TAppData::TimeProvider->Now();
             if (Deadline <= now) {
@@ -107,7 +108,7 @@ public:
 
 } // namespace
 
-IActor* CreateWriteActor(ui64 tabletId, IWriteController::TPtr writeController, const TInstant& deadline) {
+IActor* CreateWriteActor(ui64 tabletId, IWriteController::TPtr writeController, const TInstant deadline) {
     return new TWriteActor(tabletId, writeController, deadline);
 }
 

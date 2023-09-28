@@ -34,6 +34,11 @@ private:
     std::shared_ptr<TValueAggregationClient> SplitCompactionGranulePortionsCount;
 
     NMonitoring::THistogramPtr HistogramSuccessWritePutBlobsDurationMs;
+    NMonitoring::THistogramPtr HistogramSuccessWriteMiddle1PutBlobsDurationMs;
+    NMonitoring::THistogramPtr HistogramSuccessWriteMiddle2PutBlobsDurationMs;
+    NMonitoring::THistogramPtr HistogramSuccessWriteMiddle3PutBlobsDurationMs;
+    NMonitoring::THistogramPtr HistogramSuccessWriteMiddle4PutBlobsDurationMs;
+    NMonitoring::THistogramPtr HistogramSuccessWriteMiddle5PutBlobsDurationMs;
     NMonitoring::THistogramPtr HistogramFailedWritePutBlobsDurationMs;
     NMonitoring::THistogramPtr HistogramWriteTxCompleteDurationMs;
     NMonitoring::TDynamicCounters::TCounterPtr WritePutBlobsCount;
@@ -58,6 +63,26 @@ public:
     void OnWritePutBlobsSuccess(const ui32 milliseconds) const {
         HistogramSuccessWritePutBlobsDurationMs->Collect(milliseconds);
         WritePutBlobsCount->Sub(1);
+    }
+
+    void OnWriteMiddle1PutBlobsSuccess(const ui32 milliseconds) const {
+        HistogramSuccessWriteMiddle1PutBlobsDurationMs->Collect(milliseconds);
+    }
+
+    void OnWriteMiddle2PutBlobsSuccess(const ui32 milliseconds) const {
+        HistogramSuccessWriteMiddle2PutBlobsDurationMs->Collect(milliseconds);
+    }
+
+    void OnWriteMiddle3PutBlobsSuccess(const ui32 milliseconds) const {
+        HistogramSuccessWriteMiddle3PutBlobsDurationMs->Collect(milliseconds);
+    }
+
+    void OnWriteMiddle4PutBlobsSuccess(const ui32 milliseconds) const {
+        HistogramSuccessWriteMiddle4PutBlobsDurationMs->Collect(milliseconds);
+    }
+
+    void OnWriteMiddle5PutBlobsSuccess(const ui32 milliseconds) const {
+        HistogramSuccessWriteMiddle5PutBlobsDurationMs->Collect(milliseconds);
     }
 
     void OnWritePutBlobsFail(const ui32 milliseconds) const {

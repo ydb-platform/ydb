@@ -74,16 +74,20 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
         if (writeMeta.HasLongTxId()) {
             auto result = std::make_unique<TEvColumnShard::TEvWriteResult>(TabletID(), writeMeta, errCode);
             ctx.Send(writeMeta.GetSource(), result.release());
-            CSCounters.OnFailedWriteResponse();
         } else {
             auto operation = OperationsManager.GetOperation((TWriteId)writeMeta.GetWriteId());
             Y_VERIFY(operation);
             auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(operation->GetTxId(), NKikimrDataEvents::TEvWriteResult::ERROR, "put data fails");
             ctx.Send(writeMeta.GetSource(), result.release());
-            CSCounters.OnFailedWriteResponse();
         }
+        CSCounters.OnFailedWriteResponse();
     } else {
         CSCounters.OnWritePutBlobsSuccess((TMonotonic::Now() - writeMeta.GetWriteStartInstant()).MilliSeconds());
+        CSCounters.OnWriteMiddle1PutBlobsSuccess((TMonotonic::Now() - writeMeta.GetWriteMiddle1StartInstant()).MilliSeconds());
+        CSCounters.OnWriteMiddle2PutBlobsSuccess((TMonotonic::Now() - writeMeta.GetWriteMiddle2StartInstant()).MilliSeconds());
+        CSCounters.OnWriteMiddle3PutBlobsSuccess((TMonotonic::Now() - writeMeta.GetWriteMiddle3StartInstant()).MilliSeconds());
+        CSCounters.OnWriteMiddle4PutBlobsSuccess((TMonotonic::Now() - writeMeta.GetWriteMiddle4StartInstant()).MilliSeconds());
+        CSCounters.OnWriteMiddle5PutBlobsSuccess((TMonotonic::Now() - writeMeta.GetWriteMiddle5StartInstant()).MilliSeconds());
         LOG_S_DEBUG("Write (record) into pathId " << writeMeta.GetTableId()
             << (writeMeta.GetWriteId() ? (" writeId " + ToString(writeMeta.GetWriteId())).c_str() : "") << " at tablet " << TabletID());
 
@@ -161,10 +165,10 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
             << (writeMeta.GetWriteId()? (" writeId " + ToString(writeMeta.GetWriteId())).c_str() : " ")
             << WritesMonitor.DebugString()
             << " at tablet " << TabletID());
-
+        writeData.MutableWriteMeta().SetWriteMiddle1StartInstant(TMonotonic::Now());
         std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildSlicesTask>(TabletID(), SelfId(),
             StoragesManager->GetInsertOperator()->StartWritingAction(), writeData);
-        NConveyor::TCompServiceOperator::SendTaskToExecute(task);
+        NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
     }
 }
 

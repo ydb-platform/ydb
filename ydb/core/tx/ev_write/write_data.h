@@ -28,6 +28,11 @@ class TWriteMeta {
     YDB_ACCESSOR_DEF(TString, DedupId);
 
     YDB_READONLY(TMonotonic, WriteStartInstant, TMonotonic::Now());
+    YDB_ACCESSOR(TMonotonic, WriteMiddle1StartInstant, TMonotonic::Now());
+    YDB_ACCESSOR(TMonotonic, WriteMiddle2StartInstant, TMonotonic::Now());
+    YDB_ACCESSOR(TMonotonic, WriteMiddle3StartInstant, TMonotonic::Now());
+    YDB_ACCESSOR(TMonotonic, WriteMiddle4StartInstant, TMonotonic::Now());
+    YDB_ACCESSOR(TMonotonic, WriteMiddle5StartInstant, TMonotonic::Now());
 public:
     TWriteMeta(const ui64 writeId, const ui64 tableId, const NActors::TActorId& source)
         : WriteId(writeId)
@@ -51,6 +56,10 @@ public:
     }
 
     const TWriteMeta& GetWriteMeta() const {
+        return WriteMeta;
+    }
+
+    TWriteMeta& MutableWriteMeta() {
         return WriteMeta;
     }
 

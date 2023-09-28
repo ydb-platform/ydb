@@ -51,6 +51,9 @@ protected:
     virtual void DoOnBlobWriteResult(const TEvBlobStorage::TEvPutResult& /*result*/) {
 
     }
+    virtual void DoOnStartSending() {
+
+    }
 
     NOlap::TBlobWriteInfo& AddWriteTask(NOlap::TBlobWriteInfo&& task) {
         WritingActions.emplace(task.GetWriteOperator()->GetActionId(), task.GetWriteOperator());
@@ -66,6 +69,10 @@ public:
 
     using TPtr = std::shared_ptr<IWriteController>;
     virtual ~IWriteController() {}
+
+    void OnStartSending() {
+        DoOnStartSending();
+    }
 
     void OnReadyResult(const NActors::TActorContext& ctx, const TBlobPutResult::TPtr& putResult) {
         putResult->AddResources(ResourceUsage);

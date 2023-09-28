@@ -126,6 +126,8 @@ message TConfigItem {
         AwsCompatibilityConfigItem = 70;
         KafkaProxyConfig = 71;
         CompConveyorConfigItem = 72;
+        QueryServiceConfigItem = 73;
+        InsertConveyorConfigItem = 74;
 
         NamedConfigsItem = 100;
         ClusterYamlConfigItem = 101;

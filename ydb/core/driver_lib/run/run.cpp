@@ -1506,6 +1506,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TCompConveyorInitializer(runConfig));
     }
 
+    if (serviceMask.EnableInsertConveyor) {
+        sil->AddServiceInitializer(new TInsertConveyorInitializer(runConfig));
+    }
+
     if (serviceMask.EnableBackgroundTasks) {
         sil->AddServiceInitializer(new TBackgroundTasksInitializer(runConfig));
     }

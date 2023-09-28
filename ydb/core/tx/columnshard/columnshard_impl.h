@@ -51,7 +51,7 @@ class TOperationsManager;
 
 extern bool gAllowLogBatchingDefaultValue;
 
-IActor* CreateWriteActor(ui64 tabletId, IWriteController::TPtr writeController, const TInstant& deadline);
+IActor* CreateWriteActor(ui64 tabletId, IWriteController::TPtr writeController, const TInstant deadline);
 IActor* CreateReadActor(ui64 tabletId, const NActors::TActorId readBlobsActor,
                         const TActorId& dstActor, const std::shared_ptr<NOlap::IStoragesManager>& storages,
                         std::unique_ptr<TEvColumnShard::TEvReadResult>&& event,
@@ -60,7 +60,6 @@ IActor* CreateReadActor(ui64 tabletId, const NActors::TActorId readBlobsActor,
                         const TActorId& columnShardActorId,
                         ui64 requestCookie, const TConcreteScanCounters& counters);
 IActor* CreateColumnShardScan(const TActorId& scanComputeActor, ui32 scanId, ui64 txId);
-IActor* CreateExportActor(const ui64 tabletId, const TActorId& dstActor, TAutoPtr<TEvPrivate::TEvExport> ev);
 
 struct TSettings {
     static constexpr ui32 MAX_ACTIVE_COMPACTIONS = 1;

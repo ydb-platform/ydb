@@ -2050,6 +2050,7 @@ message TAppConfig {
     optional TKafkaProxyConfig KafkaProxyConfig = 71;
     optional TConveyorConfig CompConveyorConfig = 72;
     optional TQueryServiceConfig QueryServiceConfig = 73;
+    optional TConveyorConfig InsertConveyorConfig = 74;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

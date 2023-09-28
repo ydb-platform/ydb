@@ -7,6 +7,22 @@
 
 namespace NKikimr::NConveyor {
 
+class TAsyncTaskExecutor: public TActorBootstrapped<TAsyncTaskExecutor> {
+private:
+    const std::shared_ptr<ITask> Task;
+public:
+    TAsyncTaskExecutor(const std::shared_ptr<ITask>& task)
+        : Task(task)
+    {
+
+    }
+
+    void Bootstrap() {
+        auto gAway = PassAwayGuard();
+        Task->Execute(nullptr);
+    }
+};
+
 template <class TConveyorPolicy>
 class TServiceOperatorImpl {
 private:
@@ -20,6 +36,10 @@ private:
         return TConveyorPolicy::Name;
     }
 public:
+    static void AsyncTaskToExecute(const std::shared_ptr<ITask>& task) {
+        auto& context = NActors::TActorContext::AsActorContext();
+        context.Register(new TAsyncTaskExecutor(task));
+    }
     static bool SendTaskToExecute(const std::shared_ptr<ITask>& task) {
         auto& context = NActors::TActorContext::AsActorContext();
         const NActors::TActorId& selfId = context.SelfID;
@@ -55,7 +75,13 @@ public:
     static const inline TString Name = "Comp";
 };
 
+class TInsertConveyorPolicy {
+public:
+    static const inline TString Name = "Isrt";
+};
+
 using TScanServiceOperator = TServiceOperatorImpl<TScanConveyorPolicy>;
 using TCompServiceOperator = TServiceOperatorImpl<TCompConveyorPolicy>;
+using TInsertServiceOperator = TServiceOperatorImpl<TInsertConveyorPolicy>;
 
 }

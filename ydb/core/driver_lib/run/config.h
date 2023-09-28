@@ -72,6 +72,7 @@ union TBasicKikimrServicesMask {
         bool EnableExternalIndex: 1;
         bool EnableScanConveyor : 1;
         bool EnableCompConveyor : 1;
+        bool EnableInsertConveyor : 1;
         bool EnableLocalPgWire:1;
         bool EnableKafkaProxy:1;
         bool EnableIcNodeCacheService:1;

@@ -20,6 +20,7 @@ TIndexedWriteController::TIndexedWriteController(const TActorId& dstActor, const
 }
 
 void TIndexedWriteController::DoOnReadyResult(const NActors::TActorContext& ctx, const NColumnShard::TBlobPutResult::TPtr& putResult) {
+    WriteData.MutableWriteMeta().SetWriteMiddle4StartInstant(TMonotonic::Now());
     if (putResult->GetPutStatus() == NKikimrProto::OK) {
         std::vector<std::shared_ptr<IBlobsWritingAction>> actions = {Action};
         auto result = std::make_unique<NColumnShard::TEvPrivate::TEvWriteBlobsResult>(putResult, std::move(BlobData), actions, WriteData.GetWriteMeta(), WriteData.GetData().GetSchemaVersion());
@@ -28,6 +29,10 @@ void TIndexedWriteController::DoOnReadyResult(const NActors::TActorContext& ctx,
         auto result = std::make_unique<NColumnShard::TEvPrivate::TEvWriteBlobsResult>(putResult, WriteData.GetWriteMeta());
         ctx.Send(DstActor, result.release());
     }
+}
+
+void TIndexedWriteController::DoOnStartSending() {
+    WriteData.MutableWriteMeta().SetWriteMiddle5StartInstant(TMonotonic::Now());
 }
 
 }

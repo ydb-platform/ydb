@@ -1,8 +1,24 @@
 PROGRAM(yasm)
 
+LICENSE(
+    Artistic-1.0 AND
+    Artistic-1.0-Perl AND
+    Artistic-2.0 AND
+    BSD-2-Clause AND
+    BSD-3-Clause AND
+    GPL-1.0-or-later AND
+    LGPL-2.0-or-later AND
+    LicenseRef-scancode-warranty-disclaimer AND
+    Public-Domain
+)
+
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
 IF (MUSL)
-    PEERDIR(contrib/libs/musl_extra)
-    PEERDIR(contrib/libs/jemalloc)
+    PEERDIR(
+        contrib/libs/musl_extra
+        contrib/libs/jemalloc
+    )
     DISABLE(USE_ASMLIB)
     NO_RUNTIME()
     ENABLE(MUSL_LITE)
@@ -11,7 +27,9 @@ ELSE()
 ENDIF()
 
 NO_CLANG_COVERAGE()
+
 NO_COMPILER_WARNINGS()
+
 NO_UTIL()
 
 ALLOCATOR(FAKE)

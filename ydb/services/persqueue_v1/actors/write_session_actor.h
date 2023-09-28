@@ -57,8 +57,12 @@ class TWriteSessionActor
     using TWriteRequestInfo = TWriteRequestInfoImpl<TEvWrite>;
     using TPartitionWriter = TPartitionWriterImpl<TEvWrite>;
 
-// Codec ID size in bytes
-static constexpr ui32 CODEC_ID_SIZE = 1;
+    // Codec ID size in bytes
+    static constexpr ui32 CODEC_ID_SIZE = 1;
+
+    //TODO: get user agent from headers
+    static constexpr auto UserAgent = UseMigrationProtocol ? "pqv1 server" : "topic server";
+    static constexpr auto ProtoName = UseMigrationProtocol ? "v1" : "topic";
 
 public:
     TWriteSessionActor(TEvStreamWriteRequest* request, const ui64 cookie,
@@ -71,7 +75,10 @@ public:
 
     void Die(const NActors::TActorContext& ctx) override;
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::FRONT_PQ_WRITE; }
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::FRONT_PQ_WRITE;
+    }
+
 private:
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
@@ -219,7 +226,6 @@ private:
     NPQ::NSourceIdEncoding::TEncodedSourceId EncodedSourceId;
 
     TString OwnerCookie;
-    TString UserAgent;
 
     THolder<TAclWrapper> ACL;
 

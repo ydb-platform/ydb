@@ -455,8 +455,6 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWriteInit::TPt
     if (!UseDeduplication) {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session request cookie: " << Cookie << ". Disable deduplication for empty producer id");
     }
-    //TODO: get user agent from headers
-    UserAgent = "pqv1 server";
     LogSession(ctx);
 
     if (Request->GetSerializedToken().empty()) { // session without auth
@@ -1796,7 +1794,7 @@ void TWriteSessionActor<UseMigrationProtocol>::LogSession(const TActorContext& c
     LOG_INFO_S(
             ctx, NKikimrServices::PQ_WRITE_PROXY,
             "write session:  cookie=" << Cookie << " sessionId=" << OwnerCookie << " userAgent=\"" << UserAgent
-                                      << "\" ip=" << PeerName << " proto=v1 "
+                                      << "\" ip=" << PeerName << " proto=" << ProtoName << " "
                                       << " topic=" << topic_path
                                       << " durationSec=" << (ctx.Now() - StartTime).Seconds()
     );

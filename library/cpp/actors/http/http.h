@@ -215,7 +215,7 @@ public:
     };
 
     static constexpr size_t MaxMethodSize = 8;
-    static constexpr size_t MaxURLSize = 1024;
+    static constexpr size_t MaxURLSize = 2048;
     static constexpr size_t MaxProtocolSize = 4;
     static constexpr size_t MaxVersionSize = 4;
     static constexpr size_t MaxStatusSize = 3;

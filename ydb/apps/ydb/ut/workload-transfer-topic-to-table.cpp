@@ -1,5 +1,7 @@
 #include "run_ydb.h"
 
+#include <util/string/split.h>
+
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -74,12 +76,13 @@ void ExpectTable(const TTableConfigMatcher& matcher)
     }
 }
 
-TString ExecYdb(const TList<TString>& args)
+TString ExecYdb(const TList<TString>& args, bool checkExitCode = true)
 {
     //
     // ydb -e grpc://${YDB_ENDPOINT} -d /${YDB_DATABASE} workload transfer topic-to-table ${args}
     //
-    return RunYdb({"-v", "--user", "root", "--no-password", "workload", "transfer", "topic-to-table"}, args);
+    return RunYdb({"--user", "root", "--no-password", "workload", "transfer", "topic-to-table"}, args,
+                  checkExitCode);
 }
 
 void RunYdb(const TList<TString>& args,
@@ -139,6 +142,32 @@ Y_UNIT_TEST(Double_Init)
 {
     ExecYdb({"init"});
     UNIT_ASSERT_EXCEPTION(ExecYdb({"init"}), yexception);
+    ExecYdb({"clean"});
+}
+
+void EnsureStatisticsColumns(const TList<TString>& args,
+                             const TVector<TString>& columns1,
+                             const TVector<TString>& columns2)
+{
+    RunYdb({"-v", "yql", "-s", R"(ALTER USER root PASSWORD "")"}, TList<TString>());
+
+    ExecYdb({"init"});
+    auto output = ExecYdb(args, false);
+
+    TVector<TString> lines;
+    Split(output, "\n", lines);
+
+    UnitAssertColumnsOrder(lines[0], columns1);
+    UnitAssertColumnsOrder(lines[1], columns2);
+
+    ExecYdb({"clean"});
+}
+
+Y_UNIT_TEST(Statistics)
+{
+    EnsureStatisticsColumns({"run", "-s", "1", "--warmup", "0"},
+                            {"Window", "Write speed", "Write time", "Inflight", "Read speed", "Topic time", "Select time", "Upsert time", "Commit time"},
+                            {"#", "msg/s", "MB/s", "percentile,ms", "percentile,msg", "msg/s", "MB/s", "percentile,ms", "percentile,ms", "percentile,ms", "percentile,ms"});
 }
 
 }

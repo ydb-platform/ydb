@@ -6,6 +6,13 @@
 TString GetYdbEndpoint();
 TString GetYdbDatabase();
 
-TString RunYdb(const TList<TString>& args1, const TList<TString>& args2);
+TString RunYdb(const TList<TString>& args1, const TList<TString>& args2, bool checkExitCode = true);
 
 ui64 GetFullTimeValue(const TString& output);
+
+void EnsureStatisticsColumns(const TList<TString>& args,
+                             const TVector<TString>& columns1,
+                             const TVector<TString>& columns2);
+
+void UnitAssertColumnsOrder(TString line,
+                            const TVector<TString>& columns);

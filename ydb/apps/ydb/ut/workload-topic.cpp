@@ -12,12 +12,12 @@
 
 Y_UNIT_TEST_SUITE(YdbWorkloadTopic) {
 
-TString ExecYdb(const TList<TString>& args)
+TString ExecYdb(const TList<TString>& args, bool checkExitCode = true)
 {
     //
     // ydb -e grpc://${YDB_ENDPOINT} -d /${YDB_DATABASE} workload topic ${args}
     //
-    return RunYdb({"workload", "topic"}, args);
+    return RunYdb({"workload", "topic"}, args, checkExitCode);
 }
 
 struct TTopicConfigurationMatcher {
@@ -47,8 +47,6 @@ Y_UNIT_TEST(Default_RunFull) {
     ExecYdb({"init"});
     auto output = ExecYdb({"run", "full", "-s", "10"});
     ExecYdb({"clean"});
-
-    TVector<TString> lines, columns;
 
     ui64 fullTime = GetFullTimeValue(output);
 
@@ -88,6 +86,44 @@ Y_UNIT_TEST(Double_Init)
 {
     ExecYdb({"init"});
     UNIT_ASSERT_EXCEPTION(ExecYdb({"init"}), yexception);
+    ExecYdb({"clean"});
+}
+
+void EnsureStatisticsColumns(const TList<TString>& args,
+                             const TVector<TString>& columns1,
+                             const TVector<TString>& columns2)
+{
+    ExecYdb({"init"});
+    auto output = ExecYdb(args, false);
+
+    TVector<TString> lines;
+    Split(output, "\n", lines);
+
+    UnitAssertColumnsOrder(lines[0], columns1);
+    UnitAssertColumnsOrder(lines[1], columns2);
+
+    ExecYdb({"clean"});
+}
+
+Y_UNIT_TEST(Read_Statistics)
+{
+    EnsureStatisticsColumns({"run", "read", "-s", "1", "--warmup", "0"},
+                            {"Window", "Lag", "Lag time", "Read speed", "Full time"},
+                            {"#", "percentile,msg", "percentile,ms", "msg/s", "MB/s", "percentile,ms"});
+}
+
+Y_UNIT_TEST(Write_Statistics)
+{
+    EnsureStatisticsColumns({"run", "write", "-s", "1", "--warmup", "0"},
+                            {"Window", "Write speed", "Write time", "Inflight"},
+                            {"#", "msg/s", "MB/s", "percentile,ms", "percentile,msg"});
+}
+
+Y_UNIT_TEST(ReadWrite_Statistics)
+{
+    EnsureStatisticsColumns({"run", "full", "-s", "1", "--warmup", "0"},
+                            {"Window", "Write speed", "Write time", "Inflight", "Lag", "Lag time", "Read speed", "Full time"},
+                            {"#", "msg/s", "MB/s", "percentile,ms", "percentile,msg", "percentile,msg", "percentile,ms", "msg/s", "MB/s", "percentile,ms"});
 }
 
 }

@@ -205,6 +205,13 @@ void _DqOptimizeEquiJoinWithCosts(const std::function<IOptimizer*(IOptimizer::TI
     UNIT_ASSERT(equiJoin.Ptr() != res.Ptr());
     UNIT_ASSERT(equiJoin.Ptr()->ChildrenSize() == res.Ptr()->ChildrenSize());
     UNIT_ASSERT(equiJoin.Maybe<TCoEquiJoin>());
+    auto resStr = NCommon::ExprToPrettyString(ctx, *res.Ptr());
+    auto expected = R"__((
+(let $1 '('"Inner" '"orders" '"customer" '('"orders" '"a") '('"customer" '"b") '()))
+(return (EquiJoin '('() '"orders") '('() '"customer") $1 '()))
+)
+)__";
+    UNIT_ASSERT_STRINGS_EQUAL(expected, resStr);
 }
 
 Y_UNIT_TEST(DqOptimizeEquiJoinWithCostsNative) {

@@ -36,10 +36,11 @@ public:
 
     bool Fetch(TMergedColumn& column);
 
-    TPortionColumnCursor(const TPortionInfoWithBlobs& portionWithBlobs, const ui32 columnId, const std::shared_ptr<TColumnLoader> loader)
-        : ColumnLoader(loader) {
-        BlobChunks = portionWithBlobs.GetColumnChunks(columnId);
-        ColumnChunks = portionWithBlobs.GetPortionInfo().GetColumnChunksPointers(columnId);
+    TPortionColumnCursor(const std::vector<IPortionColumnChunk::TPtr>& columnChunks, const std::vector<const TColumnRecord*>& records, const std::shared_ptr<TColumnLoader> loader)
+        : BlobChunks(columnChunks)
+        , ColumnChunks(records)
+        , ColumnLoader(loader)
+    {
         Y_VERIFY(BlobChunks.size());
         Y_VERIFY(ColumnChunks.size() == BlobChunks.size());
         CurrentBlobChunk = BlobChunks.front();

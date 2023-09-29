@@ -15,6 +15,17 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<arrow::Field>, Field);
     YDB_READONLY_DEF(std::vector<IPortionColumnChunk::TPtr>, Chunks);
 public:
+
+    std::shared_ptr<arrow::Scalar> GetFirstScalar() const {
+        Y_VERIFY(Chunks.size());
+        return Chunks.front()->GetFirstScalar();
+    }
+
+    std::shared_ptr<arrow::Scalar> GetLastScalar() const {
+        Y_VERIFY(Chunks.size());
+        return Chunks.back()->GetLastScalar();
+    }
+
     void Merge(TSplittedColumn&& c) {
         Size += c.Size;
         Y_VERIFY(Field->name() == c.Field->name());

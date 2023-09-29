@@ -2,6 +2,7 @@
 #include "chunk_meta.h"
 #include <ydb/core/tx/columnshard/engines/scheme/column_features.h>
 #include <ydb/core/tx/columnshard/counters/splitter.h>
+#include <ydb/core/tx/columnshard/engines/portions/common.h>
 
 namespace NKikimr::NOlap {
 
@@ -19,6 +20,8 @@ protected:
     virtual ui32 DoGetRecordsCount() const = 0;
     virtual TString DoDebugString() const = 0;
     virtual TSimpleChunkMeta DoBuildSimpleChunkMeta() const = 0;
+    virtual std::shared_ptr<arrow::Scalar> DoGetFirstScalar() const = 0;
+    virtual std::shared_ptr<arrow::Scalar> DoGetLastScalar() const = 0;
 
 public:
     IPortionColumnChunk(const ui32 columnId)
@@ -27,6 +30,21 @@ public:
 
     }
     virtual ~IPortionColumnChunk() = default;
+
+    TChunkAddress GetChunkAddress() const {
+        return TChunkAddress(ColumnId, ChunkIdx);
+    }
+
+    std::shared_ptr<arrow::Scalar> GetFirstScalar() const {
+        auto result = DoGetFirstScalar();
+        Y_VERIFY(result);
+        return result;
+    }
+    std::shared_ptr<arrow::Scalar> GetLastScalar() const {
+        auto result = DoGetLastScalar();
+        Y_VERIFY(result);
+        return result;
+    }
 
     TSimpleChunkMeta BuildSimpleChunkMeta() const {
         return DoBuildSimpleChunkMeta();

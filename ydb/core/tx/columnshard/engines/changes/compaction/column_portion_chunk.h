@@ -15,6 +15,8 @@ private:
     TString Data;
     TColumnRecord Record;
     ISnapshotSchema::TPtr SchemaInfo;
+    std::shared_ptr<arrow::Scalar> First;
+    std::shared_ptr<arrow::Scalar> Last;
 protected:
     virtual std::vector<IPortionColumnChunk::TPtr> DoInternalSplit(const TColumnSaver& saver, std::shared_ptr<NColumnShard::TSplitterCounters> counters, const std::vector<ui64>& splitSizes) const override;
     virtual const TString& DoGetData() const override {
@@ -29,6 +31,13 @@ protected:
     virtual TSimpleChunkMeta DoBuildSimpleChunkMeta() const override {
         return Record.GetMeta();
     }
+    virtual std::shared_ptr<arrow::Scalar> DoGetFirstScalar() const override {
+        return First;
+    }
+    virtual std::shared_ptr<arrow::Scalar> DoGetLastScalar() const override {
+        return Last;
+    }
+
 public:
     const TColumnRecord& GetRecord() const {
         return Record;
@@ -47,6 +56,9 @@ public:
         , Data(data)
         , Record(TChunkAddress(columnId, 0), column, schema->GetIndexInfo())
         , SchemaInfo(schema) {
+        Y_VERIFY(column->length());
+        First = NArrow::TStatusValidator::GetValid(column->GetScalar(0));
+        Last = NArrow::TStatusValidator::GetValid(column->GetScalar(column->length() - 1));
         Record.BlobRange.Size = data.size();
     }
 };
@@ -79,6 +91,10 @@ public:
 
     ui64 GetCurrentPortionRecords() const {
         return CurrentPortionRecords;
+    }
+
+    TString DebugString() const {
+        return TStringBuilder() << "chunks=" << Chunks.size() << ";records=" << CurrentPortionRecords << ";";
     }
 
 };

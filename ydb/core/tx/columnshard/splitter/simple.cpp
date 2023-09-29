@@ -1,5 +1,6 @@
 #include "simple.h"
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/common/validation.h>
 #include <util/string/join.h>
 
 namespace NKikimr::NOlap {
@@ -110,6 +111,14 @@ std::vector<TSaverSplittedChunk> TSimpleSplitter::SplitBySizes(std::shared_ptr<a
     }
     Y_VERIFY(remainedRecordsCount == 0);
     return SplitByRecordsCount(data, recordsCount);
+}
+
+std::shared_ptr<arrow::Scalar> TSaverSplittedChunk::GetFirstScalar() const {
+    return NArrow::TStatusValidator::GetValid(SlicedBatch->column(0)->GetScalar(0));
+}
+
+std::shared_ptr<arrow::Scalar> TSaverSplittedChunk::GetLastScalar() const {
+    return NArrow::TStatusValidator::GetValid(SlicedBatch->column(0)->GetScalar(GetRecordsCount() - 1));
 }
 
 }

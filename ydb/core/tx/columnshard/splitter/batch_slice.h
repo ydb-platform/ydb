@@ -95,7 +95,29 @@ protected:
     std::shared_ptr<NColumnShard::TSplitterCounters> Counters;
     TSplitSettings Settings;
     TGeneralSerializedSlice() = default;
+
+    const TSplittedColumn& GetColumnVerified(const std::string& fieldName) const {
+        for (auto&& i : Columns) {
+            if (i.GetField()->name() == fieldName) {
+                return i;
+            }
+        }
+        Y_VERIFY(false);
+        return Columns.front();
+    }
 public:
+    std::shared_ptr<arrow::RecordBatch> GetFirstLastPKBatch(const std::shared_ptr<arrow::Schema>& pkSchema) const {
+        std::vector<std::shared_ptr<arrow::Array>> pkColumns;
+        for (auto&& i : pkSchema->fields()) {
+            auto aBuilder = NArrow::MakeBuilder(i);
+            const TSplittedColumn& splittedColumn = GetColumnVerified(i->name());
+            NArrow::TStatusValidator::Validate(aBuilder->AppendScalar(*splittedColumn.GetFirstScalar()));
+            NArrow::TStatusValidator::Validate(aBuilder->AppendScalar(*splittedColumn.GetLastScalar()));
+            pkColumns.emplace_back(NArrow::TStatusValidator::GetValid(aBuilder->Finish()));
+        }
+        return arrow::RecordBatch::Make(pkSchema, 2, pkColumns);
+    }
+
     ui64 GetSize() const {
         return Size;
     }

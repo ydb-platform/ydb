@@ -25,8 +25,7 @@ public:
         public:
             TBuilder(TBlobInfo& blob, TPortionInfoWithBlobs& portion)
                 : OwnerBlob(&blob)
-                , OwnerPortion(&portion)
-            {
+                , OwnerPortion(&portion) {
 
             }
             const TColumnRecord& AddChunk(const IPortionColumnChunk::TPtr& chunk) {
@@ -50,6 +49,8 @@ public:
         }
 
         void RegisterBlobId(TPortionInfoWithBlobs& owner, const TUnifiedBlobId& blobId);
+        void ExtractColumnChunks(const ui32 columnId, std::map<TChunkAddress, IPortionColumnChunk::TPtr>& resultMap);
+
     };
 private:
     TPortionInfo PortionInfo;
@@ -82,6 +83,8 @@ public:
     std::shared_ptr<arrow::RecordBatch> GetBatch(const ISnapshotSchema::TPtr& data, const ISnapshotSchema& result, const std::set<std::string>& columnNames = {}) const;
 
     std::vector<IPortionColumnChunk::TPtr> GetColumnChunks(const ui32 columnId) const;
+
+    void ExtractColumnChunks(const ui32 columnId, std::vector<const TColumnRecord*>& records, std::vector<IPortionColumnChunk::TPtr>& chunks);
 
     ui64 GetSize() const {
         return PortionInfo.BlobsBytes();

@@ -21,12 +21,16 @@ public:
         return SlicedBatch->num_rows();
     }
 
+    std::shared_ptr<arrow::Scalar> GetFirstScalar() const;
+    std::shared_ptr<arrow::Scalar> GetLastScalar() const;
+
     TSaverSplittedChunk(std::shared_ptr<arrow::RecordBatch> batch, TString&& serializedChunk)
         : SlicedBatch(batch)
         , SerializedChunk(std::move(serializedChunk))
     {
         Y_VERIFY(SlicedBatch);
         Y_VERIFY(SlicedBatch->num_columns() == 1);
+        Y_VERIFY(SlicedBatch->num_rows());
 
     }
 
@@ -162,8 +166,14 @@ protected:
         return TSimpleChunkMeta(Data.GetColumn(), SchemaInfo->NeedMinMaxForColumn(ColumnId), SchemaInfo->IsSortedColumn(ColumnId));
     }
 
-public:
+    virtual std::shared_ptr<arrow::Scalar> DoGetFirstScalar() const override {
+        return Data.GetFirstScalar();
+    }
+    virtual std::shared_ptr<arrow::Scalar> DoGetLastScalar() const override {
+        return Data.GetLastScalar();
+    }
 
+public:
     i64 GetSize() const {
         return Data.GetSerializedChunk().size();
     }

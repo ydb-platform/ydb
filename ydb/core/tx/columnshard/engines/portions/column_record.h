@@ -158,12 +158,17 @@ protected:
     virtual TSimpleChunkMeta DoBuildSimpleChunkMeta() const override {
         return ColumnRecord.GetMeta();
     }
+    virtual std::shared_ptr<arrow::Scalar> DoGetFirstScalar() const override {
+        return nullptr;
+    }
+    virtual std::shared_ptr<arrow::Scalar> DoGetLastScalar() const override {
+        return nullptr;
+    }
 public:
-
     TSimpleOrderedColumnChunk(const TColumnRecord& cRecord, const TString& data)
         : TBase(cRecord.ColumnId)
         , ColumnRecord(cRecord)
-        , Data(std::move(data)) {
+        , Data(data) {
         ChunkIdx = cRecord.Chunk;
     }
 };

@@ -12,9 +12,8 @@ std::vector<NKikimr::NOlap::IPortionColumnChunk::TPtr> TChunkPreparation::DoInte
     std::vector<IPortionColumnChunk::TPtr> newChunks;
     for (auto&& i : chunks) {
         Y_VERIFY(i.GetSlicedBatch()->num_columns() == 1);
-        TColumnRecord newRecord(TChunkAddress(ColumnId, ChunkIdx), i.GetSlicedBatch()->column(0), SchemaInfo->GetIndexInfo());
         newChunks.emplace_back(std::make_shared<TChunkPreparation>(
-            saver.Apply(i.GetSlicedBatch()), newRecord, SchemaInfo));
+            saver.Apply(i.GetSlicedBatch()), i.GetSlicedBatch()->column(0), ColumnId, SchemaInfo));
     }
     return newChunks;
 }
@@ -23,7 +22,9 @@ std::shared_ptr<arrow::Array> TColumnPortion::AppendBlob(const TString& data, co
     if (CurrentPortionRecords + columnChunk.GetMeta().GetNumRowsVerified() <= Context.GetPortionRowsCountLimit() &&
         columnChunk.GetMeta().GetRawBytesVerified() < Context.GetChunkRawBytesLimit() &&
         data.size() < Context.GetChunkPackedBytesLimit() &&
-        columnChunk.GetMeta().GetRawBytesVerified() > Context.GetStorePackedChunkSizeLimit() && Context.GetSaver().IsHardPacker()) {
+        columnChunk.GetMeta().GetRawBytesVerified() > Context.GetStorePackedChunkSizeLimit() && Context.GetSaver().IsHardPacker() &&
+        Context.GetUseWholeChunksOptimization())
+    {
         FlushBuffer();
         Chunks.emplace_back(std::make_shared<TChunkPreparation>(data, columnChunk, Context.GetSchemaInfo()));
         PackedSize += Chunks.back()->GetPackedSize();

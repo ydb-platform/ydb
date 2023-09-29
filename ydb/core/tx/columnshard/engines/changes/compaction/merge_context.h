@@ -20,6 +20,7 @@ private:
     YDB_READONLY(ui64, ExpectedBlobPackedBytes, 4 * 1024 * 1024);
     YDB_READONLY(ui64, ChunkRawBytesLimit, 50 * 1024 * 1024);
     YDB_READONLY(ui64, StorePackedChunkSizeLimit, 512 * 1024);
+    YDB_READONLY(bool, UseWholeChunksOptimization, true);
 
     TColumnSerializationStat ColumnStat;
     const TIndexInfo& IndexInfo;
@@ -49,8 +50,10 @@ public:
         , Field(f)
         , PortionRowsCountLimit(portionRowsCountLimit)
         , ChunkRawBytesLimit(chunkRawBytesLimit)
+        , UseWholeChunksOptimization(!schema->GetIndexInfo().GetReplaceKey()->GetFieldByName(f->name()))
         , ColumnStat(columnStat)
-        , IndexInfo(schema->GetIndexInfo()) {
+        , IndexInfo(schema->GetIndexInfo())
+    {
         Y_VERIFY(PortionRowsCountLimit);
         Y_VERIFY(ChunkRawBytesLimit);
     }

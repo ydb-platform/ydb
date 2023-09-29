@@ -607,6 +607,18 @@ message TGenericGatewayConfig {
     reserved 1, 2;
 }
 
+/////////////////////////////// Revision filter ///////////////////////////////
+
+message TRevisionException {
+    repeated string Revisions = 1;
+    repeated string IncludeUsers = 2;
+    repeated string ExcludeUsers = 3;
+}
+
+message TRevisionFilterConfig {
+    repeated TRevisionException RevisionException = 1;
+}
+
 /////////////////////////////// Root ///////////////////////////////
 
 message TGatewaysConfig {
@@ -631,4 +643,5 @@ message TGatewaysConfig {
     optional TYtOrmGatewayConfig YtOrm = 19;
     optional TDbToolConfig DbTool = 20;
     optional TGenericGatewayConfig Generic = 21;
+    optional TRevisionFilterConfig RevisionFilter = 22;
 }

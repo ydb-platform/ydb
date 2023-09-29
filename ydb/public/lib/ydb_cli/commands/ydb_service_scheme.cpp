@@ -912,6 +912,7 @@ TCommandPermissions::TCommandPermissions()
     AddCommand(std::make_unique<TCommandPermissionSet>());
     AddCommand(std::make_unique<TCommandChangeOwner>());
     AddCommand(std::make_unique<TCommandPermissionClear>());
+    AddCommand(std::make_unique<TCommandPermissionList>());
 }
 
 TCommandPermissionGrant::TCommandPermissionGrant()
@@ -1099,6 +1100,36 @@ int TCommandPermissionClear::Run(TConfig& config) {
             )
         ).GetValueSync()
     );
+    return EXIT_SUCCESS;
+}
+
+TCommandPermissionList::TCommandPermissionList()
+    : TYdbOperationCommand("list", std::initializer_list<TString>(), "List permissions")
+{}
+
+void TCommandPermissionList::Config(TConfig& config) {
+    TYdbOperationCommand::Config(config);
+
+    config.SetFreeArgsNum(1);
+    SetFreeArgTitle(0, "<path>", "Path to list permissions for");
+}
+
+void TCommandPermissionList::Parse(TConfig& config) {
+    TClientCommand::Parse(config);
+    ParsePath(config, 0);
+}
+
+int TCommandPermissionList::Run(TConfig& config) {
+    TDriver driver = CreateDriver(config);
+    NScheme::TSchemeClient client(driver);
+    NScheme::TDescribePathResult result = client.DescribePath(
+        Path,
+        FillSettings(NScheme::TDescribePathSettings())
+    ).GetValueSync();
+    ThrowOnError(result);
+    NScheme::TSchemeEntry entry = result.GetEntry();
+    Cout << Endl;
+    PrintAllPermissions(entry.Owner, entry.Permissions, entry.EffectivePermissions);
     return EXIT_SUCCESS;
 }
 

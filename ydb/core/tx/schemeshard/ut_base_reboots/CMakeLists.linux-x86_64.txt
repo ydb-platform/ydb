@@ -67,7 +67,7 @@ set_yunittest_property(
   ydb-core-tx-schemeshard-ut_base_reboots
   PROPERTY
   LABELS
-  LARGE
+  MEDIUM
 )
 set_yunittest_property(
   TEST
@@ -81,7 +81,7 @@ set_yunittest_property(
   ydb-core-tx-schemeshard-ut_base_reboots
   PROPERTY
   TIMEOUT
-  1800
+  600
 )
 target_allocator(ydb-core-tx-schemeshard-ut_base_reboots
   cpp-malloc-tcmalloc

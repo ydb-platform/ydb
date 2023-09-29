@@ -92,3 +92,7 @@ ELSE()
 ENDIF()
 
 END()
+
+RECURSE(
+    xmllint
+)

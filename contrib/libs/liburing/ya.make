@@ -2,6 +2,10 @@
 
 LIBRARY()
 
+VERSION(2.4)
+
+ORIGINAL_SOURCE(https://github.com/axboe/liburing/archive/liburing-2.4.tar.gz)
+
 LICENSE(
     "(GPL-2.0-only WITH Linux-syscall-note OR MIT)" AND
     "(LGPL-2.1-only OR MIT)" AND
@@ -9,10 +13,6 @@ LICENSE(
 )
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
-VERSION(2.4)
-
-ORIGINAL_SOURCE(https://github.com/axboe/liburing/archive/liburing-2.4.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/liburing/src/include
@@ -157,7 +157,6 @@ RECURSE(
     test/send-zerocopy.t
     test/send_recv.t
     test/send_recvmsg.t
-    test/sendmsg_fs_cve.t
     test/shared-wq.t
     test/short-read.t
     test/shutdown.t

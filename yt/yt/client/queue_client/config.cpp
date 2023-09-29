@@ -54,7 +54,35 @@ void TQueueAutoTrimConfig::Register(TRegistrar registrar)
 
 bool operator==(const TQueueAutoTrimConfig& lhs, const TQueueAutoTrimConfig& rhs)
 {
-    return lhs.Enable == rhs.Enable && lhs.RetainedRows == rhs.RetainedRows;
+    return std::tie(lhs.Enable, lhs.RetainedRows, lhs.RetainedLifetimeDuration) == std::tie(rhs.Enable, rhs.RetainedRows, rhs.RetainedLifetimeDuration);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TQueueStaticExportConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("export_period", &TThis::ExportPeriod)
+        .GreaterThan(TDuration::Zero());
+    registrar.Parameter("export_directory", &TThis::ExportDirectory);
+
+    registrar.Postprocessor([] (TThis* config) {
+        if (config->ExportPeriod.GetValue() % TDuration::Seconds(1).GetValue() != 0) {
+            THROW_ERROR_EXCEPTION("The value of \"export_period\" must be a multiple of 1000 (1 second)");
+        }
+    });
+}
+
+bool operator==(const TQueueStaticExportConfig& lhs, const TQueueStaticExportConfig& rhs)
+{
+    return std::tie(lhs.ExportPeriod, lhs.ExportDirectory) == std::tie(rhs.ExportPeriod, rhs.ExportDirectory);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TQueueStaticExportDestinationConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("originating_queue_id", &TThis::OriginatingQueueId)
+        .Default();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

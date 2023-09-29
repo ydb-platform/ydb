@@ -2,6 +2,10 @@
 
 #include "public.h"
 
+#include <yt/yt/client/object_client/public.h>
+
+#include <yt/yt/client/ypath/rich.h>
+
 #include <yt/yt/core/ytree/yson_struct.h>
 
 namespace NYT::NQueueClient {
@@ -57,6 +61,38 @@ public:
 };
 
 bool operator==(const TQueueAutoTrimConfig& lhs, const TQueueAutoTrimConfig& rhs);
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TQueueStaticExportConfig
+    : public NYTree::TYsonStructLite
+{
+public:
+    //! Export will be performed at times that are multiple of this period.
+    TDuration ExportPeriod;
+
+    //! Path to directory that will contain resulting static tables with exported data.
+    NYPath::TYPath ExportDirectory;
+
+    REGISTER_YSON_STRUCT_LITE(TQueueStaticExportConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+bool operator==(const TQueueStaticExportConfig& lhs, const TQueueStaticExportConfig& rhs);
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TQueueStaticExportDestinationConfig
+    : public NYTree::TYsonStructLite
+{
+public:
+    NObjectClient::TObjectId OriginatingQueueId;
+
+    REGISTER_YSON_STRUCT_LITE(TQueueStaticExportDestinationConfig);
+
+    static void Register(TRegistrar registrar);
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 

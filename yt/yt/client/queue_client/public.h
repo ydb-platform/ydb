@@ -23,6 +23,7 @@ DECLARE_REFCOUNTED_STRUCT(ISubConsumerClient)
 
 DECLARE_REFCOUNTED_STRUCT(IPartitionReader)
 DECLARE_REFCOUNTED_CLASS(TPartitionReaderConfig)
+DECLARE_REFCOUNTED_CLASS(TQueueStaticExportDestinationConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

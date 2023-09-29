@@ -2,6 +2,15 @@
 
 PROGRAM(curl)
 
+LICENSE(
+    BSD-3-Clause AND
+    ISC AND
+    Public-Domain AND
+    curl
+)
+
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
 WITHOUT_LICENSE_TEXTS()
 
 PEERDIR(

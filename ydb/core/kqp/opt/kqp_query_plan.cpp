@@ -6,10 +6,12 @@
 #include <ydb/public/lib/value/value.h>
 
 #include <ydb/library/yql/ast/yql_ast_escaping.h>
+#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/tasks/dq_tasks_graph.h>
+#include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/json/json_reader.h>
@@ -895,9 +897,34 @@ private:
 
             for (const auto& input : expr.Cast<TDqStageBase>().Inputs()) {
                 if (auto source = input.Maybe<TDqSource>()) {
-                    auto settings = source.Settings().Maybe<TKqpReadRangesSourceSettings>();
-                    if (settings.IsValid()) {
+                    if (auto settings = source.Settings().Maybe<TKqpReadRangesSourceSettings>(); settings.IsValid()) {
                         Visit(settings.Cast(), stagePlanNode);
+                    } else if (auto settings = source.Settings().Maybe<TS3SourceSettings>(); settings.IsValid()) {
+                        TOperator op;
+                        op.Properties["Name"] = S3ProviderName;
+                        op.Properties["Format"] = "raw";
+                        auto cluster = source.Cast().DataSource().Cast<TS3DataSource>().Cluster().StringValue();
+                        if (auto pos = cluster.rfind('/'); pos != TString::npos) {
+                            cluster = cluster.substr(pos + 1);
+                        }
+                        op.Properties["Cluster"] = cluster;
+                        AddOperator(stagePlanNode, "Source", op);
+                    } else if (auto settings = source.Settings().Maybe<TS3ParseSettingsBase>(); settings.IsValid()) {
+                        TOperator op;
+                        op.Properties["Name"] = S3ProviderName;
+                        op.Properties["Format"] = settings.Cast().Format().StringValue();
+                        auto cluster = source.Cast().DataSource().Cast<TS3DataSource>().Cluster().StringValue();
+                        if (auto pos = cluster.rfind('/'); pos != TString::npos) {
+                            cluster = cluster.substr(pos + 1);
+                        }
+                        op.Properties["Cluster"] = cluster;
+                        const TStructExprType* fullRowType = settings.Cast().RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                        auto rowTypeItems = fullRowType->GetItems();
+                        auto& columns = op.Properties["ReadColumns"];
+                        for (auto& item : rowTypeItems) {
+                            columns.AppendValue(item->GetName());
+                        }
+                        AddOperator(stagePlanNode, "Source", op);
                     } else {
                         TOperator op;
                         op.Properties["Name"] = source.Cast().DataSource().Cast<TCoDataSource>().Category().StringValue();

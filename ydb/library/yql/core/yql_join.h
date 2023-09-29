@@ -143,7 +143,7 @@ struct TEquiJoinLinkSettings {
     TSet<TString> LeftHints;
     TSet<TString> RightHints;
     // JOIN implementation may ignore this flags if SortedMerge strategy is not supported
-    bool ForceSortedMerge = true;
+    bool ForceSortedMerge = false;
 };
 
 TEquiJoinLinkSettings GetEquiJoinLinkSettings(const TExprNode& linkSettings);

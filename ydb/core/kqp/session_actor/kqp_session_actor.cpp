@@ -173,7 +173,7 @@ public:
         CompilationCookie = std::make_shared<std::atomic<bool>>(true);
 
         FillSettings.AllResultsBytesLimit = Nothing();
-        FillSettings.RowsLimitPerWrite = Config->_ResultRowsLimit.Get().GetRef();
+        FillSettings.RowsLimitPerWrite = Config->_ResultRowsLimit.Get();
         FillSettings.Format = IDataProvider::EResultFormat::Custom;
         FillSettings.FormatDetails = TString(KikimrMkqlProtoFormat);
 

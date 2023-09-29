@@ -93,7 +93,11 @@ public:
 
         if (QueryId.Settings.QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT) {
             ui32 scriptResultRowsLimit = queryServiceConfig.GetScriptResultRowsLimit();
-            Config->_ResultRowsLimit = scriptResultRowsLimit ? scriptResultRowsLimit : std::numeric_limits<ui32>::max();
+            if (scriptResultRowsLimit > 0) {
+                Config->_ResultRowsLimit = scriptResultRowsLimit;
+            } else {
+                Config->_ResultRowsLimit.Clear();
+            }
         }
 
         Config->FreezeDefaults();

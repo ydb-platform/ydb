@@ -2,7 +2,7 @@ UNITTEST_FOR(ydb/services/persqueue_v1)
 
 FORK_SUBTESTS()
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     TIMEOUT(1200)
     SIZE(LARGE)
     TAG(ya:fat)

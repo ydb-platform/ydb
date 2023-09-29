@@ -6,6 +6,8 @@
 #include <util/generic/size_literals.h>
 #include <util/string/cast.h>
 
+#include <locale>
+
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
@@ -113,6 +115,56 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::NoChildren,
                             NLs::PathsInsideDomain(0),
                             NLs::ShardsInsideDomain(0)});
+    }
+
+    Y_UNIT_TEST(PathName) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "NameInEnglish");
+        TestMkDir(runtime, ++txId, "/MyRoot", "НазваниеНаРусском", {NKikimrScheme::StatusSchemeError});
+
+        env.TestWaitNotification(runtime, xrange(txId - 1, txId + 1));
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::Finished});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/NameInEnglish"),
+                           {NLs::Finished});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/НазваниеНаРусском"),
+                           {NLs::PathNotExist});
+    }
+
+    class TLocaleGuard {
+    public:
+        explicit TLocaleGuard(const std::locale& targetLocale)
+            : OriginalLocale_(std::locale::global(targetLocale))
+        {
+        }
+        ~TLocaleGuard() {
+            std::locale::global(OriginalLocale_);
+        }
+    
+    private:
+        const std::locale OriginalLocale_;
+    };
+
+    Y_UNIT_TEST(PathName_SetLocale) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        try {
+            TLocaleGuard localeGuard(std::locale("C.UTF-8"));
+            TestMkDir(runtime, ++txId, "/MyRoot", "НазваниеНаРусском", {NKikimrScheme::StatusSchemeError});
+
+            env.TestWaitNotification(runtime, txId);
+
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/НазваниеНаРусском"),
+                            {NLs::PathNotExist});
+        } catch (std::runtime_error) {
+            // basic utf-8 locale is absent in the system, abort the test
+        }
     }
 
     using TRuntimeTxFn = std::function<void(TTestBasicRuntime&, ui64)>;

@@ -1,9 +1,10 @@
 PY2_PROGRAM()
 
+LICENSE(BSD-3-Clause)
+
 PEERDIR(
     contrib/python/numpy
 )
-
 
 PY_SRCS(
     NAMESPACE numpy.f2py

@@ -133,50 +133,6 @@ void InferStatisticsForIndexLookup(const TExprNode::TPtr& input, TTypeAnnotation
     typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(outputStats));
 }
 
-/**
- * Compute statistics for map join
- * FIX: Currently we treat all join the same from the cost perspective, need to refine cost function
- */
-void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
-    auto inputNode = TExprBase(input);
-    auto join = inputNode.Cast<TCoMapJoinCore>();
-
-    auto leftArg = join.LeftInput();
-    auto rightArg = join.RightDict();
-
-    auto leftStats = typeCtx->GetStats(leftArg.Raw());
-    auto rightStats = typeCtx->GetStats(rightArg.Raw());
-
-    if (!leftStats || !rightStats) {
-        return;
-    }
-
-    typeCtx->SetStats(join.Raw(), std::make_shared<TOptimizerStatistics>(
-                                      ComputeJoinStats(*leftStats, *rightStats, MapJoin)));
-}
-
-/**
- * Compute statistics for grace join
- * FIX: Currently we treat all join the same from the cost perspective, need to refine cost function
- */
-void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
-    auto inputNode = TExprBase(input);
-    auto join = inputNode.Cast<TCoGraceJoinCore>();
-
-    auto leftArg = join.LeftInput();
-    auto rightArg = join.RightInput();
-
-    auto leftStats = typeCtx->GetStats(leftArg.Raw());
-    auto rightStats = typeCtx->GetStats(rightArg.Raw());
-
-    if (!leftStats || !rightStats) {
-        return;
-    }
-
-    typeCtx->SetStats(join.Raw(), std::make_shared<TOptimizerStatistics>(
-                                      ComputeJoinStats(*leftStats, *rightStats, GraceJoin)));
-}
-
 /***
  * Infer statistics for result binding of a stage
  */
@@ -203,23 +159,6 @@ void InferStatisticsForResultBinding(const TExprNode::TPtr& input, TTypeAnnotati
             typeCtx->SetStats(inputNode.Raw(), txStats[bindingNo][resultNo]);
         }
     }
-}
-
-/**
- * Infer statistics for DqSource
- *
- * We just pass up the statistics from the Settings of the DqSource
- */
-void InferStatisticsForDqSource(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
-    auto inputNode = TExprBase(input);
-    auto dqSource = inputNode.Cast<TDqSource>();
-    auto inputStats = typeCtx->GetStats(dqSource.Settings().Raw());
-    if (!inputStats) {
-        return;
-    }
-
-    typeCtx->SetStats(input.Get(), inputStats);
-    typeCtx->SetCost(input.Get(), typeCtx->GetCost(dqSource.Settings().Raw()));
 }
 
 /**

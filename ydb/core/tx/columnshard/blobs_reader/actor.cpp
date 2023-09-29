@@ -5,6 +5,8 @@ namespace NKikimr::NOlap::NBlobOperations::NRead {
 TAtomicCounter TActor::WaitingBlobsCount = 0;
 
 void TActor::Handle(TEvStartReadTask::TPtr& ev) {
+    const auto& externalTaskId = ev->Get()->GetTask()->GetExternalTaskId();
+    NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("external_task_id", externalTaskId);
     THashSet<TBlobRange> rangesInProgress;
     for (auto&& agent : ev->Get()->GetTask()->GetAgents()) {
         for (auto&& b : agent->GetRangesForRead()) {
@@ -14,7 +16,7 @@ void TActor::Handle(TEvStartReadTask::TPtr& ev) {
                     ACFL_DEBUG("event", "TEvReadTask")("enqueued_blob_id", r);
                     rangesInProgress.emplace(r);
                 } else {
-                    ACFL_TRACE("event", "TEvReadTask")("blob_id", r);
+                    ACFL_DEBUG("event", "TEvReadTask")("blob_id", r);
                     it = BlobTasks.emplace(r, std::vector<std::shared_ptr<ITask>>()).first;
                     WaitingBlobsCount.Inc();
                 }
@@ -50,6 +52,14 @@ TActor::TActor(ui64 tabletId, const TActorId& parent)
     , BlobCacheActorId(NBlobCache::MakeBlobCacheServiceId())
 {
 
+}
+
+TActor::~TActor() {
+    for (auto&& i : BlobTasks) {
+        for (auto&& t : i.second) {
+            t->Abort();
+        }
+    }
 }
 
 }

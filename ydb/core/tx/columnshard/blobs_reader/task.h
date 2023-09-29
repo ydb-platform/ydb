@@ -19,6 +19,10 @@ private:
     bool TaskFinishedWithError = false;
     bool DataIsReadyFlag = false;
     const ui64 TaskIdentifier = 0;
+    const TString ExternalTaskId;
+    bool AbortFlag = false;
+    std::optional<ui64> WaitBlobsSize;
+    std::optional<ui64> WaitBlobsCount;
 protected:
     bool IsFetchingStarted() const {
         return BlobsFetchingStarted;
@@ -42,26 +46,28 @@ protected:
         return "";
     }
 public:
+    void Abort() {
+        AbortFlag = true;
+    }
+
     ui64 GetTaskIdentifier() const {
         return TaskIdentifier;
+    }
+
+    const TString& GetExternalTaskId() const {
+        return ExternalTaskId;
     }
 
     TString DebugString() const;
 
     ui64 GetExpectedBlobsSize() const {
-        ui64 result = 0;
-        for (auto&& i : BlobsWaiting) {
-            result += i.second->GetExpectedBlobsSize();
-        }
-        return result;
+        Y_VERIFY(WaitBlobsSize);
+        return *WaitBlobsSize;
     }
 
     ui64 GetExpectedBlobsCount() const {
-        ui64 result = 0;
-        for (auto&& i : BlobsWaiting) {
-            result += i.second->GetExpectedBlobsCount();
-        }
-        return result;
+        Y_VERIFY(WaitBlobsCount);
+        return *WaitBlobsCount;
     }
 
     THashSet<TBlobRange> GetExpectedRanges() const {
@@ -76,7 +82,7 @@ public:
 
     virtual ~ITask();
 
-    ITask(const std::vector<std::shared_ptr<IBlobsReadingAction>>& actions);
+    ITask(const std::vector<std::shared_ptr<IBlobsReadingAction>>& actions, const TString& externalTaskId = "");
 
     void StartBlobsFetching(const THashSet<TBlobRange>& rangesInProgress);
 

@@ -30,6 +30,7 @@ public:
     STFUNC(StateWait) {
         TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent", Parent));
         switch (ev->GetTypeRewrite()) {
+            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
             hFunc(TEvStartReadTask, Handle);
             hFunc(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult, Handle);
             default:
@@ -37,6 +38,7 @@ public:
         }
     }
 
+    ~TActor();
 };
 
 }

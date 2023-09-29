@@ -14,6 +14,8 @@
 
 namespace NYT::NClient::NCache {
 
+////////////////////////////////////////////////////////////////////////////////
+
 NCompression::ECodec GetResponseCodecFromProto(const ECompressionCodec& protoCodec)
 {
     switch (protoCodec) {

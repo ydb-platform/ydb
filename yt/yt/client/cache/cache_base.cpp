@@ -16,8 +16,10 @@ NApi::IClientPtr TClientsCacheBase::GetClient(TStringBuf clusterUrl)
 
     auto client = CreateClient(clusterUrl);
 
-    auto guard = WriterGuard(Lock_);
-    return Clients_.try_emplace(clusterUrl, client).first->second;
+    {
+        auto guard = WriterGuard(Lock_);
+        return Clients_.try_emplace(clusterUrl, client).first->second;
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

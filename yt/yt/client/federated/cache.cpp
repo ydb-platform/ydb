@@ -26,7 +26,7 @@ public:
         , Options_(std::move(options))
         , FederationConfig_(std::move(federationConfig))
         , ClusterSeparator_(std::move(clusterSeparator))
-        {}
+    {}
 
 protected:
     NApi::IClientPtr CreateClient(TStringBuf clusterUrl) override
@@ -99,6 +99,18 @@ IClientsCachePtr CreateFederatedClientsCache(
     return CreateFederatedClientsCache(
         std::move(clustersConfig),
         std::move(options),
+        std::move(chaosBundleName),
+        std::move(clusterSeparator));
+}
+
+IClientsCachePtr CreateFederatedClientsCache(
+    const TConfig& config,
+    TString chaosBundleName,
+    TString clusterSeparator)
+{
+    return CreateFederatedClientsCache(
+        config,
+        NCache::GetClientOpsFromEnvStatic(),
         std::move(chaosBundleName),
         std::move(clusterSeparator));
 }

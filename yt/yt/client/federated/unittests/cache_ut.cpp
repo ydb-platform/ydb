@@ -13,7 +13,8 @@ using namespace NYT::NApi;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TFederatedClientsCacheTest, GetSameClient) {
+TEST(TFederatedClientsCacheTest, GetSameClient)
+{
     SetEnv("YT_TOKEN", "AAAA-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
     auto cache = CreateFederatedClientsCache("my_bundle");
     auto client1 = cache->GetClient("localhost");

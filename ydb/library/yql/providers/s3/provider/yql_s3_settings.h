@@ -23,6 +23,7 @@ struct TS3Settings {
     NCommon::TConfSetting<bool, false> UseBlocksSource;            // Use blocks source (if exists) for scalar MKQL mode
     NCommon::TConfSetting<bool, false> AtomicUploadCommit;         // Commit each file independently, w/o transaction semantic over all files
     NCommon::TConfSetting<bool, false> UseConcurrentDirectoryLister;
+    NCommon::TConfSetting<ui64, false> MaxDiscoveryFilesPerDirectory;
 };
 
 struct TS3ClusterSettings {
@@ -59,6 +60,7 @@ struct TS3Configuration : public TS3Settings, public NCommon::TSettingDispatcher
     bool AllowConcurrentListings = false;
     ui64 GeneratorPathsLimit = 0;
     bool WriteThroughDqIntegration = false;
+    ui64 MaxListingResultSizePerPhysicalPartition;
 };
 
 } // NYql

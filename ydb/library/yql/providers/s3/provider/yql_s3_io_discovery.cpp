@@ -587,6 +587,10 @@ private:
         if (!s3ParseSettingsBase.Paths().Empty()) {
             resultSetLimitPerPath /= s3ParseSettingsBase.Paths().Size();
         }
+        resultSetLimitPerPath =
+            std::min(resultSetLimitPerPath,
+                     State_->Configuration->MaxDiscoveryFilesPerDirectory.Get().GetOrElse(
+                         State_->Configuration->MaxListingResultSizePerPhysicalPartition));
 
         for (auto path : s3ParseSettingsBase.Paths()) {
             NS3Details::TPathList directories;

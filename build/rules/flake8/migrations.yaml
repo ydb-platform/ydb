@@ -78,7 +78,6 @@ migrations:
     - extsearch/video/quality/nirvana/hitman_operations/utils/concat_json_to_array
     - extsearch/video/robot/sbr_metric/sbr_tool
     - geoproduct/advert_ranking/traffic_prediction/predictor
-    - infra/box_dns_controller/monitoring/alerts
     - infra/dist/dmover/lib
     - infra/kernel/tools/coroner
     - infra/rtc/iolimit_ticketer
@@ -2539,7 +2538,6 @@ migrations:
     - geoproduct/amocrm/update_companies_info/mapper
     - infra/awacs/vendor/kazoo/kazoo
     - infra/awacs/vendor/kazoo/kazoo/protocol
-    - infra/box_dns_controller/monitoring/alerts
     - infra/callisto/agent/v2
     - infra/callisto/controllers/shard
     - infra/callisto/controllers/user/img

@@ -15,6 +15,7 @@
 #include <util/generic/string.h>
 #include <util/datetime/base.h>
 #include <util/stream/str.h>
+#include <util/generic/guid.h>
 #include <compare>
 
 namespace NKikimr::NTabletFlatExecutor {
@@ -169,7 +170,13 @@ protected:
     TBlobsAction BlobsAction;
 
     virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const = 0;
+
+    const TString TaskIdentifier = TGUID::Create().AsGuidString();
 public:
+    TString GetTaskIdentifier() const {
+        return TaskIdentifier;
+    }
+
     TBlobsAction& GetBlobsAction() {
         return BlobsAction;
     }

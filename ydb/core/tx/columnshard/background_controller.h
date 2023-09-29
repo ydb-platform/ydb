@@ -46,7 +46,7 @@ private:
 
 class TBackgroundController {
 private:
-    bool ActiveIndexing = false;
+    i64 ActiveIndexing = 0;
 
     using TCurrentCompaction = THashMap<ui64, NOlap::TPlanCompactionInfo>;
     TCurrentCompaction ActiveCompactionInfo;
@@ -75,8 +75,8 @@ public:
 
     void StartIndexing(const NOlap::TColumnEngineChanges& changes);
     void FinishIndexing() {
-        Y_VERIFY(ActiveIndexing);
-        ActiveIndexing = false;
+        --ActiveIndexing;
+        Y_VERIFY(ActiveIndexing >= 0);
     }
     bool IsIndexingActive() const {
         return ActiveIndexing;

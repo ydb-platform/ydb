@@ -459,6 +459,7 @@ private:
     void RunDropTable(const NKikimrTxColumnShard::TDropTable& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc);
     void RunAlterStore(const NKikimrTxColumnShard::TAlterStore& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc);
 
+    void StartIndexTask(std::vector<const NOlap::TInsertedData*>&& dataToIndex, const i64 bytesToIndex);
     void SetupIndexation();
     void SetupCompaction();
     bool SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls = {}, const bool force = false);

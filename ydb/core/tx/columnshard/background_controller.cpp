@@ -47,8 +47,7 @@ void TBackgroundController::CheckDeadlines() {
 }
 
 void TBackgroundController::StartIndexing(const NOlap::TColumnEngineChanges& /*changes*/) {
-    Y_VERIFY(!ActiveIndexing);
-    ActiveIndexing = true;
+    ++ActiveIndexing;
 }
 
 

@@ -3752,7 +3752,7 @@ get_conversion_oid(List *name, bool missing_ok)
  * FindDefaultConversionProc - find default encoding conversion proc
  */
 Oid
-FindDefaultConversionProc(int32 for_encoding, int32 to_encoding)
+FindDefaultConversionProc_original(int32 for_encoding, int32 to_encoding)
 {
 	Oid			proc;
 	ListCell   *l;

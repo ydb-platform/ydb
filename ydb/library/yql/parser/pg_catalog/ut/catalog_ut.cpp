@@ -197,3 +197,14 @@ Y_UNIT_TEST_SUITE(TOpClassesTests) {
         UNIT_ASSERT_VALUES_EQUAL(ret.FamilyId, 1977);
    }
 }
+
+Y_UNIT_TEST_SUITE(TConversionTests) {
+    Y_UNIT_TEST(TestMissing) {
+        UNIT_ASSERT_EXCEPTION(LookupConversion("foo", "bar"), yexception);
+    }
+
+   Y_UNIT_TEST(TestOk) {
+        auto procId = LookupConversion("LATIN1", "UTF8").ProcId;
+        UNIT_ASSERT_VALUES_EQUAL(LookupProc(procId).Name, "iso8859_1_to_utf8");
+   }
+}

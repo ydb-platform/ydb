@@ -704,7 +704,7 @@ InvalidateSystemCachesExtended(bool debug_discard)
  *		This should be called as the first step in processing a transaction.
  */
 void
-AcceptInvalidationMessages(void)
+AcceptInvalidationMessages_original(void)
 {
 	ReceiveSharedInvalidMessages(LocalExecuteInvalidationMessage,
 								 InvalidateSystemCaches);

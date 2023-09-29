@@ -24,6 +24,7 @@ SRCS(
     arena_ctx.cpp
     arrow.cpp
     arrow_impl.cpp
+    conversion.cpp
     parser.cpp
     thread_inits.c
     comp_factory.cpp
@@ -33,6 +34,7 @@ SRCS(
     pg_kernels.1.cpp
     pg_kernels.2.cpp
     pg_kernels.3.cpp
+    recovery.cpp
     superuser.cpp
     config.cpp
     cost_mocks.cpp

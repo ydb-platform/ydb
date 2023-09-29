@@ -4,9 +4,6 @@ static __thread int pg_thread_init_flag;
 void pg_thread_init(void) {
     if (pg_thread_init_flag) return;
     pg_thread_init_flag=1;
-    setup_pg_thread_cleanup();
-    pg_timezone_initialize();
-
     BackendList_init();
     CurrentTransactionState_init();
     DatabaseList_init();
@@ -17,4 +14,7 @@ void pg_thread_init(void) {
     mainrdata_last_init();
     pcxt_list_init();
     saved_plan_list_init();
+
+    setup_pg_thread_cleanup();
+    pg_timezone_initialize();
 }

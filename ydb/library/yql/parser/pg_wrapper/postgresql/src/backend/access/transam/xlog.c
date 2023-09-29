@@ -8291,7 +8291,7 @@ CheckRecoveryConsistency(void)
  * variables the first time we see that recovery is finished.
  */
 bool
-RecoveryInProgress(void)
+RecoveryInProgress_original(void)
 {
 	/*
 	 * We check shared state each time only until we leave recovery mode. We

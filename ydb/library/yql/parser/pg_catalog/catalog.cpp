@@ -38,6 +38,8 @@ using TAmOps = THashMap<std::tuple<ui32, ui32, ui32, ui32>, TAmOpDesc>;
 
 using TAmProcs = THashMap<std::tuple<ui32, ui32, ui32, ui32>, TAmProcDesc>;
 
+using TConversions = THashMap<std::pair<TString, TString>, TConversionDesc>;
+
 bool IsCompatibleTo(ui32 actualTypeId, ui32 expectedTypeId, const TTypes& types) {
     if (actualTypeId == expectedTypeId) {
         return true;
@@ -372,7 +374,9 @@ public:
         } else if (key == "prosrc") {
             LastProc.Src = value;
         } else if (key == "prolang") {
-            IsSupported = false;
+            if (value != "c") {
+                IsSupported = false;
+            }
         } else if (key == "proargtypes") {
             TVector<TString> strArgs;
             Split(value, " ", strArgs);
@@ -1092,6 +1096,46 @@ private:
     bool IsSupported = true;
 };
 
+class TConversionsParser : public TParser {
+public:
+    TConversionsParser(TConversions& conversions, const THashMap<TString, TVector<ui32>>& procByName)
+        : Conversions(conversions)
+        , ProcByName(procByName)
+    {}
+
+    void OnKey(const TString& key, const TString& value) override {
+        if (key == "oid") {
+            LastConversion.ConversionId = FromString<ui32>(value);
+        } else if (key == "conforencoding") {
+            Y_ENSURE(value.StartsWith("PG_"));
+            LastConversion.From = value.substr(3);
+        } else if (key == "contoencoding") {
+            Y_ENSURE(value.StartsWith("PG_"));
+            LastConversion.To = value.substr(3);
+        } else if (key == "conproc") {
+            auto found = ProcByName.FindPtr(value);
+            if (found && found->size() == 1) {
+                LastConversion.ProcId = found->front();
+            }
+        }
+    }
+
+    void OnFinish() override {
+        if (LastConversion.ProcId) {
+            Conversions[std::make_pair(LastConversion.From, LastConversion.To)] = LastConversion;
+        }
+
+        LastConversion = TConversionDesc();
+    }
+
+private:
+    TConversions& Conversions;
+
+    const THashMap<TString, TVector<ui32>>& ProcByName;
+
+    TConversionDesc LastConversion;
+};
+
 TOperators ParseOperators(const TString& dat, const THashMap<TString, ui32>& typeByName,
     const TTypes& types, const THashMap<TString, TVector<ui32>>& procByName, const TProcs& procs) {
     TOperators ret;
@@ -1163,6 +1207,13 @@ TAmProcs ParseAmProcs(const TString& dat, const THashMap<TString, ui32>& typeByN
     return ret;
 }
 
+TConversions ParseConversions(const TString& dat, const THashMap<TString, TVector<ui32>>& procByName) {
+    TConversions ret;
+    TConversionsParser parser(ret, procByName);
+    parser.Do(dat);
+    return ret;
+}
+
 struct TCatalog {
     TCatalog() {
         TString typeData;
@@ -1183,6 +1234,8 @@ struct TCatalog {
         Y_ENSURE(NResource::FindExact("pg_amproc.dat", &amProcData));
         TString amOpData;
         Y_ENSURE(NResource::FindExact("pg_amop.dat", &amOpData));
+        TString conversionData;
+        Y_ENSURE(NResource::FindExact("pg_conversion.dat", &conversionData));
         THashMap<ui32, TLazyTypeInfo> lazyTypeInfos;
         Types = ParseTypes(typeData, lazyTypeInfos);
         for (const auto& [k, v] : Types) {
@@ -1333,6 +1386,8 @@ struct TCatalog {
                 }
             }
         }
+
+        Conversions = ParseConversions(conversionData, ProcByName);
     }
 
     static const TCatalog& Instance() {
@@ -1347,6 +1402,7 @@ struct TCatalog {
     TOpClasses OpClasses;
     TAmOps AmOps;
     TAmProcs AmProcs;
+    TConversions Conversions;
     THashMap<TString, TVector<ui32>> ProcByName;
     THashMap<TString, ui32> TypeByName;
     THashMap<std::pair<ui32, ui32>, ui32> CastsByDir;
@@ -2419,6 +2475,21 @@ const TAmProcDesc& LookupAmProc(ui32 familyId, ui32 num, ui32 leftType, ui32 rig
     }
 
     return *amProcPtr;
+}
+
+bool HasConversion(const TString& from, const TString& to) {
+    const auto &catalog = TCatalog::Instance();
+    return catalog.Conversions.contains(std::make_pair(from, to));
+}
+
+const TConversionDesc& LookupConversion(const TString& from, const TString& to) {
+    const auto& catalog = TCatalog::Instance();
+    auto convPtr = catalog.Conversions.FindPtr(std::make_pair(from, to));
+    if (!convPtr) {
+        throw yexception() << "No such conversion from " << from << " to " << to;
+    }
+
+    return *convPtr;
 }
 
 bool IsCompatibleTo(ui32 actualType, ui32 expectedType) {

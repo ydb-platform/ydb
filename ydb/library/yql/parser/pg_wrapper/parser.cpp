@@ -16,6 +16,7 @@
 #undef SIZEOF_SIZE_T
 extern "C" {
 #include "postgres.h"
+#include "access/xact.h"
 #include "mb/pg_wchar.h"
 #include "nodes/pg_list.h"
 #include "nodes/parsenodes.h"
@@ -30,6 +31,7 @@ extern "C" {
 #include "port/pg_crc32c.h"
 #include "postmaster/postmaster.h"
 #include "storage/latch.h"
+#include "storage/proc.h"
 #include "miscadmin.h"
 #include "thread_inits.h"
 #undef Abs
@@ -228,6 +230,7 @@ extern "C" void setup_pg_thread_cleanup() {
             free_current_locale_conv();
             ResourceOwnerDelete(CurrentResourceOwner);
             MemoryContextDelete(TopMemoryContext);
+            free(MyProc);
         }
     };
 
@@ -250,4 +253,8 @@ extern "C" void setup_pg_thread_cleanup() {
     MyLatch = &LocalLatchData;
     InitLatch(MyLatch);
     InitializeLatchWaitSet();
+
+    MyProc = (PGPROC*)malloc(sizeof(PGPROC));
+    Zero(*MyProc);
+    StartTransactionCommand();
 };

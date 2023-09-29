@@ -195,6 +195,13 @@ enum class EHashAmProcNum {
     Hash = 1
 };
 
+struct TConversionDesc {
+    ui32 ConversionId = 0;
+    TString From;
+    TString To;
+    ui32 ProcId = 0;
+};
+
 const TProcDesc& LookupProc(const TString& name, const TVector<ui32>& argTypeIds);
 const TProcDesc& LookupProc(ui32 procId, const TVector<ui32>& argTypeIds);
 const TProcDesc& LookupProc(ui32 procId);
@@ -229,6 +236,9 @@ const TAmOpDesc& LookupAmOp(ui32 familyId, ui32 strategy, ui32 leftType, ui32 ri
 
 bool HasAmProc(ui32 familyId, ui32 num, ui32 leftType, ui32 rightType);
 const TAmProcDesc& LookupAmProc(ui32 familyId, ui32 num, ui32 leftType, ui32 rightType);
+
+bool HasConversion(const TString& from, const TString& to);
+const TConversionDesc& LookupConversion(const TString& from, const TString& to);
 
 bool IsCompatibleTo(ui32 actualType, ui32 expectedType);
 

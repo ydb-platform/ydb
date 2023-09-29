@@ -1,0 +1,50 @@
+{
+    "test_traceback.test_traceback[custom-default]": {
+        "stderr": {
+            "uri": "file://test_traceback.test_traceback_custom-default_/stderr.txt"
+        },
+        "stdout": {
+            "uri": "file://test_traceback.test_traceback_custom-default_/stdout.txt"
+        }
+    },
+    "test_traceback.test_traceback[custom-ultratb_color]": {
+        "stderr": {
+            "uri": "file://test_traceback.test_traceback_custom-ultratb_color_/stderr.txt"
+        },
+        "stdout": {
+            "uri": "file://test_traceback.test_traceback_custom-ultratb_color_/stdout.txt"
+        }
+    },
+    "test_traceback.test_traceback[custom-ultratb_verbose]": {
+        "stderr": {
+            "uri": "file://test_traceback.test_traceback_custom-ultratb_verbose_/stderr.txt"
+        },
+        "stdout": {
+            "uri": "file://test_traceback.test_traceback_custom-ultratb_verbose_/stdout.txt"
+        }
+    },
+    "test_traceback.test_traceback[main-default]": {
+        "stderr": {
+            "uri": "file://test_traceback.test_traceback_main-default_/stderr.txt"
+        },
+        "stdout": {
+            "uri": "file://test_traceback.test_traceback_main-default_/stdout.txt"
+        }
+    },
+    "test_traceback.test_traceback[main-ultratb_color]": {
+        "stderr": {
+            "uri": "file://test_traceback.test_traceback_main-ultratb_color_/stderr.txt"
+        },
+        "stdout": {
+            "uri": "file://test_traceback.test_traceback_main-ultratb_color_/stdout.txt"
+        }
+    },
+    "test_traceback.test_traceback[main-ultratb_verbose]": {
+        "stderr": {
+            "uri": "file://test_traceback.test_traceback_main-ultratb_verbose_/stderr.txt"
+        },
+        "stdout": {
+            "uri": "file://test_traceback.test_traceback_main-ultratb_verbose_/stdout.txt"
+        }
+    }
+}

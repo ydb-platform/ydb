@@ -1,0 +1,275 @@
+Metadata-Version: 2.1
+Name: moto
+Version: 3.1.12
+Summary: A library that allows your python tests to easily mock out the boto library
+Home-page: https://github.com/spulec/moto
+Author: Steve Pulec
+Author-email: spulec@gmail.com
+License: Apache
+Project-URL: Documentation, http://docs.getmoto.org/en/latest/
+Project-URL: Issue tracker, https://github.com/spulec/moto/issues
+Project-URL: Changelog, https://github.com/spulec/moto/blob/master/CHANGELOG.md
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Topic :: Software Development :: Testing
+Requires-Python: >=3.6
+Description-Content-Type: text/markdown
+License-File: LICENSE
+License-File: AUTHORS.md
+Requires-Dist: boto3 (>=1.9.201)
+Requires-Dist: botocore (>=1.12.201)
+Requires-Dist: cryptography (>=3.3.1)
+Requires-Dist: requests (>=2.5)
+Requires-Dist: xmltodict
+Requires-Dist: werkzeug (>=0.5)
+Requires-Dist: pytz
+Requires-Dist: python-dateutil (<3.0.0,>=2.1)
+Requires-Dist: responses (>=0.9.0)
+Requires-Dist: MarkupSafe (!=2.0.0a1)
+Requires-Dist: Jinja2 (>=2.10.1)
+Requires-Dist: importlib-metadata ; python_version < "3.8"
+Provides-Extra: acm
+Provides-Extra: all
+Requires-Dist: PyYAML (>=5.1) ; extra == 'all'
+Requires-Dist: python-jose[cryptography] (<4.0.0,>=3.1.0) ; extra == 'all'
+Requires-Dist: ecdsa (!=0.15) ; extra == 'all'
+Requires-Dist: docker (>=2.5.1) ; extra == 'all'
+Requires-Dist: graphql-core ; extra == 'all'
+Requires-Dist: jsondiff (>=1.1.2) ; extra == 'all'
+Requires-Dist: aws-xray-sdk (!=0.96,>=0.93) ; extra == 'all'
+Requires-Dist: idna (<4,>=2.5) ; extra == 'all'
+Requires-Dist: cfn-lint (>=0.4.0) ; extra == 'all'
+Requires-Dist: sshpubkeys (>=3.1.0) ; extra == 'all'
+Requires-Dist: pyparsing (>=3.0.7) ; extra == 'all'
+Requires-Dist: openapi-spec-validator (>=0.2.8) ; extra == 'all'
+Requires-Dist: setuptools ; extra == 'all'
+Provides-Extra: apigateway
+Requires-Dist: PyYAML (>=5.1) ; extra == 'apigateway'
+Requires-Dist: python-jose[cryptography] (<4.0.0,>=3.1.0) ; extra == 'apigateway'
+Requires-Dist: ecdsa (!=0.15) ; extra == 'apigateway'
+Requires-Dist: openapi-spec-validator (>=0.2.8) ; extra == 'apigateway'
+Provides-Extra: apigatewayv2
+Requires-Dist: PyYAML (>=5.1) ; extra == 'apigatewayv2'
+Provides-Extra: applicationautoscaling
+Provides-Extra: appsync
+Requires-Dist: graphql-core ; extra == 'appsync'
+Provides-Extra: athena
+Provides-Extra: autoscaling
+Provides-Extra: awslambda
+Requires-Dist: docker (>=2.5.1) ; extra == 'awslambda'
+Provides-Extra: batch
+Requires-Dist: docker (>=2.5.1) ; extra == 'batch'
+Provides-Extra: batch_simple
+Provides-Extra: budgets
+Provides-Extra: cloudformation
+Requires-Dist: PyYAML (>=5.1) ; extra == 'cloudformation'
+Requires-Dist: python-jose[cryptography] (<4.0.0,>=3.1.0) ; extra == 'cloudformation'
+Requires-Dist: ecdsa (!=0.15) ; extra == 'cloudformation'
+Requires-Dist: docker (>=2.5.1) ; extra == 'cloudformation'
+Requires-Dist: graphql-core ; extra == 'cloudformation'
+Requires-Dist: jsondiff (>=1.1.2) ; extra == 'cloudformation'
+Requires-Dist: aws-xray-sdk (!=0.96,>=0.93) ; extra == 'cloudformation'
+Requires-Dist: idna (<4,>=2.5) ; extra == 'cloudformation'
+Requires-Dist: cfn-lint (>=0.4.0) ; extra == 'cloudformation'
+Requires-Dist: sshpubkeys (>=3.1.0) ; extra == 'cloudformation'
+Requires-Dist: pyparsing (>=3.0.7) ; extra == 'cloudformation'
+Requires-Dist: openapi-spec-validator (>=0.2.8) ; extra == 'cloudformation'
+Requires-Dist: setuptools ; extra == 'cloudformation'
+Provides-Extra: cloudfront
+Provides-Extra: cloudtrail
+Provides-Extra: cloudwatch
+Provides-Extra: codecommit
+Provides-Extra: codepipeline
+Provides-Extra: cognitoidentity
+Provides-Extra: cognitoidp
+Requires-Dist: python-jose[cryptography] (<4.0.0,>=3.1.0) ; extra == 'cognitoidp'
+Requires-Dist: ecdsa (!=0.15) ; extra == 'cognitoidp'
+Provides-Extra: config
+Provides-Extra: databrew
+Provides-Extra: datapipeline
+Provides-Extra: datasync
+Provides-Extra: dax
+Provides-Extra: dms
+Provides-Extra: ds
+Requires-Dist: sshpubkeys (>=3.1.0) ; extra == 'ds'
+Provides-Extra: dynamodb
+Requires-Dist: docker (>=2.5.1) ; extra == 'dynamodb'
+Provides-Extra: dynamodb2
+Requires-Dist: docker (>=2.5.1) ; extra == 'dynamodb2'
+Provides-Extra: dynamodbstreams
+Requires-Dist: docker (>=2.5.1) ; extra == 'dynamodbstreams'
+Provides-Extra: ebs
+Requires-Dist: sshpubkeys (>=3.1.0) ; extra == 'ebs'
+Provides-Extra: ec2
+Requires-Dist: sshpubkeys (>=3.1.0) ; extra == 'ec2'
+Provides-Extra: ec2instanceconnect
+Provides-Extra: ecr
+Provides-Extra: ecs
+Provides-Extra: efs
+Requires-Dist: sshpubkeys (>=3.1.0) ; extra == 'efs'
+Provides-Extra: eks
+Provides-Extra: elasticache
+Provides-Extra: elasticbeanstalk
+Provides-Extra: elastictranscoder
+Provides-Extra: elb
+Provides-Extra: elbv2
+Provides-Extra: emr
+Provides-Extra: emrcontainers
+Provides-Extra: es
+Provides-Extra: events
+Provides-Extra: firehose
+Provides-Extra: forecast
+Provides-Extra: glacier
+Provides-Extra: glue
+Requires-Dist: pyparsing (>=3.0.7) ; extra == 'glue'
+Provides-Extra: greengrass
+Provides-Extra: guardduty
+Provides-Extra: iam
+Provides-Extra: iot
+Provides-Extra: iotdata
+Requires-Dist: jsondiff (>=1.1.2) ; extra == 'iotdata'
+Provides-Extra: kinesis
+Provides-Extra: kinesisvideo
+Provides-Extra: kinesisvideoarchivedmedia
+Provides-Extra: kms
+Provides-Extra: lambda
+Provides-Extra: logs
+Provides-Extra: managedblockchain
+Provides-Extra: mediaconnect
+Provides-Extra: medialive
+Provides-Extra: mediapackage
+Provides-Extra: mediastore
+Provides-Extra: mediastoredata
+Provides-Extra: mq
+Provides-Extra: opsworks
+Provides-Extra: organizations
+Provides-Extra: pinpoint
+Provides-Extra: polly
+Provides-Extra: quicksight
+Provides-Extra: ram
+Provides-Extra: rds
+Provides-Extra: rds2
+Provides-Extra: redshift
+Provides-Extra: redshiftdata
+Provides-Extra: rekognition
+Provides-Extra: resourcegroups
+Provides-Extra: resourcegroupstaggingapi
+Provides-Extra: route53
+Provides-Extra: route53resolver
+Requires-Dist: sshpubkeys (>=3.1.0) ; extra == 'route53resolver'
+Provides-Extra: s3
+Requires-Dist: PyYAML (>=5.1) ; extra == 's3'
+Provides-Extra: s3control
+Provides-Extra: sagemaker
+Provides-Extra: sdb
+Provides-Extra: secretsmanager
+Provides-Extra: server
+Requires-Dist: PyYAML (>=5.1) ; extra == 'server'
+Requires-Dist: python-jose[cryptography] (<4.0.0,>=3.1.0) ; extra == 'server'
+Requires-Dist: ecdsa (!=0.15) ; extra == 'server'
+Requires-Dist: docker (>=2.5.1) ; extra == 'server'
+Requires-Dist: graphql-core ; extra == 'server'
+Requires-Dist: jsondiff (>=1.1.2) ; extra == 'server'
+Requires-Dist: aws-xray-sdk (!=0.96,>=0.93) ; extra == 'server'
+Requires-Dist: idna (<4,>=2.5) ; extra == 'server'
+Requires-Dist: cfn-lint (>=0.4.0) ; extra == 'server'
+Requires-Dist: sshpubkeys (>=3.1.0) ; extra == 'server'
+Requires-Dist: pyparsing (>=3.0.7) ; extra == 'server'
+Requires-Dist: openapi-spec-validator (>=0.2.8) ; extra == 'server'
+Requires-Dist: setuptools ; extra == 'server'
+Requires-Dist: flask ; extra == 'server'
+Requires-Dist: flask-cors ; extra == 'server'
+Provides-Extra: servicediscovery
+Provides-Extra: ses
+Provides-Extra: sns
+Provides-Extra: sqs
+Provides-Extra: ssm
+Requires-Dist: PyYAML (>=5.1) ; extra == 'ssm'
+Requires-Dist: dataclasses ; (python_version < "3.7") and extra == 'ssm'
+Provides-Extra: ssoadmin
+Provides-Extra: stepfunctions
+Provides-Extra: sts
+Provides-Extra: support
+Provides-Extra: swf
+Provides-Extra: textract
+Provides-Extra: timestreamwrite
+Provides-Extra: transcribe
+Provides-Extra: wafv2
+Provides-Extra: xray
+Requires-Dist: aws-xray-sdk (!=0.96,>=0.93) ; extra == 'xray'
+Requires-Dist: setuptools ; extra == 'xray'
+Provides-Extra: xray_client
+
+# Moto - Mock AWS Services
+
+[![Join the chat at https://gitter.im/awsmoto/Lobby](https://badges.gitter.im/awsmoto/Lobby.svg)](https://gitter.im/awsmoto/Lobby?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
+[![Build Status](https://github.com/spulec/moto/workflows/TestNDeploy/badge.svg)](https://github.com/spulec/moto/actions)
+[![Coverage Status](https://codecov.io/gh/spulec/moto/branch/master/graph/badge.svg)](https://codecov.io/gh/spulec/moto)
+[![Docs](https://readthedocs.org/projects/pip/badge/?version=stable)](http://docs.getmoto.org)
+[![PyPI](https://img.shields.io/pypi/v/moto.svg)](https://pypi.org/project/moto/)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/moto.svg)](#)
+[![PyPI - Downloads](https://img.shields.io/pypi/dw/moto.svg)](https://pypistats.org/packages/moto)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+
+
+## Install
+
+```console
+$ pip install 'moto[ec2,s3,all]'
+```
+
+## In a nutshell
+
+
+Moto is a library that allows your tests to easily mock out AWS Services.
+
+Imagine you have the following python code that you want to test:
+
+```python
+import boto3
+
+class MyModel(object):
+    def __init__(self, name, value):
+        self.name = name
+        self.value = value
+
+    def save(self):
+        s3 = boto3.client('s3', region_name='us-east-1')
+        s3.put_object(Bucket='mybucket', Key=self.name, Body=self.value)
+```
+
+Take a minute to think how you would have tested that in the past.
+
+Now see how you could test it with Moto:
+
+```python
+import boto3
+from moto import mock_s3
+from mymodule import MyModel
+
+@mock_s3
+def test_my_model_save():
+    conn = boto3.resource('s3', region_name='us-east-1')
+    # We need to create the bucket since this is all in Moto's 'virtual' AWS account
+    conn.create_bucket(Bucket='mybucket')
+    model_instance = MyModel('steve', 'is awesome')
+    model_instance.save()
+    body = conn.Object('mybucket', 'steve').get()['Body'].read().decode("utf-8")
+    assert body == 'is awesome'
+```
+
+With the decorator wrapping the test, all the calls to s3 are automatically mocked out. The mock keeps the state of the buckets and keys.
+
+For a full list of which services and features are covered, please see our [implementation coverage](https://github.com/spulec/moto/blob/master/IMPLEMENTATION_COVERAGE.md).
+
+
+### Documentation
+The full documentation can be found here:
+
+[http://docs.getmoto.org/en/latest/](http://docs.getmoto.org/en/latest/)

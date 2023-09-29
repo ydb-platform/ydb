@@ -10,6 +10,50 @@ namespace NYdb::NFederatedTopic {
 
 NTopic::TTopicClientSettings FromFederated(const TFederatedTopicClientSettings& settings);
 
+template <typename TEvent, typename TFederatedEvent>
+typename std::function<void(TEvent&)> WrapFederatedHandler(std::function<void(TFederatedEvent&)> outerHandler, std::shared_ptr<TDbInfo> db) {
+    if (outerHandler) {
+        return [outerHandler, db = std::move(db)](TEvent& ev) {
+            auto fev = Federate(std::move(ev), db);
+            return outerHandler(fev);
+        };
+    }
+    return {};
+}
+
+NTopic::TReadSessionSettings FromFederated(const TFederatedReadSessionSettings& settings, const std::shared_ptr<TDbInfo>& db) {
+    NTopic::TReadSessionSettings SubsessionSettings = settings;
+    SubsessionSettings.EventHandlers_.MaxMessagesBytes(settings.EventHandlers_.MaxMessagesBytes_);
+    SubsessionSettings.EventHandlers_.HandlersExecutor(settings.EventHandlers_.HandlersExecutor_);
+
+#define MAYBE_CONVERT_HANDLER(type, name) \
+    SubsessionSettings.EventHandlers_.name( \
+        WrapFederatedHandler<NTopic::type, type>(settings.FederatedEventHandlers_.name##_, db) \
+    );
+
+    MAYBE_CONVERT_HANDLER(TReadSessionEvent::TDataReceivedEvent, DataReceivedHandler);
+    MAYBE_CONVERT_HANDLER(TReadSessionEvent::TCommitOffsetAcknowledgementEvent, CommitOffsetAcknowledgementHandler);
+    MAYBE_CONVERT_HANDLER(TReadSessionEvent::TStartPartitionSessionEvent, StartPartitionSessionHandler);
+    MAYBE_CONVERT_HANDLER(TReadSessionEvent::TStopPartitionSessionEvent, StopPartitionSessionHandler);
+    MAYBE_CONVERT_HANDLER(TReadSessionEvent::TPartitionSessionStatusEvent, PartitionSessionStatusHandler);
+    MAYBE_CONVERT_HANDLER(TReadSessionEvent::TPartitionSessionClosedEvent, PartitionSessionClosedHandler);
+    MAYBE_CONVERT_HANDLER(TReadSessionEvent::TEvent, CommonHandler);
+
+#undef MAYBE_CONVERT_HANDLER
+
+    SubsessionSettings.EventHandlers_.SessionClosedHandler(settings.FederatedEventHandlers_.SessionClosedHandler_);
+
+    if (settings.FederatedEventHandlers_.SimpleDataHandlers_.DataHandler) {
+        SubsessionSettings.EventHandlers_.SimpleDataHandlers(
+            WrapFederatedHandler<NTopic::TReadSessionEvent::TDataReceivedEvent, TReadSessionEvent::TDataReceivedEvent>(
+                settings.FederatedEventHandlers_.SimpleDataHandlers_.DataHandler, db),
+            settings.FederatedEventHandlers_.SimpleDataHandlers_.CommitDataAfterProcessing,
+            settings.FederatedEventHandlers_.SimpleDataHandlers_.GracefulStopAfterCommit);
+    }
+
+    return SubsessionSettings;
+}
+
 TFederatedReadSession::TFederatedReadSession(const TFederatedReadSessionSettings& settings,
                                              std::shared_ptr<TGRpcConnectionsImpl> connections,
                                              const TFederatedTopicClientSettings& clientSetttings,
@@ -42,7 +86,7 @@ void TFederatedReadSession::OpenSubSessionsImpl() {
             .Database(db->path())
             .DiscoveryEndpoint(db->endpoint());
         auto subclient = make_shared<NTopic::TTopicClient::TImpl>(Connections, settings);
-        auto subsession = subclient->CreateReadSession(Settings);
+        auto subsession = subclient->CreateReadSession(FromFederated(Settings, db));
         SubSessions.emplace_back(subsession, db);
     }
     SubsessionIndex = 0;
@@ -98,9 +142,8 @@ TVector<TReadSessionEvent::TEvent> TFederatedReadSession::GetEvents(bool block, 
     with_lock(Lock) {
         do {
             auto sub = SubSessions[SubsessionIndex];
-            // TODO remove copy
             for (auto&& ev : sub.Session->GetEvents(false, maxEventsCount, maxByteSize)) {
-                result.push_back(Federate(ev, sub.DbInfo));
+                result.push_back(Federate(std::move(ev), sub.DbInfo));
             }
             SubsessionIndex = (SubsessionIndex + 1) % SubSessions.size();
         }

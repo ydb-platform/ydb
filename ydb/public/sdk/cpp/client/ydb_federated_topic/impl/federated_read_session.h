@@ -66,8 +66,9 @@ private:
     // void ScheduleDumpCountersToLog(size_t timeNumber = 0);
 
 private:
+    TFederatedReadSessionSettings Settings;
+
     // For subsessions creation
-    const NTopic::TReadSessionSettings Settings;
     std::shared_ptr<TGRpcConnectionsImpl> Connections;
     const NTopic::TTopicClientSettings SubClientSetttings;
 

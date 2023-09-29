@@ -135,7 +135,7 @@ public:
     i32 GetNodeId() const;
     i64 GetGeneration() const;
 
-private:    
+private:
     // Node identificator.
     i32 NodeId_ = 1;
 
@@ -1403,14 +1403,14 @@ struct TReadSessionSettings: public TRequestSettings<TReadSessionSettings> {
         //! Sets the following handlers:
         //! DataReceivedHandler: sets DataReceivedHandler to handler that calls dataHandler and (if
         //! commitDataAfterProcessing is set) then calls Commit(). CommitAcknowledgementHandler to handler that does
-        //! nothing. CreatePartitionSessionHandler to handler that confirms event. StopPartitionSessionHandler to
+        //! nothing. StartPartitionSessionHandler to handler that confirms event. StopPartitionSessionHandler to
         //! handler that confirms event. PartitionSessionStatusHandler to handler that does nothing.
         //! PartitionSessionClosedHandler to handler that does nothing.
         //!
         //! dataHandler: handler of data event.
         //! commitDataAfterProcessing: automatically commit data after calling of dataHandler.
         //! gracefulReleaseAfterCommit: wait for commit acknowledgements for all inflight data before confirming
-        //! partition session destroy.
+        //! partition session stop.
         TSelf& SimpleDataHandlers(std::function<void(TReadSessionEvent::TDataReceivedEvent&)> dataHandler,
                                   bool commitDataAfterProcessing = false, bool gracefulStopAfterCommit = true);
 
@@ -1476,7 +1476,7 @@ struct TReadSessionSettings: public TRequestSettings<TReadSessionSettings> {
         FLUENT_SETTING(IExecutor::TPtr, HandlersExecutor);
     };
 
-    
+
     TString ConsumerName_ = "";
     //! Consumer.
     TSelf& ConsumerName(const TString& name) {
@@ -1484,7 +1484,7 @@ struct TReadSessionSettings: public TRequestSettings<TReadSessionSettings> {
         WithoutConsumer_ = false;
         return static_cast<TSelf&>(*this);
     }
-    
+
     bool WithoutConsumer_ = false;
     //! Read without consumer.
     TSelf& WithoutConsumer() {

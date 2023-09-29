@@ -1,6 +1,8 @@
 #include <ydb/public/sdk/cpp/client/ydb_federated_topic/federated_topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/read_session.h>
 
+#include <optional>
+
 namespace NYdb::NFederatedTopic {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -15,24 +17,23 @@ std::pair<ui64, ui64> GetMessageOffsetRange(const TReadSessionEvent::TDataReceiv
     return {msg.GetOffset(), msg.GetOffset() + 1};
 }
 
+TReadSessionEvent::TDataReceivedEvent Federate(NTopic::TReadSessionEvent::TDataReceivedEvent event, std::shared_ptr<TDbInfo> db) {
+    return {std::move(event), std::move(db)};
+}
+
 TReadSessionEvent::TEvent Federate(NTopic::TReadSessionEvent::TEvent event, std::shared_ptr<TDbInfo> db) {
-    if (auto* ev = std::get_if<NTopic::TReadSessionEvent::TDataReceivedEvent>(&event)) {
-        return TReadSessionEvent::TDataReceivedEvent(std::move(*ev), db);
-    } else if (auto* ev = std::get_if<NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(&event)) {
-        return TReadSessionEvent::TFederated(*ev, db);
-    } else if (auto* ev = std::get_if<NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&event)) {
-        return TReadSessionEvent::TFederated(*ev, db);
-    } else if (auto* ev = std::get_if<NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&event)) {
-        return TReadSessionEvent::TFederated(*ev, db);
-    } else if (auto* ev = std::get_if<NTopic::TReadSessionEvent::TPartitionSessionStatusEvent>(&event)) {
-        return TReadSessionEvent::TFederated(*ev, db);
-    } else if (auto* ev = std::get_if<NTopic::TReadSessionEvent::TPartitionSessionClosedEvent>(&event)) {
-        return TReadSessionEvent::TFederated(*ev, db);
-    } else if (auto* ev = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
+    return std::visit([db = std::move(db)](auto&& arg) {
+        using T = std::decay_t<decltype(arg)>;
+        std::optional<TReadSessionEvent::TEvent> ev;
+        if constexpr (std::is_same_v<T, NTopic::TReadSessionEvent::TDataReceivedEvent>) {
+            ev = TReadSessionEvent::TDataReceivedEvent(std::move(arg), std::move(db));
+        } else if constexpr (std::is_same_v<T, NTopic::TSessionClosedEvent>) {
+            ev = std::move(arg);
+        } else {
+            ev = TReadSessionEvent::TFederated(std::move(arg), std::move(db));
+        }
         return *ev;
-    } else {
-        Y_UNREACHABLE();
-    }
+    }, event);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -8,6 +8,7 @@ import (
 	"github.com/ydb-platform/ydb/library/go/core/log"
 	"github.com/ydb-platform/ydb/library/go/core/log/zap"
 	api_common "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/api/common"
+	"github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/config"
 	api_service_protos "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/libgo/service/protos"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest"
@@ -37,17 +38,26 @@ func LogCloserError(logger log.Logger, closer io.Closer, msg string) {
 	}
 }
 
-func NewDevelopmentLogger() (log.Logger, error) {
-	cfg := zap.NewDeployConfig()
-	cfg.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
-	cfg.Encoding = "console"
+func NewLoggerFromConfig(cfg *config.TLoggerConfig) (log.Logger, error) {
+	if cfg == nil {
+		return NewDefaultLogger()
+	}
 
-	zapLogger, err := cfg.Build()
+	loggerCfg := zap.NewDeployConfig()
+	loggerCfg.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+	loggerCfg.Encoding = "console"
+	loggerCfg.Level.SetLevel(convertToZapLogLevel(cfg.GetLogLevel()))
+
+	zapLogger, err := loggerCfg.Build()
 	if err != nil {
 		return nil, fmt.Errorf("new logger: %w", err)
 	}
 
 	return &zap.Logger{L: zapLogger}, nil
+}
+
+func NewDefaultLogger() (log.Logger, error) {
+	return NewLoggerFromConfig(&config.TLoggerConfig{LogLevel: config.ELogLevel_TRACE})
 }
 
 func NewTestLogger(t *testing.T) log.Logger { return &zap.Logger{L: zaptest.NewLogger(t)} }
@@ -67,4 +77,21 @@ func DumpReadSplitsResponse(logger log.Logger, resp *api_service_protos.TReadSpl
 	if dump := resp.GetArrowIpcStreaming(); dump != nil {
 		logger.Debug("response", log.Int("arrow_blob_length", len(dump)))
 	}
+}
+
+func convertToZapLogLevel(lvl config.ELogLevel) zapcore.Level {
+	switch lvl {
+	case config.ELogLevel_TRACE, config.ELogLevel_DEBUG:
+		return zapcore.DebugLevel
+	case config.ELogLevel_INFO:
+		return zapcore.InfoLevel
+	case config.ELogLevel_WARN:
+		return zapcore.WarnLevel
+	case config.ELogLevel_ERROR:
+		return zapcore.ErrorLevel
+	case config.ELogLevel_FATAL:
+		return zapcore.FatalLevel
+	}
+
+	return zapcore.InvalidLevel
 }

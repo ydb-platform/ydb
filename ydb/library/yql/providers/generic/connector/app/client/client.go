@@ -45,16 +45,16 @@ func newConfigFromPath(configPath string) (*config.ClientConfig, error) {
 }
 
 func runClient(_ *cobra.Command, args []string) error {
-	logger, err := utils.NewDevelopmentLogger()
-	if err != nil {
-		return fmt.Errorf("zap new: %w", err)
-	}
-
 	configPath := args[0]
 
 	cfg, err := newConfigFromPath(configPath)
 	if err != nil {
 		return fmt.Errorf("unknown instance: %w", err)
+	}
+
+	logger, err := utils.NewDefaultLogger()
+	if err != nil {
+		return fmt.Errorf("new default logger: %w", err)
 	}
 
 	if err := callServer(logger, cfg); err != nil {

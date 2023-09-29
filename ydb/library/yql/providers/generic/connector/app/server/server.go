@@ -21,7 +21,7 @@ type Server struct {
 	api_service.UnimplementedConnectorServer
 	handlerFactory        *rdbms.HandlerFactory
 	columnarBufferFactory *utils.ColumnarBufferFactory
-	cfg                   *config.ServerConfig
+	cfg                   *config.TServerConfig
 	logger                log.Logger
 }
 
@@ -260,7 +260,7 @@ func (s *Server) makeOptions() ([]grpc.ServerOption, error) {
 
 func newServer(
 	logger log.Logger,
-	cfg *config.ServerConfig,
+	cfg *config.TServerConfig,
 ) (*Server, error) {
 	return &Server{
 		handlerFactory: rdbms.NewHandlerFactory(),
@@ -274,11 +274,6 @@ func newServer(
 }
 
 func runServer(cmd *cobra.Command, _ []string) error {
-	logger, err := utils.NewDevelopmentLogger()
-	if err != nil {
-		return fmt.Errorf("new development logger: %w", err)
-	}
-
 	configPath, err := cmd.Flags().GetString(configFlag)
 	if err != nil {
 		return fmt.Errorf("get config flag: %v", err)
@@ -287,6 +282,11 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	cfg, err := newConfigFromPath(configPath)
 	if err != nil {
 		return fmt.Errorf("new config: %w", err)
+	}
+
+	logger, err := utils.NewLoggerFromConfig(cfg.Logger)
+	if err != nil {
+		return fmt.Errorf("new logger from config: %w", err)
 	}
 
 	srv, err := newServer(logger, cfg)

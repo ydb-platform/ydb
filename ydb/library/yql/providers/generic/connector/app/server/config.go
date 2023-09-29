@@ -11,7 +11,7 @@ import (
 	"google.golang.org/protobuf/encoding/prototext"
 )
 
-func validateServerConfig(c *config.ServerConfig) error {
+func validateServerConfig(c *config.TServerConfig) error {
 	if err := validateEndpoint(c.Endpoint); err != nil {
 		return fmt.Errorf("validate `Server`: %w", err)
 	}
@@ -43,7 +43,7 @@ func validateEndpoint(c *api_common.TEndpoint) error {
 	return nil
 }
 
-func validateServerTLSConfig(c *config.ServerTLSConfig) error {
+func validateServerTLSConfig(c *config.TServerTLSConfig) error {
 	if c == nil {
 		// It's OK not to have TLS config section
 		return nil
@@ -60,7 +60,7 @@ func validateServerTLSConfig(c *config.ServerTLSConfig) error {
 	return nil
 }
 
-func validateServerReadLimit(c *config.ServerReadLimit) error {
+func validateServerReadLimit(c *config.TServerReadLimit) error {
 	if c == nil {
 		// It's OK not to have read request memory limitation
 		return nil
@@ -87,13 +87,13 @@ func fileMustExist(path string) error {
 	return nil
 }
 
-func newConfigFromPath(configPath string) (*config.ServerConfig, error) {
+func newConfigFromPath(configPath string) (*config.TServerConfig, error) {
 	data, err := ioutil.ReadFile(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("read file %v: %w", configPath, err)
 	}
 
-	var cfg config.ServerConfig
+	var cfg config.TServerConfig
 
 	if err := prototext.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("prototext unmarshal `%v`: %w", string(data), err)

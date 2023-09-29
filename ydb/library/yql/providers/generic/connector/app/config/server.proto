@@ -6,19 +6,21 @@ import "ydb/library/yql/providers/generic/connector/api/common/endpoint.proto";
 option go_package = "github.com/ydb-platform/ydb/ydb/library/yql/providers/generic/connector/app/config";
 
 // Connector server configuration
-message ServerConfig {
+message TServerConfig {
     // Network address server will be listening on
     NYql.NConnector.NApi.TEndpoint endpoint = 1;
     // TLS settings.
     // Leave it empty for insecure connections.
-    ServerTLSConfig tls = 2;
+    TServerTLSConfig tls = 2;
     // This is a rough restriction for YQ memory consumption until
     // https://st.yandex-team.ru/YQ-2057 is implemented.
     // Leave it empty if you want to avoid any memory limits.
-    ServerReadLimit read_limit = 3;
+    TServerReadLimit read_limit = 3;
+    // Logger config
+    TLoggerConfig logger = 4;
 }
 
-message ServerTLSConfig {
+message TServerTLSConfig {
     // TLS private key path
     string key = 2;
     // TLS public cert path
@@ -28,7 +30,23 @@ message ServerTLSConfig {
 }
 
 // ServerReadLimit limitates the amount of data extracted from the data source on every read request. 
-message ServerReadLimit {
+message TServerReadLimit {
     // The number of rows extracted from the data source
     uint64 rows = 1;
+}
+
+// TLogger represents logger configuration
+message TLoggerConfig {
+    // Level of logging
+    ELogLevel log_level = 1;
+}
+
+// ELogLevel enumerates standard levels of logging
+enum ELogLevel {
+    TRACE = 0;
+	DEBUG = 1;
+	INFO = 2;
+	WARN = 3;
+	ERROR = 4;
+	FATAL = 5;
 }

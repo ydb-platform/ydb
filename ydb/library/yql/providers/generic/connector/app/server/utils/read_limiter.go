@@ -34,7 +34,7 @@ func (rl *readLimiterRows) AddRow() error {
 }
 
 type ReadLimiterFactory struct {
-	cfg *config.ServerReadLimit
+	cfg *config.TServerReadLimit
 }
 
 func (rlf *ReadLimiterFactory) MakeReadLimiter(logger log.Logger) ReadLimiter {
@@ -47,6 +47,6 @@ func (rlf *ReadLimiterFactory) MakeReadLimiter(logger log.Logger) ReadLimiter {
 	return &readLimiterRows{rowsRead: 0, rowsLimit: rlf.cfg.GetRows()}
 }
 
-func NewReadLimiterFactory(cfg *config.ServerReadLimit) *ReadLimiterFactory {
+func NewReadLimiterFactory(cfg *config.TServerReadLimit) *ReadLimiterFactory {
 	return &ReadLimiterFactory{cfg: cfg}
 }

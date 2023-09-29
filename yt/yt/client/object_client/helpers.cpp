@@ -117,6 +117,7 @@ bool IsUserType(EObjectType type)
 {
     return
         type == EObjectType::Transaction ||
+        type == EObjectType::SystemTransaction ||
         type == EObjectType::Chunk ||
         type == EObjectType::JournalChunk ||
         type == EObjectType::ErasureChunk ||
@@ -232,6 +233,22 @@ bool IsMediumType(EObjectType type)
     return
         type == EObjectType::DomesticMedium ||
         type == EObjectType::S3Medium;
+}
+
+bool IsCypressTransactionType(EObjectType type)
+{
+    return
+        type == EObjectType::Transaction ||
+        type == EObjectType::NestedTransaction ||
+        type == EObjectType::UploadTransaction ||
+        type == EObjectType::UploadNestedTransaction;
+}
+
+bool IsSystemTransactionType(EObjectType type)
+{
+    return
+        type == EObjectType::SystemTransaction ||
+        type == EObjectType::SystemNestedTransaction;
 }
 
 bool HasSchema(EObjectType type)

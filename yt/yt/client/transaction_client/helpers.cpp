@@ -15,10 +15,13 @@ bool IsMasterTransactionId(TTransactionId id)
 {
     auto type = TypeFromId(id);
     // NB: Externalized transactions are for internal use only.
-    return type == NObjectClient::EObjectType::Transaction ||
-        type == NObjectClient::EObjectType::NestedTransaction ||
+    return
+        type == EObjectType::Transaction ||
+        type == EObjectType::NestedTransaction ||
         type == EObjectType::UploadTransaction ||
-        type == EObjectType::UploadNestedTransaction;
+        type == EObjectType::UploadNestedTransaction ||
+        type == EObjectType::SystemTransaction ||
+        type == EObjectType::SystemNestedTransaction;
 }
 
 void ValidateTabletTransactionId(TTransactionId id)
@@ -79,7 +82,7 @@ TTimestamp TimestampFromUnixTime(ui64 time)
     return time << TimestampCounterWidth;
 }
 
-TTimestamp EmbedCellTagIntoTimestamp(TTimestamp timestamp, NObjectClient::TCellTag cellTag)
+TTimestamp EmbedCellTagIntoTimestamp(TTimestamp timestamp, TCellTag cellTag)
 {
     static_assert(sizeof(TCellTag) == 2, "Invalid TCellTag size");
 

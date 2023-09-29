@@ -63,8 +63,14 @@ bool IsChaosTableReplicaType(EObjectType type);
 //! Checks if the given type is a collocation.
 bool IsCollocationType(EObjectType type);
 
-//! Checks if the given type is a medium;
+//! Checks if the given type is a medium.
 bool IsMediumType(EObjectType type);
+
+//! Checks if the given type is a cypress (i.e. master, simple) transaction.
+bool IsCypressTransactionType(EObjectType type);
+
+//! Checks if the given type is a system transaction.
+bool IsSystemTransactionType(EObjectType type);
 
 //! Extracts the type component from #id.
 EObjectType TypeFromId(TObjectId id);

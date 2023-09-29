@@ -45,7 +45,7 @@ set_property(
   ydb-core-persqueue-ut-slow
   PROPERTY
   SPLIT_FACTOR
-  20
+  5
 )
 add_yunittest(
   NAME
@@ -64,7 +64,7 @@ set_yunittest_property(
   ydb-core-persqueue-ut-slow
   PROPERTY
   LABELS
-  LARGE
+  MEDIUM
 )
 set_yunittest_property(
   TEST
@@ -78,7 +78,7 @@ set_yunittest_property(
   ydb-core-persqueue-ut-slow
   PROPERTY
   TIMEOUT
-  3600
+  600
 )
 target_allocator(ydb-core-persqueue-ut-slow
   cpp-malloc-tcmalloc

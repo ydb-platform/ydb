@@ -2,13 +2,9 @@ UNITTEST_FOR(ydb/core/persqueue)
 
 FORK_SUBTESTS()
 
-SPLIT_FACTOR(20)
-
-SIZE(LARGE)
-
-TAG(ya:fat)
-
-TIMEOUT(3600)
+SPLIT_FACTOR(5)
+SIZE(MEDIUM)
+TIMEOUT(600)
 
 PEERDIR(
     library/cpp/getopt

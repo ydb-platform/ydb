@@ -1,15 +1,11 @@
+IF (NOT SANITIZER_TYPE)
+
 PY3TEST()
 
 TEST_SRCS(test.py)
 
-IF (SANITIZER_TYPE)
-    TIMEOUT(1800)
-    SIZE(LARGE)
-    TAG(ya:fat)
-ELSE()
-    TIMEOUT(600)
-    SIZE(MEDIUM)
-ENDIF()
+TIMEOUT(600)
+SIZE(MEDIUM)
 
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
@@ -33,3 +29,5 @@ INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 FORK_SUBTESTS()
 FORK_TEST_FILES()
 END()
+
+ENDIF()

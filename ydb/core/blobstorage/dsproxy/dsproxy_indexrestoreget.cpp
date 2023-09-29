@@ -17,6 +17,7 @@ class TBlobStorageGroupIndexRestoreGetRequest
     TArrayHolder<TEvBlobStorage::TEvGet::TQuery> Queries;
     const TInstant Deadline;
     const bool IsInternal;
+    const bool Decommission;
     const std::optional<TEvBlobStorage::TEvGet::TForceBlockTabletData> ForceBlockTabletData;
 
     THashMap<ui64, TGroupQuorumTracker> QuorumTracker;
@@ -174,6 +175,7 @@ class TBlobStorageGroupIndexRestoreGetRequest
                 std::unique_ptr<TEvBlobStorage::TEvGet> get(new TEvBlobStorage::TEvGet(
                     Queries[idx].Id, 0, 0, Deadline,
                     GetHandleClass, true));
+                get->Decommission = Decommission;
                 A_LOG_DEBUG_S("DSPI12", "OnEnoughVGetResults"
                         << " recoverable blob, id# " << Queries[idx].Id.ToString()
                         << " BlobStatus# " << DumpBlobStatus(idx)
@@ -247,6 +249,7 @@ class TBlobStorageGroupIndexRestoreGetRequest
         auto ev = std::make_unique<TEvBlobStorage::TEvGet>(Queries, QuerySize, Deadline, GetHandleClass,
             true /*mustRestoreFirst*/, true /*isIndexOnly*/, std::nullopt /*forceBlockTabletData*/, IsInternal);
         ev->RestartCounter = counter;
+        ev->Decommission = Decommission;
         return ev;
     }
 
@@ -275,6 +278,7 @@ public:
         , Queries(ev->Queries.Release())
         , Deadline(ev->Deadline)
         , IsInternal(ev->IsInternal)
+        , Decommission(ev->Decommission)
         , ForceBlockTabletData(ev->ForceBlockTabletData)
         , VGetsInFlight(0)
         , StartTime(now)

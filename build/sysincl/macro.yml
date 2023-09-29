@@ -848,9 +848,6 @@
       - contrib/libs/opencv/modules/core/src/split.simd.hpp
       - contrib/libs/opencv/modules/core/src/stat.simd.hpp
       - contrib/libs/opencv/modules/core/src/sum.simd.hpp
-      - contrib/libs/opencv/modules/core/test/test_intrin128.simd.hpp
-      - contrib/libs/opencv/modules/core/test/test_intrin256.simd.hpp
-      - contrib/libs/opencv/modules/core/test/test_intrin512.simd.hpp
 
 - source_filter: "^contrib/libs/opencv/modules/imgproc"
   includes:

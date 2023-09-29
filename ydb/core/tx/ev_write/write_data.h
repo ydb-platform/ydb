@@ -12,9 +12,9 @@ class IDataContainer {
 public:
     using TPtr = std::shared_ptr<IDataContainer>;
     virtual ~IDataContainer() {}
-    virtual std::shared_ptr<arrow::RecordBatch> GetArrowBatch() const = 0;
-    virtual const TString& GetData() const = 0;
+    virtual std::shared_ptr<arrow::RecordBatch> ExtractBatch() = 0;
     virtual ui64 GetSchemaVersion() const = 0;
+    virtual ui64 GetSize() const = 0;
 };
 
 class TWriteMeta {
@@ -42,16 +42,15 @@ public:
 };
 
 class TWriteData {
+private:
     TWriteMeta WriteMeta;
     IDataContainer::TPtr Data;
 public:
     TWriteData(const TWriteMeta& writeMeta, IDataContainer::TPtr data);
 
-    const IDataContainer& GetData() const {
-        return *Data;
-    }
+    const IDataContainer& GetData() const;
 
-    const IDataContainer::TPtr GetDataPtr() const {
+    const IDataContainer::TPtr& GetDataPtr() const {
         return Data;
     }
 
@@ -64,7 +63,7 @@ public:
     }
 
     ui64 GetSize() const {
-        return Data->GetData().size();
+        return Data->GetSize();
     }
 };
 

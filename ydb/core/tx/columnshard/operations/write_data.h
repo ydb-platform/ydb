@@ -39,18 +39,20 @@ public:
 };
 
 class TArrowData : public NEvWrite::IDataContainer {
+private:
+    std::optional<ui64> OriginalDataSize;
 public:
     TArrowData(const NOlap::ISnapshotSchema::TPtr& schema)
         : IndexSchema(schema)
     {}
 
-    const TString& GetData() const override {
-        return IncomingData;
-    }
-
     bool Parse(const NKikimrDataEvents::TOperationData& proto, const IPayloadData& payload);
-    std::shared_ptr<arrow::RecordBatch> GetArrowBatch() const override;
+    virtual std::shared_ptr<arrow::RecordBatch> ExtractBatch() override;
     ui64 GetSchemaVersion() const override;
+    ui64 GetSize() const override {
+        Y_VERIFY(OriginalDataSize);
+        return *OriginalDataSize;
+    }
 
 private:
     NOlap::ISnapshotSchema::TPtr IndexSchema;
@@ -59,18 +61,20 @@ private:
 };
 
 class TProtoArrowData : public NEvWrite::IDataContainer {
+private:
+    std::optional<ui64> OriginalDataSize;
 public:
     TProtoArrowData(const NOlap::ISnapshotSchema::TPtr& schema)
         : IndexSchema(schema)
     {}
 
-    const TString& GetData() const override {
-        return IncomingData;
-    }
-
     bool ParseFromProto(const NKikimrTxColumnShard::TEvWrite& proto);
-    std::shared_ptr<arrow::RecordBatch> GetArrowBatch() const override;
+    virtual std::shared_ptr<arrow::RecordBatch> ExtractBatch() override;
     ui64 GetSchemaVersion() const override;
+    ui64 GetSize() const override {
+        Y_VERIFY(OriginalDataSize);
+        return *OriginalDataSize;
+    }
 
 private:
     NOlap::ISnapshotSchema::TPtr IndexSchema;

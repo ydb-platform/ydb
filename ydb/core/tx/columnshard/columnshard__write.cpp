@@ -215,7 +215,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         return;
     }
 
-    auto wg = WritesMonitor.RegisterWrite(arrowData->GetData().size());
+    auto wg = WritesMonitor.RegisterWrite(arrowData->GetSize());
     auto operation = OperationsManager.RegisterOperation(txId);
     Y_VERIFY(operation);
     operation->Start(*this, tableId, arrowData, source, ctx);

@@ -13,11 +13,15 @@ bool TArrowData::Parse(const NKikimrDataEvents::TOperationData& proto, const IPa
         columns.emplace_back(columnId);
     }
     BatchSchema = std::make_shared<NOlap::TFilteredSnapshotSchema>(IndexSchema, columns);
+    OriginalDataSize = IncomingData.size();
     return BatchSchema->GetColumnsCount() == columns.size() && !IncomingData.empty();
 }
 
-std::shared_ptr<arrow::RecordBatch> TArrowData::GetArrowBatch() const {
-    return IndexSchema->PrepareForInsert(IncomingData, BatchSchema->GetSchema());
+std::shared_ptr<arrow::RecordBatch> TArrowData::ExtractBatch() {
+    Y_VERIFY(!!IncomingData);
+    auto result = IndexSchema->PrepareForInsert(IncomingData, BatchSchema->GetSchema());
+    IncomingData = "";
+    return result;
 }
 
 ui64 TArrowData::GetSchemaVersion() const {
@@ -37,11 +41,15 @@ bool TProtoArrowData::ParseFromProto(const NKikimrTxColumnShard::TEvWrite& proto
             return false;
         }
     }
+    OriginalDataSize = IncomingData.size();
     return !IncomingData.empty() && IncomingData.size() <= NColumnShard::TLimits::GetMaxBlobSize();
 }
 
-std::shared_ptr<arrow::RecordBatch> TProtoArrowData::GetArrowBatch() const {
-    return IndexSchema->PrepareForInsert(IncomingData, ArrowSchema);
+std::shared_ptr<arrow::RecordBatch> TProtoArrowData::ExtractBatch() {
+    Y_VERIFY(!!IncomingData);
+    auto result = IndexSchema->PrepareForInsert(IncomingData, ArrowSchema);
+    IncomingData = "";
+    return result;
 }
 
 ui64 TProtoArrowData::GetSchemaVersion() const {

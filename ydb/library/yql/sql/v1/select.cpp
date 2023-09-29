@@ -1680,11 +1680,15 @@ public:
 
         auto block(Y(Y("let", "core", input)));
 
-        if (auto matchRecognize = Source->BuildMatchRecognize(ctx, "core")) {
-            //use unique name match_recognize to find this block easily in unit tests
-            block = L(block, Y("let", "match_recognize", matchRecognize));
-            //then bind to the conventional name
-            block = L(block, Y("let", "core", "match_recognize"));
+        if (Source->HasMatchRecognize()) {
+            if (auto matchRecognize = Source->BuildMatchRecognize(ctx, "core")) {
+                //use unique name match_recognize to find this block easily in unit tests
+                block = L(block, Y("let", "match_recognize", matchRecognize));
+                //then bind to the conventional name
+                block = L(block, Y("let", "core", "match_recognize"));
+            } else {
+                return nullptr;
+            }
         }
 
         bool ordered = ctx.UseUnordered(*this);

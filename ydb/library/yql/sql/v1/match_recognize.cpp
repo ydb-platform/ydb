@@ -202,6 +202,7 @@ bool TMatchRecognizeNavigate::DoInit(TContext& ctx, ISource* src) {
     if (DefaultNavigatingFunction == Name) {
         if (not varColumn->IsTheSameVar()) {
             ctx.Error(Pos) << "Row pattern navigation function is required";
+            return false;
         }
         navigatedRowIndex =  varLastRowIndex;
     }
@@ -229,6 +230,7 @@ bool TMatchRecognizeNavigate::DoInit(TContext& ctx, ISource* src) {
         );
     } else {
         ctx.Error(Pos) << "Internal logic error";
+        return false;
     }
     Add("Member");
     Add(

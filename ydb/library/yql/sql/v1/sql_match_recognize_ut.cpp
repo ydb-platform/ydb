@@ -648,4 +648,19 @@ FROM Input MATCH_RECOGNIZE(
         UNIT_ASSERT(IsLambda(defines->GetChild(5), 3));
         UNIT_ASSERT(IsLambda(defines->GetChild(6), 3));
     }
+
+    Y_UNIT_TEST(CheckRequiredNavigationFunction) {
+        TString stmtPrefix = R"(
+USE plato;
+SELECT *
+FROM Input MATCH_RECOGNIZE(
+    PATTERN ( Y Q L )
+    DEFINE
+        L as L.V =
+)";
+        //Be aware that right parenthesis is added at the end of the query as required
+        UNIT_ASSERT(MatchRecognizeSqlToYql(stmtPrefix + "LAST(Q.dt) )").IsOk());
+        UNIT_ASSERT(!MatchRecognizeSqlToYql(stmtPrefix + "Q.dt )").IsOk());
+    }
+
 }

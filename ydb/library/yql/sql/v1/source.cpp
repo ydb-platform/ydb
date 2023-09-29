@@ -937,11 +937,13 @@ TNodePtr ISource::BuildSortSpec(const TVector<TSortSpecificationPtr>& orderBy, c
     }
 }
 
+bool ISource::HasMatchRecognize() const {
+    return static_cast<bool>(MatchRecognizeBuilder);
+}
+
 TNodePtr ISource::BuildMatchRecognize(TContext& ctx, TString&& inputTable){
-    if (MatchRecognizeBuilder){
-        return MatchRecognizeBuilder->Build(ctx, std::move(inputTable), this);
-    }
-    return TNodePtr{};
+    YQL_ENSURE(HasMatchRecognize());
+    return MatchRecognizeBuilder->Build(ctx, std::move(inputTable), this);
 };
 
 IJoin::IJoin(TPosition pos)

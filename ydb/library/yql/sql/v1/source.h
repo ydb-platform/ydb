@@ -94,6 +94,7 @@ namespace NSQLTranslationV1 {
         virtual bool ShouldUseSourceAsColumn(const TString& source) const;
         virtual bool IsJoinKeysInitializing() const;
         virtual const TString* GetWindowName() const;
+        virtual bool HasMatchRecognize() const;
         virtual TNodePtr BuildMatchRecognize(TContext& ctx, TString&& inputTable);
         virtual bool DoInit(TContext& ctx, ISource* src);
         virtual TNodePtr Build(TContext& ctx) = 0;

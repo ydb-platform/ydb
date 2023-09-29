@@ -5,6 +5,22 @@
 #include <ydb/library/ydb_issue/issue_helpers.h>
 
 namespace NKikimr {
+
+namespace NGRpcService {
+
+IActor* CreatePgAlterTableRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg);
+
+using TEvAlterTableRequest = NGRpcService::TGrpcRequestOperationCall<Ydb::Table::AlterTableRequest,
+    Ydb::Table::AlterTableResponse>;
+
+struct TEvPgAlterTableRequest : public TEvAlterTableRequest {
+    static IActor* CreateRpcActor(IRequestOpCtx* msg) {
+        return CreatePgAlterTableRpcActor(msg);
+    }
+};
+
+} // NGRpcService
+
 namespace NKqp {
 
 using namespace NYql;
@@ -29,10 +45,7 @@ IKikimrGateway::TGenericResult GenericResultFromSyncOperation(const Operations::
 void DoAlterTableSameMailbox(Ydb::Table::AlterTableRequest&& req, TAlterTableRespHandler&& cb,
     const TString& database, const TMaybe<TString>& token, const TMaybe<TString>& type)
 {
-    using TEvAlterTableRequest = NGRpcService::TGrpcRequestOperationCall<Ydb::Table::AlterTableRequest,
-        Ydb::Table::AlterTableResponse>;
-
-    NRpcService::DoLocalRpcSameMailbox<TEvAlterTableRequest>(std::move(req), std::move(cb),
+    NRpcService::DoLocalRpcSameMailbox<NGRpcService::TEvPgAlterTableRequest>(std::move(req), std::move(cb),
         database, token, type, TlsActivationContext->AsActorContext());
 }
 

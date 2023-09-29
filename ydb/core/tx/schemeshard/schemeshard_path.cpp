@@ -908,6 +908,35 @@ const TPath::TChecker& TPath::TChecker::IsValidACL(const TString& acl, EStatus s
         << ", new ACL size: " << bytesSize);
 }
 
+const TPath::TChecker& TPath::TChecker::IsNameUniqGrandParentLevel(EStatus status) const {
+    if (Failed) {
+        return *this;
+    }
+
+    if (Path.Elements.size() < 2) {
+        return *this;
+    }
+
+    auto path = Path.Parent();
+    if (!path.IsResolved()) {
+        return *this;
+    }
+
+    path.Rise();
+    if (!path.IsResolved()) {
+        return *this;
+    }
+
+    const auto& myName = Path.NameParts.back();
+
+    if (path.Elements.back()->FindChild(myName)) {
+        return Fail(status, TStringBuilder() << "name " << myName
+            << " is not uniq. Found in: " << path.PathString());
+    }
+
+    return *this;
+}
+
 TString TPath::TChecker::BasicPathInfo(TPathElement::TPtr element) const {
     return TStringBuilder()
         << "id: " << element->PathId << ", "

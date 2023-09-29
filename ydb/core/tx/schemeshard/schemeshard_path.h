@@ -90,6 +90,7 @@ public:
         const TChecker& ImportsLimit(ui64 delta = 1, EStatus status = EStatus::StatusResourceExhausted) const;
         const TChecker& IsExternalTable(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsExternalDataSource(EStatus status = EStatus::StatusNameConflict) const;
+        const TChecker& IsNameUniqGrandParentLevel(EStatus status = EStatus::StatusNameConflict) const;
     };
 
 public:

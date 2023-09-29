@@ -86,7 +86,7 @@ public:
 
         if (settings.has_index()) {
             buildInfo->BuildKind = TIndexBuildInfo::EBuildKind::BuildIndex;
-            const auto indexPath = tablePath.Child(settings.index().name());
+            const auto& indexPath = tablePath.Child(settings.index().name());
             {
                 const auto checks = indexPath.Check();
                 checks
@@ -101,6 +101,10 @@ public:
                     checks
                         .NotEmpty()
                         .NotResolved();
+                }
+
+                if (settings.pg_mode()) {
+                    checks.IsNameUniqGrandParentLevel();
                 }
 
                 checks

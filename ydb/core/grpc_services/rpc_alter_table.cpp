@@ -142,8 +142,15 @@ class TAlterTableRPC : public TRpcSchemeRequestActor<TAlterTableRPC, TEvAlterTab
     }
 
 public:
-    TAlterTableRPC(IRequestOpCtx* msg)
-        : TBase(msg) {}
+    enum EFlags : ui8 {
+        Default = 0,
+        PgMode = 1
+    };
+
+    TAlterTableRPC(IRequestOpCtx* msg, ui8 flags = Default)
+        : TBase(msg)
+        , Flags(flags)
+    {}
 
     void Bootstrap(const TActorContext &ctx) {
         TBase::Bootstrap(ctx);
@@ -400,6 +407,9 @@ private:
         const auto& req = *GetProtoRequest();
 
         NKikimrIndexBuilder::TIndexBuildSettings settings;
+        if (Flags & PgMode) {
+            settings.set_pg_mode(true);
+        }
         settings.set_source_path(req.path());
         auto tableIndex = settings.mutable_index();
         tableIndex->CopyFrom(req.add_indexes(0));
@@ -699,6 +709,8 @@ private:
     THolder<const NACLib::TUserToken> UserToken;
     TTableProfiles Profiles;
     EOp OpType;
+
+    const ui8 Flags;
 };
 
 void DoAlterTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
@@ -709,6 +721,11 @@ template<>
 IActor* TEvAlterTableRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
     return new TAlterTableRPC(msg);
 }
+
+IActor* CreatePgAlterTableRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return new TAlterTableRPC(msg, TAlterTableRPC::PgMode);
+}
+
 
 } // namespace NKikimr
 } // namespace NGRpcService

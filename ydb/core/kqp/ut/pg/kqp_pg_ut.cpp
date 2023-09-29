@@ -1467,6 +1467,16 @@ Y_UNIT_TEST_SUITE(KqpPg) {
             auto result = session.ExecuteQuery(query, txCtrl).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
         }
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                CREATE INDEX "test" ON test (fk);
+                )");
+
+            auto result = session.ExecuteQuery(query, txCtrl).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        }
+
 /*
         {
             const auto query = Q_(R"(

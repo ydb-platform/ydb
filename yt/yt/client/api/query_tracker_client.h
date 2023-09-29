@@ -102,7 +102,7 @@ struct TQuery
     NQueryTrackerClient::TQueryId Id;
     std::optional<NQueryTrackerClient::EQueryEngine> Engine;
     std::optional<TString> Query;
-    NYson::TYsonString Files;
+    std::optional<NYson::TYsonString> Files;
     std::optional<TInstant> StartTime;
     std::optional<TInstant> FinishTime;
     NYson::TYsonString Settings;

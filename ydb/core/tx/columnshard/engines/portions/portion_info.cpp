@@ -28,11 +28,16 @@ const TColumnRecord& TPortionInfo::AppendOneChunkColumn(TColumnRecord&& record) 
 
 void TPortionInfo::AddMetadata(const ISnapshotSchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch,
                                const TString& tierName) {
-    const auto& indexInfo = snapshotSchema.GetIndexInfo();
     Y_VERIFY(batch->num_rows() == NumRows());
+    AddMetadata(snapshotSchema, NArrow::TFirstLastSpecialKeys(batch), tierName);
+}
+
+void TPortionInfo::AddMetadata(const ISnapshotSchema& snapshotSchema, const NArrow::TFirstLastSpecialKeys& specials,
+    const TString& tierName) {
+    const auto& indexInfo = snapshotSchema.GetIndexInfo();
     Meta = {};
     Meta.FirstPkColumn = indexInfo.GetPKFirstColumnId();
-    Meta.FillBatchInfo(batch, indexInfo);
+    Meta.FillBatchInfo(specials, indexInfo);
     Meta.SetTierName(tierName);
 }
 

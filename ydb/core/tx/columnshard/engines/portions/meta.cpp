@@ -5,9 +5,12 @@
 
 namespace NKikimr::NOlap {
 
-void TPortionMeta::FillBatchInfo(const std::shared_ptr<arrow::RecordBatch> batch, const TIndexInfo& indexInfo) {
+void TPortionMeta::FillBatchInfo(const NArrow::TFirstLastSpecialKeys& specials, const TIndexInfo& indexInfo) {
+    auto& batch = specials.GetBatch();
+    AFL_VERIFY(batch->num_rows());
     {
         auto keyBatch = NArrow::ExtractColumns(batch, indexInfo.GetReplaceKey());
+        AFL_VERIFY(keyBatch);
         std::vector<bool> bits(batch->num_rows(), false);
         bits[0] = true;
         bits[batch->num_rows() - 1] = true; // it could be 0 if batch has one row

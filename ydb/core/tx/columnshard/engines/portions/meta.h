@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/common/portion.h>
 #include <ydb/core/formats/arrow/replace_key.h>
+#include <ydb/core/formats/arrow/special_keys.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/library/accessor/accessor.h>
 #include <util/stream/output.h>
@@ -26,7 +27,7 @@ public:
     
     std::optional<NKikimrTxColumnShard::TIndexPortionMeta> SerializeToProto(const ui32 columnId, const ui32 chunk) const;
 
-    void FillBatchInfo(const std::shared_ptr<arrow::RecordBatch> batch, const TIndexInfo& indexInfo);
+    void FillBatchInfo(const NArrow::TFirstLastSpecialKeys& specials, const TIndexInfo& indexInfo);
 
     EProduced GetProduced() const {
         return Produced;

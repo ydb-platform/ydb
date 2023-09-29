@@ -1,4 +1,5 @@
 #include "special_keys.h"
+#include "permutations.h"
 #include <ydb/core/formats/arrow/serializer/full.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
@@ -33,19 +34,17 @@ TFirstLastSpecialKeys::TFirstLastSpecialKeys(std::shared_ptr<arrow::RecordBatch>
     if (columnNames.size()) {
         keyBatch = NArrow::ExtractColumns(batch, columnNames);
     }
-    std::vector<bool> bits(batch->num_rows(), false);
-    bits[0] = true;
-    bits[batch->num_rows() - 1] = true;
+    std::vector<ui64> indexes = {0};
+    if (batch->num_rows() > 1) {
+        indexes.emplace_back(batch->num_rows() - 1);
+    }
 
-    auto filter = NArrow::TColumnFilter(std::move(bits)).BuildArrowFilter(batch->num_rows());
-    Data = NArrow::TStatusValidator::GetValid(arrow::compute::Filter(keyBatch, filter)).record_batch();
-    Y_VERIFY(Data->num_rows() == 1 || Data->num_rows() == 2);
+    Data = NArrow::CopyRecords(keyBatch, indexes);
 }
 
 TFirstLastSpecialKeys::TFirstLastSpecialKeys(const TString& data)
     : TBase(data)
 {
-    Y_VERIFY(Data);
     Y_VERIFY_DEBUG(Data->ValidateFull().ok());
     Y_VERIFY(Data->num_rows() == 1 || Data->num_rows() == 2);
 }

@@ -32,6 +32,10 @@ class TFirstLastSpecialKeys: public TSpecialKeys {
 private:
     using TBase = TSpecialKeys;
 public:
+    const std::shared_ptr<arrow::RecordBatch>& GetBatch() const {
+        return Data;
+    }
+
     std::optional<TReplaceKey> GetMin(const std::shared_ptr<arrow::Schema>& schema) const {
         return GetKeyByIndex(0, schema);
     }

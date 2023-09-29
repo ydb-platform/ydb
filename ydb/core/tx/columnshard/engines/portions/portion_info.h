@@ -5,6 +5,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/column_features.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
+#include <ydb/core/formats/arrow/special_keys.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr::NOlap {
@@ -190,12 +191,16 @@ public:
         return {sum, max};
     }
 
-    ui64 BlobsBytes() const noexcept {
+    ui64 GetBlobBytes() const noexcept {
         ui64 sum = 0;
         for (const auto& rec : Records) {
             sum += rec.BlobRange.Size;
         }
         return sum;
+    }
+
+    ui64 BlobsBytes() const noexcept {
+        return GetBlobBytes();
     }
 
     bool IsVisible(const TSnapshot& snapshot) const {
@@ -219,7 +224,9 @@ public:
     void AddRecord(const TIndexInfo& indexInfo, const TColumnRecord& rec, const NKikimrTxColumnShard::TIndexPortionMeta* portionMeta);
 
     void AddMetadata(const ISnapshotSchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch,
-                     const TString& tierName);
+        const TString& tierName);
+    void AddMetadata(const ISnapshotSchema& snapshotSchema, const NArrow::TFirstLastSpecialKeys& specials,
+        const TString& tierName);
 
     std::shared_ptr<arrow::Scalar> MinValue(ui32 columnId) const;
     std::shared_ptr<arrow::Scalar> MaxValue(ui32 columnId) const;

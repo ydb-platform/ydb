@@ -110,6 +110,15 @@ std::shared_ptr<arrow::UInt64Array> MakeFilterPermutation(const std::vector<ui64
     return out;
 }
 
+std::shared_ptr<arrow::RecordBatch> CopyRecords(const std::shared_ptr<arrow::RecordBatch>& source, const std::vector<ui64>& indexes) {
+    auto schema = source->schema();
+    std::vector<std::shared_ptr<arrow::Array>> columns;
+    for (auto&& i : source->columns()) {
+        columns.emplace_back(CopyRecords(i, indexes));
+    }
+    return arrow::RecordBatch::Make(schema, indexes.size(), columns);
+}
+
 std::shared_ptr<arrow::Array> CopyRecords(const std::shared_ptr<arrow::Array>& source, const std::vector<ui64>& indexes) {
     if (!source) {
         return source;
@@ -127,7 +136,9 @@ std::shared_ptr<arrow::Array> CopyRecords(const std::shared_ptr<arrow::Array>& s
 
         {
             auto& builderImpl = static_cast<TBuilder&>(*builder);
+            const ui32 arraySize = column.length();
             for (auto&& i : indexes) {
+                Y_VERIFY(i < arraySize);
                 TStatusValidator::Validate(builderImpl.Append(column.GetView(i)));
             }
         }

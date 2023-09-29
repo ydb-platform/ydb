@@ -502,8 +502,7 @@ std::vector<std::unique_ptr<arrow::ArrayBuilder>> MakeBuilders(const std::shared
 
     for (auto& field : schema->fields()) {
         std::unique_ptr<arrow::ArrayBuilder> builder;
-        auto status = arrow::MakeBuilder(arrow::default_memory_pool(), field->type(), &builder);
-        Y_VERIFY_OK(status);
+        TStatusValidator::Validate(arrow::MakeBuilder(arrow::default_memory_pool(), field->type(), &builder));
         if (sizeByColumn.size()) {
             auto it = sizeByColumn.find(field->name());
             if (it != sizeByColumn.end()) {
@@ -512,7 +511,7 @@ std::vector<std::unique_ptr<arrow::ArrayBuilder>> MakeBuilders(const std::shared
         }
 
         if (reserve) {
-            Y_VERIFY_OK(builder->Reserve(reserve));
+            TStatusValidator::Validate(builder->Reserve(reserve));
         }
 
         builders.emplace_back(std::move(builder));
@@ -523,8 +522,7 @@ std::vector<std::unique_ptr<arrow::ArrayBuilder>> MakeBuilders(const std::shared
 
 std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(const std::shared_ptr<arrow::Field>& field) {
     std::unique_ptr<arrow::ArrayBuilder> builder;
-    auto status = arrow::MakeBuilder(arrow::default_memory_pool(), field->type(), &builder);
-    Y_VERIFY_OK(status);
+    TStatusValidator::Validate(arrow::MakeBuilder(arrow::default_memory_pool(), field->type(), &builder));
     return std::move(builder);
 }
 
@@ -532,8 +530,7 @@ std::vector<std::shared_ptr<arrow::Array>> Finish(std::vector<std::unique_ptr<ar
     std::vector<std::shared_ptr<arrow::Array>> out;
     for (auto& builder : builders) {
         std::shared_ptr<arrow::Array> array;
-        auto status = builder->Finish(&array);
-        Y_VERIFY_OK(status);
+        TStatusValidator::Validate(builder->Finish(&array));
         out.emplace_back(array);
     }
     return out;

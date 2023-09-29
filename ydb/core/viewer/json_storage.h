@@ -31,7 +31,7 @@ class TJsonStorage : public TJsonStorageBase {
     };
     enum class EVersion {
         v1,
-        v2 // only this works with sorting and filtering with usage buckets
+        v2 // only this works with sorting, limiting and filtering with usage buckets
     };
     EVersion Version = EVersion::v1;
     EGroupSort GroupSort = EGroupSort::PoolName;
@@ -397,9 +397,14 @@ public:
                     break;
             }
 
-            for (const auto& groupRow: GroupRows) {
+            ui32 start = Offset.has_value() ? Offset.value() : 0;
+            ui32 end = GroupRows.size();
+            if (Limit.has_value()) {
+                end = Min(end, start + Limit.value());
+            }
+            for (ui32 i = start; i < end; ++i) {
                 NKikimrViewer::TStorageGroupInfo* group = StorageInfo.AddStorageGroups();
-                group->SetGroupId(groupRow.GroupId);
+                group->SetGroupId(GroupRows[i].GroupId);
             }
         }
 

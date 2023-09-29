@@ -16,7 +16,7 @@ NO_PYTHON_INCLUDES()
 NO_PYTHON_COVERAGE()
 
 SRCDIR(
-    contrib/tools/python3/pycc
+    tools/py3cc
 )
 
 PY_SRCS(

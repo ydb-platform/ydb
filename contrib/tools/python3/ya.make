@@ -25,7 +25,6 @@ SRCS(
 END()
 
 RECURSE(
-    pycc
     src
     src/Lib
     src/Modules

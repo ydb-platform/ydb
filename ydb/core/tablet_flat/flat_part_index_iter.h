@@ -137,6 +137,13 @@ public:
         return Iter.GetRecord();
     }
 
+    // currently this method is needed for tests only, but it's worth to keep it for future optimizations
+    const TRecord * GetLastRecord() const {
+        Y_VERIFY(Index);
+        Y_VERIFY(Iter, "Should be called only after SeekLast call");
+        return Index->GetLastKeyRecord();
+    }
+
 private:
     EReady DataOrGone() const {
         return Iter ? EReady::Data : EReady::Gone;

@@ -52,7 +52,7 @@ public:
         for (ui32 group : xrange(size_t(1), Part->GroupsCount)) {
             AltGroups.emplace_back(Part.Get(), env, NPage::TGroupId(group));
         }
-        for (ui32 group : xrange(Part->HistoricIndexes.size())) {
+        for (ui32 group : xrange(Part->HistoricGroupsCount)) {
             HistoryGroups.emplace_back(Part.Get(), env, NPage::TGroupId(group, true));
         }
     }
@@ -158,7 +158,7 @@ private:
         if (IsValid()) {
             return Pos.GetRowId();
         }
-        if (TRowId endRowId = Part->Index.GetEndRowId(); endRowId != Max<TRowId>()) {
+        if (TRowId endRowId = Pos.GetEndRowId(); endRowId != Max<TRowId>()) {
             // This would include the last page rows when known
             return endRowId;
         }

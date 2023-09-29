@@ -104,9 +104,7 @@ namespace {
             , Eggs(MakeEggs(groups, history))
             , Tool(*Mass.Model->Scheme)
         {
-            auto pages = Eggs.Lone()->Index->End() - Eggs.Lone()->Index->Begin();
-
-            UNIT_ASSERT(pages == 9);
+            UNIT_ASSERT(NTest::IndexTools::CountMainPages(*Eggs.Lone()) == 9);
         }
 
         NTest::TPartEggs MakeEggs(bool groups, bool history) noexcept
@@ -335,9 +333,15 @@ namespace {
                 }
 
                 TMap<ui64, ui64> absoluteId;
-                auto groupIndex = Eggs.Lone()->GetGroupIndex(groupId);
-                for (auto it = groupIndex->Begin(); it != groupIndex->End(); it++) {
-                    absoluteId[absoluteId.size()] = it->GetPageId();
+                NTest::TTestEnv env;
+                TPartIndexIt groupIndex(Eggs.Lone().Get(), &env, groupId);
+                for (size_t i = 0; ; i++) {
+                    auto ready = i == 0 ? groupIndex.Seek(0) : groupIndex.Next();
+                    if (ready != EReady::Data) {
+                        Y_VERIFY(ready != EReady::Page);
+                        break;
+                    }
+                    absoluteId[absoluteId.size()] = groupIndex.GetPageId();
                 }
 
                 TSet<TPageId> actualValue;

@@ -73,6 +73,11 @@ namespace NTest {
 
             TEpoch epoch = TEpoch(root.GetEpoch());
 
+            size_t indexesRawSize = 0;
+            for (auto indexPage : eggs.IndexGroupsPages) {
+                indexesRawSize += Store->GetPageSize(0, indexPage);
+            }
+
             return
                 new TPartStore(
                     std::move(Store),
@@ -86,8 +91,7 @@ namespace NTest {
                         eggs.ByKey ? new TBloom(*eggs.ByKey) : nullptr,
                         eggs.Large ? new TFrames(*eggs.Large) : nullptr,
                         eggs.Small ? new TFrames(*eggs.Small) : nullptr,
-                        std::move(eggs.GroupIndexes),
-                        std::move(eggs.HistoricIndexes),
+                        indexesRawSize,
                         TRowVersion(minRowVersion.GetStep(), minRowVersion.GetTxId()),
                         TRowVersion(maxRowVersion.GetStep(), maxRowVersion.GetTxId()),
                         eggs.GarbageStats ? new NPage::TGarbageStats(*eggs.GarbageStats) : nullptr,
@@ -115,30 +119,23 @@ namespace NTest {
                 indexGroupsPages.push_back(lay.GetIndex());
             }
 
-            TVector<TSharedData> groupIndexes;
             for (ui32 pageId : lay.GetGroupIndexes()) {
                 indexGroupsPages.push_back(pageId);
-                groupIndexes.emplace_back(*Store->GetPage(0, pageId));
             }
-
-            TVector<TSharedData> historicIndexes;
             for (ui32 pageId : lay.GetHistoricIndexes()) {
                 indexHistoricPages.push_back(pageId);
-                historicIndexes.emplace_back(*Store->GetPage(0, pageId));
             }
 
             return {
                 true /* rooted page collection */,
-                indexGroupsPages, 
-                indexHistoricPages,
+                std::move(indexGroupsPages), 
+                std::move(indexHistoricPages),
                 Store->GetPage(0, lay.HasIndex() ? lay.GetIndex() : undef),
                 Store->GetPage(0, lay.HasScheme() ? lay.GetScheme() : undef),
                 Store->GetPage(0, lay.HasGlobs() ? lay.GetGlobs() : undef),
                 Store->GetPage(0, lay.HasByKey() ? lay.GetByKey() : undef),
                 Store->GetPage(0, lay.HasLarge() ? lay.GetLarge() : undef),
                 Store->GetPage(0, lay.HasSmall() ? lay.GetSmall() : undef),
-                std::move(groupIndexes),
-                std::move(historicIndexes),
                 Store->GetPage(0, lay.HasGarbageStats() ? lay.GetGarbageStats() : undef),
                 Store->GetPage(0, lay.HasTxIdStats() ? lay.GetTxIdStats() : undef),
             };

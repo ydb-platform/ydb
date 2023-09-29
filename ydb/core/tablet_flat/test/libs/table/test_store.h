@@ -32,8 +32,6 @@ namespace NTest {
             TData *ByKey;
             TData *Large;
             TData *Small;
-            TVector<TSharedData> GroupIndexes;
-            TVector<TSharedData> HistoricIndexes;
             TData *GarbageStats;
             TData *TxIdStats;
         };
@@ -61,6 +59,13 @@ namespace NTest {
             if (page == Max<TPageId>()) return nullptr;
 
             return &PageCollections.at(room).at(page);
+        }
+
+        size_t GetPageSize(ui32 room, ui32 page) const noexcept
+        {
+            Y_VERIFY(room < PageCollections.size(), "Room is out of bounds");
+
+            return PageCollections.at(room).at(page).size();
         }
 
         NPage::EPage GetPageType(ui32 room, ui32 page) const noexcept
@@ -129,8 +134,6 @@ namespace NTest {
                 GetPage(MainPageCollection, ByKey),
                 GetPage(MainPageCollection, Large),
                 nullptr,
-                { },
-                { },
                 nullptr,
                 nullptr,
             };

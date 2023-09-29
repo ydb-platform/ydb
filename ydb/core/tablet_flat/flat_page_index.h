@@ -255,38 +255,14 @@ namespace NPage {
                 return 0; /* cannot estimate rows for one page part */
         }
 
-        TPageId UpperPage() const noexcept
-        {
-            return Page.Begin() ? (Page.End() - 1)->GetPageId() + 1 : 0;
-        }
-
-        const TRecord* GetFirstKeyRecord() const noexcept
-        {
-            return Page.Record(0);
-        }
-
         const TRecord* GetLastKeyRecord() const noexcept
         {
             return LastKey;
         }
 
-        const TRecord* At(TRecIdx index) const noexcept
-        {
-            Y_VERIFY(index <= Page.Count);
-            auto it = Page.Begin() + index;
-            return it
-                ? it.GetRecord()
-                : GetLastKeyRecord();
-        }
-
         TRowId GetEndRowId() const noexcept
         {
             return EndRowId;
-        }
-
-        size_t RawSize() const noexcept
-        {
-            return Raw.size();
         }
 
     private:

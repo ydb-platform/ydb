@@ -63,9 +63,7 @@ namespace {
         TModel()
             : Tool(*Mass.Model->Scheme)
         {
-            auto pages = Eggs.At(0)->Index->End() - Eggs.At(0)->Index->Begin();
-
-            Y_VERIFY(pages > 120);
+            Y_VERIFY(NTest::IndexTools::CountMainPages(*Eggs.Lone()) > 120);
         }
 
         static NTest::TPartEggs MakeEggs() noexcept

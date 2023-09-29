@@ -162,23 +162,18 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
         Y_Fail("TPart has small blobs, " << Packs.size() << " page collections");
     }
 
-    TVector<TSharedData> groupIndexes;
-    groupIndexes.reserve(GroupIndexesIds.size());
+    // TODO: stop load indexes
     for (auto pageId : GroupIndexesIds) {
         auto* page = GetPage(pageId);
         if (!page) {
             Y_Fail("Missing group index page " << pageId);
         }
-        groupIndexes.emplace_back(*page);
     }
-
-    TVector<TSharedData> historicIndexes(Reserve(HistoricIndexesIds.size()));
     for (auto pageId : HistoricIndexesIds) {
         auto* page = GetPage(pageId);
         if (!page) {
             Y_Fail("Missing historic index page " << pageId);
         }
-        historicIndexes.emplace_back(*page);
     }
 
     const auto extra = BlobsLabelFor(Packs[0]->PageCollection->Label());
@@ -194,19 +189,25 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
         groupIndexesIds.push_back(pageId);
     }
 
+    // TODO: put index size to stat?
+    // TODO: include history indexes bytes
+    size_t indexesRawSize = 0;
+    for (auto indexPage : groupIndexesIds) {
+        indexesRawSize += GetPageSize(indexPage);
+    }
+
     auto *partStore = new TPartStore(
         Packs.front()->PageCollection->Label(),
         {
             epoch,
             TPartScheme::Parse(*scheme, Rooted),
-            { groupIndexesIds, HistoricIndexesIds },
+            { std::move(groupIndexesIds), HistoricIndexesIds },
             *index,
             blobs ? new NPage::TExtBlobs(*blobs, extra) : nullptr,
             byKey ? new NPage::TBloom(*byKey) : nullptr,
             large ? new NPage::TFrames(*large) : nullptr,
             small ? new NPage::TFrames(*small) : nullptr,
-            std::move(groupIndexes),
-            std::move(historicIndexes),
+            indexesRawSize,
             MinRowVersion,
             MaxRowVersion,
             garbageStats ? new NPage::TGarbageStats(*garbageStats) : nullptr,

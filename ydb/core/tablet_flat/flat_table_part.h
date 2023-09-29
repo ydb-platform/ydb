@@ -61,8 +61,7 @@ namespace NTable {
             TIntrusiveConstPtr<NPage::TBloom> ByKey;
             TIntrusiveConstPtr<NPage::TFrames> Large;
             TIntrusiveConstPtr<NPage::TFrames> Small;
-            TVector<TSharedData> GroupIndexes;
-            TVector<TSharedData> HistoricIndexes;
+            size_t IndexesRawSize;
             TRowVersion MinRowVersion;
             TRowVersion MaxRowVersion;
             TIntrusiveConstPtr<NPage::TGarbageStats> GarbageStats;
@@ -87,29 +86,19 @@ namespace NTable {
             , Small(std::move(params.Small))
             , IndexPages(std::move(params.IndexPages))
             , Index(std::move(params.Index))
-            , GroupIndexes(
-                std::make_move_iterator(params.GroupIndexes.begin()),
-                std::make_move_iterator(params.GroupIndexes.end()))
-            , HistoricIndexes(
-                std::make_move_iterator(params.HistoricIndexes.begin()),
-                std::make_move_iterator(params.HistoricIndexes.end()))
             , ByKey(std::move(params.ByKey))
             , GarbageStats(std::move(params.GarbageStats))
             , TxIdStats(std::move(params.TxIdStats))
             , Stat(stat)
             , GroupsCount(IndexPages.Groups.size())
             , HistoricGroupsCount(IndexPages.Historic.size())
-            , IndexesRawSize(Index.RawSize() + SumRawSize(GroupIndexes))
+            , IndexesRawSize(params.IndexesRawSize)
             , MinRowVersion(params.MinRowVersion)
             , MaxRowVersion(params.MaxRowVersion)
         {
             Y_VERIFY(Scheme->Groups.size() == GroupsCount,
                 "Part has scheme with %" PRISZT " groups, but %" PRISZT " indexes",
                 Scheme->Groups.size(), GroupsCount);
-            Y_VERIFY(HistoricIndexes.empty() || HistoricIndexes.size() == GroupsCount,
-                "Part has %" PRISZT " indexes, but %" PRISZT " historic indexes",
-                GroupsCount, HistoricIndexes.size());
-
             Y_VERIFY(!HistoricGroupsCount || HistoricGroupsCount == GroupsCount,
                 "Part has %" PRISZT " indexes, but %" PRISZT " historic indexes",
                 GroupsCount, HistoricGroupsCount);
@@ -141,24 +130,6 @@ namespace NTable {
         virtual ui8 GetPageChannel(NPage::TPageId id, NPage::TGroupId groupId = { }) const = 0;
         virtual ui8 GetPageChannel(ELargeObj lob, ui64 ref) const = 0;
 
-        const NPage::TIndex& GetGroupIndex(NPage::TGroupId groupId) const noexcept {
-            if (!groupId.Historic) {
-                if (groupId.Index == 0) {
-                    return Index;
-                } else {
-                    Y_VERIFY(groupId.Index <= GroupIndexes.size(),
-                        "Group index %" PRIu32 " is missing",
-                        groupId.Index);
-                    return GroupIndexes[groupId.Index - 1];
-                }
-            } else {
-                Y_VERIFY(groupId.Index < HistoricIndexes.size(),
-                    "Historic index %" PRIu32 " is missing",
-                    groupId.Index);
-                return HistoricIndexes[groupId.Index];
-            }
-        }
-
     protected:
         // Helper for CloneWithEpoch
         TPart(const TPart& src, TEpoch epoch)
@@ -170,8 +141,6 @@ namespace NTable {
             , Small(src.Small)
             , IndexPages(src.IndexPages)
             , Index(src.Index)
-            , GroupIndexes(src.GroupIndexes)
-            , HistoricIndexes(src.HistoricIndexes)
             , ByKey(src.ByKey)
             , GarbageStats(src.GarbageStats)
             , Stat(src.Stat)
@@ -182,15 +151,6 @@ namespace NTable {
             , MaxRowVersion(src.MaxRowVersion)
         { }
 
-    private:
-        static size_t SumRawSize(const TVector<NPage::TIndex>& indexes) {
-            size_t ret = 0;
-            for (auto& index : indexes) {
-                ret += index.RawSize();
-            }
-            return ret;
-        }
-
     public:
         const TLogoBlobID Label;
         const TEpoch Epoch;
@@ -200,8 +160,6 @@ namespace NTable {
         const TIntrusiveConstPtr<NPage::TFrames> Small;
         const TIndexPages IndexPages;
         const NPage::TIndex Index;
-        const TVector<NPage::TIndex> GroupIndexes;
-        const TVector<NPage::TIndex> HistoricIndexes;
         const TIntrusiveConstPtr<NPage::TBloom> ByKey;
         const TIntrusiveConstPtr<NPage::TGarbageStats> GarbageStats;
         const TIntrusiveConstPtr<NPage::TTxIdStatsPage> TxIdStats;

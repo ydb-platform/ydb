@@ -3,18 +3,21 @@
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 
+#include <util/random/random.h>
+
 using namespace NYdb::NConsoleClient;
 
 int TCommandWorkloadTransferTopicToTableInit::TScenario::DoRun(const TConfig& config)
 {
     CreateTopic(config.Database, TopicName, TopicPartitionCount, ConsumerCount);
-    CreateTable(TableName, TablePartitionCount);
+    CreateWriteOnlyTable(GetWriteOnlyTableName(), TablePartitionCount);
+    CreateReadOnlyTable(GetReadOnlyTableName(), TablePartitionCount);
 
     return EXIT_SUCCESS;
 }
 
-void TCommandWorkloadTransferTopicToTableInit::TScenario::CreateTable(const TString& name,
-                                                                      ui32 partitionCount)
+void TCommandWorkloadTransferTopicToTableInit::TScenario::CreateWriteOnlyTable(const TString& name,
+                                                                               ui32 partitionCount)
 {
     TStringBuilder query;
     query << "CREATE TABLE `";
@@ -26,6 +29,53 @@ void TCommandWorkloadTransferTopicToTableInit::TScenario::CreateTable(const TStr
     query << ")";
 
     ExecSchemeQuery(query);
+}
+
+void TCommandWorkloadTransferTopicToTableInit::TScenario::CreateReadOnlyTable(const TString& name,
+                                                                              ui32 partitionCount)
+{
+    TStringBuilder query;
+    query << "CREATE TABLE `";
+    query << name;
+    query << "` (id Uint64, PRIMARY KEY (id)) WITH (UNIFORM_PARTITIONS = ";
+    query << partitionCount;
+    query << ", AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = ";
+    query << partitionCount;
+    query << ")";
+
+    ExecSchemeQuery(query);
+
+    for (int i = 0; i < 10; ++i) {
+        UpsertRandomKeyBlock();
+    }
+}
+
+void TCommandWorkloadTransferTopicToTableInit::TScenario::UpsertRandomKeyBlock()
+{
+    TString query = R"(
+        DECLARE $rows AS List<Struct<
+            id: Uint64
+        >>;
+
+        UPSERT INTO `)" + GetReadOnlyTableName() + R"(` (SELECT id FROM AS_TABLE($rows));
+    )";
+
+    NYdb::TParamsBuilder builder;
+
+    auto& rows = builder.AddParam("$rows");
+    rows.BeginList();
+    for (int i = 0; i < 100'000; ++i) {
+        rows.AddListItem()
+            .BeginStruct()
+            .AddMember("id").Uint64(RandomNumber<ui64>())
+            .EndStruct();
+    }
+    rows.EndList();
+    rows.Build();
+
+    auto params = builder.Build();
+
+    ExecDataQuery(query, params);
 }
 
 TCommandWorkloadTransferTopicToTableInit::TCommandWorkloadTransferTopicToTableInit() :

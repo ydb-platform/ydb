@@ -19,6 +19,12 @@ namespace NYdb {
                 ui64 LagMessages;
                 ui64 LagTime;
             };
+            struct SelectEvent {
+                ui64 Time;
+            };
+            struct UpsertEvent {
+                ui64 Time;
+            };
             struct CommitTxEvent {
                 ui64 Time;
             };
@@ -28,6 +34,8 @@ namespace NYdb {
             void AddEvent(const WriterEvent& event);
             void AddEvent(const ReaderEvent& event);
             void AddEvent(const LagEvent& event);
+            void AddEvent(const SelectEvent& event);
+            void AddEvent(const UpsertEvent& event);
             void AddEvent(const CommitTxEvent& event);
 
             ui64 WriteBytes;
@@ -39,6 +47,8 @@ namespace NYdb {
             ui64 ReadBytes;
             ui64 ReadMessages;
             NHdr::THistogram FullTimeHist;
+            NHdr::THistogram SelectTimeHist;
+            NHdr::THistogram UpsertTimeHist;
             NHdr::THistogram CommitTxTimeHist;
 
         private:

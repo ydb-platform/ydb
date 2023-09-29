@@ -44,6 +44,16 @@ void TTopicOperationsScenario::EnsureWarmupSecIsValid() const
     }
 }
 
+TString TTopicOperationsScenario::GetReadOnlyTableName() const
+{
+    return TableName + "-ro";
+}
+
+TString TTopicOperationsScenario::GetWriteOnlyTableName() const
+{
+    return TableName;
+}
+
 THolder<TLogBackend> TTopicOperationsScenario::MakeLogBackend(TConfig::EVerbosityLevel level)
 {
     return CreateLogBackend("cerr",
@@ -74,7 +84,8 @@ void TTopicOperationsScenario::InitStatsCollector()
                                                        TotalSec.Seconds(),
                                                        WarmupSec.Seconds(),
                                                        Percentile,
-                                                       ErrorFlag);
+                                                       ErrorFlag,
+                                                       UseTransactions);
 }
 
 void TTopicOperationsScenario::CreateTopic(const TString& database,
@@ -115,6 +126,17 @@ void TTopicOperationsScenario::ExecSchemeQuery(const TString& query)
     NTable::TTableClient client(*Driver);
     auto session = GetSession(client);
     auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+    ThrowOnError(result);
+}
+
+void TTopicOperationsScenario::ExecDataQuery(const TString& query,
+                                             const NYdb::TParams& params)
+{
+    NTable::TTableClient client(*Driver);
+    auto session = GetSession(client);
+    auto result = session.ExecuteDataQuery(query,
+                                           NTable::TTxControl::BeginTx(NTable::TTxSettings::SerializableRW()).CommitTx(),
+                                           params).ExtractValueSync();
     ThrowOnError(result);
 }
 
@@ -175,13 +197,17 @@ void TTopicOperationsScenario::StartConsumerThreads(std::vector<std::future<void
                 .StartedCount = count,
                 .Database = database,
                 .TopicName = TopicName,
-                .TableName = TableName,
+                .TableName = GetWriteOnlyTableName(),
+                .ReadOnlyTableName = GetReadOnlyTableName(),
                 .ConsumerIdx = consumerIdx,
                 .ConsumerPrefix = ConsumerPrefix,
                 .ReaderIdx = readerIdx,
                 .UseTransactions = UseTransactions,
-                .UseTopicApiCommit = UseTopicApiCommit,
-                .CommitPeriod = CommitPeriod
+                .UseTopicCommit = OnlyTableInTx,
+                .UseTableSelect = UseTableSelect && !OnlyTopicInTx,
+                .UseTableUpsert = !OnlyTopicInTx,
+                .CommitPeriod = CommitPeriod,
+                .CommitMessages = CommitMessages
             };
 
             threads.push_back(std::async([readerParams = std::move(readerParams)]() mutable { TTopicWorkloadReader::RetryableReaderLoop(readerParams); }));

@@ -6,11 +6,18 @@ namespace NYdb::NConsoleClient {
 
 class TTransactionSupport {
 public:
+    struct TExecutionTimes {
+        TDuration SelectTime;
+        TDuration UpsertTime;
+        TDuration CommitTime;
+    };
+
     TTransactionSupport(const NYdb::TDriver& driver,
-                        const TString& tableName);
+                        const TString& readOnlyTableName,
+                        const TString& writeOnyTableName);
 
     void BeginTx();
-    void CommitTx();
+    TExecutionTimes CommitTx(bool useTableSelect, bool useTableUpsert);
     void AppendRow(const TString& data);
 
     struct TRow {
@@ -23,11 +30,13 @@ public:
 
 private:
     void CreateSession();
-    void UpsertIntoTable();
-    void Commit();
+    TDuration SelectFromTable();
+    TDuration UpsertIntoTable();
+    TDuration Commit();
 
     NYdb::NTable::TTableClient TableClient;
-    TString TableName;
+    TString ReadOnlyTableName;
+    TString WriteOnlyTableName;
     std::optional<NYdb::NTable::TSession> Session;
 };
 

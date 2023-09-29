@@ -18,6 +18,7 @@ class TLog;
 namespace NYdb {
 
 class TDriver;
+class TParams;
 
 }
 
@@ -41,6 +42,9 @@ public:
     void EnsurePercentileIsValid() const;
     void EnsureWarmupSecIsValid() const;
 
+    TString GetReadOnlyTableName() const;
+    TString GetWriteOnlyTableName() const;
+
     TDuration TotalSec;
     TDuration WindowSec;
     TDuration WarmupSec;
@@ -61,8 +65,11 @@ public:
     TString TableName;
     ui32 TablePartitionCount = 1;
     bool UseTransactions = false;
-    size_t CommitPeriod = 15;
-    bool UseTopicApiCommit = false;
+    size_t CommitPeriod = 10;
+    size_t CommitMessages = 1'000'000;
+    bool OnlyTopicInTx = false;
+    bool OnlyTableInTx = false;
+    bool UseTableSelect = true;
 
 protected:
     void CreateTopic(const TString& database,
@@ -75,6 +82,7 @@ protected:
     void DropTable(const TString& database, const TString& table);
 
     void ExecSchemeQuery(const TString& query);
+    void ExecDataQuery(const TString& query, const NYdb::TParams& params);
 
     void StartConsumerThreads(std::vector<std::future<void>>& threads,
                               const TString& database);

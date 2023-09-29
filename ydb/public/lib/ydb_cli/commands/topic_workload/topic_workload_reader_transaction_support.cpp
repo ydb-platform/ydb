@@ -6,17 +6,23 @@ namespace NYdb::NConsoleClient {
 
 static void EnsureSuccess(const NYdb::TStatus& status, std::string_view name)
 {
-    Y_VERIFY(!status.IsTransportError());
+    if (status.IsTransportError()) {
+        Cerr << "transport error on " << name << ": " << status << Endl;
+        ythrow yexception() << "transport error on " << name << ": " << status;
+    }
 
     if (!status.IsSuccess()) {
+        Cerr << "error on " << name << ": " << status << Endl;
         ythrow yexception() << "error on " << name << ": " << status;
     }
 }
 
 TTransactionSupport::TTransactionSupport(const NYdb::TDriver& driver,
-                                         const TString& tableName) :
+                                         const TString& readOnlyTableName,
+                                         const TString& writeOnlyTableName) :
     TableClient(driver),
-    TableName(tableName)
+    ReadOnlyTableName(readOnlyTableName),
+    WriteOnlyTableName(writeOnlyTableName)
 {
 }
 
@@ -37,15 +43,20 @@ void TTransactionSupport::BeginTx()
     Transaction = result.GetTransaction();
 }
 
-void TTransactionSupport::CommitTx()
+auto TTransactionSupport::CommitTx(bool useTableSelect, bool useTableUpsert) -> TExecutionTimes
 {
     Y_VERIFY(Transaction);
 
-    UpsertIntoTable();
-    Commit();
+    TExecutionTimes result;
+
+    result.SelectTime = useTableSelect ? SelectFromTable() : TDuration::Seconds(0);
+    result.UpsertTime = useTableUpsert ? UpsertIntoTable() : TDuration::Seconds(0);
+    result.CommitTime = Commit();
 
     Rows.clear();
     Transaction = std::nullopt;
+
+    return result;
 }
 
 void TTransactionSupport::AppendRow(const TString& m)
@@ -67,18 +78,62 @@ void TTransactionSupport::CreateSession()
     Session = result.GetSession();
 }
 
-void TTransactionSupport::UpsertIntoTable()
+TDuration TTransactionSupport::SelectFromTable()
 {
     Y_VERIFY(Transaction);
 
-    TString query = R"(
-        DECLARE $rows AS List<Struct<
-            id: Uint64,
-            value: String
-        >>;
+    ui64 left = RandomNumber<ui64>();
+    ui64 right = RandomNumber<ui64>();
 
-        UPSERT INTO `)" + TableName + R"(` (SELECT id, value FROM AS_TABLE($rows));
-    )";
+    if (right < left) {
+        std::swap(left, right);
+    }
+
+    TString query = "                                                                            \
+        DECLARE $left AS Uint64;                                                                 \
+        DECLARE $right AS Uint64;                                                                \
+                                                                                                 \
+        SELECT COUNT(id) FROM `" + ReadOnlyTableName + "` WHERE ($left <= id) AND (id < $right); \
+    ";
+
+    NYdb::TParamsBuilder builder;
+
+    builder.AddParam("$left").Uint64(left).Build();
+    builder.AddParam("$right").Uint64(right).Build();
+
+    auto params = builder.Build();
+
+    NYdb::NTable::TExecDataQuerySettings settings;
+    settings.KeepInQueryCache(true);
+
+    auto runQuery = [this, &query, &params, &settings](NYdb::NTable::TSession) -> NYdb::TStatus {
+        return Transaction->GetSession().ExecuteDataQuery(query,
+                                                          NYdb::NTable::TTxControl::Tx(*Transaction),
+                                                          params,
+                                                          settings).GetValueSync();
+    };
+
+    auto beginTime = TInstant::Now();
+    auto result = TableClient.RetryOperationSync(runQuery);
+    auto duration = TInstant::Now() - beginTime;
+
+    EnsureSuccess(result, "SELECT");
+
+    return duration;
+}
+
+TDuration TTransactionSupport::UpsertIntoTable()
+{
+    Y_VERIFY(Transaction);
+
+    TString query = "                                                                     \
+        DECLARE $rows AS List<Struct<                                                     \
+            id: Uint64,                                                                   \
+            value: String                                                                 \
+        >>;                                                                               \
+                                                                                          \
+        UPSERT INTO `" + WriteOnlyTableName + "` (SELECT id, value FROM AS_TABLE($rows)); \
+    ";
 
     NYdb::TParamsBuilder builder;
 
@@ -106,17 +161,28 @@ void TTransactionSupport::UpsertIntoTable()
                                                           settings).GetValueSync();
     };
 
+
+    auto beginTime = TInstant::Now();
     auto result = TableClient.RetryOperationSync(runQuery);
+    auto duration = TInstant::Now() - beginTime;
+
     EnsureSuccess(result, "UPSERT");
+
+    return duration;
 }
 
-void TTransactionSupport::Commit()
+TDuration TTransactionSupport::Commit()
 {
     Y_VERIFY(Transaction);
 
     auto settings = NYdb::NTable::TCommitTxSettings();
+    auto beginTime = TInstant::Now();
     auto result = Transaction->Commit(settings).GetValueSync();
+    auto duration = TInstant::Now() - beginTime;
+
     EnsureSuccess(result, "COMMIT");
+
+    return duration;
 }
 
 }

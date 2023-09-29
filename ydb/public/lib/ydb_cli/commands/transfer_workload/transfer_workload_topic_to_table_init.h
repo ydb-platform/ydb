@@ -17,7 +17,10 @@ private:
     class TScenario : public TTopicOperationsScenario {
         int DoRun(const TConfig& config) override;
 
-        void CreateTable(const TString& table, ui32 partitionCount);
+        void CreateWriteOnlyTable(const TString& table, ui32 partitionCount);
+        void CreateReadOnlyTable(const TString& table, ui32 partitionCount);
+
+        void UpsertRandomKeyBlock();
     };
 
     TScenario Scenario;

@@ -11,9 +11,11 @@ TTopicWorkloadStatsCollector::TTopicWorkloadStatsCollector(
     bool quiet, bool printTimestamp,
     ui32 windowDurationSec, ui32 totalDurationSec, ui32 warmupSec,
     double percentile,
-    std::shared_ptr<std::atomic_bool> errorFlag)
+    std::shared_ptr<std::atomic_bool> errorFlag,
+    bool transferMode)
     : WriterCount(writerCount)
     , ReaderCount(readerCount)
+    , TransferMode(transferMode)
     , Quiet(quiet)
     , PrintTimestamp(printTimestamp)
     , WindowSec(windowDurationSec)
@@ -30,6 +32,8 @@ TTopicWorkloadStatsCollector::TTopicWorkloadStatsCollector(
     for (size_t readerIdx = 0; readerIdx < readerCount; readerIdx++) {
         AddQueue(ReaderEventQueues);
         AddQueue(LagEventQueues);
+        AddQueue(SelectEventQueues);
+        AddQueue(UpsertEventQueues);
         AddQueue(CommitTxEventQueues);
     }
 }
@@ -43,17 +47,39 @@ void TTopicWorkloadStatsCollector::PrintHeader(bool total) const {
     header << "Window\t";
     if (WriterCount > 0)
         header << "Write speed\tWrite time\tInflight\t";
-    if (ReaderCount > 0)
-        header << "Lag\t\tLag time\tRead speed\tFull time\t";
+    if (ReaderCount > 0) {
+        if (!TransferMode)
+            header << "Lag\t\tLag time\t";
+        header << "Read speed\t";
+        if (TransferMode) {
+            header << "Topic time\t";
+        } else {
+            header << "Full time\t";
+        }
+    }
+    if (TransferMode) {
+        header << "Select time\t";
+        header << "Upsert time\t";
+        header << "Commit time\t";
+    }
     if (PrintTimestamp)
         header << "Timestamp";
+
     header << "\n";
 
     header << "#\t";
     if (WriterCount > 0)
         header << "msg/s\tMB/s\tpercentile,ms\tpercentile,msg\t";
-    if (ReaderCount > 0)
-        header << "percentile,msg\tpercentile,ms\tmsg/s\tMB/s\tpercentile,ms";
+    if (ReaderCount > 0) {
+        if (!TransferMode)
+            header << "percentile,msg\tpercentile,ms\t";
+        header << "msg/s\tMB/s\tpercentile,ms\t";
+    }
+    if (TransferMode) {
+        header << "percentile,ms\t";
+        header << "percentile,ms\t";
+        header << "percentile,ms\t";
+    }
     header << "\n";
 
     Cout << header << Flush;
@@ -108,11 +134,18 @@ void TTopicWorkloadStatsCollector::PrintStats(TMaybe<ui32> windowIt) const {
              << "\t" << stats.InflightMessagesHist.GetValueAtPercentile(Percentile) << "\t";
     }
     if (ReaderCount > 0) {
-        Cout << "\t" << stats.LagMessagesHist.GetValueAtPercentile(Percentile) << "\t"
-             << "\t" << stats.LagTimeHist.GetValueAtPercentile(Percentile) << "\t"
-             << "\t" << (int)(stats.ReadMessages / seconds)
+        if (!TransferMode) {
+            Cout << "\t" << stats.LagMessagesHist.GetValueAtPercentile(Percentile) << "\t"
+                 << "\t" << stats.LagTimeHist.GetValueAtPercentile(Percentile) << "\t";
+        }
+        Cout << "\t" << (int)(stats.ReadMessages / seconds)
              << "\t" << (int)(stats.ReadBytes / seconds / 1024 / 1024)
              << "\t" << stats.FullTimeHist.GetValueAtPercentile(Percentile) << "\t";
+    }
+    if (TransferMode) {
+        Cout << "\t" << stats.SelectTimeHist.GetValueAtPercentile(Percentile) << "\t";
+        Cout << "\t" << stats.UpsertTimeHist.GetValueAtPercentile(Percentile) << "\t";
+        Cout << "\t" << stats.CommitTxTimeHist.GetValueAtPercentile(Percentile) << "\t";
     }
     if (PrintTimestamp) {
         Cout << "\t" << Now().ToStringUpToSeconds();
@@ -125,6 +158,8 @@ void TTopicWorkloadStatsCollector::CollectThreadEvents()
     CollectThreadEvents(WriterEventQueues);
     CollectThreadEvents(ReaderEventQueues);
     CollectThreadEvents(LagEventQueues);
+    CollectThreadEvents(SelectEventQueues);
+    CollectThreadEvents(UpsertEventQueues);
     CollectThreadEvents(CommitTxEventQueues);
 }
 
@@ -168,6 +203,16 @@ void TTopicWorkloadStatsCollector::AddReaderEvent(size_t readerIdx, const TTopic
 void TTopicWorkloadStatsCollector::AddLagEvent(size_t readerIdx, const TTopicWorkloadStats::LagEvent& event)
 {
     AddEvent(readerIdx, LagEventQueues, event);
+}
+
+void TTopicWorkloadStatsCollector::AddSelectEvent(size_t readerIdx, const TTopicWorkloadStats::SelectEvent& event)
+{
+    AddEvent(readerIdx, SelectEventQueues, event);
+}
+
+void TTopicWorkloadStatsCollector::AddUpsertEvent(size_t readerIdx, const TTopicWorkloadStats::UpsertEvent& event)
+{
+    AddEvent(readerIdx, UpsertEventQueues, event);
 }
 
 void TTopicWorkloadStatsCollector::AddCommitTxEvent(size_t readerIdx, const TTopicWorkloadStats::CommitTxEvent& event)

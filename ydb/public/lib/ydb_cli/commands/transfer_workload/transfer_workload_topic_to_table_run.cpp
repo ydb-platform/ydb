@@ -80,14 +80,24 @@ void TCommandWorkloadTransferTopicToTableRun::Config(TConfig& config)
         .Optional()
         .DefaultValue((TStringBuilder() << NTopic::ECodec::RAW))
         .StoreMappedResultT<TString>(&Scenario.Codec, &TCommandWorkloadTopicParams::StrToCodec);
+
+    config.Opts->MutuallyExclusive("message-rate", "byte-rate");
+
     config.Opts->AddLongOption("commit-period", "Waiting time between commit.")
         .DefaultValue(10)
         .StoreResult(&Scenario.CommitPeriod);
-    config.Opts->AddLongOption("use-topic-commit", "Use TopicAPI commit.")
-        .DefaultValue(false)
-        .StoreTrue(&Scenario.UseTopicApiCommit);
+    config.Opts->AddLongOption("commit-messages", "Number of messages per transaction")
+        .DefaultValue(1'000'000)
+        .StoreResult(&Scenario.CommitMessages);
 
-    config.Opts->MutuallyExclusive("message-rate", "byte-rate");
+    config.Opts->AddLongOption("only-topic-in-tx", "Use only topic in transaction")
+        .DefaultValue(false)
+        .StoreTrue(&Scenario.OnlyTopicInTx);
+    config.Opts->AddLongOption("only-table-in-tx", "Use only table in transaction")
+        .DefaultValue(false)
+        .StoreTrue(&Scenario.OnlyTableInTx);
+
+    config.Opts->MutuallyExclusive("only-topic-in-tx", "only-table-in-tx");
 
     config.IsNetworkIntensive = true;
 }

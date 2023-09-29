@@ -15,7 +15,8 @@ namespace NYdb {
                 bool quiet, bool printTimestamp,
                 ui32 windowDurationSec, ui32 totalDurationSec, ui32 warmupSec,
                 double Percentile,
-                std::shared_ptr<std::atomic_bool> errorFlag);
+                std::shared_ptr<std::atomic_bool> errorFlag,
+                bool transferMode);
 
             void PrintWindowStatsLoop();
 
@@ -25,6 +26,8 @@ namespace NYdb {
             void AddWriterEvent(size_t writerIdx, const TTopicWorkloadStats::WriterEvent& event);
             void AddReaderEvent(size_t readerIdx, const TTopicWorkloadStats::ReaderEvent& event);
             void AddLagEvent(size_t readerIdx, const TTopicWorkloadStats::LagEvent& event);
+            void AddSelectEvent(size_t readerIdx, const TTopicWorkloadStats::SelectEvent& event);
+            void AddUpsertEvent(size_t readerIdx, const TTopicWorkloadStats::UpsertEvent& event);
             void AddCommitTxEvent(size_t readerIdx, const TTopicWorkloadStats::CommitTxEvent& event);
 
             ui64 GetTotalReadMessages() const;
@@ -49,10 +52,13 @@ namespace NYdb {
 
             size_t WriterCount;
             size_t ReaderCount;
+            bool TransferMode;
 
             TEventQueues<TTopicWorkloadStats::WriterEvent> WriterEventQueues;
             TEventQueues<TTopicWorkloadStats::ReaderEvent> ReaderEventQueues;
             TEventQueues<TTopicWorkloadStats::LagEvent> LagEventQueues;
+            TEventQueues<TTopicWorkloadStats::SelectEvent> SelectEventQueues;
+            TEventQueues<TTopicWorkloadStats::UpsertEvent> UpsertEventQueues;
             TEventQueues<TTopicWorkloadStats::CommitTxEvent> CommitTxEventQueues;
 
             bool Quiet;

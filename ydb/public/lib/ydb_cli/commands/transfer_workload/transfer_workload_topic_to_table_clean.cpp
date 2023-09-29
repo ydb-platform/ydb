@@ -8,7 +8,8 @@ using namespace NYdb::NConsoleClient;
 int TCommandWorkloadTransferTopicToTableClean::TScenario::DoRun(const TConfig& config)
 {
     DropTopic(config.Database, TopicName);
-    DropTable(config.Database, TableName);
+    DropTable(config.Database, GetWriteOnlyTableName());
+    DropTable(config.Database, GetReadOnlyTableName());
 
     return EXIT_SUCCESS;
 }

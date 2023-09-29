@@ -22,12 +22,16 @@ namespace NYdb {
             TString Database;
             TString TopicName;
             TString TableName;
+            TString ReadOnlyTableName;
             ui32 ConsumerIdx;
             TString ConsumerPrefix;
             ui64 ReaderIdx;
             bool UseTransactions = false;
-            bool UseTopicApiCommit = false;
+            bool UseTopicCommit = false;
+            bool UseTableSelect = true;
+            bool UseTableUpsert = true;
             size_t CommitPeriod = 15;
+            size_t CommitMessages = 1'000'000;
         };
 
         class TTransactionSupport;

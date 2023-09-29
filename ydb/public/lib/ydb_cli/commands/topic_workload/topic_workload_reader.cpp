@@ -35,7 +35,7 @@ void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams& params, TInsta
     }
     
     if (params.UseTransactions) {
-        txSupport.emplace(params.Driver, params.TableName);
+        txSupport.emplace(params.Driver, params.ReadOnlyTableName, params.TableName);
     }
 
     NYdb::NTopic::TReadSessionSettings settings;
@@ -93,7 +93,7 @@ void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams& params, TInsta
                         << " createTime " << message.GetCreateTime() << " fullTimeMs " << fullTime);
                 }
 
-                if (!txSupport || params.UseTopicApiCommit) {
+                if (!txSupport || params.UseTopicCommit) {
                     dataEvent->Commit();
                 }
             } else if (auto* createPartitionStreamEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&event)) {
@@ -143,12 +143,14 @@ TVector<NYdb::NTopic::TReadSessionEvent::TEvent> TTopicWorkloadReader::GetEvents
 
     settings.Block(false);
 
-    if (txSupport && !params.UseTopicApiCommit) {
+    if (txSupport) {
         if (!txSupport->Transaction) {
             txSupport->BeginTx();
         }
 
-        settings.Tx(*txSupport->Transaction);
+        if (!params.UseTopicCommit) {
+            settings.Tx(*txSupport->Transaction);
+        }
     }
 
     return readSession.GetEvents(settings);
@@ -161,7 +163,7 @@ void TTopicWorkloadReader::TryCommitTx(TTopicWorkloadReaderParams& params,
 {
     Y_VERIFY(txSupport);
 
-    if (commitTime > Now()) {
+    if ((commitTime > Now()) && (params.CommitMessages > txSupport->Rows.size())) {
         return;
     }
 
@@ -178,11 +180,11 @@ void TTopicWorkloadReader::TryCommitTableChanges(TTopicWorkloadReaderParams& par
         return;
     }
 
-    auto begin = TInstant::Now();
-    txSupport->CommitTx();
-    ui64 duration = (TInstant::Now() - begin).MilliSeconds();
+    auto execTimes = txSupport->CommitTx(params.UseTableSelect, params.UseTableUpsert);
 
-    params.StatsCollector->AddCommitTxEvent(params.ReaderIdx, {duration});
+    params.StatsCollector->AddSelectEvent(params.ReaderIdx, {execTimes.SelectTime.MilliSeconds()});
+    params.StatsCollector->AddUpsertEvent(params.ReaderIdx, {execTimes.UpsertTime.MilliSeconds()});
+    params.StatsCollector->AddCommitTxEvent(params.ReaderIdx, {execTimes.CommitTime.MilliSeconds()});
 }
 
 void TTopicWorkloadReader::GracefullShutdown(TVector<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>& stopPartitionSessionEvents)

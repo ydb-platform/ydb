@@ -214,6 +214,9 @@ DEFINE_ENUM(EObjectType,
     ((AccessControlObjectNamespace)                 (432))
     ((AccessControlObjectNamespaceMap)              (433))
 
+    // Sequoia nodes
+    ((SequoiaMapNode)                              (1504))
+
     // Cypress shards
     ((CypressShard)                               (11004))
     ((CypressShardMap)                            (11005))

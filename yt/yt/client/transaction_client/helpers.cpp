@@ -24,13 +24,14 @@ bool IsMasterTransactionId(TTransactionId id)
         type == EObjectType::SystemNestedTransaction;
 }
 
+bool IsTabletTransactionType(NObjectClient::EObjectType type)
+{
+    return type == EObjectType::AtomicTabletTransaction || type == EObjectType::NonAtomicTabletTransaction;
+}
+
 void ValidateTabletTransactionId(TTransactionId id)
 {
-    auto type = TypeFromId(id);
-    if (type != EObjectType::Transaction &&
-        type != EObjectType::AtomicTabletTransaction &&
-        type != EObjectType::NonAtomicTabletTransaction)
-    {
+    if (!IsTabletTransactionType(TypeFromId(id))) {
         THROW_ERROR_EXCEPTION("%v is not a valid tablet transaction id",
             id);
     }

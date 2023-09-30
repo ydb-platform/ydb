@@ -110,7 +110,8 @@ bool IsVersionedType(EObjectType type)
         type == EObjectType::RootstockMap ||
         type == EObjectType::Scion ||
         type == EObjectType::ScionMap ||
-        type == EObjectType::ClusterProxyNode;
+        type == EObjectType::ClusterProxyNode ||
+        type == EObjectType::SequoiaMapNode;
 }
 
 bool IsUserType(EObjectType type)

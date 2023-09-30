@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: boto3
-Version: 1.28.48
+Version: 1.28.49
 Summary: The AWS SDK for Python
 Home-page: https://github.com/boto/boto3
 Author: Amazon Web Services
@@ -24,7 +24,7 @@ Classifier: Programming Language :: Python :: 3.12
 Requires-Python: >= 3.7
 License-File: LICENSE
 License-File: NOTICE
-Requires-Dist: botocore (<1.32.0,>=1.31.48)
+Requires-Dist: botocore (<1.32.0,>=1.31.49)
 Requires-Dist: jmespath (<2.0.0,>=0.7.1)
 Requires-Dist: s3transfer (<0.7.0,>=0.6.0)
 Provides-Extra: crt
@@ -113,7 +113,7 @@ Then, set up a default region (in e.g. ``~/.aws/config``):
    [default]
    region=us-east-1
 
-Other credentials configuration method can be found `here <https://boto3.amazonaws.com/v1/documentation/api/latest/guide/credentials.html>`__
+Other credential configuration methods can be found `here <https://boto3.amazonaws.com/v1/documentation/api/latest/guide/credentials.html>`__
 
 Then, from a Python interpreter:
 

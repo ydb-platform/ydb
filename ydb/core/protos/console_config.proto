@@ -247,6 +247,7 @@ message TSetYamlConfigRequest {
 }
 
 message TSetYamlConfigResponse {
+    repeated Ydb.Issue.IssueMessage Issues = 1;
 }
 
 message TReplaceYamlConfigRequest {
@@ -255,6 +256,7 @@ message TReplaceYamlConfigRequest {
 }
 
 message TReplaceYamlConfigResponse {
+    repeated Ydb.Issue.IssueMessage Issues = 1;
 }
 
 message TDropConfigRequest {

@@ -180,10 +180,10 @@ public:
     explicit TDynamicConfigClient(const TDriver& driver);
 
     // Set config
-    TAsyncStatus SetConfig(const TString& config, bool dryRun = false, const TClusterConfigSettings& settings = {});
+    TAsyncStatus SetConfig(const TString& config, bool dryRun = false, bool allowUnknownFields = false, const TClusterConfigSettings& settings = {});
 
     // Replace config
-    TAsyncStatus ReplaceConfig(const TString& config, bool dryRun = false, const TClusterConfigSettings& settings = {});
+    TAsyncStatus ReplaceConfig(const TString& config, bool dryRun = false, bool allowUnknownFields = false, const TClusterConfigSettings& settings = {});
 
     // Drop config
     TAsyncStatus DropConfig(

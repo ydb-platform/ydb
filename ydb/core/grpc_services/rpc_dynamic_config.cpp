@@ -147,6 +147,14 @@ private:
         return TBase::Reply(ev->Get()->Record.GetYdbStatus(), ev->Get()->Record.GetIssues(), TActivationContext::AsActorContext());
     }
 
+    void Handle(TEvConsole::TEvSetYamlConfigResponse::TPtr& ev) {
+        return TBase::Reply(Ydb::StatusIds::SUCCESS, ev->Get()->Record.GetIssues(), TActivationContext::AsActorContext());
+    }
+
+    void Handle(TEvConsole::TEvReplaceYamlConfigResponse::TPtr& ev) {
+        return TBase::Reply(Ydb::StatusIds::SUCCESS, ev->Get()->Record.GetIssues(), TActivationContext::AsActorContext());
+    }
+
     template<typename T>
     void Handle(T& ev)
     {

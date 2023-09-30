@@ -4,7 +4,7 @@ PY3_LIBRARY()
 
 PROVIDES(python_traitlets)
 
-VERSION(5.9.0)
+VERSION(5.10.0)
 
 LICENSE(BSD-3-Clause)
 
@@ -35,6 +35,7 @@ PY_SRCS(
     traitlets/utils/nested_update.py
     traitlets/utils/sentinel.py
     traitlets/utils/text.py
+    traitlets/utils/warnings.py
 )
 
 RESOURCE_FILES(

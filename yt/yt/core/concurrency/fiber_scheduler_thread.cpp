@@ -889,6 +889,24 @@ void SetCurrentFiberId(TFiberId id)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+thread_local bool ContextSwitchForbidden;
+
+bool IsContextSwitchForbidden()
+{
+    return ContextSwitchForbidden;
+}
+
+TForbidContextSwitchGuard::TForbidContextSwitchGuard()
+    : OldValue_(std::exchange(ContextSwitchForbidden, true))
+{ }
+
+TForbidContextSwitchGuard::~TForbidContextSwitchGuard()
+{
+    ContextSwitchForbidden = OldValue_;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 bool CheckFreeStackSpace(size_t space)
 {
     auto* currentFiber = NDetail::TryGetCurrentFiber();
@@ -915,6 +933,7 @@ TFiberCanceler GetCurrentFiberCanceler()
 
 void WaitUntilSet(TFuture<void> future, IInvokerPtr invoker)
 {
+    YT_VERIFY(!IsContextSwitchForbidden());
     YT_VERIFY(future);
     YT_ASSERT(invoker);
 
@@ -1018,10 +1037,6 @@ TOneShotContextSwitchGuard::TOneShotContextSwitchGuard(TContextSwitchHandler out
         },
         nullptr)
     , Active_(true)
-{ }
-
-TForbidContextSwitchGuard::TForbidContextSwitchGuard()
-    : TOneShotContextSwitchGuard([] { YT_ABORT(); })
 { }
 
 ////////////////////////////////////////////////////////////////////////////////

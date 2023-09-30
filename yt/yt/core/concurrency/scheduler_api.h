@@ -38,6 +38,23 @@ void SetCurrentFiberId(TFiberId id);
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//! Returns |true| if fiber context switch is currently forbidden.
+bool IsContextSwitchForbidden();
+
+class TForbidContextSwitchGuard
+{
+public:
+    TForbidContextSwitchGuard();
+    TForbidContextSwitchGuard(const TForbidContextSwitchGuard&) = delete;
+
+    ~TForbidContextSwitchGuard();
+
+private:
+    const bool OldValue_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 // NB: Use function pointer to minimize the overhead.
 using TGlobalContextSwitchHandler = void(*)();
 
@@ -69,15 +86,6 @@ public:
 private:
     bool Active_;
 };
-
-class TForbidContextSwitchGuard
-    : public TOneShotContextSwitchGuard
-{
-public:
-    TForbidContextSwitchGuard();
-};
-
-////////////////////////////////////////////////////////////////////////////////
 
 //! Blocks the current fiber until #future is set.
 //! The fiber is resceduled to #invoker.

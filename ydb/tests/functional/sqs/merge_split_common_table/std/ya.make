@@ -7,7 +7,7 @@ TEST_SRCS(
 )
 
 
-IF (SANITIZER_TYPE)
+IF (SANITIZER_TYPE == "thread")
     TIMEOUT(2400)
     SIZE(LARGE)
     TAG(ya:fat)

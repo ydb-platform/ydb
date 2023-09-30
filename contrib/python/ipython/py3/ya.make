@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(8.14.0)
+VERSION(8.15.0)
 
 LICENSE(BSD-3-Clause)
 
@@ -81,6 +81,7 @@ PY_SRCS(
     IPython/core/magic.py
     IPython/core/magic_arguments.py
     IPython/core/magics/__init__.py
+    IPython/core/magics/ast_mod.py
     IPython/core/magics/auto.py
     IPython/core/magics/basic.py
     IPython/core/magics/code.py

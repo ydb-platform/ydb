@@ -117,13 +117,38 @@ std::vector<TString> GetMeteringRecords(const TString& statistics, bool billable
     NJson::TJsonValue stat;
 
     ui64 ingress = 0;
-
     if (billable) {
         if (NJson::ReadJsonTree(statistics, &jsonConfig, &stat)) {
-            for (const auto& p : stat.GetMap()) {
-                if (p.first.StartsWith("Graph=") || p.first.StartsWith("Precompute=")) {
-                    if (auto* ingressNode = p.second.GetValueByPath("TaskRunner.Stage=Total.IngressS3SourceBytes.sum")) {
-                        ingress += ingressNode->GetInteger();
+            for (const auto& graph : stat.GetMapSafe()) {
+                //
+                // in v1 graphs are always named as name=index
+                //
+                // in v2 two cases are possible
+                // - ResultSet or Sink (i.e. name) when only one subgraph exists
+                // - name_index when there are 2+ graphs
+                //
+                // Precompute always implies other graph, so we can distinguish v1 vs v2 by '=' or '_' symbol
+                //
+                if (graph.first.StartsWith("Graph=") || graph.first.StartsWith("Precompute=")) {
+                    // YQv1 raw
+                    if (auto* ingressNode = graph.second.GetValueByPath("TaskRunner.Stage=Total.IngressS3SourceBytes.sum")) {
+                        ingress += ingressNode->GetIntegerSafe();
+                    }
+                } else if (graph.first.StartsWith("ResultSet") || graph.first.StartsWith("Sink") || graph.first.StartsWith("Precompute_")) {
+                    // YQv2
+                    if (auto* ingressNode = graph.second.GetValueByPath("IngressObjectStorageBytes.sum")) {
+                        // prettyfied
+                        ingress += ingressNode->GetIntegerSafe();
+                    } else if (graph.second.GetType() == NJson::JSON_MAP) {
+                        for (const auto& stage : graph.second.GetMapSafe()) {
+                            if (auto* ingressNode = stage.second.GetValueByPath("IngressBytes=S3Source.sum")) {
+                                // raw old
+                                ingress += ingressNode->GetIntegerSafe();
+                            } else if (auto* ingressNode = stage.second.GetValueByPath("IngressBytes=S3Source.Input.Bytes.sum")) {
+                                // raw new
+                                ingress += ingressNode->GetIntegerSafe();
+                            }
+                        }
                     }
                 }
             }

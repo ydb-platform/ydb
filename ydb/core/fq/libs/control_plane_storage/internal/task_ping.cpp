@@ -446,7 +446,12 @@ TPingTaskParams ConstructHardPingTask(
                     << FederatedQuery::QueryMeta::ComputeStatus_Name(request.status())
                     << ", statusCode: " << NYql::NDqProto::StatusIds_StatusCode_Name(internal.status_code()));
                 }
-                auto records = GetMeteringRecords(request.statistics(), isBillable, jobId, request.scope(), HostName());
+                auto statistics = request.statistics();
+                if (!statistics) {
+                    // YQv2 may not provide statistics with terminal status, use saved one
+                    statistics = query.statistics().json();
+                }
+                auto records = GetMeteringRecords(statistics, isBillable, jobId, request.scope(), HostName());
                 meteringRecords->swap(records);
             } catch (const std::exception&) {
                 CPS_LOG_AS_E(*actorSystem, "Error on statistics meterification: " << CurrentExceptionMessage());

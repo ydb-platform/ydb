@@ -1,7 +1,7 @@
 G_BENCHMARK()
 
-TAG(ya:fat)
-SIZE(LARGE)
+SIZE(MEDIUM)
+TIMEOUT(600)
 
 SRCS(
     b_charge.cpp

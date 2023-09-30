@@ -32,4 +32,6 @@ protected:
 
 THolder<IKqpPlannerStrategy> CreateKqpGreedyPlanner();
 
+THolder<IKqpPlannerStrategy> CreateKqpMockEmptyPlanner();
+
 } // namespace NKikimr::NKqp

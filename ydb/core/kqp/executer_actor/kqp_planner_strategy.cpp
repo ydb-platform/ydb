@@ -116,18 +116,6 @@ public:
     {
         TVector<TResult> result;
         TNodesManager nodes(nodeResources);
-        for (auto& node : nodeResources) {
-            if (LogFunc) {
-                LogFunc(TStringBuilder() << "[AvailableResources] node #" << node.GetNodeId()
-                    << " memory: " << (node.GetTotalMemory() - node.GetUsedMemory())
-                    << ", ca: " << node.GetAvailableComputeActors());
-            }
-        }
-        if (LogFunc) {
-            for (const auto& task : tasks) {
-                LogFunc(TStringBuilder() << "[TaskResources] task: " << task.TaskId << ", memory: " << task.TotalMemoryLimit);
-            }
-        }
 
         for (const auto& taskEstimation : tasks) {
             auto node = nodes.PopOptimalNodeWithLimits(taskEstimation.TotalMemoryLimit * TASK_MEMORY_ESTIMATION_OVERFLOW, 1);
@@ -169,10 +157,25 @@ public:
     }
 };
 
+class TKqpMockEmptyPlanner : public IKqpPlannerStrategy {
+public:
+    ~TKqpMockEmptyPlanner() override {}
+
+    TVector<TResult> Plan(const TVector<NKikimrKqp::TKqpNodeResources>&,
+        const TVector<TTaskResourceEstimation>&) override
+    {
+        return {};
+    }
+};
+
 } // anonymous namespace
 
 THolder<IKqpPlannerStrategy> CreateKqpGreedyPlanner() {
     return MakeHolder<TKqpGreedyPlanner>();
+}
+
+THolder<IKqpPlannerStrategy> CreateKqpMockEmptyPlanner() {
+    return MakeHolder<TKqpMockEmptyPlanner>();
 }
 
 } // namespace NKikimr::NKqp

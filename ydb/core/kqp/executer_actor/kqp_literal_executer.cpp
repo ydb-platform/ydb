@@ -73,11 +73,13 @@ TDqTaskRunnerExecutionContext CreateTaskRunnerExecutionContext() {
 
 class TKqpLiteralExecuter {
 public:
-    TKqpLiteralExecuter(IKqpGateway::TExecPhysicalRequest&& request, TKqpRequestCounters::TPtr counters, TActorId owner)
+    TKqpLiteralExecuter(IKqpGateway::TExecPhysicalRequest&& request, TKqpRequestCounters::TPtr counters, TActorId owner,
+        const TIntrusivePtr<TUserRequestContext>& userRequestContext)
         : Request(std::move(request))
         , Counters(counters)
         , OwnerActor(owner)
         , LiteralExecuterSpan(TWilsonKqp::LiteralExecuter, std::move(Request.TraceId), "LiteralExecuter")
+        , UserRequestContext(userRequestContext)
     {
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc);
         ResponseEv->Orbit = std::move(Request.Orbit);
@@ -406,15 +408,17 @@ private:
     std::unique_ptr<NKikimr::NMiniKQL::TKqpComputeContextBase> ComputeCtx;
     std::unique_ptr<NYql::NDq::TDqTaskRunnerContext> RunnerContext;
     NWilson::TSpan LiteralExecuterSpan;
+
+    TIntrusivePtr<TUserRequestContext> UserRequestContext;
 };
 
 } // anonymous namespace
 
 std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ExecuteLiteral(
-    IKqpGateway::TExecPhysicalRequest&& request, TKqpRequestCounters::TPtr counters, TActorId owner)
+    IKqpGateway::TExecPhysicalRequest&& request, TKqpRequestCounters::TPtr counters, TActorId owner, const TIntrusivePtr<TUserRequestContext>& userRequestContext)
 {
     std::unique_ptr<TKqpLiteralExecuter> executer = std::make_unique<TKqpLiteralExecuter>(
-        std::move(request), counters, owner);
+        std::move(request), counters, owner, userRequestContext);
 
     return executer->ExecuteLiteral();
 }

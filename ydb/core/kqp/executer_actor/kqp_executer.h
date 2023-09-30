@@ -99,7 +99,7 @@ IActor* CreateKqpSchemeExecuter(TKqpPhyTxHolder::TConstPtr phyTx, const TActorId
     bool temporary, TString SessionId);
 
 std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ExecuteLiteral(
-    IKqpGateway::TExecPhysicalRequest&& request, TKqpRequestCounters::TPtr counters, TActorId owner);
+    IKqpGateway::TExecPhysicalRequest&& request, TKqpRequestCounters::TPtr counters, TActorId owner, const TIntrusivePtr<TUserRequestContext>& userRequestContext);
 
 } // namespace NKqp
 } // namespace NKikimr

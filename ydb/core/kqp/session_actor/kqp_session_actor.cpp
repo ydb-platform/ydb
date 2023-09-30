@@ -217,6 +217,9 @@ public:
         QueryState = std::make_shared<TKqpQueryState>(
             ev, QueryId, Settings.Database, Settings.Cluster, Settings.DbCounters, Settings.LongSession,
             Settings.TableService, Settings.QueryService, std::move(id), SessionId);
+        if (QueryState->UserRequestContext->TraceId == "") {
+            QueryState->UserRequestContext->TraceId = UlidGen.Next().ToString();
+        }
     }
 
     void ForwardRequest(TEvKqp::TEvQueryRequest::TPtr& ev) {
@@ -990,7 +993,8 @@ public:
                 request.Orbit = std::move(QueryState->Orbit);
             }
             request.TraceId = QueryState ? QueryState->KqpSessionSpan.GetTraceId() : NWilson::TTraceId();
-            auto response = ExecuteLiteral(std::move(request), RequestCounters, SelfId());
+            Y_ENSURE(QueryState);
+            auto response = ExecuteLiteral(std::move(request), RequestCounters, SelfId(), QueryState->UserRequestContext);
             ++QueryState->CurrentTx;
             ProcessExecuterResult(response.get());
             return true;
@@ -1065,7 +1069,7 @@ public:
         request.MaxShardCount = RequestControls.MaxShardCount;
         request.TraceId = QueryState ? QueryState->KqpSessionSpan.GetTraceId() : NWilson::TTraceId();
         LOG_D("Sending to Executer TraceId: " << request.TraceId.GetTraceId() << " " << request.TraceId.GetSpanIdSize());
-
+        
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             RequestCounters, Settings.TableService.GetAggregationConfig(), Settings.TableService.GetExecuterRetriesConfig(),

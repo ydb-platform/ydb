@@ -486,7 +486,7 @@ public:
     {}
 
     void Bootstrap() {
-        auto result = ::NKikimr::NKqp::ExecuteLiteral(std::move(Request), Counters, SelfId());
+        auto result = ::NKikimr::NKqp::ExecuteLiteral(std::move(Request), Counters, SelfId(), MakeIntrusive<TUserRequestContext>());
         ProcessPureExecution(result);
         Become(&TThis::DieState);
         Send(SelfId(), new TEvents::TEvPoisonPill());

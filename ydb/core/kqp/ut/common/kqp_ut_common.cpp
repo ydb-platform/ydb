@@ -608,8 +608,9 @@ bool IsTimeoutError(NYdb::EStatus status) {
     return status == NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED || status == NYdb::EStatus::TIMEOUT || status == NYdb::EStatus::CANCELLED;
 }
 
+// IssueMessageSubString - uses only in case if !streamPart.IsSuccess()
 template<typename TIterator>
-TString StreamResultToYsonImpl(TIterator& it, TVector<TString>* profiles, bool throwOnTimeout = false, const NYdb::EStatus& opStatus = NYdb::EStatus::SUCCESS) {
+TString StreamResultToYsonImpl(TIterator& it, TVector<TString>* profiles, bool throwOnTimeout = false, const NYdb::EStatus& opStatus = NYdb::EStatus::SUCCESS, const TString& issueMessageSubString = "") {
     TStringStream out;
     NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true);
     writer.OnBeginList();
@@ -621,6 +622,7 @@ TString StreamResultToYsonImpl(TIterator& it, TVector<TString>* profiles, bool t
         if (!streamPart.IsSuccess()) {
             if (opStatus != NYdb::EStatus::SUCCESS) {
                 UNIT_ASSERT_VALUES_EQUAL_C(streamPart.GetStatus(), opStatus, streamPart.GetIssues().ToString());
+                UNIT_ASSERT_C(streamPart.GetIssues().ToString().Contains(issueMessageSubString), TStringBuilder() << "Issue should contain '" << issueMessageSubString << "'. " << streamPart.GetIssues().ToString());
                 break;
             }
             if (throwOnTimeout && IsTimeoutError(streamPart.GetStatus())) {
@@ -644,8 +646,8 @@ TString StreamResultToYsonImpl(TIterator& it, TVector<TString>* profiles, bool t
     return out.Str();
 }
 
-TString StreamResultToYson(NYdb::NTable::TScanQueryPartIterator& it, bool throwOnTimeout, const NYdb::EStatus& opStatus) {
-    return StreamResultToYsonImpl(it, nullptr, throwOnTimeout, opStatus);
+TString StreamResultToYson(NYdb::NTable::TScanQueryPartIterator& it, bool throwOnTimeout, const NYdb::EStatus& opStatus, const TString& issueMessageSubString) {
+    return StreamResultToYsonImpl(it, nullptr, throwOnTimeout, opStatus, issueMessageSubString);
 }
 
 TString StreamResultToYson(NYdb::NTable::TTablePartIterator& it, bool throwOnTimeout, const NYdb::EStatus& opStatus) {

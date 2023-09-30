@@ -15,10 +15,10 @@ using namespace NActors;
 
 namespace NKikimr::NKqp {
 
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << stream)
-#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << stream)
+#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "UserRequestContext: " << *UserRequestContext << ". " << stream)
+#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "UserRequestContext: " << *UserRequestContext << ". " << stream)
+#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "UserRequestContext: " << *UserRequestContext << ". " << stream)
+#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "UserRequestContext: " << *UserRequestContext << ". " << stream)
 
 using namespace NYql;
 
@@ -27,7 +27,7 @@ namespace {
 const ui64 MaxTaskSize = 48_MB;
 
 template <class TCollection>
-std::unique_ptr<TEvKqp::TEvAbortExecution> CheckTaskSize(ui64 TxId, const TCollection& tasks) {
+std::unique_ptr<TEvKqp::TEvAbortExecution> CheckTaskSize(ui64 TxId, const TIntrusivePtr<TUserRequestContext>& UserRequestContext, const TCollection& tasks) {
     for (const auto& task : tasks) {
         if (ui32 size = task.ByteSize(); size > MaxTaskSize) {
             LOG_E("Abort execution. Task #" << task.GetId() << " size is too big: " << size << " > " << MaxTaskSize);
@@ -50,6 +50,8 @@ void BuildInitialTaskResources(const TKqpTasksGraph& graph, ui64 taskId, TTaskRe
 }
 
 }
+
+bool TKqpPlanner::UseMockEmptyPlanner = false;
 
 // Task can allocate extra memory during execution.
 // So, we estimate total memory amount required for task as apriori task size multiplied by this constant.
@@ -90,6 +92,28 @@ TKqpPlanner::TKqpPlanner(TKqpTasksGraph& graph, ui64 txId, const TActorId& execu
             LOG_E("Database not set, use " << Database);
         }
     }
+}
+
+// ResourcesSnapshot, ResourceEstimations
+
+void TKqpPlanner::LogMemoryStatistics(const TLogFunc& logFunc) {
+    uint64_t totalMemory = 0;
+    uint32_t totalComputeActors = 0;
+    for (auto& node : ResourcesSnapshot) {
+        logFunc(TStringBuilder() << "[AvailableResources] node #" << node.GetNodeId()
+            << " memory: " << (node.GetTotalMemory() - node.GetUsedMemory())
+            << ", ca: " << node.GetAvailableComputeActors());
+        totalMemory += (node.GetTotalMemory() - node.GetUsedMemory());
+        totalComputeActors += node.GetAvailableComputeActors();
+    }
+    logFunc(TStringBuilder() << "Total nodes: " << ResourcesSnapshot.size() << ", total memory: " << totalMemory << ", total CA:" << totalComputeActors);
+
+    totalMemory = 0;
+    for (const auto& task : ResourceEstimations) {
+        logFunc(TStringBuilder() << "[TaskResources] task: " << task.TaskId << ", memory: " << task.TotalMemoryLimit);
+        totalMemory += task.TotalMemoryLimit;
+    }
+    logFunc(TStringBuilder() << "Total tasks: " << ResourceEstimations.size() << ", total memory: " << totalMemory);
 }
 
 bool TKqpPlanner::SendStartKqpTasksRequest(ui32 requestId, const TActorId& target) {
@@ -248,17 +272,19 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
         return std::make_unique<IEventHandle>(ExecuterId, ExecuterId, ev.Release());
     }
 
-    auto planner = CreateKqpGreedyPlanner();
+    auto planner = (UseMockEmptyPlanner ? CreateKqpMockEmptyPlanner() : CreateKqpGreedyPlanner());  // KqpMockEmptyPlanner is a mock planner for tests
 
     auto ctx = TlsActivationContext->AsActorContext();
     if (ctx.LoggerSettings() && ctx.LoggerSettings()->Satisfies(NActors::NLog::PRI_DEBUG, NKikimrServices::KQP_EXECUTER)) {
-        planner->SetLogFunc([TxId = TxId](TStringBuf msg) { LOG_D(msg); });
+        planner->SetLogFunc([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { LOG_D(msg); });
     }
 
     THashMap<ui64, size_t> nodeIdtoIdx;
     for (size_t idx = 0; idx < ResourcesSnapshot.size(); ++idx) {
         nodeIdtoIdx[ResourcesSnapshot[idx].nodeid()] = idx;
     }
+
+    LogMemoryStatistics([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { LOG_D(msg); });
 
     auto plan = planner->Plan(ResourcesSnapshot, ResourceEstimations);
 
@@ -281,12 +307,10 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
 
         return nullptr;
     }  else {
-        // what is here?
-        Cerr << (*UserRequestContext);
-        Y_FAIL_S("Fail point 123#!");
-        // UserRequestContext->Out(Cerr);
+        LogMemoryStatistics([TxId = TxId, &UserRequestContext = UserRequestContext](TStringBuf msg) { LOG_E(msg); });
+
         auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
-            "Not enough resources to execute query");
+            TStringBuilder() << "Not enough resources to execute query. " << "TraceId: " << UserRequestContext->TraceId);
         return std::make_unique<IEventHandle>(ExecuterId, ExecuterId, ev.Release());
     }
 }
@@ -414,7 +438,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
             SortUnique(tasks);
             auto& request = Requests.emplace_back(std::move(tasks), CalcSendMessageFlagsForNode(nodeId), nodeId);
             request.SerializedRequest = SerializeRequest(request);
-            auto ev = CheckTaskSize(TxId, request.SerializedRequest->Record.GetTasks());
+            auto ev = CheckTaskSize(TxId, UserRequestContext, request.SerializedRequest->Record.GetTasks());
             if (ev != nullptr) {
                 return std::make_unique<IEventHandle>(ExecuterId, ExecuterId, ev.release());
             }

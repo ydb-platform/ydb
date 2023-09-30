@@ -38,6 +38,8 @@ class TKqpPlanner {
         {}
     };
 
+    using TLogFunc = std::function<void(TStringBuf message)>;
+
 public:
     TKqpPlanner(TKqpTasksGraph& tasksGraph, ui64 txId, const TActorId& executer, const IKqpGateway::TKqpSnapshot& snapshot,
         const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TInstant deadline,
@@ -70,7 +72,7 @@ private:
     std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> SerializeRequest(const TRequestData& requestData);
     ui32 CalcSendMessageFlagsForNode(ui32 nodeId);
 
-    
+    void LogMemoryStatistics(const TLogFunc& logFunc);
 
 private:
     const ui64 TxId;
@@ -104,6 +106,8 @@ private:
 
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
 
+public:
+    static bool UseMockEmptyPlanner;  // for tests: if true then use TKqpMockEmptyPlanner that leads to the error
 };
 
 std::unique_ptr<TKqpPlanner> CreateKqpPlanner(TKqpTasksGraph& tasksGraph, ui64 txId, const TActorId& executer,

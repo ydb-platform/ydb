@@ -10,6 +10,8 @@ namespace NKikimr::NKqp {
         TString Database;
         TString SessionId;
 
+        TUserRequestContext() = default;
+
         TUserRequestContext(const TString& traceId, const TString& database, const TString& sessionId)
             : TraceId(traceId)
             , Database(database)

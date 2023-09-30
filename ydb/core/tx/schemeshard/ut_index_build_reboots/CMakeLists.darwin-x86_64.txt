@@ -63,7 +63,7 @@ set_yunittest_property(
   ydb-core-tx-schemeshard-ut_index_build_reboots
   PROPERTY
   LABELS
-  LARGE
+  MEDIUM
 )
 set_yunittest_property(
   TEST
@@ -77,7 +77,7 @@ set_yunittest_property(
   ydb-core-tx-schemeshard-ut_index_build_reboots
   PROPERTY
   TIMEOUT
-  2400
+  600
 )
 target_allocator(ydb-core-tx-schemeshard-ut_index_build_reboots
   system_allocator

@@ -6,11 +6,8 @@ IF (WITH_VALGRIND)
     SPLIT_FACTOR(40)
 ENDIF()
 
-TIMEOUT(2400)
-
-TAG(ya:fat)
-
-SIZE(LARGE)
+TIMEOUT(600)
+SIZE(MEDIUM)
 
 PEERDIR(
     library/cpp/getopt

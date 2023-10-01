@@ -25,7 +25,6 @@ SRCS(
     columnshard_schema.cpp
     counters.cpp
     defs.cpp
-    export_actor.cpp
     read_actor.cpp
     write_actor.cpp
     tables_manager.cpp
@@ -53,6 +52,7 @@ PEERDIR(
     ydb/core/tx/columnshard/operations
     ydb/core/tx/columnshard/blobs_reader
     ydb/core/tx/columnshard/blobs_action
+    ydb/core/tx/columnshard/resource_subscriber
     ydb/core/tx/tiering
     ydb/core/tx/conveyor/usage
     ydb/core/tx/long_tx_service/public

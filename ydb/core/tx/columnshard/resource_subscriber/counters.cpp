@@ -1,0 +1,29 @@
+#include "counters.h"
+
+namespace NKikimr::NOlap::NResourceBroker::NSubscribe {
+
+
+std::shared_ptr<TSubscriberTypeCounters> TSubscriberCounters::GetTypeCounters(const TString& resourceType) {
+    auto it = ResourceTypeCounters.find(resourceType);
+    if (it == ResourceTypeCounters.end()) {
+        it = ResourceTypeCounters.emplace(resourceType, std::make_shared<TSubscriberTypeCounters>(*this, resourceType)).first;
+    }
+    return it->second;
+}
+
+TSubscriberTypeCounters::TSubscriberTypeCounters(const TSubscriberCounters& owner, const TString& resourceType)
+    : TBase(owner)
+{
+    DeepSubGroup("ResourceType", resourceType);
+
+    RequestsCount = TBase::GetDeriviative("Requests/Count");
+    RequestBytes = TBase::GetDeriviative("Requests/Bytes");
+
+    RepliesCount = TBase::GetDeriviative("Replies/Count");
+    ReplyBytes = TBase::GetDeriviative("Replies/Bytes");
+
+    BytesAllocated = TBase::GetValueAutoAggregationsClient("Allocated/Bytes");
+    CountAllocated = TBase::GetValueAutoAggregationsClient("Allocated/Count");
+}
+
+}

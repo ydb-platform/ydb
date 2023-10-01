@@ -1269,6 +1269,9 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     const ui64 KqpRmQueueCPU = 4;
     const ui64 KqpRmQueueMemory = 10ULL << 30;
 
+    const ui64 CSInsertCompactionMemoryLimit = 1ULL << 30;
+    const ui64 CSGeneralCompactionMemoryLimit = 3ULL << 30;
+
     const ui64 TotalCPU = 20;
     const ui64 TotalMemory = 16ULL << 30;
 
@@ -1303,6 +1306,18 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     queue->SetName("queue_compaction_borrowed");
     queue->SetWeight(100);
     queue->MutableLimit()->SetCpu(3);
+
+    queue = config.AddQueues();
+    queue->SetName("QUEUE::CS::INDEXATION");
+    queue->SetWeight(100);
+    queue->MutableLimit()->SetCpu(3);
+    queue->MutableLimit()->SetMemory(CSInsertCompactionMemoryLimit);
+
+    queue = config.AddQueues();
+    queue->SetName("QUEUE::CS::GENERAL");
+    queue->SetWeight(100);
+    queue->MutableLimit()->SetCpu(3);
+    queue->MutableLimit()->SetMemory(CSGeneralCompactionMemoryLimit);
 
     queue = config.AddQueues();
     queue->SetName("queue_transaction");
@@ -1383,6 +1398,16 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     task = config.AddTasks();
     task->SetName("compaction_borrowed");
     task->SetQueueName("queue_compaction_borrowed");
+    task->SetDefaultDuration(TDuration::Minutes(10).GetValue());
+
+    task = config.AddTasks();
+    task->SetName("CS::INDEXATION");
+    task->SetQueueName("QUEUE::CS::INDEXATION");
+    task->SetDefaultDuration(TDuration::Minutes(10).GetValue());
+
+    task = config.AddTasks();
+    task->SetName("CS::GENERAL");
+    task->SetQueueName("QUEUE::CS::GENERAL");
     task->SetDefaultDuration(TDuration::Minutes(10).GetValue());
 
     task = config.AddTasks();

@@ -29,6 +29,7 @@ struct TEvPrivate {
         EvWriteDraft,
         EvGarbageCollectionFinished,
         EvTieringModified,
+        EvStartResourceUsageTask,
         EvEnd
     };
 
@@ -224,6 +225,23 @@ struct TEvPrivate {
                 LogicalMeta.SetSpecialKeysRawData(specialKeys.SerializeToString());
             }
         };
+
+        TString GetBlobVerified(const TBlobRange& bRange) const {
+            for (auto&& i : Actions) {
+                for (auto&& b : i->GetBlobsForWrite()) {
+                    if (bRange.GetBlobId() == b.first) {
+                        AFL_VERIFY(bRange.Size + bRange.Offset <= b.second.size());
+                        if (bRange.Size == b.second.size()) {
+                            return b.second;
+                        } else {
+                            return b.second.substr(bRange.Offset, bRange.Size);
+                        }
+                    }
+                }
+            }
+            AFL_VERIFY(false);
+            return "";
+        }
 
         TEvWriteBlobsResult(const NColumnShard::TBlobPutResult::TPtr& putResult, const NEvWrite::TWriteMeta& writeMeta)
             : PutResult(putResult)

@@ -100,7 +100,6 @@ private:
     };
 
     static constexpr i64 MAX_IN_FLIGHT_BYTES = 250ll << 20;
-    static constexpr i64 MAX_IN_FLIGHT_FALLBACK_BYTES = 100ll << 20;
     static constexpr i64 MAX_REQUEST_BYTES = 8ll << 20;
     static constexpr TDuration DEFAULT_READ_DEADLINE = TDuration::Seconds(30);
     static constexpr TDuration FAST_READ_DEADLINE = TDuration::Seconds(10);
@@ -113,7 +112,6 @@ private:
 
     TControlWrapper MaxCacheDataSize;
     TControlWrapper MaxInFlightDataSize;
-    TControlWrapper MaxFallbackDataSize; // It's expected to be less then MaxInFlightDataSize
     i64 CacheDataSize;              // Current size of all blobs in cache
     ui64 ReadCookie;
     THashMap<ui64, std::vector<TBlobRange>> CookieToRange;  // All in-flight requests
@@ -121,7 +119,6 @@ private:
     TDeque<TReadItem> ReadQueue;    // Reads that are waiting to be sent
                                     // TODO: Consider making per-group queues
     i64 InFlightDataSize;           // Current size of all in-flight blobs
-    i64 FallbackDataSize;           // Current size of in-flight fallback blobs
 
     THashMap<ui64, TActorId> ShardPipes;    // TabletId -> PipeClient for small blob read requests
     THashMap<ui64, THashSet<ui64>> InFlightTabletRequests;  // TabletId -> list to read cookies
@@ -159,11 +156,9 @@ public:
         , Cache(SIZE_MAX)
         , MaxCacheDataSize(maxSize, 0, 1ull << 40)
         , MaxInFlightDataSize(Min<i64>(MaxCacheDataSize, MAX_IN_FLIGHT_BYTES), 0, 10ull << 30)
-        , MaxFallbackDataSize(Min<i64>(MaxCacheDataSize / 2, MAX_IN_FLIGHT_FALLBACK_BYTES), 0, 5ull << 30)
         , CacheDataSize(0)
         , ReadCookie(1)
         , InFlightDataSize(0)
-        , FallbackDataSize(0)
         , SizeBytes(counters->GetCounter("SizeBytes"))
         , SizeBlobs(counters->GetCounter("SizeBlobs"))
         , Hits(counters->GetCounter("Hits", true))
@@ -190,10 +185,8 @@ public:
         auto& icb = AppData(ctx)->Icb;
         icb->RegisterSharedControl(MaxCacheDataSize, "BlobCache.MaxCacheDataSize");
         icb->RegisterSharedControl(MaxInFlightDataSize, "BlobCache.MaxInFlightDataSize");
-        icb->RegisterSharedControl(MaxFallbackDataSize, "BlobCache.MaxFallbackDataSize");
 
         LOG_S_NOTICE("MaxCacheDataSize: " << (i64)MaxCacheDataSize
-            << " MaxFallbackDataSize: " << (i64)MaxFallbackDataSize
             << " InFlightDataSize: " << (i64)InFlightDataSize);
 
         Become(&TBlobCache::StateFunc);
@@ -238,9 +231,8 @@ private:
     void Handle(TEvBlobCache::TEvReadBlobRange::TPtr& ev, const TActorContext& ctx) {
         const TBlobRange& blobRange = ev->Get()->BlobRange;
         const bool promote = (i64)MaxCacheDataSize && ev->Get()->ReadOptions.CacheAfterRead;
-        const bool fallback = ev->Get()->ReadOptions.ForceFallback;
 
-        LOG_S_DEBUG("Read request: " << blobRange << " cache: " << (ui32)promote << " fallback: " << (ui32)fallback << " sender:" << ev->Sender);
+        LOG_S_DEBUG("Read request: " << blobRange << " cache: " << (ui32)promote << " sender:" << ev->Sender);
 
         if (!HandleSingleRangeRead(TReadItem(ev->Get()->ReadOptions, blobRange), ev->Sender, ctx)) {
             MakeReadRequests(ctx);
@@ -249,6 +241,7 @@ private:
 
     bool HandleSingleRangeRead(TReadItem readItem, const TActorId& sender, const TActorContext& ctx) {
         const TBlobRange& blobRange = readItem.BlobRange;
+        AFL_DEBUG(NKikimrServices::BLOB_CACHE)("ask", blobRange);
 
         // Is in cache?
         auto it = readItem.PromoteInCache() ? Cache.Find(blobRange) : Cache.FindWithoutPromote(blobRange);
@@ -261,16 +254,6 @@ private:
 
         LOG_S_DEBUG("Miss cache: " << blobRange << " sender:" << sender);
         Misses->Inc();
-
-        // Prevent full cache flushing by exported blobs. Decrease propability of caching depending on cache size.
-        // TODO: better cache strategy
-        if (readItem.ForceFallback && readItem.CacheAfterRead) {
-            if (CacheDataSize > (MaxCacheDataSize / 4) * 3) {
-                readItem.CacheAfterRead = !(ReadCookie % 256);
-            } else if (CacheDataSize > (MaxCacheDataSize / 2)) {
-                readItem.CacheAfterRead = !(ReadCookie % 32);
-            }
-        }
 
         // Update set of outstanding requests.
         TReadInfo& blobInfo = OutstandingReads[blobRange];
@@ -364,7 +347,7 @@ private:
     void SendBatchReadRequestToDS(const std::vector<TBlobRange>& blobRanges, const ui64 cookie,
         ui32 dsGroup, TReadItem::EReadVariant readVariant, const TActorContext& ctx)
     {
-        LOG_S_DEBUG("Sending read from DS: group: " << dsGroup
+        LOG_S_DEBUG("Sending read from BlobCache: group: " << dsGroup
             << " ranges: " << JoinStrings(blobRanges.begin(), blobRanges.end(), " ")
             << " cookie: " << cookie);
 
@@ -393,7 +376,7 @@ private:
         return TInstant::Max(); // EReadVariant::DEFAULT_NO_DEADLINE
     }
 
-    void MakeReadRequests(const TActorContext& ctx, THashMap<TUnifiedBlobId, std::vector<TBlobRange>>&& fallbackRanges = {}) {
+    void MakeReadRequests(const TActorContext& ctx) {
         THashMap<std::tuple<ui64, ui32, TReadItem::EReadVariant>, std::vector<TBlobRange>> groupedBlobRanges;
 
         while (!ReadQueue.empty()) {
@@ -408,23 +391,8 @@ private:
             SizeBytesInFlight->Add(blobRange.Size);
             SizeBlobsInFlight->Inc();
 
-            if (readItem.ForceFallback) {
-                Y_VERIFY(blobRange.BlobId.IsDsBlob());
-
-                if (FallbackDataSize && FallbackDataSize >= MaxFallbackDataSize) {
-                    // 1. Do not block DS reads by fallbacks (fallback reads form S3 could be much slower then DS ones)
-                    // 2. Limit max fallback data in flight
-                    // Requires MaxFallbackDataSize < MaxInFlightDataSize
-                    ReadQueue.push_back(readItem);
-                } else {
-                    // Tablet cannot read different blobs in fallback now. Group reads by blobId.
-                    fallbackRanges[blobRange.BlobId].push_back(blobRange);
-                    FallbackDataSize += blobRange.Size;
-                }
-            } else {
-                auto blobSrc = readItem.BlobSource();
-                groupedBlobRanges[blobSrc].push_back(blobRange);
-            }
+            auto blobSrc = readItem.BlobSource();
+            groupedBlobRanges[blobSrc].push_back(blobRange);
 
             ReadQueue.pop_front();
         }
@@ -433,13 +401,6 @@ private:
 
         // We might need to free some space to accommodate the results of new reads
         Evict(ctx);
-
-        for (auto& [blobId, ranges] : fallbackRanges) {
-            Y_VERIFY(blobId.IsDsBlob());
-
-            ui64 cookie = ++ReadCookie;
-            CookieToRange[cookie] = std::move(ranges);
-        }
 
         ui64 cookie = ++ReadCookie;
 
@@ -489,9 +450,11 @@ private:
         }
 
         if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {
-            LOG_S_WARN("Read failed: " << ev->Get()->ToString());
+            AFL_WARN(NKikimrServices::BLOB_CACHE)("fail", ev->Get()->ToString());
             ReadSimpleFailedBytes->Add(ev->Get()->ResponseSz);
             ReadSimpleFailedCount->Add(1);
+        } else {
+            AFL_DEBUG(NKikimrServices::BLOB_CACHE)("success", ev->Get()->ToString());
         }
 
         auto cookieIt = CookieToRange.find(readCookie);
@@ -506,23 +469,18 @@ private:
 
         Y_VERIFY(blobRanges.size() == ev->Get()->ResponseSz, "Mismatched number of results for read request!");
 
-        // We could find blob ranges evicted (NODATA). Try to fallback them to tablet.
-        THashMap<TUnifiedBlobId, std::vector<TBlobRange>> fallbackRanges;
         for (size_t i = 0; i < ev->Get()->ResponseSz; ++i) {
             const auto& res = ev->Get()->Responses[i];
-            if (res.Status == NKikimrProto::EReplyStatus::NODATA) {
-                fallbackRanges[blobRanges[i].BlobId].emplace_back(std::move(blobRanges[i]));
-            } else {
-                ProcessSingleRangeResult(blobRanges[i], readCookie, res.Status, res.Buffer.ConvertToString(), ctx);
-            }
+            ProcessSingleRangeResult(blobRanges[i], readCookie, res.Status, res.Buffer.ConvertToString(), ctx);
         }
 
-        MakeReadRequests(ctx, std::move(fallbackRanges));
+        MakeReadRequests(ctx);
     }
 
     void ProcessSingleRangeResult(const TBlobRange& blobRange, const ui64 readCookie,
-        ui32 status, const TString& data, const TActorContext& ctx)
+        ui32 status, const TString& data, const TActorContext& ctx) noexcept
     {
+        AFL_DEBUG(NKikimrServices::BLOB_CACHE)("ProcessSingleRangeResult", blobRange);
         auto readIt = OutstandingReads.find(blobRange);
         if (readIt == OutstandingReads.end()) {
             // This shouldn't happen
@@ -552,6 +510,7 @@ private:
             ReadRangeFailedCount->Add(1);
         }
 
+        AFL_DEBUG(NKikimrServices::BLOB_CACHE)("ProcessSingleRangeResult", blobRange)("send_replies", readIt->second.Waiting.size());
         // Send results to all waiters
         for (const auto& to : readIt->second.Waiting) {
             SendResult(to, blobRange, (NKikimrProto::EReplyStatus)status, data, ctx);
@@ -560,7 +519,7 @@ private:
         OutstandingReads.erase(readIt);
     }
 
-    // Frogets the pipe to the tablet and fails all in-flight requests to it
+    // Forgets the pipe to the tablet and fails all in-flight requests to it
     void DestroyPipe(ui64 tabletId, const TActorContext& ctx) {
         ShardPipes.erase(tabletId);
         // Send errors for in-flight requests
@@ -611,7 +570,7 @@ private:
         if (data.capacity() > data.size() * 1.1) {
             data = TString(data.begin(), data.end());
         }
-
+        AFL_DEBUG(NKikimrServices::BLOB_CACHE)("insert_cache", blobRange);
         if (Cache.Insert(blobRange, data)) {
             CachedRanges.insert(blobRange);
 
@@ -631,8 +590,7 @@ private:
             LOG_S_DEBUG("Evict: " << it.Key()
                 << " CacheDataSize: " << CacheDataSize
                 << " InFlightDataSize: " << (i64)InFlightDataSize
-                << " MaxCacheDataSize: " << (i64)MaxCacheDataSize
-                << " MaxFallbackDataSize: " << (i64)MaxFallbackDataSize);
+                << " MaxCacheDataSize: " << (i64)MaxCacheDataSize);
 
             Evictions->Inc();
             EvictedBytes->Add(it.Key().Size);

@@ -27,8 +27,9 @@ bool Schema::IndexColumns_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* ds
 
 bool Schema::InsertTable_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsGroupSelector, NOlap::TInsertTableAccessor& insertTable, const TInstant& /*loadTime*/) {
     auto rowset = db.Table<InsertTable>().GreaterOrEqual(0, 0, 0, 0, "").Select();
-    if (!rowset.IsReady())
+    if (!rowset.IsReady()) {
         return false;
+    }
 
     while (!rowset.EndOfSet()) {
         EInsertTableIds recType = (EInsertTableIds)rowset.GetValue<InsertTable::Committed>();
@@ -52,7 +53,7 @@ bool Schema::InsertTable_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsG
         if (metaStr) {
             Y_VERIFY(meta.ParseFromString(metaStr));
         }
-        TInsertedData data(planStep, writeTxId, pathId, dedupId, NOlap::TBlobRange(blobId, 0, blobId.BlobSize()), meta, indexSnapshot);
+        TInsertedData data(planStep, writeTxId, pathId, dedupId, NOlap::TBlobRange(blobId, 0, blobId.BlobSize()), meta, indexSnapshot, {});
 
         switch (recType) {
             case EInsertTableIds::Inserted:
@@ -66,8 +67,9 @@ bool Schema::InsertTable_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsG
                 break;
         }
 
-        if (!rowset.Next())
+        if (!rowset.Next()) {
             return false;
+        }
     }
     return true;
 }

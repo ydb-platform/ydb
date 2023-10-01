@@ -54,16 +54,16 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
         TSnapshot indexSnapshot(1, 1);
 
         // insert, not commited
-        bool ok = insertTable.Insert(dbTable, TInsertedData(writeId, tableId, dedupId, blobId1, {}, indexSnapshot));
+        bool ok = insertTable.Insert(dbTable, TInsertedData(writeId, tableId, dedupId, blobId1, {}, indexSnapshot, {}));
         UNIT_ASSERT(ok);
 
         // insert the same blobId1 again
-        ok = insertTable.Insert(dbTable, TInsertedData(writeId, tableId, dedupId, blobId1, {}, indexSnapshot));
+        ok = insertTable.Insert(dbTable, TInsertedData(writeId, tableId, dedupId, blobId1, {}, indexSnapshot, {}));
         UNIT_ASSERT(!ok);
 
         // insert different blodId with the same writeId and dedupId
         TUnifiedBlobId blobId2(2222, 1, 2, 100, 1);
-        ok = insertTable.Insert(dbTable, TInsertedData(writeId, tableId, dedupId, blobId2, {}, indexSnapshot));
+        ok = insertTable.Insert(dbTable, TInsertedData(writeId, tableId, dedupId, blobId2, {}, indexSnapshot, {}));
         UNIT_ASSERT(!ok);
 
         // read nothing

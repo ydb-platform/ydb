@@ -1,7 +1,7 @@
 #include "tx_write.h"
 
 namespace NKikimr::NColumnShard {
-bool TTxWrite::InsertOneBlob(TTransactionContext& txc, const TEvPrivate::TEvWriteBlobsResult::TPutBlobData& blobData, const TWriteId writeId) {
+bool TTxWrite::InsertOneBlob(TTransactionContext& txc, const TEvPrivate::TEvWriteBlobsResult::TPutBlobData& blobData, const TWriteId writeId, const TString& blob) {
     const NKikimrTxColumnShard::TLogicalMetadata& meta = blobData.GetLogicalMeta();
 
     const auto& blobRange = blobData.GetBlobRange();
@@ -15,7 +15,7 @@ bool TTxWrite::InsertOneBlob(TTransactionContext& txc, const TEvPrivate::TEvWrit
 
     auto tableSchema = Self->TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetSchemaUnsafe(PutBlobResult->Get()->GetSchemaVersion());
 
-    NOlap::TInsertedData insertData((ui64)writeId, writeMeta.GetTableId(), writeMeta.GetDedupId(), blobRange, meta, tableSchema->GetSnapshot());
+    NOlap::TInsertedData insertData((ui64)writeId, writeMeta.GetTableId(), writeMeta.GetDedupId(), blobRange, meta, tableSchema->GetSnapshot(), blob);
     bool ok = Self->InsertTable->Insert(dbTable, std::move(insertData));
     if (ok) {
         // Put new data into blob cache
@@ -29,15 +29,15 @@ bool TTxWrite::InsertOneBlob(TTransactionContext& txc, const TEvPrivate::TEvWrit
 
 
 bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
-    LOG_S_DEBUG(TxPrefix() << "execute" << TxSuffix());
-
+    NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("tx_state", "execute");
+    ACFL_DEBUG("event", "start_execute");
     const auto& writeMeta(PutBlobResult->Get()->GetWriteMeta());
     Y_VERIFY(Self->TablesManager.IsReadyForWrite(writeMeta.GetTableId()));
 
     txc.DB.NoMoreReadsForTx();
     TWriteOperation::TPtr operation;
     if (writeMeta.HasLongTxId()) {
-        Y_VERIFY_S(PutBlobResult->Get()->GetBlobData().size() == 1, TStringBuilder() << "Blobs count: " << PutBlobResult->Get()->GetBlobData().size());
+        AFL_VERIFY(PutBlobResult->Get()->GetBlobData().size() == 1)("count", PutBlobResult->Get()->GetBlobData().size());
     } else {
         operation = Self->OperationsManager.GetOperation((TWriteId)writeMeta.GetWriteId());
         Y_VERIFY(operation);
@@ -54,7 +54,7 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
             writeId = Self->GetLongTxWrite(db, writeMeta.GetLongTxIdUnsafe(), writeMeta.GetWritePartId());
         }
 
-        if (!InsertOneBlob(txc, blobData, writeId)) {
+        if (!InsertOneBlob(txc, blobData, writeId, PutBlobResult->Get()->GetBlobVerified(blobData.GetBlobRange()))) {
             LOG_S_DEBUG(TxPrefix() << "duplicate writeId " << (ui64)writeId << TxSuffix());
             Self->IncCounter(COUNTER_WRITE_DUPLICATE);
         }
@@ -62,6 +62,8 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
     }
 
     TBlobManagerDb blobManagerDb(txc.DB);
+    AFL_VERIFY(PutBlobResult->Get()->GetActions().size() == 1);
+    AFL_VERIFY(PutBlobResult->Get()->GetActions().front()->GetBlobsCount() == PutBlobResult->Get()->GetBlobData().size());
     for (auto&& i : PutBlobResult->Get()->GetActions()) {
         i->OnExecuteTxAfterWrite(*Self, blobManagerDb, true);
     }
@@ -80,8 +82,8 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
 }
 
 void TTxWrite::Complete(const TActorContext& ctx) {
-    Y_VERIFY(Result);
-    LOG_S_DEBUG(TxPrefix() << "complete" << TxSuffix());
+    NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("tx_state", "complete");
+    AFL_VERIFY(Result);
     Self->CSCounters.OnWriteTxComplete((TMonotonic::Now() - PutBlobResult->Get()->GetWriteMeta().GetWriteStartInstant()).MilliSeconds());
     Self->CSCounters.OnSuccessWriteResponse();
     ctx.Send(PutBlobResult->Get()->GetWriteMeta().GetSource(), Result.release());

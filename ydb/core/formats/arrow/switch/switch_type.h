@@ -1,8 +1,10 @@
 #pragma once
-#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
-#include <util/system/yassert.h>
 #include <ydb/core/scheme_types/scheme_type_info.h>
 #include <ydb/core/scheme/scheme_type_id.h>
+#include <ydb/core/formats/arrow/common/validation.h>
+
+#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+#include <util/system/yassert.h>
 
 namespace NKikimr::NArrow {
 
@@ -196,32 +198,32 @@ template <typename T>
 bool Append(arrow::ArrayBuilder& builder, const typename T::c_type& value) {
     using TBuilder = typename arrow::TypeTraits<T>::BuilderType;
 
-    auto status = static_cast<TBuilder&>(builder).Append(value);
-    return status.ok();
+    TStatusValidator::Validate(static_cast<TBuilder&>(builder).Append(value));
+    return true;
 }
 
 template <typename T>
 bool Append(arrow::ArrayBuilder& builder, arrow::util::string_view value) {
     using TBuilder = typename arrow::TypeTraits<T>::BuilderType;
 
-    auto status = static_cast<TBuilder&>(builder).Append(value);
-    return status.ok();
+    TStatusValidator::Validate(static_cast<TBuilder&>(builder).Append(value));
+    return true;
 }
 
 template <typename T>
 bool Append(arrow::ArrayBuilder& builder, const typename T::c_type* values, size_t size) {
     using TBuilder = typename arrow::NumericBuilder<T>;
 
-    auto status = static_cast<TBuilder&>(builder).AppendValues(values, size);
-    return status.ok();
+    TStatusValidator::Validate(static_cast<TBuilder&>(builder).AppendValues(values, size));
+    return true;
 }
 
 template <typename T>
 bool Append(arrow::ArrayBuilder& builder, const std::vector<typename T::c_type>& values) {
     using TBuilder = typename arrow::NumericBuilder<T>;
 
-    auto status = static_cast<TBuilder&>(builder).AppendValues(values.data(), values.size());
-    return status.ok();
+    TStatusValidator::Validate(static_cast<TBuilder&>(builder).AppendValues(values.data(), values.size()));
+    return true;
 }
 
 template <typename T>
@@ -235,27 +237,29 @@ bool Append(T& builder, const arrow::Array& array, int position, ui64* recordSiz
         auto& typedBuilder = static_cast<TBuilder&>(builder);
 
         if (typedArray.IsNull(position)) {
-            auto status = typedBuilder.AppendNull();
+            TStatusValidator::Validate(typedBuilder.AppendNull());
             if (recordSize) {
                 *recordSize += 4;
             }
-            return status.ok();
+            return true;
         } else {
             if constexpr (!arrow::has_string_view<typename TWrap::T>::value) {
-                auto status = typedBuilder.Append(typedArray.GetView(position));
+                TStatusValidator::Validate(typedBuilder.Append(typedArray.GetView(position)));
                 if (recordSize) {
                     *recordSize += sizeof(typedArray.GetView(position));
                 }
-                return status.ok();
+                return true;
             }
             if constexpr (arrow::has_string_view<typename TWrap::T>::value) {
-                auto status = typedBuilder.Append(typedArray.GetView(position));
+                TStatusValidator::Validate(typedBuilder.Append(typedArray.GetView(position)));
                 if (recordSize) {
                     *recordSize += typedArray.GetView(position).size();
                 }
-                return status.ok();
+                return true;
             }
         }
+        Y_VERIFY(false, "unpredictable variant");
+        return false;
     });
 }
 

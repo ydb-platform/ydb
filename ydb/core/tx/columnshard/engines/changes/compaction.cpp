@@ -76,7 +76,7 @@ void TCompactColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, T
 }
 
 TCompactColumnEngineChanges::TCompactColumnEngineChanges(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const std::map<ui64, std::shared_ptr<TPortionInfo>>& portions, const TSaverContext& saverContext)
-    : TBase(limits.GetSplitSettings(), saverContext)
+    : TBase(limits.GetSplitSettings(), saverContext, StaticTypeName())
     , Limits(limits)
     , GranuleMeta(granule)
 {

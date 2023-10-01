@@ -28,8 +28,8 @@ public:
         return SplitSettings;
     }
 
-    TChangesWithAppend(const TSplitSettings& splitSettings, const TSaverContext& saverContext)
-        : TBase(saverContext.GetStoragesManager())
+    TChangesWithAppend(const TSplitSettings& splitSettings, const TSaverContext& saverContext, const TString& consumerId)
+        : TBase(saverContext.GetStoragesManager(), consumerId)
         , SplitSettings(splitSettings)
         , SaverContext(saverContext)
     {

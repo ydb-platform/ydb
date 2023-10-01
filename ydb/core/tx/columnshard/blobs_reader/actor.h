@@ -10,7 +10,7 @@
 
 namespace NKikimr::NOlap::NBlobOperations::NRead {
 
-class TActor : public TActorBootstrapped<TActor> {
+class TActor: public TActorBootstrapped<TActor> {
 private:
     ui64 TabletId;
     NActors::TActorId Parent;

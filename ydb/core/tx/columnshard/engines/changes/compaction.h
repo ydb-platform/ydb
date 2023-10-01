@@ -35,6 +35,10 @@ public:
     TCompactColumnEngineChanges(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const std::map<ui64, std::shared_ptr<TPortionInfo>>& portions, const TSaverContext& saverContext);
     ~TCompactColumnEngineChanges();
 
+    static TString StaticTypeName() {
+        return "CS::GENERAL";
+    }
+
     ui32 NumSplitInto(const ui32 srcRows) const;
 };
 

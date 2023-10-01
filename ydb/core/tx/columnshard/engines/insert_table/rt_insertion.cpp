@@ -6,9 +6,7 @@ namespace NKikimr::NOlap {
 TAtomicCounter TInsertionSummary::CriticalInserted;
 
 void TInsertionSummary::OnNewCommitted(const ui64 dataSize, const bool load) noexcept {
-    if (!load) {
-        Counters.Committed.Add(dataSize);
-    }
+    Counters.Committed.Add(dataSize, load);
     ++StatsCommitted.Rows;
     if (StatsCommitted.Bytes <= (i64)2 * 1024 * 1024 * 1024 && StatsCommitted.Bytes + dataSize > (i64)2 * 1024 * 1024 * 1024) {
         ++LocalInsertedCritical;
@@ -82,12 +80,8 @@ const NKikimr::NOlap::TPathInfo* TInsertionSummary::GetPathInfoOptional(const ui
     return &it->second;
 }
 
-bool TInsertionSummary::IsOverloaded(const ui64 pathId) const {
-    auto it = PathInfo.find(pathId);
-    if (it == PathInfo.end()) {
-        return false;
-    }
-    return it->second.IsOverloaded();
+bool TInsertionSummary::IsOverloaded(const ui64 /*pathId*/) const {
+    return StatsCommitted.Bytes > TCompactionLimits::OVERLOAD_INSERT_TABLE_SIZE_BY_PATH_ID;
 }
 
 void TInsertionSummary::Clear() {
@@ -105,9 +99,7 @@ void TInsertionSummary::Clear() {
 }
 
 void TInsertionSummary::OnNewInserted(TPathInfo& pathInfo, const ui64 dataSize, const bool load) noexcept {
-    if (!load) {
-        Counters.Inserted.Add(dataSize);
-    }
+    Counters.Inserted.Add(dataSize, load);
     pathInfo.AddInsertedSize(dataSize, TCompactionLimits::OVERLOAD_INSERT_TABLE_SIZE_BY_PATH_ID);
     ++StatsPrepared.Rows;
     StatsPrepared.Bytes += dataSize;
@@ -168,9 +160,7 @@ bool TInsertionSummary::EraseCommitted(const TInsertedData& data) {
 
 const NKikimr::NOlap::TInsertedData* TInsertionSummary::AddAborted(TInsertedData&& data, const bool load /*= false*/) {
     const TWriteId writeId((TWriteId)data.WriteTxId);
-    if (!load) {
-        Counters.Aborted.Add(data.BlobSize());
-    }
+    Counters.Aborted.Add(data.BlobSize(), load);
     auto insertInfo = Aborted.emplace(writeId, std::move(data));
     Y_VERIFY(insertInfo.second);
     return &insertInfo.first->second;

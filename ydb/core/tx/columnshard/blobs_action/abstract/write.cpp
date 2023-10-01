@@ -7,22 +7,41 @@ TUnifiedBlobId IBlobsWritingAction::AddDataForWrite(const TString& data) {
     Y_VERIFY(!WritingStarted);
     auto blobId = AllocateNextBlobId(data);
     AFL_VERIFY(BlobsForWrite.emplace(blobId, data).second);
+    BlobsWaiting.emplace(blobId);
+    BlobsWriteCount += 1;
     SumSize += data.size();
     return blobId;
 }
 
 void IBlobsWritingAction::OnBlobWriteResult(const TUnifiedBlobId& blobId, const NKikimrProto::EReplyStatus status) {
-    Y_VERIFY(BlobsForWrite.erase(blobId));
+    AFL_VERIFY(Counters);
+    auto it = WritingStart.find(blobId);
+    AFL_VERIFY(it != WritingStart.end());
+    if (status == NKikimrProto::EReplyStatus::OK) {
+        Counters->OnReply(blobId.BlobSize(), TMonotonic::Now() - it->second);
+    } else {
+        Counters->OnFail(blobId.BlobSize(), TMonotonic::Now() - it->second);
+    }
+    WritingStart.erase(it);
+    Y_VERIFY(BlobsWaiting.erase(blobId));
     return DoOnBlobWriteResult(blobId, status);
 }
 
 bool IBlobsWritingAction::IsReady() const {
     Y_VERIFY(WritingStarted);
-    return BlobsForWrite.empty();
+    return BlobsWaiting.empty();
 }
 
 IBlobsWritingAction::~IBlobsWritingAction() {
-    AFL_VERIFY(!NActors::TlsActivationContext || BlobsForWrite.empty() || Aborted);
+    AFL_VERIFY(!NActors::TlsActivationContext || BlobsWaiting.empty() || Aborted);
+}
+
+void IBlobsWritingAction::SendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId) {
+    AFL_VERIFY(Counters);
+    Counters->OnRequest(data.size());
+    WritingStarted = true;
+    AFL_VERIFY(WritingStart.emplace(blobId, TMonotonic::Now()).second);
+    return DoSendWriteBlobRequest(data, blobId);
 }
 
 }

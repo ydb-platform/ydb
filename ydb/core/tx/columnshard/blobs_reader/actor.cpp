@@ -37,7 +37,7 @@ void TActor::Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult::TPtr& ev) 
     AFL_VERIFY(it != BlobTasks.end())("blob_id", event.BlobRange);
     for (auto&& i : it->second) {
         if (event.Status != NKikimrProto::EReplyStatus::OK) {
-            i->AddError(event.BlobRange, ITask::TErrorStatus::Fail(event.Status, "cannot get blob"));
+            i->AddError(event.BlobRange, IBlobsReadingAction::TErrorStatus::Fail(event.Status, "cannot get blob"));
         } else {
             i->AddData(event.BlobRange, event.Data);
         }

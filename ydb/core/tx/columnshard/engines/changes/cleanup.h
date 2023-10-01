@@ -25,7 +25,11 @@ protected:
     }
     virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const override;
 public:
-    using TBase::TBase;
+    TCleanupColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager)
+        : TBase(storagesManager, StaticTypeName()) {
+
+    }
+
 
     virtual THashSet<TPortionAddress> GetTouchedPortions() const override {
         THashSet<TPortionAddress> result;
@@ -48,8 +52,12 @@ public:
         return true;
     }
 
+    static TString StaticTypeName() {
+        return "CS::CLEANUP";
+    }
+
     virtual TString TypeString() const override {
-        return "CLEANUP";
+        return StaticTypeName();
     }
 };
 

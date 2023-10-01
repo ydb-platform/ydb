@@ -14,6 +14,9 @@ void ITask::Start(const NActors::TActorId& actorId, const std::shared_ptr<ITask>
 }
 
 TResourcesGuard::~TResourcesGuard() {
+    if (!NActors::TlsActivationContext) {
+        return;
+    }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "free_resources")("task_id", TaskId)("mem", Memory)("cpu", Cpu);
     auto ev = std::make_unique<IEventHandle>(NKikimr::NResourceBroker::MakeResourceBrokerID(), Sender, new NKikimr::NResourceBroker::TEvResourceBroker::TEvFinishTask(TaskId));
     NActors::TActorContext::AsActorContext().Send(std::move(ev));

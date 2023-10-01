@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/engines/columns_table.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/portions/with_blobs.h>
+#include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/tx/columnshard/splitter/settings.h>
@@ -181,8 +182,8 @@ public:
         return BlobsAction;
     }
 
-    TColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager)
-        : BlobsAction(storagesManager)
+    TColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager, const TString& consumerId)
+        : BlobsAction(storagesManager, consumerId)
     {
 
     }
@@ -218,6 +219,7 @@ public:
     }
 
     THashMap<TBlobRange, TString> Blobs;
+    std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
 
     std::vector<std::shared_ptr<IBlobsReadingAction>> GetReadingActions() const {
         auto result = BlobsAction.GetReadingActions();

@@ -31,10 +31,11 @@ void TActor::Handle(TEvStartTask::TPtr& ev) {
 void TActor::Handle(NKikimr::NResourceBroker::TEvResourceBroker::TEvResourceAllocated::TPtr& ev) {
     auto it = Tasks.find(((TCookie*)ev->Get()->Cookie.Get())->GetTaskIdentifier());
     Y_VERIFY(it != Tasks.end());
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "result_resources")("task_id", ev->Get()->TaskId)("task", it->second->DebugString());
-    it->second->OnAllocationSuccess(ev->Get()->TaskId, SelfId());
+    auto task = it->second;
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "result_resources")("task_id", ev->Get()->TaskId)("task", task->DebugString());
+    task->OnAllocationSuccess(ev->Get()->TaskId, SelfId());
+    task->GetContext().GetCounters()->OnReply(task->GetMemoryAllocation());
     Tasks.erase(it);
-    it->second->GetContext().GetCounters()->OnReply(it->second->GetMemoryAllocation());
 }
 
 TActor::TActor(ui64 tabletId, const TActorId& parent)

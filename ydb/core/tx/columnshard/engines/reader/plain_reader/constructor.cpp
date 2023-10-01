@@ -30,17 +30,17 @@ TPortionInfo::TPreparedBatchData TAssembleColumnsTaskConstructor::BuildBatchAsse
     return PortionInfo->PrepareForAssemble(*blobSchema, *resultSchema, blobsDataAssemble);
 }
 
-void TEFTaskConstructor::DoOnDataReady() {
+void TEFTaskConstructor::DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) {
     NConveyor::TScanServiceOperator::SendTaskToExecute(std::make_shared<TAssembleFilter>(ScanActorId, BuildBatchAssembler(),
         ReadMetadata, SourceIdx, ColumnIds, UseEarlyFilter));
 }
 
-void TFFColumnsTaskConstructor::DoOnDataReady() {
+void TFFColumnsTaskConstructor::DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) {
     NConveyor::TScanServiceOperator::SendTaskToExecute(std::make_shared<TAssembleFFBatch>(ScanActorId, BuildBatchAssembler(),
         SourceIdx, AppliedFilter));
 }
 
-void TCommittedColumnsTaskConstructor::DoOnDataReady() {
+void TCommittedColumnsTaskConstructor::DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) {
     auto blobs = ExtractBlobsData();
     Y_VERIFY(NullBlocks.size() == 0);
     Y_VERIFY(blobs.size() == 1);

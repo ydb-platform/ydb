@@ -25,7 +25,7 @@ public:
     THashMap<ui64, std::vector<std::pair<TMark, ui64>>> PathToGranule; // pathId -> {mark, granule}
 public:
     TInsertColumnEngineChanges(const TMark& defaultMark, std::vector<NOlap::TInsertedData>&& dataToIndex, const TSplitSettings& splitSettings, const TSaverContext& saverContext)
-        : TBase(splitSettings, saverContext)
+        : TBase(splitSettings, saverContext, StaticTypeName())
         , DataToIndex(std::move(dataToIndex))
         , DefaultMark(defaultMark)
     {
@@ -39,8 +39,12 @@ public:
         return TBase::GetTouchedPortions();
     }
 
+    static TString StaticTypeName() {
+        return "CS::INDEXATION";
+    }
+
     virtual TString TypeString() const override {
-        return "INSERT";
+        return StaticTypeName();
     }
     bool AddPathIfNotExists(ui64 pathId);
 

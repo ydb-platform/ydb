@@ -38,8 +38,8 @@ TInsertionSummary::TCounters TInsertTable::Commit(IDbWrapper& dbTable, ui64 plan
 
             pathInfo->AddCommitted(std::move(*data));
         } else {
-             dbTable.Abort(*data);
-             Summary.AddAborted(std::move(*data));
+            dbTable.Abort(*data);
+            Summary.AddAborted(std::move(*data));
         }
     }
 

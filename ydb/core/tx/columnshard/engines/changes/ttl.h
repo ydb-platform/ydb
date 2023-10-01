@@ -70,11 +70,19 @@ public:
         PortionsToEvict.emplace_back(info, std::move(features));
     }
 
-    virtual TString TypeString() const override {
-        return "TTL";
+    static TString StaticTypeName() {
+        return "CS::TTL";
     }
 
-    using TBase::TBase;
+    virtual TString TypeString() const override {
+        return StaticTypeName();
+    }
+
+    TTTLColumnEngineChanges(const TSplitSettings& splitSettings, const TSaverContext& saverContext)
+        : TBase(splitSettings, saverContext, StaticTypeName()) {
+
+    }
+
 };
 
 }

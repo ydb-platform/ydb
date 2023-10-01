@@ -4,6 +4,7 @@
 #include "read.h"
 
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
+#include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
 #include <ydb/library/accessor/accessor.h>
 
 namespace NKikimr::NColumnShard {
@@ -34,6 +35,7 @@ private:
         Y_VERIFY(GCActivity);
         GCActivity = false;
     }
+    std::shared_ptr<NBlobOperations::TStorageCounters> Counters;
 protected:
     virtual std::shared_ptr<IBlobsDeclareRemovingAction> DoStartDeclareRemovingAction() = 0;
     virtual std::shared_ptr<IBlobsWritingAction> DoStartWritingAction() = 0;
@@ -47,8 +49,9 @@ protected:
     }
 public:
     IBlobsStorageOperator(const TString& storageId)
-        : StorageId(storageId) {
-
+        : StorageId(storageId)
+    {
+        Counters = std::make_shared<NBlobOperations::TStorageCounters>(storageId);
     }
 
     virtual std::shared_ptr<IBlobInUseTracker> GetBlobsTracker() const = 0;
@@ -65,14 +68,19 @@ public:
     void OnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& tiers) {
         return DoOnTieringModified(tiers);
     }
-    std::shared_ptr<IBlobsDeclareRemovingAction> StartDeclareRemovingAction() {
+
+    std::shared_ptr<IBlobsDeclareRemovingAction> StartDeclareRemovingAction(const TString& /*consumerId*/) {
         return DoStartDeclareRemovingAction();
     }
-    std::shared_ptr<IBlobsWritingAction> StartWritingAction() {
-        return DoStartWritingAction();
+    std::shared_ptr<IBlobsWritingAction> StartWritingAction(const TString& consumerId) {
+        auto result = DoStartWritingAction();
+        result->SetCounters(Counters->GetConsumerCounter(consumerId)->GetWriteCounters());
+        return result;
     }
-    std::shared_ptr<IBlobsReadingAction> StartReadingAction() {
-        return DoStartReadingAction();
+    std::shared_ptr<IBlobsReadingAction> StartReadingAction(const TString& consumerId) {
+        auto result = DoStartReadingAction();
+        result->SetCounters(Counters->GetConsumerCounter(consumerId)->GetReadCounters());
+        return result;
     }
     bool StartGC() {
         if (!GCActivity) {

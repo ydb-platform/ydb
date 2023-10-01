@@ -167,7 +167,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
             << " at tablet " << TabletID());
         writeData.MutableWriteMeta().SetWriteMiddle1StartInstant(TMonotonic::Now());
         std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildSlicesTask>(TabletID(), SelfId(),
-            StoragesManager->GetInsertOperator()->StartWritingAction(), writeData);
+            StoragesManager->GetInsertOperator()->StartWritingAction("WRITING"), writeData);
         NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
     }
 }

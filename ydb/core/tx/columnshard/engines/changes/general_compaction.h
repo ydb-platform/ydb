@@ -18,7 +18,7 @@ public:
     using TBase::TBase;
 
     virtual TString TypeString() const override {
-        return "GENERAL_COMPACTION";
+        return StaticTypeName();
     }
 };
 

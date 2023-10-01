@@ -11,6 +11,8 @@
 #include "tx_controller.h"
 #include "inflight_request_tracker.h"
 #include "counters/columnshard.h"
+#include "resource_subscriber/counters.h"
+#include "resource_subscriber/task.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tablet/tablet_counters.h>
@@ -388,6 +390,7 @@ private:
     TInstant LastStatsReport;
 
     TActorId BlobsReadActor;
+    TActorId ResourceSubscribeActor;
     TActorId StatsReportPipe;
 
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
@@ -399,6 +402,8 @@ private:
     TTabletCountersBase* TabletCounters;
     std::unique_ptr<NTabletPipe::IClientCache> PipeClientCache;
     std::unique_ptr<NOlap::TInsertTable> InsertTable;
+    std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters> SubscribeCounters;
+    NOlap::NResourceBroker::NSubscribe::TTaskContext InsertTaskSubscription;
     const TScanCounters ReadCounters;
     const TScanCounters ScanCounters;
     const TIndexationCounters CompactionCounters = TIndexationCounters("GeneralCompaction");

@@ -85,12 +85,12 @@ void TPortionDataSource::DoStartFilterStage() {
     Y_VERIFY(FetchingPlan->GetFilterStage()->GetSize());
     auto& columnIds = FetchingPlan->GetFilterStage()->GetColumnIds();
 
-    auto readAction = Portion->GetBlobsStorage()->StartReadingAction();
+    auto readAction = Portion->GetBlobsStorage()->StartReadingAction("CS::READ::FILTER");
     THashMap<TBlobRange, ui32> nullBlocks;
     NeedFetchColumns(columnIds, readAction, nullBlocks, nullptr);
 
     std::vector<std::shared_ptr<IBlobsReadingAction>> actions = {readAction};
-    auto constructor = std::make_shared<TEFTaskConstructor>(ReadData, actions, std::move(nullBlocks), columnIds, *this, FetchingPlan->CanUseEarlyFilterImmediately());
+    auto constructor = std::make_shared<TEFTaskConstructor>(ReadData, actions, std::move(nullBlocks), columnIds, *this, FetchingPlan->CanUseEarlyFilterImmediately(), "ReaderFilter");
     ReadData.AddForFetch(GetSourceIdx(), constructor, false);
 }
 
@@ -101,12 +101,12 @@ void TPortionDataSource::DoStartFetchStage() {
     if (FetchingPlan->GetFetchingStage()->GetSize() && !FilterStageData->IsEmptyFilter()) {
         auto& columnIds = FetchingPlan->GetFetchingStage()->GetColumnIds();
 
-        auto readAction = Portion->GetBlobsStorage()->StartReadingAction();
+        auto readAction = Portion->GetBlobsStorage()->StartReadingAction("CS::READ::FETCHING");
         THashMap<TBlobRange, ui32> nullBlocks;
         NeedFetchColumns(columnIds, readAction, nullBlocks, GetFilterStageData().GetActualFilter());
         if (readAction->GetExpectedBlobsCount()) {
             std::vector<std::shared_ptr<IBlobsReadingAction>> actions = {readAction};
-            auto constructor = std::make_shared<TFFColumnsTaskConstructor>(ReadData, actions, std::move(nullBlocks), columnIds, *this);
+            auto constructor = std::make_shared<TFFColumnsTaskConstructor>(ReadData, actions, std::move(nullBlocks), columnIds, *this, "ReaderFetcher");
             ReadData.AddForFetch(GetSourceIdx(), constructor, true);
             return;
         }
@@ -124,12 +124,12 @@ void TCommittedDataSource::DoFetch() {
         ReadStarted = true;
 
         std::shared_ptr<IBlobsStorageOperator> storageOperator = ReadData.GetContext().GetStoragesManager()->GetInsertOperator();
-        auto readAction = storageOperator->StartReadingAction();
+        auto readAction = storageOperator->StartReadingAction("CS::READ::COMMITTED");
         readAction->AddRange(CommittedBlob.GetBlobRange());
 
         THashMap<TBlobRange, ui32> nullBlocks;
         std::vector<std::shared_ptr<IBlobsReadingAction>> actions = {readAction};
-        auto constructor = std::make_shared<TCommittedColumnsTaskConstructor>(ReadData, actions, std::move(nullBlocks), *this);
+        auto constructor = std::make_shared<TCommittedColumnsTaskConstructor>(ReadData, actions, std::move(nullBlocks), *this, "ReaderCommitted");
         ReadData.AddForFetch(GetSourceIdx(), constructor, true);
     }
 }

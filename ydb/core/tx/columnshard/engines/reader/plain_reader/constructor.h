@@ -19,8 +19,8 @@ protected:
     THashMap<TBlobRange, ui32> NullBlocks;
     virtual bool DoOnError(const TBlobRange& range) override;
 public:
-    IFetchTaskConstructor(IDataReader& reader, const std::vector<std::shared_ptr<IBlobsReadingAction>>& readActions, THashMap<TBlobRange, ui32>&& nullBlocks, const IDataSource& source)
-        : TBase(readActions)
+    IFetchTaskConstructor(IDataReader& reader, const std::vector<std::shared_ptr<IBlobsReadingAction>>& readActions, THashMap<TBlobRange, ui32>&& nullBlocks, const IDataSource& source, const TString& taskCustomer)
+        : TBase(readActions, taskCustomer)
         , ScanActorId(NActors::TActorContext::AsActorContext().SelfID)
         , SourceIdx(source.GetSourceIdx())
         , ReadMetadata(reader.GetReadMetadata())
@@ -36,11 +36,11 @@ private:
     TCommittedBlob CommittedBlob;
     using TBase = IFetchTaskConstructor;
 protected:
-    virtual void DoOnDataReady() override;
+    virtual void DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuard) override;
 public:
     TCommittedColumnsTaskConstructor(IDataReader& reader, const std::vector<std::shared_ptr<IBlobsReadingAction>>& readActions, THashMap<TBlobRange, ui32>&& nullBlocks,
-        const TCommittedDataSource& source)
-        : TBase(reader, readActions, std::move(nullBlocks), source)
+        const TCommittedDataSource& source, const TString& taskCustomer)
+        : TBase(reader, readActions, std::move(nullBlocks), source, taskCustomer)
         , CommittedBlob(source.GetCommitted())
     {
 
@@ -56,8 +56,8 @@ protected:
     TPortionInfo::TPreparedBatchData BuildBatchAssembler();
 public:
     TAssembleColumnsTaskConstructor(IDataReader& reader, const std::vector<std::shared_ptr<IBlobsReadingAction>>& readActions, THashMap<TBlobRange, ui32>&& nullBlocks,
-        const std::set<ui32>& columnIds, const TPortionDataSource& portion)
-        : TBase(reader, readActions, std::move(nullBlocks), portion)
+        const std::set<ui32>& columnIds, const TPortionDataSource& portion, const TString& taskCustomer)
+        : TBase(reader, readActions, std::move(nullBlocks), portion, taskCustomer)
         , ColumnIds(columnIds)
         , PortionInfo(portion.GetPortionInfoPtr())
     {
@@ -69,11 +69,11 @@ class TFFColumnsTaskConstructor: public TAssembleColumnsTaskConstructor {
 private:
     using TBase = TAssembleColumnsTaskConstructor;
     std::shared_ptr<NArrow::TColumnFilter> AppliedFilter;
-    virtual void DoOnDataReady() override;
+    virtual void DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuard) override;
 public:
     TFFColumnsTaskConstructor(IDataReader& reader, const std::vector<std::shared_ptr<IBlobsReadingAction>>& readActions, THashMap<TBlobRange, ui32>&& nullBlocks,
-        const std::set<ui32>& columnIds, const TPortionDataSource& portion)
-        : TBase(reader, readActions, std::move(nullBlocks), columnIds, portion)
+        const std::set<ui32>& columnIds, const TPortionDataSource& portion, const TString& taskCustomer)
+        : TBase(reader, readActions, std::move(nullBlocks), columnIds, portion, taskCustomer)
         , AppliedFilter(portion.GetFilterStageData().GetAppliedFilter())
     {
     }
@@ -83,11 +83,11 @@ class TEFTaskConstructor: public TAssembleColumnsTaskConstructor {
 private:
     bool UseEarlyFilter = false;
     using TBase = TAssembleColumnsTaskConstructor;
-    virtual void DoOnDataReady() override;
+    virtual void DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuard) override;
 public:
     TEFTaskConstructor(IDataReader& reader, const std::vector<std::shared_ptr<IBlobsReadingAction>>& readActions, THashMap<TBlobRange, ui32>&& nullBlocks,
-        const std::set<ui32>& columnIds, const TPortionDataSource& portion, const bool useEarlyFilter)
-        : TBase(reader, readActions, std::move(nullBlocks), columnIds, portion)
+        const std::set<ui32>& columnIds, const TPortionDataSource& portion, const bool useEarlyFilter, const TString& taskCustomer)
+        : TBase(reader, readActions, std::move(nullBlocks), columnIds, portion, taskCustomer)
         , UseEarlyFilter(useEarlyFilter)
     {
     }

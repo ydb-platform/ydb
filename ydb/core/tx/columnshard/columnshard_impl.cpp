@@ -5,6 +5,7 @@
 #include "engines/changes/ttl.h"
 #include "engines/changes/cleanup.h"
 #include "blobs_action/bs/storage.h"
+#include "resource_subscriber/task.h"
 
 #ifndef KIKIMR_DISABLE_S3_OPS
 #include "blobs_action/tier/storage.h"
@@ -21,6 +22,7 @@
 #include <ydb/services/metadata/service.h>
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
+#include "resource_subscriber/counters.h"
 
 namespace NKikimr::NColumnShard {
 
@@ -173,6 +175,8 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , TablesManager(StoragesManager)
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
     , InsertTable(std::make_unique<NOlap::TInsertTable>())
+    , SubscribeCounters(std::make_shared<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>())
+    , InsertTaskSubscription(NOlap::TInsertColumnEngineChanges::StaticTypeName(), SubscribeCounters)
     , ReadCounters("Read")
     , ScanCounters("Scan")
     , WritesMonitor(*this)
@@ -707,8 +711,9 @@ private:
     std::unique_ptr<TEvPrivate::TEvWriteIndex> TxEvent;
     TIndexationCounters Counters;
 protected:
-    virtual void DoOnDataReady() override {
-        TxEvent->IndexChanges->Blobs = std::move(ExtractBlobsData());
+    virtual void DoOnDataReady(const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuard) override {
+        TxEvent->IndexChanges->Blobs = ExtractBlobsData();
+        TxEvent->IndexChanges->ResourcesGuard = resourcesGuard;
         const bool isInsert = !!dynamic_pointer_cast<NOlap::TInsertColumnEngineChanges>(TxEvent->IndexChanges);
         std::shared_ptr<NConveyor::ITask> task = std::make_shared<TChangesTask>(std::move(TxEvent), Counters, TabletId, ParentActorId);
         if (isInsert) {
@@ -726,7 +731,7 @@ protected:
     }
 public:
     TChangesReadTask(std::unique_ptr<TEvPrivate::TEvWriteIndex>&& event, const TActorId parentActorId, const ui64 tabletId, const TIndexationCounters& counters)
-        : TBase(event->IndexChanges->GetReadingActions(), event->IndexChanges->GetTaskIdentifier())
+        : TBase(event->IndexChanges->GetReadingActions(), event->IndexChanges->TypeString(), event->IndexChanges->GetTaskIdentifier())
         , ParentActorId(parentActorId)
         , TabletId(tabletId)
         , TxEvent(std::move(event))
@@ -754,8 +759,10 @@ void TColumnShard::StartIndexTask(std::vector<const NOlap::TInsertedData*>&& dat
 
     std::vector<NOlap::TInsertedData> data;
     data.reserve(dataToIndex.size());
+    ui64 memoryNeed = 0;
     for (auto& ptr : dataToIndex) {
         data.push_back(*ptr);
+        memoryNeed += ptr->GetMeta().GetRawBytes();
     }
 
     Y_VERIFY(data.size());
@@ -770,7 +777,10 @@ void TColumnShard::StartIndexTask(std::vector<const NOlap::TInsertedData*>&& dat
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges,
         Settings.CacheDataAfterIndexing);
 
-    ActorContext().Send(BlobsReadActor, std::make_unique<NOlap::NBlobOperations::NRead::TEvStartReadTask>(std::make_unique<TChangesReadTask>(std::move(ev), SelfId(), TabletID(), IndexationCounters)));
+    const TString taskName = indexChanges->GetTaskIdentifier();
+    NOlap::NResourceBroker::NSubscribe::ITask::Start(
+        ResourceSubscribeActor, std::make_shared<NOlap::NBlobOperations::NRead::ITask::TReadSubscriber>(BlobsReadActor,
+                                std::make_unique<TChangesReadTask>(std::move(ev), SelfId(), TabletID(), IndexationCounters), 0, memoryNeed, taskName, InsertTaskSubscription));
 }
 
 void TColumnShard::SetupIndexation() {

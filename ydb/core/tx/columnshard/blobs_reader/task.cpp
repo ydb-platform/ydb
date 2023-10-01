@@ -1,4 +1,5 @@
 #include "task.h"
+#include "events.h"
 #include <library/cpp/actors/core/log.h>
 
 namespace NKikimr::NOlap::NBlobOperations::NRead {
@@ -8,7 +9,8 @@ const std::vector<std::shared_ptr<IBlobsReadingAction>>& ITask::GetAgents() cons
     return Agents;
 }
 
-bool ITask::AddError(const TBlobRange& range, const TErrorStatus& status) {
+bool ITask::AddError(const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) {
+    ++BlobErrorsCount;
     if (TaskFinishedWithError || AbortFlag) {
         ACFL_WARN("event", "SkipError")("blob_range", range)("message", status.GetErrorMessage())("status", status.GetStatus())("external_task_id", ExternalTaskId)
             ("abort", AbortFlag)("finished_with_error", TaskFinishedWithError);
@@ -19,11 +21,9 @@ bool ITask::AddError(const TBlobRange& range, const TErrorStatus& status) {
     {
         auto it = BlobsWaiting.find(range);
         AFL_VERIFY(it != BlobsWaiting.end());
-        it->second->OnReadError(range, status.GetStatus());
+        it->second->OnReadError(range, status);
         BlobsWaiting.erase(it);
     }
-
-    Y_VERIFY(BlobErrors.emplace(range, status).second);
     if (!OnError(range)) {
         TaskFinishedWithError = true;
         return false;
@@ -35,6 +35,7 @@ bool ITask::AddError(const TBlobRange& range, const TErrorStatus& status) {
 }
 
 void ITask::AddData(const TBlobRange& range, const TString& data) {
+    ++BlobsDataCount;
     if (TaskFinishedWithError || AbortFlag) {
         ACFL_WARN("event", "SkipDataAfterError")("external_task_id", ExternalTaskId)("abort", AbortFlag)("finished_with_error", TaskFinishedWithError);
         return;
@@ -48,7 +49,6 @@ void ITask::AddData(const TBlobRange& range, const TString& data) {
         it->second->OnReadResult(range, data);
         BlobsWaiting.erase(it);
     }
-    Y_VERIFY(BlobsData.emplace(range, data).second);
     if (BlobsWaiting.empty()) {
         OnDataReady();
     }
@@ -61,11 +61,11 @@ void ITask::StartBlobsFetching(const THashSet<TBlobRange>& rangesInProgress) {
     ui64 size = 0;
     ui64 count = 0;
     for (auto&& agent : Agents) {
+        size += agent->GetExpectedBlobsSize();
+        count += agent->GetExpectedBlobsCount();
         for (auto&& b : agent->GetRangesForRead()) {
             for (auto&& r : b.second) {
                 BlobsWaiting.emplace(r, agent);
-                size += r.Size;
-                ++count;
             }
         }
         agent->Start(rangesInProgress);
@@ -79,12 +79,19 @@ void ITask::StartBlobsFetching(const THashSet<TBlobRange>& rangesInProgress) {
 
 namespace {
 TAtomicCounter TaskIdentifierBuilder = 0;
+
 }
 
-ITask::ITask(const std::vector<std::shared_ptr<IBlobsReadingAction>>& actions, const TString& externalTaskId)
+void ITask::TReadSubscriber::DoOnAllocationSuccess(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& guard) {
+    Task->ResourcesGuard = guard;
+    TActorContext::AsActorContext().Send(ReadActorId, std::make_unique<TEvStartReadTask>(Task));
+}
+
+ITask::ITask(const std::vector<std::shared_ptr<IBlobsReadingAction>>& actions, const TString& taskCustomer, const TString& externalTaskId)
     : Agents(actions)
     , TaskIdentifier(TaskIdentifierBuilder.Inc())
     , ExternalTaskId(externalTaskId)
+    , TaskCustomer(taskCustomer)
 {
     AFL_VERIFY(Agents.size());
     for (auto&& i : Agents) {
@@ -95,8 +102,8 @@ ITask::ITask(const std::vector<std::shared_ptr<IBlobsReadingAction>>& actions, c
 TString ITask::DebugString() const {
     TStringBuilder sb;
     sb << "finished_with_error=" << TaskFinishedWithError << ";"
-        << "errors=" << BlobErrors.size() << ";"
-        << "data=" << BlobsData.size() << ";"
+        << "errors=" << BlobErrorsCount << ";"
+        << "data=" << BlobsDataCount << ";"
         << "waiting=" << BlobsWaiting.size() << ";"
         << "additional_info=(" << DoDebugString() << ");"
         ;
@@ -107,7 +114,7 @@ void ITask::OnDataReady() {
     ACFL_DEBUG("event", "OnDataReady")("task", DebugString())("external_task_id", ExternalTaskId);
     Y_VERIFY(!DataIsReadyFlag);
     DataIsReadyFlag = true;
-    DoOnDataReady();
+    DoOnDataReady(ResourcesGuard);
 }
 
 bool ITask::OnError(const TBlobRange& range) {
@@ -116,7 +123,18 @@ bool ITask::OnError(const TBlobRange& range) {
 }
 
 ITask::~ITask() {
-    AFL_VERIFY(!NActors::TlsActivationContext || DataIsReadyFlag || TaskFinishedWithError || AbortFlag);
+    AFL_VERIFY(!NActors::TlsActivationContext || DataIsReadyFlag || TaskFinishedWithError || AbortFlag || !BlobsFetchingStarted);
+}
+
+THashMap<NKikimr::NOlap::TBlobRange, TString> ITask::ExtractBlobsData() {
+    AFL_VERIFY(BlobsWaiting.empty());
+    AFL_VERIFY(!ResultsExtracted);
+    ResultsExtracted = true;
+    THashMap<TBlobRange, TString> result;
+    for (auto&& i : Agents) {
+        i->ExtractBlobsDataTo(result);
+    }
+    return std::move(result);
 }
 
 }

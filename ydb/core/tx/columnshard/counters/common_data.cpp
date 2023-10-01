@@ -6,6 +6,9 @@ TDataOwnerSignals::TDataOwnerSignals(const TString& module, const TString dataNa
     : TBase(module)
     , DataName(dataName)
 {
+    DataSize = TBase::GetValueAutoAggregationsClient(DataName + "/Size");
+    ChunksCount = TBase::GetValueAutoAggregationsClient(DataName + "/Chunks/Count");
+
     AddCount = GetDeriviative(DataName + "/Add/Count");
     AddBytes = GetDeriviative(DataName + "/Add/Bytes");
     EraseCount = GetDeriviative(DataName + "/Erase/Count");

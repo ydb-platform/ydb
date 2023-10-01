@@ -1,6 +1,7 @@
 #include "columnshard_impl.h"
 #include "blobs_reader/actor.h"
 #include "hooks/abstract/abstract.h"
+#include "resource_subscriber/actor.h"
 
 namespace NKikimr {
 
@@ -15,6 +16,7 @@ namespace NKikimr::NColumnShard {
 void TColumnShard::CleanupActors(const TActorContext& ctx)
 {
     ctx.Send(BlobsReadActor, new TEvents::TEvPoisonPill);
+    ctx.Send(ResourceSubscribeActor, new TEvents::TEvPoisonPill);
     if (Tiers) {
         Tiers->Stop();
     }
@@ -32,6 +34,7 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
     LOG_S_INFO("Switched to work at " << TabletID() << " actor " << ctx.SelfID);
 
     BlobsReadActor = ctx.Register(new NOlap::NBlobOperations::NRead::TActor(TabletID(), SelfId()));
+    ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));
 
     for (auto&& i : TablesManager.GetTables()) {
         ActivateTiering(i.first, i.second.GetTieringUsage());

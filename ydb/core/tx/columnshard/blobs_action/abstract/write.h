@@ -3,6 +3,7 @@
 #include <util/generic/hash.h>
 #include <ydb/core/protos/base.pb.h>
 #include <ydb/core/tx/columnshard/blob.h>
+#include <ydb/core/tx/columnshard/blobs_action/counters/write.h>
 
 namespace NKikimr::NColumnShard {
 class TColumnShard;
@@ -15,9 +16,13 @@ class IBlobsWritingAction: public ICommonBlobsAction {
 private:
     using TBase = ICommonBlobsAction;
     bool WritingStarted = false;
+    THashMap<TUnifiedBlobId, TMonotonic> WritingStart;
     ui64 SumSize = 0;
+    ui32 BlobsWriteCount = 0;
     THashMap<TUnifiedBlobId, TString> BlobsForWrite;
+    THashSet<TUnifiedBlobId> BlobsWaiting;
     bool Aborted = false;
+    std::shared_ptr<NBlobOperations::TWriteCounters> Counters;
 protected:
     virtual void DoOnExecuteTxBeforeWrite(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs) = 0;
     virtual void DoOnCompleteTxBeforeWrite(NColumnShard::TColumnShard& self) = 0;
@@ -38,6 +43,10 @@ public:
     virtual ~IBlobsWritingAction();
     bool IsReady() const;
 
+    void SetCounters(std::shared_ptr<NBlobOperations::TWriteCounters> counters) {
+        Counters = counters;
+    }
+
     const THashMap<TUnifiedBlobId, TString>& GetBlobsForWrite() const {
         return BlobsForWrite;
     }
@@ -54,7 +63,7 @@ public:
     }
 
     ui32 GetBlobsCount() const {
-        return BlobsForWrite.size();
+        return BlobsWriteCount;
     }
     ui32 GetTotalSize() const {
         return SumSize;
@@ -74,10 +83,7 @@ public:
         return DoOnCompleteTxAfterWrite(self);
     }
 
-    void SendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId) {
-        WritingStarted = true;
-        return DoSendWriteBlobRequest(data, blobId);
-    }
+    void SendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId);
 };
 
 }

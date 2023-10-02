@@ -17,6 +17,9 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <ydb/core/tx/columnshard/counters/common/owner.h>
+
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/public/api/grpc/draft/ydb_long_tx_v1.pb.h>
@@ -32,6 +35,40 @@
 #include <util/generic/size_literals.h>
 
 namespace NKikimr {
+
+class TUploadCounters: public NColumnShard::TCommonCountersOwner {
+private:
+    using TBase = NColumnShard::TCommonCountersOwner;
+    NMonitoring::TDynamicCounters::TCounterPtr RequestsCount;
+    NMonitoring::TDynamicCounters::TCounterPtr RepliesCount;
+    NMonitoring::THistogramPtr ReplyDuration;
+
+    NMonitoring::TDynamicCounters::TCounterPtr RowsCount;
+    NMonitoring::THistogramPtr PackageSize;
+
+    NMonitoring::TDynamicCounters::TCounterPtr FailsCount;
+    NMonitoring::THistogramPtr FailDuration;
+
+public:
+    TUploadCounters();
+
+    void OnRequest(const ui64 rowsCount) const {
+        RequestsCount->Add(1);
+        RowsCount->Add(rowsCount);
+        PackageSize->Collect(rowsCount);
+    }
+
+    void OnReply( const TDuration d) const {
+        RepliesCount->Add(1);
+        ReplyDuration->Collect(d.MilliSeconds());
+    }
+
+    void OnFail(const TDuration d) const {
+        FailsCount->Add(1);
+        FailDuration->Collect(d.MilliSeconds());
+    }
+};
+
 
 using namespace NActors;
 
@@ -132,6 +169,7 @@ private:
     std::shared_ptr<NYql::TIssues> Issues = std::make_shared<NYql::TIssues>();
     NLongTxService::TLongTxId LongTxId;
     NThreading::TFuture<Ydb::LongTx::WriteResponse> WriteBatchResult;
+    TUploadCounters UploadCounters;
 
 protected:
     enum class EUploadSource {
@@ -651,6 +689,10 @@ private:
 
                 break;
             }
+        }
+
+        if (Batch) {
+            UploadCounters.OnRequest(Batch->num_rows());
         }
 
         if (TableKind == NSchemeCache::TSchemeCacheNavigate::KindTable) {
@@ -1180,6 +1222,7 @@ private:
     }
 
     void ReplyWithResult(::Ydb::StatusIds::StatusCode status, const TActorContext& ctx) {
+        UploadCounters.OnReply(TAppData::TimeProvider->Now() - StartTime);
         SendResult(ctx, status);
 
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, LogPrefix() << "completed with status " << status);

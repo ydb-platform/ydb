@@ -77,11 +77,11 @@
         "5111970858": "http://devtools-registry.s3.yandex.net/5111970858",
         "5111976416": "http://devtools-registry.s3.yandex.net/5111976416",
         "5112005661": "http://devtools-registry.s3.yandex.net/5112005661",
-        "5133683360": "http://devtools-registry.s3.yandex.net/5133683360",
-        "5133684376": "http://devtools-registry.s3.yandex.net/5133684376",
-        "5133682626": "http://devtools-registry.s3.yandex.net/5133682626",
-        "5133691606": "http://devtools-registry.s3.yandex.net/5133691606",
-        "5133688195": "http://devtools-registry.s3.yandex.net/5133688195",
+        "5171074557": "http://devtools-registry.s3.yandex.net/5171074557",
+        "5171080348": "http://devtools-registry.s3.yandex.net/5171080348",
+        "5171088369": "http://devtools-registry.s3.yandex.net/5171088369",
+        "5171083158": "http://devtools-registry.s3.yandex.net/5171083158",
+        "5171091616": "http://devtools-registry.s3.yandex.net/5171091616",
         "4825838152": "http://devtools-registry.s3.yandex.net/4825838152",
         "4825839069": "http://devtools-registry.s3.yandex.net/4825839069",
         "4825834530": "http://devtools-registry.s3.yandex.net/4825834530",
@@ -166,11 +166,11 @@
         "5111970858": "yexport for darwin",
         "5111976416": "yexport for darwin-arm64",
         "5112005661": "yexport for linux",
-        "5133683360": "ymake for darwin",
-        "5133684376": "ymake for darwin-arm64",
-        "5133682626": "ymake for linux",
-        "5133691606": "ymake for linux-aarch64",
-        "5133688195": "ymake.exe for win32-clang-cl",
+        "5171074557": "ymake for darwin",
+        "5171080348": "ymake for darwin-arm64",
+        "5171088369": "ymake for linux",
+        "5171083158": "ymake for linux-aarch64",
+        "5171091616": "ymake.exe for win32-clang-cl",
         "4825838152": "yolint for darwin",
         "4825839069": "yolint for darwin-arm64",
         "4825834530": "yolint for linux",
@@ -201,20 +201,20 @@
         "1885743377": {
             "linux-x86_64": "4940633745"
         },
-        "1942369015": {
-            "darwin": "5133683360"
+        "1953714628": {
+            "darwin": "5171074557"
         },
-        "1942369023": {
-            "darwin-arm64": "5133684376"
+        "1953714654": {
+            "darwin-arm64": "5171080348"
         },
-        "1942368984": {
-            "linux": "5133682626"
+        "1953714571": {
+            "linux": "5171088369"
         },
-        "1942369033": {
-            "linux-aarch64": "5133691606"
+        "1953714685": {
+            "linux-aarch64": "5171083158"
         },
-        "1942368998": {
-            "win32-clang-cl": "5133688195"
+        "1953714607": {
+            "win32-clang-cl": "5171091616"
         }
     }
 }

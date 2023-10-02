@@ -1,7 +1,5 @@
 {
   ".github/actions/build/action.yml":"ydb/github_toplevel/.github/actions/build/action.yml",
-  ".github/actions/docs/build.yaml":"ydb/github_toplevel/.github/actions/docs/build.yaml",
-  ".github/actions/docs/release.yaml":"ydb/github_toplevel/.github/actions/docs/release.yaml",
   ".github/actions/prepare_vm/action.yaml":"ydb/github_toplevel/.github/actions/prepare_vm/action.yaml",
   ".github/actions/test/action.yml":"ydb/github_toplevel/.github/actions/test/action.yml",
   ".github/check_dirs.sh":"ydb/github_toplevel/.github/check_dirs.sh",
@@ -32,6 +30,8 @@
   ".github/workflows/build_and_test_ondemand.yml":"ydb/github_toplevel/.github/workflows/build_and_test_ondemand.yml",
   ".github/workflows/build_and_test_provisioned.yml":"ydb/github_toplevel/.github/workflows/build_and_test_provisioned.yml",
   ".github/workflows/docker_publish.yml":"ydb/github_toplevel/.github/workflows/docker_publish.yml",
+  ".github/workflows/docs/build.yaml":"ydb/github_toplevel/.github/workflows/docs/build.yaml",
+  ".github/workflows/docs/release.yaml":"ydb/github_toplevel/.github/workflows/docs/release.yaml",
   ".github/workflows/nightly_run.yaml":"ydb/github_toplevel/.github/workflows/nightly_run.yaml",
   ".github/workflows/pr_check.yml":"ydb/github_toplevel/.github/workflows/pr_check.yml",
   ".github/workflows/prewarm-ccache.yml":"ydb/github_toplevel/.github/workflows/prewarm-ccache.yml",

@@ -522,7 +522,8 @@ class TExecutor
 
     void TranslateCacheTouchesToSharedCache();
     void RequestInMemPagesForDatabase();
-    void RequestInMemPagesForPartStore(ui32 tableId, const NTable::TPartView &partView);
+    void RequestInMemPagesForPartStore(ui32 tableId, const NTable::TPartView &partView, const THashSet<NTable::TTag> &stickyColumns);
+    THashSet<NTable::TTag> GetStickyColumns(ui32 tableId);
     void RequestFromSharedCache(TAutoPtr<NPageCollection::TFetch> fetch,
         NBlockIO::EPriority way, EPageCollectionRequest requestCategory);
     THolder<TScanSnapshot> PrepareScanSnapshot(ui32 table,

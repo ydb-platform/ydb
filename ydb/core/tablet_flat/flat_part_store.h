@@ -128,17 +128,18 @@ public:
         return (lob == ELargeObj::Extern ? Pseudo : PageCollections.at(GroupsCount)).Get();
     }
 
-    TAutoPtr<NPageCollection::TFetch> DataPages() const noexcept
+    TAutoPtr<NPageCollection::TFetch> GetPages(ui32 room) const noexcept
     {
-        TVector<TPageId> pages;
+        Y_VERIFY(room < PageCollections.size());
 
-        pages.reserve(Index->End() - Index->Begin());
+        auto total = PageCollections[room]->PageCollection->Total();
 
-        auto it = Index.LookupKey({ }, Scheme->Groups[0], ESeek::Lower, nullptr);
+        TVector<TPageId> pages(total);
+        for (size_t i : xrange(total)) {
+            pages[i] = i;
+        }
 
-        for (; it; ++it) pages.emplace_back(it->GetPageId());
-
-        return new NPageCollection::TFetch{ 0, PageCollections[0]->PageCollection , std::move(pages) };
+        return new NPageCollection::TFetch{ 0, PageCollections[room]->PageCollection, std::move(pages) };
     }
 
     static TVector<TIntrusivePtr<TCache>> Construct(TVector<TPageCollectionComponents> components) noexcept

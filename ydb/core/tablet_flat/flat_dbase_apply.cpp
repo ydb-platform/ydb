@@ -84,6 +84,7 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
 
         Y_VERIFY(ui32(codec) <= 1, "Invalid page encoding code value");
 
+        // FIXME: for now these changes will affect old parts on boot only (see RequestInMemPagesForPartStore)
         bool ever = delta.HasInMemory() && delta.GetInMemory();
         auto cache = ever ? ECache::Ever : family.Cache;
 
@@ -174,6 +175,7 @@ bool TSchemeModifier::AddColumnToFamily(ui32 tid, ui32 cid, ui32 family)
 
     if (column->Family != family) {
         PreserveTable(tid);
+        // FIXME: for now ECache::Ever setting will affect old parts on boot only (see RequestInMemPagesForPartStore)
         column->Family = family;
         return true;
     }

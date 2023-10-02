@@ -5054,5 +5054,349 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorIndexLoading) {
 
 }
 
+Y_UNIT_TEST_SUITE(TFlatTableExecutorStickyPages) {
+    using EReady = NTable::EReady;
+    using ENext = NTable::ENext;
+
+    struct TTxFullScan : public ITransaction {
+        int& FailedAttempts;
+
+        TTxFullScan(int& failedAttempts)
+            : FailedAttempts(failedAttempts)
+        {
+            FailedAttempts = 0;
+        }
+
+        bool Execute(TTransactionContext &txc, const TActorContext &) override
+        {
+            TVector<NTable::TTag> tags{ { TRowsModel::ColumnKeyId, TRowsModel::ColumnValueId } };
+
+            auto iter = txc.DB.IterateRange(TRowsModel::TableId, { }, tags, {2, 0});
+            while (iter->Next(ENext::Data) == EReady::Data) {
+                // iterate over all rows
+            }
+
+            if (iter->Last() != EReady::Page) {
+                return true;
+            }
+            FailedAttempts++;
+            return false;
+        }
+
+        void Complete(const TActorContext &ctx) override
+        {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
+    struct TTxKeepFamilyInMemory : public ITransaction {
+        ui32 Family;
+
+        TTxKeepFamilyInMemory(ui32 family)
+            : Family(family)
+        { }
+
+        bool Execute(TTransactionContext &txc, const TActorContext &) override
+        {
+            using namespace NTable::NPage;
+
+            txc.DB.Alter().SetFamily(TRowsModel::TableId, Family, ECache::Ever, ECodec::Plain);
+
+            return true;
+        }
+
+        void Complete(const TActorContext &ctx) override
+        {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
+    struct TTxAddFamily : public ITransaction {
+        bool Execute(TTransactionContext &txc, const TActorContext &) override
+        {
+            using namespace NTable::NPage;
+
+            txc.DB.Alter()
+                .SetFamily(TRowsModel::TableId, TRowsModel::AltFamilyId, ECache::None, ECodec::Plain)
+                .AddColumnToFamily(TRowsModel::TableId, TRowsModel::ColumnValueId, TRowsModel::AltFamilyId);
+
+            return true;
+        }
+
+        void Complete(const TActorContext &ctx) override
+        {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+    
+    void ZeroSharedCache(TMyEnvBase &env) {
+        env.Env.GetMemObserver()->NotifyStat({1, 1, 1});
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(NSharedCache::EvMem, 1));
+        env->DispatchEvents(options);
+    }
+
+    Y_UNIT_TEST(TestNonSticky) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+        ZeroSharedCache(env);
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+
+        // 10 history pages
+        env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
+        
+        // 10 data pages
+        env.SendSync(rows.VersionTo(TRowVersion(2, 20)).RowTo(0).MakeRows(70, 950));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        int failedAttempts = 0;
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 20); // data pages only, 2 indexes are sticky
+
+        // restart tablet
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        // should have the same behaviour
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 20);
+    }
+
+    Y_UNIT_TEST(TestSticky) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+        ZeroSharedCache(env);
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+        env.SendSync(new NFake::TEvExecute{ new TTxKeepFamilyInMemory(0) });
+
+        // 10 history pages
+        env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
+        
+        // 10 data pages
+        env.SendSync(rows.VersionTo(TRowVersion(2, 20)).RowTo(0).MakeRows(70, 950));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        int failedAttempts = 0;
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
+
+        // restart tablet
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        // should have the same behaviour
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
+    }
+
+    Y_UNIT_TEST(TestNonStickyGroup) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+        ZeroSharedCache(env);
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy(), true));
+
+        // 1 historic[0] + 10 historic[1] pages
+        env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
+        
+        // 1 groups[0] + 10 groups[1] pages
+        env.SendSync(rows.VersionTo(TRowVersion(2, 20)).RowTo(0).MakeRows(70, 950));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        int failedAttempts = 0;
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 12); // 1 groups[0], 1 historic[0], 10 historic[1] pages, 4 indexes are sticky
+
+        // restart tablet
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        // should have the same behaviour
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 12);
+    }
+
+    Y_UNIT_TEST(TestStickyMain) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+        ZeroSharedCache(env);
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy(), true));
+        env.SendSync(new NFake::TEvExecute{ new TTxKeepFamilyInMemory(0) });
+
+        // 1 historic[0] + 10 historic[1] pages
+        env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
+        
+        // 1 groups[0] + 10 groups[1] pages
+        env.SendSync(rows.VersionTo(TRowVersion(2, 20)).RowTo(0).MakeRows(70, 950));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        int failedAttempts = 0;
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 10); // 10 historic[1] pages
+
+        // restart tablet
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        // should have the same behaviour
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 10);
+    }
+
+    Y_UNIT_TEST(TestStickyAlt) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+        ZeroSharedCache(env);
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy(), true));
+
+        env.SendSync(new NFake::TEvExecute{ new TTxKeepFamilyInMemory(TRowsModel::AltFamilyId) });
+
+        // 1 historic[0] + 10 historic[1] pages
+        env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
+        
+        // 1 groups[0] + 10 groups[1] pages
+        env.SendSync(rows.VersionTo(TRowVersion(2, 20)).RowTo(0).MakeRows(70, 950));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        int failedAttempts = 0;
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 2); // 1 groups[0], 1 historic[0], 4 indexes are sticky
+
+        // restart tablet
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        // should have the same behaviour
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 2);
+    }
+
+    Y_UNIT_TEST(TestStickyAll) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+        ZeroSharedCache(env);
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy(), true));
+        env.SendSync(new NFake::TEvExecute{ new TTxKeepFamilyInMemory(0) });
+        env.SendSync(new NFake::TEvExecute{ new TTxKeepFamilyInMemory(TRowsModel::AltFamilyId) });
+
+        // 1 historic[0] + 10 historic[1] pages
+        env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
+        
+        // 1 groups[0] + 10 groups[1] pages
+        env.SendSync(rows.VersionTo(TRowVersion(2, 20)).RowTo(0).MakeRows(70, 950));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        int failedAttempts = 0;
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
+
+        // restart tablet
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        // should have the same behaviour
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
+    }
+
+    Y_UNIT_TEST(TestAlterAddFamilySticky) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+        ZeroSharedCache(env);
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+
+        // 10 historic[0] pages
+        env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
+        
+        // 10 groups[0] pages
+        env.SendSync(rows.VersionTo(TRowVersion(2, 20)).RowTo(0).MakeRows(70, 950));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        // add family, old parts won't have it
+        env.SendSync(new NFake::TEvExecute{ new TTxAddFamily() });
+        env.SendSync(new NFake::TEvExecute{ new TTxKeepFamilyInMemory(0) });
+        env.SendSync(new NFake::TEvExecute{ new TTxKeepFamilyInMemory(TRowsModel::AltFamilyId) });
+
+        int failedAttempts = 0;
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 20); // old parts aren't sticky before restart
+
+        // restart tablet
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // all old columns were made sticky, load them on start
+    }
+
+    Y_UNIT_TEST(TestAlterAddFamilyPartiallySticky) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+        ZeroSharedCache(env);
+
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+
+        // 10 historic[0] pages
+        env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
+        
+        // 10 groups[0] pages
+        env.SendSync(rows.VersionTo(TRowVersion(2, 20)).RowTo(0).MakeRows(70, 950));
+        
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        // add family, old parts won't have it
+        env.SendSync(new NFake::TEvExecute{ new TTxAddFamily() });
+        env.SendSync(new NFake::TEvExecute{ new TTxKeepFamilyInMemory(0) });
+
+        int failedAttempts = 0;
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) });
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 20); // old parts aren't sticky before restart
+
+        // restart tablet
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(failedAttempts) }, true);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // if at least one family of a group is for memory load it 
+    }
+}
+
 } // namespace NTabletFlatExecutor
 } // namespace NKikimr

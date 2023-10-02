@@ -168,13 +168,6 @@ public:
         return nullptr;
     }
 
-    ECache CachePolicy(ui32 id) const noexcept
-    {
-        auto *family = DefaultFamilyFor(id);
-
-        return family ? family->Cache : ECache::None;
-    }
-
     ECompactionStrategy CompactionStrategyFor(ui32 id) const noexcept
     {
         if (auto *table = GetTableInfo(id)) {

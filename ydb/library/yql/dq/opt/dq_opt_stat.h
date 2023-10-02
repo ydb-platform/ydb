@@ -16,5 +16,6 @@ void InferStatisticsForStage(const TExprNode::TPtr& input, TTypeAnnotationContex
 void InferStatisticsForDqSource(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForMapJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
+double ComputePredicateSelectivity(const NNodes::TExprBase& input, const std::shared_ptr<TOptimizerStatistics>& stats);
 
 } // namespace NYql::NDq {

@@ -92,7 +92,8 @@ void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationCont
         // Selectivity is the fraction of tuples that are selected by this predicate
         // Currently we just set the number to 10% before we have statistics and parse
         // the predicate
-        double selectivity = 0.1;
+
+        double selectivity = ComputePredicateSelectivity(flatmap.Lambda().Body(), inputStats);
 
         auto outputStats = TOptimizerStatistics(inputStats->Nrows * selectivity, inputStats->Ncols);
 
@@ -133,14 +134,9 @@ void InferStatisticsForFilter(const TExprNode::TPtr& input, TTypeAnnotationConte
     // Selectivity is the fraction of tuples that are selected by this predicate
     // Currently we just set the number to 10% before we have statistics and parse
     // the predicate
-    double selectivity = 0.1;
-
-    auto filterLambda = filter.Lambda();
-    if (auto exists = filterLambda.Body().Maybe<TCoExists>()) {
-        if (exists.Cast().Optional().Maybe<TCoMember>()) {
-            selectivity = 1.0;
-        }
-    }
+    auto filterBody = filter.Lambda().Body();
+    
+    double selectivity = ComputePredicateSelectivity(filterBody, inputStats);
 
     auto outputStats = TOptimizerStatistics(inputStats->Nrows * selectivity, inputStats->Ncols);
 

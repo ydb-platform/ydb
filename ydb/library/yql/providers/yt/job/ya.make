@@ -17,7 +17,7 @@ PEERDIR(
     library/cpp/time_provider
     library/cpp/yson/node
     yt/cpp/mapreduce/interface
-    library/cpp/yt/user_job_statistics
+    yt/cpp/mapreduce/library/user_job_statistics
     ydb/library/yql/minikql/comp_nodes/llvm
     ydb/library/yql/public/udf
     ydb/library/yql/utils

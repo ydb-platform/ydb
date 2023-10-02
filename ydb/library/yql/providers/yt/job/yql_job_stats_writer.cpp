@@ -1,7 +1,7 @@
 #include "yql_job_stats_writer.h"
 #include "yql_job_base.h"
 
-#include <library/cpp/yt/user_job_statistics/user_job_statistics.h>
+#include <yt/cpp/mapreduce/library/user_job_statistics/user_job_statistics.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
 
 using NKikimr::NMiniKQL::IStatsRegistry;

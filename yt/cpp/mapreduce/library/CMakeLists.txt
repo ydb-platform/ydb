@@ -7,3 +7,4 @@
 
 
 add_subdirectory(table_schema)
+add_subdirectory(user_job_statistics)

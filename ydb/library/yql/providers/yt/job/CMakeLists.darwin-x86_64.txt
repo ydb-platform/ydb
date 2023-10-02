@@ -19,7 +19,7 @@ target_link_libraries(providers-yt-job PUBLIC
   library-cpp-time_provider
   cpp-yson-node
   cpp-mapreduce-interface
-  cpp-yt-user_job_statistics
+  mapreduce-library-user_job_statistics
   minikql-comp_nodes-llvm
   yql-public-udf
   library-yql-utils

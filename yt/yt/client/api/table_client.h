@@ -165,6 +165,7 @@ struct TReshardTableOptions
     std::optional<bool> Uniform;
     std::optional<bool> EnableSlicing;
     std::optional<double> SlicingAccuracy;
+    std::vector<i64> TrimmedRowCounts;
 };
 
 struct TReshardTableAutomaticOptions

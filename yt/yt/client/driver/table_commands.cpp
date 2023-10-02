@@ -533,6 +533,8 @@ TReshardTableCommand::TReshardTableCommand()
     RegisterParameter("slicing_accuracy", Options.SlicingAccuracy)
         .Default()
         .GreaterThan(0);
+    RegisterParameter("trimmed_row_counts", Options.TrimmedRowCounts)
+        .Default();
 
     RegisterPostprocessor([&] () {
         if (PivotKeys && TabletCount) {

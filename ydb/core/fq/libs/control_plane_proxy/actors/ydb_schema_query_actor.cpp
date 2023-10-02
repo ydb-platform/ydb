@@ -499,7 +499,8 @@ private:
 };
 
 bool IsPathDoesNotExistIssue(const TStatus& status) {
-    return status.GetIssues().ToOneLineString().Contains("Path does not exist");
+    auto oneLineError = status.GetIssues().ToOneLineString();
+    return oneLineError.Contains("Path does not exist") || oneLineError.Contains("path hasn't been resolved");
 }
 
 bool IsPathExistsIssue(const TStatus& status) {

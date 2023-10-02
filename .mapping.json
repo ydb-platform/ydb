@@ -81,6 +81,7 @@
   "cmake/protobuf.cmake":"",
   "cmake/shared_libs.cmake":"",
   "conanfile.txt":"",
+  "contrib/.gitignore":"ydb/yandex_specific/contrib_gitignore",
   "contrib/CMakeLists.txt":"",
   "contrib/libs/CMakeLists.darwin-x86_64.txt":"",
   "contrib/libs/CMakeLists.linux-aarch64.txt":"",

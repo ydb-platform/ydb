@@ -678,88 +678,95 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
     Y_UNIT_TEST(IndexTtl) {
         TTestDbWrapper db;
-        TIndexInfo tableInfo = NColumnShard::BuildTableInfo(testColumns, testKey);;
+        TIndexInfo tableInfo = NColumnShard::BuildTableInfo(testColumns, testKey);
 
         ui64 pathId = 1;
         ui32 step = 1000;
 
         // insert
         ui64 planStep = 1;
-
-        TSnapshot indexSnapshot(1, 1);
-        TColumnEngineForLogs engine(0, TestLimits(), CommonStoragesManager);
-        engine.UpdateDefaultSchema(indexSnapshot, TIndexInfo(tableInfo));
         THashSet<TUnifiedBlobId> lostBlobs;
-        engine.Load(db, lostBlobs);
+        TSnapshot indexSnapshot(1, 1);
+        {
+            TColumnEngineForLogs engine(0, TestLimits(), CommonStoragesManager);
+            engine.UpdateDefaultSchema(indexSnapshot, TIndexInfo(tableInfo));
+            engine.Load(db, lostBlobs);
 
-        THashMap<TBlobRange, TString> blobs;
-        ui64 numRows = 1000;
-        ui64 rowPos = 0;
-        for (ui64 txId = 1; txId <= 20; ++txId, rowPos += numRows) {
-            TString testBlob = MakeTestBlob(rowPos, rowPos + numRows);
-            auto blobRange = MakeBlobRange(++step, testBlob.size());
-            blobs[blobRange] = testBlob;
+            THashMap<TBlobRange, TString> blobs;
+            ui64 numRows = 1000;
+            ui64 rowPos = 0;
+            for (ui64 txId = 1; txId <= 20; ++txId, rowPos += numRows) {
+                TString testBlob = MakeTestBlob(rowPos, rowPos + numRows);
+                auto blobRange = MakeBlobRange(++step, testBlob.size());
+                blobs[blobRange] = testBlob;
 
-            // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
-            std::vector<TInsertedData> dataToIndex;
-            dataToIndex.push_back(
-                TInsertedData(txId, pathId, "", blobRange.BlobId, {}, indexSnapshot, {}));
+                // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
+                std::vector<TInsertedData> dataToIndex;
+                dataToIndex.push_back(
+                    TInsertedData(txId, pathId, "", blobRange.BlobId, {}, indexSnapshot, {}));
 
-            bool ok = Insert(engine, db, TSnapshot(planStep, txId), std::move(dataToIndex), blobs, step);
-            UNIT_ASSERT(ok);
+                bool ok = Insert(engine, db, TSnapshot(planStep, txId), std::move(dataToIndex), blobs, step);
+                UNIT_ASSERT(ok);
+            }
+
+            // compact
+            planStep = 2;
+
+            //        bool ok = Compact(engine, db, TSnapshot(planStep, 1), std::move(blobs), step, {20, 4, 4});
+            //        UNIT_ASSERT(ok);
+
+                    // read
+            planStep = 3;
+
+            const TIndexInfo& indexInfo = engine.GetVersionedIndex().GetLastSchema()->GetIndexInfo();
+            THashSet<ui32> oneColumnId = {indexInfo.GetColumnId(testColumns[0].first)};
+
+            { // full scan
+                ui64 txId = 1;
+                auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), oneColumnId, NOlap::TPKRangesFilter(false));
+                UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 20);
+            }
+
+            // Cleanup
+            Cleanup(engine, db, TSnapshot(planStep, 1), 0);
+
+            { // full scan
+                ui64 txId = 1;
+                auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), oneColumnId, NOlap::TPKRangesFilter(false));
+                UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 20);
+            }
+
+            // TTL
+            std::shared_ptr<arrow::DataType> ttlColType = arrow::timestamp(arrow::TimeUnit::MICRO);
+            THashMap<ui64, NOlap::TTiering> pathTtls;
+            NOlap::TTiering tiering;
+            tiering.Ttl = NOlap::TTierInfo::MakeTtl(TDuration::MicroSeconds(TInstant::Now().MicroSeconds() - 10000), "timestamp");
+            pathTtls.emplace(pathId, std::move(tiering));
+            Ttl(engine, db, pathTtls, 10);
+
+            // read + load + read
+
+            { // full scan
+                ui64 txId = 1;
+                auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), oneColumnId, NOlap::TPKRangesFilter(false));
+                UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 10);
+            }
         }
+        {
+            // load
+            TColumnEngineForLogs engine(0, TestLimits(), CommonStoragesManager);
+            engine.UpdateDefaultSchema(indexSnapshot, TIndexInfo(tableInfo));
+            engine.Load(db, lostBlobs);
+            UNIT_ASSERT_VALUES_EQUAL(engine.GetTotalStats().EmptyGranules, 0);
 
-        // compact
-        planStep = 2;
+            const TIndexInfo& indexInfo = engine.GetVersionedIndex().GetLastSchema()->GetIndexInfo();
+            THashSet<ui32> oneColumnId = {indexInfo.GetColumnId(testColumns[0].first)};
 
-//        bool ok = Compact(engine, db, TSnapshot(planStep, 1), std::move(blobs), step, {20, 4, 4});
-//        UNIT_ASSERT(ok);
-
-        // read
-        planStep = 3;
-
-        const TIndexInfo& indexInfo = engine.GetVersionedIndex().GetLastSchema()->GetIndexInfo();
-        THashSet<ui32> oneColumnId = { indexInfo.GetColumnId(testColumns[0].first) };
-
-        { // full scan
-            ui64 txId = 1;
-            auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), oneColumnId, NOlap::TPKRangesFilter(false));
-            UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 20);
-        }
-
-        // Cleanup
-        Cleanup(engine, db, TSnapshot(planStep, 1), 0);
-
-        { // full scan
-            ui64 txId = 1;
-            auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), oneColumnId, NOlap::TPKRangesFilter(false));
-            UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 20);
-        }
-
-        // TTL
-        std::shared_ptr<arrow::DataType> ttlColType = arrow::timestamp(arrow::TimeUnit::MICRO);
-        THashMap<ui64, NOlap::TTiering> pathTtls;
-        NOlap::TTiering tiering;
-        tiering.Ttl = NOlap::TTierInfo::MakeTtl(TDuration::MicroSeconds(TInstant::Now().MicroSeconds() - 10000), "timestamp");
-        pathTtls.emplace(pathId, std::move(tiering));
-        Ttl(engine, db, pathTtls, 10);
-
-        // read + load + read
-
-        { // full scan
-            ui64 txId = 1;
-            auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), oneColumnId, NOlap::TPKRangesFilter(false));
-            UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 10);
-        }
-
-        // load
-        engine.Load(db, lostBlobs);
-        UNIT_ASSERT_VALUES_EQUAL(engine.GetTotalStats().EmptyGranules, 0);
-
-        { // full scan
-            ui64 txId = 1;
-            auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), oneColumnId, NOlap::TPKRangesFilter(false));
-            UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 10);
+            { // full scan
+                ui64 txId = 1;
+                auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), oneColumnId, NOlap::TPKRangesFilter(false));
+                UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 10);
+            }
         }
     }
 }

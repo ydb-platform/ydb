@@ -220,13 +220,13 @@ private:
     /// Set of empty granules.
     /// Just for providing count of empty granules.
     THashSet<ui64> EmptyGranules;
-    TSet<TPortionAddress> CleanupPortions;
+    std::map<TSnapshot, std::vector<TPortionInfo>> CleanupPortions;
     TColumnEngineStats Counters;
     ui64 LastPortion;
     ui64 LastGranule;
     TSnapshot LastSnapshot = TSnapshot::Zero();
     mutable std::optional<TMark> CachedDefaultMark;
-
+    bool Loaded = false;
 private:
     const std::shared_ptr<arrow::Schema>& MarkSchema() const noexcept {
         return VersionedIndex.GetIndexKey();
@@ -243,19 +243,6 @@ private:
         return VersionedIndex.GetLastSchema()->GetIndexInfo().IsCompositeIndexKey();
     }
 
-    void ClearIndex() {
-        Granules.clear();
-        PathGranules.clear();
-        PathStats.clear();
-        EmptyGranules.clear();
-        CleanupPortions.clear();
-        Counters.Clear();
-
-        LastPortion = 0;
-        LastGranule = 0;
-        LastSnapshot = TSnapshot::Zero();
-    }
-
     bool LoadGranules(IDbWrapper& db);
     bool LoadColumns(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs);
     bool LoadCounters(IDbWrapper& db);
@@ -264,6 +251,7 @@ private:
 
     /// Insert granule or check if same granule was already inserted.
     void SetGranule(const TGranuleRecord& rec);
+    std::optional<ui64> NewGranule(const TGranuleRecord& rec);
     void UpsertPortion(const TPortionInfo& portionInfo, const TPortionInfo* exInfo = nullptr);
     bool ErasePortion(const TPortionInfo& portionInfo, bool updateStats = true);
     void UpdatePortionStats(const TPortionInfo& portionInfo, EStatsUpdateType updateType = EStatsUpdateType::DEFAULT,

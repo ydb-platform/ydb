@@ -34,12 +34,12 @@ public:
     virtual THashSet<TPortionAddress> GetTouchedPortions() const override {
         THashSet<TPortionAddress> result;
         for (const auto& portionInfo : PortionsToDrop) {
-            result.emplace(portionInfo->GetAddress());
+            result.emplace(portionInfo.GetAddress());
         }
         return result;
     }
 
-    std::vector<std::shared_ptr<TPortionInfo>> PortionsToDrop;
+    std::vector<TPortionInfo> PortionsToDrop;
     bool NeedRepeat = false;
 
     virtual ui32 GetWritePortionsCount() const override {

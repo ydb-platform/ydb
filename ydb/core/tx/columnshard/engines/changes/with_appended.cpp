@@ -56,19 +56,27 @@ void TChangesWithAppend::DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIn
 
 bool TChangesWithAppend::DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context) {
     // Save new granules
+    std::map<ui64, ui64> remapGranules;
     for (auto& [granule, p] : NewGranules) {
         ui64 pathId = p.first;
         TMark mark = p.second;
         TGranuleRecord rec(pathId, granule, context.Snapshot, mark.GetBorder());
-        self.SetGranule(rec);
-        self.GranulesTable->Write(context.DB, rec);
+        auto oldGranuleId = self.NewGranule(rec);
+        if (!oldGranuleId) {
+            self.GranulesTable->Write(context.DB, rec);
+        } else {
+            remapGranules.emplace(rec.Granule, *oldGranuleId);
+        }
     }
     // Save new portions (their column records)
 
     for (auto& portionInfoWithBlobs : AppendedPortions) {
         auto& portionInfo = portionInfoWithBlobs.GetPortionInfo();
         Y_VERIFY(!portionInfo.Empty());
-
+        auto it = remapGranules.find(portionInfo.GetGranule());
+        if (it != remapGranules.end()) {
+            portionInfo.SetGranule(it->second);
+        }
         self.UpsertPortion(portionInfo);
         for (auto& record : portionInfo.Records) {
             self.ColumnsTable->Write(context.DB, portionInfo, record);
@@ -96,7 +104,7 @@ bool TChangesWithAppend::DoApplyChanges(TColumnEngineForLogs& self, TApplyChange
     }
 
     for (auto& portionInfo : PortionsToRemove) {
-        self.CleanupPortions.insert(portionInfo.GetAddress());
+        self.CleanupPortions[portionInfo.GetRemoveSnapshot()].emplace_back(portionInfo);
     }
 
     return true;

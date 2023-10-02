@@ -9,7 +9,7 @@ void TCleanupColumnEngineChanges::DoDebugString(TStringOutput& out) const {
     if (ui32 dropped = PortionsToDrop.size()) {
         out << "drop " << dropped << " portions";
         for (auto& portionInfo : PortionsToDrop) {
-            out << portionInfo->DebugString();
+            out << portionInfo.DebugString();
         }
     }
 }
@@ -18,23 +18,23 @@ void TCleanupColumnEngineChanges::DoWriteIndex(NColumnShard::TColumnShard& self,
     self.IncCounter(NColumnShard::COUNTER_PORTIONS_ERASED, PortionsToDrop.size());
     THashSet<TUnifiedBlobId> blobIds;
     for (auto&& p : PortionsToDrop) {
-        auto removing = BlobsAction.GetRemoving(*p);
-        for (auto&& r : p->Records) {
+        auto removing = BlobsAction.GetRemoving(p);
+        for (auto&& r : p.Records) {
             removing->DeclareRemove(r.BlobRange.BlobId);
         }
-        self.IncCounter(NColumnShard::COUNTER_RAW_BYTES_ERASED, p->RawBytesSum());
+        self.IncCounter(NColumnShard::COUNTER_RAW_BYTES_ERASED, p.RawBytesSum());
     }
 }
 
 bool TCleanupColumnEngineChanges::DoApplyChanges(TColumnEngineForLogs& self, TApplyChangesContext& context) {
     THashSet<TUnifiedBlobId> blobIds;
     for (auto& portionInfo : PortionsToDrop) {
-        if (!self.ErasePortion(*portionInfo)) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot erase portion")("portion", portionInfo->DebugString());
-            return false;
+        if (!self.ErasePortion(portionInfo)) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "Cannot erase portion")("portion", portionInfo.DebugString());
+            continue;
         }
-        for (auto& record : portionInfo->Records) {
-            self.ColumnsTable->Erase(context.DB, *portionInfo, record);
+        for (auto& record : portionInfo.Records) {
+            self.ColumnsTable->Erase(context.DB, portionInfo, record);
         }
     }
 

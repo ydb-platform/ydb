@@ -142,7 +142,8 @@ void TColumnEngineForLogs::UpdateDefaultSchema(const TSnapshot& snapshot, TIndex
 }
 
 bool TColumnEngineForLogs::Load(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBlobs, const THashSet<ui64>& pathsToDrop) {
-    ClearIndex();
+    Y_VERIFY(!Loaded);
+    Loaded = true;
     {
         auto guard = GranulesStorage->StartPackModification();
         if (!LoadGranules(db)) {
@@ -165,7 +166,7 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db, THashSet<TUnifiedBlobId>& lostBl
         for (const auto& [_, portionInfo] : spg->GetPortions()) {
             UpdatePortionStats(*portionInfo, EStatsUpdateType::ADD);
             if (portionInfo->CheckForCleanup()) {
-                CleanupPortions.emplace(portionInfo->GetAddress());
+                CleanupPortions[portionInfo->GetRemoveSnapshot()].emplace_back(*portionInfo);
             }
         }
     }
@@ -309,7 +310,7 @@ std::shared_ptr<TCleanupColumnEngineChanges> TColumnEngineForLogs::StartCleanup(
             Y_VERIFY(spg);
             for (auto& [portion, info] : spg->GetPortions()) {
                 affectedRecords += info->NumChunks();
-                changes->PortionsToDrop.push_back(info);
+                changes->PortionsToDrop.push_back(*info);
                 dropPortions.insert(portion);
             }
 
@@ -332,36 +333,20 @@ std::shared_ptr<TCleanupColumnEngineChanges> TColumnEngineForLogs::StartCleanup(
         return changes;
     }
 
-    // Add stale portions of alive paths
-    THashSet<ui64> cleanGranules;
-    std::shared_ptr<TGranuleMeta> granuleMeta;
-    for (auto it = CleanupPortions.begin(); it != CleanupPortions.end();) {
-        if (!granuleMeta || granuleMeta->GetGranuleId() != it->GetGranuleId()) {
-            auto itGranule = Granules.find(it->GetGranuleId());
-            if (itGranule == Granules.end()) {
-                it = CleanupPortions.erase(it);
-                continue;
-            }
-            granuleMeta = itGranule->second;
+    while (CleanupPortions.size() && affectedRecords <= maxRecords) {
+        auto it = CleanupPortions.begin();
+        if (it->first >= snapshot) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanupStop")("snapshot", snapshot.DebugString())("current_snapshot", it->first.DebugString());
+            break;
         }
-        Y_VERIFY(granuleMeta);
-        auto portionInfo = granuleMeta->GetPortionPtr(it->GetPortionId());
-        if (!portionInfo) {
-            it = CleanupPortions.erase(it);
-        } else if (portionInfo->CheckForCleanup(snapshot)) {
-            affectedRecords += portionInfo->NumChunks();
-            changes->PortionsToDrop.push_back(portionInfo);
-            it = CleanupPortions.erase(it);
-            if (affectedRecords > maxRecords) {
-                changes->NeedRepeat = true;
-                break;
-            }
-        } else {
-            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanup/Check")("snapshot", snapshot.DebugString())("portions_snapshot", portionInfo->GetRemoveSnapshot().DebugString());
-            Y_VERIFY(portionInfo->CheckForCleanup());
-            ++it;
+        for (auto&& i : it->second) {
+            Y_VERIFY(i.CheckForCleanup(snapshot));
+            affectedRecords += i.NumChunks();
+            changes->PortionsToDrop.push_back(i);
         }
+        CleanupPortions.erase(it);
     }
+    changes->NeedRepeat = affectedRecords > maxRecords;
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanup")("portions_count", CleanupPortions.size())("portions_prepared", changes->PortionsToDrop.size());
 
     if (changes->PortionsToDrop.empty()) {
@@ -587,12 +572,23 @@ void TColumnEngineForLogs::SetGranule(const TGranuleRecord& rec) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "upsert_granule")("granule", rec.DebugString());
     const TMark mark(rec.Mark);
 
-    // There should be only one granule with (PathId, Mark).
     AFL_VERIFY(PathGranules[rec.PathId].emplace(mark, rec.Granule).second)("event", "marker_duplication")("granule_id", rec.Granule)("old_granule_id", PathGranules[rec.PathId][mark]);
-
-    // Allocate granule info and ensure that there is no granule with same id inserted before.
     AFL_VERIFY(Granules.emplace(rec.Granule, std::make_shared<TGranuleMeta>(rec, GranulesStorage, SignalCounters.RegisterGranuleDataCounters())).second)("event", "granule_duplication")
-        ("granule_id", rec.Granule)("old_granule", Granules[rec.Granule]->DebugString());
+        ("rec_path_id", rec.PathId)("granule_id", rec.Granule)("old_granule", Granules[rec.Granule]->DebugString());
+}
+
+std::optional<ui64> TColumnEngineForLogs::NewGranule(const TGranuleRecord& rec) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "upsert_granule")("granule", rec.DebugString());
+    const TMark mark(rec.Mark);
+
+    auto insertInfo = PathGranules[rec.PathId].emplace(mark, rec.Granule);
+    if (insertInfo.second) {
+        AFL_VERIFY(Granules.emplace(rec.Granule, std::make_shared<TGranuleMeta>(rec, GranulesStorage, SignalCounters.RegisterGranuleDataCounters())).second)("event", "granule_duplication")
+            ("granule_id", rec.Granule)("old_granule", Granules[rec.Granule]->DebugString());
+        return {};
+    } else {
+        return insertInfo.first->second;
+    }
 }
 
 void TColumnEngineForLogs::EraseGranule(ui64 pathId, ui64 granule, const TMark& mark) {

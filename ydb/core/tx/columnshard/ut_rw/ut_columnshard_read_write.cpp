@@ -2871,8 +2871,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     ++cleanupsHappened;
                     Cerr << "Cleanup old portions:";
                     for (const auto& portion : cleanup->PortionsToDrop) {
-                        Cerr << " " << portion->GetPortion();
-                        deletedPortions.insert(portion->GetPortion());
+                        Cerr << " " << portion.GetPortion();
+                        deletedPortions.insert(portion.GetPortion());
                     }
                     Cerr << Endl;
                 }

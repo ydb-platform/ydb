@@ -167,10 +167,11 @@ void TQueryExecutionStats::AddComputeActorStats(ui32 /* nodeId */, NYql::NDqProt
             UpdateAggr(stageStats->MutableOutputRows(), task.GetOutputRows());
             UpdateAggr(stageStats->MutableOutputBytes(), task.GetOutputBytes());
 
+            UpdateMinMax(stageStats->MutableStartTimeMs(), task.GetStartTimeMs());
             UpdateMinMax(stageStats->MutableFirstRowTimeMs(), task.GetFirstRowTimeMs());
             UpdateMinMax(stageStats->MutableFinishTimeMs(), task.GetFinishTimeMs());
 
-            stageStats->SetDurationUs((stageStats->GetFinishTimeMs().GetMax() - stageStats->GetFirstRowTimeMs().GetMin()) * 1'000);
+            stageStats->SetDurationUs((stageStats->GetFinishTimeMs().GetMax() - stageStats->GetStartTimeMs().GetMin()) * 1'000);
 
             for (auto ingressStat : task.GetIngress()) {
                 UpdateAggr(&(*stageStats->MutableIngressBytes())[ingressStat.GetName()], ingressStat.GetBytes());
@@ -179,6 +180,7 @@ void TQueryExecutionStats::AddComputeActorStats(ui32 /* nodeId */, NYql::NDqProt
                 UpdateAggr(&(*stageStats->MutableEgressBytes())[egressStat.GetName()], egressStat.GetBytes());
             }
         }
+
     }
 
     if (CollectProfileStats(StatsMode)) {
@@ -253,10 +255,11 @@ void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStat
             UpdateAggr(stageStats->MutableOutputRows(), task.GetOutputRows());
             UpdateAggr(stageStats->MutableOutputBytes(), task.GetOutputBytes());
 
+            UpdateMinMax(stageStats->MutableStartTimeMs(), task.GetStartTimeMs());
             UpdateMinMax(stageStats->MutableFirstRowTimeMs(), task.GetFirstRowTimeMs());
             UpdateMinMax(stageStats->MutableFinishTimeMs(), task.GetFinishTimeMs());
 
-            stageStats->SetDurationUs((stageStats->GetFinishTimeMs().GetMax() - stageStats->GetFirstRowTimeMs().GetMin()) * 1'000);
+            stageStats->SetDurationUs((stageStats->GetFinishTimeMs().GetMax() - stageStats->GetStartTimeMs().GetMin()) * 1'000);
 
             for (auto& tableStats: task.GetTables()) {
                 auto* tableAggrStats = GetOrCreateTableAggrStats(stageStats, tableStats.GetTablePath());

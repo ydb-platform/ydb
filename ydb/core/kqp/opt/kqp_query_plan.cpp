@@ -1869,9 +1869,12 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
         SetNonZero(node, "OutputRows", taskStats.GetOutputRows());
         SetNonZero(node, "OutputBytes", taskStats.GetOutputBytes());
 
-        SetNonZero(node, "FirstRowTimeMs", taskStats.GetFirstRowTimeMs());
-        SetNonZero(node, "FinishTimeMs", taskStats.GetFinishTimeMs());
+        // equals to max if there was no first row
+        if(taskStats.GetFirstRowTimeMs() != std::numeric_limits<ui64>::max()) {
+            SetNonZero(node, "FirstRowTimeMs", taskStats.GetFirstRowTimeMs());
+        }
         SetNonZero(node, "StartTimeMs", taskStats.GetStartTimeMs());
+        SetNonZero(node, "FinishTimeMs", taskStats.GetFinishTimeMs());
 
         SetNonZero(node, "ComputeTimeUs", taskStats.GetComputeCpuTimeUs());
         SetNonZero(node, "WaitTimeUs", taskStats.GetWaitTimeUs());
@@ -1917,7 +1920,7 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                 }
 
                 stats["TotalTasks"] = (*stat)->GetTotalTasksCount();
-                stats["TotalDurationMs"] = (*stat)->GetFinishTimeMs().GetMax() - (*stat)->GetFirstRowTimeMs().GetMin();
+                stats["TotalDurationMs"] = (*stat)->GetDurationUs() / 1000;
                 stats["TotalCpuTimeUs"] = (*stat)->GetCpuTimeUs().GetSum();
                 stats["TotalInputRows"] = (*stat)->GetInputRows().GetSum();
                 stats["TotalInputBytes"] = (*stat)->GetInputBytes().GetSum();

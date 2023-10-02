@@ -236,6 +236,7 @@ message TDqStageStats {
 
     TDqStatsMinMax FirstRowTimeMs = 13;
     TDqStatsMinMax FinishTimeMs = 14;
+    TDqStatsMinMax StartTimeMs = 21;
     uint64 DurationUs = 15; // microseconds from min(task_first_row_time) to max(task_finish_time)
 
     repeated TDqTableAggrStats Tables = 16; // is it required?

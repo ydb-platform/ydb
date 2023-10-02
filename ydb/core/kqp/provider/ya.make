@@ -18,6 +18,8 @@ SRCS(
     yql_kikimr_settings.cpp
     yql_kikimr_settings.h
     yql_kikimr_type_ann.cpp
+    yql_kikimr_type_ann_pg.h
+    yql_kikimr_type_ann_pg.cpp
 )
 
 PEERDIR(

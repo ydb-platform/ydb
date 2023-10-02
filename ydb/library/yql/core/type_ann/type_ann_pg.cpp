@@ -2719,6 +2719,13 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                     }
                     hasEmitPgStar = true;
                 }
+                else if (optionName == "fill_target_columns") {
+                    if (option->ChildrenSize() > 2) {
+                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(option->Head().Pos()),
+                            "Incorrect fill_target_columns option"));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                }
                 else if (optionName == "ext_types" || optionName == "final_ext_types") {
                     if (pass != 2) {
                         continue;
@@ -3906,7 +3913,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         if (auto values = GetSetting(options, "values")) {
                             if (values->Child(1)->ChildrenSize() != targetColumns->ChildrenSize()) {
                                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(option->Head().Pos()),
-                                    TStringBuilder() << "values and target_options sizes do not match"));
+                                    TStringBuilder() << "values and target_columns sizes do not match"));
                                 return IGraphTransformer::TStatus::Error;
                             }
                         }
@@ -3914,7 +3921,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                     if (auto projectionOrder = GetSetting(options, "projection_order")) {
                         if (projectionOrder->ChildrenSize() != targetColumns->ChildrenSize()) {
                             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(option->Head().Pos()),
-                                TStringBuilder() << "projection_order and target_options sizes do not match"));
+                                TStringBuilder() << "projection_order and target_columns sizes do not match"));
                             return IGraphTransformer::TStatus::Error;
                         }
                     }

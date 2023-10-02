@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
                 pgOption->IsListOfSize(2) && pgOption->GetChild(0)->IsAtom() 
                 && pgOption->GetChild(0)->GetContent() == "quote";
             if (!isQuotedList) {
-                return;
+                continue;
             }
 
             const auto* option = pgOption->GetChild(1);
@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(PgSqlParsingAutoparam) {
                 && optionName->GetChild(0)->GetContent() == "quote"
                 && optionName->GetChild(1)->GetContent() == "values";
             if (!isValuesNode) {
-                return;
+                continue;
             }
             const auto values = option->GetChild(2);
             if (values->IsAtom()) {

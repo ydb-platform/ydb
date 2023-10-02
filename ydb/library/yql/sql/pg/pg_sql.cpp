@@ -620,7 +620,8 @@ public:
         bool inner,
         TVector <TAstNode*> targetColumns = {},
         bool allowEmptyResSet = false,
-        bool emitPgStar = false
+        bool emitPgStar = false,
+        bool fillTargetColumns = false
     ) {
         CTE.emplace_back();
         Y_DEFER {
@@ -980,8 +981,10 @@ public:
             if (emitPgStar) {
                 setItemOptions.push_back(QL(QA("emit_pg_star")));
             }
-            if (targetColumns) {
+            if (!targetColumns.empty()) {
                 setItemOptions.push_back(QL(QA("target_columns"), QVL(targetColumns.data(), targetColumns.size())));
+            } else if (fillTargetColumns) {
+                setItemOptions.push_back(QL(QA("fill_target_columns")));
             }
             if (ListLength(x->targetList) > 0) {
                 setItemOptions.push_back(QL(QA("result"), QVL(res.data(), res.size())));
@@ -1279,7 +1282,13 @@ public:
         }
 
         const auto select = (value->selectStmt)
-            ? ParseSelectStmt(CAST_NODE(SelectStmt, value->selectStmt), true, targetColumns)
+            ? ParseSelectStmt(
+                CAST_NODE(SelectStmt, value->selectStmt), 
+                true, 
+                targetColumns, 
+                /*allowEmptyResSet=*/false, 
+                /*emitPgStar=*/false, 
+                /*fillTargetColumns=*/true)
             : L(A("Void"));
         if (!select) {
             return nullptr;

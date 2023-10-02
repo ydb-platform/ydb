@@ -1,4 +1,5 @@
 #include "yql_kikimr_provider_impl.h"
+#include "yql_kikimr_type_ann_pg.h"
 
 #include <ydb/core/docapi/traits.h>
 
@@ -288,48 +289,6 @@ namespace {
         }
         return true;
     }
-
-    bool ValidatePgUpdateKeys(const TKiWriteTable& node, const TKikimrTableDescription* table, TExprContext& ctx) {
-        bool ok = true;
-        auto updateKeyCheck = [&](const TStringBuf& colName) {
-            if (table->GetKeyColumnIndex(TString(colName))) {
-                ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-                    << "Cannot update primary key column: " << colName));
-                ok = false;
-            }
-        };
-        auto pgSelect = node.Input().Cast<TCoPgSelect>();
-        for (const auto& option : pgSelect.SelectOptions()) {
-            if (option.Name() == "set_items") {
-                auto pgSetItems = option.Value().Cast<TExprList>();
-                for (const auto& setItem : pgSetItems) {
-                    auto setItemNode = setItem.Cast<TCoPgSetItem>();
-                    for (const auto& setItemOption : setItemNode.SetItemOptions()) {
-                        if (setItemOption.Name() == "result") {
-                            auto resultList = setItemOption.Value().Cast<TExprList>();
-                            bool skipStar = true;
-                            for (const auto& pgResultItem : resultList) {
-                                if (skipStar) {
-                                    skipStar = false;
-                                    continue;
-                                }
-                                auto pgResultNode = pgResultItem.Cast<TCoPgResultItem>();
-                                if (pgResultNode.ExpandedColumns().Maybe<TExprList>()) {
-                                    auto list = pgResultNode.ExpandedColumns().Cast<TExprList>();
-                                    for (const auto& item : list) {
-                                        updateKeyCheck(item.Cast<TCoAtom>().Value());
-                                    }
-                                } else {
-                                    updateKeyCheck(pgResultNode.ExpandedColumns().Cast<TCoAtom>().Value());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        return ok;
-    }
 }
 
 class TKiSinkTypeAnnotationTransformer : public TKiSinkVisitorTransformer
@@ -415,6 +374,15 @@ private:
             }
         }
 
+        auto op = GetTableOp(node);
+        if (NPgTypeAnn::NeedsValuesRename(node, op)) {
+            if (!NPgTypeAnn::RewriteValuesColumnNames(node, table, ctx, Types)) {
+                return TStatus::Error;
+            }
+            rowType = table->SchemeNode;
+            return TStatus::Repeat;
+        }
+
         if (!rowType) {
             ctx.AddError(TIssue(pos, TStringBuilder()
                 << "Expected list or stream of structs as input, but got: " << *inputType));
@@ -437,7 +405,6 @@ private:
             autoincrementColumns.emplace(keyColumnName);
         }
 
-        auto op = GetTableOp(node);
         if (op == TYdbOperation::InsertAbort || op == TYdbOperation::InsertRevert ||
             op == TYdbOperation::Upsert || op == TYdbOperation::Replace) {
             for (const auto& [name, meta] : table->Metadata->Columns) {
@@ -465,8 +432,7 @@ private:
             }
         } else if (op == TYdbOperation::UpdateOn) {
             if (TCoPgSelect::Match(node.Input().Ptr().Get())) {
-                auto ok = ValidatePgUpdateKeys(node, table, ctx);
-                if (!ok) {
+                if (!NPgTypeAnn::ValidatePgUpdateKeys(node, table, ctx)) {
                     return TStatus::Error;
                 }
             }

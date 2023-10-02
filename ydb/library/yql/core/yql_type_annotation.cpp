@@ -89,7 +89,7 @@ TMaybe<TColumnOrder> TTypeAnnotationContext::LookupColumnOrder(const TExprNode& 
 }
 
 IGraphTransformer::TStatus TTypeAnnotationContext::SetColumnOrder(const TExprNode& node,
-    const TColumnOrder& columnOrder, TExprContext& ctx)
+    const TColumnOrder& columnOrder, TExprContext& ctx, bool overwrite)
 {
     if (!OrderedColumns) {
         return IGraphTransformer::TStatus::Ok;
@@ -99,9 +99,11 @@ IGraphTransformer::TStatus TTypeAnnotationContext::SetColumnOrder(const TExprNod
     YQL_ENSURE(node.IsCallable());
 
     if (auto existing = ColumnOrderStorage->Lookup(node.UniqueId())) {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
-            TStringBuilder() << "Column order " << FormatColumnOrder(existing) << " is already set for node " << node.Content()));
-        return IGraphTransformer::TStatus::Error;
+        if (!overwrite) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+                TStringBuilder() << "Column order " << FormatColumnOrder(existing) << " is already set for node " << node.Content()));
+            return IGraphTransformer::TStatus::Error;
+        }
     }
 
     auto nodeType = node.GetTypeAnn();

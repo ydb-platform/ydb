@@ -2406,7 +2406,7 @@
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "PgSetItem"},
             "Children": [
-                {"Index": 0, "Name": "SetItemOptions", "Type": "TCoNameValueTupleList"}
+                {"Index": 0, "Name": "SetItemOptions", "Type": "TExprList"}
             ]
         },
         {

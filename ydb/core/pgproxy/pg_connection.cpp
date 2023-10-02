@@ -467,16 +467,23 @@ protected:
         }
     }
 
-    static void FillErrorResponse(TPGStreamOutput<TPGErrorResponse>& dataOut, const std::vector<std::pair<char, TString>>& dataIn) {
+    template<typename TPGResponse>
+    static void FillKeyValueResponse(TPGStreamOutput<TPGResponse>& dataOut, const std::vector<std::pair<char, TString>>& dataIn) {
         for (const auto& field : dataIn) {
             dataOut << field.first << field.second << '\0';
         }
         dataOut << '\0';
     }
 
+    void SendNoticeResponse(const std::vector<std::pair<char, TString>>& noticeFields) {
+        TPGStreamOutput<TPGNoticeResponse> noticeResponse;
+        FillKeyValueResponse(noticeResponse, noticeFields);
+        SendStream(noticeResponse);
+    }
+
     void SendErrorResponse(const std::vector<std::pair<char, TString>>& errorFields) {
         TPGStreamOutput<TPGErrorResponse> errorResponse;
-        FillErrorResponse(errorResponse, errorFields);
+        FillKeyValueResponse(errorResponse, errorFields);
         SendStream(errorResponse);
     }
 
@@ -550,12 +557,15 @@ protected:
                         FillDataRowDescription(rowDescription, ev->Get()->DataFields);
                         SendStream(rowDescription);
                     }
-                    { // dataFields
+                    if (!ev->Get()->DataRows.empty()) { // dataFields
                         for (const auto& row : ev->Get()->DataRows) {
                             TPGStreamOutput<TPGDataRow> dataRow;
                             FillDataRow(dataRow, row);
                             SendStream(dataRow);
                         }
+                    }
+                    if (!ev->Get()->NoticeFields.empty()) { // notices
+                        SendNoticeResponse(ev->Get()->NoticeFields);
                     }
                     if (ev->Get()->CommandCompleted) {
                         // commandComplete
@@ -615,13 +625,15 @@ protected:
                 if (ev->Get()->EmptyQuery) {
                     SendMessage(TPGEmptyQueryResponse());
                 } else {
-                    TString tag = ev->Get()->Tag ? ev->Get()->Tag : "OK";
-                    { // dataFields
+                    if (!ev->Get()->DataRows.empty()) { // dataFields
                         for (const auto& row : ev->Get()->DataRows) {
                             TPGStreamOutput<TPGDataRow> dataRow;
                             FillDataRow(dataRow, row);
                             SendStream(dataRow);
                         }
+                    }
+                    if (!ev->Get()->NoticeFields.empty()) { // notices
+                        SendNoticeResponse(ev->Get()->NoticeFields);
                     }
                     if (ev->Get()->CommandCompleted) {
                         // commandComplete

@@ -62,6 +62,26 @@ std::unordered_map<TString, TString> TPGInitial::GetClientParams() const {
     return params;
 }
 
+TString TPGNoticeResponse::Dump() const {
+    TPGStreamInput stream(*this);
+    TStringBuilder text;
+
+    while (!stream.Empty()) {
+        char code;
+        TString message;
+        stream >> code;
+        if (code == 0) {
+            break;
+        }
+        stream >> message;
+        if (!text.empty()) {
+            text << ' ';
+        }
+        text << code << "=\"" << message << "\"";
+    }
+    return text;
+}
+
 TString TPGErrorResponse::Dump() const {
     TPGStreamInput stream(*this);
     TStringBuilder text;

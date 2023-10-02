@@ -52,6 +52,7 @@ enum EFormatType : int16_t {
 struct TEvEvents {
     enum EEv {
         EvProxyCompleted = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+        EvUpdateStatement,
         EvSingleQuery,
         EvEnd
     };
@@ -59,16 +60,21 @@ struct TEvEvents {
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "ES_PRIVATE event space is too small.");
 
     struct TEvProxyCompleted : NActors::TEventLocal<TEvProxyCompleted, EvProxyCompleted> {
-        std::optional<TConnectionState> Connection;
-        std::optional<TParsedStatement> ParsedStatement;
+        TConnectionState Connection;
 
         TEvProxyCompleted() = default;
 
         TEvProxyCompleted(const TConnectionState& connection)
             : Connection(connection)
         {}
+    };
 
-        TEvProxyCompleted(const TParsedStatement& parsedStatement)
+    struct TEvUpdateStatement : NActors::TEventLocal<TEvUpdateStatement, EvUpdateStatement> {
+        TParsedStatement ParsedStatement;
+
+        TEvUpdateStatement() = default;
+
+        TEvUpdateStatement(const TParsedStatement& parsedStatement)
             : ParsedStatement(parsedStatement)
         {}
     };
@@ -81,6 +87,10 @@ struct TEvEvents {
             : Query(query)
             , FinalQuery(finalQuery)
         {}
+
+        static std::unique_ptr<NPG::TEvPGEvents::TEvQueryResponse> Reply() {
+            return std::make_unique<NPG::TEvPGEvents::TEvQueryResponse>();
+        }
     };
 };
 

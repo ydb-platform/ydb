@@ -109,6 +109,7 @@ struct TEvPGEvents {
         std::vector<TRowDescriptionField> DataFields;
         std::vector<TDataRow> DataRows;
         std::vector<std::pair<char, TString>> ErrorFields;
+        std::vector<std::pair<char, TString>> NoticeFields;
         TString Tag;
         bool EmptyQuery = false;
         bool CommandCompleted = true;
@@ -148,6 +149,9 @@ struct TEvPGEvents {
     struct TEvParseResponse : NActors::TEventLocal<TEvParseResponse, EvParseResponse> {
         std::unique_ptr<TPGParse> OriginalMessage;
         std::vector<std::pair<char, TString>> ErrorFields;
+        std::vector<std::pair<char, TString>> NoticeFields;
+        TString Tag;
+        char TransactionStatus = 0;
 
         TEvParseResponse(std::unique_ptr<TPGParse> originalMessage)
             : OriginalMessage(std::move(originalMessage))
@@ -201,6 +205,17 @@ struct TEvPGEvents {
         std::vector<std::pair<char, TString>> ErrorFields;
     };
 
+    struct TEvExecuteResponse : NActors::TEventLocal<TEvExecuteResponse, EvExecuteResponse> {
+        std::vector<TDataRow> DataRows;
+        std::vector<std::pair<char, TString>> ErrorFields;
+        std::vector<std::pair<char, TString>> NoticeFields;
+        TString Tag;
+        bool EmptyQuery = false;
+        bool CommandCompleted = true;
+        bool ReadyForQuery = true;
+        char TransactionStatus = 0;
+    };
+
     struct TEvExecute : NActors::TEventLocal<TEvExecute, EvExecute> {
         std::unique_ptr<TPGExecute> Message;
         char TransactionStatus;
@@ -209,16 +224,10 @@ struct TEvPGEvents {
             : Message(std::move(message))
             , TransactionStatus(transactionStatus)
         {}
-    };
 
-    struct TEvExecuteResponse : NActors::TEventLocal<TEvExecuteResponse, EvExecuteResponse> {
-        std::vector<TDataRow> DataRows;
-        std::vector<std::pair<char, TString>> ErrorFields;
-        TString Tag;
-        bool EmptyQuery = false;
-        bool CommandCompleted = true;
-        bool ReadyForQuery = true;
-        char TransactionStatus = 0;
+        static std::unique_ptr<TEvExecuteResponse> Reply() {
+            return std::make_unique<TEvExecuteResponse>();
+        }
     };
 
     struct TEvCloseResponse : NActors::TEventLocal<TEvCloseResponse, EvCloseResponse> {

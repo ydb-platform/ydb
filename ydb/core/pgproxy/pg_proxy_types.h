@@ -160,6 +160,10 @@ struct TPGErrorResponse : TPGMessageType<'E'> {
     TString Dump() const;
 };
 
+struct TPGNoticeResponse : TPGMessageType<'N'> {
+    TString Dump() const;
+};
+
 struct TPGTerminate : TPGMessageType<'X'> {
 };
 

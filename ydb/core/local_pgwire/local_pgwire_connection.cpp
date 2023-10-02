@@ -185,37 +185,36 @@ public:
         BLOG_D("Created pgwireKqpProxyExecute: " << actorId);
     }
 
+    void Handle(TEvEvents::TEvUpdateStatement::TPtr& ev) {
+        auto name(ev->Get()->ParsedStatement.QueryData.Name);
+        BLOG_D("Updating ParsedStatement \"" << name << "\"");
+        ParsedStatements[name] = ev->Get()->ParsedStatement;
+    }
+
     void Handle(TEvEvents::TEvProxyCompleted::TPtr& ev) {
         --Inflight;
         BLOG_D("Received TEvProxyCompleted");
-        if (ev->Get()->ParsedStatement) {
-            auto name(ev->Get()->ParsedStatement.value().QueryData.Name);
-            BLOG_D("Updating ParsedStatement \"" << name << "\"");
-            ParsedStatements[name] = ev->Get()->ParsedStatement.value();
+        auto& connection(ev->Get()->Connection);
+        if (connection.Transaction.Status) {
+            BLOG_D("Updating transaction state to " << connection.Transaction.Status);
+            Connection.Transaction.Status = connection.Transaction.Status;
+            switch (connection.Transaction.Status) {
+                case 'I':
+                    Connection.Transaction.Id.clear();
+                    BLOG_D("Transaction id cleared");
+                    break;
+                case 'T':
+                case 'E':
+                    if (connection.Transaction.Id) {
+                        Connection.Transaction.Id = connection.Transaction.Id;
+                        BLOG_D("Transaction id is " << Connection.Transaction.Id);
+                    }
+                    break;
+            }
         }
-        if (ev->Get()->Connection) {
-            auto& connection(ev->Get()->Connection.value());
-            if (connection.Transaction.Status) {
-                BLOG_D("Updating transaction state to " << connection.Transaction.Status);
-                Connection.Transaction.Status = connection.Transaction.Status;
-                switch (connection.Transaction.Status) {
-                    case 'I':
-                    case 'E':
-                        Connection.Transaction.Id.clear();
-                        BLOG_D("Transaction id cleared");
-                        break;
-                    case 'T':
-                        if (connection.Transaction.Id) {
-                            Connection.Transaction.Id = connection.Transaction.Id;
-                            BLOG_D("Transaction id is " << Connection.Transaction.Id);
-                        }
-                        break;
-                }
-            }
-            if (connection.SessionId) {
-                BLOG_D("Session id is " << connection.SessionId);
-                Connection.SessionId = connection.SessionId;
-            }
+        if (connection.SessionId) {
+            BLOG_D("Session id is " << connection.SessionId);
+            Connection.SessionId = connection.SessionId;
         }
         ProcessEventsQueue();
     }
@@ -233,6 +232,7 @@ public:
     STATEFN(StateSchedule) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvEvents::TEvProxyCompleted, Handle);
+            hFunc(TEvEvents::TEvUpdateStatement, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
             default: {
                 if (Inflight == 0) {

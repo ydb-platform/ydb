@@ -16,12 +16,14 @@
 #undef SIZEOF_SIZE_T
 extern "C" {
 #include "postgres.h"
+#include "access/session.h"
 #include "access/xact.h"
 #include "mb/pg_wchar.h"
 #include "nodes/pg_list.h"
 #include "nodes/parsenodes.h"
 #include "nodes/value.h"
 #include "parser/parser.h"
+#include "utils/guc.h"
 #include "utils/palloc.h"
 #include "utils/memutils.h"
 #include "utils/memdebug.h"
@@ -257,4 +259,7 @@ extern "C" void setup_pg_thread_cleanup() {
     MyProc = (PGPROC*)malloc(sizeof(PGPROC));
     Zero(*MyProc);
     StartTransactionCommand();
+
+    InitializeSession();
+    work_mem = MAX_KILOBYTES; // a way to postpone spilling for tuple stores
 };

@@ -296,6 +296,14 @@ public:
     }
 
     ~TReturnSetInfo() {
+        if (Ref().expectedDesc) {
+            FreeTupleDesc(Ref().expectedDesc);
+        }
+
+        if (Ref().setResult) {
+            tuplestore_end(Ref().setResult);
+        }
+
         TWithDefaultMiniKQLAlloc::FreeWithSize(Ptr, sizeof(ReturnSetInfo));
     }
 
@@ -483,7 +491,15 @@ private:
             {
                 auto& callInfo = CallInfo.Ref();
                 callInfo.resultinfo = (fmNodePtr)&RSInfo.Ref();
-                ((ReturnSetInfo*)callInfo.resultinfo)->econtext = &ExprContextHolder.Ref();
+                auto& rsInfo = *(ReturnSetInfo*)callInfo.resultinfo;
+                rsInfo.econtext = &ExprContextHolder.Ref();
+                rsInfo.allowedModes = (int) (SFRM_ValuePerCall | SFRM_Materialize);
+                rsInfo.returnMode = SFRM_ValuePerCall;
+                rsInfo.setResult = nullptr;
+                rsInfo.setDesc = nullptr;
+                rsInfo.expectedDesc = CreateTemplateTupleDesc(1);
+                TupleDescInitEntry(rsInfo.expectedDesc, (AttrNumber) 1, nullptr, RetTypeDesc.TypeId, -1, 0);
+                TupleSlot = MakeSingleTupleTableSlot(rsInfo.expectedDesc, &TTSOpsMinimalTuple);
                 for (ui32 i = 0; i < args.size(); ++i) {
                     const auto& value = args[i];
                     NullableDatum argDatum = { 0, false };
@@ -500,6 +516,9 @@ private:
             }
 
             ~TIterator() {
+                if (TupleSlot) {
+                    ExecDropSingleTupleTableSlot(TupleSlot);
+                }
             }
 
         private:
@@ -508,19 +527,58 @@ private:
                     return false;
                 }
 
+                if (RSInfo.Ref().setResult) {
+                    return CopyTuple(value);
+                }
+
                 auto& callInfo = CallInfo.Ref();
                 callInfo.isnull = false;
                 auto ret = callInfo.flinfo->fn_addr(&callInfo);
-                if (RSInfo.Ref().isDone == ExprEndResult) {
+                if (RSInfo.Ref().returnMode == SFRM_Materialize) {
+                    Y_ENSURE(RSInfo.Ref().isDone == ExprSingleResult);
+                    Y_ENSURE(RSInfo.Ref().setResult);
+                    auto readPtr = tuplestore_alloc_read_pointer(RSInfo.Ref().setResult, 0);
+                    tuplestore_select_read_pointer(RSInfo.Ref().setResult, readPtr);
+                    return CopyTuple(value);
+                } else {
+                    if (RSInfo.Ref().isDone == ExprEndResult) {
+                        IsFinished = true;
+                        return false;
+                    }
+
+                    if (callInfo.isnull) {
+                        value = NUdf::TUnboxedValuePod();
+                    } else {
+                        value = AnyDatumToPod(ret, RetTypeDesc.PassByValue);
+                    }
+
+                    return true;
+                }
+            }
+
+            bool CopyTuple(NUdf::TUnboxedValue& value) {
+                if (!tuplestore_gettupleslot(RSInfo.Ref().setResult, true, false, TupleSlot)) {
                     IsFinished = true;
                     return false;
                 }
-
-                if (callInfo.isnull) {
+                
+                slot_getallattrs(TupleSlot);
+                Y_ENSURE(TupleSlot->tts_nvalid == 1);
+                if (TupleSlot->tts_isnull[0]) {
                     value = NUdf::TUnboxedValuePod();
                 } else {
-                    value = AnyDatumToPod(ret, RetTypeDesc.PassByValue);
-                }
+                    auto datum = TupleSlot->tts_values[0];
+                    if (RetTypeDesc.PassByValue) {
+                        value = ScalarDatumToPod(datum);
+                    } else if (RetTypeDesc.TypeLen == -1) {
+                        const text* orig = (const text*)datum;
+                        value = PointerDatumToPod((Datum)MakeVar(GetVarBuf(orig)));
+                    } else {
+                        Y_ENSURE(RetTypeDesc.TypeLen == -2);
+                        const char* orig = (const char*)datum;
+                        value = PointerDatumToPod((Datum)MakeCString(orig));
+                    }
+               }
 
                 return true;
             }
@@ -533,6 +591,7 @@ private:
             TFunctionCallInfo CallInfo;
             TReturnSetInfo RSInfo;
             bool IsFinished = false;
+            TupleTableSlot* TupleSlot = nullptr;
         };
 
         TListValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx,

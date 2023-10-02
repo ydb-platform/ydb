@@ -6,6 +6,7 @@
 #include <ydb/library/yql/utils/yql_panic.h>
 
 #include <util/string/builder.h>
+#include <util/generic/scope.h>
 
 #ifdef _WIN32
 #define __restrict
@@ -17,6 +18,7 @@
 
 extern "C" {
 #include "postgres.h"
+#include "miscadmin.h"
 #include "optimizer/paths.h"
 #include "nodes/print.h"
 #include "utils/selfuncs.h"
@@ -120,6 +122,12 @@ TPgOptimizer::~TPgOptimizer()
 TPgOptimizer::TOutput TPgOptimizer::JoinSearch()
 {
     TArenaMemoryContext ctx;
+    auto prev_work_mem = work_mem;
+    work_mem = 4096;
+    Y_DEFER {
+        work_mem = prev_work_mem;
+    };
+
     auto* rel = JoinSearchInternal();
     return MakeOutput(rel->cheapest_total_path);
 }

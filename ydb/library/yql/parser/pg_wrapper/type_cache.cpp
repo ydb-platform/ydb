@@ -9,6 +9,9 @@ extern "C" {
 #include "postgres.h"
 #include "catalog/pg_operator_d.h"
 #include "access/hash.h"
+#include "access/toast_compression.h"
+#include "access/tupdesc.h"
+#include "utils/builtins.h"
 #include "utils/catcache.h"
 #include "utils/fmgroids.h"
 #include "utils/typcache.h"
@@ -501,6 +504,69 @@ void destroy_typecache_hashtable() {
     hash_destroy(YQL_TypeCacheHash);
     YQL_TypeCacheHash = nullptr;
 }
+
+void
+TupleDescInitEntry(TupleDesc desc,
+                   AttrNumber attributeNumber,
+                   const char *attributeName,
+                   Oid oidtypeid,
+                   int32 typmod,
+                   int attdim)
+{
+    HeapTuple tuple;
+    Form_pg_attribute att;
+
+    /*
+     * sanity checks
+     */
+    AssertArg(PointerIsValid(desc));
+    AssertArg(attributeNumber >= 1);
+    AssertArg(attributeNumber <= desc->natts);
+
+    /*
+     * initialize the attribute fields
+     */
+    att = TupleDescAttr(desc, attributeNumber - 1);
+
+    att->attrelid = 0;			/* dummy value */
+
+    /*
+     * Note: attributeName can be NULL, because the planner doesn't always
+     * fill in valid resname values in targetlists, particularly for resjunk
+     * attributes. Also, do nothing if caller wants to re-use the old attname.
+     */
+    if (attributeName == NULL)
+        MemSet(NameStr(att->attname), 0, NAMEDATALEN);
+    else if (attributeName != NameStr(att->attname))
+        namestrcpy(&(att->attname), attributeName);
+
+    att->attstattarget = -1;
+    att->attcacheoff = -1;
+    att->atttypmod = typmod;
+
+    att->attnum = attributeNumber;
+    att->attndims = attdim;
+
+    att->attnotnull = false;
+    att->atthasdef = false;
+    att->atthasmissing = false;
+    att->attidentity = '\0';
+    att->attgenerated = '\0';
+    att->attisdropped = false;
+    att->attislocal = true;
+    att->attinhcount = 0;
+    /* attacl, attoptions and attfdwoptions are not present in tupledescs */
+
+    const auto& typeDesc = NYql::NPg::LookupType(oidtypeid);
+    att->atttypid = oidtypeid;
+    att->attlen = typeDesc.TypeLen;
+    att->attbyval = typeDesc.PassByValue;
+    att->attalign = typeDesc.TypeAlign;
+    att->attstorage = TYPSTORAGE_PLAIN;
+    att->attcompression = InvalidCompressionMethod;
+    att->attcollation = typeDesc.TypeCollation;
+}
+
 
 }
 }

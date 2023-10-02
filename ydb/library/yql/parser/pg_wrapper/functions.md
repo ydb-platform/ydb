@@ -3078,9 +3078,9 @@ Table 9.47. JSON Processing Functions
 ||Function|Description|Example(s)||
 ||json_array_elements ( json ) → setof json  
 jsonb_array_elements ( jsonb ) → setof jsonb|
-Expands the top-level JSON array into a set of JSON values. (NOT SUPPORTED)|
+Expands the top-level JSON array into a set of JSON values.|
 ```sql
-#SELECT * FROM json_array_elements('[1,true, [2,false]]') as a → [
+SELECT * FROM json_array_elements('[1,true, [2,false]]') as a → [
 1
 true
 [2,false]
@@ -3088,9 +3088,9 @@ true
 ```||
 ||json_array_elements_text ( json ) → setof text  
 jsonb_array_elements_text ( jsonb ) → setof text|
-Expands the top-level JSON array into a set of text values. (NOT SUPPORTED)|
+Expands the top-level JSON array into a set of text values.|
 ```sql
-#SELECT * FROM json_array_elements_text('["foo", "bar"]') as a → [
+SELECT * FROM json_array_elements_text('["foo", "bar"]') as a → [
 foo
 bar
 ]

@@ -3704,6 +3704,10 @@ const TTypeAnnotationNode& GetSeqItemType(const TTypeAnnotationNode& type) {
     throw yexception() << "Impossible to get item type from " << type;
 }
 
+const TTypeAnnotationNode& RemoveOptionality(const TTypeAnnotationNode& type) {
+    return ETypeAnnotationKind::Optional == type.GetKind() ? *type.Cast<TOptionalExprType>()->GetItemType() : type;
+}
+
 } // namespace NYql
 
 template<>

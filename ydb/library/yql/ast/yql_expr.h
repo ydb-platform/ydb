@@ -2790,6 +2790,8 @@ TString SubstParameters(const TString& str, const TMaybe<NYT::TNode>& params, TS
 const TTypeAnnotationNode* GetSeqItemType(const TTypeAnnotationNode* seq);
 const TTypeAnnotationNode& GetSeqItemType(const TTypeAnnotationNode& seq);
 
+const TTypeAnnotationNode& RemoveOptionality(const TTypeAnnotationNode& type);
+
 } // namespace NYql
 
 template<>

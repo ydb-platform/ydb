@@ -760,16 +760,25 @@ private:
             }
         }
 
-        if (body.IsCallable({"CastStruct","FilterMembers"}))
+        if (body.IsCallable({"CastStruct","FilterMembers","Just","Unwrap"}))
             return GetPathToKey(body.Head(), arg);
         if (body.IsCallable("Member") && body.Head().IsCallable("AsStruct"))
             return GetPathToKey(GetLiteralStructMember(body.Head(), body.Tail()), arg);
         if (body.IsCallable("Nth") && body.Head().IsList())
             return GetPathToKey(*body.Head().Child(FromString<ui32>(body.Tail().Content())), arg);
+        if (body.IsList() && 1U == body.ChildrenSize() && body.Head().IsCallable("Nth") && body.Head().Tail().IsAtom("0") &&
+            1U == RemoveOptionality(*body.Head().Head().GetTypeAnn()).Cast<TTupleExprType>()->GetSize())
+            // Especialy for "Extract single item tuple from Condense1" optimizer.
+            return GetPathToKey(body.Head().Head(), arg);
+        if (body.IsCallable("AsStruct") && 1U == body.ChildrenSize() && body.Head().Tail().IsCallable("Member") &&
+            body.Head().Head().Content() == body.Head().Tail().Tail().Content() &&
+            1U == RemoveOptionality(*body.Head().Tail().Head().GetTypeAnn()).Cast<TStructExprType>()->GetSize())
+            // Especialy for "Extract single item struct from Condense1" optimizer.
+            return GetPathToKey(body.Head().Tail().Head(), arg);
         if (IsTransparentIfPresent(body) && &body.Head() == &arg)
             return GetPathToKey(body.Child(1)->Tail().Head(), body.Child(1)->Head().Head());
 
-        return std::nullopt;
+         return std::nullopt;
     }
 
     static std::vector<std::pair<TPartOfConstraintBase::TPathType, bool>>
@@ -929,10 +938,10 @@ private:
                     }
 
                     if constexpr (Ordered) {
-                        if (auto mapping = TPartOfSortedConstraintNode::GetCommonMapping(node.Head().GetConstraint<TSortedConstraintNode>(), node.Head().GetConstraint<TPartOfSortedConstraintNode>()); !mapping.empty()) {
+                        if (auto mapping = TPartOfSortedConstraintNode::GetCommonMapping(GetDetailed(node.Head().GetConstraint<TSortedConstraintNode>(), *node.Head().GetTypeAnn(), ctx), node.Head().GetConstraint<TPartOfSortedConstraintNode>()); !mapping.empty()) {
                             argsConstraints.front().emplace_back(ctx.MakeConstraint<TPartOfSortedConstraintNode>(std::move(mapping)));
                         }
-                        if (auto mapping = TPartOfChoppedConstraintNode::GetCommonMapping(node.Head().GetConstraint<TChoppedConstraintNode>(), node.Head().GetConstraint<TPartOfChoppedConstraintNode>()); !mapping.empty()) {
+                        if (auto mapping = TPartOfChoppedConstraintNode::GetCommonMapping(GetDetailed(node.Head().GetConstraint<TChoppedConstraintNode>(), *node.Head().GetTypeAnn(), ctx), node.Head().GetConstraint<TPartOfChoppedConstraintNode>()); !mapping.empty()) {
                             argsConstraints.front().emplace_back(ctx.MakeConstraint<TPartOfChoppedConstraintNode>(std::move(mapping)));
                         }
                     }
@@ -1720,10 +1729,10 @@ private:
                 }
 
                 if constexpr (Ordered) {
-                    if (auto mapping = TPartOfSortedConstraintNode::GetCommonMapping(node.Head().GetConstraint<TSortedConstraintNode>(), node.Head().GetConstraint<TPartOfSortedConstraintNode>()); !mapping.empty()) {
+                    if (auto mapping = TPartOfSortedConstraintNode::GetCommonMapping(GetDetailed(node.Head().GetConstraint<TSortedConstraintNode>(), *node.Head().GetTypeAnn(), ctx), node.Head().GetConstraint<TPartOfSortedConstraintNode>()); !mapping.empty()) {
                         argsConstraints.front().emplace_back(ctx.MakeConstraint<TPartOfSortedConstraintNode>(std::move(mapping)));
                     }
-                    if (auto mapping = TPartOfChoppedConstraintNode::GetCommonMapping(node.Head().GetConstraint<TChoppedConstraintNode>(), node.Head().GetConstraint<TPartOfChoppedConstraintNode>()); !mapping.empty()) {
+                    if (auto mapping = TPartOfChoppedConstraintNode::GetCommonMapping(GetDetailed(node.Head().GetConstraint<TChoppedConstraintNode>(), *node.Head().GetTypeAnn(), ctx), node.Head().GetConstraint<TPartOfChoppedConstraintNode>()); !mapping.empty()) {
                         argsConstraints.front().emplace_back(ctx.MakeConstraint<TPartOfChoppedConstraintNode>(std::move(mapping)));
                     }
                 }
@@ -2760,10 +2769,9 @@ private:
         if constexpr (!Wide) {
             if (TCoIsKeySwitch::Match(&body)) {
                 const TCoIsKeySwitch keySwitch(&body);
-                const auto& i = GetSimpleKeys(keySwitch.ItemKeyExtractor().Body().Ref(), keySwitch.ItemKeyExtractor().Args().Arg(0).Ref());
-                const auto& s = GetSimpleKeys(keySwitch.StateKeyExtractor().Body().Ref(), keySwitch.StateKeyExtractor().Args().Arg(0).Ref());
+                const auto& i = GetSimpleKeys(*ctx.ReplaceNode(keySwitch.ItemKeyExtractor().Body().Ptr(), keySwitch.ItemKeyExtractor().Args().Arg(0).Ref(), keySwitch.Item().Ptr()), keySwitch.Item().Ref());
+                const auto& s = GetSimpleKeys(*ctx.ReplaceNode(keySwitch.StateKeyExtractor().Body().Ptr(), keySwitch.StateKeyExtractor().Args().Arg(0).Ref(), keySwitch.State().Ptr()), keySwitch.Item().Ref());
                 return i == s  ? i : TPartOfConstraintBase::TSetType();
-
             }
         }
 
@@ -2826,8 +2834,8 @@ private:
         const auto chopped = input->Head().GetConstraint<TChoppedConstraintNode>();
         if (sorted || chopped) {
             if (const auto& keys = GetSimpleKeys<Wide>(*FuseInitLambda(*initLambda, *switchLambda, ctx), ctx); !keys.empty()) {
-                if (sorted && sorted->GetSimplifiedForType(*input->Head().GetTypeAnn(), ctx)->StartsWith(keys) ||
-                    chopped && chopped->GetSimplifiedForType(*input->Head().GetTypeAnn(), ctx)->Equals(keys)) {
+                if (sorted && (sorted->StartsWith(keys) || sorted->GetSimplifiedForType(*input->Head().GetTypeAnn(), ctx)->StartsWith(keys)) ||
+                    chopped && (chopped->Equals(keys) || chopped->GetSimplifiedForType(*input->Head().GetTypeAnn(), ctx)->Equals(keys))) {
                     TPartOfConstraintBase::TSetOfSetsType sets;
                     sets.reserve(keys.size());
                     for (const auto& key : keys)
@@ -3237,19 +3245,9 @@ private:
         ExtractSimpleKeys(body, arg, columns);
     }
 
-    template<bool Distinct>
-    static const TUniqueConstraintNodeBase<Distinct>* GetDetailed(const TUniqueConstraintNodeBase<Distinct>* unique, const TTypeAnnotationNode& type, TExprContext& ctx) {
-        return unique ? unique->GetComplicatedForType(type, ctx) : nullptr;
-    }
-
-    static const TSortedConstraintNode* GetDetailed(const TSortedConstraintNode* sorted, const TTypeAnnotationNode&, TExprContext&) {
-        // TODO:: get for tuple.
-        return sorted;
-    }
-
-    static const TChoppedConstraintNode* GetDetailed(const TChoppedConstraintNode* chopped, const TTypeAnnotationNode&, TExprContext&) {
-        // TODO:: get for tuple.
-        return chopped;
+    template<class TConstraintWithFields>
+    static const TConstraintWithFields* GetDetailed(const TConstraintWithFields* constraint, const TTypeAnnotationNode& type, TExprContext& ctx) {
+        return constraint ? constraint->GetComplicatedForType(type, ctx) : nullptr;
     }
 
     static const TStructExprType* GetNonEmptyStructItemType(const TTypeAnnotationNode& type) {

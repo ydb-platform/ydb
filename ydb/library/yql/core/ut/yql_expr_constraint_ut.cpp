@@ -1422,6 +1422,36 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         CheckConstraint<TDistinctConstraintNode>(exprRoot, "Skip", "Distinct((key,subkey))");
     }
 
+    Y_UNIT_TEST(PartitionsByKeysWithCondense1WithSingleItemTupleKey) {
+        const auto s = R"(
+(
+    (let mr_sink (DataSink 'yt (quote plato)))
+    (let list (AsList
+        (AsStruct '('key '((Just (String '4)))) '('subkey (Just (String 'c))) '('value (Just (String 'x))))
+        (AsStruct '('key '((Just (String '1)))) '('subkey (Just (String 'b))) '('value (Just (String 'y))))
+        (AsStruct '('key '((Just (String '4)))) '('subkey (Just (String 'b))) '('value (Just (String 'z))))
+    ))
+    (let deep (lambda '(row) (Nth (Member row 'key) '0)))
+    (let aggr (PartitionsByKeys list (lambda '(item) (Member item 'key)) (Void) (Void)
+        (lambda '(stream) (Map (Condense1 stream deep
+            (lambda '(row state) (IsKeySwitch row state deep (lambda '(item) item)))
+            (lambda '(row state) state)
+        )
+            (lambda '(item) (AsStruct '('key '(item))))
+        ))
+    ))
+    (let world (Write! world mr_sink (Key '('table (String 'Output))) (Skip aggr (Uint64 '1)) '('('mode 'renew))))
+    (let world (Commit! world mr_sink))
+    (return world)
+)
+    )";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Skip", "Unique((key))");
+        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Skip", "Distinct((key))");
+    }
+
     Y_UNIT_TEST(ShuffleByKeysInputUnique) {
         const auto s = R"(
 (

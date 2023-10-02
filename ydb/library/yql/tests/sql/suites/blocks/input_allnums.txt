@@ -1,0 +1,3 @@
+{ "i8"=1 ; "i16"=2;  "i32"=3;  "i64"=4;  "i8opt"=5;  "i16opt"=6;  "i32opt"=7;  "i64opt"=8;   "ui8"=9u;  "ui16"=10u; "ui32"=11u; "ui64"=12u; "ui8opt"=13u; "ui16opt"=14u; "ui32opt"=15u; "ui64opt"=16u; };	
+{ "i8"=17; "i16"=18; "i32"=19; "i64"=20; "i8opt"=21; "i16opt"=#;  "i32opt"=23; "i64opt"=#;   "ui8"=25u; "ui16"=26u; "ui32"=27u; "ui64"=28u; "ui8opt"=#;   "ui16opt"=30u; "ui32opt"=#;   "ui64opt"=32u; };	
+{ "i8"=33; "i16"=34; "i32"=35; "i64"=36; "i8opt"=37; "i16opt"=38; "i32opt"=#;  "i64opt"=40;  "ui8"=41u; "ui16"=42u; "ui32"=43u; "ui64"=44u; "ui8opt"=45u; "ui16opt"=#;   "ui32opt"=47u; "ui64opt"=48u; };	

@@ -1,0 +1,32 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let list (AsList
+'((Uint32 '1) (String 'b))
+'((Uint32 '2) (String 'o))
+'((Uint32 '1) (String 'm))
+'((Uint32 '3) (String 'b))))
+
+(let init_state '((Uint32 '0) (String '"")))
+
+(let update (lambda '(item state) (block '(
+    (let key (Nth item '0))
+    (let val (Nth item '1))
+    (let skey (Nth state '0))
+    (let sval (Nth state '1))
+    (let skey (+ skey key))
+    (let sval (Concat sval val))
+    (let new_item '(key val skey sval))
+    (let new_state '(skey sval))
+    (return '(new_item new_state)
+)))))
+
+(let result (FoldMap list init_state update))
+
+(let world (Write! world res_sink (Key) result '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

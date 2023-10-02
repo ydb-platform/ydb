@@ -1,0 +1,80 @@
+#use plato;
+#
+#SELECT * FROM Input
+#UNION ALL
+#SELECT 2 AS y;
+#
+#SELECT 1 AS x
+#UNION ALL
+#SELECT * FROM Input;
+
+(
+(let world (block '(
+  (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"Input"))) (Void) '()))
+  (let world (Left! x))
+  (let table0 (Right! x))
+  (let output (block '(
+    (let select (UnionAll (block '(
+      (let core table0)
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsList row))
+        (return res)
+      )))))
+      (return core)
+    )) (block '(
+      (let core (AsList (Void)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (Struct))
+        (let res (AddMember res '"y" (Int64 '"2")))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    ))))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"Input"))) (Void) '()))
+  (let world (Left! x))
+  (let table0 (Right! x))
+  (let output (block '(
+    (let select (UnionAll (block '(
+      (let core (AsList (Void)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (Struct))
+        (let res (AddMember res '"x" (Int64 '"1")))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )) (block '(
+      (let core table0)
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsList row))
+        (return res)
+      )))))
+      (return core)
+    ))))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let plato_sink (DataSink '"yt" '"plato"))
+  (let world (Commit! world plato_sink))
+  (return world)
+)))
+(return world)
+)

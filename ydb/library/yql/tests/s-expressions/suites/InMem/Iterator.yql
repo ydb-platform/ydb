@@ -1,0 +1,18 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let list (AsList (String 'aaa) (String 'bbb) (String 'ccc)))
+(let world (Write! world res_sink (Key) (Collect (Iterator list (DependsOn (Uint32 '0)))) '()))
+(let world (Write! world res_sink (Key) (Collect (Iterator (Just list))) '()))
+(let world (Write! world res_sink (Key) (Collect (Iterator (Nothing (OptionalType (TypeOf list))))) '()))
+(let world (Write! world res_sink (Key) (Collect (EmptyIterator (StreamType (DataType 'Double)))) '()))
+(let world (Write! world res_sink (Key) (Collect (ToStream (Just (Uint32 '123)) (DependsOn (Uint32 '1)))) '()))
+(let world (Write! world res_sink (Key) (Collect (ToStream (Nothing (OptionalType (DataType 'Double))))) '()))
+(let world (Write! world res_sink (Key) (Collect (ToStream (EmptyIterator (StreamType (DataType 'String))))) '()))
+(let world (Write! world res_sink (Key) (Collect (ToStream list (DependsOn (Uint32 '2)))) '()))
+(let world (Commit! world res_sink))
+(return world)
+)

@@ -1,0 +1,21 @@
+(
+
+(library "alterto.yql")
+(import alterto_module '"alterto.yql")
+
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+# Dict<Int32, String> -> Dict<Int32, Utf8>
+(let targetType (DictType (DataType 'Int32) (DataType 'Utf8)))
+(let emptyTarget (Dict targetType))
+(let src (AsDict '((Int32 '1) (String 'one)) '((Int32 '2) (String 'two)) '((Int32 '3) (String 'three))))
+(let world (Apply (bind alterto_module 'doAlterTo) world src targetType emptyTarget))
+
+# Dict<Int32, String> -> Dict<Int32, Utf8> (fail)
+(let src (AsDict '((Int32 '1) (String 'one)) '((Int32 '2) (String '"\xff\xfe")) '((Int32 '3) (String 'three))))
+(let world (Apply (bind alterto_module 'doAlterTo) world src targetType emptyTarget))
+
+(return world)
+
+)

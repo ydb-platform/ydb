@@ -1,0 +1,18 @@
+(
+(let mr_source (DataSource 'yt 'plato))
+(let world (Configure! world (DataSource '"yt" '"$all") '"Attr" '"ignoreweakschema" '""))
+(let world (Configure! world (DataSource '"yt" '"$all") '"Attr" '"inferschema" '""))
+
+(let x (Read! world mr_source
+    (Key '('tablescheme (String 'Input)))
+    (Void) '()
+))
+
+(let world (Left! x))
+(let scheme (Right! x))
+
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) scheme '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

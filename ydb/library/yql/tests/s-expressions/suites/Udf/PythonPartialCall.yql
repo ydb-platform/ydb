@@ -1,0 +1,22 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+# prepare python udf
+(let ui32 (DataType 'Uint32))
+(let udfType (CallableType '('1) '(ui32) '(ui32) '((OptionalType ui32))))
+(let udfScript (String '"def Add(x, y): return x + (y if y is not None else 1)"))
+(let udf (ScriptUdf 'Python 'Add udfType udfScript))
+
+# call udf
+(let x (Uint32 '20))
+(let result (Apply udf x))
+
+# output result with type
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) result '( '('type) )))
+
+# finish
+(let world (Commit! world res_sink))
+(return world)
+)

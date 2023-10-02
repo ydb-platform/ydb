@@ -1,0 +1,23 @@
+(
+(let structType (StructType '('"key" (DataType 'String)) '('"subkey" (DataType 'String)) '('"value" (DataType 'String))))
+#comment
+(let udfType (CallableType '() '((StreamType structType)) '((StreamType structType))))
+(let script '@@
+def f(input):
+   for i in input:
+      yield {
+        'key': i.key,
+        'subkey': i.subkey,
+        'value': i.value
+      }
+@@)
+(let udf (ScriptUdf 'Python3 '"f" udfType (String script)))
+
+(let res (LMap (List (ListType structType)) (lambda '(stream) (block '(
+   (return (Apply udf stream))
+)))))
+(let mr_sink (DataSink 'yt (quote plato)))
+(let world (Write! world mr_sink (Key '('table (String 'Output))) res '('('mode 'append))))
+(let world (Commit! world mr_sink))
+(return world)
+)

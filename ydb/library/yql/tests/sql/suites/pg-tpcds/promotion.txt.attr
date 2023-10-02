@@ -1,0 +1,25 @@
+{
+    "_yql_row_spec"={
+        "Type"=["StructType";[
+              ["p_promo_sk";["PgType";"int4";];];
+              ["p_promo_id";["PgType";"text";];];
+              ["p_start_date_sk";["PgType";"int4";];];
+              ["p_end_date_sk";["PgType";"int4";];];
+              ["p_item_sk";["PgType";"int4";];];
+              ["p_cost";["PgType";"numeric";];];
+              ["p_response_target";["PgType";"int4";];];
+              ["p_promo_name";["PgType";"text";];];
+              ["p_channel_dmail";["PgType";"text";];];
+              ["p_channel_email";["PgType";"text";];];
+              ["p_channel_catalog";["PgType";"text";];];
+              ["p_channel_tv";["PgType";"text";];];
+              ["p_channel_radio";["PgType";"text";];];
+              ["p_channel_press";["PgType";"text";];];
+              ["p_channel_event";["PgType";"text";];];
+              ["p_channel_demo";["PgType";"text";];];
+              ["p_channel_details";["PgType";"text";];];
+              ["p_purpose";["PgType";"text";];];
+              ["p_discount_active";["PgType";"text";];];
+        ];];
+    }
+}

@@ -1,0 +1,58 @@
+(
+(let world (block '(
+  (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"Input1"))) '('"key") '()))
+  (let world (Left! x))
+  (let table0 (Right! x))
+  (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"Input2"))) '('"key") '()))
+  (let world (Left! x))
+  (let table1 (Right! x))
+  (let output (block '(
+    (let select (block '(
+      (let core (block '(
+        (let select (UnionAll (block '(
+          (let core table0)
+          (let core (FlatMap core (lambda '(row) (block '(
+            (let res (Struct))
+            (let res (AddMember res '"key" (Member row '"key")))
+            (let res (AddMember res '"A" (String '"1")))
+            (let res (AsList res))
+            (return res)
+          )))))
+          (return core)
+        )) (block '(
+          (let core table1)
+          (let core (FlatMap core (lambda '(row) (block '(
+            (let res (Struct))
+            (let res (AddMember res '"key" (Member row '"key")))
+            (let res (AddMember res '"A" (Int64 '"1")))
+            (let res (AsList res))
+            (return res)
+          )))))
+          (return core)
+        ))))
+        (return select)
+      )))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (Struct))
+        (let res (AddMember res '"key" (Member row '"key")))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"key")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let plato_sink (DataSink '"yt" '"plato"))
+  (let world (Commit! world plato_sink))
+  (return world)
+)))
+(return world)
+)

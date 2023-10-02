@@ -1,0 +1,1 @@
+select key as subkey, subkey as value, value as key from plato.Input;

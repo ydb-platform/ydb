@@ -1,0 +1,7 @@
+(
+    (let world (Configure! world (DataSource '"yt" '"$all") '"Attr" '"forceinferschema" '"2"))
+    (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"Input"))) (Void) '()))
+    (let result (DataSink 'result))
+    (let world (Write! (Left! x) result (Key) (Right! x) '('('type) '('autoref))))
+    (return (Commit! (Commit! world result) (DataSink '"yt" '"plato")))
+)

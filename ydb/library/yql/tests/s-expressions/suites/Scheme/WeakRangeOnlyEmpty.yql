@@ -1,0 +1,33 @@
+(
+(import aggregate_module '"/lib/yql/aggregate.yql")
+(import window_module '"/lib/yql/window.yql")
+(let world (block '(
+  (let filter (lambda '(name) (And (>= name (String '"Input1")) (<= name (String '"Input2")))))
+  (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (MrTableRange '"" filter))) (Void) '('('infer_scheme))))
+  (let world (Left! x))
+  (let table0 (Right! x))
+  (let output (block '(
+    (let select (block '(
+      (let core table0)
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsList row))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let plato_sink (DataSink '"yt" '"plato"))
+  (let world (Commit! world plato_sink))
+  (return world)
+)))
+(return world)
+)

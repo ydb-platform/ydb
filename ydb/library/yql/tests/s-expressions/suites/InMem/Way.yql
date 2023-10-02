@@ -1,0 +1,50 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(import id_module '"/lib/yql/id.yql")
+(let id (bind id_module 'id))
+
+(let res_sink (DataSink 'result))
+(let vt (VariantType (TupleType (DataType 'Int32) (DataType 'String))))
+(let v1 (Variant (Int32 '34) '0 vt))
+(let v2 (Variant (String 'qwe) '1 vt))
+(let jv1 (Just v1))
+(let jv2 (Just v2))
+(let n (Nothing (TypeOf jv1)))
+
+(let world (Write! world res_sink (Key) (Way v1) '('('type))))
+(let world (Write! world res_sink (Key) (Way v2) '('('type))))
+(let world (Write! world res_sink (Key) (Way jv1) '('('type))))
+(let world (Write! world res_sink (Key) (Way jv2) '('('type))))
+(let world (Write! world res_sink (Key) (Way n) '('('type))))
+
+(let world (Write! world res_sink (Key) (Way (Apply id v1)) '('('type))))
+(let world (Write! world res_sink (Key) (Way (Apply id v2)) '('('type))))
+(let world (Write! world res_sink (Key) (Way (Apply id jv1)) '('('type))))
+(let world (Write! world res_sink (Key) (Way (Apply id jv2)) '('('type))))
+(let world (Write! world res_sink (Key) (Way (Apply id n)) '('('type))))
+
+(let vt (VariantType (StructType '('a (DataType 'Int32)) '('b (DataType 'String)))))
+(let v1 (Variant (Int32 '34) 'a vt))
+(let v2 (Variant (String 'qwe) 'b vt))
+(let jv1 (Just v1))
+(let jv2 (Just v2))
+(let n (Nothing (TypeOf jv1)))
+
+(let world (Write! world res_sink (Key) (Way v1) '('('type))))
+(let world (Write! world res_sink (Key) (Way v2) '('('type))))
+(let world (Write! world res_sink (Key) (Way jv1) '('('type))))
+(let world (Write! world res_sink (Key) (Way jv2) '('('type))))
+(let world (Write! world res_sink (Key) (Way n) '('('type))))
+
+(let world (Write! world res_sink (Key) (Way (Apply id v1)) '('('type))))
+(let world (Write! world res_sink (Key) (Way (Apply id v2)) '('('type))))
+(let world (Write! world res_sink (Key) (Way (Apply id jv1)) '('('type))))
+(let world (Write! world res_sink (Key) (Way (Apply id jv2)) '('('type))))
+(let world (Write! world res_sink (Key) (Way (Apply id n)) '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+)

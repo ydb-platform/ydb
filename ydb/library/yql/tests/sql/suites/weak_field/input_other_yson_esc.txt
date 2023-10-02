@@ -1,0 +1,7 @@
+{"key"="020";"subkey"="1";"strE1"="hello\\world"     ;"value"="find"};
+{"key"="075";"subkey"="5";"strE1"="\nfunny\n"        };
+{"key"="150";"subkey"="4";"strE1"="\nbunny\n"        ;"value"="the"};
+{"key"="333";"subkey"="9";"strE1"=#                  };
+{"key"="500";"subkey"="2";"strE1"="33.33"            ;"value"="black"};
+{"key"="400";"subkey"="13";"strE1"="test\"funny\"esc"};
+{"key"="800";"subkey"="3";"strE1"="test\\esc"        ;"value"="rabbit"};

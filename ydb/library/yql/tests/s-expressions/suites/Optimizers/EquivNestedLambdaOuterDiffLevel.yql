@@ -1,0 +1,34 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let outLambda1 (lambda '(sep) (block '(
+   (let data (AsList (String 'a) (String 'b)))
+   (let data1 (Map data (lambda '(x) (Concat x sep))))
+   (let res data1)
+   (return res)
+))))
+
+(let outLambda2 (lambda '(sep) (block '(
+   (let data (AsList (String 'a) (String 'b)))
+   (let data1 (Map data (lambda '(x) (Concat x sep))))
+   (let res data1)
+   (return res)
+))))
+
+(let anotherLambda (lambda '(sep) (block '(
+   (let seps (AsList (Concat (String 'z) sep) (Concat (String 'y) sep)))
+   (let res (FlatMap seps outLambda2))
+   (return res)
+))))
+
+(let predicate (== (Int32 '1) (Int32 '2)))
+(let sep (If predicate (Just (String '_)) (Just (String '+))))
+(let data1 (IfPresent sep outLambda1 (AsList (String 'none))))
+(let data2 (IfPresent sep anotherLambda (AsList (String 'none))))
+(let world (Write! world res_sink (Key) '(data1 data2) '()))
+(let world (Commit! world res_sink))
+(return world)
+)

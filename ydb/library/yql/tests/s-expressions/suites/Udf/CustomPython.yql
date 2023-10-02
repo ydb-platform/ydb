@@ -1,0 +1,24 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+# prepare python udf
+(let world (Configure! world (DataSource 'config) 'ImportUdfs 'custom_python.so))
+
+(let json (DataType 'Json))
+(let udfType (CallableType '() '(json) '(json)))
+(let udfScript (String '"from custom_python.foo import bar"))
+(let udf (ScriptUdf 'CustomPython 'bar udfType udfScript))
+
+# call udf
+(let x (Json '@@{"abc":1}@@))
+(let result (Apply udf x))
+
+# output result with type
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) result '( '('type) )))
+
+# finish
+(let world (Commit! world res_sink))
+(return world)
+)

@@ -1,0 +1,14 @@
+{"key"=10u;"subkey"=1u;"value"=[1;[1.0]]};
+{"key"=20u;"subkey"=2u;"value"=#};
+{"key"=20u;"subkey"=2u;"value"=[2;[#]]};
+{"key"=20u;"subkey"=2u;"value"=[2;[%nan]]};
+{"key"=20u;"subkey"=2u;"value"=[2;[%inf]]};
+{"key"=10u;"subkey"=1u;"value"=[1;[%-inf]]};
+{"key"=10u;"subkey"=1u;"value"=[1;[%nan]]};
+{"key"=10u;"subkey"=1u;"value"=[1;[%inf]]};
+{"key"=10u;"subkey"=1u;"value"=#};
+{"key"=10u;"subkey"=1u;"value"=[1;[#]]};
+{"key"=10u;"subkey"=1u;"value"=[1;#]};
+{"key"=20u;"subkey"=2u;"value"=[2;[1.0]]};
+{"key"=20u;"subkey"=2u;"value"=[2;#]};
+{"key"=20u;"subkey"=2u;"value"=[2;[%-inf]]};

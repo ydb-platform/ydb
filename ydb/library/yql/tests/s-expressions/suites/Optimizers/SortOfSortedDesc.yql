@@ -1,0 +1,24 @@
+(
+(let source (DataSource 'yt 'plato))
+(let sink (DataSink 'yt 'plato))
+(let result (DataSink 'result))
+
+(let r (Read! world source (MrTableConcat (Key '('table (String '"Input")))) (Void) '()))
+(let input (Right! r))
+(let world (Left! r))
+
+(let out (Sort (FlatMap input (lambda '(item) (AsList item))) (Bool 'false) (lambda '(item) (Member item '"key"))))
+(let world (Write! world sink (Key '('table (String '"Output"))) out '('('mode 'renew))))
+(let world (Commit! world sink))
+
+(let r (Read! world source (MrTableConcat (Key '('table (String '"Output")))) (Void) '()))
+(let input (Right! r))
+(let world (Left! r))
+
+(let out (Sort (FlatMap input (lambda '(item) (AsList item))) (Bool 'true) (lambda '(item) (Member item '"key"))))
+(let world (Write! world result (Key) out '('('type) '('autoref))))
+(let world (Commit! world result))
+(let world (Commit! world sink))
+
+(return world)
+)

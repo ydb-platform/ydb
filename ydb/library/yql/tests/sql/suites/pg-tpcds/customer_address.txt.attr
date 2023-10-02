@@ -1,0 +1,19 @@
+{
+    "_yql_row_spec"={
+        "Type"=["StructType";[
+              ["ca_address_sk";["PgType";"int4";];];
+              ["ca_address_id";["PgType";"text";];];
+              ["ca_street_number";["PgType";"text";];];
+              ["ca_street_name";["PgType";"text";];];
+              ["ca_street_type";["PgType";"text";];];
+              ["ca_suite_number";["PgType";"text";];];
+              ["ca_city";["PgType";"text";];];
+              ["ca_county";["PgType";"text";];];
+              ["ca_state";["PgType";"text";];];
+              ["ca_zip";["PgType";"text";];];
+              ["ca_country";["PgType";"text";];];
+              ["ca_gmt_offset";["PgType";"numeric";];];
+              ["ca_location_type";["PgType";"text";];];
+        ];];
+    }
+}

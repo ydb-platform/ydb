@@ -1,0 +1,14 @@
+(
+(let sink (DataSink 'yt 'plato))
+(let source (DataSource 'yt 'plato))
+(let table (Right! (Read! world source (Key '('table (String 'Input))) '('key 'subkey 'value) '())))
+(let filter (lambda '(item) (block '(
+  (let res (And (> (Member item 'value) (String 'd)) (< (Member item 'key) (String '100))))
+  (return res)
+)
+)))
+(let table (Filter table filter))
+(let world (Write! world sink (Key '('table (String 'Output))) table '('('mode 'append))))
+(let world (Commit! world sink))
+(return world)
+)

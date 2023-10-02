@@ -1,0 +1,31 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+# common types
+(let ui64 (DataType 'Uint64))
+(let str (DataType 'String))
+
+# callable func
+(let funcType (CallableType '() '(str) '(str) '(ui64)))
+(let func (Udf 'SimpleUdf.Repeat))
+
+# python udf
+(let udfType (CallableType '() '(str) '(funcType) '(ui64)))
+(let udfScript (String '@@
+def new_string(func, x):
+    return func('x', x) + ':' + func('y', x)
+@@))
+(let udf (ScriptUdf 'Python 'new_string udfType udfScript))
+
+# call udf
+(let x (Uint64 '3))
+(let result (Apply udf func x))
+
+# output result with type
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) result '( '('type) )))
+
+# finish
+(return (Commit! world res_sink))
+)

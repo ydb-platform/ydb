@@ -1,0 +1,21 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let vt (VariantType (TupleType (DataType 'String) (DataType 'String) (DataType 'String))))
+(let v0 (Variant (String 'aaa) '0 vt))
+(let v1 (Variant (String 'bbb) '1 vt))
+(let v2 (Variant (String 'ccc) '2 vt))
+(let list (AsList v0 v1 v2))
+
+(let handler0 (lambda '(x) (Concat (String '0-) x)))
+(let handler1 (lambda '(x) (Concat (String '0-) x)))
+(let handler2 (lambda '(x) (Concat (String '0-) x)))
+
+(let world (Write! world res_sink (Key) (Map list (lambda '(x) (Visit x '0 handler0 '1 handler1 '2 handler2))) '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+)

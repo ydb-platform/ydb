@@ -1,0 +1,14 @@
+(
+(let $1 (DataSink 'result))
+(let $2 (Right! (Read! world (DataSource '"yt" '"plato") (MrTableConcat (Key '('table (String '"Input")))) (Void) '())))
+(let inputFlow (ToFlow (PersistableRepr (OrderedSqlProject $2 '((SqlProjectStarItem (TypeOf $2) '"" (lambda '($4) $4) '()))))))
+(let timeOrderRecover (TimeOrderRecover
+    inputFlow
+    (lambda '($3)  (Member $3 '"ts"))
+    (Interval '-9)
+    (Interval '10)
+    (Uint32 '12)
+))
+(let $3 (Write! world $1 (Key)(ForwardList timeOrderRecover)'('('type) '('autoref))))
+(return (CommitAll! (Commit! $3 $1)))
+)

@@ -1,0 +1,16 @@
+(
+(let mr_sync (DataSink 'result))
+(let mr_source (DataSource '"yt" '"plato"))
+(let lambda (lambda '(item) (block '(
+  (return (AsList (AsStruct '('"path" (TablePath (DependsOn item))))))
+))))
+(let res (Extend
+  (FlatMap (Right! (Read! world mr_source (Key '('table (String '"Input"))) '() '())) lambda)
+  (FlatMap (Right! (Read! world mr_source (Key '('table (String '"Input"))) '() '())) lambda)
+  (FlatMap (Extend
+    (Right! (Read! world mr_source (Key '('table (String '"Input"))) '() '()))) (lambda '(item) (block '(
+      (return (AsList (AsStruct '('"path" (String '"Special")))))
+))))))
+(let world (ResWrite! world mr_sync (Key) res '('('type) '('autoref) '('columns '('"path")))))
+(return (Commit! (Commit! world mr_sync) (DataSink '"yt" '"plato")))
+)

@@ -1,0 +1,26 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+# prepare python udf
+(let i64 (DataType 'Int64))
+(let udfType (CallableType '() '((ListType i64))))
+(let udfScript (String '@@
+def g0():
+    def gen():
+        for x in xrange(1, 4):
+            yield long(x + 42)
+    return gen
+@@))
+(let udf (ScriptUdf 'Python 'g0 udfType udfScript))
+
+# call udf
+(let result (Apply udf))
+
+# output result with type
+(let sink (DataSink 'result))
+(let world (Write! world sink (Key) result '( '('type) )))
+
+# finish
+(return (Commit! world sink))
+)

@@ -1,0 +1,16 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let list (AsList '((Uint32 '1) (String 'a)) '((Uint32 '1) (String 'b)) '((Uint32 '2) (String 'c))))
+(let premap (lambda '(x) (Iterator (AsList x))))
+(let keyExtractor (lambda '(x) (Nth x '0)))
+(let handlerInit (lambda '(key item) (Nth item '1)))
+(let handlerUpdate (lambda '(key item state) (Concat (Nth item '1) state)))
+(let handlerFinish (lambda '(key state) (Iterator (AsList '(key state)))))
+(let world (Write! world res_sink (Key) (CombineByKey list premap keyExtractor handlerInit handlerUpdate handlerFinish) '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

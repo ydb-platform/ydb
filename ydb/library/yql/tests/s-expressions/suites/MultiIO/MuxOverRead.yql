@@ -1,0 +1,27 @@
+(
+(let mr_source (DataSource 'yt 'plato))
+(let mr_sink (DataSink 'yt 'plato))
+
+(let x (Read! world mr_source (Key '('table (String 'Input1))) (Void) '()))
+(let world (Left! x))
+(let data1 (Right! x))
+
+(let x (Read! world mr_source (Key '('table (String 'Input2))) (Void) '()))
+(let world (Left! x))
+(let data2 (Right! x))
+
+(let data (Mux '(data1 data2)))
+
+(let data (Map data (lambda '(item) (block '(
+    (let res (Visit item
+        '0 (lambda '(x) x)
+        '1 (lambda '(x) x)
+    ))
+   (return res)
+)))))
+
+(let world (Write! world mr_sink (Key '('table (String 'Output1))) data '('('mode 'renew))))
+
+(let world (Commit! world mr_sink))
+(return world)
+)

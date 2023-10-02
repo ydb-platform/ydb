@@ -1,0 +1,19 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+(let res_sink (DataSink 'result))
+
+(let origType (VariantType (TupleType (DataType 'Int32) (DataType 'Int32) (DataType 'Int32))))
+(let orig (Variant (Int32 '0) '1 origType))
+
+(let testcase (AsList orig))
+
+(let testType (VariantType (TupleType (DataType 'Int32) (DataType 'Float) (DataType 'Int32))))
+(let test (Variant (Float '0) '1 testType))
+
+(let testcase (Append testcase test))
+
+(let world (Write! world res_sink (Key) testcase '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

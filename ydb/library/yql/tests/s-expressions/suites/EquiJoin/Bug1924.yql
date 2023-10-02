@@ -1,0 +1,117 @@
+(
+(import aggregate_module '"/lib/yql/aggregate.yql")
+(import window_module '"/lib/yql/window.yql")
+(let world (block '(
+  (let x (Read! world (DataSource '"yt" '"plato") (MrTableConcat (Key '('table (String '"InputSelf")))) '('"key" '"value") '()))
+  (let world (Left! x))
+  (let table0 (Right! x))
+  (let output (block '(
+    (let select (block '(
+      (let core (block '(
+        (let select (block '(
+          (let core (Map (EquiJoin '((block '(
+            (let select (block '(
+              (let core (EquiJoin '((block '(
+                (let select (block '(
+                  (let core (EquiJoin '((block '(
+                    (let select (block '(
+                      (let core table0)
+                      (let core (FlatMap core (lambda '(row) (block '(
+                        (let res (AsStruct '('"DeviceID" (Member row '"key"))))
+                        (let res (AsList res))
+                        (return res)
+                      )))))
+                      (return core)
+                    )))
+                    (return select)
+                  )) '"rutaxi") '((block '(
+                    (let select (block '(
+                      (let core table0)
+                      (let core (FlatMap core (lambda '(row) (block '(
+                        (let res (AsStruct '('"devid" (Member row '"key")) '('"mmetric_devid" (Member row '"key"))))
+                        (let res (AsList res))
+                        (return res)
+                      )))))
+                      (return core)
+                    )))
+                    (return select)
+                  )) '"hash") '('RightSemi '"rutaxi" '"hash" '('"rutaxi" '"DeviceID") '('"hash" '"mmetric_devid") '()) '()))
+                  (let core (FlatMap core (lambda '(row) (block '(
+                    (let res (AsStruct '('"devid" (Member row '"hash.devid"))))
+                    (let res (AsList res))
+                    (return res)
+                  )))))
+                  (return core)
+                )))
+                (return select)
+              )) '"x") '((block '(
+                (let select (block '(
+                  (let core table0)
+                  (let core (FlatMap core (lambda '(row) (block '(
+                    (let res (AsStruct '('"devid" (Member row '"key")) '('"yuid" (Member row '"key"))))
+                    (let res (AsList res))
+                    (return res)
+                  )))))
+                  (return core)
+                )))
+                (return select)
+              )) '"device") '('RightSemi '"x" '"device" '('"x" '"devid") '('"device" '"devid") '()) '()))
+              (let core (FlatMap core (lambda '(row) (block '(
+                (let res (AsStruct '('"yuid" (Member row '"device.yuid"))))
+                (let res (AsList res))
+                (return res)
+              )))))
+              (return core)
+            )))
+            (return select)
+          )) '"y") '((Map (block '(
+            (let select (block '(
+              (let core table0)
+              (let core (FlatMap core (lambda '(row) (block '(
+                (let res (AsStruct '('"yuid" (Member row '"key")) '('"phones" (Member row '"value"))))
+                (let res (AsList res))
+                (return res)
+              )))))
+              (return core)
+            )))
+            (return select)
+          )) (lambda '(row) (block '(
+            (let row (AddMember row '"_equijoin_column_0" ("Concat" (Member row '"yuid") (String '""))))
+            (return row)
+          )))) '"cripta") '('RightSemi '"y" '"cripta" '('"y" '"yuid") '('"cripta" '"_equijoin_column_0") '()) '()) (lambda '(row) (block '(
+            (let row (ForceRemoveMember row '"cripta._equijoin_column_0"))
+            (return row)
+          )))))
+          (let core (FlatMap core (lambda '(row) (block '(
+            (let res (AsStruct '('"phones" (Member row '"cripta.phones"))))
+            (let res (AsList res))
+            (return res)
+          )))))
+          (return core)
+        )))
+        (return select)
+      )))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"phone" (Member row '"phones"))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (let select (Sort select (Bool 'true) (lambda '(row) (Member row '"phone"))))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"phone")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let plato_sink (DataSink '"yt" '"plato"))
+  (let world (Commit! world plato_sink))
+  (return world)
+)))
+(return world)
+)

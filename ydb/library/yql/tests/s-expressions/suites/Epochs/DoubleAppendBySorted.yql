@@ -1,0 +1,20 @@
+(
+(let source (DataSource '"yt" '"plato"))
+(let sink (DataSink '"yt" '"plato"))
+
+(let r (Read! world source (Key '('table (String '"Input"))) (Void) '()))
+(let world (Left! r))
+(let input (Right! r))
+(let sorted (Sort input (Bool 'true) (lambda '(item) (Member item '"key"))))
+(let world (Write! world sink (Key '('table (String 'Output))) sorted '('('mode 'append))))
+
+(let r (Read! world source (Key '('table (String '"Input"))) (Void) '()))
+(let world (Left! r))
+(let input (Right! r))
+(let sorted (Sort input (Bool 'true) (lambda '(item) (Member item '"key"))))
+(let world (Write! world sink (Key '('table (String 'Output))) sorted '('('mode 'append))))
+
+(let world (Commit! world sink))
+
+(return world)
+)

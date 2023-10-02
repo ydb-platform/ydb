@@ -1,0 +1,25 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let t '(
+  (String 'aaa)
+  (Just (Uint32 '4))
+  (Nothing (OptionalType (DataType 'Uint32)))
+))
+
+(let jt (Just t))
+(let n (Nothing (TypeOf jt)))
+
+(let world (Write! world res_sink (Key) (Nth t '0) '()))
+(let world (Write! world res_sink (Key) (Nth jt '0) '()))
+(let world (Write! world res_sink (Key) (Nth jt '1) '()))
+(let world (Write! world res_sink (Key) (Nth jt '2) '()))
+(let world (Write! world res_sink (Key) (Nth n '0) '()))
+(let world (Write! world res_sink (Key) (Nth n '2) '()))
+
+(let world (Commit! world res_sink))
+(return world)
+)

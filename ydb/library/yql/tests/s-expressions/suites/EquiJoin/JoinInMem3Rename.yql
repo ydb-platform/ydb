@@ -1,0 +1,36 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let list1 (AsList 
+  (AsStruct '('key1 (Int32 '1)) '('value1 (String 'A))) 
+  (AsStruct '('key1 (Int32 '7)) '('value1 (String 'B)))
+  (AsStruct '('key1 (Int32 '4)) '('value1 (String 'C)))
+  (AsStruct '('key1 (Int32 '4)) '('value1 (String 'D)))
+))
+
+(let list2 (AsList 
+  (AsStruct '('key2 (Int32 '9)) '('value2 (String 'Z))) 
+  (AsStruct '('key2 (Int32 '4)) '('value2 (String 'Y))) 
+  (AsStruct '('key2 (Int32 '3)) '('value2 (String 'X))) 
+  (AsStruct '('key2 (Int32 '4)) '('value2 (String 'W)))
+  (AsStruct '('key2 (Int32 '8)) '('value2 (String 'V)))
+))
+
+(let list3 (AsList 
+  (AsStruct '('key3 (Int32 '1)) '('value3 (String 'G))) 
+  (AsStruct '('key3 (Int32 '4)) '('value3 (String 'H))) 
+  (AsStruct '('key3 (Int32 '2)) '('value3 (String 'I))) 
+  (AsStruct '('key3 (Int32 '3)) '('value3 (String 'J)))
+  (AsStruct '('key3 (Int32 '3)) '('value3 (String 'K)))
+))
+
+(let joinInnerInner (EquiJoin '(list1 'a) '(list2 'b) '(list3 'c) '('Inner '('Inner 'a 'b '('a 'key1) '('b 'key2) '()) 'c '('b 'key2) '('c 'key3) '()) 
+'('('rename '"a.key1" 'col1) '('rename '"b.value2" '"") '('rename '"c.key3" 'ccc))))
+
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) joinInnerInner '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+)

@@ -1,0 +1,26 @@
+(
+(import aggregate_module '"/lib/yql/aggregate.yql")
+(import window_module '"/lib/yql/window.yql")
+(let world (block '(
+  (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"Input1"))) (Void) '()))
+  (let world (Left! x))
+  (let table1 (Right! x))
+  (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"Input2"))) (Void) '()))
+  (let world (Left! x))
+  (let table2 (Right! x))
+  (let u (UnionAll table1 table2))
+  (let output (Aggregate u '() '('('Min0 (Apply (bind aggregate_module '"min_traits_factory") (TypeOf u) (lambda '(row) (Member row '"age")))))))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let plato_sink (DataSink '"yt" '"plato"))
+  (let world (Commit! world plato_sink))
+  (return world)
+)))
+(return world)
+)

@@ -1,0 +1,23 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+
+# Dict<Uint32, Int16>> -> Dict<Uint32, Uint64> (false)
+(let value (AsDict '((Uint32 '0) (Int16 '"-1"))))
+(let commonType (DictType (DataType 'Uint32) (DataType 'Uint64)))
+(let imlicitEqualsResult (Exists (StrictCast value commonType)))
+(let world (Write! world res_sink (Key) imlicitEqualsResult '('('type))))
+
+# Dict<Uint32, Uint16>> -> Dict<Uint32, Uint64> (true)
+(let value (AsDict '((Uint32 '0) (Uint16 '0))))
+(let commonType (DictType (DataType 'Uint32) (DataType 'Uint64)))
+(let imlicitEqualsResult (Exists (StrictCast value commonType)))
+(let world (Write! world res_sink (Key) imlicitEqualsResult '('('type))))
+
+
+(let world (Commit! world res_sink))
+(return world)
+
+)

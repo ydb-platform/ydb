@@ -1,0 +1,6 @@
+(
+    (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"Input"))) (Void) '('('infer_scheme))))
+    (let result (DataSink 'result))
+    (let world (Write! (Left! x) result (Key) (FlatMap (Right! x) (lambda '(item) (AsList item))) '('('type) '('autoref))))
+    (return (Commit! (Commit! world result) (DataSink '"yt" '"plato")))
+)

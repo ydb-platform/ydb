@@ -1,0 +1,46 @@
+(
+(let world (block '(
+  (let values (block '(
+    (let values (Struct))
+    (let values (AddMember values '"key" ("Just" (Cast ("Minus" (Int64 '"1")) 'Int32))))
+    (let values (AddMember values '"x" (String '"2")))
+    (return (AsList values))
+  )))
+  (let world (block '(
+    (let sink (DataSink '"yt" '"plato"))
+    (let world (Write! world sink (Key '('table (String '"Output"))) values '('('mode 'append))))
+    (return (Commit! world sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"Output"))) '('"key") '()))
+  (let world (Left! x))
+  (let table0 (Right! x))
+  (let output (block '(
+    (let select (block '(
+      (let core table0)
+      (let core (block '(
+        (return (Aggregate core '('"key") '()))
+      )))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (Struct))
+        (let res (AddMember res '"column0" ("ToString" ("Coalesce" (Member row '"key") (Int64 '"34")))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (let plato_sink (DataSink '"yt" '"plato"))
+    (let world (Commit! world plato_sink))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(return world)
+)

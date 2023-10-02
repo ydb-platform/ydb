@@ -1,0 +1,57 @@
+(
+(let mr_source (DataSource 'yt 'plato))
+(let mr_sink (DataSink 'yt 'plato))
+
+(let x (Read! world mr_source (Key '('table (String 'Input))) (Void) '()))
+(let world (Left! x))
+(let data (Right! x))
+
+(let varTuple (VariantType (TupleType
+    (StructType
+        '('key (DataType 'String))
+        '('subkey (DataType 'String))
+        '('value (DataType 'String))
+    )
+    (StructType
+        '('key (DataType 'String))
+        '('subkey (DataType 'String))
+        '('value (DataType 'String))
+    )
+)))
+
+(let varData1 (Map data (lambda '(item) (block '(
+    (let intValue (FromString (Member item 'key) 'Int32))
+    (let res
+        (If (Coalesce (Equal (% intValue (Int32 '2)) (Int32 '0)) (Bool 'false))
+            (Variant item '0 varTuple)
+            (Variant item '1 varTuple)
+        )
+    )
+   (return res)
+)))))
+
+(let varData2 (Map data (lambda '(item) (block '(
+    (let intValue (FromString (Member item 'key) 'Int32))
+    (let intValue (+ intValue (Int32 '1)))
+    (let res
+        (If (Coalesce (Equal (% intValue (Int32 '2)) (Int32 '0)) (Bool 'false))
+            (Variant item '0 varTuple)
+            (Variant item '1 varTuple)
+        )
+    )
+   (return res)
+)))))
+
+(let dataTuple (Demux (Extend varData1 varData2)))
+
+(let data1 (Nth dataTuple '0))
+(let data2 (Nth dataTuple '1))
+
+(let data1 (Filter data1 (lambda '(item) (Less (Member item 'key) (String '200)))))
+
+(let world (Write! world mr_sink (Key '('table (String 'Output))) data1 '('('mode 'renew))))
+(let world (Write! world mr_sink (Key '('table (String 'Output))) data2 '('('mode 'append))))
+
+(let world (Commit! world mr_sink))
+(return world)
+)

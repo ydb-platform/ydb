@@ -1,0 +1,4 @@
+/* postgres can not */
+use plato;
+$a = plato.Input;
+SELECT count(*) FROM concat($a,$a);

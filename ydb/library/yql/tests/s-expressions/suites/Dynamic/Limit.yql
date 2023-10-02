@@ -1,0 +1,15 @@
+(
+(let source (DataSource '"yt" '"plato"))
+(let sink (DataSink '"yt" '"plato"))
+
+(let r (Read! world source (Key '('table (String '"Input1"))) (Void) '()))
+(let world (Left! r))
+(let input (Right! r))
+(let input (Take input (Int32 '"3")))
+
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) (Unordered input) '('('type))))
+(let world (Commit! world res_sink))
+
+(return world)
+)

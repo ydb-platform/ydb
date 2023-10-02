@@ -1,0 +1,37 @@
+(
+# read data from Input table
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+
+(let str1 (AsStruct '('a (Uint32 '1)) '('b (String 'a))))
+(let str2 (AsStruct '('a (Uint32 '2)) '('b (String 'b))))
+(let str3 (AsStruct '('a (Uint32 '3)) '('b (String 'c))))
+(let list1 (AsList str1 str2))
+(let list2 (AsList str2 str1))
+(let list3 (AsList str1 str3))
+
+(let cond (>= (RandomNumber) (Uint64 '0)))
+
+(let res (FlatMap (OptionalIf cond str1) (lambda '(r) (OptionalIf (>= (Member r 'b) (String 'a)) r))))
+(let world (Write! world res_sink (Key) res '()))
+
+(let res (FlatMap (OptionalIf cond str1) (lambda '(r) (AsList r r))))
+(let world (Write! world res_sink (Key) res '()))
+
+(let res (FlatMap (OptionalIf cond str1) (lambda '(r) (ToStream (Just r) (DependsOn r)))))
+(let world (Write! world res_sink (Key) (ForwardList res) '()))
+
+(let res (FlatMap (ListIf cond str1) (lambda '(r) (OptionalIf (>= (Member r 'b) (String 'a)) r))))
+(let world (Write! world res_sink (Key) res '()))
+
+(let res (FlatMap (ListIf cond str1) (lambda '(r) (AsList r r))))
+(let world (Write! world res_sink (Key) res '()))
+
+(let res (FlatMap (ListIf cond str1) (lambda '(r) (ToStream (Just r) (DependsOn r)))))
+(let world (Write! world res_sink (Key) res '()))
+
+(let world (Commit! world res_sink))
+(return world)
+)

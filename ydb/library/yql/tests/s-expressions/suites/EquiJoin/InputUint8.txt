@@ -1,0 +1,5 @@
+{"key"=255u;"value"="Uint8_a"};
+{"key"=127u;"value"="Uint8_b"};
+{"key"=0u;"value"="Uint8_c"};
+{"key"=1u;"value"="Uint8_d"};
+{"key"=2u;"value"="Uint8_e"};

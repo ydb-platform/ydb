@@ -1,0 +1,10 @@
+{
+    "schema" = <
+        "strict" = %false;
+        "unique_keys" = %false
+    >
+    [{
+        "name" = "missing";
+        "type" = "string"
+    }];
+}

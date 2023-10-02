@@ -1,0 +1,12 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let list (AsList (Uint32 '1) (Uint32 '2) (Uint32 '3)))
+(let world (Write! world res_sink (Key) (Collect (Map (Iterator list) 
+   (lambda '(x) (+ (Uint32 '10) x)))) '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

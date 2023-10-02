@@ -1,0 +1,1 @@
+select YQL::ToString(1 + 2);

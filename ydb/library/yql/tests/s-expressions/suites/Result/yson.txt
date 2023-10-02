@@ -1,0 +1,7 @@
+{"key"="075";"subkey"="1";"value"={"a"=1;}};
+{"key"="075";"subkey"="1";"value"={"$b"=#;}};
+{"key"="075";"subkey"="1";"value"={"c"=2u;}};
+{"key"="075";"subkey"="1";"value"={"d"=4.1;}};
+{"key"="075";"subkey"="1";"value"={"e"=%true;}};
+{"key"="075";"subkey"="1";"value"={"f"=[1;<x=1>"english text"]}};
+{"key"="100";"subkey"="6";"value"={"g"=<u=2>{x=<v="\xff\xff binary">[];y="русский текст"}}};

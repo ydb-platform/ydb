@@ -1,0 +1,1 @@
+{"any_column"={"this"=["is";{"unstructured"="value";};];};"boolean_column"=%true;"date_column"=2131u;"double_column"=3.14;"int64_column"=-64;"interval_column"=123131123;"list_column"=[%true;%false;];"null_column"=#;"optional_column"="foo";"string_column"="txt";};

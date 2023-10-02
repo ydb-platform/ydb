@@ -1,0 +1,14 @@
+{
+    "_read_schema"=<"strict"=%false>
+    [
+        {"type"="string"; "name"="a"};
+        {"type"="string"; "name"="b"};
+        {"type"="string"; "name"="c"}
+    ];
+    "schema"=<"strict" = %true; "unique_keys" = %true>
+    [
+        {"type"="string"; "name"="a"; "sort_order"="ascending"};
+        {"type"="string"; "name"="b"; "sort_order"="ascending"};
+        {"type"="string"; "name"="c"; "sort_order"="ascending"}
+    ]
+}

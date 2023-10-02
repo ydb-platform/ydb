@@ -1,0 +1,13 @@
+(
+#comment
+(let mr_source (DataSource 'yt 'plato))
+(let x (Read! world mr_source (Key '('table (String 'Input))) '('key 'subkey 'value) '()))
+(let world (Left! x))
+(let table1 (Right! x))
+(let table1sorted (Sort table1 (Bool 'true) (lambda '(item) (Member item 'key))))
+#(let table1sorted (Sort table1 (Tuple (Bool 'true) (Bool 'false)) (lambda '(item) (Tuple (Member item 'key) (Member item 'value)))))
+(let mr_sink (DataSink 'yt (quote plato)))
+(let world (Write! world mr_sink (Key '('table (String 'Output))) table1sorted '()))
+(let world (Commit! world mr_sink))
+(return world)
+)

@@ -1,0 +1,17 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let init (lambda '(x) x))
+(let update (lambda '(x y) (+ x y)))
+(let save (lambda '(x) x))
+(let load (lambda '(x) x))
+(let merge (lambda '(x y) (+ x y)))
+(let finish (lambda '(x) x))
+(let sum (AggregationTraits (DataType 'Uint32) init update save load merge finish (Null)))
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) (FormatType (TypeOf sum)) '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

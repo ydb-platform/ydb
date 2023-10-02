@@ -1,0 +1,56 @@
+(
+# Should not generate single MrFill for all content
+(import aggregate_module '"/lib/yql/aggregate.yql")
+(let world (block '(
+  (let x (Read! world (DataSource '"yt" '"plato") (MrTableConcat (Key '('table (String '"Input")))) (Void) '()))
+  (let world (Left! x))
+  (let table2 (Right! x))
+  (let values (block '(
+    (let select (block '(
+      (let core (UnionAll (block '(
+        (let select (block '(
+          (let core table2)
+          (let core (Aggregate core '('"key") '('('Sum0 (Apply (bind aggregate_module '"sum_traits_factory") (TypeOf core) (lambda '(row) (Cast (Member row '"subkey") 'Uint32)))))))
+          (let core (FlatMap core (lambda '(row) (block '(
+            (let res (AsStruct '('"key" (Member row '"key")) '('"value" (Member row 'Sum0))))
+            (let res (AsList res))
+            (return res)
+          )))))
+          (return core)
+        )))
+        (return select)
+      )) (block '(
+        (let select (block '(
+          (let core table2)
+          (let core (Aggregate core '() '('('Sum1 (Apply (bind aggregate_module '"sum_traits_factory") (TypeOf core) (lambda '(row) (Cast (Member row '"subkey") 'Uint32)))))))
+          (let core (FlatMap core (lambda '(row) (block '(
+            (let res (AsStruct '('"key" (String '"")) '('"value" (Member row 'Sum1))))
+            (let res (AsList res))
+            (return res)
+          )))))
+          (return core)
+        )))
+        (return select)
+      ))))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsList row))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let sink (DataSink '"yt" '"plato"))
+    (let world (Write! world sink (Key '('table (String '"Output"))) values '('('mode 'append))))
+    (return world)
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let plato_sink (DataSink '"yt" '"plato"))
+  (let world (Commit! world plato_sink))
+  (return world)
+)))
+(return world)
+)

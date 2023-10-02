@@ -1,0 +1,18 @@
+(
+(let mr_source (DataSource 'yt 'plato))
+(let x (Read! world mr_source (Key '('table (String 'Input))) '('key 'subkey 'value) '()))
+(let world (Left! x))
+(let table1 (Right! x))
+
+(let table1 (Map ("/" (Int32 '42) (Int32 '1)) (lambda '(item) (AsStruct
+  '('magic (Just item))
+  '('black_magic ("/" (Int32 '100) item))
+  ))))
+
+(let table1 (SelectMembers table1 '('m)))
+
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) table1 '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

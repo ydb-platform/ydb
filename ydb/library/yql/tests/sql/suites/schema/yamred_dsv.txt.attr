@@ -1,0 +1,4 @@
+{
+    "_format"=<"fs"="\t";"rs"="\n";"has_subkey"=%true;"escape_carriage_return"=%true;"key_column_names"=["key"];"subkey_column_names"=["subkey"]>"yamred_dsv";
+    "_yql_read_udf"="Dsv.ReadRecord"
+}

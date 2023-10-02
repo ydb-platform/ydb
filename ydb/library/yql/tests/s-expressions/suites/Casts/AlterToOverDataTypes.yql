@@ -1,0 +1,35 @@
+(
+
+(library "alterto.yql")
+(import alterto_module '"alterto.yql")
+
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+# String->Utf8
+(let world (Apply (bind alterto_module 'doAlterTo) world (String 'OK) (DataType 'Utf8) (Utf8 'FAIL)))
+(let world (Apply (bind alterto_module 'doAlterTo) world (String '"\xff\xfe") (DataType 'Utf8) (Utf8 'OK)))
+
+# TzDatetime->TzDate
+# 2019-01-09T00:00:00,Europe/Moscow
+(let world (Apply (bind alterto_module 'doAlterTo) world  (TzDatetime '"1546981200,Europe/Moscow") (DataType 'TzDate) (TzDate '"1,GMT")))
+(let world (Apply (bind alterto_module 'doAlterTo) world  (TzDatetime '"1546981201,Europe/Moscow") (DataType 'TzDate) (TzDate '"2,GMT")))
+
+# TzTimestamp->Date
+# 2019-01-09T00:00:00,GMT
+(let world (Apply (bind alterto_module 'doAlterTo) world (TzTimestamp '"1546992000000000,GMT") (DataType 'Date) (Date '3)))
+(let world (Apply (bind alterto_module 'doAlterTo) world (TzTimestamp '"1546992000000001,GMT") (DataType 'Date) (Date '4)))
+# 2019-01-09T00:00:00,Europe/Moscow
+(let world (Apply (bind alterto_module 'doAlterTo) world (TzTimestamp '"1546981200000000,Europe/Moscow") (DataType 'Date) (Date '5)))
+# 2019-01-09T03:00:00,Europe/Moscow
+(let world (Apply (bind alterto_module 'doAlterTo) world (TzTimestamp '"1546992000000000,Europe/Moscow") (DataType 'Date) (Date '6)))
+(let world (Apply (bind alterto_module 'doAlterTo) world (TzTimestamp '"1546992000000001,Europe/Moscow") (DataType 'Date) (Date '7)))
+
+# Datetime->Date
+# 2019-01-09T00:00:00Z
+(let world (Apply (bind alterto_module 'doAlterTo) world (Datetime    '"1546992000") (DataType 'Date) (Date '8)))
+(let world (Apply (bind alterto_module 'doAlterTo) world (Datetime    '"1546992001") (DataType 'Date) (Date '9)))
+
+(return world)
+
+)

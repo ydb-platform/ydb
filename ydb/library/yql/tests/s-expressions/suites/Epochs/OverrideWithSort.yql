@@ -1,0 +1,65 @@
+#USE plato;
+#INSERT INTO Output SELECT COALESCE(CAST(key as Uint64), 0) as age1, value as name1 FROM Input ORDER by age1;
+#COMMIT;
+#INSERT INTO Output WITH TRUNCATE SELECT age1 as age2, name1 as name2 FROM Output WHERE age1 < 100 ORDER BY name2;
+#COMMIT;
+#SELECT * FROM Output where name2 < "zzz";
+
+
+
+(
+(let source (DataSource '"yt" '"plato"))
+(let sink (DataSink '"yt" '"plato"))
+(let result (DataSink 'result))
+
+(let r (Read! world source (Key '('table (String '"Input"))) (Void) '()))
+(let world (Left! r))
+(let input (Right! r))
+(let conv1 (lambda '(item) (block '(
+  (let res (Struct))
+  (let res (AddMember res '"age1" (Coalesce (Cast (Member item '"key") 'Uint64) (Uint64 '0))))
+  (let res (AddMember res '"name1" (Member item '"value")))
+  (return (AsList res))
+))))
+(let out (FlatMap input conv1))
+(let out (Sort out (Bool 'true) (lambda '(item) (Member item '"age1"))))
+(let world (Write! world sink (Key '('table (String 'Output))) out '('('mode 'append))))
+(let world (Commit! world sink))
+
+(let r (Read! world source (Key '('table (String '"Output"))) (Void) '()))
+(let world (Left! r))
+(let input (Right! r))
+(let filter (lambda '(item) (block '(
+  (let age (Member item '"age1"))
+  (let res (Coalesce (< age (Uint64 '100)) (Bool 'false)))
+  (return res)
+)
+)))
+(let out (Filter input filter))
+(let conv2 (lambda '(item) (block '(
+  (let res (Struct))
+  (let res (AddMember res '"age2" (Member item '"age1")))
+  (let res (AddMember res '"name2" (Member item '"name1")))
+  (return (AsList res))
+))))
+(let out (FlatMap out conv2))
+(let out (Sort out (Bool 'true) (lambda '(item) (Member item '"name2"))))
+(let world (Write! world sink (Key '('table (String 'Output))) out '('('mode 'renew))))
+(let world (Commit! world sink))
+
+(let r (Read! world source (Key '('table (String '"Output"))) (Void) '()))
+(let world (Left! r))
+(let input (Right! r))
+(let filter (lambda '(item) (block '(
+  (let name (Member item '"name2"))
+  (let res (Coalesce (< name (String '"zzz")) (Bool 'false)))
+  (return res)
+)
+)))
+(let out (Filter input filter))
+
+(let world (Write! world result (Key) out '('('type))))
+(let world (Commit! world sink))
+(let world (Commit! world result))
+(return world)
+)

@@ -1,0 +1,70 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+
+# Both signed (true)
+(let value (Int32 '0))
+(let commonType (DataType 'Int64))
+(let imlicitEqualsResult (Exists (StrictCast value commonType)))
+(let world (Write! world res_sink (Key) imlicitEqualsResult '('('type))))
+
+# Both unsigned (true)
+(let value (Uint8 '0))
+(let commonType (DataType 'Uint16))
+(let imlicitEqualsResult (Exists (StrictCast value commonType)))
+(let world (Write! world res_sink (Key) imlicitEqualsResult '('('type))))
+
+# uint32(0) -> int32 (true)
+(let value (Uint32 '0))
+(let commonType (DataType 'Int32))
+(let imlicitEqualsResult (Exists (StrictCast value commonType)))
+(let world (Write! world res_sink (Key) imlicitEqualsResult '('('type))))
+
+# uint32(2^31-1) -> int32 (true)
+(let value (Uint32 '2147483647))
+(let commonType (DataType 'Int32))
+(let imlicitEqualsResult (Exists (StrictCast value commonType)))
+(let world (Write! world res_sink (Key) imlicitEqualsResult '('('type))))
+
+# uint32(2^31) -> int32 (false)
+(let value (Uint32 '2147483648))
+(let commonType (DataType 'Int32))
+(let imlicitEqualsResult (Exists (StrictCast value commonType)))
+(let world (Write! world res_sink (Key) imlicitEqualsResult '('('type))))
+
+# uint32(2^32-1) -> int32 (false)
+(let value (Uint32 '4294967295))
+(let commonType (DataType 'Int32))
+(let imlicitEqualsResult (Exists (StrictCast value commonType)))
+(let world (Write! world res_sink (Key) imlicitEqualsResult '('('type))))
+
+# int16(0) -> uint32 (true)
+(let value (Int16 '0))
+(let commonType (DataType 'Uint32))
+(let imlicitEqualsResult (Exists (StrictCast value commonType)))
+(let world (Write! world res_sink (Key) imlicitEqualsResult '('('type))))
+
+# int16(32767) -> uint32 (true)
+(let value (Int16 '32767))
+(let commonType (DataType 'Uint32))
+(let imlicitEqualsResult (Exists (StrictCast value commonType)))
+(let world (Write! world res_sink (Key) imlicitEqualsResult '('('type))))
+
+# int16(-1) -> uint32 (false)
+(let value (Int16 '"-1"))
+(let commonType (DataType 'Uint32))
+(let imlicitEqualsResult (Exists (StrictCast value commonType)))
+(let world (Write! world res_sink (Key) imlicitEqualsResult '('('type))))
+
+# int16(-32768) -> uint32 (false)
+(let value (Int16 '"-32768"))
+(let commonType (DataType 'Uint32))
+(let imlicitEqualsResult (Exists (StrictCast value commonType)))
+(let world (Write! world res_sink (Key) imlicitEqualsResult '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+
+)

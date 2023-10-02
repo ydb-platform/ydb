@@ -1,0 +1,13 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let data (AsList (AsDict '((Uint32 '12) (Uint32 '34)))))
+(let data (Append data (AsDict '((Uint32 '56) (Int64 '78)))))
+(let dt (DictType (DataType 'Uint32) (DataType 'Int64)))
+(let data (Append data (Dict dt '((Uint32 '90) (Int64 '12)))))
+(let world (Write! world res_sink (Key) data '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

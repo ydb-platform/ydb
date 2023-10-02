@@ -1,0 +1,3 @@
+{
+    "_yql_row_spec"={"Type"=["StructType";[["age";["DataType";"Int64"]];["name";["DataType";"String"]]]]}
+}

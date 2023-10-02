@@ -1,0 +1,48 @@
+(
+
+(let doAllJoinsExceptCross (lambda '(world t1 t2) ( block '(
+
+  (let mr_source (DataSource 'yt 'plato))
+  (let x (Read! world mr_source (Key '('table (String t1))) (Void) '()))
+  (let world (Left! x))
+  (let list1 (Right! x))
+
+  (let x (Read! world mr_source (Key '('table (String t2))) (Void) '()))
+  (let world (Left! x))
+  (let list2 (Right! x))
+
+  (let joinInner (EquiJoin '(list1 'a) '(list2 'b) '('Inner 'a 'b '('a 'key) '('b 'key) '()) '()))
+  (let joinLeft (EquiJoin '(list1 'a) '(list2 'b) '('Left 'a 'b '('a 'key) '('b 'key) '()) '()))
+  (let joinRight (EquiJoin '(list1 'a) '(list2 'b) '('Right 'a 'b '('a 'key) '('b 'key) '()) '()))
+  (let joinFull (EquiJoin '(list1 'a) '(list2 'b) '('Full 'a 'b '('a 'key) '('b 'key) '()) '()))
+  (let joinLeftOnly (EquiJoin '(list1 'a) '(list2 'b) '('LeftOnly 'a 'b '('a 'key) '('b 'key) '()) '()))
+  (let joinRightOnly (EquiJoin '(list1 'a) '(list2 'b) '('RightOnly 'a 'b '('a 'key) '('b 'key) '()) '()))
+  (let joinExclusion (EquiJoin '(list1 'a) '(list2 'b) '('Exclusion 'a 'b '('a 'key) '('b 'key) '()) '()))
+  (let joinLeftSemi (EquiJoin '(list1 'a) '(list2 'b) '('LeftSemi 'a 'b '('a 'key) '('b 'key) '()) '()))
+  (let joinRightSemi (EquiJoin '(list1 'a) '(list2 'b) '('RightSemi 'a 'b '('a 'key) '('b 'key) '()) '()))
+
+  (let sortDir2 '((Bool 'true) (Bool 'true)))
+  (let sortDir1 '((Bool 'true)))
+  (let keySelectorAB (lambda '(row) '((Member row '"a.key") (Member row '"b.key"))))
+  (let keySelectorA (lambda '(row) '((Member row '"a.key"))))
+  (let keySelectorB (lambda '(row) '((Member row '"b.key"))))
+
+  (let res_sink (DataSink 'result))
+  (let world (Write! world res_sink (Key) (Sort joinInner sortDir2 keySelectorAB) '('('type))))
+  (let world (Write! world res_sink (Key) (Sort joinLeft sortDir2 keySelectorAB) '('('type))))
+  (let world (Write! world res_sink (Key) (Sort joinRight sortDir2 keySelectorAB) '('('type))))
+  (let world (Write! world res_sink (Key) (Sort joinFull sortDir2 keySelectorAB) '('('type))))
+  (let world (Write! world res_sink (Key) (Sort joinLeftOnly sortDir1 keySelectorA) '('('type))))
+  (let world (Write! world res_sink (Key) (Sort joinRightOnly sortDir1 keySelectorB) '('('type))))
+  (let world (Write! world res_sink (Key) (Sort joinExclusion sortDir2 keySelectorAB) '('('type))))
+  (let world (Write! world res_sink (Key) (Sort joinLeftSemi sortDir1 keySelectorA) '('('type))))
+  (let world (Write! world res_sink (Key) (Sort joinRightSemi sortDir1 keySelectorB) '('('type))))
+
+  (let world (Commit! world res_sink))
+  (return world)
+
+))))
+
+(export doAllJoinsExceptCross)
+
+)

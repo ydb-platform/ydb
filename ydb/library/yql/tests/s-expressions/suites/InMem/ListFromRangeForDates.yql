@@ -1,0 +1,16 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let intervalOneSec (Interval '"1000000"))
+
+(let FirstList (ListFromRange (SafeCast (CurrentUtcDate) (DataType 'Datetime)) (Unwrap (- (CurrentUtcDatetime) (Interval '"63995000000"))) intervalOneSec))
+(let SecondList (ListFromRange (CurrentUtcDate) (Unwrap (+ (CurrentUtcDate) (Interval '"432000000000"))) (Interval '"86400000000")))
+(let ThirdList (ListFromRange (CurrentUtcDatetime) (Unwrap (+ (CurrentUtcDatetime) (Interval '"5000000"))) intervalOneSec))
+(let FourthList (ListFromRange (CurrentUtcTimestamp) (Unwrap (+ (CurrentUtcTimestamp) (Interval '"5"))) (Interval '"1")))
+(let Columns '('"column0" '"column1" '"column2" '"column3"))
+(let Col '('('type) '('autoref) '('columns Columns)))
+(let world (Write! world res_sink (Key) (AsList (AsStruct '('"column0" FirstList) '('"column1" SecondList) '('"column2" ThirdList) '('"column3" FourthList))) Col))
+(return (Commit! world res_sink))
+)

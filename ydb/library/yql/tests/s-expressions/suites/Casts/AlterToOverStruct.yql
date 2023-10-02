@@ -1,0 +1,22 @@
+(
+
+(library "alterto.yql")
+(import alterto_module '"alterto.yql")
+
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let targetType (StructType '('"a" (DataType 'Uint8)) '('"b" (DataType 'Utf8))))
+(let failValue (AsStruct '('a (Uint8 '0)) '('b (Utf8 '"not converted"))))
+
+# Struct<Int32, String> -> Struct<Uint8, Utf8>
+(let value (AsStruct '('a (Int32 '1)) '('b (String 'one))))
+(let world (Apply (bind alterto_module 'doAlterTo) world value targetType failValue))
+
+# Struct<Int32, String> -> Struct<Uint8, Utf8> (fail)
+(let value (AsStruct '('a (Int32 '"-1")) '('b (String 'one))))
+(let world (Apply (bind alterto_module 'doAlterTo) world value targetType failValue))
+
+(return world)
+
+)

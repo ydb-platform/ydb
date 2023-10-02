@@ -1,0 +1,40 @@
+(
+(let source (DataSource '"yt" '"plato"))
+(let sink (DataSink '"yt" '"plato"))
+(let result (DataSink 'result))
+
+(let r (Read! world source (Key '('table (String '"Input"))) (Void) '()))
+(let world (Left! r))
+(let input (Right! r))
+
+(let test (lambda '(world cmp) (block '(
+  (let filter (lambda '(item) (block '(
+    (let value (Member item 'value))
+    (let res (Coalesce (Apply cmp value) (Bool 'false)))
+    (return res)
+  ))))
+
+  (let out (Filter input filter))
+  (let world (Write! world result (Key) out '()))
+  (return world)
+))))
+
+(let world (Apply test world (lambda '(key) (And (> key (Double '0)) (< key (Double '10))))))
+(let world (Apply test world (lambda '(key) (And (>= key (Double '0)) (<= key (Double '10))))))
+(let world (Apply test world (lambda '(key) (And (> key (Double '-0.5)) (< key (Double '10.5))))))
+(let world (Apply test world (lambda '(key) (And (>= key (Double '-0.5)) (<= key (Double '10.5))))))
+(let world (Apply test world (lambda '(key) (And (> key (Double '0.5)) (< key (Double '9.5))))))
+(let world (Apply test world (lambda '(key) (And (>= key (Double '0.5)) (<= key (Double '9.5))))))
+(let world (Apply test world (lambda '(key) (And (>= key (Double '0)) (<= key (Double '1000))))))
+(let world (Apply test world (lambda '(key) (And (>= key (Double '0)) (<= key (Double '255))))))
+(let world (Apply test world (lambda '(key) (And (> key (Double '0)) (< key (Double '255))))))
+(let world (Apply test world (lambda '(key) (> key (Double '255)))))
+(let world (Apply test world (lambda '(key) (>= key (Double '255)))))
+(let world (Apply test world (lambda '(key) (>= key (Double '1000)))))
+(let world (Apply test world (lambda '(key) (< key (Double '0)))))
+(let world (Apply test world (lambda '(key) (<= key (Double '0)))))
+
+(let world (Commit! world sink))
+(let world (Commit! world result))
+(return world)
+)

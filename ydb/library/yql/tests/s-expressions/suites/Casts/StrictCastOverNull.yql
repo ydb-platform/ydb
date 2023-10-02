@@ -1,0 +1,30 @@
+(
+
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+(let res_sink (DataSink 'result))
+
+# Null -> Uint16?
+(let cast (StrictCast (Null) (OptionalType (DataType 'Uint16))))
+(let world (Write! world res_sink (Key) cast '('('type))))
+
+# Just(Null) -> Null? [good]
+(let cast (StrictCast (Just (Null)) (NullType)))
+(let world (Write! world res_sink (Key) cast '('('type))))
+
+# Nothing(Null?) -> Null? [fail]
+(let cast (StrictCast (Nothing (OptionalType (NullType))) (NullType)))
+(let world (Write! world res_sink (Key) cast '('('type))))
+
+# Nothing(Uint16?) -> Null
+(let cast (StrictCast (Nothing (OptionalType (DataType 'Uint16))) (NullType)))
+(let world (Write! world res_sink (Key) cast '('('type))))
+
+# Null -> Null?
+(let cast (StrictCast (Null) (OptionalType (NullType))))
+(let world (Write! world res_sink (Key) cast '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+
+)

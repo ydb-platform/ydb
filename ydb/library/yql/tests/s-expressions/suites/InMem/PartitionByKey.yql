@@ -1,0 +1,27 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let list (AsList
+'((Uint32 '1) (String 'a))
+'((Uint32 '2) (String 'b))
+'((Uint32 '1) (String 'c))))
+
+(let keyExtractor (lambda '(x) (Nth x '0)))
+(let handler (lambda '(groups) (block '(
+   (return (Map groups (lambda '(pair) (block '(
+       (let key (Nth pair '0))
+       (let stream (Nth pair '1))
+       (let state (Concat (String '"key:") (ToString key)))
+       (let state (Condense stream state (lambda '(row state) (Bool 'False)) (lambda '(row state) (Concat (Concat state (String '" ")) (Nth row '1)))))
+       (return (Collect state))
+   )))))
+))))
+(let data (PartitionByKey list keyExtractor (Void) (Void) handler))
+
+(let world (Write! world res_sink (Key) data '()))
+(let world (Commit! world res_sink))
+(return world)
+)

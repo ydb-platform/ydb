@@ -1,0 +1,12 @@
+(
+(let source (DataSource 'yt 'plato))
+(let x (Read! world source (Key '('table (String 'Input1))) '('key 'value) '()))
+(let world (Left! x))
+(let table (Right! x))
+(let sorted (Sort table (Bool 'true) (lambda '(item) (Member item 'value))))
+(let result (Extend table sorted))
+(let sink (DataSink 'yt 'plato))
+(let world (Write! world sink (Key '('table (String 'Output))) result '()))
+(let world (Commit! world sink))
+(return world)
+)

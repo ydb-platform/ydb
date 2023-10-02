@@ -1,0 +1,302 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let scriptudf0 (String '@@
+def f(x,y,z):
+  return x + y + z
+@@))
+(let scriptudf1 (String '@@
+def f(x,y,z):
+  return x + y + z
+@@))
+(let scriptudf10 (String '@@
+def f(x,y,z):
+  return x + y + z
+@@))
+(let scriptudf11 (String '@@
+def f(x,y,z):
+  return x + y + z
+@@))
+(let scriptudf2 (String '@@
+def f(x,y,z):
+  return x + y + z
+@@))
+(let scriptudf3 (String '@@
+def f(x,y,z):
+  return x + y + z
+@@))
+(let scriptudf4 (String '@@
+def f(x,y,z):
+  return x + y + z
+@@))
+(let scriptudf5 (String '@@
+def f(x,y,z):
+  return x + y + z
+@@))
+(let scriptudf6 (String '@@
+def f(x,y,z):
+  return x + y + z
+@@))
+(let scriptudf7 (String '@@
+def f(x,y,z):
+  return x + y + z
+@@))
+(let scriptudf8 (String '@@
+def f(x,y,z):
+  return x + y + z
+@@))
+(let scriptudf9 (String '@@
+def f(x,y,z):
+  return x + y + z
+@@))
+(import aggregate_module '"/lib/yql/aggregate.yql")
+(import window_module '"/lib/yql/window.yql")
+(import core_module '"/lib/yql/core.yql")
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python '"f" (CallableType '() '((DataType 'Int32)) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf0) '() (AsStruct '('x (Int32 '"1")) '('y (Int32 '"2")) '('z (Int32 '"3")))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python '"f" (CallableType '() '((DataType 'Int32)) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf1) '() (AsStruct '('x ("Just" (Int32 '"1"))) '('y (Int32 '"2")) '('z (Int32 '"3")))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python '"f" (CallableType '() '((DataType 'Int32)) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf2) '() (AsStruct '('x ("Just" (Int32 '"1"))) '('y ("Just" (Int32 '"2"))) '('z (Int32 '"3")))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python '"f" (CallableType '() '((DataType 'Int32)) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf3) '() (AsStruct '('x ("Just" (Int32 '"1"))) '('y ("Just" (Int32 '"2"))) '('z ("Just" (Int32 '"3"))))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python '"f" (CallableType '() '((DataType 'Int32)) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf4) '(("Just" (Int32 '"1"))) (AsStruct '('y ("Just" (Int32 '"2"))) '('z ("Just" (Int32 '"3"))))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python '"f" (CallableType '() '((DataType 'Int32)) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf5) '(("Just" (Int32 '"1")) ("Just" (Int32 '"2"))) (AsStruct '('z ("Just" (Int32 '"3"))))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python '"f" (CallableType '() '((OptionalType (DataType 'Int32))) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf6) '() (AsStruct '('x (Int32 '"4")) '('y (Int32 '"5")) '('z (Int32 '"6")))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python '"f" (CallableType '() '((OptionalType (DataType 'Int32))) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf7) '() (AsStruct '('x ("Just" (Int32 '"4"))) '('y (Int32 '"5")) '('z (Int32 '"6")))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python '"f" (CallableType '() '((OptionalType (DataType 'Int32))) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf8) '() (AsStruct '('x ("Just" (Int32 '"4"))) '('y ("Just" (Int32 '"5"))) '('z (Int32 '"6")))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python '"f" (CallableType '() '((OptionalType (DataType 'Int32))) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf9) '() (AsStruct '('x ("Just" (Int32 '"4"))) '('y ("Just" (Int32 '"5"))) '('z ("Just" (Int32 '"6"))))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python '"f" (CallableType '() '((OptionalType (DataType 'Int32))) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf10) '(("Just" (Int32 '"4"))) (AsStruct '('y ("Just" (Int32 '"5"))) '('z ("Just" (Int32 '"6"))))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("NamedApply" (ScriptUdf 'Python '"f" (CallableType '() '((OptionalType (DataType 'Int32))) '((DataType 'Int32) 'x '1) '((DataType 'Int32) 'y '1) '((DataType 'Int32) 'z '1)) scriptudf11) '(("Just" (Int32 '"4")) ("Just" (Int32 '"5"))) (AsStruct '('z ("Just" (Int32 '"6"))))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let plato_sink (DataSink '"yt" '"plato"))
+  (let world (Commit! world plato_sink))
+  (return world)
+)))
+(return world)
+)

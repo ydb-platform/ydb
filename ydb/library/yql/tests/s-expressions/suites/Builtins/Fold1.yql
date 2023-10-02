@@ -1,0 +1,30 @@
+(
+#comment
+(let mr_source (DataSource 'yt 'plato))
+(let x (Read! world mr_source (Key '('table (String 'Input))) '('key 'subkey 'value) '()))
+(let world (Left! x))
+(let table1 (Right! x))
+(let table1map (FlatMap table1 (lambda '(item) (block '(
+   (let value (Member item 'value))
+   (let newValue (AsList value))
+   (let newValue (Prepend (String 'prepended) newValue))
+   (let newValue (Append newValue (String 'appended)))
+   (let state (Fold1 newValue 
+       (lambda '(item) '((Size item) (Uint64 '1))) 
+       (lambda '(item state) '((+ (Nth state '0) (Size item)) (+ (Nth state '1) (Uint64 '1))))))
+   (return (FlatMap state (lambda '(state) (block '(
+      (let s (Struct))
+      (let s (AddMember s 'key (Member item 'key)))
+      (let s (AddMember s 'subkey (String  '.)))
+      (let x (ToString (Nth state '0)))
+      (let y (ToString (Nth state '1)))
+      (let s (AddMember s 'value 
+         (Concat (Concat value (String '" ==> ")) (Concat (Concat x (String '" ")) y))))
+      (return (AsList s))
+   )))))
+)))))
+(let mr_sink (DataSink 'yt (quote plato)))
+(let world (Write! world mr_sink (Key '('table (String 'Output))) table1map '('('mode 'append))))
+(let world (Commit! world mr_sink))
+(return world)
+)

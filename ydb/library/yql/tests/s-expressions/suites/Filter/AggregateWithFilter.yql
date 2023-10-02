@@ -1,0 +1,51 @@
+(
+(let source (DataSource '"yt" '"plato"))
+(let sink (DataSink '"yt" '"plato"))
+(let result (DataSink 'result))
+
+(let r (Read! world source (Key '('table (String '"Input"))) (Void) '()))
+(let world (Left! r))
+(let input (Right! r))
+(let sorted (Sort input (Bool 'true) (lambda '(item) (Member item '"key"))))
+(let world (Write! world sink (Key '('table (String 'Output))) sorted '('('mode 'append))))
+(let world (Commit! world sink))
+
+(let r (Read! world source (Key '('table (String '"Output"))) '('"key" '"subkey") '()))
+(let world (Left! r))
+(let input (Right! r))
+(let filter (lambda '(rec) (block '(
+  (return (Coalesce (> (Member rec '"key") (String '"100")) (Bool 'false)))
+))))
+(let res (Filter input filter))
+(let l1 (lambda '(rec) (block '(
+  (return (Convert (Exists (Member rec '"subkey")) 'Uint64))
+))))
+(let l2 (lambda '(rec state) (block '(
+  (let l (lambda '(r1 r2) (block '(
+    (return (+ r1 r2))
+  ))))
+  (let state (OptionalReduce state (Convert (Exists (Member rec '"subkey")) 'Uint64) l))
+  (return state)
+))))
+(let identity (lambda '(s) (block '(
+  (return s)
+))))
+(let l5 (lambda '(rec state) (block '(
+  (let l (lambda '(r1 r2) (block '(
+    (return (+ r1 r2))
+  ))))
+  (return (OptionalReduce rec state l))
+))))
+(let res (Aggregate res '('"key") '('('Count0 (AggregationTraits (ListItemType (TypeOf res)) l1 l2 identity identity l5 identity (Null))))))
+(let l (lambda '(state) (block '(
+  (let res (Struct))
+  (let res (AddMember res '"key" (Member state '"key")))
+  (let res (AddMember res '"subkey" (Cast (Member state 'Count0) 'String)))
+  (let res (AddMember res '"value" (String '"")))
+  (return (AsList res))
+))))
+(let res (FlatMap res l))
+(let world (Write! world sink (Key '('table (String '"Output"))) res '()))
+(let world (Commit! world sink))
+(return world)
+)

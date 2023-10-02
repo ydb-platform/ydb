@@ -1,0 +1,23 @@
+(
+
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+(let res_sink (DataSink 'result))
+
+# Struct<Int32, String, Utf8> -> Struct<Uint8?, Utf8?>
+(let targetType (StructType '('a (OptionalType (DataType 'Uint8))) '('b (OptionalType (DataType 'Utf8)))))
+(let value (AsStruct '('a (Int32 '1)) '('b (String 'one)) '('c (Utf8 'two))))
+(let cast (SafeCast value targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+
+# Struct<Int32, String> -> Struct<Int8, Utf8, Float?>?
+(let targetType (StructType '('a (DataType 'Int8)) '('b (DataType 'Utf8)) '('c (OptionalType (DataType 'Float)))))
+(let value (AsStruct '('a (Int32 '-1)) '('b (String 'one))))
+(let cast (SafeCast value targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+
+(let world (Commit! world res_sink))
+
+(return world)
+
+)

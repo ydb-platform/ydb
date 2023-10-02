@@ -1,0 +1,8 @@
+/* postgres can not */
+use plato;
+
+SELECT
+  i1.subkey as sk,
+  WeakField(value1, "String", "funny") as v1, -- no idea to check value1 from i1._other or i2._other
+  WeakField(value2, "String", "bunny") as v2
+FROM Input1 as i1 join Input2 as i2 USING(subkey) ORDER BY sk

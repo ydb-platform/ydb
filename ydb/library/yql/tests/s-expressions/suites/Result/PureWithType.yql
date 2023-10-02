@@ -1,0 +1,21 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let data '(
+(Uint32 '1)
+(AsStruct '('k (String 'key)) '('v (Uint64 '456)))
+(AsList (Uint32 '2))
+(Just (Uint32 '3))
+(Nothing (OptionalType (DataType 'String)))
+(ToDict (AsList '((String 'dkey1) (String 'dvalue1)) '((String 'dkey2) (String 'dvalue2)))
+   (lambda '(x) (Nth x '0)) (lambda '(x) (Nth x '1)) '('Sorted 'One)
+)
+(Void)
+))
+(let world (Write! world res_sink (Key) data '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

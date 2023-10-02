@@ -1,0 +1,2 @@
+{"key"="Vasya";"subkey"="Pupkin";"value"="33"};
+{"key"="Naum";"subkey"="Prikhoder";"value"="66"};

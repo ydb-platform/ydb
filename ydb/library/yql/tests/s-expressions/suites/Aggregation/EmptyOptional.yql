@@ -1,0 +1,58 @@
+(
+(let world (block '(
+  (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"Input"))) '('"key" '"subkey" '"value") '()))
+  (let world (Left! x))
+  (let table0 (Right! x))
+  (let output (block '(
+    (let select (block '(
+      (let core (block '(
+        (let select (block '(
+          (let core table0)
+          (let core (FlatMap core (lambda '(row) (block '(
+            (let res (Struct))
+            (let res (AddMember res '"key" (Member row '"key")))
+            (let res (AddMember res '"subkey" (Member row '"subkey")))
+            (let res (AddMember res '"value" (Cast (Member row '"value") 'Double)))
+            (let res (AsList res))
+            (return res)
+          )))))
+          (return core)
+        )))
+        (return select)
+      )))
+      (let core (block '(
+        (let Sum1_create (lambda '(row) (Member row '"value")))
+        (let Sum1_update (lambda '(row state) (OptionalReduce state (Member row '"value") (lambda '(a b) (+ a b)))))
+        (let Sum1_save (lambda '(state) state))
+        (let Sum1_load (lambda '(item) item))
+        (let Sum1_merge (lambda '(a b) (OptionalReduce a b (lambda '(a b) (+ a b)))))
+        (let Sum1_finish (lambda '(state) state))
+        (return (Aggregate core '('"key") '('('Sum1 (AggregationTraits (ListItemType (TypeOf core)) Sum1_create Sum1_update Sum1_save Sum1_load Sum1_merge Sum1_finish (Null))))))
+      )))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (Struct))
+        (let res (AddMember res '"key" (Member row '"key")))
+        (let res (AddMember res '"subkey" (String '"")))
+        (let res (AddMember res '"value" (Member row 'Sum1)))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (let select (Sort select (Bool 'true) (lambda '(row) (Member row '"key"))))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"key" '"subkey" '"value")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let plato_sink (DataSink '"yt" '"plato"))
+  (let world (Commit! world plato_sink))
+  (return world)
+)))
+(return world)
+)

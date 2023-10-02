@@ -1,0 +1,29 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let t (ToDict (AsList '((String 'dkey1) (String 'dvalue1)) '((String 'dkey2) (String 'dvalue2)))
+   (lambda '(x) (Nth x '0)) (lambda '(x) (Nth x '1)) '('Sorted 'One)
+))
+
+(let jt (Just t))
+(let n (Nothing (TypeOf jt)))
+
+(let world (Write! world res_sink (Key) (Contains jt (String 'dkey1)) '('('type))))
+(let world (Write! world res_sink (Key) (Contains jt (String 'dkeyx)) '('('type))))
+(let world (Write! world res_sink (Key) (Contains n (String 'dkey1)) '('('type))))
+(let world (Write! world res_sink (Key) (Contains n (String 'dkeyx)) '('('type))))
+
+(let world (Write! world res_sink (Key) (Lookup jt (String 'dkey1)) '('('type))))
+(let world (Write! world res_sink (Key) (Lookup jt (String 'dkeyx)) '('('type))))
+(let world (Write! world res_sink (Key) (Lookup n (String 'dkey1)) '('('type))))
+(let world (Write! world res_sink (Key) (Lookup n (String 'dkeyx)) '('('type))))
+
+(let world (Write! world res_sink (Key) (DictItems jt) '('('type))))
+(let world (Write! world res_sink (Key) (DictItems n) '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+)

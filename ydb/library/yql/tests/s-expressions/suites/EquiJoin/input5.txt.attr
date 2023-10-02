@@ -1,0 +1,35 @@
+{
+    "_yql_row_spec" = {"Type" = [
+        "StructType";
+        [
+            [
+                "id";
+                [
+                    "DataType";
+                    "Int64"
+                ]
+            ];
+            [
+                "payload_right";
+                [
+                    "DataType";
+                    "String"
+                ]
+            ]
+        ]
+    ]};
+    "schema" = <
+        "strict" = %true;
+        "unique_keys" = %false
+    >
+    [
+        {
+            "name" = "payload_right";
+            "type" = "string"
+        };
+        {
+            "name" = "id";
+            "type" = "int64"
+        }
+    ];
+}

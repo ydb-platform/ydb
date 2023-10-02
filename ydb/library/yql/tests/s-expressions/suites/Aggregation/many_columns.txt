@@ -1,0 +1,10 @@
+{"assignment_assignment_id"=243u;"assignment_gs_count"=98u;"assignment_gs_weight"=89989u;"assignment_last_status_change_time"=43u;"project_id"=67u;"requester_id"=65u};
+{"assignment_assignment_id"=43u;"assignment_gs_count"=9u;"assignment_gs_weight"=8u;"assignment_last_status_change_time"=4563u;"project_id"=6897u;"requester_id"=765u};
+{"assignment_assignment_id"=25u;"assignment_gs_count"=678u;"assignment_gs_weight"=0u;"assignment_last_status_change_time"=45u;"project_id"=62u;"requester_id"=63u};
+{"assignment_assignment_id"=2563u;"assignment_gs_count"=98u;"assignment_gs_weight"=89989u;"assignment_last_status_change_time"=43u;"project_id"=67u;"requester_id"=65u};
+{"assignment_assignment_id"=233453u;"assignment_gs_count"=98u;"assignment_gs_weight"=89989u;"assignment_last_status_change_time"=43u;"project_id"=67u;"requester_id"=65u};
+{"assignment_assignment_id"=2456u;"assignment_gs_count"=978u;"assignment_gs_weight"=89u;"assignment_last_status_change_time"=403u;"project_id"=67u;"requester_id"=67u};
+{"assignment_assignment_id"=27643u;"assignment_gs_count"=9768u;"assignment_gs_weight"=86789u;"assignment_last_status_change_time"=49u;"project_id"=67u;"requester_id"=67u};
+{"assignment_assignment_id"=248u;"assignment_gs_count"=9768u;"assignment_gs_weight"=89989u;"assignment_last_status_change_time"=409u;"project_id"=67u;"requester_id"=625u};
+{"assignment_assignment_id"=248u;"assignment_gs_count"=9768u;"assignment_gs_weight"=89969u;"assignment_last_status_change_time"=4u;"project_id"=6347u;"requester_id"=65u};
+{"assignment_assignment_id"=24893u;"assignment_gs_count"=98u;"assignment_gs_weight"=8963989u;"assignment_last_status_change_time"=40u;"project_id"=6767u;"requester_id"=655u};

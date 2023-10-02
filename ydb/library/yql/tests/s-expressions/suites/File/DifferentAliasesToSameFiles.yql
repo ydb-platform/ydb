@@ -1,0 +1,13 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let results (AsDict
+    '((String 'OneFile) (FileContent 'OneFile))
+    '((String 'AnotherFile) (FileContent 'AnotherFile))
+))
+(let world (Write! world res_sink (Key) results '('('type))))
+(return (Commit! world res_sink))
+)

@@ -1,0 +1,23 @@
+(
+(let mr_source (DataSource 'yt 'plato))
+(let x (Read! world mr_source (Key '('table (String 'Input))) '('key 'subkey 'value) '()))
+(let world (Left! x))
+(let table1 (Right! x))
+
+(let table1 (Iterator table1))
+(let table1 (MapNext table1 (lambda '(current next) (AsStruct
+  '('ks '((Member current 'key) (Member next 'subkey)))
+  '('sv '((Member current 'subkey) (Member next 'value)))
+  ))))
+
+(let table1 (ForwardList table1))
+
+(let table1 (OrderedMap table1 (lambda '(row) (AsStruct
+  '('sv (Member row 'sv))
+  ))))
+
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) table1 '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

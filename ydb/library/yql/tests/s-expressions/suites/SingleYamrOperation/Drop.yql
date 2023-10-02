@@ -1,0 +1,19 @@
+(
+(let mr_sink (DataSink 'yt 'plato))
+(let data (AsList (AsStruct '('key (String 'abc)))))
+
+(let world (Write! world mr_sink
+    (Key '('table (String 'Output)))
+    data '('('mode 'renew))
+))
+
+(let world (Commit! world mr_sink))
+
+(let world (Write! world mr_sink
+    (Key '('table (String 'Output)))
+    (Void) '('('mode 'drop))
+))
+
+(let world (Commit! world mr_sink))
+(return world)
+)

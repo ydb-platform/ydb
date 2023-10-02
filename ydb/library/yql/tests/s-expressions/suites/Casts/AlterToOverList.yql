@@ -1,0 +1,29 @@
+(
+
+(library "alterto.yql")
+(import alterto_module '"alterto.yql")
+
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+# List<Int32> -> List<Uint16> (success)
+(let targetType (ListType (DataType 'Uint16)))
+(let emptyTarget (List targetType))
+(let src (AsList (Int32 '1) (Int32 '2) (Int32 '3)))
+(let world (Apply (bind alterto_module 'doAlterTo) world src targetType emptyTarget))
+
+# List<Int32> -> List<Uint16> (fail)
+(let targetType (ListType (DataType 'Uint16)))
+(let emptyTarget (List targetType))
+(let src (AsList (Int32 '1) (Int32 '"-2") (Int32 '3)))
+(let world (Apply (bind alterto_module 'doAlterTo) world src targetType emptyTarget))
+
+# List<Int32?> -> List<Uint16> (fail)
+(let targetType (ListType (DataType 'Uint16)))
+(let emptyTarget (List targetType))
+(let src (AsList (Just (Int32 '1)) (Null) (Just (Int32 '3))))
+(let world (Apply (bind alterto_module 'doAlterTo) world src targetType emptyTarget))
+
+(return world)
+
+)

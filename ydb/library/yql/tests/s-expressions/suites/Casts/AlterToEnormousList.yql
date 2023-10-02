@@ -1,0 +1,9 @@
+(
+(let w (DataSink 'result))
+(let out '('('type) '('autoref) '('columns '('column0))))
+(let res (Write! world w (Key) (Unordered (EnsurePersistable (OrderedFlatMap (AsList (Uint32 '0)) (lambda '(stub) (block '(
+  (let $5 (AlterTo (ListFromRange (Minus (Int64 '1)) (Int64 '1000000000000)) (ListType (DataType 'Uint64)) (lambda '(x) x) (AsList (Uint64 '0))))
+  (return (AsList (AsStruct '('"column0" $5))))
+)))))) out))
+(return (CommitAll! (Commit! res w)))
+)

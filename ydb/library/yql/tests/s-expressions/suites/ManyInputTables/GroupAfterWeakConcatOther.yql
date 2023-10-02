@@ -1,0 +1,57 @@
+(
+(import aggregate_module '"/lib/yql/aggregate.yql")
+(import window_module '"/lib/yql/window.yql")
+(import core_module '"/lib/yql/core.yql")
+(let world (block '(
+  (let x (Read! world (DataSource '"yt" '"plato") (MrTableConcat 
+     (Key '('table (String '"Input1")))
+     (Key '('table (String '"Input2")))
+     (Key '('table (String '"Input3")))
+     (Key '('table (String '"Input4")))
+     (Key '('table (String '"Input5")))
+     (Key '('table (String '"Input6")))
+   ) (Void) '()))
+  (let world (Left! x))
+  (let table0 (Right! x))
+  (let output (block '(
+    (let select (block '(
+      (let core (block '(
+        (let select (block '(
+          (let core table0)
+          (let core (FlatMap core (lambda '(row) (block '(
+            (let res (AsStruct '('"age" (Coalesce
+                   (TryMember row '"age" (Nothing (OptionalType (DataType 'Int64))))
+                   (FromYsonSimpleType (SqlAccess 'dict (TryMember row '"_other" (Just (Dict (DictType (DataType '"String") (DataType '"String"))))) (String '"age")) 'Int64)
+                   ))))
+            (let res (AsList res))
+            (return res)
+          )))))
+          (return core)
+        )))
+        (return select)
+      )))
+      (let core (Aggregate core '('"age") '('('Count1 (Apply (bind aggregate_module '"count_traits_factory") (TypeOf core) (lambda '(row) (Void)))))))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" (Member row 'Count1)) '('"age" (Member row '"age"))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let output (Sort output '((Bool 'true) (Bool 'true)) (lambda '(item) '((Member item 'column0) (Member item 'age)))))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0" '"age")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let plato_sink (DataSink '"yt" '"plato"))
+  (let world (Commit! world plato_sink))
+  (return world)
+)))
+(return world)
+)

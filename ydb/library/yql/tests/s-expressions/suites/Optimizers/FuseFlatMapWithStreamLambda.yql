@@ -1,0 +1,15 @@
+(
+(let res_sink (DataSink 'result))
+
+(let singleList (AsList (Int32 '1)))
+(let optional (/ (Int32 '1) (Int32 '0)))
+(let streamLambda (lambda '(x) (Iterator (AsList (Int32 '1) (Int32 '2)))))
+
+(let map1 (Unordered (FlatMap singleList streamLambda)))
+(let map2 (Unordered (FlatMap (ToList optional) streamLambda)))
+
+(let world (Write! world res_sink (Key) map1 '('('type))))
+(let world (Write! world res_sink (Key) map2 '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

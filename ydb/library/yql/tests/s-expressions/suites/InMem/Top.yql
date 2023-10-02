@@ -1,0 +1,27 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let list (AsList
+    (AsStruct '('a (Uint32 '4)) '('b (String 'c)))
+    (AsStruct '('a (Uint32 '1)) '('b (String 'd)))
+    (AsStruct '('a (Uint32 '3)) '('b (String 'b)))
+    (AsStruct '('a (Uint32 '2)) '('b (String 'a)))
+    (AsStruct '('a (Uint32 '5)) '('b (String 'y)))
+    (AsStruct '('a (Uint32 '1)) '('b (String 'z)))
+))
+(let world (Write! world res_sink (Key) (Top list (Uint64 '3) (Bool 'True) (lambda '(item) (Member item 'b))) '('('type))))
+(let world (Write! world res_sink (Key) (Top list (Uint64 '3) (Bool 'False) (lambda '(item) (Member item 'b))) '('('type))))
+(let world (Write! world res_sink (Key) (Top list (Uint64 '3) '((Bool 'True) (Bool 'True)) (lambda '(item) '((Member item 'a) (Member item 'b)))) '('('type))))
+(let world (Write! world res_sink (Key) (Collect (Top (Iterator list (DependsOn (String 'a))) (Uint64 '3) (Bool 'True) (lambda '(item) (Member item 'b)))) '('('type))))
+
+(let world (Write! world res_sink (Key) (TopSort list (Uint64 '3) (Bool 'True) (lambda '(item) (Member item 'b))) '('('type))))
+(let world (Write! world res_sink (Key) (TopSort list (Uint64 '3) (Bool 'False) (lambda '(item) (Member item 'b))) '('('type))))
+(let world (Write! world res_sink (Key) (TopSort list (Uint64 '3) '((Bool 'True) (Bool 'True)) (lambda '(item) '((Member item 'a) (Member item 'b)))) '('('type))))
+(let world (Write! world res_sink (Key) (Collect (TopSort (Iterator list (DependsOn (String 'b))) (Uint64 '3) (Bool 'True) (lambda '(item) (Member item 'b)))) '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+)

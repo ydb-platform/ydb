@@ -1,0 +1,14 @@
+(
+
+(let doAlterTo (lambda '(world src targetType failValue) ( block '(
+  (let res_sink (DataSink 'result))
+  (let identity (lambda '(x) x))
+  (let alterToResult (AlterTo src targetType identity failValue))
+  (let world (Write! world res_sink (Key) alterToResult '('('type))))
+  (let world (Commit! world res_sink))
+  (return world)
+))))
+
+(export doAlterTo)
+
+)

@@ -1,0 +1,72 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(import aggregate_module '"/lib/yql/aggregate.yql")
+(import window_module '"/lib/yql/window.yql")
+(import core_module '"/lib/yql/core.yql")
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("Apply" ("bind" core_module '"Decode") (String '"key1") ("AsList" (String '"key1") (String '"value1") (String '"key2") (String '"value2")) (String '"default")))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("Apply" ("bind" core_module '"Decode") (String '"key2") ("AsList" (String '"key1") (String '"value1") (String '"key2") (String '"value2")) (String '"default")))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("Apply" ("bind" core_module '"Decode") (String '"keyZ") ("AsList" (String '"key1") (String '"value1") (String '"key2") (String '"value2")) (String '"default")))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (return world)
+)))
+(return world)
+)

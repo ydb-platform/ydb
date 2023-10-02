@@ -1,0 +1,37 @@
+(
+
+(library "alterto.yql")
+(import alterto_module '"alterto.yql")
+
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+# Int32->Int16
+(let world (Apply (bind alterto_module 'doAlterTo) world (Int32 '10) (DataType 'Int16) (Int16 '100)))
+(let world (Apply (bind alterto_module 'doAlterTo) world (Int32 '32768) (DataType 'Int16) (Int16 '101)))
+(let world (Apply (bind alterto_module 'doAlterTo) world (Int32 '"-32769") (DataType 'Int16) (Int16 '102)))
+
+# Int64->Uint16
+(let world (Apply (bind alterto_module 'doAlterTo) world (Int64 '11) (DataType 'Uint16) (Uint16 '110)))
+(let world (Apply (bind alterto_module 'doAlterTo) world (Int64 '65536) (DataType 'Uint16) (Uint16 '111)))
+(let world (Apply (bind alterto_module 'doAlterTo) world (Int64 '"-1") (DataType 'Uint16) (Uint16 '112)))
+
+# Uint32->Int8
+(let world (Apply (bind alterto_module 'doAlterTo) world (Uint32 '12) (DataType 'Int8) (Int8 '120)))
+(let world (Apply (bind alterto_module 'doAlterTo) world (Uint32 '128) (DataType 'Int8) (Int8 '121)))
+
+# Uint64->Uint32
+(let world (Apply (bind alterto_module 'doAlterTo) world (Uint64 '13) (DataType 'Uint32) (Uint32 '130)))
+(let world (Apply (bind alterto_module 'doAlterTo) world (Uint64 '4294967296) (DataType 'Uint32) (Uint32 '131)))
+
+# Int64->Uint64
+(let world (Apply (bind alterto_module 'doAlterTo) world (Int64 '14) (DataType 'Uint64) (Uint64 '140)))
+(let world (Apply (bind alterto_module 'doAlterTo) world (Int64 '"-1") (DataType 'Uint64) (Uint64 '141)))
+
+# Int32->Uint32
+(let world (Apply (bind alterto_module 'doAlterTo) world (Int32 '15) (DataType 'Uint32) (Uint32 '150)))
+(let world (Apply (bind alterto_module 'doAlterTo) world (Int32 '"-1") (DataType 'Uint32) (Uint32 '151)))
+
+(return world)
+
+)

@@ -1,0 +1,83 @@
+(
+(import aggregate_module '"/lib/yql/aggregate.yql")
+(import window_module '"/lib/yql/window.yql")
+(import core_module '"/lib/yql/core.yql")
+(let world (block '(
+  (let x (Read! world (DataSource '"yt" '"plato") (MrTableConcat (Key '('table (String '"Input1")))) (Void) '()))
+  (let world (Left! x))
+  (let table1 (Right! x))
+  (let output (block '(
+    (let select (block '(
+      (let core (EquiJoin '(table1 '"t") '((block '(
+        (let select (block '(
+          (let core table1)
+          (let core (Aggregate core '('"Group" '"Name") '('('Sum0 (Apply (bind aggregate_module '"sum_traits_factory") (TypeOf core) (lambda '(row) (Member row '"Amount")))))))
+          (let core (FlatMap core (lambda '(row) (block '(
+            (let res (AsStruct '('"Group" (Member row '"Group")) '('"Name" (Member row '"Name")) '('"TotalAmount" (Member row 'Sum0))))
+            (let res (AsList res))
+            (return res)
+          )))))
+          (return core)
+        )))
+        (return select)
+      )) '"a") '('Inner '"t" '"a" '('"t" '"Group" '"t" '"Name") '('"a" '"Group" '"a" '"Name") '()) '()))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"t.Comment" (SqlColumn row '"Comment" '"t")) '('"a.TotalAmount" (SqlColumn row '"TotalAmount" '"a"))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (let select (Sort select '((Bool 'true) (Bool 'true)) (lambda '(row) '((Member row '"t.Comment") (Member row '"a.TotalAmount")))))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"t.Comment" '"a.TotalAmount")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let x (Read! world (DataSource '"yt" '"plato") (MrTableConcat (Key '('table (String '"Input1")))) (Void) '()))
+  (let world (Left! x))
+  (let table1 (Right! x))
+  (let output (block '(
+    (let select (block '(
+      (let core (block '(
+        (let select (block '(
+          (let core table1)
+          (let core (Aggregate core '('"Group" '"Name") '('('Sum0 (Apply (bind aggregate_module '"sum_traits_factory") (TypeOf core) (lambda '(row) (Member row '"Amount")))))))
+          (let core (FlatMap core (lambda '(row) (block '(
+            (let res (AsStruct '('"Group" (Member row '"Group")) '('"Name" (Member row '"Name")) '('"TotalAmount" (Member row 'Sum0))))
+            (let res (AsList res))
+            (return res)
+          )))))
+          (return core)
+        )))
+        (return select)
+      )))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"TotalAmount" (Member row '"TotalAmount"))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (let select (Sort select (Bool 'true) (lambda '(row) (Member row '"TotalAmount"))))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"TotalAmount")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let plato_sink (DataSink '"yt" '"plato"))
+  (let world (Commit! world plato_sink))
+  (return world)
+)))
+(return world)
+)

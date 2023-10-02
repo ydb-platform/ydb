@@ -1,0 +1,54 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+(let res_sink (DataSink 'result))
+
+# Variant over tuple
+
+(let vt (ParseType '"Variant<Int64, Struct<A:Int64, B:Double>>"))
+(let vt2 (ParseType '"Variant<Int32, Struct<A:Int32, B:Double>>"))
+
+(let testcase1 (AsList (Variant (Int64 '10) '0 vt)))
+
+(let argBody (lambda '() (Variant (Int32 '11) '0 vt2)))
+(let argType (CallableType '() '(vt2)))
+(let argCallable (Callable argType argBody))
+(let arg (Apply argCallable))
+(let testcase1 (Append testcase1 arg))
+
+(let argBody (lambda '() (Variant (AsStruct '('A (Int64 '25)) '('B (Double '15.5))) '1 vt2)))
+(let argType (CallableType '() '(vt2)))
+(let argCallable (Callable argType argBody))
+(let arg (Apply argCallable))
+(let testcase1 (Append testcase1 arg))
+
+# Variant over struct
+
+(let vts (ParseType '"Variant<A:Int64, B:Struct<A:Int64, B:Double>>"))
+(let vts2 (ParseType '"Variant<A:Int32, B:Struct<A:Int32, B:Double>>"))
+(let vts3 (ParseType '"Variant<A:Int32>"))
+
+(let testcase2 (AsList (Variant (Int64 '10) 'A vts)))
+
+(let argBody (lambda '() (Variant (Int32 '11) 'A vts2)))
+(let argType (CallableType '() '(vts2)))
+(let argCallable (Callable argType argBody))
+(let arg (Apply argCallable))
+(let testcase2 (Append testcase2 arg))
+
+(let argBody (lambda '() (Variant (AsStruct '('A (Int64 '25)) '('B (Double '15.5))) 'B vts2)))
+(let argType (CallableType '() '(vts2)))
+(let argCallable (Callable argType argBody))
+(let arg (Apply argCallable))
+(let testcase2 (Append testcase2 arg))
+
+(let argBody (lambda '() (Variant (Int32 '11) 'A vts3)))
+(let argType (CallableType '() '(vts3)))
+(let argCallable (Callable argType argBody))
+(let arg (Apply argCallable))
+(let testcase2 (Append testcase2 arg))
+
+(let world (Write! world res_sink (Key) '(testcase1 testcase2) '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

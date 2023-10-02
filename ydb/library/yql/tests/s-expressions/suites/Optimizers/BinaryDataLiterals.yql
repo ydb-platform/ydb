@@ -1,0 +1,25 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+
+(let data (Bool 'x"00"))
+(let world (Write! world res_sink (Key) data '()))
+
+(let data (Int16 'x"FEFF"))
+(let world (Write! world res_sink (Key) data '()))
+
+(let data (Double 'x"722078DC7BF042D3"))
+(let world (Write! world res_sink (Key) data '()))
+
+(let data (Date 'x"0100"))
+(let world (Write! world res_sink (Key) data '()))
+
+(let data (TzTimestamp 'x"0000F9BCF768AC000001"))
+(let world (Write! world res_sink (Key) data '()))
+
+(let world (Commit! world res_sink))
+(return world)
+)

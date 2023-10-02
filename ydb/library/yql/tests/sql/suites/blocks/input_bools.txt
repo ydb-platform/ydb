@@ -1,0 +1,9 @@
+{"key"=1; "b1"=%false; "b2"=%false; "ob1"=%false;"ob2"=%false;};
+{"key"=2; "b1"=%false; "b2"=%true;  "ob1"=%false;"ob2"=%true;};
+{"key"=3; "b1"=%true;  "b2"=%false; "ob1"=%false;"ob2"=#;};
+{"key"=4; "b1"=%true;  "b2"=%true;  "ob1"=%true; "ob2"=%false;};
+{"key"=5; "b1"=%false; "b2"=%false; "ob1"=%true; "ob2"=%true;};
+{"key"=6; "b1"=%false; "b2"=%true;  "ob1"=%true; "ob2"=#;};
+{"key"=7; "b1"=%true;  "b2"=%false; "ob1"=#;     "ob2"=%false;};
+{"key"=8; "b1"=%true;  "b2"=%true;  "ob1"=#;     "ob2"=%true;};
+{"key"=9; "b1"=%false; "b2"=%false; "ob1"=#;     "ob2"=#;};

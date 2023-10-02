@@ -1,0 +1,20 @@
+(
+(let source (DataSource 'yt 'plato))
+(let sink (DataSink 'yt 'plato))
+
+(let r (Read! world source (MrTableConcat (Key '('table (String '"Input")))) (Void) '()))
+(let input (Right! r))
+(let world (Left! r))
+
+(let mapLambda (lambda '(item) (AsList (AsStruct '('"key" (Member item '"key"))))))
+(let keyExtractLambda  (lambda '(item) (Member item '"key")))
+
+(let out1 (Sort (FlatMap input mapLambda) (Bool 'false) keyExtractLambda))
+(let out2 (Sort (FlatMap input mapLambda) (Bool 'true) keyExtractLambda))
+(let union (UnionAll (Take out1 (Int32 '"3")) (Take out2 (Int32 '"2"))))
+
+(let world (Write! world sink (Key '('table (String '"Output"))) union '('('mode 'renew))))
+(let world (Commit! world sink))
+
+(return world)
+)

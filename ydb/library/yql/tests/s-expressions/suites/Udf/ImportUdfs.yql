@@ -1,0 +1,23 @@
+# not supported on windows
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+# (1) import udfs from 'myfile'
+(let config (DataSource 'config))
+(let world (Configure! world config 'ImportUdfs 'myfile))
+# (2) execute 'TestImportUdf.Concat'
+(let name (String 'Jamel))
+(let hello (Udf 'TestImportUdf.Concat))
+(let foo_data (Apply hello (String '"Hello, ") name))
+
+# (3) execute 'TestImportUdf.Repeat'
+(let bar_data (Apply (Udf 'TestImportUdf.Repeat) (String 'x) (Uint64 '3)))
+
+# (4) output results
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) foo_data '('('type))))
+(let world (Write! world res_sink (Key) bar_data '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

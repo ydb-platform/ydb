@@ -1,0 +1,23 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let vt (VariantType (TupleType (DataType 'Int32))))
+(let v1 (Variant (Int32 '34) '0 vt))
+
+(let handler (lambda '(x) (+ (Int32 '100) x)))
+
+(let world (Write! world res_sink (Key) (Visit v1 '0 handler) '('('type))))
+(let world (Write! world res_sink (Key) (Visit v1 '0 handler (Int32 '999)) '('('type))))
+
+(let vt (VariantType (StructType '('a (DataType 'Int32)))))
+(let v1 (Variant (Int32 '34) 'a vt))
+
+(let world (Write! world res_sink (Key) (Visit v1 'a handler) '('('type))))
+(let world (Write! world res_sink (Key) (Visit v1 'a handler (Int32 '999)) '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+)

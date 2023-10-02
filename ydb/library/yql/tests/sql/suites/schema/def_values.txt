@@ -1,0 +1,6 @@
+{"key"="2";"value"="4";"subkey"="123"};
+{"key"="1"};
+{"subkey"="2"};
+{"value"="4"};
+{};
+{"key"=#;"value"=#;"subkey"=#};

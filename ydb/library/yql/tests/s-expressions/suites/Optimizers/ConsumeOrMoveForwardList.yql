@@ -1,0 +1,30 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(import id_module '"/lib/yql/id.yql")
+(let id (bind id_module 'id))
+
+(let list (AsList (String 'a) (String 'b) (String 'c)))
+
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) (ForwardList (Iterator list (DependsOn (Int32 '0)))) '('('type))))
+(let world (Write! world res_sink (Key) (ForwardList (Apply id (Iterator list (DependsOn (Int32 '1))))) '('('type))))
+(let world (Write! world res_sink (Key) (Fold (ForwardList (Apply id (Iterator list (DependsOn (Int32 '2))))) (String '"") 
+  (lambda '(item state) (Concat item state))) '('('type))))
+(let world (Write! world res_sink (Key) (Fold1 (ForwardList (Apply id (Iterator list (DependsOn (Int32 '3))))) 
+  (lambda '(item) item)
+  (lambda '(item state) (Concat item state))) '('('type))))
+(let world (Write! world res_sink (Key) (FlatMap (ForwardList (Apply id (Iterator list (DependsOn (Int32 '4)))))
+  (lambda '(item) (AsList item item))) '('('type))))
+(let world (Write! world res_sink (Key) (FoldMap (ForwardList (Apply id (Iterator list (DependsOn (Int32 '5))))) (String '"") 
+  (lambda '(item state) '((Concat item state) (Concat item state)))) '('('type))))
+  
+(let world (Write! world res_sink (Key) (Fold1Map (ForwardList (Apply id (Iterator list (DependsOn (Int32 '6))))) 
+  (lambda '(item) '(item item))
+  (lambda '(item state) '((Concat item state) (Concat item state)))) '('('type))))  
+
+(let world (Commit! world res_sink))
+(return world)
+
+)

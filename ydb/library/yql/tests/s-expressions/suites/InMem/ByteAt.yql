@@ -1,0 +1,15 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) (ByteAt (String 'ab) (Uint32 '1)) '('('type))))
+(let world (Write! world res_sink (Key) (ByteAt (String 'ab) (Uint32 '2)) '('('type))))
+(let world (Write! world res_sink (Key) (ByteAt (Just (String 'ab)) (Uint32 '1)) '('('type))))
+(let world (Write! world res_sink (Key) (ByteAt (Just (String 'ab)) (Uint32 '2)) '('('type))))
+(let world (Write! world res_sink (Key) (ByteAt (Nothing (OptionalType (DataType 'String))) (Uint32 '1)) '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+)

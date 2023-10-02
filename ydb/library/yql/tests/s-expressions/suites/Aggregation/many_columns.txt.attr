@@ -1,0 +1,3 @@
+{
+    "_yql_row_spec"={"Type"=["StructType";[["assignment_assignment_id";["DataType";"Uint64"]];["assignment_last_status_change_time";["DataType";"Uint64"]];["requester_id";["DataType";"Uint64"]];["project_id";["DataType";"Uint64"]];["assignment_gs_count";["DataType";"Uint64"]];["assignment_gs_weight";["DataType";"Uint64"]]]]}
+}

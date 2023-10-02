@@ -1,0 +1,16 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let list (AsList (String 'a) (String 'b) (String 'c)))
+(let keyExtractor (lambda '(x) (String '"@")))
+(let handler (lambda '(key list) (AsList '(key (Length list)))))
+(let data (GroupByKey list keyExtractor handler))
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink
+    (Key)
+    data '()))
+
+(let world (Commit! world res_sink))
+(return world)
+)

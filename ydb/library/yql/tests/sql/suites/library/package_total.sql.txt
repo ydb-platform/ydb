@@ -1,0 +1,11 @@
+import pkg.project.package.detail.foo symbols $do_foo;
+import pkg.project.package.detail.bar symbols $do_bar;
+
+$do_total = ($value) -> {
+    $foo = $do_foo($value);
+    $bar = $do_bar($value);
+
+    return ($foo, $bar);
+};
+
+export $do_total;

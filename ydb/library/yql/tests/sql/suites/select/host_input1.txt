@@ -1,0 +1,3 @@
+{"url"="http://www.ya.ru/foo";};
+{"url"="http://www.ya.ru/bar";};
+{"url"="http://www.ya.hz/wat";};

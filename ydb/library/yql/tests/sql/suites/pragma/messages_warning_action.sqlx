@@ -1,0 +1,6 @@
+/* postgres can not */
+/* not supported on windows */
+PRAGMA Warning("error", '4500');
+PRAGMA Greetings;
+PRAGMA Greetings("It's a good day!");
+PRAGMA WarningMsg("Ready to fight!");

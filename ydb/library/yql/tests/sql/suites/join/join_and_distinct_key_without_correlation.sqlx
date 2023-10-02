@@ -1,0 +1,6 @@
+use plato;
+
+SELECT
+    count(distinct key) as uniq_count -- distinct qualifier required correlation name
+FROM Input as i1 JOIN Input AS i2 on cast(i1.key as uint32) / 100 == cast(i2.subkey as uint32) / 100
+;

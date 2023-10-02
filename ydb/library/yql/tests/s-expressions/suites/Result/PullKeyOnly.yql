@@ -1,0 +1,11 @@
+(
+(let x (Read! world (DataSource 'yt 'plato) (Key '('table (String 'Input))) '('key) '()))
+(let world (Left! x))
+(let data (Right! x))
+(let result_sink (DataSink 'result))
+(let world (Write! world result_sink (Key) data '('('type) '('autoref))))
+(let plato_sink (DataSink 'yt 'plato))
+(let world (Commit! world plato_sink))
+(let world (Commit! world result_sink))
+(return world)
+)

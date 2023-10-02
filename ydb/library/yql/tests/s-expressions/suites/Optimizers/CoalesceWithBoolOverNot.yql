@@ -1,0 +1,11 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let optBool (SafeCast (/ (Int32 '1) (Int32 '0)) (OptionalType (DataType 'Bool))))
+(let data (Coalesce (Not optBool) (Bool 'false)))
+(let world (Write! world res_sink (Key) data '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

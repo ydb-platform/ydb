@@ -1,0 +1,39 @@
+(
+(let mr_source (DataSource 'yt 'plato))
+(let x (Read! world mr_source (Key '('table (String 'Input1))) '('key 'subkey 'value) '()))
+(let world (Left! x))
+(let table1 (Right! x))
+(let table1 (Map table1 (lambda '(item) (AsStruct
+  '('key (Just (Member item 'key)))
+  '('subkey1 (Just (Member item 'subkey)))
+  '('value1 (Just (Member item 'value)))))))
+
+(let x (Read! world mr_source (Key '('table (String 'Input2))) '('key 'subkey 'value) '()))
+(let world (Left! x))
+(let table2 (Right! x))
+
+(let table2 (Map table2 (lambda '(item) (AsStruct
+  '('key (Just (Member item 'key)))
+  '('subkey2 (Just (Member item 'subkey)))
+  '('value2 (Just (Member item 'value)))))))
+
+(let x (Read! world mr_source (Key '('table (String 'Input3))) '('key 'subkey 'value) '()))
+(let world (Left! x))
+(let table3 (Right! x))
+
+(let table3 (Map table3 (lambda '(item) (AsStruct
+  '('key (Just (Member item 'key)))
+  '('subkey3 (Just (Member item 'subkey)))
+  '('value3 (Just (Member item 'value)))))))
+
+(let join (EquiJoin '(table1 'a) '(table2 'b) '(table3 'c)
+    '('Inner 
+       '('Inner '"a" '"b" '('"a" '"key") '('"b" '"key" ) '())
+       '"c"  '('"a" '"key") '('"c" '"key" ) '())
+    '('('flatten))))
+
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) join '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

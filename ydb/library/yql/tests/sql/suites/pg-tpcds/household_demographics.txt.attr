@@ -1,0 +1,11 @@
+{
+    "_yql_row_spec"={
+        "Type"=["StructType";[
+              ["hd_demo_sk";["PgType";"int4";];];
+              ["hd_income_band_sk";["PgType";"int4";];];
+              ["hd_buy_potential";["PgType";"text";];];
+              ["hd_dep_count";["PgType";"int4";];];
+              ["hd_vehicle_count";["PgType";"int4";];];
+        ];];
+    }
+}

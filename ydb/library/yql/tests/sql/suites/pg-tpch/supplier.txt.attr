@@ -1,0 +1,13 @@
+{
+    "_yql_row_spec"={
+       "Type"=["StructType";[
+           ["s_suppkey";["PgType";"int4";];];
+           ["s_name";["PgType";"text";];];
+           ["s_address";["PgType";"text";];];
+           ["s_nationkey";["PgType";"int4";];];
+           ["s_phone";["PgType";"text";];];
+           ["s_acctbal";["PgType";"numeric";];];
+           ["s_comment";["PgType";"text";];];
+       ];];
+    }
+}

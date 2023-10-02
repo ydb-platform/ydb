@@ -1,0 +1,22 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let test (lambda '(world data) (block '(
+  (let world (Write! world res_sink (Key) data '('('type))))
+  (return world)
+))))
+
+(let world (Apply test world (Extend (AsList (String 'a)))))
+(let world (Apply test world (Extend (AsList (String 'a)) (AsList (String 'b)))))
+(let world (Apply test world (Extend (AsList (String 'a)) (AsList (String 'b)) (AsList (String 'c)))))
+(let world (Apply test world (Extend 
+    (Extend (Take (AsList (String 'a)) (Uint64 '1)) (AsList (String 'b)))
+    (Extend (Take (AsList (String 'c)) (Uint64 '1)) (AsList (String 'd)))
+    )))
+
+(let world (Commit! world res_sink))
+(return world)
+)

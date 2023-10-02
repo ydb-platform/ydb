@@ -1,0 +1,39 @@
+(
+
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+(let res_sink (DataSink 'result))
+
+(let targetType (TupleType (DataType 'Uint8) (DataType 'Utf8)))
+
+# (Int32, String) -> (Uint8, Utf8) [good]
+(let value '((Int32 '1) (String 'one)))
+(let cast (SafeCast value targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+
+# (Int32, String) -> (Uint8, Utf8)? [null]
+(let value '((Int32 '1) (String '"garbage\xff")))
+(let cast (SafeCast value targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+
+# (Int32?, String???) -> (Uint8??, Utf8?)? [good]
+(let targetType (TupleType (OptionalType (OptionalType (DataType 'Uint8))) (OptionalType (DataType 'Utf8))))
+(let value '((Just (Int32 '1)) (Just (Nothing (OptionalType (DataType 'String))))))
+(let cast (SafeCast value targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+
+# (Int32?, String???) -> (Uint8??, Utf8?)? [null]
+(let value '((Just (Int32 '1)) (Nothing (OptionalType (OptionalType (DataType 'String))))))
+(let cast (SafeCast value targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+
+# (Int32?, String???) -> (Uint8??, Utf8?)? [null]
+(let value '((Just (Int32 '-1)) (Just (Nothing (OptionalType (DataType 'String))))))
+(let cast (SafeCast value targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+
+(let world (Commit! world res_sink))
+
+(return world)
+
+)

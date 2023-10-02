@@ -1,0 +1,12 @@
+{
+    "_read_schema" = <"strict" = %false>[
+        {"type"="uint64";"name"="yandexuid"};
+    ];
+    "schema" = <"strict" = %false; "unique_keys" = %false>
+    [
+        {
+            "name" = "yandexuid";
+            "type" = "uint64"
+        }
+    ]
+}

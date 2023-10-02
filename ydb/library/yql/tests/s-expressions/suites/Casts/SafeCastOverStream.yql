@@ -1,0 +1,30 @@
+(
+
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+(let res_sink (DataSink 'result))
+
+# Stream<Int32> -> Stream<Uint16> (full)
+(let targetType (StreamType (DataType 'Uint16)))
+(let src (Iterator (AsList (Int32 '1) (Int32 '2) (Int32 '3))))
+(let cast (SafeCast src targetType))
+(let world (Write! world res_sink (Key) (Collect cast) '('('type))))
+
+# Stream<Int32> -> Stream<Uint16> (less)
+(let targetType (StreamType (DataType 'Uint16)))
+(let src (Iterator (AsList (Int32 '1) (Int32 '-2) (Int32 '3))))
+(let cast (SafeCast src targetType))
+(let world (Write! world res_sink (Key) (Collect cast) '('('type))))
+
+# Stream<Int32?> -> Stream<Uint16> (less)
+(let targetType (StreamType (DataType 'Uint16)))
+(let src (Iterator (AsList (Just (Int32 '1)) (Null) (Just (Int32 '3)))))
+(let cast (SafeCast src targetType))
+(let world (Write! world res_sink (Key) (Collect cast) '('('type))))
+
+(let world (Commit! world res_sink))
+
+(return world)
+
+)
+

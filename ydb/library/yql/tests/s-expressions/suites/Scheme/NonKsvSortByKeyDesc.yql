@@ -1,0 +1,19 @@
+(
+(let x (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"Input"))) '('"age" '"name") '()))
+(let data (lambda '(item) (block '(
+  (let s (Struct))
+  (let s (AddMember s '"age" (Cast (Member item '"age") 'Uint64)))
+  (let s (AddMember s '"name" (Member item '"name")))
+  (return (AsList s))
+))))
+(let data (FlatMap (Right! x) data))
+(let key (lambda '(item) (block '(
+  (let age (Member item '"age"))
+  (let name (Member item '"name"))
+  (return '(age name))
+))))
+(let res (Sort data '((Bool 'false) (Bool 'false)) key))
+(let mr_sink (DataSink '"yt" '"plato"))
+(let res (Write! (Left! x) mr_sink (Key '('table (String '"Output"))) res '('('mode 'append))))
+(return (Commit! res mr_sink))
+)

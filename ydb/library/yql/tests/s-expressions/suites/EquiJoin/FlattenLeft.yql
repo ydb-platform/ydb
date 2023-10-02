@@ -1,0 +1,26 @@
+(
+ (let data.source (DataSource 'yt 'plato))
+ (let data.sink (DataSink 'yt 'plato))
+ (let input_left (Read! world data.source (Key '('table (String 'Input4))) (Void) '()))
+ (let world (Left! input_left))
+ (let input_left (Right! input_left))
+   
+ (let input_right (Read! world data.source (Key '('table (String 'Input5))) (Void) '()))
+ (let world (Left! input_right))
+ (let input_right (Right! input_right))
+ 
+ (let output (EquiJoin '((RemoveSystemMembers input_left) 'left) '((RemoveSystemMembers input_right) 'right)
+   '('Left 'left 'right '('left 'id) '('right 'id) '()) '('('flatten))
+ ))
+
+ (let output (Map output (lambda '(item) (block '(
+   (let item (AddMember item 'val (String '"")))
+   (return item)
+ )))))
+
+ (let res_sink (DataSink 'result))
+ (let world (Write! world res_sink (Key) output '('('type))))
+ (let world (Commit! world res_sink))
+ 
+ (return world)
+)

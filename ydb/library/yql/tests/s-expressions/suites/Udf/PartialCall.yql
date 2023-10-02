@@ -1,0 +1,16 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let udf (Udf 'SimpleUdf.EchoWithPrefix))
+(let x (String 'aaa))
+(let y (String 'bbb))
+(let data (Apply udf x))
+(let world (Write! world res_sink (Key) data '()))
+(let data (Apply udf x y))
+(let world (Write! world res_sink (Key) data '()))
+(let world (Commit! world res_sink))
+(return world)
+)

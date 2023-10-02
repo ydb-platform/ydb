@@ -1,0 +1,3 @@
+{"key2"="075";"subkey2"="1";"value2"="ABC"};
+{"key2"="800";"subkey2"="2";"value2"="DDD"};
+{"key2"="020";"subkey2"="3";"value2"="Q"};

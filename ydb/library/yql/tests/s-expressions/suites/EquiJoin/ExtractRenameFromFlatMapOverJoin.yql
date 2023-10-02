@@ -1,0 +1,42 @@
+(
+(let mr_source (DataSource 'yt 'plato))
+(let list1 (AsList 
+  (AsStruct '('key1 (Int32 '1)) '('value1 (String 'A))) 
+  (AsStruct '('key1 (Int32 '7)) '('value1 (String 'B)))
+  (AsStruct '('key1 (Int32 '4)) '('value1 (String 'C)))
+  (AsStruct '('key1 (Int32 '4)) '('value1 (String 'D)))
+))
+
+(let list2 (AsList 
+  (AsStruct '('key2 (Int32 '9)) '('value2 (String 'Z))) 
+  (AsStruct '('key2 (Int32 '4)) '('value2 (String 'Y))) 
+  (AsStruct '('key2 (Int32 '3)) '('value2 (String 'X))) 
+  (AsStruct '('key2 (Int32 '4)) '('value2 (String 'W)))
+  (AsStruct '('key2 (Int32 '8)) '('value2 (String 'V)))
+))
+
+(let joinInner (EquiJoin '(list1 'a) '(list2 'b) '('Inner 'a 'b '('a 'key1) '('b 'key2) '()) '()))
+(let list (Map joinInner (lambda '(x) (block '(
+  (return (AsStruct
+     '('"a.key1" (Member x '"a.key1"))
+     '('"q" (Member x '"a.value1"))
+     '('"f.value2" (Member x '"b.value2"))
+  ))
+)))))
+
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) list '('('type))))
+
+(let joinInner2 (EquiJoin '(list1 'a) '(list2 'b) '('Inner 'a 'b '('a 'key1) '('b 'key2) '())
+  '('('rename '"a.key1" 'z) '('rename '"b.key2" '""))))
+(let list2 (Map joinInner2 (lambda '(x) (block '(
+  (return (AsStruct
+     '('"yy" (Member x '"z"))
+     '('"q" (Member x '"b.value2"))
+  ))
+)))))
+
+(let world (Write! world res_sink (Key) list2 '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

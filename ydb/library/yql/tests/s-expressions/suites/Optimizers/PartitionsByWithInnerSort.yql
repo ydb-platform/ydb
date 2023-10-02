@@ -1,0 +1,72 @@
+(
+    # prepare python udf
+    (let str (DataType 'String))
+    (let tupleType (TupleType str str))
+    (let udfType (CallableType '() '(tupleType) '(str) '(str)))
+    (let udfScript (String '@@
+def MyTuple(one, two):
+    return (one, two)
+
+@@))
+    (let udf (ScriptUdf 'Python3 'MyTuple udfType udfScript))
+
+    (let mr_source (DataSource 'yt 'plato))
+    (let x (Read! world mr_source (Key '('table (String 'Input))) (Void) '()))
+    (let world (Left! x))
+    (let table1 (Right! x))
+
+    (let singleKeySelector (lambda '(x) (Member x 'key)))
+    (let multiKeySelector (lambda '(x) '((Member x 'key) (Member x 'subkey))))
+    (let tupleKeySelector (lambda '(x) (Apply udf (Member x 'key) (Member x 'subkey))))
+    (let calcKeySelector (lambda '(x) (Concat (Member x 'key) (Member x 'subkey))))
+
+    (let singleDirAsc (Bool 'true))
+    (let singleDirDesc (Bool 'false))
+    (let multiDirAsc '((Bool 'true) (Bool 'true)))
+    (let multiDirDesc '((Bool 'false) (Bool 'false)))
+
+    (let singleSortKeySelector (lambda '(item) (Member item 'subkey)))
+    (let multiSortKeySelector (lambda '(item) '((Member item 'subkey) (Member item 'value))))
+    (let tupleSortKeySelector (lambda '(item) (Apply udf (Member item 'subkey) (Member item 'value))))
+    (let calcSortKeySelector (lambda '(item) (Concat (Member item 'subkey) (Member item 'value))))
+
+    (let res_sink (DataSink 'result))
+
+    (let macro (lambda '(world keySelector sortDir sortKeySelector) (block '(
+        (let res (PartitionsByKeys table1 keySelector sortDir sortKeySelector (lambda '(stream) stream)))
+        (let res (Sort res '((Bool 'true) (Bool 'true)) (lambda '(item) '((Member item 'key) (Member item 'subkey)))))
+        (let world (Write! world res_sink (Key) res '()))
+        (return world)
+    ))))
+
+    (let world (Apply macro world singleKeySelector singleDirAsc singleSortKeySelector))
+    (let world (Apply macro world singleKeySelector singleDirDesc singleSortKeySelector))
+    (let world (Apply macro world singleKeySelector multiDirAsc multiSortKeySelector))
+    (let world (Apply macro world singleKeySelector multiDirDesc multiSortKeySelector))
+    (let world (Apply macro world singleKeySelector multiDirAsc tupleSortKeySelector))
+    (let world (Apply macro world singleKeySelector singleDirAsc calcSortKeySelector))
+
+    (let world (Apply macro world multiKeySelector singleDirAsc singleSortKeySelector))
+    (let world (Apply macro world multiKeySelector singleDirDesc singleSortKeySelector))
+    (let world (Apply macro world multiKeySelector multiDirAsc multiSortKeySelector))
+    (let world (Apply macro world multiKeySelector multiDirDesc multiSortKeySelector))
+    (let world (Apply macro world multiKeySelector multiDirAsc tupleSortKeySelector))
+    (let world (Apply macro world multiKeySelector singleDirAsc calcSortKeySelector))
+
+    (let world (Apply macro world tupleKeySelector singleDirAsc singleSortKeySelector))
+    (let world (Apply macro world tupleKeySelector singleDirDesc singleSortKeySelector))
+    (let world (Apply macro world tupleKeySelector multiDirAsc multiSortKeySelector))
+    (let world (Apply macro world tupleKeySelector multiDirDesc multiSortKeySelector))
+    (let world (Apply macro world tupleKeySelector multiDirAsc tupleSortKeySelector))
+    (let world (Apply macro world tupleKeySelector singleDirAsc calcSortKeySelector))
+
+    (let world (Apply macro world calcKeySelector singleDirAsc singleSortKeySelector))
+    (let world (Apply macro world calcKeySelector singleDirDesc singleSortKeySelector))
+    (let world (Apply macro world calcKeySelector multiDirAsc multiSortKeySelector))
+    (let world (Apply macro world calcKeySelector multiDirDesc multiSortKeySelector))
+    (let world (Apply macro world calcKeySelector multiDirAsc tupleSortKeySelector))
+    (let world (Apply macro world calcKeySelector singleDirAsc calcSortKeySelector))
+
+    (let world (Commit! world res_sink))
+    (return world)
+)

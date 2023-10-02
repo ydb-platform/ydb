@@ -1,0 +1,9 @@
+{
+    "_yql_row_spec"={
+       "Type"=["StructType";[
+           ["r_regionkey";["PgType";"int4";];];
+           ["r_name";["PgType";"text";];];
+           ["r_comment";["PgType";"text";];];
+       ];];
+    }
+}

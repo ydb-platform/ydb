@@ -1,0 +1,26 @@
+#USE plato;
+#INSERT INTO Output WITH TRUNCATE SELECT key FROM Input;
+#COMMIT;
+#INSERT INTO Output WITH TRUNCATE SELECT key FROM CONCAT(Input, Output);
+
+(
+(let source (DataSource '"yt" '"plato"))
+(let sink (DataSink '"yt" '"plato"))
+(let result (DataSink 'result))
+
+(let read (Read! world source (MrTableConcat (Key '('table (String '"Input")))) '('"key") '()))
+(let world (Left! read))
+(let input (Right! read))
+(let output (FlatMap input (lambda '(item) (AsList (AsStruct '('"key" (Member item '"key")))))))
+(let world (Write! world sink (Key '('table (String '"Output"))) output '('('mode 'renew))))
+(let world (Commit! world sink))
+
+(let read (Read! world source (MrTableConcat (Key '('table (String '"Input"))) (Key '('table (String '"Output")))) '('"key") '()))
+(let world (Left! read))
+(let input (Right! read))
+(let output (FlatMap input (lambda '(item) (AsList (AsStruct '('"key" (Member item '"key")))))))
+(let world (Write! world sink (Key '('table (String '"Output"))) output '('('mode 'renew))))
+(let world (Commit! world sink))
+
+(return world)
+)

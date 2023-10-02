@@ -1,0 +1,6 @@
+USE plato;
+SELECT
+  t.key, t.value
+FROM Input as t
+LEFT SEMI JOIN `Input.with.dot`
+USING(subkey);

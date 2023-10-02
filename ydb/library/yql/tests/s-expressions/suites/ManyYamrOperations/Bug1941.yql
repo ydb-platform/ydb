@@ -1,0 +1,47 @@
+(
+(import aggregate_module '"/lib/yql/aggregate.yql")
+(import window_module '"/lib/yql/window.yql")
+(let world (block '(
+  (let x (Read! world (DataSource '"yt" '"plato") (MrTableConcat (Key '('table (String '"Input")))) '('"key") '()))
+  (let world (Left! x))
+  (let table1 (Right! x))
+  (let output (block '(
+    (let select (block '(
+      (let core (block '(
+        (let select (block '(
+          (let core table1)
+          (let core (Filter core (lambda '(row) (Coalesce ("<" (Member row '"key") (String '"100")) (Bool 'false)))))
+          (let core (Just (AsStruct '('Count0 (Length core)))))
+          (let core (FlatMap core (lambda '(row) (block '(
+            (let res (AsStruct '('"count" (Member row 'Count0))))
+            (let res (AsList res))
+            (return res)
+          )))))
+          (return core)
+        )))
+        (return select)
+      )))
+      (let core (Aggregate core '() '('('Sum2 (Apply (bind aggregate_module '"sum_traits_factory") (TypeOf core) (lambda '(row) (Member row '"count")))))))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" (Member row 'Sum2))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let plato_sink (DataSink '"yt" '"plato"))
+  (let world (Commit! world plato_sink))
+  (return world)
+)))
+(return world)
+)

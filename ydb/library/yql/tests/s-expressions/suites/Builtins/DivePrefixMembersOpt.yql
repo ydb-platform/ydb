@@ -1,0 +1,20 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+
+(let value (Just (AsStruct '('akey1 (Just (Int8 '1))) '('bkey2 (String 'str)) '('c (Nothing (OptionalType (DataType 'Int32)))))))
+(let prefixes '('b 'a 'ak '""))
+(let result (DivePrefixMembers value prefixes))
+(let world (Write! world res_sink (Key) result '('('type))))
+
+(let value (Nothing (OptionalType (StructType '('akey1 (OptionalType (DataType 'Int8))) '('bkey2 (DataType 'String)) '('c (OptionalType (DataType 'Int32)))))))
+(let prefixes '('b 'a 'ak '""))
+(let result (DivePrefixMembers value prefixes))
+(let world (Write! world res_sink (Key) result '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+
+)

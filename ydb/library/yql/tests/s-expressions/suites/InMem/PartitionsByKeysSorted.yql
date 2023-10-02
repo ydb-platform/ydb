@@ -1,0 +1,25 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let list (AsList
+'((Uint32 '1) (String 'a))
+'((Uint32 '2) (String 'b))
+'((Uint32 '1) (String 'c))))
+
+(let keyExtractor (lambda '(x) (Nth x '0)))
+(let subkeyExtractor (lambda '(x) (Nth x '1)))
+(let handler (lambda '(x) (Condense1 x
+    (lambda '(row) '((Nth row '0) (Concat (String '"values:") (ToString (Nth row '1)))))
+    (lambda '(row state) (AggrNotEquals (Nth row '0) (Nth state '0)))
+    (lambda '(row state) '((Nth state '0) (Concat (Concat (Nth state '1) (String '" ")) (Nth row '1))))
+)))
+(let data (PartitionsByKeys (Iterator list) keyExtractor (Bool 'false) subkeyExtractor handler))
+(let data (Collect data))
+
+(let world (Write! world res_sink (Key) data '()))
+(let world (Commit! world res_sink))
+(return world)
+)

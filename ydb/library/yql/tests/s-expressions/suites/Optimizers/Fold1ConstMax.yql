@@ -1,0 +1,16 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let list (AsList (String 'a) (String 'b) (String 'c)))
+(let data (Fold1 list
+  (lambda '(item) (String 'z))
+  (lambda '(item state) (Max state (String 'y)))))
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink
+    (Key)
+    data '()))
+
+(let world (Commit! world res_sink))
+(return world)
+)

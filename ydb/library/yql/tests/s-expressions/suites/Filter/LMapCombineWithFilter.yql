@@ -1,0 +1,53 @@
+(
+# read data from Input table
+(let mr_source (DataSource 'yt 'plato))
+(let mr_sink (DataSink 'yt (quote plato)))
+(let res_sink (DataSink 'result))
+
+(let x (Read! world mr_source  (Key '('table (String 'Input))) (Void) '()))
+(let world (Left! x))
+(let table (Right! x))
+
+(let sorted (Sort table (Bool 'true) (lambda '(item) (Member item '"key"))))
+(let world (Write! world mr_sink (Key '('table (String 'Output))) sorted '('('mode 'renew))))
+(let world (Commit! world mr_sink))
+
+(let x (Read! world mr_source  (Key '('table (String 'Output))) (Void) '()))
+(let world (Left! x))
+(let table (Right! x))
+
+# prepare python udf
+(let streamType (StreamType (ListItemType (TypeOf table))))
+(let udfType (CallableType '() '(streamType) '(streamType)))
+(let udfScript (String '@@
+def MyFunc(list):
+    return list
+@@))
+(let udf (ScriptUdf 'Python 'MyFunc udfType udfScript))
+
+# filter keys less than '100'
+(let table (Filter table (lambda '(item)
+    (Coalesce (> (Member item 'key) (String '100)) (Bool 'false))
+)))
+# Produce LMap
+(let table (LMap table (lambda '($stream) (Apply udf $stream))))
+
+(let Count_create (lambda '(row) (Convert (Exists row) 'Uint64)))
+(let Count_update (lambda '(row state) (OptionalReduce state (Convert (Exists row) 'Uint64) (lambda '(a b) (+ a b)))))
+(let Count_save (lambda '(state) state))
+(let Count_load (lambda '(item) item))
+(let Count_merge (lambda '(a b) (OptionalReduce a b (lambda '(a b) (+ a b)))))
+(let Count_finish (lambda '(state) state))
+(let table (Aggregate table '('"key") '('('Count0 (AggregationTraits (DataType 'String)
+    Count_create Count_update Count_save Count_load Count_merge Count_finish (Uint64 '0)) '"value"))))
+(let table (Sort table '((Bool 'true) (Bool 'true)) (lambda '(row) '((Member row '"key") (Member row '"Count0")))))
+
+# write table
+(let world (Write! world mr_sink (Key '('table (String 'Output))) table '('('mode 'renew))))
+(let world (Write! world res_sink (Key) table '()))
+
+# finish
+(let world (Commit! world mr_sink))
+(let world (Commit! world res_sink))
+(return world)
+)

@@ -1,0 +1,35 @@
+(
+#comment
+(let mr_source (DataSource 'yt 'plato))
+(let x (Read! world mr_source (Key '('table (String 'Input))) '('key 'subkey 'value) '()))
+(let world (Left! x))
+(let table1 (Right! x))
+(let table1map (Map table1 (lambda '(item) (block '(
+   (let x (Double '1.2))
+   (let y (Double '3))
+   (let newValue (String '" => "))
+   (let newValue (Concat newValue (Concat (String '" ") (ToString (+ x y)))))
+   (let newValue (Concat newValue (Concat (String '" ") (ToString (- x y)))))
+   (let newValue (Concat newValue (Concat (String '" ") (ToString (* x y)))))
+   (let newValue (Concat newValue (Concat (String '" ") (ToString (/ x y)))))
+   
+   (let x (Float '0.1))
+   (let y (Float '-2.2))
+   (let newValue (Concat newValue (Concat (String '" ") (ToString (+ x y)))))
+   (let newValue (Concat newValue (Concat (String '" ") (ToString (- x y)))))
+   (let newValue (Concat newValue (Concat (String '" ") (ToString (* x y)))))
+   (let newValue (Concat newValue (Concat (String '" ") (ToString (/ x y)))))
+
+   (let newValue (Concat newValue (Concat (String '" ") (ToString (Coalesce (FromString (String '1.23) 'Float) (Float '0.0))))))
+   
+   (let s (Struct))
+   (let s (AddMember s 'key (Member item 'key)))
+   (let s (AddMember s 'subkey (Member item 'subkey)))
+   (let s (AddMember s 'value newValue))
+   (return s)
+)))))
+(let mr_sink (DataSink 'yt (quote plato)))
+(let world (Write! world mr_sink (Key '('table (String 'Output))) table1map '('('mode 'append))))
+(let world (Commit! world mr_sink))
+(return world)
+)

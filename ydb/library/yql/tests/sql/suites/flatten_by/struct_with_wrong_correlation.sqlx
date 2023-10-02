@@ -1,0 +1,10 @@
+/* postgres can not */
+pragma sampleselect;
+use plato;
+
+$data_dict = (select mod, some(AsStruct(key as s, subkey as subkey)) as list_struct from Input group by cast(key as uint32) % 10 as mod order by mod);
+
+select
+  zz.s -- try with invalid correlation (show as wrong column)
+from $data_dict as dd
+flatten by list_struct as s

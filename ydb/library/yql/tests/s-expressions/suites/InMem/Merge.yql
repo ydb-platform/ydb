@@ -1,0 +1,47 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let list1 (AsList
+    (AsStruct '('a (Uint32 '4)) '('b (String 'c)))
+    (AsStruct '('a (Uint32 '1)) '('b (String 'd)))
+    (AsStruct '('a (Uint32 '3)) '('b (String 'b)))
+))
+(let list2 (AsList
+    (AsStruct '('a (Uint32 '2)) '('b (String 'a)))
+    (AsStruct '('a (Uint32 '5)) '('b (String 'y)))
+    (AsStruct '('a (Uint32 '1)) '('b (String 'z)))
+))
+(let world (Write! world res_sink (Key)
+    (Merge
+        list1
+        list2
+    )
+'('('type))))
+
+(let world (Write! world res_sink (Key)
+    (Merge
+        (Sort list1 (Bool 'True) (lambda '(item) (Member item 'a)))
+        (Sort list2 (Bool 'True) (lambda '(item) (Member item 'a)))
+    )
+'('('type))))
+
+(let world (Write! world res_sink (Key)
+    (Merge
+        (Sort list1 (Bool 'False) (lambda '(item) (Member item 'a)))
+        (Sort list2 (Bool 'False) (lambda '(item) (Member item 'a)))
+    )
+'('('type))))
+
+(let world (Write! world res_sink (Key)
+    (Merge
+        (Sort list1 '((Bool 'True) (Bool 'True)) (lambda '(item) '((Member item 'a) (Member item 'b))))
+        (Sort list2 '((Bool 'True) (Bool 'True)) (lambda '(item) '((Member item 'a) (Member item 'b))))
+    )
+'('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+)

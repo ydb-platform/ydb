@@ -1,0 +1,3 @@
+{
+    "_yql_row_spec"={"Type"=["StructType";[["key";["DataType";"String"]];["subkey";["DataType";"Int32"]];["value1";["DataType";"String"]]]]}
+}

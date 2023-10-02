@@ -1,0 +1,38 @@
+(
+
+(library "alterto.yql")
+(import alterto_module '"alterto.yql")
+
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+### Tuple
+
+(let srcType (VariantType (TupleType (DataType 'Int32) (DataType 'String))))
+(let targetType (VariantType (TupleType (DataType 'Uint8) (DataType 'Utf8))))
+(let failValue (Variant (Utf8 '"not converted") '1 targetType))
+
+# Variant<Tuple<Int32, String>> -> Variant<Tuple<Uint8, Utf8>>
+(let value (Variant (String 'one) '1 srcType))
+(let world (Apply (bind alterto_module 'doAlterTo) world value targetType failValue))
+
+# Variant<Tuple<Int32, String>> -> Variant<Tuple<Uint8, Utf8>> (fail)
+(let value (Variant (String '"garbage\xff") '1 srcType))
+(let world (Apply (bind alterto_module 'doAlterTo) world value targetType failValue))
+
+### Struct
+(let srcType (VariantType (StructType '('a (DataType 'Int32)) '('b (DataType 'String)))))
+(let targetType (VariantType (StructType '('a (DataType 'Uint8)) '('b (DataType 'Utf8)))))
+(let failValue (Variant (Uint8 '123) 'a targetType))
+
+# Variant<Struct<Int32, String>> -> Variant<Struct<Uint8, Utf8>>
+(let value (Variant (Int32 '1) 'a srcType))
+(let world (Apply (bind alterto_module 'doAlterTo) world value targetType failValue))
+
+# Variant<Struct<Int32, String>> -> Variant<Struct<Uint8, Utf8>> (fail)
+(let value (Variant (Int32 '"-1") 'a srcType))
+(let world (Apply (bind alterto_module 'doAlterTo) world value targetType failValue))
+
+(return world)
+
+)

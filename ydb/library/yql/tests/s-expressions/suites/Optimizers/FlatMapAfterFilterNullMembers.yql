@@ -1,0 +1,18 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let data (AsList 
+  (AsStruct '('data (Just (String 'a)))) 
+  (AsStruct '('data (Nothing (OptionalType (DataType 'String)))))
+  (AsStruct '('data (Just (String 'b))))
+))
+(let filtered (FilterNullMembers data '('data)))
+(let map (Map filtered (lambda '(x) '(x x))))
+(let result (Sort map (Bool 'true) (lambda '(x) (Member (Nth x '0) 'data))))
+(let world (Write! world res_sink (Key) result '()))
+(let world (Commit! world res_sink))
+(return world)
+)

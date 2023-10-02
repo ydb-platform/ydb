@@ -1,0 +1,35 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let list (AsList
+'((Uint32 '1) (String 'a))
+'((Uint32 '2) (String 'b))
+'((Uint32 '1) (String 'c))))
+
+(let macro (lambda '(world name flags) (block '(
+
+(let dict (ToDict list (lambda '(x) (Nth x '0)) (lambda '(x) (Nth x '1)) flags))
+
+(let world (Write! world res_sink (Key) (String name) '()))
+(let world (Write! world res_sink (Key) dict '('('type))))
+(let world (Write! world res_sink (Key) (Contains dict (Uint32 '1)) '()))
+(let world (Write! world res_sink (Key) (Contains dict (Uint32 '2)) '()))
+(let world (Write! world res_sink (Key) (Contains dict (Uint32 '3)) '()))
+(let world (Write! world res_sink (Key) (Lookup dict (Uint32 '1)) '()))
+(let world (Write! world res_sink (Key) (Lookup dict (Uint32 '2)) '()))
+(let world (Write! world res_sink (Key) (Lookup dict (Uint32 '3)) '()))
+
+(return world)
+))))
+
+(let world (Apply macro world 'Sorted/One '('Sorted 'One)))
+(let world (Apply macro world 'Sorted/Many '('Sorted 'Many)))
+(let world (Apply macro world 'Hashed/One '('Hashed 'One)))
+(let world (Apply macro world 'Hashed/Many '('Hashed 'Many)))
+
+(let world (Commit! world res_sink))
+(return world)
+)

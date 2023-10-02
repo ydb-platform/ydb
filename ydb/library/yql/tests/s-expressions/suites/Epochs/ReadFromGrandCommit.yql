@@ -1,0 +1,46 @@
+#USE plato;
+#INSERT INTO Output WITH TRUNCATE SELECT key as a, "value:" || value as b FROM Input;
+#COMMIT;
+#INSERT INTO Output2 WITH TRUNCATE SELECT 1 as x;
+#COMMIT;
+#SELECT * FROM Output;
+
+(
+(let source (DataSource '"yt" '"plato"))
+(let sink (DataSink '"yt" '"plato"))
+(let result (DataSink 'result))
+
+(let conv (lambda '(item) (block '(
+  (let res (Struct))
+  (let res (AddMember res '"a" (Member item '"key")))
+  (let res (AddMember res '"b" (Concat (String '"value:") (Member item '"value"))))
+  (return (AsList res))
+))))
+
+(let r (Read! world source (Key '('table (String '"Input"))) (Void) '()))
+(let world (Left! r))
+(let input (Right! r))
+(let out (FlatMap input conv))
+(let world (Write! world sink (Key '('table (String 'Output))) out '('('mode 'renew))))
+(let world (Commit! world sink))
+
+(let fill (lambda '(item) (block '(
+  (let res (Struct))
+  (let res (AddMember res '"x" (Int64 '"1")))
+  (return (AsList res))
+))))
+
+(let out2 (FlatMap (AsList (Void)) fill))
+(let world (Write! world sink (Key '('table (String 'Output2))) out2 '('('mode 'renew))))
+(let world (Commit! world sink))
+
+(let r (Read! world source (Key '('table (String '"Output"))) (Void) '()))
+(let world (Left! r))
+(let input (Right! r))
+
+(let world (Write! world result (Key) input '('('type) '('autoref))))
+(let world (Commit! world result))
+(let world (Commit! world sink))
+
+(return world)
+)

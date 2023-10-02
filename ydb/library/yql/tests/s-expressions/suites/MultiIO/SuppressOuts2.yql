@@ -1,0 +1,39 @@
+(
+(let mr_source (DataSource 'yt 'plato))
+(let mr_sink (DataSink 'yt 'plato))
+
+(let x (Read! world mr_source (Key '('table (String 'Input1))) (Void) '()))
+(let world (Left! x))
+(let data (Right! x))
+
+(let structType (StructType
+    '('key (DataType 'String))
+    '('subkey (DataType 'String))
+    '('value (DataType 'String))
+))
+
+(let varTuple (VariantType (TupleType structType structType structType)))
+
+(let data (Map data (lambda '(item) (block '(
+    (let intValue (FromString (Member item 'key) 'Int32))
+    (let mod (Coalesce (% intValue (Int32 '3)) (Int32 '0)))
+    (let res
+        (If (Equal mod (Int32 '0))
+            (Variant item '0 varTuple)
+            (If (Equal mod (Int32 '1))
+                (Variant item '1 varTuple)
+                (Variant item '2 varTuple)
+            )
+        )
+    )
+   (return res)
+)))))
+
+(let dataTuple (Demux data))
+
+(let world (Write! world mr_sink (Key '('table (String 'Output1))) (Nth dataTuple '0) '('('mode 'renew))))
+(let world (Write! world mr_sink (Key '('table (String 'Output2))) (Nth dataTuple '2) '('('mode 'renew))))
+
+(let world (Commit! world mr_sink))
+(return world)
+)

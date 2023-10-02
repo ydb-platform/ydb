@@ -1,0 +1,23 @@
+{"_yql_row_spec"={
+	"Type"=["StructType";[
+		["i8";["DataType";"Int8"]];
+		["i16";["DataType";"Int16"]];
+		["i32";["DataType";"Int32"]];
+		["i64";["DataType";"Int64"]];
+
+		["i8opt";["OptionalType"; ["DataType";"Int8"]]];
+		["i16opt";["OptionalType"; ["DataType";"Int16"]]];
+		["i32opt";["OptionalType"; ["DataType";"Int32"]]];
+		["i64opt";["OptionalType"; ["DataType";"Int64"]]];
+
+                ["ui8";["DataType";"Uint8"]];
+                ["ui16";["DataType";"Uint16"]];
+                ["ui32";["DataType";"Uint32"]];
+                ["ui64";["DataType";"Uint64"]];
+
+                ["ui8opt";["OptionalType"; ["DataType";"Uint8"]]];
+                ["ui16opt";["OptionalType"; ["DataType";"Uint16"]]];
+                ["ui32opt";["OptionalType"; ["DataType";"Uint32"]]];
+                ["ui64opt";["OptionalType"; ["DataType";"Uint64"]]];
+	]];
+}}

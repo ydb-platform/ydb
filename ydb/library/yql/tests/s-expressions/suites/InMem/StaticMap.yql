@@ -1,0 +1,18 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let default (lambda '(x) (block '(
+   (return (Coalesce x (Default (OptionalItemType (TypeOf x)))))
+))))
+
+(let tuple '((Just (Uint32 '1)) (Just (String 'X))))
+(let struct (AsStruct '('a (Nothing (OptionalType (DataType 'Uint32)))) '('b (Just (String 'Y)))))
+
+(let world (Write! world res_sink (Key) (StaticMap tuple default) '('('type))))
+(let world (Write! world res_sink (Key) (StaticMap struct default) '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

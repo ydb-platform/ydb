@@ -1,0 +1,11 @@
+/* postgres can not */
+use plato;
+
+$data = (SELECT key as kk, subkey as sk, value as val FROM plato.Input WHERE key == '075');
+
+SELECT
+  *
+FROM
+  Input
+WHERE
+  key = $data; -- $data should have one column

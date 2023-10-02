@@ -1,0 +1,10 @@
+{
+    "schema" = <"strict" = %true;"unique_keys" = %false>
+        [
+            {
+                "name" = "value";
+                "sort_order" = "ascending";
+                "type" = "int64"
+            }
+        ]
+}

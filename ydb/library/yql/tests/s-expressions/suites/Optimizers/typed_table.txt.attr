@@ -1,0 +1,32 @@
+{
+    "_yql_view_opt_struct"="SELECT AsList(1,2,3) as b FROM self;";
+    "_yql_syntax_version_opt_struct"=1;
+    "_yql_row_spec" = {
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "key";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "subkey";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "value";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ]
+            ]
+        ]
+    }
+}

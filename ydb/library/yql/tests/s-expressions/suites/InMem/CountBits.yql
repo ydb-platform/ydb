@@ -1,0 +1,18 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) (CountBits (Int8 '-1)) '('('type))))
+(let world (Write! world res_sink (Key) (CountBits (Uint8 '7)) '('('type))))
+(let world (Write! world res_sink (Key) (CountBits (Int16 '-1)) '('('type))))
+(let world (Write! world res_sink (Key) (CountBits (Uint16 '16)) '('('type))))
+(let world (Write! world res_sink (Key) (CountBits (Int32 '1)) '('('type))))
+(let world (Write! world res_sink (Key) (CountBits (Uint32 '0)) '('('type))))
+(let world (Write! world res_sink (Key) (CountBits (Int64 '-7)) '('('type))))
+(let world (Write! world res_sink (Key) (CountBits (Uint64 '7)) '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+)

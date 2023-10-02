@@ -1,0 +1,29 @@
+(
+(let world (Configure! world (DataSource '"yt" '"$all") '"Attr" '"mapjoinlimit" '"1m"))
+(let mr_source (DataSource 'yt 'plato))
+(let x (Read! world mr_source (Key '('table (String 'Input1))) '('key 'subkey 'value) '()))
+(let world (Left! x))
+(let table1 (Right! x))
+(let table1 (Map table1 (lambda '(item) (AsStruct
+  '('key (Just (Member item 'key)))
+  '('subkey (Just (Member item 'subkey)))
+  '('value (Just (Member item 'value)))))))
+
+(let x (Read! world mr_source (Key '('table (String 'Input2))) '('key 'subkey 'value) '()))
+(let world (Left! x))
+(let table2 (Right! x))
+
+(let table2 (Map table2 (lambda '(item) (AsStruct
+  '('key (Just (Member item 'key)))
+  '('subkey (Just (Member item 'subkey)))
+  '('value (Just (Member item 'value)))))))
+
+(let join (EquiJoin '(table1 'a) '(table2 'b)
+    '('Right '"a" '"b" '('"a" '"key") '('"b" '"key" ) '('('left 'unique))) 
+    '()))
+
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) join '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

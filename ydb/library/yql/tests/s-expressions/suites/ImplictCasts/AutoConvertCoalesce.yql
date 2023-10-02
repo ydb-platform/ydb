@@ -1,0 +1,16 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let data (Coalesce (Nothing (OptionalType (DataType 'Uint32))) (Uint64 '1)))
+(let world (Write! world res_sink (Key) data '('('type))))
+(let data (Coalesce (Nothing (OptionalType (DataType 'Uint64))) (Int64 '2)))
+(let world (Write! world res_sink (Key) data '('('type))))
+(let data (Coalesce (Nothing (OptionalType (DataType 'Int64))) (+ (Uint32 '1) (Uint32 '2))))
+(let world (Write! world res_sink (Key) data '('('type))))
+(let data (Coalesce (Nothing (OptionalType (DataType 'Uint32))) (Just (Uint32 '4))))
+(let world (Write! world res_sink (Key) data '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

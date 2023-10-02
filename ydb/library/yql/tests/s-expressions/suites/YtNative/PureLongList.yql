@@ -1,0 +1,15 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+(let res_sink (DataSink 'result))
+(let data (AsList (Uint32 '1)))
+(let data (Extend data data data data data))
+(let data (Extend data data data data data))
+(let data (Extend data data data data data))
+(let data (Extend data data data data data))
+(let data (Extend data data))
+(let world (Write! world res_sink (Key) data '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

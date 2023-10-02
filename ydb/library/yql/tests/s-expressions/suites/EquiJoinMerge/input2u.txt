@@ -1,0 +1,6 @@
+{"key"="075";"subkey"=1;"value2"=3.};
+{"key"="150";"subkey"=1;"value2"=5.5};
+{"key"="800";"subkey"=1;"value2"=1.};
+{"key"="801";"subkey"=1;"value2"=1.1};
+{"key"="802";"subkey"=1;"value2"=1.2};
+{"key"="803";"subkey"=1;"value2"=1.3};

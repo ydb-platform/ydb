@@ -1,0 +1,111 @@
+#USE plato;
+#
+#$sample = (SELECT a.key as key, a.value as value FROM Input as a Join Input as b ON a.key = b.key);
+#
+#select key, count(*) from $sample group by key;
+#select value, count(*) from $sample group by value;
+
+(
+(let world (block '(
+  (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"Input"))) '('"key" '"value") '()))
+  (let world (Left! x))
+  (let table0 (Right! x))
+  (let output (block '(
+    (let select (block '(
+      (let core (block '(
+        (let select (block '(
+          (let core (EquiJoin '(table0 '"a") '(table0 '"b") '('Inner '"a" '"b" '('"a" '"key") '('"b" '"key") '()) '()))
+          (let core (FlatMap core (lambda '(row) (block '(
+            (let res (Struct))
+            (let res (AddMember res '"key" (Member row '"a.key")))
+            (let res (AddMember res '"value" (Member row '"a.value")))
+            (let res (AsList res))
+            (return res)
+          )))))
+          (return core)
+        )))
+        (return select)
+      )))
+      (let core (block '(
+        (let Count2_create (lambda '(row) (Uint64 '1)))
+        (let Count2_update (lambda '(row state) (OptionalReduce state (Uint64 '1) (lambda '(a b) (+ a b)))))
+        (let Count2_save (lambda '(state) state))
+        (let Count2_load (lambda '(item) item))
+        (let Count2_merge (lambda '(a b) (OptionalReduce a b (lambda '(a b) (+ a b)))))
+        (let Count2_finish (lambda '(state) state))
+        (return (Aggregate core '('"key") '('('Count2 (AggregationTraits (ListItemType (TypeOf core)) Count2_create Count2_update Count2_save Count2_load Count2_merge Count2_finish (Uint64 '0))))))
+      )))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (Struct))
+        (let res (AddMember res '"key" (Member row '"key")))
+        (let res (AddMember res '"column1" (Member row 'Count2)))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (let core (Sort core (Bool 'true) (lambda '(row) (Member row '"key"))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"key" '"column1")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"Input"))) '('"key" '"value") '()))
+  (let world (Left! x))
+  (let table0 (Right! x))
+  (let output (block '(
+    (let select (block '(
+      (let core (block '(
+        (let select (block '(
+          (let core (EquiJoin '(table0 '"a") '(table0 '"b") '('Inner '"a" '"b" '('"a" '"key") '('"b" '"key") '()) '()))
+          (let core (FlatMap core (lambda '(row) (block '(
+            (let res (Struct))
+            (let res (AddMember res '"key" (Member row '"a.key")))
+            (let res (AddMember res '"value" (Member row '"a.value")))
+            (let res (AsList res))
+            (return res)
+          )))))
+          (return core)
+        )))
+        (return select)
+      )))
+      (let core (block '(
+        (let Count4_create (lambda '(row) (Uint64 '1)))
+        (let Count4_update (lambda '(row state) (OptionalReduce state (Uint64 '1) (lambda '(a b) (+ a b)))))
+        (let Count4_save (lambda '(state) state))
+        (let Count4_load (lambda '(item) item))
+        (let Count4_merge (lambda '(a b) (OptionalReduce a b (lambda '(a b) (+ a b)))))
+        (let Count4_finish (lambda '(state) state))
+        (return (Aggregate core '('"value") '('('Count4 (AggregationTraits (ListItemType (TypeOf core)) Count4_create Count4_update Count4_save Count4_load Count4_merge Count4_finish (Uint64 '0))))))
+      )))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (Struct))
+        (let res (AddMember res '"value" (Member row '"value")))
+        (let res (AddMember res '"column1" (Member row 'Count4)))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (let core (Sort core (Bool 'true) (lambda '(row) (Member row '"value"))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"value" '"column1")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let plato_sink (DataSink '"yt" '"plato"))
+  (let world (Commit! world plato_sink))
+  (return world)
+)))
+(return world)
+)

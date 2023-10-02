@@ -1,0 +1,1 @@
+{"o_clerk"="Clerk#000006222";"o_comment"=" ironic platelets. final instructions haggle ";"o_custkey"=1110145;"o_orderdate"="\xFF\xFF\xF6k";"o_orderkey"=55714306;"o_orderpriority"="4-NOT SPECIFIED";"o_orderstatus"="F";"o_shippriority"=0;"o_totalprice"="\0\3\0\1\0\0\0\1\0\x10\x1A\xB2\x1BX";};

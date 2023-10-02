@@ -1,0 +1,23 @@
+(
+
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+(let res_sink (DataSink 'result))
+
+# Dict<Int32, String> -> Dict<Uint8, Utf8> (full)
+(let targetType (DictType (DataType 'Uint8) (DataType 'Utf8)))
+(let src (AsDict '((Int32 '1) (String 'one)) '((Int32 '2) (String 'two)) '((Int32 '3) (String 'three))))
+(let cast (SafeCast src targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+
+# Dict<Int32, String> -> Dict<Int64, Utf8> (less)
+(let targetType (DictType (DataType 'Int64) (DataType 'Utf8)))
+(let src (AsDict '((Int32 '1) (String 'one)) '((Int32 '2) (String '"\xff\xfe")) '((Int32 '3) (String 'three))))
+(let cast (SafeCast src targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+
+(let world (Commit! world res_sink))
+
+(return world)
+
+)

@@ -1,0 +1,3 @@
+/* postgres can not */
+$x = a.b[0];
+SELECT count(*) FROM $x;

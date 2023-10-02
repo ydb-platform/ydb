@@ -1,0 +1,39 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+# prepare python udf
+(let ui64 (DataType 'Uint64))
+(let str (DataType 'String))
+(let funcType (CallableType '() '(ui64) '(ui64)))
+
+(let udfType (CallableType '() '(funcType) '(ui64)))
+(let udfScript (String '@@
+def create_counter(start):
+    def counter(step):
+        v = counter.x
+        counter.x += step
+        return v
+
+    counter.x = start
+    return counter
+@@))
+
+(let udf (ScriptUdf 'Python 'create_counter udfType udfScript))
+
+# call udf
+(let counter (Apply udf (Uint64 '1)))
+(let result (AsList
+    (Apply counter (Uint64 '1))
+    (Apply counter (Uint64 '2))
+    (Apply counter (Uint64 '3))
+    (Apply counter (Uint64 '4))
+))
+
+# output result with type
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) result '( '('type) )))
+
+# finish
+(return (Commit! world res_sink))
+)

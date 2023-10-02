@@ -1,0 +1,17 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let data (AsList (String 'x) (String 'c) (String 'e) (String 'a) (String 'z) (String 'y) (String 'f)))
+(let data (Reverse data))
+(let data (Skip data (Uint64 '2)))
+(let data (Take data (Uint64 '3)))
+(let data (OrderedMap data (lambda '(x) '(x x))))
+(let data (ToFlow data))
+(let data (Collect data))
+(let world (Write! world res_sink (Key) data '()))
+(let world (Commit! world res_sink))
+(return world)
+)

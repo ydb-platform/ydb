@@ -1,0 +1,21 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let list (AsList
+'((Uint32 '1) (String 'a))
+'((Uint32 '2) (String 'b))
+'((Uint32 '1) (String 'c))))
+
+(let handler (lambda '(stream) (block '(
+   (return (Map stream (lambda '(x) (Nth x '1))))
+))))
+
+(let data (LMap list handler))
+
+(let world (Write! world res_sink (Key) data '()))
+(let world (Commit! world res_sink))
+(return world)
+)

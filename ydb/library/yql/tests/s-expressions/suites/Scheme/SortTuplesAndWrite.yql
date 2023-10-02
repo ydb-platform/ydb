@@ -1,0 +1,16 @@
+(
+(let mr_source (DataSource 'yt 'plato))
+(let data (block '(
+  (let x (Read! world mr_source (Key '('table (String 'Input))) '('key 'subkey 'value) '()))
+  (let world (Left! x))
+  (let input (Right! x))
+  (let output (Sort input '((Bool 'true) (Bool 'true)) (lambda '(item) (block '(
+     (return '((Member item 'value) (Member item 'subkey)))
+  )))))
+  (return output)
+)))
+(let mr_sink (DataSink 'yt (quote plato)))
+(let world (Write! world mr_sink (Key '('table (String 'Output))) data '()))
+(let world (Commit! world mr_sink))
+(return world)
+)

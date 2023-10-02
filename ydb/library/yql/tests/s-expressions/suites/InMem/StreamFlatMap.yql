@@ -1,0 +1,21 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let list (AsList (Int32 '1) (Int32 '2) (Int32 '3)))
+(let world (Write! world res_sink (Key) (Collect (FlatMap (Iterator list (DependsOn (String 'A))) 
+   (lambda '(x) (AsList x x)))) '('('type))))
+(let add (lambda '(y) (+ y (Int32 '10))))
+(let world (Write! world res_sink (Key) (Collect (FlatMap (Iterator list (DependsOn (String 'B))) 
+   (lambda '(x) (Map (/ (Int32 '5) (- (Int32 '2) x)) add)))) '('('type))))
+(let world (Write! world res_sink (Key) (Collect (FlatMap (Iterator list (DependsOn (String 'C))) 
+   (lambda '(x) (Iterator (AsList x x))))) '('('type))))
+(let world (Write! world res_sink (Key) (Collect (FlatMap list
+   (lambda '(x) (Iterator (AsList x x))))) '('('type))))
+(let world (Write! world res_sink (Key) (Collect (FlatMap (/ (Int32 '3) (Int32 '1))
+   (lambda '(x) (Iterator (AsList x x))))) '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

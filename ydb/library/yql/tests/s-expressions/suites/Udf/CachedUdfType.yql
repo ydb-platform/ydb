@@ -1,0 +1,14 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let cachedType (CallableType '() '((DataType 'String)) '((OptionalType (DataType 'String)))))
+(let udf (Udf 'SimpleUdf.Echo (Void) (Void) '"" cachedType))
+(let x (String 'aaa))
+(let data (Apply udf x))
+(let world (Write! world res_sink (Key) data '()))
+(let world (Commit! world res_sink))
+(return world)
+)

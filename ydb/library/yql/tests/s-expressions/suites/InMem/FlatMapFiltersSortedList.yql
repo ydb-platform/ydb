@@ -1,0 +1,22 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let list (AsList
+(AsStruct '('a (Int32 '7)) '('b (String 'two)))
+(AsStruct '('a (Int32 '1)) '('b (String 'one)))
+(AsStruct '('a (Int32 '3)) '('b (String 'two)))
+(AsStruct '('a (Int32 '5)) '('b (String 'one)))
+(AsStruct '('a (Int32 '5)) '('b (String 'two)))
+))
+
+(let keyExtractor (lambda '(x) '((Member x 'a)(Member x 'b))))
+(let data (ListSort list '((Bool 'true) (Bool 'false)) keyExtractor))
+(let mapped (ListFlatMap data (lambda '(x) (ListIf (Greater (Member x 'a) (Uint64 '2)) x) )))
+
+(let world (Write! world res_sink (Key) mapped '()))
+(let world (Commit! world res_sink))
+(return world)
+)

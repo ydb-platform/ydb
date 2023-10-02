@@ -1,0 +1,32 @@
+(
+# read data from Input table
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+
+(let str1 (AsStruct '('a (Uint32 '1)) '('b (String 'a))))
+(let str2 (AsStruct '('a (Uint32 '2)) '('b (String 'b))))
+(let list (AsList str1 str2))
+
+(let res (FlatMap (FlatMap (Iterator list (DependsOn (String '1))) (lambda '(r) (OptionalIf (> (Member r 'a) (Uint32 '0)) r))) (lambda '(r) (ToStream (Just r)))))
+(let world (Write! world res_sink (Key) (ForwardList res) '()))
+
+(let res (FlatMap (FlatMap (Iterator list (DependsOn (String '2))) (lambda '(r) (OptionalIf (> (Member r 'a) (Uint32 '0)) r))) (lambda '(r) (AsList r r))))
+(let world (Write! world res_sink (Key) (ForwardList res) '()))
+
+(let res (FlatMap (FlatMap (Iterator list (DependsOn (String '3))) (lambda '(r) (OptionalIf (> (Member r 'a) (Uint32 '0)) r))) (lambda '(r) (OptionalIf (> (Member r 'b) (String 'a)) r))))
+(let world (Write! world res_sink (Key) (ForwardList res) '()))
+
+(let res (FlatMap (FlatMap (Iterator list (DependsOn (String '4))) (lambda '(r) (ListIf (> (Member r 'a) (Uint32 '0)) r))) (lambda '(r) (ToStream (Just r)))))
+(let world (Write! world res_sink (Key) (ForwardList res) '()))
+
+(let res (FlatMap (FlatMap (Iterator list (DependsOn (String '5))) (lambda '(r) (ListIf (> (Member r 'a) (Uint32 '0)) r))) (lambda '(r) (AsList r r))))
+(let world (Write! world res_sink (Key) (ForwardList res) '()))
+
+(let res (FlatMap (FlatMap (Iterator list (DependsOn (String '6))) (lambda '(r) (ListIf (> (Member r 'a) (Uint32 '0)) r))) (lambda '(r) (OptionalIf (> (Member r 'b) (String 'a)) r))))
+(let world (Write! world res_sink (Key) (ForwardList res) '()))
+
+(let world (Commit! world res_sink))
+(return world)
+)

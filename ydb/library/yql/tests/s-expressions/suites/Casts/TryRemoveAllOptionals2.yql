@@ -1,0 +1,24 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+
+### Tuple
+
+# (Int8?, String, (Int32, Int64)?, Just(Nothing(String?)) (success)
+(let value '((Just (Int8 '1)) (String 'str) (Just '((Int32 '2) (Int64 '3))) (Just (Nothing (OptionalType (DataType 'String))))))
+(let tryRemoveAllOptionalsResult (TryRemoveAllOptionals value))
+(let world (Write! world res_sink (Key) tryRemoveAllOptionalsResult '('('type))))
+
+### Struct
+
+# Struct<Int8?, String, (Int32, Int64)?> (success)
+(let value (AsStruct '('a (Just (Int8 '1))) '('b (String 'str)) '('c (Just '((Int32 '2) (Int64 '3)))) '('d (Just (Nothing (OptionalType (DataType 'String)))))))
+(let tryRemoveAllOptionalsResult (TryRemoveAllOptionals value))
+(let world (Write! world res_sink (Key) tryRemoveAllOptionalsResult '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+
+)

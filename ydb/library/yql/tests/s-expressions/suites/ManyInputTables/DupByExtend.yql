@@ -1,0 +1,16 @@
+(
+#comment
+(let mr_source (DataSource 'yt 'plato))
+(let x (Read! world mr_source (Key '('table (String 'Input1))) '('key 'subkey 'value) '()))
+(let world (Left! x))
+(let table1 (Right! x))
+(let offset (Uint64 '5))
+(let result (Extend table1 table1))
+(let mr_sink (DataSink 'yt (quote plato)))
+(let world (Write! world mr_sink (Key '('table (String 'Output))) result '()))
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) result '()))
+(let world (Commit! world mr_sink))
+(let world (Commit! world res_sink))
+(return world)
+)

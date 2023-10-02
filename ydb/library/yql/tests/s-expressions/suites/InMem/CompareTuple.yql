@@ -1,0 +1,45 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+
+(let write (lambda '(world x y) (block '(
+   (let world (Write! world res_sink (Key) (String '==============) '()))
+   (let world (Write! world res_sink (Key) (== x y) '('('type))))
+   (let world (Write! world res_sink (Key) (!= x y) '('('type))))
+   (let world (Write! world res_sink (Key) (< x y) '('('type))))
+   (let world (Write! world res_sink (Key) (<= x y) '('('type))))
+   (let world (Write! world res_sink (Key) (> x y) '('('type))))
+   (let world (Write! world res_sink (Key) (>= x y) '('('type))))
+   (return world)
+))))
+
+(let world (Apply write world '() '()))
+(let world (Apply write world (Just '()) '()))
+(let world (Apply write world '() (Just '())))
+(let world (Apply write world (Just '()) (Just '())))
+
+(let world (Apply write world '((Int32 '1)) '((Uint64 '1))))
+(let world (Apply write world '((Int32 '1)) '((Uint64 '2))))
+(let world (Apply write world '((Int32 '3)) '((Uint64 '2))))
+
+(let world (Apply write world (Just '((Int32 '1))) '((Uint64 '1))))
+(let world (Apply write world '((Int32 '1)) (Just '((Uint64 '1)))))
+(let world (Apply write world '((Just (Int32 '1))) '((Uint64 '1))))
+(let world (Apply write world '((Int32 '1)) '((Just (Uint64 '1)))))
+(let world (Apply write world (Just '((Just (Int32 '1)))) '((Uint64 '1))))
+(let world (Apply write world (Just '((Just (Int32 '1)))) '((Just (Uint64 '1)))))
+(let world (Apply write world (Just '((Just (Int32 '1)))) (Just '((Just (Uint64 '1))))))
+
+(let world (Apply write world '((Int32 '1) (String 'a)) '((Uint64 '1) (String 'a))))
+(let world (Apply write world '((Int32 '1) (String 'a)) '((Uint64 '1) (String 'b))))
+(let world (Apply write world '((Int32 '1) (String 'b)) '((Uint64 '1) (String 'a))))
+(let world (Apply write world '((Int32 '1) (String 'a)) '((Uint64 '2) (String 'a))))
+(let world (Apply write world '((Int32 '2) (String 'a)) '((Uint64 '1) (String 'b))))
+(let world (Apply write world '((Int32 '2) (String 'b)) '((Uint64 '1) (String 'a))))
+
+(let world (Commit! world res_sink))
+(return world)
+)

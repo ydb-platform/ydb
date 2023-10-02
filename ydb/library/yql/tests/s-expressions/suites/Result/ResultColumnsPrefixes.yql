@@ -1,0 +1,13 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let row1 (AsStruct '('key1 (String 'key1)) '('key2 (String '.)) '('aaa (String 'value1))))
+(let row2 (AsStruct '('key1 (String 'key2)) '('key2 (String '.)) '('aaa (String 'value2))))
+(let table1 (AsList row1 row2))
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) table1 '('('columns '('('prefix 'key) 'aaa)) '('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

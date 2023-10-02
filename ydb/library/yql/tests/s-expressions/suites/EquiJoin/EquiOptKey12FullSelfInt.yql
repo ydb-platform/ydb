@@ -1,0 +1,27 @@
+(
+(let mr_source (DataSource 'yt 'plato))
+(let x (Read! world mr_source (Key '('table (String 'InputSelf2))) '('key 'subkey 'value) '()))
+(let world (Left! x))
+(let table (Right! x))
+(let tableOptKVInt (Map table (lambda '(row) (block '(
+   (return (AsStruct
+     '('key (FromString (Member row 'key) 'Uint32))
+     '('subkey (Just (Member row 'subkey)))
+     '('value (FromString (Member row 'value) 'Uint32))
+   ))
+)))))
+(let tableKVInt (Map table (lambda '(row) (block '(
+   (return (AsStruct
+     '('key (Coalesce (FromString (Member row 'key) 'Uint32) (Uint32 '888)))
+     '('subkey (Just (Member row 'subkey)))
+     '('value (Coalesce (FromString (Member row 'value) 'Uint32) (Uint32 '999)))
+   ))
+)))))
+(let join (EquiJoin '(tableOptKVInt 'a) '(tableOptKVInt 'b) '('Full '"a" '"b" '('"a" '"key") '('"b" '"value" ) '()) '()))
+(let res_sink (DataSink 'result))
+(let sortDir '((Bool 'true) (Bool 'true) (Bool 'true) (Bool 'true)))
+(let keySelector (lambda '(row) '((Member row '"a.key") (Member row '"a.subkey") (Member row '"b.key") (Member row '"b.subkey"))))
+(let world (Write! world res_sink (Key) (Sort join sortDir keySelector) '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

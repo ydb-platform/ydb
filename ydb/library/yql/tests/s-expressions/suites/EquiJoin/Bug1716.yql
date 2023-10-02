@@ -1,0 +1,305 @@
+(
+(let data.source (DataSource 'yt 'plato))
+(let data.sink (DataSink 'yt 'plato))
+
+(let first (String 'Input1))
+(let second (String 'Input2))
+(let output (String 'Output))
+
+(let first.read
+    (Read! world data.source 
+        (Key '('table first))
+        (Void)
+        '('('infer_scheme))
+    )
+)
+
+(let world (Left! first.read))
+(let first.read (Right! first.read))
+
+(let second.read
+    (Read! world data.source 
+        (Key '('table second))
+        (Void)
+        '('('infer_scheme))
+    )
+)
+
+(let world (Left! second.read))
+(let second.read (Right! second.read))
+
+(let data
+    (EquiJoin
+        '((RemoveSystemMembers first.read) 'left) '((RemoveSystemMembers second.read) 'right)
+        '('Inner
+          'left
+          'right
+          # '('left 'id 'left 'id.nonzero 'left 'name 'left 'name.nonzero)
+          '('left 'id 'left 'name)
+          # '('right 'id 'right 'id.nonzero 'right 'name 'right 'name.nonzero)
+          '('right 'id 'right 'name)
+          '('('left 'small) '('right 'small)))
+        '('('flatten))
+    )
+)
+
+(let data
+    (Sort data
+        '((Bool 'true) (Bool 'true))
+        (lambda '(row) '((Member row 'id) (Member row 'name)))
+    )
+)
+
+(let world
+    (Write! world (DataSink 'result)
+        (Key)
+        data
+        '('('type))
+    )
+)
+
+(let data
+    (EquiJoin
+        '((RemoveSystemMembers first.read) 'left) '((RemoveSystemMembers second.read) 'right)
+        '('Left
+          'left
+          'right
+          # '('left 'id 'left 'id.nonzero 'left 'name 'left 'name.nonzero)
+          '('left 'id 'left 'name)
+          # '('right 'id 'right 'id.nonzero 'right 'name 'right 'name.nonzero)
+          '('right 'id 'right 'name)
+          '('('left 'small) '('right 'small)))
+        '('('flatten))
+    )
+)
+
+(let data
+    (Sort data
+        '((Bool 'true) (Bool 'true))
+        (lambda '(row) '((Member row 'id) (Member row 'name)))
+    )
+)
+
+(let world
+    (Write! world (DataSink 'result)
+        (Key)
+        data
+        '('('type))
+    )
+)
+
+
+(let data
+    (EquiJoin
+        '((RemoveSystemMembers first.read) 'left) '((RemoveSystemMembers second.read) 'right)
+        '('Right
+          'left
+          'right
+          # '('left 'id 'left 'id.nonzero 'left 'name 'left 'name.nonzero)
+          '('left 'id 'left 'name)
+          # '('right 'id 'right 'id.nonzero 'right 'name 'right 'name.nonzero)
+          '('right 'id 'right 'name)
+          '('('left 'small) '('right 'small)))
+        '('('flatten))
+    )
+)
+
+(let data
+    (Sort data
+        '((Bool 'true) (Bool 'true))
+        (lambda '(row) '((Member row 'id) (Member row 'name)))
+    )
+)
+
+(let world
+    (Write! world (DataSink 'result)
+        (Key)
+        data
+        '('('type))
+    )
+)
+
+(let data
+    (EquiJoin
+        '((RemoveSystemMembers first.read) 'left) '((RemoveSystemMembers second.read) 'right)
+        '('Full
+          'left
+          'right
+          # '('left 'id 'left 'id.nonzero 'left 'name 'left 'name.nonzero)
+          '('left 'id 'left 'name)
+          # '('right 'id 'right 'id.nonzero 'right 'name 'right 'name.nonzero)
+          '('right 'id 'right 'name)
+          '('('left 'small) '('right 'small)))
+        '('('flatten))
+    )
+)
+
+(let data
+    (Sort data
+        '((Bool 'true) (Bool 'true))
+        (lambda '(row) '((Member row 'id) (Member row 'name)))
+    )
+)
+
+(let world
+    (Write! world (DataSink 'result)
+        (Key)
+        data
+        '('('type))
+    )
+)
+
+(let data
+    (EquiJoin
+        '((RemoveSystemMembers first.read) 'left) '((RemoveSystemMembers second.read) 'right)
+        '('LeftOnly
+          'left
+          'right
+          # '('left 'id 'left 'id.nonzero 'left 'name 'left 'name.nonzero)
+          '('left 'id 'left 'name)
+          # '('right 'id 'right 'id.nonzero 'right 'name 'right 'name.nonzero)
+          '('right 'id 'right 'name)
+          '('('left 'small) '('right 'small)))
+        '('('flatten))
+    )
+)
+
+(let data
+    (Sort data
+        '((Bool 'true) (Bool 'true))
+        (lambda '(row) '((Member row 'id) (Member row 'name)))
+    )
+)
+
+(let world
+    (Write! world (DataSink 'result)
+        (Key)
+        data
+        '('('type))
+    )
+)
+
+(let data
+    (EquiJoin
+        '((RemoveSystemMembers first.read) 'left) '((RemoveSystemMembers second.read) 'right)
+        '('LeftSemi
+          'left
+          'right
+          # '('left 'id 'left 'id.nonzero 'left 'name 'left 'name.nonzero)
+          '('left 'id 'left 'name)
+          # '('right 'id 'right 'id.nonzero 'right 'name 'right 'name.nonzero)
+          '('right 'id 'right 'name)
+          '('('left 'small) '('right 'small)))
+        '('('flatten))
+    )
+)
+
+(let data
+    (Sort data
+        '((Bool 'true) (Bool 'true))
+        (lambda '(row) '((Member row 'id) (Member row 'name)))
+    )
+)
+
+(let world
+    (Write! world (DataSink 'result)
+        (Key)
+        data
+        '('('type))
+    )
+)
+
+(let data
+    (EquiJoin
+        '((RemoveSystemMembers first.read) 'left) '((RemoveSystemMembers second.read) 'right)
+        '('RightOnly
+          'left
+          'right
+          # '('left 'id 'left 'id.nonzero 'left 'name 'left 'name.nonzero)
+          '('left 'id 'left 'name)
+          # '('right 'id 'right 'id.nonzero 'right 'name 'right 'name.nonzero)
+          '('right 'id 'right 'name)
+          '('('left 'small) '('right 'small)))
+        '('('flatten))
+    )
+)
+
+(let data
+    (Sort data
+        '((Bool 'true) (Bool 'true))
+        (lambda '(row) '((Member row 'id) (Member row 'name)))
+    )
+)
+
+(let world
+    (Write! world (DataSink 'result)
+        (Key)
+        data
+        '('('type))
+    )
+)
+
+(let data
+    (EquiJoin
+        '((RemoveSystemMembers first.read) 'left) '((RemoveSystemMembers second.read) 'right)
+        '('RightSemi
+          'left
+          'right
+          # '('left 'id 'left 'id.nonzero 'left 'name 'left 'name.nonzero)
+          '('left 'id 'left 'name)
+          # '('right 'id 'right 'id.nonzero 'right 'name 'right 'name.nonzero)
+          '('right 'id 'right 'name)
+          '('('left 'small) '('right 'small)))
+        '('('flatten))
+    )
+)
+
+(let data
+    (Sort data
+        '((Bool 'true) (Bool 'true))
+        (lambda '(row) '((Member row 'id) (Member row 'name)))
+    )
+)
+
+(let world
+    (Write! world (DataSink 'result)
+        (Key)
+        data
+        '('('type))
+    )
+)
+
+(let data
+    (EquiJoin
+        '((RemoveSystemMembers first.read) 'left) '((RemoveSystemMembers second.read) 'right)
+        '('Exclusion
+          'left
+          'right
+          # '('left 'id 'left 'id.nonzero 'left 'name 'left 'name.nonzero)
+          '('left 'id 'left 'name)
+          # '('right 'id 'right 'id.nonzero 'right 'name 'right 'name.nonzero)
+          '('right 'id 'right 'name)
+          '('('left 'small) '('right 'small)))
+        '('('flatten))
+    )
+)
+
+(let data
+    (Sort data
+        '((Bool 'true) (Bool 'true))
+        (lambda '(row) '((Member row 'id) (Member row 'name)))
+    )
+)
+
+(let world
+    (Write! world (DataSink 'result)
+        (Key)
+        data
+        '('('type))
+    )
+)
+
+(let world (Commit! world (DataSink 'result)))
+
+(return world)
+)

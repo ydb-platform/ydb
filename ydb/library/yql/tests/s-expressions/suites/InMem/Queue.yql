@@ -1,0 +1,25 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+
+(let queue (QueueCreate (DataType 'Uint32) (Uint64 '4) (Uint64 '2)))
+
+(let queue (QueuePush queue (Int32 '1)))
+(let queue (QueuePush queue (Int32 '2)))
+
+(let result '((QueuePeek queue (Uint64 '0)) (QueuePeek queue (Uint64 '1)) (QueuePeek queue (Uint64 '2)) (QueuePeek queue (Uint64 '3))))
+(let world (Write! world res_sink (Key) result '('('type))))
+
+(let queue (QueuePop queue))
+(let queue (QueuePop queue))
+(let queue (QueuePush queue (Int32 '3)))
+
+(let result '((QueuePeek queue (Uint64 '0)) (QueuePeek queue (Uint64 '1)) (QueuePeek queue (Uint64 '2)) (QueuePeek queue (Uint64 '3))))
+(let world (Write! world res_sink (Key) result '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+
+)

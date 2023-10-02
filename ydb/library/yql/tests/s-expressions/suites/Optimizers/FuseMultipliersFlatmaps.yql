@@ -1,0 +1,20 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let data (AsList
+  (AsStruct '('data (String 'a)))
+  (AsStruct '('data (String 'b)))
+  (AsStruct '('data (String 'c)))
+))
+
+(let one (OrderedFlatMap data (lambda '(x) (AsList x (AsStruct '('data (String 'z)))))))
+(let two (OrderedFlatMap one (lambda '(x) (AsList (AsStruct '('data (String 'y))) x x))))
+(let three (OrderedFlatMap two (lambda '(x) (AsList x (AsStruct '('data (String 'x))) x))))
+(let world (Write! world res_sink (Key) three '()))
+(let world (Commit! world res_sink))
+(return world)
+)
+

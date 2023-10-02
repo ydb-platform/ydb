@@ -1,0 +1,20 @@
+(
+(let mr_source (DataSource 'yt 'plato))
+(let x (Read! world mr_source (Key '('table (String 'InputSelf2))) '('key 'subkey 'value) '()))
+(let world (Left! x))
+(let table (Right! x))
+(let tableKVInt (Map table (lambda '(row) (block '(
+   (return (AsStruct
+     '('key (Coalesce (FromString (Member row 'key) 'Uint32) (Uint32 '666)))
+     '('subkey (Just (Member row 'subkey)))
+     '('value (Coalesce (FromString (Member row 'value) 'Uint32) (Uint32 '777)))
+   ))
+)))))
+(let tableKVInt1 (Take tableKVInt (Uint64 '6)))
+(let tableKVInt2 (Take tableKVInt (Uint64 '6)))
+(let join (EquiJoin '(tableKVInt1 'a) '(tableKVInt2 'b) '('Inner '"a" '"b" '('"a" '"key") '('"b" '"value" ) '()) '()))
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) join '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

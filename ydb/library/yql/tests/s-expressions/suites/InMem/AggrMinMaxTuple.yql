@@ -1,0 +1,35 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+
+(let write (lambda '(world x y) (block '(
+   (let world (Write! world res_sink (Key) (String '==============) '()))
+   (let world (Write! world res_sink (Key) (AggrMin x y) '('('type))))
+   (let world (Write! world res_sink (Key) (AggrMax x y) '('('type))))
+   (return world)
+))))
+
+(let world (Apply write world '() '()))
+(let world (Apply write world (Just '()) (Just '())))
+
+(let world (Apply write world '((Int64 '1)) '((Int64 '1))))
+(let world (Apply write world '((Int64 '1)) '((Int64 '2))))
+(let world (Apply write world '((Uint64 '3)) '((Uint64 '2))))
+
+(let world (Apply write world '((Just (Int32 '1))) '((Just (Int32 '2)))))
+(let world (Apply write world (Just '((Just (Int32 '1)))) (Just '((Just (Int32 '3))))))
+
+(let world (Apply write world '((Int8 '1) (String 'a)) '((Int8 '1) (String 'a))))
+(let world (Apply write world '((Int8 '1) (String 'a)) '((Int8 '1) (String 'b))))
+(let world (Apply write world '((Int8 '1) (String 'b)) '((Int8 '1) (String 'a))))
+(let world (Apply write world '((Int8 '1) (String 'a)) '((Int8 '2) (String 'a))))
+(let world (Apply write world '((Int8 '2) (String 'a)) '((Int8 '1) (String 'b))))
+(let world (Apply write world '((Int8 '2) (String 'b)) '((Int8 '1) (String 'a))))
+
+(let world (Commit! world res_sink))
+(return world)
+)
+

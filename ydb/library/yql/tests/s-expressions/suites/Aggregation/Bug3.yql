@@ -1,0 +1,40 @@
+(
+(import aggregate_module '"/lib/yql/aggregate.yql")
+(import window_module '"/lib/yql/window.yql")
+(import core_module '"/lib/yql/core.yql")
+(let world (Configure! world (DataSource '"config") 'SQL '0))
+(let world (block '(
+  (let x (Read! world (DataSource '"yt" '"plato") (MrTableConcat (Key '('table (String '"Input")))) (Void) '()))
+  (let world (Left! x))
+  (let table1 (Right! x))
+  (let output (block '(
+    (let select (block '(
+      (let core table1)
+      (let core (Aggregate core '() '('('Avg0 (Apply (bind aggregate_module '"avg_traits_factory") (TypeOf core) (lambda '(row) (PersistableRepr (Apply (lambda '("$UniqID") (block '(
+        (let $string_uniqid (Coalesce (SafeCast "$UniqID" (DataType 'String)) (String '"")))
+        (let $time (Substring "$string_uniqid" ("-" (Size "$string_uniqid") (SafeCast (Int32 '"10") (DataType 'Uint32))) (Int32 '"10")))
+        (return ("-" (SafeCast (SqlCall '"DateTime2.ToSeconds" '((PositionalArgs (SafeCast (String '"2017-06-29") (DataType 'Date))))) (DataType 'Int64)) (SafeCast (SqlCall '"DateTime2.FromSeconds" '((PositionalArgs (SafeCast "$time" (DataType 'Uint32))))) (DataType 'Int64))))
+      ))) (Member row '"key"))))))) '()))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"avg_timediff" (Cast (/ (Member row 'Avg0) (Uint64 '1000000000000)) 'Int32))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"avg_timediff")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let plato_sink (DataSink '"yt" '"plato"))
+  (let world (Commit! world plato_sink))
+  (return world)
+)))
+(return world)
+)

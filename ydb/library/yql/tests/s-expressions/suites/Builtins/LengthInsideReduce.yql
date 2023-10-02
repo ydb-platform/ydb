@@ -1,0 +1,23 @@
+(
+#comment
+(let mr_source (DataSource 'yt 'plato))
+(let x (Read! world mr_source (Key '('table (String 'Input))) '('key 'subkey 'value) '()))
+(let world (Left! x))
+(let table1 (Right! x))
+(let keySelector (lambda '(x) (Member x 'key)))
+(let listHandler (lambda '(stream) (FlatMap stream (lambda '(pair) (block '(
+  (let key (Nth pair '0))
+  (let list (ForwardList (Nth pair '1)))
+  (let s (Struct))
+  (let s (AddMember s 'key key))
+  (let s (AddMember s 'subkey (Concat (ToString (Length table1)) (ToString (HasItems table1)))))
+  (let s (AddMember s 'value (Concat (ToString (Length list)) (ToString (HasItems list)))))
+  (let ret (AsList s))
+  (return ret)
+))))))
+(let reducedTable (PartitionByKey table1 keySelector (Bool 'true) (lambda '(item) (Member item 'subkey)) listHandler))
+(let mr_sink (DataSink 'yt (quote plato)))
+(let world (Write! world mr_sink (Key '('table (String 'Output))) reducedTable '('('mode 'append))))
+(let world (Commit! world mr_sink))
+(return world)
+)

@@ -1,0 +1,37 @@
+{
+    "_yql_proto_field_key"="{\"name\":\"TA\",\"meta\":\"H4sIAAAAAAAAA42Puw6CQBBFszw0DEp0Y4E2GmyolriJHyAPS6rVflFMTBCUR8Hn+KcuD0ui3WRy59wzcIJ1co9yntfOM8/KLKpuTv1KnKp0rqTdWBQk5uM5SEFhKhvZNqhKmE8CPAHF5yU30QbZmqUDCvAIpONuhmA/jL30WCywXsMI+SPuGJAOn0XdGVZDFhfl6qf1VuBdPAX1zJOq46vYAOSbkhh1Kosf4I2GC/mfhb3YcOD78EoYHfACkNva6FQjLZow11rCmJ3SqoivjaPXB4Sj9wEBmoL3ogEAAA==\",\"lists\":{\"optional\":true}}";
+    "schema" = <
+        "strict" = %true;
+        "unique_keys" = %false;
+    > [
+        {
+            "type_v3" = "string";
+            "required" = %true;
+            "name" = "key";
+        };
+        {
+            "type_v3" = {
+                "type_name" = "struct";
+                "members" = [
+                    {
+                        "type" = {
+                            "type_name" = "optional";
+                            "item" = "int32";
+                        };
+                        "name" = "b";
+                    };
+                    {
+                        "type" = "string";
+                        "name" = "a";
+                    };
+                    {
+                        "type" = "string";
+                        "name" = "c";
+                    };
+                ];
+            };
+            "required" = %true;
+            "name" = "subkey";
+        };
+    ];
+}

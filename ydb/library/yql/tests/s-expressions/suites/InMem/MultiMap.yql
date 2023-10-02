@@ -1,0 +1,16 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let list (AsList (Int32 '1) (Int32 '2) (Int32 '3)))
+(let world (Write! world res_sink (Key) (OrderedMultiMap list
+   (lambda '(x) x (+ x (Int32 '10)) x)) '('('type))))
+(let world (Write! world res_sink (Key) (MultiMap (LazyList list)
+   (lambda '(x) x (- (Int32 '7) x) (* x x))) '('('type))))
+(let world (Write! world res_sink (Key) (Collect (MultiMap (ToFlow list)
+   (lambda '(x) x (+ x (Int32 '-3)) (Int32 '0)))) '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

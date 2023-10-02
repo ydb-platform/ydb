@@ -58,9 +58,9 @@ private:
 } // namespace
 
 IClientsCachePtr CreateFederatedClientsCache(
+    TFederationConfigPtr federatedConfig,
     const TClustersConfig& config,
     const NYT::NApi::TClientOptions& options,
-    TFederationConfigPtr federatedConfig,
     TString clusterSeparator)
 {
     return NYT::New<TClientsCache>(
@@ -71,9 +71,25 @@ IClientsCachePtr CreateFederatedClientsCache(
 }
 
 IClientsCachePtr CreateFederatedClientsCache(
+    TFederationConfigPtr federationConfig,
+    const TConfig& config,
+    const NYT::NApi::TClientOptions& options,
+    TString clusterSeparator)
+{
+    TClustersConfig clustersConfig;
+    *clustersConfig.MutableDefaultConfig() = config;
+
+    return CreateFederatedClientsCache(
+        std::move(federationConfig),
+        std::move(clustersConfig),
+        std::move(options),
+        std::move(clusterSeparator));
+}
+
+IClientsCachePtr CreateFederatedClientsCache(
+    TString chaosBundleName,
     const TClustersConfig& config,
     const NYT::NApi::TClientOptions& options,
-    TString chaosBundleName,
     TString clusterSeparator)
 {
     auto federationConfig = NYT::New<NYT::NClient::NFederated::TFederationConfig>();
@@ -81,25 +97,25 @@ IClientsCachePtr CreateFederatedClientsCache(
         federationConfig->BundleName = std::move(chaosBundleName);
     }
     return CreateFederatedClientsCache(
+        std::move(federationConfig),
         std::move(config),
         std::move(options),
-        std::move(federationConfig),
         std::move(clusterSeparator));
 }
 
 IClientsCachePtr CreateFederatedClientsCache(
+    TString chaosBundleName,
     const TConfig& config,
     const NYT::NApi::TClientOptions& options,
-    TString chaosBundleName,
     TString clusterSeparator)
 {
     TClustersConfig clustersConfig;
     *clustersConfig.MutableDefaultConfig() = config;
 
     return CreateFederatedClientsCache(
-        std::move(clustersConfig),
-        std::move(options),
         std::move(chaosBundleName),
+        std::move(clustersConfig),
+        options,
         std::move(clusterSeparator));
 }
 
@@ -109,9 +125,9 @@ IClientsCachePtr CreateFederatedClientsCache(
     TString clusterSeparator)
 {
     return CreateFederatedClientsCache(
+        std::move(chaosBundleName),
         config,
         NCache::GetClientOpsFromEnvStatic(),
-        std::move(chaosBundleName),
         std::move(clusterSeparator));
 }
 
@@ -120,9 +136,9 @@ IClientsCachePtr CreateFederatedClientsCache(
     TString clusterSeparator)
 {
     return CreateFederatedClientsCache(
+        std::move(chaosBundleName),
         TClustersConfig{},
         NCache::GetClientOpsFromEnvStatic(),
-        std::move(chaosBundleName),
         std::move(clusterSeparator));
 }
 

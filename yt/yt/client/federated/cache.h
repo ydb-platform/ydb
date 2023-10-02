@@ -25,25 +25,32 @@ IClientsCachePtr CreateFederatedClientsCache(
 
 //! Shortcut to create cache with default federation config.
 IClientsCachePtr CreateFederatedClientsCache(
+    TFederationConfigPtr federationConfig,
+    const TConfig& config,
+    const NYT::NApi::TClientOptions& options,
+    TString clusterSeparator = "+");
+
+//! Shortcut to create cache with default federation config.
+IClientsCachePtr CreateFederatedClientsCache(
+    TString chaosBundleName,
     const TClustersConfig& config,
     const NYT::NApi::TClientOptions& options,
-    TString chaosBundleName,
     TString clusterSeparator = "+");
 
 //! Creates clients cache which shares same config (except server name).
 //! Shortcut to create cache with default federation config.
 IClientsCachePtr CreateFederatedClientsCache(
+    TString chaosBundleName,
     const TConfig& config,
     const NYT::NApi::TClientOptions& options,
-    TString chaosBundleName,
     TString clusterSeparator = "+");
 
 //! Creates clients cache which shares same config (except server name).
 //! Shortcut to create cache with default federation config.
 //! Shortcut to use client options from env.
 IClientsCachePtr CreateFederatedClientsCache(
-    const TConfig& config,
     TString chaosBundleName,
+    const TConfig& config,
     TString clusterSeparator = "+");
 
 //! Shortcut to create cache with default federation config.

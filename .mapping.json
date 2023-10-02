@@ -1,5 +1,7 @@
 {
   ".github/actions/build/action.yml":"ydb/github_toplevel/.github/actions/build/action.yml",
+  ".github/actions/docs/build.yaml":"ydb/github_toplevel/.github/actions/docs/build.yaml",
+  ".github/actions/docs/release.yaml":"ydb/github_toplevel/.github/actions/docs/release.yaml",
   ".github/actions/prepare_vm/action.yaml":"ydb/github_toplevel/.github/actions/prepare_vm/action.yaml",
   ".github/actions/test/action.yml":"ydb/github_toplevel/.github/actions/test/action.yml",
   ".github/check_dirs.sh":"ydb/github_toplevel/.github/check_dirs.sh",

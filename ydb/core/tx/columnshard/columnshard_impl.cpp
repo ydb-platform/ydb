@@ -742,6 +742,8 @@ public:
 };
 
 void TColumnShard::StartIndexTask(std::vector<const NOlap::TInsertedData*>&& dataToIndex, const i64 bytesToIndex) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "indexation")("bytes", bytesToIndex)("blobs_count", dataToIndex.size())("max_limit", (i64)Limits.MaxInsertBytes)
+        ("has_more", bytesToIndex >= Limits.MaxInsertBytes);
     if (bytesToIndex < Limits.MinInsertBytes && dataToIndex.size() < TLimits::MIN_SMALL_BLOBS_TO_INSERT) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_indexation")("bytes", bytesToIndex)("blobs_count", dataToIndex.size());
 
@@ -754,9 +756,6 @@ void TColumnShard::StartIndexTask(std::vector<const NOlap::TInsertedData*>&& dat
     CSCounters.IndexationInput(bytesToIndex);
     SkippedIndexations = 0;
 
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "indexation")("bytes", bytesToIndex)("blobs_count", dataToIndex.size())("max_limit", (i64)Limits.MaxInsertBytes)
-        ("has_more", bytesToIndex >= Limits.MaxInsertBytes);
-
     std::vector<NOlap::TInsertedData> data;
     data.reserve(dataToIndex.size());
     ui64 memoryNeed = 0;
@@ -767,15 +766,11 @@ void TColumnShard::StartIndexTask(std::vector<const NOlap::TInsertedData*>&& dat
 
     Y_VERIFY(data.size());
     auto indexChanges = TablesManager.MutablePrimaryIndex().StartInsert(std::move(data));
-    if (!indexChanges) {
-        LOG_S_NOTICE("Cannot prepare indexing at tablet " << TabletID());
-        return;
-    }
+    Y_VERIFY(indexChanges);
 
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
     indexChanges->Start(*this);
-    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges,
-        Settings.CacheDataAfterIndexing);
+    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges, Settings.CacheDataAfterIndexing);
 
     const TString taskName = indexChanges->GetTaskIdentifier();
     NOlap::NResourceBroker::NSubscribe::ITask::Start(
@@ -785,8 +780,10 @@ void TColumnShard::StartIndexTask(std::vector<const NOlap::TInsertedData*>&& dat
 
 void TColumnShard::SetupIndexation() {
     if (BackgroundController.IsIndexingActive()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_indexation")("reason", "in_progress");
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_indexation")("reason", "in_progress")("count", BackgroundController.GetIndexingActiveCount())("insert_overload_size", InsertTable->GetCountersCommitted().Bytes);
         return;
+    } else {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "start_indexation_tasks")("insert_overload_size", InsertTable->GetCountersCommitted().Bytes);
     }
     CSCounters.OnSetupIndexation();
     i64 bytesToIndex = 0;

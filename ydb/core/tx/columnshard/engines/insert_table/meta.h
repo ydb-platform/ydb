@@ -12,25 +12,34 @@ private:
     YDB_READONLY_DEF(TInstant, DirtyWriteTime);
     YDB_READONLY(ui32, NumRows, 0);
     YDB_READONLY(ui64, RawBytes, 0);
-    std::optional<NArrow::TFirstLastSpecialKeys> SpecialKeys;
 
-    bool DeserializeFromProto(const NKikimrTxColumnShard::TLogicalMetadata& proto);
+    mutable bool KeysParsed = false;
+    mutable std::optional<NArrow::TFirstLastSpecialKeys> SpecialKeysParsed;
 
+    NKikimrTxColumnShard::TLogicalMetadata OriginalProto;
+
+    const std::optional<NArrow::TFirstLastSpecialKeys>& GetSpecialKeys() const;
 public:
-    TInsertedDataMeta(const NKikimrTxColumnShard::TLogicalMetadata& proto) {
-        Y_VERIFY(DeserializeFromProto(proto));
+    TInsertedDataMeta(const NKikimrTxColumnShard::TLogicalMetadata& proto)
+        : OriginalProto(proto)
+    {
+        if (proto.HasDirtyWriteTimeSeconds()) {
+            DirtyWriteTime = TInstant::Seconds(proto.GetDirtyWriteTimeSeconds());
+        }
+        NumRows = proto.GetNumRows();
+        RawBytes = proto.GetRawBytes();
     }
 
     std::optional<NArrow::TReplaceKey> GetMin(const std::shared_ptr<arrow::Schema>& schema) const {
-        if (SpecialKeys) {
-            return SpecialKeys->GetMin(schema);
+        if (GetSpecialKeys()) {
+            return GetSpecialKeys()->GetMin(schema);
         } else {
             return {};
         }
     }
     std::optional<NArrow::TReplaceKey> GetMax(const std::shared_ptr<arrow::Schema>& schema) const {
-        if (SpecialKeys) {
-            return SpecialKeys->GetMax(schema);
+        if (GetSpecialKeys()) {
+            return GetSpecialKeys()->GetMax(schema);
         } else {
             return {};
         }

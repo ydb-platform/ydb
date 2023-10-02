@@ -32,16 +32,7 @@ private:
     void OnNewInserted(TPathInfo& pathInfo, const ui64 dataSize, const bool load) noexcept;
     void OnEraseInserted(TPathInfo& pathInfo, const ui64 dataSize) noexcept;
     static TAtomicCounter CriticalInserted;
-    i64 LocalInsertedCritical = 0;
 public:
-    static i64 GetCriticalInserted() {
-        return CriticalInserted.Val();
-    }
-
-    ~TInsertionSummary() {
-        CriticalInserted.Sub(LocalInsertedCritical);
-    }
-
     THashSet<TWriteId> GetInsertedByPathId(const ui64 pathId) const;
 
     THashSet<TWriteId> GetDeprecatedInsertions(const TInstant timeBorder) const;
@@ -74,8 +65,6 @@ public:
     const THashMap<ui64, TPathInfo>& GetPathInfo() const {
         return PathInfo;
     }
-
-    void Clear();
 
     bool IsOverloaded(const ui64 pathId) const;
 

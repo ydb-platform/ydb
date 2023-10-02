@@ -3,26 +3,19 @@
 
 namespace NKikimr::NOlap {
 
-TAtomicCounter TInsertionSummary::CriticalInserted;
-
 void TInsertionSummary::OnNewCommitted(const ui64 dataSize, const bool load) noexcept {
     Counters.Committed.Add(dataSize, load);
     ++StatsCommitted.Rows;
-    if (StatsCommitted.Bytes <= (i64)2 * 1024 * 1024 * 1024 && StatsCommitted.Bytes + dataSize > (i64)2 * 1024 * 1024 * 1024) {
-        ++LocalInsertedCritical;
-        CriticalInserted.Inc();
-    }
     StatsCommitted.Bytes += dataSize;
+    Y_VERIFY(Counters.Committed.GetDataSize() == (i64)StatsCommitted.Bytes);
 }
 
 void TInsertionSummary::OnEraseCommitted(TPathInfo& /*pathInfo*/, const ui64 dataSize) noexcept {
     Counters.Committed.Erase(dataSize);
     Y_VERIFY(--StatsCommitted.Rows >= 0);
-    if (StatsCommitted.Bytes > (i64)2 * 1024 * 1024 * 1024 && StatsCommitted.Bytes - dataSize <= (i64)2 * 1024 * 1024 * 1024) {
-        --LocalInsertedCritical;
-        CriticalInserted.Dec();
-    }
+    Y_VERIFY(StatsCommitted.Bytes >= dataSize);
     StatsCommitted.Bytes -= dataSize;
+    Y_VERIFY(Counters.Committed.GetDataSize() == (i64)StatsCommitted.Bytes);
 }
 
 void TInsertionSummary::RemovePriority(const TPathInfo& pathInfo) noexcept {
@@ -84,32 +77,21 @@ bool TInsertionSummary::IsOverloaded(const ui64 /*pathId*/) const {
     return StatsCommitted.Bytes > TCompactionLimits::OVERLOAD_INSERT_TABLE_SIZE_BY_PATH_ID;
 }
 
-void TInsertionSummary::Clear() {
-    StatsPrepared = {};
-    StatsCommitted = {};
-    if (LocalInsertedCritical) {
-        --LocalInsertedCritical;
-        CriticalInserted.Dec();
-    }
-
-    PathInfo.clear();
-    Priorities.clear();
-    Inserted.clear();
-    Aborted.clear();
-}
-
 void TInsertionSummary::OnNewInserted(TPathInfo& pathInfo, const ui64 dataSize, const bool load) noexcept {
     Counters.Inserted.Add(dataSize, load);
     pathInfo.AddInsertedSize(dataSize, TCompactionLimits::OVERLOAD_INSERT_TABLE_SIZE_BY_PATH_ID);
     ++StatsPrepared.Rows;
     StatsPrepared.Bytes += dataSize;
+    AFL_VERIFY(Counters.Inserted.GetDataSize() == (i64)StatsPrepared.Bytes);
 }
 
 void TInsertionSummary::OnEraseInserted(TPathInfo& pathInfo, const ui64 dataSize) noexcept {
     Counters.Inserted.Erase(dataSize);
     pathInfo.AddInsertedSize(-1 * (i64)dataSize, TCompactionLimits::OVERLOAD_INSERT_TABLE_SIZE_BY_PATH_ID);
     Y_VERIFY(--StatsPrepared.Rows >= 0);
-    StatsPrepared.Bytes += dataSize;
+    Y_VERIFY(StatsPrepared.Bytes >= dataSize);
+    StatsPrepared.Bytes -= dataSize;
+    AFL_VERIFY(Counters.Inserted.GetDataSize() == (i64)StatsPrepared.Bytes);
 }
 
 THashSet<NKikimr::NOlap::TWriteId> TInsertionSummary::GetInsertedByPathId(const ui64 pathId) const {

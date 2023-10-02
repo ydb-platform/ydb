@@ -192,6 +192,11 @@ size_t TPortionInfo::NumBlobs() const {
     return blobIds.size();
 }
 
+bool TPortionInfo::IsEqualWithSnapshots(const TPortionInfo& item) const {
+    return Granule == item.Granule && MinSnapshot == item.MinSnapshot
+        && Portion == item.Portion && RemoveSnapshot == item.RemoveSnapshot;
+}
+
 std::shared_ptr<arrow::ChunkedArray> TPortionInfo::TPreparedColumn::Assemble() const {
     Y_VERIFY(!Blobs.empty());
 

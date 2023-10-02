@@ -99,7 +99,8 @@ void TInsertTable::EraseAborted(IDbWrapper& dbTable, const TInsertedData& data) 
 }
 
 bool TInsertTable::Load(IDbWrapper& dbTable, const TInstant loadTime) {
-    Clear();
+    Y_VERIFY(!Loaded);
+    Loaded = true;
     return dbTable.Load(*this, loadTime);
 }
 

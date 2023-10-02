@@ -91,10 +91,7 @@ public:
 
     TPortionInfo CopyWithFilteredColumns(const THashSet<ui32>& columnIds) const;
 
-    bool IsEqualWithSnapshots(const TPortionInfo& item) const {
-        return Granule == item.Granule && MinSnapshot == item.MinSnapshot
-            && Portion == item.Portion && RemoveSnapshot == item.RemoveSnapshot;
-    }
+    bool IsEqualWithSnapshots(const TPortionInfo& item) const;
 
     static TPortionInfo BuildEmpty() {
         return TPortionInfo();

@@ -15,11 +15,6 @@ class IDbWrapper;
 class TInsertTableAccessor {
 protected:
     TInsertionSummary Summary;
-
-protected:
-    void Clear() {
-        Summary.Clear();
-    }
 public:
     const std::map<TPathInfoIndexPriority, std::set<const TPathInfo*>>& GetPathPriorities() const {
         return Summary.GetPathPriorities();
@@ -49,6 +44,8 @@ public:
 };
 
 class TInsertTable: public TInsertTableAccessor {
+private:
+    bool Loaded = false;
 public:
     static constexpr const TDuration WaitCommitDelay = TDuration::Minutes(10);
     static constexpr const TDuration CleanDelay = TDuration::Minutes(10);

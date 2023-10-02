@@ -30,13 +30,13 @@ public:
     void OnReply(const ui64 bytes, const TDuration d) const {
         RepliesCount->Add(1);
         ReplyBytes->Add(bytes);
-        ReplyDuration->Collect(d.MicroSeconds());
+        ReplyDuration->Collect(d.MilliSeconds());
     }
 
     void OnFail(const ui64 bytes, const TDuration d) const {
         FailsCount->Add(1);
         FailBytes->Add(bytes);
-        FailDuration->Collect(d.MicroSeconds());
+        FailDuration->Collect(d.MilliSeconds());
     }
 };
 

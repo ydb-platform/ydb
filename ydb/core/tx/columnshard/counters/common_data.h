@@ -21,6 +21,10 @@ private:
 public:
     TDataOwnerSignals(const TString& module, const TString dataName);
 
+    i64 GetDataSize() const {
+        return DataSize->GetValue();
+    }
+
     void Add(const ui64 size, const bool load) const {
         DataSize->Add(size);
         ChunksCount->Add(1);

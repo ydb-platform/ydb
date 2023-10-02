@@ -2,27 +2,18 @@
 
 namespace NKikimr::NOlap {
 
-bool TInsertedDataMeta::DeserializeFromProto(const NKikimrTxColumnShard::TLogicalMetadata& proto) {
-    if (proto.HasDirtyWriteTimeSeconds()) {
-        DirtyWriteTime = TInstant::Seconds(proto.GetDirtyWriteTimeSeconds());
-    }
-    if (proto.HasSpecialKeysRawData()) {
-        SpecialKeys = NArrow::TFirstLastSpecialKeys(proto.GetSpecialKeysRawData());
-    }
-    NumRows = proto.GetNumRows();
-    RawBytes = proto.GetRawBytes();
-    return true;
+NKikimrTxColumnShard::TLogicalMetadata TInsertedDataMeta::SerializeToProto() const {
+    return OriginalProto;
 }
 
-NKikimrTxColumnShard::TLogicalMetadata TInsertedDataMeta::SerializeToProto() const {
-    NKikimrTxColumnShard::TLogicalMetadata result;
-    result.SetDirtyWriteTimeSeconds(DirtyWriteTime.Seconds());
-    if (SpecialKeys) {
-        result.SetSpecialKeysRawData(SpecialKeys->SerializeToString());
+const std::optional<NKikimr::NArrow::TFirstLastSpecialKeys>& TInsertedDataMeta::GetSpecialKeys() const {
+    if (!KeysParsed) {
+        if (OriginalProto.HasSpecialKeysRawData()) {
+            SpecialKeysParsed = NArrow::TFirstLastSpecialKeys(OriginalProto.GetSpecialKeysRawData());
+        }
+        KeysParsed = true;
     }
-    result.SetNumRows(NumRows);
-    result.SetRawBytes(RawBytes);
-    return result;
+    return SpecialKeysParsed;
 }
 
 }

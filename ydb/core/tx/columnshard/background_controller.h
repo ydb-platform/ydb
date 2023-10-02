@@ -81,6 +81,9 @@ public:
     bool IsIndexingActive() const {
         return ActiveIndexing;
     }
+    bool GetIndexingActiveCount() const {
+        return ActiveIndexing;
+    }
 
     void StartCleanup() {
         Y_VERIFY(!ActiveCleanup);

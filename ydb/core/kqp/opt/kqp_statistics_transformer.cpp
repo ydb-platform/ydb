@@ -186,108 +186,55 @@ void AppendTxStats(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx
 IGraphTransformer::TStatus TKqpStatisticsTransformer::DoTransform(TExprNode::TPtr input,
     TExprNode::TPtr& output, TExprContext& ctx) {
 
-    Y_UNUSED(ctx);
     output = input;
     if (!Config->HasOptEnableCostBasedOptimization()) {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    TOptimizeExprSettings settings(nullptr);
+    TxStats.clear();
+    return TDqStatisticsTransformerBase::DoTransform(input, output, ctx);
+}
 
-    TVector<TVector<std::shared_ptr<TOptimizerStatistics>>> txStats;
+bool TKqpStatisticsTransformer::BeforeLambdasSpecific(const TExprNode::TPtr& input, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    bool matched = true;
+    // KQP Matchers
+    if(TKqlReadTableBase::Match(input.Get()) || TKqlReadTableRangesBase::Match(input.Get())){
+        InferStatisticsForReadTable(input, TypeCtx, KqpCtx);
+    }
+    else if(TKqlLookupTableBase::Match(input.Get())) {
+        InferStatisticsForLookupTable(input, TypeCtx);
+    }
+    else if(TKqlLookupIndexBase::Match(input.Get())){
+        InferStatisticsForIndexLookup(input, TypeCtx);
+    }
+    else if(TKqpTable::Match(input.Get())) {
+        InferStatisticsForKqpTable(input, TypeCtx, KqpCtx);
+    }
+    else if (TKqpReadRangesSourceSettings::Match(input.Get())) {
+        InferStatisticsForRowsSourceSettings(input, TypeCtx);
+    }
 
-    VisitExprLambdasLast(
-        input, [*this, &txStats](const TExprNode::TPtr& input) {
+    // Match a result binding atom and connect it to a stage
+    else if(TCoParameter::Match(input.Get())) {
+        InferStatisticsForResultBinding(input, TypeCtx, TxStats);
+    }
+    else {
+        matched = false;
+    }
 
-        // Generic matchers
-        if (TCoFilterBase::Match(input.Get())){
-            InferStatisticsForFilter(input, TypeCtx);
-        }
-        else if(TCoSkipNullMembers::Match(input.Get())){
-            InferStatisticsForSkipNullMembers(input, TypeCtx);
-        }
-        else if(TCoExtractMembers::Match(input.Get())){
-            InferStatisticsForExtractMembers(input, TypeCtx);
-        }
-        else if(TCoAggregateCombine::Match(input.Get())){
-            InferStatisticsForAggregateCombine(input, TypeCtx);
-        }
-        else if(TCoAggregateMergeFinalize::Match(input.Get())){
-            InferStatisticsForAggregateMergeFinalize(input, TypeCtx);
-        }
+    return matched;
+}
 
-        // KQP Matchers
-        else if(TKqlReadTableBase::Match(input.Get()) || TKqlReadTableRangesBase::Match(input.Get())){
-            InferStatisticsForReadTable(input, TypeCtx, KqpCtx);
-        }
-        else if(TKqlLookupTableBase::Match(input.Get())) {
-            InferStatisticsForLookupTable(input, TypeCtx);
-        }
-        else if(TKqlLookupIndexBase::Match(input.Get())){
-            InferStatisticsForIndexLookup(input, TypeCtx);
-        }
-        else if(TKqpTable::Match(input.Get())) {
-            InferStatisticsForKqpTable(input, TypeCtx, KqpCtx);
-        }
-        else if (TKqpReadRangesSourceSettings::Match(input.Get())) {
-            InferStatisticsForRowsSourceSettings(input, TypeCtx);
-        }
-
-        // Join matchers
-        else if(TCoMapJoinCore::Match(input.Get())) {
-            InferStatisticsForMapJoin(input, TypeCtx);
-        }
-        else if(TCoGraceJoinCore::Match(input.Get())) {
-            InferStatisticsForGraceJoin(input, TypeCtx);
-        }
-
-        // Do nothing in case of EquiJoin, otherwise the EquiJoin rule won't fire
-        else if(TCoEquiJoin::Match(input.Get())){
-        }
-
-        // In case of DqSource, propagate the statistics from the correct argument
-        else if (TDqSource::Match(input.Get())) {
-            InferStatisticsForDqSource(input, TypeCtx);
-        }
-
-        // Match a result binding atom and connect it to a stage
-        else if(TCoParameter::Match(input.Get())) {
-            InferStatisticsForResultBinding(input, TypeCtx, txStats);
-        } 
-
-        // Finally, use a default rule to propagate the statistics and costs
-        else {
-
-            // default sum propagation
-            if (input->ChildrenSize() >= 1) {
-                auto stats = TypeCtx->GetStats(input->ChildRef(0).Get());
-                if (stats) {
-                    TypeCtx->SetStats(input.Get(), stats);
-                }
-            }
-        }
-
-        // We have a separate rule for all callables that may use a lambda
-        // we need to take each generic callable and see if it includes a lambda
-        // if so - we will map the input to the callable to the argument of the lambda
-        if (input->IsCallable()) {
-            PropagateStatisticsToLambdaArgument(input, TypeCtx);
-        }
-
-        return true; },
-
-        [*this, &txStats](const TExprNode::TPtr& input) {
-            if (TDqStageBase::Match(input.Get())) {
-                InferStatisticsForStage(input, TypeCtx);
-            } else if (TKqpPhysicalTx::Match(input.Get())) {
-                AppendTxStats(input, TypeCtx, txStats);
-            } else if (TCoFlatMapBase::Match(input.Get())) {
-                InferStatisticsForFlatMap(input, TypeCtx);
-            }
-
-            return true;
-        });
-    return IGraphTransformer::TStatus::Ok;
+bool TKqpStatisticsTransformer::AfterLambdasSpecific(const TExprNode::TPtr& input, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    bool matched = true;
+    if (TKqpPhysicalTx::Match(input.Get())) {
+        AppendTxStats(input, TypeCtx, TxStats);
+    } else {
+        matched = false;
+    }
+    return matched;
 }
 
 TAutoPtr<IGraphTransformer> NKikimr::NKqp::CreateKqpStatisticsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,

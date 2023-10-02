@@ -20,6 +20,7 @@ SRCS(
     dq_opt_phy_finalizing.cpp
     dq_opt_phy.cpp
     dq_opt_stat.cpp
+    dq_opt_stat_transformer_base.cpp
     dq_opt_join_cost_based.cpp
     dq_opt_join_cost_based_generic.cpp
     dq_opt_predicate_selectivity.cpp

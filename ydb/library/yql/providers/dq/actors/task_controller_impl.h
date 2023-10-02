@@ -269,7 +269,7 @@ private:
         for (const auto& [k, v] : stat.Get()) {
             labels.clear();
             if (auto group = GroupForExport(stat, k, taskId, name, labels)) {
-                *group->GetCounter(name) = v.Count;
+                *group->GetCounter(name) = v.Sum;
                 if (ServiceCounters.PublicCounters && taskId == 0 && IsAggregatedStage(labels)) {
                     TString publicCounterName;
                     bool isDeriv = false;

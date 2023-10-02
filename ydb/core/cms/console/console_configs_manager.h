@@ -110,7 +110,6 @@ private:
     class TTxGetLogTail;
     class TTxLogCleanup;
     class TTxReplaceYamlConfig;
-    class TTxSetYamlConfig;
     class TTxDropYamlConfig;
     class TTxGetYamlConfig;
     class TTxGetYamlMetadata;

@@ -23,7 +23,6 @@ SRCS(
     console__add_config_subscription.cpp
     console__alter_tenant.cpp
     console__replace_yaml_config.cpp
-    console__set_yaml_config.cpp
     console__cleanup_subscriptions.cpp
     console__configure.cpp
     console__create_tenant.cpp

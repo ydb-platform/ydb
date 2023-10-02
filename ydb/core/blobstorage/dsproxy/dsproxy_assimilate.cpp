@@ -104,6 +104,8 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor<
     using TItemVariant = std::variant<TBlock, TBarrier, TBlob>;
    
     struct TPerVDiskInfo {
+        std::optional<TString> ErrorReason;
+
         std::optional<ui64> LastProcessedBlock;
         std::optional<std::tuple<ui64, ui8>> LastProcessedBarrier;
         std::optional<TLogoBlobID> LastProcessedBlob;
@@ -343,15 +345,20 @@ public:
         Y_VERIFY(RequestsInFlight);
         --RequestsInFlight;
 
+        auto& info = PerVDiskInfo[orderNumber];
+        Y_VERIFY(!info.HasItemsToMerge());
         if (record.GetStatus() == NKikimrProto::OK) {
-            auto& info = PerVDiskInfo[orderNumber];
-            Y_VERIFY(!info.HasItemsToMerge());
             info.PushDataFromMessage(record, *this, Info->Type);
             if (info.HasItemsToMerge()) {
                 Heap.push_back(&info);
                 std::push_heap(Heap.begin(), Heap.end(), TPerVDiskInfo::TCompare());
             } else if (!info.Finished()) {
                 Request(orderNumber);
+            }
+        } else {
+            info.ErrorReason = TStringBuilder() << vdiskId << ": " << NKikimrProto::EReplyStatus_Name(record.GetStatus());
+            if (record.GetErrorReason()) {
+                *info.ErrorReason += " (" + record.GetErrorReason() + ')';
             }
         }
 
@@ -445,6 +452,14 @@ public:
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status) {
         A_LOG_DEBUG_S("BPA04", "ReplyAndDie status# " << NKikimrProto::EReplyStatus_Name(status));
+        for (const auto& item : PerVDiskInfo) {
+            if (item.ErrorReason) {
+                if (ErrorReason) {
+                    ErrorReason += ", ";
+                }
+                ErrorReason += *item.ErrorReason;
+            }
+        }
         SendResponseAndDie(std::make_unique<TEvBlobStorage::TEvAssimilateResult>(status, ErrorReason));
     }
 };

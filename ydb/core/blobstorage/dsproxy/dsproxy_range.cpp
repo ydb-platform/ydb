@@ -241,9 +241,11 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
         }
         Y_VERIFY(query == queries.Get() + queryCount);
 
-        // register query in wilson and send it to DS proxy
+        // register query in wilson and send it to DS proxy; issue non-index query when MustRestoreFirst is false to
+        // prevent IndexRestoreGet invocation
         auto get = std::make_unique<TEvBlobStorage::TEvGet>(queries, queryCount, Deadline,
-                NKikimrBlobStorage::EGetHandleClass::FastRead, MustRestoreFirst, IsIndexOnly, TEvBlobStorage::TEvGet::TForceBlockTabletData(TabletId, ForceBlockedGeneration));
+                NKikimrBlobStorage::EGetHandleClass::FastRead, MustRestoreFirst, MustRestoreFirst ? IsIndexOnly : false,
+                TEvBlobStorage::TEvGet::TForceBlockTabletData(TabletId, ForceBlockedGeneration));
         get->IsInternal = true;
         get->Decommission = Decommission;
 
@@ -284,7 +286,8 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
             Y_VERIFY(response.Id == BlobsToGet[i].BlobId);
 
             if (getResult.Responses[i].Status == NKikimrProto::OK) {
-                result->Responses.emplace_back(response.Id, response.Buffer.ConvertToString(), response.Keep, response.DoNotKeep);
+                result->Responses.emplace_back(response.Id, IsIndexOnly ? TString() : response.Buffer.ConvertToString(),
+                    response.Keep, response.DoNotKeep);
             } else if (getResult.Responses[i].Status != NKikimrProto::NODATA || BlobsToGet[i].RequiredToBePresent) {
                 // it's okay to get NODATA if blob wasn't confirmed -- this blob is simply thrown out of resulting
                 // set; otherwise we return error about lost data

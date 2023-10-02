@@ -16,7 +16,7 @@ TOptimizerStatistics NYql::ComputeJoinStats(TOptimizerStatistics leftStats, TOpt
     int newNCols = leftStats.Ncols + rightStats.Ncols;
     double cost = leftStats.Nrows + 2.0 * rightStats.Nrows 
             + newCard 
-            + leftStats.Cost.value() + rightStats.Cost.value();
+            + leftStats.Cost + rightStats.Cost;
 
     return TOptimizerStatistics(newCard, newNCols, cost);
 }

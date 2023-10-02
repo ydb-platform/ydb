@@ -3,13 +3,7 @@
 using namespace NYql;
 
 std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) {
-    os << "Nrows: " << s.Nrows << ", Ncols: " << s.Ncols;
-    os << ", Cost: ";
-    if (s.Cost.has_value()){
-        os << s.Cost.value();
-    } else {
-        os << "none";
-    }
+    os << "Nrows: " << s.Nrows << ", Ncols: " << s.Ncols << ", Cost: " << s.Cost ;
     return os;
 }
 
@@ -20,10 +14,6 @@ bool TOptimizerStatistics::Empty() const {
 TOptimizerStatistics& TOptimizerStatistics::operator+=(const TOptimizerStatistics& other) {
     Nrows += other.Nrows;
     Ncols += other.Ncols;
-    if (Cost.has_value() && other.Cost.has_value()) {
-        Cost = *Cost + *other.Cost;
-    } else if (other.Cost.has_value()) {
-        Cost = other.Cost;
-    }
+    Cost += other.Cost;
     return *this;
 }

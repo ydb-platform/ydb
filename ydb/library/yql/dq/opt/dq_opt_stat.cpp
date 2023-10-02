@@ -67,7 +67,6 @@ void InferStatisticsForDqSource(const TExprNode::TPtr& input, TTypeAnnotationCon
     }
 
     typeCtx->SetStats(input.Get(), inputStats);
-    typeCtx->SetCost(input.Get(), typeCtx->GetCost(dqSource.Settings().Raw()));
 }
 
 /**
@@ -95,11 +94,9 @@ void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationCont
 
         double selectivity = ComputePredicateSelectivity(flatmap.Lambda().Body(), inputStats);
 
-        auto outputStats = TOptimizerStatistics(inputStats->Nrows * selectivity, inputStats->Ncols);
+        auto outputStats = TOptimizerStatistics(inputStats->Nrows * selectivity, inputStats->Ncols, inputStats->Cost );
 
         typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(outputStats) );
-        typeCtx->SetCost(input.Get(), typeCtx->GetCost(flatmapInput.Raw()));
-
     }
     else if (flatmap.Lambda().Body().Maybe<TCoMapJoinCore>() || 
             flatmap.Lambda().Body().Maybe<TCoMap>().Input().Maybe<TCoMapJoinCore>() ||
@@ -138,11 +135,9 @@ void InferStatisticsForFilter(const TExprNode::TPtr& input, TTypeAnnotationConte
     
     double selectivity = ComputePredicateSelectivity(filterBody, inputStats);
 
-    auto outputStats = TOptimizerStatistics(inputStats->Nrows * selectivity, inputStats->Ncols);
+    auto outputStats = TOptimizerStatistics(inputStats->Nrows * selectivity, inputStats->Ncols, inputStats->Cost);
 
     typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(outputStats) );
-    typeCtx->SetCost(input.Get(), typeCtx->GetCost(filterInput.Raw()));
-
 }
 
 /**
@@ -162,7 +157,6 @@ void InferStatisticsForSkipNullMembers(const TExprNode::TPtr& input, TTypeAnnota
     }
 
     typeCtx->SetStats( input.Get(), inputStats );
-    typeCtx->SetCost( input.Get(), typeCtx->GetCost( skipNullMembersInput.Raw() ) );
 }
 
 /**
@@ -181,7 +175,6 @@ void InferStatisticsForExtractMembers(const TExprNode::TPtr& input, TTypeAnnotat
     }
 
     typeCtx->SetStats( input.Get(), inputStats );
-    typeCtx->SetCost( input.Get(), typeCtx->GetCost( extractMembersInput.Raw() ) );
 }
 
 /**
@@ -200,7 +193,6 @@ void InferStatisticsForAggregateCombine(const TExprNode::TPtr& input, TTypeAnnot
     }
 
     typeCtx->SetStats( input.Get(), inputStats );
-    typeCtx->SetCost( input.Get(), typeCtx->GetCost( aggInput.Raw() ) );
 }
 
 /**
@@ -219,7 +211,6 @@ void InferStatisticsForAggregateMergeFinalize(const TExprNode::TPtr& input, TTyp
     }
 
     typeCtx->SetStats( input.Get(), inputStats );
-    typeCtx->SetCost( input.Get(), typeCtx->GetCost( aggInput.Raw() ) );
 }
 
 /***
@@ -255,7 +246,6 @@ void PropagateStatisticsToLambdaArgument(const TExprNode::TPtr& input, TTypeAnno
                 auto inputStats = typeCtx->GetStats(callableInput->Child(j) );
                 if (inputStats){
                     typeCtx->SetStats( lambda.Args().Arg(j).Raw(), inputStats );
-                    typeCtx->SetCost( lambda.Args().Arg(j).Raw(), typeCtx->GetCost( callableInput->Child(j) ));
                 }
             }
             
@@ -267,7 +257,6 @@ void PropagateStatisticsToLambdaArgument(const TExprNode::TPtr& input, TTypeAnno
             }
 
             typeCtx->SetStats( lambda.Args().Arg(0).Raw(), inputStats );
-            typeCtx->SetCost( lambda.Args().Arg(0).Raw(), typeCtx->GetCost( callableInput.Get() ));
         }
     }
 }
@@ -282,7 +271,6 @@ void InferStatisticsForStage(const TExprNode::TPtr& input, TTypeAnnotationContex
     auto lambdaStats = typeCtx->GetStats( stage.Program().Body().Raw());
     if (lambdaStats){
         typeCtx->SetStats( stage.Raw(), lambdaStats );
-        typeCtx->SetCost( stage.Raw(), typeCtx->GetCost( stage.Program().Body().Raw()));
     }
 }
 

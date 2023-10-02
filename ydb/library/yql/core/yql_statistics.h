@@ -11,16 +11,16 @@ namespace NYql {
  * for the current operator in the plan. Currently, only Nrows and Ncols are
  * recorded.
  * Cost is also included in statistics, as its updated concurrently with statistics
- * all of the time. Cost is optional, so it could be missing.
+ * all of the time.
 */
 struct TOptimizerStatistics {
     double Nrows = 0;
     int Ncols = 0;
-    std::optional<double> Cost;
+    double Cost;
     TString Descr;
 
-    TOptimizerStatistics() : Cost(std::nullopt) {}
-    TOptimizerStatistics(double nrows,int ncols): Nrows(nrows), Ncols(ncols), Cost(std::nullopt) {}
+    TOptimizerStatistics() {}
+    TOptimizerStatistics(double nrows,int ncols): Nrows(nrows), Ncols(ncols) {}
     TOptimizerStatistics(double nrows,int ncols, double cost): Nrows(nrows), Ncols(ncols), Cost(cost) {}
     TOptimizerStatistics(double nrows,int ncols, double cost, TString descr): Nrows(nrows), Ncols(ncols), Cost(cost), Descr(descr) {}
 

@@ -118,7 +118,7 @@ void InferStatisticsForRowsSourceSettings(const TExprNode::TPtr& input, TTypeAnn
     }
 
     int nAttrs = sourceSettings.Columns().Size();
-    double cost = inputStats->Cost.value();
+    double cost = inputStats->Cost;
 
     auto outputStats = TOptimizerStatistics(nRows, nAttrs, cost);
     typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(outputStats));

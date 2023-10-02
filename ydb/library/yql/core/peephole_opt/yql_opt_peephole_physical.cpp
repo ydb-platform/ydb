@@ -5836,7 +5836,7 @@ TExprNode::TPtr ExpandCostsOf(const TExprNode::TPtr& node, TExprContext& ctx, TT
             }
             if (stat) {
                 if (stat->Cost) {
-                    jsonWriter.Write("Cost", *stat->Cost);
+                    jsonWriter.Write("Cost", stat->Cost);
                 }
                 jsonWriter.Write("Cols", stat->Ncols);
                 jsonWriter.Write("Rows", stat->Nrows);

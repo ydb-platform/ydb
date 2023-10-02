@@ -44,7 +44,7 @@ struct TState {
         VarIds.emplace_back();
         int relId = Input.Rels.size();
         Input.Rels.back().Rows = stat->Nrows;
-        Input.Rels.back().TotalCost = *stat->Cost;
+        Input.Rels.back().TotalCost = stat->Cost;
         Tables.emplace_back(label);
         Table2RelIds[label].emplace_back(relId);
     }
@@ -171,8 +171,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     YQL_ENSURE(equiJoin.ArgCount() >= 4);
 
 	auto maybeStat = typesCtx.StatisticsMap.find(equiJoin.Raw());
-    if (maybeStat != typesCtx.StatisticsMap.end() &&
-        maybeStat->second->Cost.has_value()) {
+    if (maybeStat != typesCtx.StatisticsMap.end()) {
         return node;
     }
 

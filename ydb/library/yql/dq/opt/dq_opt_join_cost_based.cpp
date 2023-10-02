@@ -665,7 +665,7 @@ template <int N> void TDPccpSolver<N>::EmitCsgCmp(const std::bitset<N>& S1, cons
         TEdge e2 = Graph.FindCrossingEdge(S2, S1);
         std::shared_ptr<TJoinOptimizerNode> newJoin = 
             MakeJoin(DpTable[S2], DpTable[S1], e2.JoinConditions, GraceJoin);
-        if (newJoin->Stats->Cost.value() < DpTable[joined]->Stats->Cost.value()){
+        if (newJoin->Stats->Cost < DpTable[joined]->Stats->Cost){
             DpTable[joined] = newJoin;
         }
     } else {
@@ -675,10 +675,10 @@ template <int N> void TDPccpSolver<N>::EmitCsgCmp(const std::bitset<N>& S1, cons
         TEdge e2 = Graph.FindCrossingEdge(S2, S1);
         std::shared_ptr<TJoinOptimizerNode> newJoin2 = 
             MakeJoin(DpTable[S2], DpTable[S1], e2.JoinConditions, GraceJoin);
-        if (newJoin1->Stats->Cost.value() < DpTable[joined]->Stats->Cost.value()){
+        if (newJoin1->Stats->Cost < DpTable[joined]->Stats->Cost){
             DpTable[joined] = newJoin1;
         }
-        if (newJoin2->Stats->Cost.value() < DpTable[joined]->Stats->Cost.value()){
+        if (newJoin2->Stats->Cost < DpTable[joined]->Stats->Cost){
             DpTable[joined] = newJoin2;
         }
     }
@@ -860,10 +860,6 @@ bool DqCollectJoinRelationsWithStats(
             return false;
         }
 
-        if (!maybeStat->second->Cost.has_value()) {
-            return false;
-        }
-
         auto scope = input.Scope();
         if (!scope.Maybe<TCoAtom>()){
             return false;
@@ -899,8 +895,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(const TExprBase& node, TExprContext& ctx, 
     auto equiJoin = node.Cast<TCoEquiJoin>();
     YQL_ENSURE(equiJoin.ArgCount() >= 4);
 
-    if (typesCtx.StatisticsMap.contains(equiJoin.Raw()) && 
-        typesCtx.StatisticsMap[equiJoin.Raw()]->Cost.has_value()) {
+    if (typesCtx.StatisticsMap.contains(equiJoin.Raw())) {
 
         return node;
     }
@@ -999,7 +994,7 @@ public:
         TVector<int> scope;
         BuildOutput(&output, result.get(), scope);
         output.Rows = result->Stats->Nrows;
-        output.TotalCost = *result->Stats->Cost;
+        output.TotalCost = result->Stats->Cost;
         if (Log) {
             Log(output.ToString());
         }

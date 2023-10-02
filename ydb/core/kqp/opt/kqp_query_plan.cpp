@@ -1265,7 +1265,7 @@ private:
         
         if (auto stats = SerializerCtx.TypeCtx.GetStats(expr.Raw())) {
             op.Properties["E-Rows"] = stats->Nrows;
-            op.Properties["E-Cost"] = stats->Cost.value();
+            op.Properties["E-Cost"] = stats->Cost;
         }
         else {
             op.Properties["E-Rows"] = "No estimate";

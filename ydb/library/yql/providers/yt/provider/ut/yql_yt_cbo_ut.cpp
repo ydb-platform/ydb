@@ -61,7 +61,8 @@ Y_UNIT_TEST(OrderJoinsDoesNothingWhenCBODisabled) {
     TYtState::TPtr state = MakeIntrusive<TYtState>();
     TYtJoinNodeOp::TPtr tree = nullptr;
     TYtJoinNodeOp::TPtr optimizedTree;
-    state->Configuration->CostBasedOptimizer = ECostBasedOptimizer::Disable;
+    TTypeAnnotationContext typeCtx;
+    state->Types = &typeCtx;
 
     TExprContext ctx;
 
@@ -71,21 +72,23 @@ Y_UNIT_TEST(OrderJoinsDoesNothingWhenCBODisabled) {
 
 #define ADD_TEST(Name) \
     Y_UNIT_TEST(Name ## _PG) { \
-        Name(ECostBasedOptimizer::PG); \
+        Name(ECostBasedOptimizerType::PG); \
     } \
     Y_UNIT_TEST(Name ## _Native) { \
-        Name(ECostBasedOptimizer::Native); \
+        Name(ECostBasedOptimizerType::Native); \
     }
 
 
-void OrderJoins2Tables(ECostBasedOptimizer optimizerType) {
+void OrderJoins2Tables(auto optimizerType) {
     TExprContext exprCtx;
     auto tree = MakeOp({"c", "c_nationkey"}, {"n", "n_nationkey"}, {"c", "n"}, exprCtx);
     tree->Left = MakeLeaf({"c"}, {"c"},  100000, 12333, exprCtx);
     tree->Right = MakeLeaf({"n"}, {"n"}, 1000, 1233, exprCtx);
 
     TYtState::TPtr state = MakeIntrusive<TYtState>();
-    state->Configuration->CostBasedOptimizer = optimizerType;
+    TTypeAnnotationContext typeCtx;
+    typeCtx.CostBasedOptimizer = optimizerType;
+    state->Types = &typeCtx;
     auto optimizedTree = OrderJoins(tree, state, exprCtx, true);
     UNIT_ASSERT(optimizedTree != tree);
     UNIT_ASSERT(optimizedTree->Left);
@@ -103,30 +106,34 @@ void OrderJoins2Tables(ECostBasedOptimizer optimizerType) {
 
 ADD_TEST(OrderJoins2Tables)
 
-void OrderJoins2TablesComplexLabel(ECostBasedOptimizer optimizerType)
+void OrderJoins2TablesComplexLabel(auto optimizerType)
 {
     TExprContext exprCtx;
     auto tree = MakeOp({"c", "c_nationkey"}, {"n", "n_nationkey"}, {"c", "n", "e"}, exprCtx);
     tree->Left = MakeLeaf({"c"}, {"c"}, 1000000, 1233333, exprCtx);
     tree->Right = MakeLeaf({"n"}, {"n", "e"}, 10000, 12333, exprCtx);
 
+    TTypeAnnotationContext typeCtx;
     TYtState::TPtr state = MakeIntrusive<TYtState>();
-    state->Configuration->CostBasedOptimizer = optimizerType;
+    typeCtx.CostBasedOptimizer = optimizerType;
+    state->Types = &typeCtx;
     auto optimizedTree = OrderJoins(tree, state, exprCtx, true);
     UNIT_ASSERT(optimizedTree != tree);
 }
 
 ADD_TEST(OrderJoins2TablesComplexLabel)
 
-void OrderJoins2TablesTableIn2Rels(ECostBasedOptimizer optimizerType)
+void OrderJoins2TablesTableIn2Rels(auto optimizerType)
 {
     TExprContext exprCtx;
     auto tree = MakeOp({"c", "c_nationkey"}, {"n", "n_nationkey"}, {"c", "n", "e"}, exprCtx);
     tree->Left = MakeLeaf({"c"}, {"c"}, 1000000, 1233333, exprCtx);
     tree->Right = MakeLeaf({"n"}, {"n", "c"}, 10000, 12333, exprCtx);
 
+    TTypeAnnotationContext typeCtx;
     TYtState::TPtr state = MakeIntrusive<TYtState>();
-    state->Configuration->CostBasedOptimizer = optimizerType;
+    typeCtx.CostBasedOptimizer = optimizerType;
+    state->Types = &typeCtx;
     auto optimizedTree = OrderJoins(tree, state, exprCtx, true);
     UNIT_ASSERT(optimizedTree != tree);
 }
@@ -141,8 +148,10 @@ Y_UNIT_TEST(OrderLeftJoin)
     tree->Right = MakeLeaf({"n"}, {"n"}, 10000, 12333, exprCtx);
     tree->JoinKind = exprCtx.NewAtom(exprCtx.AppendPosition({}), "Left");
 
+    TTypeAnnotationContext typeCtx;
     TYtState::TPtr state = MakeIntrusive<TYtState>();
-    state->Configuration->CostBasedOptimizer = ECostBasedOptimizer::PG;
+    typeCtx.CostBasedOptimizer = ECostBasedOptimizerType::PG;
+    state->Types = &typeCtx;
     auto optimizedTree = OrderJoins(tree, state, exprCtx, true);
     UNIT_ASSERT(optimizedTree != tree);
     UNIT_ASSERT_STRINGS_EQUAL("Left", optimizedTree->JoinKind->Content());
@@ -156,8 +165,10 @@ Y_UNIT_TEST(UnsupportedJoin)
     tree->Right = MakeLeaf({"n"}, {"n"}, 10000, 12333, exprCtx);
     tree->JoinKind = exprCtx.NewAtom(exprCtx.AppendPosition({}), "Full");
 
+    TTypeAnnotationContext typeCtx;
     TYtState::TPtr state = MakeIntrusive<TYtState>();
-    state->Configuration->CostBasedOptimizer = ECostBasedOptimizer::PG;
+    typeCtx.CostBasedOptimizer = ECostBasedOptimizerType::PG;
+    state->Types = &typeCtx;
     auto optimizedTree = OrderJoins(tree, state, exprCtx, true);
     UNIT_ASSERT(optimizedTree == tree);
 }

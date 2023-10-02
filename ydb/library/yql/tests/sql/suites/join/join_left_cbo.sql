@@ -1,6 +1,6 @@
 use plato;
 
-pragma yt.CostBasedOptimizer="PG";
+pragma CostBasedOptimizer="PG";
 
 select i1.value, i2.value
 from Input1 as i1

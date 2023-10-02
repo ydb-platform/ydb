@@ -5599,7 +5599,7 @@ private:
     TMaybeNode<TExprBase> RuntimeEquiJoin(TExprBase node, TExprContext& ctx) const {
         auto equiJoin = node.Cast<TYtEquiJoin>();
 
-        const bool tryReorder = State_->Configuration->CostBasedOptimizer.Get().GetOrElse(ECostBasedOptimizer::Disable) != ECostBasedOptimizer::Disable
+        const bool tryReorder = State_->Types->CostBasedOptimizer != ECostBasedOptimizerType::Disable
             && equiJoin.Input().Size() > 2
             && HasOnlyOneJoinType(*equiJoin.Joins().Ptr(), "Inner");
 

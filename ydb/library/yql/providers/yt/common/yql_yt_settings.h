@@ -58,12 +58,6 @@ enum class EStoredConstraint : ui64 {
     Distinct = 4ULL /* "Distinct" */,
 };
 
-enum class ECostBasedOptimizer {
-    Disable,
-    PG,
-    Native,
-};
-
 enum class EInferSchemaMode {
     Sequential = 0ULL  /* "sequential" */,
     Parallel   = 1ULL  /* "parallel" */,
@@ -266,7 +260,6 @@ struct TYtSettings {
     NCommon::TConfSetting<double, false> MaxCpuUsageToFuseMultiOuts;
     NCommon::TConfSetting<double, false> MaxReplicationFactorToFuseMultiOuts;
     NCommon::TConfSetting<ui64, false> ApplyStoredConstraints;
-    NCommon::TConfSetting<ECostBasedOptimizer, false> CostBasedOptimizer;
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);

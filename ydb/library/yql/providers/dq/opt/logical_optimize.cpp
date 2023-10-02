@@ -116,14 +116,14 @@ protected:
     }
 
     TMaybeNode<TExprBase> OptimizeEquiJoinWithCosts(TExprBase node, TExprContext& ctx) {
-        if (TypesCtx.CostBasedOptimizerType == "native" || TypesCtx.CostBasedOptimizerType == "pg") {
+        if (TypesCtx.CostBasedOptimizer != ECostBasedOptimizerType::Disable) {
             std::function<void(const TString&)> log = [&](auto str) {                
                 YQL_CLOG(INFO, ProviderDq) << str;
             };
             std::function<IOptimizer*(IOptimizer::TInput&&)> factory = [&](auto input) {
-                if (TypesCtx.CostBasedOptimizerType == "native") {
+                if (TypesCtx.CostBasedOptimizer == ECostBasedOptimizerType::Native) {
                     return MakeNativeOptimizer(input, log);
-                } else if (TypesCtx.CostBasedOptimizerType == "pg") {
+                } else if (TypesCtx.CostBasedOptimizer == ECostBasedOptimizerType::PG) {
                     return MakePgOptimizer(input, log);
                 } else {
                     YQL_ENSURE(false, "Unknown CBO type");

@@ -176,6 +176,12 @@ enum class EFallbackPolicy {
     Always      /* "always" */
 };
 
+enum class ECostBasedOptimizerType {
+    Disable /* "disable" */,
+    PG /* "pg" */,
+    Native /* "native" */
+}; 
+
 struct TUdfCachedInfo {
     const TTypeAnnotationNode* FunctionType = nullptr;
     const TTypeAnnotationNode* RunConfigType = nullptr;
@@ -236,7 +242,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool UseBlocks = false;
     bool PgEmitAggApply = false;
     IArrowResolver::TPtr ArrowResolver;
-    TString CostBasedOptimizerType;
+    ECostBasedOptimizerType CostBasedOptimizer = ECostBasedOptimizerType::Disable;
     bool MatchRecognize = false;
     enum class EMatchRecognizeStreamingMode {
         Disable,

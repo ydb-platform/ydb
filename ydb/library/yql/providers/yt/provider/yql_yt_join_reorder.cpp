@@ -76,12 +76,10 @@ public:
         TYtJoinNodeOp::TPtr op,
         const TYtState::TPtr& state,
         TExprContext& ctx,
-        ECostBasedOptimizer optimizerType,
         bool debug = false)
         : Root(op)
         , State(state)
         , Ctx(ctx)
-        , OptimizerType(optimizerType)
         , Debug(debug)
     {
         Y_UNUSED(State);
@@ -113,17 +111,16 @@ public:
 
         std::unique_ptr<IOptimizer> opt;
 
-        switch (OptimizerType) {
-        case ECostBasedOptimizer::PG:
+        switch (State->Types->CostBasedOptimizer) {
+        case ECostBasedOptimizerType::PG:
             opt = std::unique_ptr<IOptimizer>(MakePgOptimizer(input, log));
             break;
-        case ECostBasedOptimizer::Native:
+        case ECostBasedOptimizerType::Native:
             opt = std::unique_ptr<IOptimizer>(NDq::MakeNativeOptimizer(input, log));
             break;
         default:
-            YQL_CLOG(ERROR, ProviderYt) << "Unknown optimizer type";
+            YQL_CLOG(ERROR, ProviderYt) << "Unknown optimizer type " << ToString(State->Types->CostBasedOptimizer);
             return Root;
-            break;
         }
 
         try {
@@ -396,7 +393,6 @@ private:
     TYtJoinNodeOp::TPtr Root;
     const TYtState::TPtr& State;
     TExprContext& Ctx;
-    ECostBasedOptimizer OptimizerType;
     bool Debug;
 
     THashMap<TStringBuf, std::vector<int>> Table2RelIds;
@@ -418,12 +414,11 @@ private:
 
 TYtJoinNodeOp::TPtr OrderJoins(TYtJoinNodeOp::TPtr op, const TYtState::TPtr& state, TExprContext& ctx, bool debug)
 {
-    auto optimizerType = state->Configuration->CostBasedOptimizer.Get().GetOrElse(ECostBasedOptimizer::Disable);
-    if (optimizerType == ECostBasedOptimizer::Disable) {
+    if (state->Types->CostBasedOptimizer == ECostBasedOptimizerType::Disable) {
         return op;
     }
 
-    auto result = TJoinReorderer(op, state, ctx, optimizerType, debug).Do();
+    auto result = TJoinReorderer(op, state, ctx, debug).Do();
     if (!debug && AreSimilarTrees(result, op)) {
         return op;
     }

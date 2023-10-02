@@ -812,14 +812,11 @@ namespace {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
                     return false;
                 }
-                auto arg = TString{args[0]};
 
-                if (!(arg == "pg" || arg == "native" || arg == "disable")) {
+                if (!TryFromString(args[0], Types.CostBasedOptimizer)) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected `disable|pg|native', but got: " << args[0]));
                     return false;
                 }
-
-                Types.CostBasedOptimizerType = arg;
             }
             else if (name == "_EnableMatchRecognize" || name == "DisableMatchRecognize") {
                 if (args.size() != 0) {

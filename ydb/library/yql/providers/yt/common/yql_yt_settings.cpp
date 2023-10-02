@@ -451,7 +451,6 @@ TYtConfiguration::TYtConfiguration()
             }
             return res;
         });
-    REGISTER_SETTING(*this, CostBasedOptimizer).Parser([](const TString& v) { return FromString<ECostBasedOptimizer>(v); });
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

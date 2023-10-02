@@ -2811,7 +2811,7 @@ private:
                     if (const auto updatePart = GetConstraintFromLambda<TConstraint, Wide>(input->Tail(), ctx))
                         if (const auto update = TConstraint::MakeComplete(ctx, updatePart->GetColumnMapping(), original))
                             if (const auto common = init->MakeCommon(update, ctx))
-                                input->AddConstraint(common);
+                                input->AddConstraint(common->GetSimplifiedForType(*input->GetTypeAnn(), ctx));
     }
 
     template<bool Wide>
@@ -2826,13 +2826,14 @@ private:
         const auto chopped = input->Head().GetConstraint<TChoppedConstraintNode>();
         if (sorted || chopped) {
             if (const auto& keys = GetSimpleKeys<Wide>(*FuseInitLambda(*initLambda, *switchLambda, ctx), ctx); !keys.empty()) {
-                if (sorted && sorted->StartsWith(keys) || chopped && chopped->Equals(keys)) {
+                if (sorted && sorted->GetSimplifiedForType(*input->Head().GetTypeAnn(), ctx)->StartsWith(keys) ||
+                    chopped && chopped->GetSimplifiedForType(*input->Head().GetTypeAnn(), ctx)->Equals(keys)) {
                     TPartOfConstraintBase::TSetOfSetsType sets;
                     sets.reserve(keys.size());
                     for (const auto& key : keys)
                         sets.insert_unique(TPartOfConstraintBase::TSetType{key});
-                    unique = ctx.MakeConstraint<TUniqueConstraintNode>(TUniqueConstraintNode::TContentType{sets});
-                    distinct = ctx.MakeConstraint<TDistinctConstraintNode>(TDistinctConstraintNode::TContentType{sets});
+                    unique = ctx.MakeConstraint<TUniqueConstraintNode>(TUniqueConstraintNode::TContentType{sets})->GetComplicatedForType(*input->Head().GetTypeAnn(), ctx);
+                    distinct = ctx.MakeConstraint<TDistinctConstraintNode>(TDistinctConstraintNode::TContentType{sets})->GetComplicatedForType(*input->Head().GetTypeAnn(), ctx);
                     if constexpr (Wide) {
                         if (const auto& mapping = TPartOfUniqueConstraintNode::GetCommonMapping(unique); !mapping.empty()) {
                             for (ui32 i = 0U; i < argsConstraints.size(); ++i) {
@@ -2890,7 +2891,7 @@ private:
                     if (const auto updatePart = GetConstraintFromLambda<TConstraint, Wide>(input->Tail(), ctx))
                         if (const auto update = TConstraint::MakeComplete(ctx, updatePart->GetColumnMapping(), original))
                             if (const auto common = init->MakeCommon(update, ctx))
-                                input->AddConstraint(common);
+                                input->AddConstraint(common->GetSimplifiedForType(*input->GetTypeAnn(), ctx));
     }
 
     template<bool Wide>
@@ -3017,7 +3018,7 @@ private:
 
         if constexpr (Partitions) {
             if (!keys.empty())
-                argConstraints.emplace_back(ctx.MakeConstraint<TChoppedConstraintNode>(keys));
+                argConstraints.emplace_back(ctx.MakeConstraint<TChoppedConstraintNode>(keys)->GetComplicatedForType(*input->Head().GetTypeAnn(), ctx));
         }
 
         if (const auto status = UpdateLambdaConstraints(input->ChildRef(TCoBase::idx_ListHandlerLambda), ctx, {argConstraints}); status != TStatus::Ok) {

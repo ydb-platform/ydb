@@ -409,7 +409,8 @@ void SerializeIntegerColumn(
                             TRange<ui32>(), \
                             rleIndexes, \
                             [&] (auto index) { \
-                                return values[index]; \
+                                YT_VERIFY(index >= column->StartIndex); \
+                                return values[index - column->StartIndex]; \
                             }, \
                             [&] (auto value) { \
                                 *currentOutput++ = value; \

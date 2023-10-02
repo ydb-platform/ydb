@@ -400,24 +400,25 @@ void SerializeIntegerColumn(
                 : TRange<ui64>();
 
             switch (simpleType) {
-#define XX(cppType, ytType)                               \
-    case ESimpleLogicalValueType::ytType: {               \
-        auto dstValues = GetTypedValues<cppType>(dstRef); \
-        auto* currentOutput = dstValues.Begin();          \
-        DecodeIntegerVector(                              \
-            column->StartIndex,                           \
-            column->StartIndex + column->ValueCount,      \
-            valueColumn->Values->BaseValue,               \
-            valueColumn->Values->ZigZagEncoded,           \
-            TRange<ui32>(),                               \
-            rleIndexes,                                   \
-            [&] (auto index) {                            \
-                return values[index];                     \
-            },                                            \
-            [&] (auto value) {                            \
-                *currentOutput++ = value;                 \
-            });                                           \
-        break;                                            \
+#define XX(cppType, ytType)                                 \
+    case ESimpleLogicalValueType::ytType: {                 \
+        auto dstValues = GetTypedValues<cppType>(dstRef);   \
+        auto* currentOutput = dstValues.Begin();            \
+        DecodeIntegerVector(                                \
+            column->StartIndex,                             \
+            column->StartIndex + column->ValueCount,        \
+            valueColumn->Values->BaseValue,                 \
+            valueColumn->Values->ZigZagEncoded,             \
+            TRange<ui32>(),                                 \
+            rleIndexes,                                     \
+            [&] (auto index) {                              \
+                YT_VERIFY(index >= column->StartIndex);     \
+                return values[index - column->StartIndex];  \
+            },                                              \
+            [&] (auto value) {                              \
+                *currentOutput++ = value;                   \
+            });                                             \
+        break;                                              \
     }
 
                 XX(i8, Int8)

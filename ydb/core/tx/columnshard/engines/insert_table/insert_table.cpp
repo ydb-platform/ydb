@@ -126,7 +126,7 @@ std::vector<TCommittedBlob> TInsertTable::Read(ui64 pathId, const TSnapshot& sna
     std::vector<TCommittedBlob> result;
     result.reserve(ret.size());
     for (auto&& i : ret) {
-        result.emplace_back(TCommittedBlob(i->GetBlobRange(), i->GetSnapshot(), i->GetSchemaSnapshot(), i->GetMeta().GetMin(pkSchema), i->GetMeta().GetMax(pkSchema)));
+        result.emplace_back(TCommittedBlob(i->GetBlobRange(), i->GetSnapshot(), i->GetSchemaVersion(), i->GetMeta().GetMin(pkSchema), i->GetMeta().GetMax(pkSchema)));
     }
 
     return result;

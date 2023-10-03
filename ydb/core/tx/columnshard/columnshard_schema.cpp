@@ -39,11 +39,7 @@ bool Schema::InsertTable_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsG
         TString dedupId = rowset.GetValue<InsertTable::DedupId>();
         TString strBlobId = rowset.GetValue<InsertTable::BlobId>();
         TString metaStr = rowset.GetValue<InsertTable::Meta>();
-
-        Y_VERIFY(rowset.HaveValue<InsertTable::IndexPlanStep>());
-        ui64 indexPlanStep = rowset.GetValue<InsertTable::IndexPlanStep>();
-        ui64 indexTxId = rowset.GetValue<InsertTable::IndexTxId>();
-        const NOlap::TSnapshot indexSnapshot(indexPlanStep, indexTxId);
+        ui64 schemaVersion = rowset.HaveValue<InsertTable::SchemaVersion>() ? rowset.GetValue<InsertTable::SchemaVersion>() : 0;
 
         TString error;
         NOlap::TUnifiedBlobId blobId = NOlap::TUnifiedBlobId::ParseFromString(strBlobId, dsGroupSelector, error);
@@ -53,7 +49,7 @@ bool Schema::InsertTable_Load(NIceDb::TNiceDb& db, const IBlobGroupSelector* dsG
         if (metaStr) {
             Y_VERIFY(meta.ParseFromString(metaStr));
         }
-        TInsertedData data(planStep, writeTxId, pathId, dedupId, NOlap::TBlobRange(blobId, 0, blobId.BlobSize()), meta, indexSnapshot, {});
+        TInsertedData data(planStep, writeTxId, pathId, dedupId, NOlap::TBlobRange(blobId, 0, blobId.BlobSize()), meta, schemaVersion, {});
 
         switch (recType) {
             case EInsertTableIds::Inserted:

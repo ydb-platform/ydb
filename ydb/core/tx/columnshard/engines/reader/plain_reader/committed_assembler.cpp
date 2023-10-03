@@ -4,7 +4,7 @@
 namespace NKikimr::NOlap::NPlainReader {
 
 bool TCommittedAssembler::DoExecute() {
-    ResultBatch = NArrow::DeserializeBatch(BlobData, ReadMetadata->GetBlobSchema(SchemaSnapshot));
+    ResultBatch = NArrow::DeserializeBatch(BlobData, ReadMetadata->GetBlobSchema(SchemaVersion));
     Y_VERIFY(ResultBatch);
     ResultBatch = ReadMetadata->GetIndexInfo().AddSpecialColumns(ResultBatch, DataSnapshot);
     Y_VERIFY(ResultBatch);
@@ -26,7 +26,7 @@ TCommittedAssembler::TCommittedAssembler(const NActors::TActorId& scanActorId, c
     , BlobData(blobData)
     , ReadMetadata(readMetadata)
     , SourceIdx(sourceIdx)
-    , SchemaSnapshot(cBlob.GetSchemaSnapshot())
+    , SchemaVersion(cBlob.GetSchemaVersion())
     , DataSnapshot(cBlob.GetSnapshot())
 {
 }

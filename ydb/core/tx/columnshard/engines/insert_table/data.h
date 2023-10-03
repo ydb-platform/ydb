@@ -28,8 +28,9 @@ public:
     ui64 WriteTxId = 0;
     ui64 PathId = 0;
     TString DedupId;
+
 private:
-    TSnapshot SchemaVersion = TSnapshot::Zero();
+    YDB_READONLY(ui64, SchemaVersion, 0);
 public:
     std::optional<TString> GetBlobData() const {
         if (BlobDataGuard) {
@@ -46,16 +47,15 @@ public:
     TInsertedData() = delete; // avoid invalid TInsertedData anywhere
 
     TInsertedData(ui64 planStep, ui64 writeTxId, ui64 pathId, TString dedupId, const TBlobRange& blobRange,
-        const NKikimrTxColumnShard::TLogicalMetadata& proto, const TSnapshot& schemaVersion, const std::optional<TString>& blobData);
+        const NKikimrTxColumnShard::TLogicalMetadata& proto, const ui64 schemaVersion, const std::optional<TString>& blobData);
 
     TInsertedData(ui64 writeTxId, ui64 pathId, TString dedupId, const TBlobRange& blobRange,
-        const NKikimrTxColumnShard::TLogicalMetadata& proto, const TSnapshot& schemaVersion, const std::optional<TString>& blobData)
+        const NKikimrTxColumnShard::TLogicalMetadata& proto, const ui64 schemaVersion, const std::optional<TString>& blobData)
         : TInsertedData(0, writeTxId, pathId, dedupId, blobRange, proto, schemaVersion, blobData)
     {}
 
-
     TInsertedData(ui64 writeTxId, ui64 pathId, TString dedupId, const TUnifiedBlobId& blobId,
-        const NKikimrTxColumnShard::TLogicalMetadata& proto, const TSnapshot& schemaVersion, const std::optional<TString>& blobData)
+        const NKikimrTxColumnShard::TLogicalMetadata& proto, const ui64 schemaVersion, const std::optional<TString>& blobData)
         : TInsertedData(0, writeTxId, pathId, dedupId, TBlobRange(blobId, 0, blobId.BlobSize()), proto, schemaVersion, blobData)
     {
     }
@@ -118,10 +118,6 @@ public:
         return TSnapshot(PlanStep, WriteTxId);
     }
 
-    const TSnapshot& GetSchemaSnapshot() const {
-        return SchemaVersion;
-    }
-
     ui32 BlobSize() const { return BlobRange.GetBlobSize(); }
 
 };
@@ -130,7 +126,7 @@ class TCommittedBlob {
 private:
     TBlobRange BlobRange;
     TSnapshot CommitSnapshot;
-    TSnapshot SchemaSnapshot;
+    YDB_READONLY_DEF(ui64, SchemaVersion);
     YDB_READONLY_DEF(std::optional<NArrow::TReplaceKey>, First);
     YDB_READONLY_DEF(std::optional<NArrow::TReplaceKey>, Last);
 public:
@@ -144,10 +140,10 @@ public:
         return *Last;
     }
 
-    TCommittedBlob(const TBlobRange& blobRange, const TSnapshot& snapshot, const TSnapshot& schemaSnapshot, const std::optional<NArrow::TReplaceKey>& first, const std::optional<NArrow::TReplaceKey>& last)
+    TCommittedBlob(const TBlobRange& blobRange, const TSnapshot& snapshot, const ui64 schemaVersion, const std::optional<NArrow::TReplaceKey>& first, const std::optional<NArrow::TReplaceKey>& last)
         : BlobRange(blobRange)
         , CommitSnapshot(snapshot)
-        , SchemaSnapshot(schemaSnapshot)
+        , SchemaVersion(schemaVersion)
         , First(first)
         , Last(last)
     {}
@@ -162,10 +158,6 @@ public:
 
     const TSnapshot& GetSnapshot() const {
         return CommitSnapshot;
-    }
-
-    const TSnapshot& GetSchemaSnapshot() const {
-        return SchemaSnapshot;
     }
 
     const TBlobRange& GetBlobRange() const {

@@ -85,7 +85,7 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
     for (auto& inserted : DataToIndex) {
         const TBlobRange& blobRange = inserted.GetBlobRange();
 
-        auto blobSchema = context.SchemaVersions.GetSchema(inserted.GetSchemaSnapshot());
+        auto blobSchema = context.SchemaVersions.GetSchema(inserted.GetSchemaVersion());
         auto& indexInfo = blobSchema->GetIndexInfo();
         Y_VERIFY(indexInfo.IsSorted());
 

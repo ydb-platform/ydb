@@ -51,7 +51,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
 
         TTestInsertTableDB dbTable;
         TInsertTable insertTable;
-        TSnapshot indexSnapshot(1, 1);
+        ui64 indexSnapshot = 0;
 
         // insert, not commited
         bool ok = insertTable.Insert(dbTable, TInsertedData(writeId, tableId, dedupId, blobId1, {}, indexSnapshot, {}));

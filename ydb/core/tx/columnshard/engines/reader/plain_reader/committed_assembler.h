@@ -13,7 +13,7 @@ private:
     TString BlobData;
     TReadMetadata::TConstPtr ReadMetadata;
     const ui32 SourceIdx;
-    TSnapshot SchemaSnapshot;
+    ui64 SchemaVersion;
     TSnapshot DataSnapshot;
 
     std::shared_ptr<NArrow::TColumnFilter> EarlyFilter;

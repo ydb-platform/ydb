@@ -189,7 +189,7 @@ public:
         return it->second;
     }
 
-    std::shared_ptr<arrow::Schema> GetBlobSchema(const TSnapshot& version) const {
+    std::shared_ptr<arrow::Schema> GetBlobSchema(const ui64 version) const {
         return IndexVersions.GetSchema(version)->GetIndexInfo().ArrowSchema();
     }
 

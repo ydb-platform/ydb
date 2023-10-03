@@ -133,7 +133,7 @@ namespace NYql::NDqs {
         return stages.size();
     }
 
-    ui32 TDqsExecutionPlanner::PlanExecution(bool canFallback) {
+    bool TDqsExecutionPlanner::PlanExecution(bool canFallback) {
         TExprBase expr(DqExprRoot);
         auto result = expr.Maybe<TDqCnResult>();
         auto query = expr.Maybe<TDqQuery>();
@@ -230,8 +230,8 @@ namespace NYql::NDqs {
 
             BuildConnections(stage);
 
-            if (canFallback && TasksGraph.GetTasks().size() > maxTasksPerOperation) {
-                break;
+            if (TasksGraph.GetTasks().size() > maxTasksPerOperation) {
+                return false;
             }
         }
 
@@ -270,7 +270,7 @@ namespace NYql::NDqs {
 
         BuildCheckpointingAndWatermarksMode(true, Settings->WatermarksMode.Get().GetOrElse("") == "default");
 
-        return TasksGraph.GetTasks().size();
+        return TasksGraph.GetTasks().size() <= maxTasksPerOperation;
     }
 
     bool TDqsExecutionPlanner::IsEgressTask(const TDqsTasksGraph::TTaskType& task) const {

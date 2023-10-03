@@ -53,7 +53,7 @@ namespace NYql::NDqs {
             return _MaxDataSizePerJob;
         }
         ui64 StagesCount();
-        ui32 PlanExecution(bool canFallback = false);
+        bool PlanExecution(bool canFallback = false);
         TVector<NDqProto::TDqTask> GetTasks(const TVector<NActors::TActorId>& workers) override;
         TVector<NDqProto::TDqTask>& GetTasks() override;
 

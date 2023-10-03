@@ -75,13 +75,15 @@ private:
         }
 
         std::unordered_set<ui64> ssIds;
+        bool isServerless = false;
         for (const auto& entry : navigate->ResultSet) {
             if (entry.Status != TNavigate::EStatus::Ok) {
                 continue;
             }
             ssIds.insert(entry.DomainInfo->ExtractSchemeShard());
+            isServerless = entry.DomainInfo->IsServerless();
         }
-        if (ssIds.size() != 1) {
+        if (ssIds.size() != 1 || isServerless) {
             ReplyFailed(requestId);
             return;
         }

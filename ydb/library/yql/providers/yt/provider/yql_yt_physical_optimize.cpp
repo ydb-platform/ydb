@@ -6180,7 +6180,8 @@ private:
 
         const ui64 maxLimit = State_->Configuration->TopSortMaxLimit.Get().GetOrElse(DEFAULT_TOP_SORT_LIMIT);
         TMaybe<ui64> limit = GetLimit(settings.Ref());
-        if (!limit || *limit > maxLimit) {
+        if (!limit || *limit == 0 || *limit > maxLimit) {
+            YQL_CLOG(INFO, ProviderYt) << __FUNCTION__ << " !!! TopSort - zero limit";
             // Keep empty "limit" setting to prevent repeated Limits optimization
             if (limitSetting->ChildPtr(1)->ChildrenSize() != 0) {
                 auto updatedSettings = NYql::RemoveSetting(settings.Ref(), EYtSettingType::Limit, ctx);

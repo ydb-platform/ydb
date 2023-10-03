@@ -211,6 +211,16 @@ public:
         Tongue = CurrentPage->data();
     }
 
+    ~TState() {
+	//Workaround for YQL-16663, consider to rework this class in a safe manner
+        while (auto row = Extract()) {
+            for (size_t i = 0; i != RowSize(); ++i) {
+                row[i].UnRef();
+            }
+        }
+        IsEmpty();
+    }
+
     bool TasteIt() {
         Y_VERIFY(!ExtractIt);
         bool isNew = false;

@@ -14,7 +14,7 @@
 [Twitter](https://twitter.com/YDBPlatform) |
 [LinkedIn](https://www.linkedin.com/company/ydb-platform)
 
-YDB is an open-source Distributed SQL Database that combines high availability and scalability with strict consistency and ACID transactions.
+YDB is an open source Distributed SQL Database that combines high availability and scalability with strict consistency and ACID transactions.
 
 [![YDB Product Video](ydb/docs/_assets/ydb-promo-video.png)](https://youtu.be/bxZRUtMAlFI)
 

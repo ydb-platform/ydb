@@ -1,6 +1,9 @@
 allowHTML: true
 langs: ['en','ru']
 apply-presets: true
+resources:
+  script:
+    - _assets/gtm.js
 
 docs-viewer:
   project-name: ydb

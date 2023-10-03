@@ -874,11 +874,11 @@ namespace {
                 }
                 const auto& arg = args[0];
                 if (arg == "disable") {
-                    Types.MatchRecognizeStreaming = TTypeAnnotationContext::EMatchRecognizeStreamingMode::Disable;
+                    Types.MatchRecognizeStreaming = EMatchRecognizeStreamingMode::Disable;
                 } else if (arg == "auto") {
-                    Types.MatchRecognizeStreaming = TTypeAnnotationContext::EMatchRecognizeStreamingMode::Auto;
+                    Types.MatchRecognizeStreaming = EMatchRecognizeStreamingMode::Auto;
                 } else if (arg == "force") {
-                    Types.MatchRecognizeStreaming = TTypeAnnotationContext::EMatchRecognizeStreamingMode::Force;
+                    Types.MatchRecognizeStreaming = EMatchRecognizeStreamingMode::Force;
                 } else {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected `disable|auto|force', but got: " << args[0]));
                     return false;

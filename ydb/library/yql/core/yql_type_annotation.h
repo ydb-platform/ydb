@@ -182,6 +182,12 @@ enum class ECostBasedOptimizerType {
     Native /* "native" */
 }; 
 
+enum class EMatchRecognizeStreamingMode {
+    Disable,
+    Auto,
+    Force,
+};
+
 struct TUdfCachedInfo {
     const TTypeAnnotationNode* FunctionType = nullptr;
     const TTypeAnnotationNode* RunConfigType = nullptr;
@@ -244,11 +250,6 @@ struct TTypeAnnotationContext: public TThrRefBase {
     IArrowResolver::TPtr ArrowResolver;
     ECostBasedOptimizerType CostBasedOptimizer = ECostBasedOptimizerType::Disable;
     bool MatchRecognize = false;
-    enum class EMatchRecognizeStreamingMode {
-        Disable,
-        Auto,
-        Force,
-    };
     EMatchRecognizeStreamingMode MatchRecognizeStreaming = EMatchRecognizeStreamingMode::Force;
     i64 TimeOrderRecoverDelay = -10'000'000; //microseconds
     i64 TimeOrderRecoverAhead = 10'000'000; //microseconds

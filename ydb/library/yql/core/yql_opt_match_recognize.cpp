@@ -10,14 +10,14 @@ using namespace NNodes;
 
 namespace {
 bool IsStreaming(const TExprNode::TPtr& input, const TTypeAnnotationContext& typeAnnCtx) {
-    if (TTypeAnnotationContext::EMatchRecognizeStreamingMode::Disable == typeAnnCtx.MatchRecognizeStreaming){
+    if (EMatchRecognizeStreamingMode::Disable == typeAnnCtx.MatchRecognizeStreaming){
         return false;
     }
-    if (TTypeAnnotationContext::EMatchRecognizeStreamingMode::Force == typeAnnCtx.MatchRecognizeStreaming){
+    if (EMatchRecognizeStreamingMode::Force == typeAnnCtx.MatchRecognizeStreaming){
         return true;
     }
 
-    YQL_ENSURE(TTypeAnnotationContext::EMatchRecognizeStreamingMode::Auto == typeAnnCtx.MatchRecognizeStreaming, "Internal logic error");
+    YQL_ENSURE(EMatchRecognizeStreamingMode::Auto == typeAnnCtx.MatchRecognizeStreaming, "Internal logic error");
 
     bool hasPq = false;
     NYql::VisitExpr(input, [&hasPq](const TExprNode::TPtr& node){

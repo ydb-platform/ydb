@@ -1,5 +1,7 @@
 PY3_PROGRAM_BIN(protoc-gen-mypy)
 
+LICENSE(Apache-2.0)
+
 PEERDIR(
     contrib/python/mypy-protobuf
 )

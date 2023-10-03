@@ -726,6 +726,10 @@ public:
                                  TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent::TCompressedMessage>& compressedMessages,
                                  TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator);
 
+    TMutex& GetLock() {
+        return Lock;
+    }
+
 private:
     const TKey Key;
     ui64 AssignId;
@@ -737,6 +741,8 @@ private:
 
     TDisjointIntervalTree<ui64> Commits;
     TDisjointIntervalTree<ui64> ClientCommits;
+
+    TMutex Lock;
 };
 
 template <bool UseMigrationProtocol>

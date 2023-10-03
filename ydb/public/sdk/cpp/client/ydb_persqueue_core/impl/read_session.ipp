@@ -180,6 +180,7 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::SignalReadyEvents(TInt
                                                                                       compressedMessages,
                                                                                       accumulator,
                                                                                       NotReady);
+
                 TDataReceivedEvent<UseMigrationProtocol> data(std::move(messages),
                                                               std::move(compressedMessages),
                                                               stream);
@@ -2096,9 +2097,11 @@ void TReadSessionEventsQueue<UseMigrationProtocol>::SignalReadyEvents(
     TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream) {
     Y_ASSERT(partitionStream);
 
-    TDeferredActions<UseMigrationProtocol> deferred;
-    with_lock (TParent::Mutex) {
-        SignalReadyEventsImpl(partitionStream, deferred);
+    with_lock (partitionStream->GetLock()) {
+        TDeferredActions<UseMigrationProtocol> deferred;
+        with_lock (TParent::Mutex) {
+            SignalReadyEventsImpl(partitionStream, deferred);
+        }
     }
 }
 
@@ -2174,7 +2177,6 @@ void TReadSessionEventsQueue<UseMigrationProtocol>::GetDataEventCallbackSettings
 
 template<bool UseMigrationProtocol>
 void TReadSessionEventsQueue<UseMigrationProtocol>::ClearAllEvents() {
-    TDeferredActions<UseMigrationProtocol> deferred;
     with_lock (TParent::Mutex) {
         while (!TParent::Events.empty()) {
             auto& event = TParent::Events.front();

@@ -1,6 +1,7 @@
 allowHTML: true
 langs: ['en','ru']
 apply-presets: true
+allowCustomResources: true
 resources:
   script:
     - _assets/gtm.js

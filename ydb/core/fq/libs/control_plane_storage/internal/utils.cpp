@@ -183,12 +183,26 @@ std::vector<TString> GetMeteringRecords(const TString& statistics, bool billable
 }
 
 void RemapValue(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, const TString& key) {
-    ui64 value = 0;
-    if (auto* keyNode = node.GetValueByPath(key)) {
-        value = keyNode->GetInteger();
-    }
     writer.OnKeyedItem(key);
-    writer.OnInt64Scalar(value);
+    if (auto* keyNode = node.GetValueByPath(key)) {
+        switch (keyNode->GetType()) {
+        case NJson::JSON_BOOLEAN:
+            writer.OnBooleanScalar(keyNode->GetBoolean());
+            break;
+        case NJson::JSON_INTEGER:
+            writer.OnInt64Scalar(keyNode->GetInteger());
+            break;
+        case NJson::JSON_DOUBLE:
+            writer.OnDoubleScalar(keyNode->GetDouble());
+            break;
+        case NJson::JSON_STRING:
+        default:
+            writer.OnStringScalar(keyNode->GetStringSafe());
+            break;
+        }
+    } else {
+        writer.OnStringScalar("-");
+    }
 }
 
 void RemapNode(NYson::TYsonWriter& writer, const NJson::TJsonValue& node, const TString& path, const TString& key) {

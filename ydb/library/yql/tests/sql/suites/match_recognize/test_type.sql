@@ -23,7 +23,7 @@ select * from AS_TABLE($data) MATCH_RECOGNIZE(
     ONE ROW PER MATCH
     AFTER MATCH SKIP TO NEXT ROW
     PATTERN (
-      A
+      Q
     )
     DEFINE
       Q as TRUE

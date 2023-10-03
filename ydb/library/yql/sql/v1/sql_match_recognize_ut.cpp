@@ -141,7 +141,7 @@ FROM Input MATCH_RECOGNIZE(
     MEASURES
         Last(Q.dt) as T,
         First(Y.key) as Key
-    PATTERN ( A )
+    PATTERN ( Y Q )
     DEFINE Y as true
 )
 )";
@@ -647,6 +647,20 @@ FROM Input MATCH_RECOGNIZE(
         UNIT_ASSERT(IsLambda(defines->GetChild(4), 3));
         UNIT_ASSERT(IsLambda(defines->GetChild(5), 3));
         UNIT_ASSERT(IsLambda(defines->GetChild(6), 3));
+    }
+
+    Y_UNIT_TEST(AbsentRowPatternVariableInDefines) {
+        auto getStatement = [](const TString &var) {
+            return TStringBuilder() << R"(
+USE plato;
+SELECT *
+FROM Input MATCH_RECOGNIZE(
+PATTERN ( Q )
+DEFINE
+)" << var << " AS TRUE )";
+        };
+        UNIT_ASSERT(MatchRecognizeSqlToYql(getStatement("Q")).IsOk());
+        UNIT_ASSERT(!MatchRecognizeSqlToYql(getStatement("Y")).IsOk());
     }
 
     Y_UNIT_TEST(CheckRequiredNavigationFunction) {

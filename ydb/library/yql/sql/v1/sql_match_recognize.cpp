@@ -106,6 +106,14 @@ TMatchRecognizeBuilderPtr TSqlMatchRecognizeClause::CreateBuilder(const NSQLv1Ge
     const auto& definitions = ParseDefinitions(commonSyntax.GetRule_row_pattern_definition_list9());
     const auto& definitionsPos = TokenPosition(commonSyntax.GetToken8());
 
+    const auto& rowPatternVariables = GetPatternVars(pattern);
+    for (const auto& [callable, name]: definitions) {
+        if (!rowPatternVariables.contains(name)) {
+            Ctx.Error(callable->GetPos()) << "ROW PATTERN VARIABLE " << name << " is defined, but not mentioned in the PATTERN";
+            return {};
+        }
+    }
+
     return new TMatchRecognizeBuilder{
         pos,
         std::pair{partitionsPos, std::move(partitioners)},

@@ -2739,12 +2739,12 @@ bool RewriteYtEmptyJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoin
     TSyncMap syncList;
     for (auto path: leftLeaf.Section.Paths()) {
         if (auto out = path.Table().Maybe<TYtOutput>()) {
-            syncList.emplace(GetOutputOp(out.Cast()).Ptr(), syncList.size());
+            syncList.emplace(out.Cast().Operation().Ptr(), syncList.size());
         }
     }
     for (auto path: rightLeaf.Section.Paths()) {
         if (auto out = path.Table().Maybe<TYtOutput>()) {
-            syncList.emplace(GetOutputOp(out.Cast()).Ptr(), syncList.size());
+            syncList.emplace(out.Cast().Operation().Ptr(), syncList.size());
         }
     }
 

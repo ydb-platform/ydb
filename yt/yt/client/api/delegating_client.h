@@ -469,6 +469,10 @@ public:
     TFuture<void> MasterExitReadOnly(
         const TMasterExitReadOnlyOptions& options = {}) override;
 
+    TFuture<void> DiscombobulateNonvotingPeers(
+        NHydra::TCellId cellId,
+        const TDiscombobulateNonvotingPeersOptions& options) override;
+
     TFuture<void> SwitchLeader(
         NHydra::TCellId cellId,
         const TString& newLeaderAddress,

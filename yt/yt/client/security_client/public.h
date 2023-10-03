@@ -92,6 +92,7 @@ DEFINE_ENUM(EAccessControlObject,
     (BuildMasterSnapshot)
     (ExitReadOnly)
     (MasterExitReadOnly)
+    (DiscombobulateNonvotingPeers)
     (SwitchLeader)
     (RequestRestart)
 );

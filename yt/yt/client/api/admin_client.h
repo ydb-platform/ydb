@@ -38,6 +38,10 @@ struct TMasterExitReadOnlyOptions
     bool Retry = true;
 };
 
+struct TDiscombobulateNonvotingPeersOptions
+    : public TTimeoutOptions
+{ };
+
 struct TSwitchLeaderOptions
     : public TTimeoutOptions
 { };
@@ -200,6 +204,10 @@ struct IAdminClient
 
     virtual TFuture<void> MasterExitReadOnly(
         const TMasterExitReadOnlyOptions& options = {}) = 0;
+
+    virtual TFuture<void> DiscombobulateNonvotingPeers(
+        NHydra::TCellId cellId,
+        const TDiscombobulateNonvotingPeersOptions& options = {}) = 0;
 
     virtual TFuture<void> SwitchLeader(
         NHydra::TCellId cellId,

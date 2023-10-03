@@ -1638,6 +1638,18 @@ TFuture<void> TClient::MasterExitReadOnly(const TMasterExitReadOnlyOptions& opti
     return req->Invoke().As<void>();
 }
 
+TFuture<void> TClient::DiscombobulateNonvotingPeers(
+    NHydra::TCellId cellId,
+    const TDiscombobulateNonvotingPeersOptions& /*options*/)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.DiscombobulateNonvotingPeers();
+    ToProto(req->mutable_cell_id(), cellId);
+
+    return req->Invoke().As<void>();
+}
+
 TFuture<void> TClient::SwitchLeader(
     NHydra::TCellId /*cellId*/,
     const TString& /*newLeaderAddress*/,

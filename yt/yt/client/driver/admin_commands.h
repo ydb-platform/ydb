@@ -56,6 +56,20 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TDiscombobulateNonvotingPeersCommand
+    : public TTypedCommand<NApi::TDiscombobulateNonvotingPeersOptions>
+{
+public:
+    TDiscombobulateNonvotingPeersCommand();
+
+private:
+    NHydra::TCellId CellId_;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TSwitchLeaderCommand
     : public TTypedCommand<NApi::TSwitchLeaderOptions>
 {

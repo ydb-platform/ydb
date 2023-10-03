@@ -203,6 +203,10 @@ public:
     MOCK_METHOD(TFuture<void>, MasterExitReadOnly, (
         const TMasterExitReadOnlyOptions& options), (override));
 
+    MOCK_METHOD(TFuture<void>, DiscombobulateNonvotingPeers, (
+        NHydra::TCellId cellId,
+        const TDiscombobulateNonvotingPeersOptions& options), (override));
+
     MOCK_METHOD(TFuture<void>, SwitchLeader, (
         NHydra::TCellId cellId,
         const TString& newLeaderAddress,

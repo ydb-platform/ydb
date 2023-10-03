@@ -744,6 +744,13 @@ TFuture<void> TDelegatingClient::MasterExitReadOnly(
     return Underlying_->MasterExitReadOnly(options);
 }
 
+TFuture<void> TDelegatingClient::DiscombobulateNonvotingPeers(
+    NHydra::TCellId cellId,
+    const TDiscombobulateNonvotingPeersOptions& options)
+{
+    return Underlying_->DiscombobulateNonvotingPeers(cellId, options);
+}
+
 TFuture<void> TDelegatingClient::SwitchLeader(
     NHydra::TCellId cellId,
     const TString& newLeaderAddress,

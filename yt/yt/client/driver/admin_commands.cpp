@@ -100,6 +100,21 @@ void TMasterExitReadOnlyCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TDiscombobulateNonvotingPeersCommand::TDiscombobulateNonvotingPeersCommand()
+{
+    RegisterParameter("cell_id", CellId_);
+}
+
+void TDiscombobulateNonvotingPeersCommand::DoExecute(ICommandContextPtr context)
+{
+    WaitFor(context->GetClient()->DiscombobulateNonvotingPeers(CellId_, Options))
+        .ThrowOnError();
+
+    ProduceEmptyOutput(context);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TSwitchLeaderCommand::TSwitchLeaderCommand()
 {
     RegisterParameter("cell_id", CellId_);

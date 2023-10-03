@@ -924,6 +924,17 @@ message TRspMasterExitReadOnly
 
 ////////////////////////////////////////////////////////////////////////////////
 
+message TReqDiscombobulateNonvotingPeers
+{
+    required NYT.NProto.TGuid cell_id = 1;
+}
+
+message TRspDiscombobulateNonvotingPeers
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 message TReqGCCollect
 {
     optional NYT.NProto.TGuid cell_id = 1;

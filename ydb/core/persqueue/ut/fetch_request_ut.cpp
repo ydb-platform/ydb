@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
         ui32 totalPartitions = 5;
         setup->CreateTopic("topic1", "dc1", totalPartitions);
         NACLib::TDiffACL acl;
-        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::ReadTopic, "user1@staff");
+        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user1@staff");
         setup->GetServer().AnnoyingClient->ModifyACL("/Root/PQ", "rt3.dc1--topic1", acl.SerializeAsString());
 
         auto edgeId = runtime.AllocateEdgeActor();

@@ -98,23 +98,18 @@
         "3166999959": "http://devtools-registry.s3.yandex.net/3166999959",
         "53100556": "http://devtools-registry.s3.yandex.net/53100556",
         "53100555": "http://devtools-registry.s3.yandex.net/53100555",
-        "5054488387": "http://devtools-registry.s3.yandex.net/5054488387",
-        "5054493005": "http://devtools-registry.s3.yandex.net/5054493005",
-        "5054495063": "http://devtools-registry.s3.yandex.net/5054495063",
-        "5054506271": "http://devtools-registry.s3.yandex.net/5054506271",
-        "5111970858": "http://devtools-registry.s3.yandex.net/5111970858",
-        "5111976416": "http://devtools-registry.s3.yandex.net/5111976416",
-        "5112005661": "http://devtools-registry.s3.yandex.net/5112005661",
-        "5171074557": "http://devtools-registry.s3.yandex.net/5171074557",
-        "5171080348": "http://devtools-registry.s3.yandex.net/5171080348",
-        "5171088369": "http://devtools-registry.s3.yandex.net/5171088369",
-        "5171083158": "http://devtools-registry.s3.yandex.net/5171083158",
-        "5171091616": "http://devtools-registry.s3.yandex.net/5171091616",
-        "4825838152": "http://devtools-registry.s3.yandex.net/4825838152",
-        "4825839069": "http://devtools-registry.s3.yandex.net/4825839069",
-        "4825834530": "http://devtools-registry.s3.yandex.net/4825834530",
-        "4825841592": "http://devtools-registry.s3.yandex.net/4825841592",
-        "4825861418": "http://devtools-registry.s3.yandex.net/4825861418",
+        "5054517618": "http://devtools-registry.s3.yandex.net/5054517618",
+        "5054512910": "http://devtools-registry.s3.yandex.net/5054512910",
+        "5054518131": "http://devtools-registry.s3.yandex.net/5054518131",
+        "5054515588": "http://devtools-registry.s3.yandex.net/5054515588",
+        "5111996178": "http://devtools-registry.s3.yandex.net/5111996178",
+        "5111987261": "http://devtools-registry.s3.yandex.net/5111987261",
+        "5111998098": "http://devtools-registry.s3.yandex.net/5111998098",
+        "5171095103": "http://devtools-registry.s3.yandex.net/5171095103",
+        "5171093801": "http://devtools-registry.s3.yandex.net/5171093801",
+        "5171093016": "http://devtools-registry.s3.yandex.net/5171093016",
+        "5171089675": "http://devtools-registry.s3.yandex.net/5171089675",
+        "5171091797": "http://devtools-registry.s3.yandex.net/5171091797",
         "2980468199": "http://devtools-registry.s3.yandex.net/2980468199"
     },
     "resources_descriptions": {
@@ -215,62 +210,19 @@
         "3166999959": "openjdk 11.0.15 vanilla for windows",
         "53100556": "org.hamcrest-hamcrest-core-1.3-sources.jar",
         "53100555": "org.hamcrest-hamcrest-core-1.3.jar",
-        "5054488387": "ya-tc for darwin",
-        "5054493005": "ya-tc for darwin-arm64",
-        "5054495063": "ya-tc for linux",
-        "5054506271": "ya-tc for linux-aarch64",
-        "5111970858": "yexport for darwin",
-        "5111976416": "yexport for darwin-arm64",
-        "5112005661": "yexport for linux",
-        "5171074557": "ymake for darwin",
-        "5171080348": "ymake for darwin-arm64",
-        "5171088369": "ymake for linux",
-        "5171083158": "ymake for linux-aarch64",
-        "5171091616": "ymake.exe for win32-clang-cl",
-        "4825838152": "yolint for darwin",
-        "4825839069": "yolint for darwin-arm64",
-        "4825834530": "yolint for linux",
-        "4825841592": "yolint for linux-aarch64",
-        "4825861418": "yolint.exe for win32",
+        "5054517618": "ya-tc for darwin",
+        "5054512910": "ya-tc for darwin-arm64",
+        "5054518131": "ya-tc for linux",
+        "5054515588": "ya-tc for linux-aarch64",
+        "5111996178": "yexport for darwin",
+        "5111987261": "yexport for darwin-arm64",
+        "5111998098": "yexport for linux",
+        "5171095103": "ymake for darwin",
+        "5171093801": "ymake for darwin-arm64",
+        "5171093016": "ymake for linux",
+        "5171089675": "ymake for linux-aarch64",
+        "5171091797": "ymake.exe for win32-clang-cl",
         "2980468199": "ytexec for linux"
     },
-    "tasks": {
-        "1032896450": {
-            "darwin-arm64": "2319130389"
-        },
-        "1277485811": {
-            "darwin": "2989597929",
-            "darwin-arm64": "2989596911",
-            "linux": "2989598506",
-            "linux-ppc64le": "2989596149",
-            "win32": "2989597467"
-        },
-        "1549947872": {
-            "linux-aarch64": "3864777619"
-        },
-        "1539939628": {
-            "Darwin-19.6.0-x86_64-i386-64bit": "3833498694"
-        },
-        "1885745585": {
-            "linux-aarch64": "4940640829"
-        },
-        "1885743377": {
-            "linux-x86_64": "4940633745"
-        },
-        "1953714628": {
-            "darwin": "5171074557"
-        },
-        "1953714654": {
-            "darwin-arm64": "5171080348"
-        },
-        "1953714571": {
-            "linux": "5171088369"
-        },
-        "1953714685": {
-            "linux-aarch64": "5171083158"
-        },
-        "1953714607": {
-            "win32-clang-cl": "5171091616"
-        }
-    }
+    "tasks": {}
 }

@@ -320,6 +320,19 @@ Y_UNIT_TEST_SUITE(JsonValueTest) {
         );
     }
 
+    Y_UNIT_TEST(EmptyList) {
+        TValue value = TValueBuilder()
+            .EmptyList(TTypeBuilder().Primitive(EPrimitiveType::Int64).Build())
+            .Build();
+        TString jsonString = FormatValueJson(value, EBinaryStringEncoding::Unicode);
+        UNIT_ASSERT_NO_DIFF(jsonString, "[]");
+        TValue resultValue = JsonToYdbValue(jsonString, value.GetType(), EBinaryStringEncoding::Unicode);
+        UNIT_ASSERT_NO_DIFF(
+            TProtoAccessor::GetProto(value).DebugString(),
+            TProtoAccessor::GetProto(resultValue).DebugString()
+        );
+    }
+
     namespace {
         TString InvalidJsonToBinaryStringBase(const TString& jsonString) {
             TString errorMessage;

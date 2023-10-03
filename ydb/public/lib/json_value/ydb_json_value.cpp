@@ -723,14 +723,16 @@ namespace {
             case TTypeParser::ETypeKind::List:
                 EnsureType(jsonValue, NJson::JSON_ARRAY);
                 TypeParser.OpenList();
-                ValueBuilder.BeginList();
-
-                for (const auto& element : jsonValue.GetArray()) {
-                    ValueBuilder.AddListItem();
-                    ParseValue(element);
+                if (jsonValue.GetArray().empty()) {
+                    ValueBuilder.EmptyList(GetType());
+                } else {
+                    ValueBuilder.BeginList();
+                    for (const auto& element : jsonValue.GetArray()) {
+                        ValueBuilder.AddListItem();
+                        ParseValue(element);
+                    }
+                    ValueBuilder.EndList();
                 }
-
-                ValueBuilder.EndList();
                 TypeParser.CloseList();
                 break;
 

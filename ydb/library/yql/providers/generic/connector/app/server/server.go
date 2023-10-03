@@ -262,8 +262,10 @@ func newServer(
 	logger log.Logger,
 	cfg *config.TServerConfig,
 ) (*Server, error) {
+	queryLoggerFactory := utils.NewQueryLoggerFactory(cfg.Logger)
+
 	return &Server{
-		handlerFactory: rdbms.NewHandlerFactory(),
+		handlerFactory: rdbms.NewHandlerFactory(queryLoggerFactory),
 		columnarBufferFactory: utils.NewColumnarBufferFactory(
 			memory.DefaultAllocator,
 			utils.NewReadLimiterFactory(cfg.ReadLimit),

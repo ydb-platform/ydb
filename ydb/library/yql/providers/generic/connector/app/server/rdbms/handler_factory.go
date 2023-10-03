@@ -36,16 +36,20 @@ func (hf *HandlerFactory) Make(
 	}
 }
 
-func NewHandlerFactory() *HandlerFactory {
+func NewHandlerFactory(qlf utils.QueryLoggerFactory) *HandlerFactory {
+	connManagerCfg := utils.ConnectionManagerBase{
+		QueryLoggerFactory: qlf,
+	}
+
 	return &HandlerFactory{
 		clickhouse: preset[*clickhouse.Connection]{
 			queryExecutor:     clickhouse.NewQueryExecutor(),
-			connectionManager: clickhouse.NewConnectionManager(),
+			connectionManager: clickhouse.NewConnectionManager(connManagerCfg),
 			typeMapper:        clickhouse.NewTypeMapper(),
 		},
 		postgresql: preset[*postgresql.Connection]{
 			queryExecutor:     postgresql.NewQueryExecutor(),
-			connectionManager: postgresql.NewConnectionManager(),
+			connectionManager: postgresql.NewConnectionManager(connManagerCfg),
 			typeMapper:        postgresql.NewTypeMapper(),
 		},
 	}

@@ -39,6 +39,8 @@ message TServerReadLimit {
 message TLoggerConfig {
     // Level of logging
     ELogLevel log_level = 1;
+    // Is logging of queries enabled
+    bool enable_sql_query_logging = 2;
 }
 
 // ELogLevel enumerates standard levels of logging

@@ -79,6 +79,37 @@ func DumpReadSplitsResponse(logger log.Logger, resp *api_service_protos.TReadSpl
 	}
 }
 
+type QueryLoggerFactory struct {
+	enableQueryLogging bool
+}
+
+func NewQueryLoggerFactory(cfg *config.TLoggerConfig) QueryLoggerFactory {
+	enabled := cfg.GetEnableSqlQueryLogging()
+	return QueryLoggerFactory{enableQueryLogging: enabled}
+}
+
+func (f *QueryLoggerFactory) Make(logger log.Logger) QueryLogger {
+	return QueryLogger{logger: logger, enabled: f.enableQueryLogging}
+}
+
+type QueryLogger struct {
+	logger  log.Logger
+	enabled bool
+}
+
+func (ql *QueryLogger) Dump(query string, args ...any) {
+	if !ql.enabled {
+		return
+	}
+
+	logFields := []log.Field{log.String("query", query)}
+	if len(args) > 0 {
+		logFields = append(logFields, log.Any("args", args))
+	}
+
+	ql.logger.Debug("execute SQL query", logFields...)
+}
+
 func convertToZapLogLevel(lvl config.ELogLevel) zapcore.Level {
 	switch lvl {
 	case config.ELogLevel_TRACE, config.ELogLevel_DEBUG:

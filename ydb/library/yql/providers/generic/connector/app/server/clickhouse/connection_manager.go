@@ -18,15 +18,18 @@ var _ utils.Connection = (*Connection)(nil)
 
 type Connection struct {
 	*sql.DB
+	logger utils.QueryLogger
 }
 
 func (c Connection) Query(ctx context.Context, query string, args ...any) (utils.Rows, error) {
+	c.logger.Dump(query, args...)
 	return c.DB.QueryContext(ctx, query, args...)
 }
 
 var _ utils.ConnectionManager[*Connection] = (*connectionManager)(nil)
 
 type connectionManager struct {
+	utils.ConnectionManagerBase
 	// TODO: cache of connections, remove unused connections with TTL
 }
 
@@ -92,13 +95,15 @@ func (c *connectionManager) Make(
 	conn.SetMaxOpenConns(maxOpenConns)
 	conn.SetConnMaxLifetime(time.Hour)
 
-	return &Connection{DB: conn}, nil
+	queryLogger := c.QueryLoggerFactory.Make(logger)
+
+	return &Connection{DB: conn, logger: queryLogger}, nil
 }
 
 func (c *connectionManager) Release(logger log.Logger, conn *Connection) {
 	utils.LogCloserError(logger, conn, "close clickhouse connection")
 }
 
-func NewConnectionManager() utils.ConnectionManager[*Connection] {
-	return &connectionManager{}
+func NewConnectionManager(cfg utils.ConnectionManagerBase) utils.ConnectionManager[*Connection] {
+	return &connectionManager{ConnectionManagerBase: cfg}
 }

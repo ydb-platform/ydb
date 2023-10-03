@@ -143,8 +143,6 @@ func (h *handlerImpl[CONN]) ReadSplit(
 
 	query := sb.String()
 
-	logger.Debug("execute query", log.String("query", query))
-
 	rows, err := conn.Query(ctx, query)
 	if err != nil {
 		return fmt.Errorf("query '%s' error: %w", query, err)

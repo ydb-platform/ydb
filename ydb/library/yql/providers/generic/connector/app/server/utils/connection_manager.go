@@ -23,3 +23,7 @@ type ConnectionManager[CONN any] interface {
 	Make(ctx context.Context, logger log.Logger, dataSourceInstance *api_common.TDataSourceInstance) (CONN, error)
 	Release(logger log.Logger, conn CONN)
 }
+
+type ConnectionManagerBase struct {
+	QueryLoggerFactory QueryLoggerFactory
+}

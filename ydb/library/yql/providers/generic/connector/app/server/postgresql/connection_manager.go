@@ -25,6 +25,7 @@ func (r rows) Close() error {
 
 type Connection struct {
 	*pgx.Conn
+	logger utils.QueryLogger
 }
 
 func (c Connection) Close() error {
@@ -32,6 +33,8 @@ func (c Connection) Close() error {
 }
 
 func (c Connection) Query(ctx context.Context, query string, args ...any) (utils.Rows, error) {
+	c.logger.Dump(query, args...)
+
 	out, err := c.Conn.Query(ctx, query, args...)
 	return rows{Rows: out}, err
 }
@@ -39,12 +42,13 @@ func (c Connection) Query(ctx context.Context, query string, args ...any) (utils
 var _ utils.ConnectionManager[*Connection] = (*connectionManager)(nil)
 
 type connectionManager struct {
+	utils.ConnectionManagerBase
 	// TODO: cache of connections, remove unused connections with TTL
 }
 
 func (c *connectionManager) Make(
 	ctx context.Context,
-	_ log.Logger,
+	logger log.Logger,
 	dsi *api_common.TDataSourceInstance,
 ) (*Connection, error) {
 	if dsi.GetCredentials().GetBasic() == nil {
@@ -85,13 +89,15 @@ func (c *connectionManager) Make(
 		return nil, fmt.Errorf("open connection: %w", err)
 	}
 
-	return &Connection{conn}, nil
+	queryLogger := c.QueryLoggerFactory.Make(logger)
+
+	return &Connection{conn, queryLogger}, nil
 }
 
 func (c *connectionManager) Release(logger log.Logger, conn *Connection) {
 	utils.LogCloserError(logger, conn, "close posgresql connection")
 }
 
-func NewConnectionManager() utils.ConnectionManager[*Connection] {
-	return &connectionManager{}
+func NewConnectionManager(cfg utils.ConnectionManagerBase) utils.ConnectionManager[*Connection] {
+	return &connectionManager{ConnectionManagerBase: cfg}
 }

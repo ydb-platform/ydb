@@ -6,30 +6,9 @@
 # original buildsystem will not be accepted.
 
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
 
-add_library(providers-s3-serializations)
-target_include_directories(providers-s3-serializations PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base/pcg-random
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src
-)
-target_link_libraries(providers-s3-serializations PUBLIC
+add_library(providers-s3-serializations INTERFACE)
+target_link_libraries(providers-s3-serializations INTERFACE
   contrib-libs-cxxsupp
   yutil
-  common-clickhouse-client
-  tools-enum_parser-enum_serialization_runtime
-)
-target_sources(providers-s3-serializations PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/serializations/serialization_interval.cpp
-)
-generate_enum_serilization(providers-s3-serializations
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/serializations/serialization_interval.h
-  INCLUDE_HEADERS
-  ydb/library/yql/providers/s3/serializations/serialization_interval.h
 )

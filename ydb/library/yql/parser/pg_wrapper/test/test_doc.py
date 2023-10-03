@@ -53,7 +53,7 @@ def test_doc():
     skip_before = get_param("skip_before")
     if skip_before is not None:
         print("WILL SKIP TESTS BEFORE: ", skip_before)
-    doc_src = yatest.common.source_path("ydb/library/yql/parser/pg_wrapper/functions.md")
+    doc_src = yatest.common.source_path("ydb/docs/ru/core/postgresql/functions.md")
     with open(doc_src) as f:
         doc_data = f.readlines()
     in_code = False

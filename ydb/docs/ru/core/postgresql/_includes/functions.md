@@ -1,5 +1,4 @@
-
-# 9.1. Logical Operators
+## 9.1. Logical Operators {#logical-operators}
 
 The usual logical operators are available:
 
@@ -7,7 +6,7 @@ The usual logical operators are available:
 * boolean OR boolean → boolean
 * NOT boolean → boolean
 
-# 9.2. Comparison Functions and Operators
+## 9.2. Comparison Functions and Operators {#comparison-functions}
 
 
 The usual comparison operators are available, as shown in Table 9.1.
@@ -79,7 +78,7 @@ There are also some comparison predicates, as shown in Table 9.2. These behave m
 ```||
 |#
 
-# 9.3. Mathematical Functions and Operators
+## 9.3. Mathematical Functions and Operators {#mathematical-functions}
 
 Mathematical operators are provided for many PostgreSQL types. For types without standard mathematical conventions (e.g., date/time types) we describe the actual behavior in subsequent sections.
 
@@ -436,8 +435,8 @@ atanh(0.5) → 0.5493061443340548
 ```||
 |#
 
-# 9.4. String Functions and Operators
-## 9.4.1. format
+## 9.4. String Functions and Operators {#string-functions}
+
 This section describes functions and operators for examining and manipulating string values. Strings in this context include values of the types character, character varying, and text. Except where noted, these functions and operators are declared to accept and return type text. They will interchangeably accept character varying arguments. Values of type character will be converted to text before the function or operator is applied, resulting in stripping any trailing spaces in the character value.
 
 SQL defines some string functions that use key words, rather than commas, to separate arguments. Details are in Table 9.9. PostgreSQL also provides versions of these functions that use the regular function invocation syntax (see Table 9.10).
@@ -754,7 +753,7 @@ unistr('d\u0061t\U00000061') → data
 ```||
 |#
 
-# 9.5. Binary String Functions and Operators
+## 9.5. Binary String Functions and Operators {#binary-string-functions}
 This section describes functions and operators for examining and manipulating binary strings, that is values of type bytea. Many of these are equivalent, in purpose and syntax, to the text-string functions described in the previous section.
 
 SQL defines some string functions that use key words, rather than commas, to separate arguments. Details are in Table 9.11. PostgreSQL also provides versions of these functions that use the regular function invocation syntax (see Table 9.12).
@@ -930,7 +929,7 @@ decode('MTIzAAE=', 'base64') → \x3132330001
 ```||
 |#
 
-# 9.6. Bit String Functions and Operators
+## 9.6. Bit String Functions and Operators {#bit-string-functions}
 This section describes functions and operators for examining and manipulating bit strings, that is values of the types bit and bit varying. (While only type bit is mentioned in these tables, values of type bit varying can be used interchangeably.) Bit strings support the usual comparison operators shown in Table 9.1, as well as the operators shown in Table 9.14.
 
 Table 9.14. Bit String Operators
@@ -1037,7 +1036,7 @@ cast(-44 as bit(12))           → 111111010100
 ```
 Note that casting to just “bit” means casting to bit(1), and so will deliver only the least significant bit of the integer.
 
-# 9.7. Pattern Matching
+## 9.7. Pattern Matching {#pattern-matching}
 
 9.7.1. LIKE
 
@@ -1368,7 +1367,7 @@ If partial newline-sensitive matching is specified, this affects . and bracket e
 
 If inverse partial newline-sensitive matching is specified, this affects ^ and $ as with newline-sensitive matching, but not . and bracket expressions. This isn't very useful but is provided for symmetry
 
-# 9.8. Data Type Formatting Functions
+## 9.8. Data Type Formatting Functions {#data-type-formatting-functions}
 
 The PostgreSQL formatting functions provide a powerful set of tools for converting various data types (date/time, integer, floating point, numeric) to formatted strings and for converting from formatted strings to specific data types. Table 9.25 lists them. These functions all follow a common calling convention: the first argument is the value to be formatted and the second argument is a template that defines the output or input format.
 
@@ -1455,7 +1454,7 @@ to_char(12.45, '99V9') → ' 125'
 to_char(0.0004859, '9.99EEEE') → ' 4.86e-04'
 ```
 
-# 9.9. Date/Time Functions and Operators
+## 9.9. Date/Time Functions and Operators {#date-time-functions}
 
 Table 9.32 shows the available functions for date/time value processing, with details appearing in the following subsections. Table 9.31 illustrates the behaviors of the basic arithmetic operators (+, *, etc.). For formatting functions, refer to Section 9.8. You should be familiar with the background information on date/time data types from Section 8.5.
 
@@ -2158,9 +2157,9 @@ The effective resolution of the sleep interval is platform-specific; 0.01 second
 Warning
 Make sure that your session does not hold more locks than necessary when calling pg_sleep or its variants. Otherwise other sessions might have to wait for your sleeping process, slowing down the entire system.
 
-# 9.10. Enum Support Functions (NOT SUPPORTED)
+## 9.10. Enum Support Functions (NOT SUPPORTED) {#enum-support-functions}
 
-# 9.11. Geometric Functions and Operators
+## 9.11. Geometric Functions and Operators {#geometric-functions}
 The geometric types point, box, lseg, line, path, polygon, and circle have a large set of native support functions and operators, shown in Table 9.35, Table 9.36, and Table 9.37.
 
 Table 9.35. Geometric Operators
@@ -2530,7 +2529,7 @@ polygon(path '((0,0),(1,1),(2,0))') → ((0,0),(1,1),(2,0))
 ```||
 |#
 
-# 9.12. Network Address Functions and Operators
+## 9.12. Network Address Functions and Operators {#network-address-functions}
 The IP network address types, cidr and inet, support the usual comparison operators shown in Table 9.1 as well as the specialized operators and functions shown in Table 9.38 and Table 9.39.
 
 Any cidr value can be cast to inet implicitly; therefore, the operators and functions shown below as operating on inet also work on cidr values. (Where there are separate functions for inet and cidr, it is because the behavior should be different for the two cases.) Also, it is permitted to cast an inet value to cidr. When this is done, any bits to the right of the netmask are silently zeroed to create a valid cidr value.
@@ -2708,9 +2707,9 @@ macaddr8_set7bit(macaddr8 '00:34:56:ab:cd:ef') → 02:34:56:ff:fe:ab:cd:ef
 |#
 
 
-# 9.13. Text Search Functions and Operators (NOT SUPPORTED)
+## 9.13. Text Search Functions and Operators (NOT SUPPORTED) {#text-search-functions}
 
-# 9.14. UUID Functions
+## 9.14. UUID Functions {#uuid-functions}
 
 PostgreSQL includes one function to generate a UUID:
 
@@ -2718,7 +2717,7 @@ gen_random_uuid () → uuid
 
 This function returns a version 4 (random) UUID. This is the most commonly used type of UUID and is appropriate for most applications.
 
-# 9.15. XML Functions
+## 9.15. XML Functions {#xml-functions}
 
 The functions and function-like expressions described in this section operate on values of type xml. See Section 8.13 for information about the xml type. The function-like expressions xmlparse and xmlserialize for converting to and from type xml are documented there, not in this section.
 
@@ -2878,7 +2877,7 @@ query_to_xml ( query text, nulls boolean,
 cursor_to_xml ( cursor refcursor, count integer, nulls boolean,
                 tableforest boolean, targetns text ) → xml
 
-# 9.16. JSON Functions and Operators
+## 9.16. JSON Functions and Operators {#json-functions}
 
 This section describes:
 
@@ -3583,9 +3582,9 @@ Keep in mind that the pattern argument of like_regex is a JSON path string liter
 
 $.* ? (@ like_regex "^\\d+$")
 
-# 9.17. Sequence Manipulation Functions (NOT SUPPORTED)
+## 9.17. Sequence Manipulation Functions (NOT SUPPORTED) {#sequence-manipulation-functions}
 
-# 9.18. Conditional Expressions
+## 9.18. Conditional Expressions {#conditional-expressions}
 
 9.18.1. CASE
 The SQL CASE expression is a generic conditional expression, similar to if/else statements in other programming languages:
@@ -3690,7 +3689,7 @@ The GREATEST and LEAST functions select the largest or smallest value from a lis
 
 Note that GREATEST and LEAST are not in the SQL standard, but are a common extension. Some other databases make them return NULL if any argument is NULL, rather than only when all are NULL.
 
-# 9.19. Array Functions and Operators
+## 9.19. Array Functions and Operators {#array-functions}
 
 Table 9.51 shows the specialized operators available for array types. In addition to those, the usual comparison operators shown in Table 9.1 are available for arrays. The comparison operators compare the array contents element-by-element, using the default B-tree comparison function for the element data type, and sort based on the first difference. In multidimensional arrays the elements are visited in row-major order (last subscript varies most rapidly). If the contents of two arrays are equal but the dimensionality is different, the first difference in the dimensionality information determines the sort order.
 
@@ -3854,9 +3853,9 @@ There are two differences in the behavior of string_to_array from pre-9.1 versio
 
 See also Section 9.21 about the aggregate function array_agg for use with arrays.
 
-# 9.20. Range/Multirange Functions and Operators (NOT SUPPORTED)
+## 9.20. Range/Multirange Functions and Operators (NOT SUPPORTED) {#range-multirange-functions}
 
-# 9.21. Aggregate Functions
+## 9.21. Aggregate Functions {#aggregate-functions}
 
 Aggregate functions compute a single result from a set of input values. The built-in general-purpose aggregate functions are listed in Table 9.57 while statistical aggregates are in Table 9.58. The built-in within-group ordered-set aggregate functions are listed in Table 9.59 while the built-in within-group hypothetical-set ones are in Table 9.60. Grouping operations, which are closely related to aggregate functions, are listed in Table 9.61. The special syntax considerations for aggregate functions are explained in Section 4.2.7. Consult Section 2.7 for additional introductory information.
 
@@ -4303,7 +4302,7 @@ The grouping operations shown in Table 9.61 are used in conjunction with groupin
 
 Here, the grouping value 0 in the first four rows shows that those have been grouped normally, over both the grouping columns. The value 1 indicates that model was not grouped by in the next-to-last two rows, and the value 3 indicates that neither make nor model was grouped by in the last row (which therefore is an aggregate over all the input rows).
 
-# 9.22. Window Functions
+## 9.22. Window Functions {#window-functions}
 
 Window functions provide the ability to perform calculations across sets of rows that are related to the current query row. See Section 3.5 for an introduction to this feature, and Section 4.2.8 for syntax details.
 
@@ -4435,7 +4434,7 @@ When an aggregate function is used as a window function, it aggregates over the 
 Note
 The SQL standard defines a RESPECT NULLS or IGNORE NULLS option for lead, lag, first_value, last_value, and nth_value. This is not implemented in PostgreSQL: the behavior is always the same as the standard's default, namely RESPECT NULLS. Likewise, the standard's FROM FIRST or FROM LAST option for nth_value is not implemented: only the default FROM FIRST behavior is supported. (You can achieve the result of FROM LAST by reversing the ORDER BY ordering.)
 
-# 9.23. Subquery Expressions
+## 9.23. Subquery Expressions {#subquery-expressions}
 
 This section describes the SQL-compliant subquery expressions available in PostgreSQL. All of the expression forms documented in this section return Boolean (true/false) results.
 
@@ -4571,7 +4570,7 @@ The left-hand side is a row constructor, as described in Section 4.2.13. The rig
 
 See Section 9.24.5 for details about the meaning of a row constructor comparison.
 
-# 9.24. Row and Array Comparisons
+## 9.24. Row and Array Comparisons {#row-and-array-comparisons}
 
 This section describes several specialized constructs for making multiple comparisons between groups of values. These forms are syntactically related to the subquery forms of the previous section, but do not involve subqueries. The forms involving array subexpressions are PostgreSQL extensions; the rest are SQL-compliant. All of the expression forms documented in this section return Boolean (true/false) results.
 
@@ -4698,7 +4697,7 @@ Each side is evaluated and they are compared row-wise. Composite type comparison
 
 To support matching of rows which include elements without a default B-tree operator class, the following operators are defined for composite type comparison: *=, *<>, *<, *<=, *>, and *>=. These operators compare the internal binary representation of the two rows. Two rows might have a different binary representation even though comparisons of the two rows with the equality operator is true. The ordering of rows under these comparison operators is deterministic but not otherwise meaningful. These operators are used internally for materialized views and might be useful for other specialized purposes such as replication and B-Tree deduplication (see Section 64.4.3). They are not intended to be generally useful for writing queries, though.
 
-# 9.25. Set Returning Functions
+## 9.25. Set Returning Functions {#set-returning-functions}
 
 This section describes functions that possibly return more than one row. The most widely used functions in this class are series generating functions, as detailed in Table 9.63 and Table 9.64. Other, more specialized set-returning functions are described elsewhere in this manual. See Section 7.2.1.4 for ways to combine multiple set-returning functions.
 
@@ -4781,12 +4780,12 @@ Generates a series comprising the valid subscripts of the dim'th dimension of th
 SELECT a AS array, s AS subscript, a[s] AS value FROM (SELECT generate_subscripts(a, 1) AS s, a FROM (VALUES (array[-1,-2]),(array[100,200,300])) s(a)) foo;
 ```
 
-# 9.26. System Information Functions and Operators (NOT SUPPORTED)
+## 9.26. System Information Functions and Operators (NOT SUPPORTED) {#system-information-functions}
 
-# 9.27. System Administration Functions (NOT SUPPORTED)
+## 9.27. System Administration Functions (NOT SUPPORTED) {#system-administration-functions}
 
-# 9.28. Trigger Functions (NOT SUPPORTED)
+## 9.28. Trigger Functions (NOT SUPPORTED) {#trigger-functions}
 
-# 9.29. Event Trigger Functions (NOT SUPPORTED)
+## 9.29. Event Trigger Functions (NOT SUPPORTED) {#event-trigger-functions}
 
-# 9.30. Statistics Information Functions (NOT SUPPORTED)
+## 9.30. Statistics Information Functions (NOT SUPPORTED) {#statistics-information-functions}

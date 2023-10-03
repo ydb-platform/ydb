@@ -152,6 +152,7 @@ TErrorOr<T>::TErrorOr(const std::exception& ex)
 
 template <class T>
 TErrorOr<T>& TErrorOr<T>::operator = (const TErrorOr<T>& other)
+    requires std::is_copy_assignable_v<T>
 {
     static_cast<TError&>(*this) = static_cast<const TError&>(other);
     Value_ = other.Value_;
@@ -160,6 +161,7 @@ TErrorOr<T>& TErrorOr<T>::operator = (const TErrorOr<T>& other)
 
 template <class T>
 TErrorOr<T>& TErrorOr<T>::operator = (TErrorOr<T>&& other) noexcept
+    requires std::is_nothrow_move_assignable_v<T>
 {
     static_cast<TError&>(*this) = std::move(other);
     Value_ = std::move(other.Value_);

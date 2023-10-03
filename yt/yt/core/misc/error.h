@@ -338,8 +338,8 @@ public:
     template <class U>
     TErrorOr(TErrorOr<U>&& other) noexcept;
 
-    TErrorOr<T>& operator = (const TErrorOr<T>& other);
-    TErrorOr<T>& operator = (TErrorOr<T>&& other) noexcept;
+    TErrorOr<T>& operator = (const TErrorOr<T>& other) requires std::is_copy_assignable_v<T>;
+    TErrorOr<T>& operator = (TErrorOr<T>&& other) noexcept requires std::is_nothrow_move_assignable_v<T>;
 
     const T& Value() const &;
     T& Value() &;

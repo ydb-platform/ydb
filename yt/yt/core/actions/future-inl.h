@@ -1722,9 +1722,79 @@ TFuture<T>* TFutureHolder<T>::operator->() // noexcept
 namespace NDetail {
 
 template <class T>
+concept CLightweight = std::default_initializable<T> &&
+                       std::is_trivially_destructible_v<T> &&
+                       std::is_move_assignable_v<T>;
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
+class TFutureCombinerResultHolderStorage
+{
+public:
+    constexpr explicit TFutureCombinerResultHolderStorage(size_t size)
+        : Impl_(size)
+    { }
+
+    template <class... Args>
+        requires std::constructible_from<T, Args...>
+    constexpr void ConstructAt(size_t index, Args&&... args)
+    {
+        Impl_[index].emplace(std::forward<Args>(args)...);
+    }
+
+    constexpr std::vector<T> VectorFromThis() &&
+    {
+        std::vector<T> result;
+
+        result.reserve(Impl_.size());
+
+        for (auto& opt : Impl_) {
+            YT_VERIFY(opt.has_value());
+
+            result.push_back(std::move(*opt));
+        }
+
+        return result;
+    }
+
+private:
+    std::vector<std::optional<T>> Impl_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <NDetail::CLightweight T>
+class TFutureCombinerResultHolderStorage<T>
+{
+public:
+    constexpr explicit TFutureCombinerResultHolderStorage(size_t size)
+        : Impl_(size)
+    { }
+
+    template <class... Args>
+        requires std::constructible_from<T, Args...>
+    constexpr void ConstructAt(size_t index, Args&&... args)
+    {
+        Impl_[index] = T(std::forward<Args>(args)...);
+    }
+
+    //! This method is inherently unsafe because it assumes
+    //! That you have filled every slot
+    constexpr std::vector<T> VectorFromThis() &&
+    {
+        return std::move(Impl_);
+    }
+
+private:
+    std::vector<T> Impl_;
+};
+
+template <class T>
 class TFutureCombinerResultHolder
 {
 public:
+    using TStorage = TFutureCombinerResultHolderStorage<T>;
     using TResult = std::vector<T>;
 
     explicit TFutureCombinerResultHolder(int size)
@@ -1734,7 +1804,7 @@ public:
     bool TrySetResult(int index, const NYT::TErrorOr<T>& errorOrValue)
     {
         if (errorOrValue.IsOK()) {
-            Result_[index] = errorOrValue.Value();
+            Result_.ConstructAt(index, errorOrValue.Value());
             return true;
         } else {
             return false;
@@ -1743,17 +1813,18 @@ public:
 
     bool TrySetPromise(const TPromise<TResult>& promise)
     {
-        return promise.TrySet(std::move(Result_));
+        return promise.TrySet(std::move(Result_).VectorFromThis());
     }
 
 private:
-    TResult Result_;
+    TStorage Result_;
 };
 
 template <class T>
 class TFutureCombinerResultHolder<TErrorOr<T>>
 {
 public:
+    using TStorage = TFutureCombinerResultHolderStorage<TErrorOr<T>>;
     using TResult = std::vector<TErrorOr<T>>;
 
     explicit TFutureCombinerResultHolder(int size)
@@ -1762,17 +1833,17 @@ public:
 
     bool TrySetResult(int index, const NYT::TErrorOr<T>& errorOrValue)
     {
-        Result_[index] = errorOrValue;
+        Result_.ConstructAt(index, errorOrValue);
         return true;
     }
 
     bool TrySetPromise(const TPromise<TResult>& promise)
     {
-        return promise.TrySet(std::move(Result_));
+        return promise.TrySet(std::move(Result_).VectorFromThis());
     }
 
 private:
-    TResult Result_;
+    TStorage Result_;
 };
 
 template <>

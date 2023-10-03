@@ -24,6 +24,11 @@ class TFutureTest
     : public ::testing::Test
 { };
 
+struct NonAssignable
+{
+    const int Value = 0;
+};
+
 TEST_F(TFutureTest, NoncopyableGet)
 {
     auto f = MakeFuture<std::unique_ptr<int>>(std::make_unique<int>(1));
@@ -92,6 +97,60 @@ TEST_F(TFutureTest, NoncopyableApply5)
     EXPECT_TRUE(g.IsSet());
     EXPECT_TRUE(g.Get().IsOK());
     EXPECT_EQ(2, g.Get().Value());
+}
+
+TEST_F(TFutureTest, NonAssignable1)
+{
+    auto f = MakeFuture<NonAssignable>({
+        .Value = 1
+    });
+
+    auto g = f.ApplyUnique(BIND([] (NonAssignable&& object) {
+        EXPECT_EQ(1, object.Value);
+    }));
+
+    EXPECT_TRUE(g.IsSet());
+    EXPECT_TRUE(g.Get().IsOK());
+}
+
+TEST_F(TFutureTest, NonAssignable2)
+{
+    auto f = MakeFuture<NonAssignable>({
+        .Value = 1
+    });
+
+    std::vector<decltype(f)> futures;
+
+    futures.push_back(f);
+    futures.push_back(f);
+
+    auto g = AllSet(futures).ApplyUnique(BIND([] (std::vector<TErrorOr<NonAssignable>>&& objects) {
+        EXPECT_TRUE(objects.at(0).IsOK());
+        EXPECT_TRUE(objects.at(1).IsOK());
+        EXPECT_EQ(1, objects[0].Value().Value);
+    }));
+
+    EXPECT_TRUE(g.IsSet());
+    EXPECT_TRUE(g.Get().IsOK());
+}
+
+TEST_F(TFutureTest, NonAssignable3)
+{
+    auto f = MakeFuture<NonAssignable>({
+        .Value = 1
+    });
+
+    std::vector<decltype(f)> futures;
+
+    futures.push_back(f);
+    futures.push_back(f);
+
+    auto g = AllSucceeded(futures).ApplyUnique(BIND([] (std::vector<NonAssignable>&& objects) {
+        EXPECT_EQ(1, objects[0].Value);
+    }));
+
+    EXPECT_TRUE(g.IsSet());
+    EXPECT_TRUE(g.Get().IsOK());
 }
 
 TEST_F(TFutureTest, Unsubscribe)

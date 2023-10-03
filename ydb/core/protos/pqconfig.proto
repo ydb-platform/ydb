@@ -113,7 +113,7 @@ message TPQConfig {
     repeated TChannelProfile ChannelProfiles = 31;
 
     optional bool TopicsAreFirstClassCitizen = 32 [default = true];
-    optional bool UseSrcIdMetaMappingInFirstClass = 52 [default = false];
+    optional bool UseSrcIdMetaMappingInFirstClass = 52 [default = true];
 
     optional string SourceIdTablePath = 33 [default = "/Root/PQ/SourceIdMeta2"];
 

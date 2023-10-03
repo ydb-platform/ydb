@@ -238,6 +238,9 @@ public:
 
     bool NeedPersistentSnapshot() const {
         auto type = GetType();
+        if (type == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY) {
+            return ::NKikimr::NKqp::HasOlapTableInTx(PreparedQuery->GetPhysicalQuery());
+        }
         return (
             type == NKikimrKqp::QUERY_TYPE_SQL_SCAN ||
             type == NKikimrKqp::QUERY_TYPE_AST_SCAN

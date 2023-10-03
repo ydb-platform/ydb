@@ -179,5 +179,18 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
     return readPhases > 1;
 }
 
+bool HasOlapTableInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
+    for (const auto &tx : physicalQuery.GetTransactions()) {
+        for (const auto &stage : tx.GetStages()) {
+            for (const auto &tableOp : stage.GetTableOps()) {
+                if (tableOp.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 } // namespace NKqp
 } // namespace NKikimr

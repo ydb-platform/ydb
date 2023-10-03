@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/public/sdk/cpp/client/draft/ydb_long_tx.h>
+#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 
 #include <ydb/core/sys_view/service/query_history.h>
 #include <ydb/core/tx/columnshard/columnshard_ut_common.h>
@@ -1437,7 +1438,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         auto rows = ExecuteScanQuery(tableClient, selectQuery);
-        
+
         TInstant tsPrev = TInstant::MicroSeconds(2000000);
         std::set<ui64> results = { 1000096, 1000097, 1000098, 1000099,
             1000999, 1001000,
@@ -4934,7 +4935,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         TestTableWithNulls({ testCase });
     }
 
-    Y_UNIT_TEST(Olap_InsertFails) {
+    Y_UNIT_TEST(Olap_InsertFailsOnDataQuery) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetForceColumnTablesCompositeMarks(true);
@@ -4951,7 +4952,29 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             INSERT INTO `/Root/tableWithNulls`(id, resource_id, level) VALUES(1, "1", 1);
         )", TTxControl::BeginTx().CommitTx()).GetValueSync();
 
-        UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT(!result.IsSuccess());
+        std::string errorMsg = result.GetIssues().ToString();
+        UNIT_ASSERT_C(errorMsg.find("Data manipulation queries do not support column shard tables.") != std::string::npos, errorMsg);
+    }
+
+    Y_UNIT_TEST(Olap_InsertFailsOnGenericQuery) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetForceColumnTablesCompositeMarks(true);
+        TKikimrRunner kikimr(settings);
+
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        TTableWithNullsHelper(kikimr).CreateTableWithNulls();
+
+        auto db = kikimr.GetQueryClient();
+
+        auto result = db.ExecuteQuery(R"(
+            INSERT INTO `/Root/tableWithNulls`(id, resource_id, level) VALUES(1, "1", 1);
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT(!result.IsSuccess());
+        std::string errorMsg = result.GetIssues().ToString();
+        UNIT_ASSERT_C(errorMsg.find("Data manipulation queries do not support column shard tables.") != std::string::npos, errorMsg);
     }
 
     Y_UNIT_TEST(OlapRead_FailsOnDataQuery) {
@@ -5024,6 +5047,83 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         )").GetValueSync();
 
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(OlapRead_UsesGenericQueryOnJoinWithDataShardTable) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetForceColumnTablesCompositeMarks(true);
+        TKikimrRunner kikimr(settings);
+
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        TTableWithNullsHelper(kikimr).CreateTableWithNulls();
+        TLocalHelper(kikimr).CreateTestOlapTable();
+
+        {
+            WriteTestDataForTableWithNulls(kikimr, "/Root/tableWithNulls");
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2);
+        }
+
+        auto db = kikimr.GetQueryClient();
+        auto result = db.ExecuteQuery(R"(
+            SELECT timestamp, resource_id, uid, level FROM `/Root/olapStore/olapTable` WHERE resource_id IN (SELECT CAST(id AS Utf8) FROM `/Root/tableWithNulls`);
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        TString output = FormatResultSetYson(result.GetResultSet(0));
+        Cout << output << Endl;
+        CompareYson(output, R"([[1000001u;["1"];["uid_1000001"];[1]]])");
+    }
+
+    Y_UNIT_TEST(OlapRead_GenericQuery) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetForceColumnTablesCompositeMarks(true);
+        TKikimrRunner kikimr(settings);
+
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        TTableWithNullsHelper(kikimr).CreateTableWithNulls();
+        TLocalHelper(kikimr).CreateTestOlapTable();
+
+        {
+            WriteTestDataForTableWithNulls(kikimr, "/Root/tableWithNulls");
+        }
+
+        auto db = kikimr.GetQueryClient();
+
+        auto result = db.ExecuteQuery(R"(
+            SELECT COUNT(*) FROM `/Root/tableWithNulls`;
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        TString output = FormatResultSetYson(result.GetResultSet(0));
+        Cout << output << Endl;
+        CompareYson(output, R"([[10u;]])");
+    }
+
+    Y_UNIT_TEST(OlapRead_ScanQuery) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetForceColumnTablesCompositeMarks(true);
+        TKikimrRunner kikimr(settings);
+
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        TTableWithNullsHelper(kikimr).CreateTableWithNulls();
+        TLocalHelper(kikimr).CreateTestOlapTable();
+
+        {
+            WriteTestDataForTableWithNulls(kikimr, "/Root/tableWithNulls");
+        }
+
+        NScripting::TScriptingClient client(kikimr.GetDriver());
+        auto result = client.ExecuteYqlScript(R"(
+            SELECT COUNT(*) FROM `/Root/tableWithNulls`;
+        )").GetValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        TString output = FormatResultSetYson(result.GetResultSet(0));
+        Cout << output << Endl;
+        CompareYson(output, R"([[10u;]])");
     }
 }
 

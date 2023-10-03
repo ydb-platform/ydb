@@ -117,6 +117,7 @@ public:
         TKqpRequestCounters::TPtr counters,
         const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig,
         const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion,
+        const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
         TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         ui64 spanVerbosity = 0, TString spanName = "no_name")
         : Request(std::move(request))
@@ -128,6 +129,8 @@ public:
         , ExecuterRetriesConfig(executerRetriesConfig)
         , MaximalSecretsSnapshotWaitTime(maximalSecretsSnapshotWaitTime)
         , UserRequestContext(userRequestContext)
+        , AggregationSettings(aggregation)
+        , HasOlapTable(false)
     {
         TasksGraph.GetMeta().Snapshot = IKqpGateway::TKqpSnapshot(Request.Snapshot.Step, Request.Snapshot.TxId);
         TasksGraph.GetMeta().Arena = MakeIntrusive<NActors::TProtoArenaHolder>();
@@ -402,7 +405,7 @@ protected:
         }
 
         Secrets = ev->Get()->GetSnapshotPtrAs<NMetadata::NSecret::TSnapshot>();
-    
+
         TString secretValue;
         for (const TString& secretName : SecretNames) {
             auto secretId = NMetadata::NSecret::TSecretId(UserToken->GetUserSID(), secretName);
@@ -446,14 +449,6 @@ protected:
         }
 
         return secureParams;
-    }
-
-    void GetResourcesSnapshot() {
-        GetKqpResourceManager()->RequestClusterResourcesInfo(
-            [as = TlsActivationContext->ActorSystem(), self = SelfId()](TVector<NKikimrKqp::TKqpNodeResources>&& resources) {
-                TAutoPtr<IEventHandle> eh = new IEventHandle(self, self, new TEvPrivate::TEvResourcesSnapshot(std::move(resources)));
-                as->Send(eh);
-            });
     }
 
 protected:
@@ -835,7 +830,7 @@ protected:
         auto sourceName = externalSource.GetSourceName();
         TString structuredToken;
         if (sourceName) {
-            structuredToken = NYql::CreateStructuredTokenParser(externalSource.GetAuthInfo()).ToBuilder().ReplaceReferences(secureParams).ToJson();   
+            structuredToken = NYql::CreateStructuredTokenParser(externalSource.GetAuthInfo()).ToBuilder().ReplaceReferences(secureParams).ToJson();
         }
 
         TVector<ui64> tasksIds;
@@ -1010,6 +1005,279 @@ protected:
             }
             return partitions.size();
         }
+    }
+
+    void FillReadInfo(TTaskMeta& taskMeta, ui64 itemsLimit, bool reverse, bool sorted) const
+    {
+        if (taskMeta.Reads && !taskMeta.Reads.GetRef().empty()) {
+            // Validate parameters
+            YQL_ENSURE(taskMeta.ReadInfo.ItemsLimit == itemsLimit);
+            YQL_ENSURE(taskMeta.ReadInfo.Reverse == reverse);
+            return;
+        }
+
+        taskMeta.ReadInfo.ItemsLimit = itemsLimit;
+        taskMeta.ReadInfo.Reverse = reverse;
+        taskMeta.ReadInfo.Sorted = sorted;
+        taskMeta.ReadInfo.ReadType = TTaskMeta::TReadInfo::EReadType::Rows;
+    }
+
+    TTaskMeta::TReadInfo::EReadType OlapReadTypeFromProto(const NKqpProto::TKqpPhyOpReadOlapRanges::EReadType& type) const {
+        switch (type) {
+            case NKqpProto::TKqpPhyOpReadOlapRanges::ROWS:
+                return TTaskMeta::TReadInfo::EReadType::Rows;
+            case NKqpProto::TKqpPhyOpReadOlapRanges::BLOCKS:
+                return TTaskMeta::TReadInfo::EReadType::Blocks;
+            default:
+                YQL_ENSURE(false, "Invalid read type from TKqpPhyOpReadOlapRanges protobuf.");
+        }
+    }
+
+    void FillOlapReadInfo(TTaskMeta& taskMeta, NKikimr::NMiniKQL::TType* resultType, const TMaybe<::NKqpProto::TKqpPhyOpReadOlapRanges>& readOlapRange) const {
+        if (taskMeta.Reads && !taskMeta.Reads.GetRef().empty()) {
+            // Validate parameters
+            if (!readOlapRange || readOlapRange->GetOlapProgram().empty()) {
+                YQL_ENSURE(taskMeta.ReadInfo.OlapProgram.Program.empty());
+                return;
+            }
+
+            YQL_ENSURE(taskMeta.ReadInfo.OlapProgram.Program == readOlapRange->GetOlapProgram());
+            return;
+        }
+
+        if (resultType) {
+            YQL_ENSURE(resultType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Struct
+                || resultType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Tuple);
+
+            auto* resultStructType = static_cast<NKikimr::NMiniKQL::TStructType*>(resultType);
+            ui32 resultColsCount = resultStructType->GetMembersCount();
+
+            taskMeta.ReadInfo.ResultColumnsTypes.reserve(resultColsCount);
+            for (ui32 i = 0; i < resultColsCount; ++i) {
+                auto memberType = resultStructType->GetMemberType(i);
+                if (memberType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Optional) {
+                    memberType = static_cast<NKikimr::NMiniKQL::TOptionalType*>(memberType)->GetItemType();
+                }
+                // TODO: support pg types
+                YQL_ENSURE(memberType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Data,
+                    "Expected simple data types to be read from column shard");
+                auto memberDataType = static_cast<NKikimr::NMiniKQL::TDataType*>(memberType);
+                taskMeta.ReadInfo.ResultColumnsTypes.push_back(NScheme::TTypeInfo(memberDataType->GetSchemeType()));
+            }
+        }
+
+        if (!readOlapRange || readOlapRange->GetOlapProgram().empty()) {
+            return;
+        }
+        taskMeta.ReadInfo.ReadType = OlapReadTypeFromProto(readOlapRange->GetReadType());
+        taskMeta.ReadInfo.OlapProgram.Program = readOlapRange->GetOlapProgram();
+        for (auto& name: readOlapRange->GetOlapProgramParameterNames()) {
+            taskMeta.ReadInfo.OlapProgram.ParameterNames.insert(name);
+        }
+    }
+
+    void MergeReadInfoToTaskMeta(TTaskMeta& meta, ui64 shardId, TMaybe<TShardKeyRanges>& keyReadRanges, const TPhysicalShardReadSettings& readSettings, const TVector<TTaskMeta::TColumn>& columns,
+        const NKqpProto::TKqpPhyTableOperation& op, bool isPersistentScan) const
+    {
+        TTaskMeta::TShardReadInfo readInfo = {
+            .Columns = columns,
+        };
+        if (keyReadRanges) {
+            readInfo.Ranges = std::move(*keyReadRanges); // sorted & non-intersecting
+        }
+
+        if (isPersistentScan) {
+            readInfo.ShardId = shardId;
+        }
+
+        FillReadInfo(meta, readSettings.ItemsLimit, readSettings.Reverse, readSettings.Sorted);
+        if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange) {
+            FillOlapReadInfo(meta, readSettings.ResultType, op.GetReadOlapRange());
+        }
+
+        if (!meta.Reads) {
+            meta.Reads.ConstructInPlace();
+        }
+
+        meta.Reads->emplace_back(std::move(readInfo));
+    }
+
+    ui32 GetScanTasksPerNode(TStageInfo& stageInfo, const bool isOlapScan, const ui64 /*nodeId*/) const {
+        ui32 result = 0;
+        if (isOlapScan) {
+            if (AggregationSettings.HasCSScanThreadsPerNode()) {
+                result = AggregationSettings.GetCSScanThreadsPerNode();
+            } else {
+                const TStagePredictor& predictor = stageInfo.Meta.Tx.Body->GetCalculationPredictor(stageInfo.Id.StageId);
+                result = predictor.CalcTasksOptimalCount(TStagePredictor::GetUsableThreads(), {});
+            }
+        } else {
+            const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+            result = AggregationSettings.GetDSScanMinimalThreads();
+            if (stage.GetProgram().GetSettings().GetHasSort()) {
+                result = std::max(result, AggregationSettings.GetDSBaseSortScanThreads());
+            }
+            if (stage.GetProgram().GetSettings().GetHasMapJoin()) {
+                result = std::max(result, AggregationSettings.GetDSBaseJoinScanThreads());
+            }
+        }
+        return Max<ui32>(1, result);
+    }
+
+    TTask& AssignScanTaskToShard(
+        TStageInfo& stageInfo, const ui64 shardId,
+        THashMap<ui64, std::vector<ui64>>& nodeTasks,
+        THashMap<ui64, ui64>& assignedShardsCount,
+        const bool sorted, const bool isOlapScan)
+    {
+        ui64 nodeId = ShardIdToNodeId.at(shardId);
+        if (stageInfo.Meta.IsOlap() && sorted) {
+            auto& task = TasksGraph.AddTask(stageInfo);
+            task.Meta.ExecuterId = SelfId();
+            task.Meta.NodeId = nodeId;
+            task.Meta.ScanTask = true;
+            task.Meta.Type = TTaskMeta::TTaskType::Scan;
+            return task;
+        }
+
+        auto& tasks = nodeTasks[nodeId];
+        auto& cnt = assignedShardsCount[nodeId];
+        const ui32 maxScansPerNode = GetScanTasksPerNode(stageInfo, isOlapScan, nodeId);
+        if (cnt < maxScansPerNode) {
+            auto& task = TasksGraph.AddTask(stageInfo);
+            task.Meta.NodeId = nodeId;
+            task.Meta.ScanTask = true;
+            task.Meta.Type = TTaskMeta::TTaskType::Scan;
+            tasks.push_back(task.Id);
+            ++cnt;
+            return task;
+        } else {
+            ui64 taskIdx = cnt % maxScansPerNode;
+            ++cnt;
+            return TasksGraph.GetTask(tasks[taskIdx]);
+        }
+    }
+
+    void BuildScanTasksFromShards(TStageInfo& stageInfo) {
+        THashMap<ui64, std::vector<ui64>> nodeTasks;
+        THashMap<ui64, std::vector<TShardInfoWithId>> nodeShards;
+        THashMap<ui64, ui64> assignedShardsCount;
+        auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+
+        const auto& tableInfo = stageInfo.Meta.TableConstInfo;
+        const auto& keyTypes = tableInfo->KeyColumnTypes;
+        ui32 metaId = 0;
+        for (auto& op : stage.GetTableOps()) {
+            Y_VERIFY_DEBUG(stageInfo.Meta.TablePath == op.GetTable().GetPath());
+
+            auto columns = BuildKqpColumns(op, tableInfo);
+            auto partitions = PrunePartitions(op, stageInfo, HolderFactory(), TypeEnv());
+            const bool isOlapScan = (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange);
+            auto readSettings = ExtractReadSettings(op, stageInfo, HolderFactory(), TypeEnv());
+
+            if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadRange) {
+                stageInfo.Meta.SkipNullKeys.assign(op.GetReadRange().GetSkipNullKeys().begin(),
+                                                   op.GetReadRange().GetSkipNullKeys().end());
+                // not supported for scan queries
+                YQL_ENSURE(!readSettings.Reverse);
+            }
+
+            for (auto&& i: partitions) {
+                const ui64 nodeId = ShardIdToNodeId.at(i.first);
+                nodeShards[nodeId].emplace_back(TShardInfoWithId(i.first, std::move(i.second)));
+            }
+
+            if (Stats && CollectProfileStats(Request.StatsMode)) {
+                for (auto&& i : nodeShards) {
+                    Stats->AddNodeShardsCount(stageInfo.Id.StageId, i.first, i.second.size());
+                }
+            }
+
+            if (!AppData()->FeatureFlags.GetEnableSeparationComputeActorsFromRead() || (!isOlapScan && readSettings.Sorted)) {
+                for (auto&& pair : nodeShards) {
+                    auto& shardsInfo = pair.second;
+                    for (auto&& shardInfo : shardsInfo) {
+                        auto& task = AssignScanTaskToShard(stageInfo, shardInfo.ShardId, nodeTasks, assignedShardsCount, readSettings.Sorted, isOlapScan);
+                        MergeReadInfoToTaskMeta(task.Meta, shardInfo.ShardId, shardInfo.KeyReadRanges, readSettings,
+                            columns, op, /*isPersistentScan*/ true);
+                    }
+                }
+
+                for (const auto& pair : nodeTasks) {
+                    for (const auto& taskIdx : pair.second) {
+                        auto& task = TasksGraph.GetTask(taskIdx);
+                        task.Meta.SetEnableShardsSequentialScan(readSettings.Sorted);
+                        PrepareScanMetaForUsage(task.Meta, keyTypes);
+                    }
+                }
+
+            } else {
+                for (auto&& pair : nodeShards) {
+                    const auto nodeId = pair.first;
+                    auto& shardsInfo = pair.second;
+                    const ui32 metaGlueingId = ++metaId;
+                    TTaskMeta meta;
+                    {
+                        for (auto&& shardInfo : shardsInfo) {
+                            MergeReadInfoToTaskMeta(meta, shardInfo.ShardId, shardInfo.KeyReadRanges, readSettings,
+                                columns, op, /*isPersistentScan*/ true);
+                        }
+                        PrepareScanMetaForUsage(meta, keyTypes);
+                        LOG_D("Stage " << stageInfo.Id << " create scan task meta for node: " << nodeId
+                            << ", meta: " << meta.ToString(keyTypes, *AppData()->TypeRegistry));
+                    }
+                    for (ui32 t = 0; t < GetScanTasksPerNode(stageInfo, isOlapScan, nodeId); ++t) {
+                        auto& task = TasksGraph.AddTask(stageInfo);
+                        task.Meta = meta;
+                        task.Meta.SetEnableShardsSequentialScan(false);
+                        task.Meta.ExecuterId = SelfId();
+                        task.Meta.NodeId = nodeId;
+                        task.Meta.ScanTask = true;
+                        task.Meta.Type = TTaskMeta::TTaskType::Scan;
+                        task.SetMetaId(metaGlueingId);
+                    }
+                }
+            }
+        }
+
+        LOG_D("Stage " << stageInfo.Id << " will be executed on " << nodeTasks.size() << " nodes.");
+    }
+
+    void PrepareScanMetaForUsage(TTaskMeta& meta, const TVector<NScheme::TTypeInfo>& keyTypes) const {
+        YQL_ENSURE(meta.Reads.Defined());
+        auto& taskReads = meta.Reads.GetRef();
+
+        /*
+         * Sort read ranges so that sequential scan of that ranges produce sorted result.
+         *
+         * Partition pruner feed us with set of non-intersecting ranges with filled right boundary.
+         * So we may sort ranges based solely on the their rightmost point.
+         */
+        std::sort(taskReads.begin(), taskReads.end(), [&](const auto& lhs, const auto& rhs) {
+            if (lhs.ShardId == rhs.ShardId) {
+                return false;
+            }
+
+            const std::pair<const TSerializedCellVec*, bool> k1 = lhs.Ranges.GetRightBorder();
+            const std::pair<const TSerializedCellVec*, bool> k2 = rhs.Ranges.GetRightBorder();
+
+            const int cmp = CompareBorders<false, false>(
+                k1.first->GetCells(),
+                k2.first->GetCells(),
+                k1.second,
+                k2.second,
+                keyTypes);
+
+            return (cmp < 0);
+            });
+    }
+
+    void GetResourcesSnapshot() {
+        GetKqpResourceManager()->RequestClusterResourcesInfo(
+            [as = TlsActivationContext->ActorSystem(), self = SelfId()](TVector<NKikimrKqp::TKqpNodeResources>&& resources) {
+                TAutoPtr<IEventHandle> eh = new IEventHandle(self, self, new typename TEvPrivate::TEvResourcesSnapshot(std::move(resources)));
+                as->Send(eh);
+            });
     }
 
 protected:
@@ -1306,6 +1574,10 @@ protected:
 
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
 
+    const NKikimrConfig::TTableServiceConfig::TAggregationConfig AggregationSettings;
+    TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
+    bool HasOlapTable;
+
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);
 };
@@ -1314,6 +1586,7 @@ private:
 
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters, bool streamResult,
+    const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregation,
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& executerRetriesConfig, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, const TActorId& creator,
     TDuration maximalSecretsSnapshotWaitTime, const TIntrusivePtr<TUserRequestContext>& userRequestContext);

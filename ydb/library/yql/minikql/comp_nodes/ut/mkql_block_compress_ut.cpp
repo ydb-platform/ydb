@@ -10,9 +10,10 @@ namespace NMiniKQL {
 
 namespace {
 
-void DoNestedTuplesCompressTest(bool useRandom, bool doFilter) {
-    TSetup<false> setup;
-    auto& pb = *setup.PgmBuilder;
+template<bool UseRandom, bool DoFilter, bool LLVM>
+void DoNestedTuplesCompressTest() {
+    TSetup<LLVM> setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto ui64Type   = pb.NewDataType(NUdf::TDataType<ui64>::Id);
     const auto boolType   = pb.NewDataType(NUdf::TDataType<bool>::Id);
@@ -24,52 +25,52 @@ void DoNestedTuplesCompressTest(bool useRandom, bool doFilter) {
 
     const auto resultTupleType = pb.NewTupleType({ui64Type, outerTupleType});
 
-    TVector<TRuntimeNode> items;
+    TRuntimeNode::TList items;
     static_assert(MaxBlockSizeInBytes % 4 == 0);
     constexpr size_t fixedStrSize = MaxBlockSizeInBytes / 4;
 
-    if (useRandom) {
+    if constexpr (UseRandom) {
         SetRandomSeed(0);
     }
 
     for (size_t i = 0; i < 95; ++i) {
         std::string str;
         bool filterValue;
-        if (useRandom) {
+        if constexpr (UseRandom) {
             size_t len = RandomNumber<size_t>(2 * MaxBlockSizeInBytes);
             str.reserve(len);
             for (size_t i = 0; i < len; ++i) {
                 str.push_back((char)RandomNumber<ui8>(128));
             }
-            if (doFilter) {
+            if constexpr (DoFilter) {
                 filterValue = RandomNumber<ui8>() & 1;
             } else {
                 filterValue = true;
             }
         } else {
             str = std::string(fixedStrSize, ' ' + i);
-            if (doFilter) {
+            if constexpr (DoFilter) {
                 filterValue = (i % 4) < 2;
             } else {
                 filterValue = true;
             }
         }
 
-        auto innerTuple = pb.NewTuple(innerTupleType, {
+        const auto innerTuple = pb.NewTuple(innerTupleType, {
             pb.NewDataLiteral<ui64>(i),
             pb.NewDataLiteral<bool>(i % 2),
             pb.NewDataLiteral<NUdf::EDataSlot::Utf8>((i % 2) ? str : std::string()),
             });
-        auto outerTuple = pb.NewTuple(outerTupleType, {
+        const auto outerTuple = pb.NewTuple(outerTupleType, {
             pb.NewDataLiteral<ui64>(i),
             innerTuple,
             pb.NewDataLiteral<NUdf::EDataSlot::Utf8>((i % 2) ? std::string() : str),
             });
 
-        auto finalTuple = pb.NewTuple(finalTupleType, {
+        const auto finalTuple = pb.NewTuple(finalTupleType, {
             pb.NewDataLiteral<ui64>(i),
             outerTuple,
-            pb.NewDataLiteral<bool>(filterValue),
+            pb.NewDataLiteral(filterValue),
             });
         items.push_back(finalTuple);
     }
@@ -83,7 +84,7 @@ void DoNestedTuplesCompressTest(bool useRandom, bool doFilter) {
     node = pb.WideToBlocks(node);
 
     node = pb.BlockExpandChunked(node);
-    node = pb.WideSkipBlocks(node, pb.NewDataLiteral<ui64>(19));
+    node = pb.WideSkipBlocks(node, pb.template NewDataLiteral<ui64>(19));
     node = pb.BlockCompress(node, 2);
     node = pb.WideFromBlocks(node);
 
@@ -91,31 +92,31 @@ void DoNestedTuplesCompressTest(bool useRandom, bool doFilter) {
         return pb.NewTuple(resultTupleType, {items[0], items[1]});
     });
 
-    const auto pgmReturn = pb.ForwardList(node);
+    const auto pgmReturn = pb.Collect(node);
     const auto graph = setup.BuildGraph(pgmReturn);
     const auto iterator = graph->GetValue().GetListIterator();
 
-    if (useRandom) {
+    if constexpr (UseRandom) {
         SetRandomSeed(0);
     }
 
     for (size_t i = 0; i < 95; ++i) {
         std::string str;
         bool filterValue;
-        if (useRandom) {
+        if constexpr (UseRandom) {
             size_t len = RandomNumber<size_t>(2 * MaxBlockSizeInBytes);
             str.reserve(len);
             for (size_t i = 0; i < len; ++i) {
                 str.push_back((char)RandomNumber<ui8>(128));
             }
-            if (doFilter) {
+            if constexpr (DoFilter) {
                 filterValue = RandomNumber<ui8>() & 1;
             } else {
                 filterValue = true;
             }
         } else {
             str = std::string(fixedStrSize, ' ' + i);
-            if (doFilter) {
+            if constexpr (DoFilter) {
                 filterValue = (i % 4) < 2;
             } else {
                 filterValue = true;
@@ -163,21 +164,21 @@ void DoNestedTuplesCompressTest(bool useRandom, bool doFilter) {
 } //namespace
 
 Y_UNIT_TEST_SUITE(TMiniKQLBlockCompressTest) {
-Y_UNIT_TEST(CompressBasic) {
-    TSetup<false> setup;
-    auto& pb = *setup.PgmBuilder;
+Y_UNIT_TEST_LLVM(CompressBasic) {
+    TSetup<LLVM> setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
 
     const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
     const auto boolType = pb.NewDataType(NUdf::TDataType<bool>::Id);
     const auto tupleType = pb.NewTupleType({boolType, ui64Type, boolType});
 
-    const auto data1 = pb.NewTuple(tupleType, {pb.NewDataLiteral<bool>(false), pb.NewDataLiteral<ui64>(1), pb.NewDataLiteral<bool>(true)});
-    const auto data2 = pb.NewTuple(tupleType, {pb.NewDataLiteral<bool>(true),  pb.NewDataLiteral<ui64>(2), pb.NewDataLiteral<bool>(false)});
-    const auto data3 = pb.NewTuple(tupleType, {pb.NewDataLiteral<bool>(false), pb.NewDataLiteral<ui64>(3), pb.NewDataLiteral<bool>(true)});
-    const auto data4 = pb.NewTuple(tupleType, {pb.NewDataLiteral<bool>(false), pb.NewDataLiteral<ui64>(4), pb.NewDataLiteral<bool>(true)});
-    const auto data5 = pb.NewTuple(tupleType, {pb.NewDataLiteral<bool>(true),  pb.NewDataLiteral<ui64>(5), pb.NewDataLiteral<bool>(false)});
-    const auto data6 = pb.NewTuple(tupleType, {pb.NewDataLiteral<bool>(true),  pb.NewDataLiteral<ui64>(6), pb.NewDataLiteral<bool>(true)});
-    const auto data7 = pb.NewTuple(tupleType, {pb.NewDataLiteral<bool>(false), pb.NewDataLiteral<ui64>(7), pb.NewDataLiteral<bool>(true)});
+    const auto data1 = pb.NewTuple(tupleType, {pb.NewDataLiteral(false), pb.NewDataLiteral<ui64>(1ULL), pb.NewDataLiteral(true)});
+    const auto data2 = pb.NewTuple(tupleType, {pb.NewDataLiteral(true),  pb.NewDataLiteral<ui64>(2ULL), pb.NewDataLiteral(false)});
+    const auto data3 = pb.NewTuple(tupleType, {pb.NewDataLiteral(false), pb.NewDataLiteral<ui64>(3ULL), pb.NewDataLiteral(true)});
+    const auto data4 = pb.NewTuple(tupleType, {pb.NewDataLiteral(false), pb.NewDataLiteral<ui64>(4ULL), pb.NewDataLiteral(true)});
+    const auto data5 = pb.NewTuple(tupleType, {pb.NewDataLiteral(true),  pb.NewDataLiteral<ui64>(5ULL), pb.NewDataLiteral(false)});
+    const auto data6 = pb.NewTuple(tupleType, {pb.NewDataLiteral(true),  pb.NewDataLiteral<ui64>(6ULL), pb.NewDataLiteral(true)});
+    const auto data7 = pb.NewTuple(tupleType, {pb.NewDataLiteral(false), pb.NewDataLiteral<ui64>(7ULL), pb.NewDataLiteral(true)});
 
     const auto list = pb.NewList(tupleType, {data1, data2, data3, data4, data5, data6, data7});
     const auto flow = pb.ToFlow(list);
@@ -190,13 +191,15 @@ Y_UNIT_TEST(CompressBasic) {
         return pb.NewTuple({items[0], items[1]});
     });
 
-    const auto pgmReturn = pb.ForwardList(narrowFlow);
+    const auto pgmReturn = pb.Collect(narrowFlow);
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
+    const auto res = graph->GetValue();
+    const auto iterator = res.GetListIterator();
 
     NUdf::TUnboxedValue item;
     UNIT_ASSERT(iterator.Next(item));
+
     UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).Get<ui64>(), 2);
     UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<bool>(), false);
 
@@ -209,16 +212,23 @@ Y_UNIT_TEST(CompressBasic) {
     UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).Get<bool>(), true);
 
     UNIT_ASSERT(!iterator.Next(item));
+    UNIT_ASSERT(!iterator.Next(item));
 }
 
-Y_UNIT_TEST(CompressNestedTuples) {
-    DoNestedTuplesCompressTest(false, true);
-    DoNestedTuplesCompressTest(false, false);
+Y_UNIT_TEST_LLVM(CompressNestedTuples) {
+    DoNestedTuplesCompressTest<false, false, LLVM>();
 }
 
-Y_UNIT_TEST(CompressNestedTuplesWithRandom) {
-    DoNestedTuplesCompressTest(true, true);
-    DoNestedTuplesCompressTest(true, false);
+Y_UNIT_TEST_LLVM(CompressNestedTuplesWithFilter) {
+    DoNestedTuplesCompressTest<false, true, LLVM>();
+}
+
+Y_UNIT_TEST_LLVM(CompressNestedTuplesWithRandom) {
+    DoNestedTuplesCompressTest<true, false, LLVM>();
+}
+
+Y_UNIT_TEST_LLVM(CompressNestedTuplesWithRandomWithFilter) {
+    DoNestedTuplesCompressTest<true, true, LLVM>();
 }
 
 }

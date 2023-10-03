@@ -14,10 +14,6 @@ namespace NMiniKQL {
 
 namespace {
 
-NUdf::TUnboxedValuePod MakeBlockCount(const THolderFactory& holderFactory, const uint64_t count) {
-    return holderFactory.CreateArrowBlock(arrow::Datum(count));
-}
-
 class TWideSkipBlocksWrapper : public TStatefulWideFlowCodegeneratorNode<TWideSkipBlocksWrapper> {
 using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideSkipBlocksWrapper>;
 public:

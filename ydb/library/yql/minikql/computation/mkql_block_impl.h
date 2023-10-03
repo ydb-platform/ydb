@@ -2,8 +2,10 @@
 
 #include "mkql_computation_node_impl.h"
 #include "mkql_computation_node_holders.h"
+#include "mkql_llvm_base.h"
 
 #include <ydb/library/yql/minikql/arrow/arrow_util.h>
+#include <ydb/library/yql/minikql/codegen/codegen.h>
 #include <ydb/library/yql/public/udf/arrow/block_item.h>
 
 #include <arrow/array.h>
@@ -12,6 +14,8 @@
 #include <arrow/compute/kernel.h>
 
 extern "C" uint64_t GetBlockCount(const NYql::NUdf::TUnboxedValuePod data);
+extern "C" uint64_t GetBitmapPopCountCount(const NYql::NUdf::TUnboxedValuePod data);
+extern "C" uint8_t GetBitmapScalarValue(const NYql::NUdf::TUnboxedValuePod data);
 
 namespace NKikimr::NMiniKQL {
 
@@ -24,6 +28,8 @@ std::vector<arrow::ValueDescr> ToValueDescr(const TVector<TType*>& types);
 
 std::vector<arrow::compute::InputType> ConvertToInputTypes(const TVector<TType*>& argTypes);
 arrow::compute::OutputType ConvertToOutputType(TType* output);
+
+NUdf::TUnboxedValuePod MakeBlockCount(const THolderFactory& holderFactory, const uint64_t count);
 
 class TBlockFuncNode : public TMutableComputationNode<TBlockFuncNode> {
 
@@ -92,7 +98,8 @@ struct TBlockState : public TComputationValue<TBlockState> {
     NUdf::TUnboxedValue* Pointer_ = nullptr;
 
     TUnboxedValueVector Values;
-    std::vector<std::deque<std::shared_ptr<arrow::ArrayData>>> Arrays;
+    std::vector<std::deque<std::shared_ptr<arrow::ArrayData>>> Deques;
+    std::vector<std::shared_ptr<arrow::ArrayData>> Arrays;
 
     TBlockState(TMemoryUsageInfo* memInfo, size_t width);
 
@@ -100,11 +107,45 @@ struct TBlockState : public TComputationValue<TBlockState> {
 
     ui64 Slice();
 
-    NUdf::TUnboxedValuePod Get(const ui64 sliceSize, const THolderFactory& holderFactory, const size_t idx); // TODO: const - mandatory for correct behavior in all cases.
+    NUdf::TUnboxedValuePod Get(const ui64 sliceSize, const THolderFactory& holderFactory, const size_t idx) const;
 
     void FillOutputs(TComputationContext& ctx, NUdf::TUnboxedValue*const* output);
 };
+#ifndef MKQL_DISABLE_CODEGEN
+    class TLLVMFieldsStructureBlockState: public TLLVMFieldsStructure<TComputationValue<TBlockState>> {
+    private:
+        using TBase = TLLVMFieldsStructure<TComputationValue<TBlockState>>;
+        llvm::IntegerType*const CountType;
+        llvm::PointerType*const PointerType;
+        llvm::ArrayType*const SkipSpaceType;
+    protected:
+        using TBase::Context;
+        static constexpr auto BaseFields = 3U;
+    public:
+        std::vector<llvm::Type*> GetFieldsArray() {
+            std::vector<llvm::Type*> result = TBase::GetFields();
+            result.emplace_back(CountType);
+            result.emplace_back(PointerType);
+            result.emplace_back(SkipSpaceType);
+            return result;
+        }
 
+        llvm::Constant* GetCount() {
+            return llvm::ConstantInt::get(llvm::Type::getInt32Ty(Context), TBase::GetFieldsCount() + 0);
+        }
+
+        llvm::Constant* GetPointer() {
+            return llvm::ConstantInt::get(llvm::Type::getInt32Ty(Context), TBase::GetFieldsCount() + 1);
+        }
+
+        TLLVMFieldsStructureBlockState(llvm::LLVMContext& context, size_t width)
+            : TBase(context)
+            , CountType(llvm::Type::getInt64Ty(Context))
+            , PointerType(llvm::PointerType::getUnqual(llvm::ArrayType::get(llvm::Type::getInt128Ty(Context), width)))
+            , SkipSpaceType(llvm::ArrayType::get(llvm::Type::getInt64Ty(Context), 9U)) // Skip std::vectors Values & Arrays
+        {}
+    };
+#endif
 template <typename TDerived>
 class TStatefulWideFlowBlockComputationNode: public TWideFlowBaseComputationNode<TDerived>
 {

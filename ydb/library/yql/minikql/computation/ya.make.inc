@@ -14,6 +14,7 @@ SRCS(
     mkql_computation_node_pack.cpp
     mkql_computation_node_pack_impl.cpp
     mkql_custom_list.cpp
+    mkql_llvm_base.cpp
     mkql_validate.cpp
     mkql_value_builder.cpp
     mkql_computation_pattern_cache.cpp

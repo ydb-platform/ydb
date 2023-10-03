@@ -1,5 +1,4 @@
 #include "mkql_blocks.h"
-#include "mkql_llvm_base.h"
 
 #include <ydb/library/yql/minikql/computation/mkql_block_reader.h>
 #include <ydb/library/yql/minikql/computation/mkql_block_builder.h>
@@ -120,7 +119,7 @@ public:
         const auto statusType = Type::getInt32Ty(context);
         const auto indexType = Type::getInt64Ty(context);
 
-        TLLVMFieldsStructureState stateFields(context);
+        TLLVMFieldsStructureState stateFields(context, Types_.size() + 1U);
         const auto stateType = StructType::get(context, stateFields.GetFieldsArray());
         const auto statePtrType = PointerType::getUnqual(stateType);
 
@@ -295,48 +294,31 @@ private:
         }
     };
 #ifndef MKQL_DISABLE_CODEGEN
-    class TLLVMFieldsStructureState: public TLLVMFieldsStructure<TComputationValue<TState>> {
+    class TLLVMFieldsStructureState: public TLLVMFieldsStructureBlockState {
     private:
-        using TBase = TLLVMFieldsStructure<TComputationValue<TState>>;
-        llvm::IntegerType*const CountType;
-        llvm::PointerType*const PointerType;
-        llvm::ArrayType*const SkipSpaceType;
+        using TBase = TLLVMFieldsStructureBlockState;
         llvm::IntegerType*const RowsType;
         llvm::IntegerType*const IsFinishedType;
     protected:
         using TBase::Context;
     public:
         std::vector<llvm::Type*> GetFieldsArray() {
-            std::vector<llvm::Type*> result = TBase::GetFields();
-            result.emplace_back(CountType);
-            result.emplace_back(PointerType);
-            result.emplace_back(SkipSpaceType);
+            std::vector<llvm::Type*> result = TBase::GetFieldsArray();
             result.emplace_back(RowsType);
             result.emplace_back(IsFinishedType);
             return result;
         }
 
-        llvm::Constant* GetCount() {
-            return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 0);
-        }
-
-        llvm::Constant* GetPointer() {
-            return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 1);
-        }
-
         llvm::Constant* GetRows() {
-            return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 3);
+            return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + BaseFields);
         }
 
         llvm::Constant* GetIsFinished() {
-            return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 4);
+            return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + BaseFields + 1);
         }
 
-        TLLVMFieldsStructureState(llvm::LLVMContext& context)
-            : TBase(context)
-            , CountType(Type::getInt64Ty(Context))
-            , PointerType(PointerType::getUnqual(Type::getInt128Ty(Context)))
-            , SkipSpaceType(ArrayType::get(Type::getInt128Ty(Context), 3U)) // Skip std::vectors Values & Arrays
+        TLLVMFieldsStructureState(llvm::LLVMContext& context, size_t width)
+            : TBase(context, width)
             , RowsType(Type::getInt64Ty(Context))
             , IsFinishedType(Type::getInt1Ty(Context))
         {}
@@ -1004,7 +986,7 @@ public:
         const auto arrayType = ArrayType::get(valueType, Width_);
         const auto ptrValuesType = PointerType::getUnqual(arrayType);
 
-        TLLVMFieldsStructureState stateFields(context, Width_);
+        TLLVMFieldsStructureBlockState stateFields(context, Width_);
         const auto stateType = StructType::get(context, stateFields.GetFieldsArray());
         const auto statePtrType = PointerType::getUnqual(stateType);
 
@@ -1118,7 +1100,7 @@ public:
                 const auto init = BasicBlock::Create(context, "init", ctx.Func);
                 const auto call = BasicBlock::Create(context, "call", ctx.Func);
 
-                TLLVMFieldsStructureState stateFields(context, width);
+                TLLVMFieldsStructureBlockState stateFields(context, width);
 
                 const auto stateArg = new LoadInst(statePtrType, stateOnStack, "state", block);
                 const auto valuesPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetPointer() }, "values_ptr", block);
@@ -1146,37 +1128,6 @@ public:
     }
 #endif
 private:
-#ifndef MKQL_DISABLE_CODEGEN
-    class TLLVMFieldsStructureState: public TLLVMFieldsStructure<TComputationValue<TBlockState>> {
-    private:
-        using TBase = TLLVMFieldsStructure<TComputationValue<TBlockState>>;
-        llvm::IntegerType*const CountType;
-        llvm::PointerType*const PointerType;
-    protected:
-        using TBase::Context;
-    public:
-        std::vector<llvm::Type*> GetFieldsArray() {
-            std::vector<llvm::Type*> result = TBase::GetFields();
-            result.emplace_back(CountType);
-            result.emplace_back(PointerType);
-            return result;
-        }
-
-        llvm::Constant* GetCount() {
-            return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 0);
-        }
-
-        llvm::Constant* GetPointer() {
-            return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 1);
-        }
-
-        TLLVMFieldsStructureState(llvm::LLVMContext& context, size_t width)
-            : TBase(context)
-            , CountType(Type::getInt64Ty(Context))
-            , PointerType(PointerType::getUnqual(ArrayType::get(Type::getInt128Ty(Context), width)))
-        {}
-    };
-#endif
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
         state = ctx.HolderFactory.Create<TBlockState>(Width_);
     }

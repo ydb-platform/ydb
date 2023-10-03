@@ -6,6 +6,7 @@
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/arrow/arrow_util.h>
+#include <ydb/library/yql/minikql/arrow/mkql_bit_utils.h>
 #include <ydb/library/yql/public/udf/arrow/args_dechunker.h>
 
 #include <ydb/library/yql/parser/pg_wrapper/interface/arrow.h>
@@ -14,6 +15,19 @@
 
 extern "C" uint64_t GetBlockCount(const NYql::NUdf::TUnboxedValuePod data) {
     return NKikimr::NMiniKQL::TArrowBlock::From(data).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+}
+
+extern "C" uint64_t GetBitmapPopCountCount(const NYql::NUdf::TUnboxedValuePod data) {
+    const NYql::NUdf::TUnboxedValue v(data);
+    const auto& arr = NKikimr::NMiniKQL::TArrowBlock::From(v).GetDatum().array();
+    const size_t len = (size_t)arr->length;
+    MKQL_ENSURE(arr->GetNullCount() == 0, "Bitmap block should not have nulls");
+    const ui8* src = arr->GetValues<ui8>(1);
+    return NKikimr::NMiniKQL::GetSparseBitmapPopCount(src, len);
+}
+
+extern "C" uint8_t GetBitmapScalarValue(const NYql::NUdf::TUnboxedValuePod data) {
+    return NKikimr::NMiniKQL::TArrowBlock::From(data).GetDatum().scalar_as<arrow::UInt8Scalar>().value;
 }
 
 namespace NKikimr::NMiniKQL {
@@ -155,6 +169,10 @@ arrow::compute::OutputType ConvertToOutputType(TType* output) {
     return arrow::compute::OutputType(ToValueDescr(output));
 }
 
+NUdf::TUnboxedValuePod MakeBlockCount(const THolderFactory& holderFactory, const uint64_t count) {
+    return holderFactory.CreateArrowBlock(arrow::Datum(count));
+}
+
 TBlockFuncNode::TBlockFuncNode(TComputationMutables& mutables, TStringBuf name, TComputationNodePtrVector&& argsNodes,
     const TVector<TType*>& argsTypes, const arrow::compute::ScalarKernel& kernel,
     std::shared_ptr<arrow::compute::ScalarKernel> kernelHolder,
@@ -250,7 +268,7 @@ const IComputationNode* TBlockFuncNode::TArrowNode::GetArgument(ui32 index) cons
 }
 
 TBlockState::TBlockState(TMemoryUsageInfo* memInfo, size_t width)
-    : TBase(memInfo), Values(width), Arrays(width - 1ULL)
+    : TBase(memInfo), Values(width), Deques(width - 1ULL), Arrays(width - 1ULL)
 {
     Pointer_ = Values.data();
 }
@@ -262,8 +280,8 @@ void TBlockState::FillArrays() {
     if (!Count)
         return;
 
-    for (size_t i = 0U; i < Arrays.size(); ++i) {
-        Arrays[i].clear();
+    for (size_t i = 0U; i < Deques.size(); ++i) {
+        Deques[i].clear();
         if (const auto value = Values[i]) {
             const auto& datum = TArrowBlock::From(value).GetDatum();
             if (datum.is_scalar()) {
@@ -271,10 +289,10 @@ void TBlockState::FillArrays() {
             }
             MKQL_ENSURE(datum.is_arraylike(), "Unexpected block type (expecting array or chunked array)");
             if (datum.is_array()) {
-                Arrays[i].push_back(datum.array());
+                Deques[i].push_back(datum.array());
             } else {
                 for (auto& chunk : datum.chunks()) {
-                    Arrays[i].push_back(chunk->data());
+                    Deques[i].push_back(chunk->data());
                 }
             }
         }
@@ -283,31 +301,39 @@ void TBlockState::FillArrays() {
 
 ui64 TBlockState::Slice() {
     auto sliceSize = Count;
-    for (size_t i = 0; i < Arrays.size(); ++i) {
-        const auto& arr = Arrays[i];
+    for (size_t i = 0; i < Deques.size(); ++i) {
+        const auto& arr = Deques[i];
         if (arr.empty())
             continue;
 
+        Y_VERIFY(ui64(arr.front()->length) <= Count);
         MKQL_ENSURE(ui64(arr.front()->length) <= Count, "Unexpected array length at column #" << i);
         sliceSize = std::min<ui64>(sliceSize, arr.front()->length);
     }
+
+    for (size_t i = 0; i < Arrays.size(); ++i) {
+        auto& arr = Deques[i];
+        if (arr.empty())
+            continue;
+        if (auto& array = arr.front(); ui64(array->length) == sliceSize) {
+            Arrays[i] = std::move(array);
+            Deques[i].pop_front();
+        } else
+            Arrays[i] = Chop(array, sliceSize);
+    }
+
     Count -= sliceSize;
     return sliceSize;
 }
 
-NUdf::TUnboxedValuePod TBlockState::Get(const ui64 sliceSize, const THolderFactory& holderFactory, const size_t idx) {
-    if (idx >= Arrays.size())
+NUdf::TUnboxedValuePod TBlockState::Get(const ui64 sliceSize, const THolderFactory& holderFactory, const size_t idx) const {
+    if (idx >= Deques.size())
         return holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(sliceSize)));
 
-    if (Arrays[idx].empty())
+    if (auto array = Arrays[idx])
+        return holderFactory.CreateArrowBlock(std::move(array));
+    else
         return Values[idx];
-
-    if (auto& array = Arrays[idx].front(); ui64(array->length) == sliceSize) {
-        const auto result = holderFactory.CreateArrowBlock(std::move(array));
-        Arrays[idx].pop_front();
-        return result;
-    } else
-        return holderFactory.CreateArrowBlock(Chop(array, sliceSize));
 }
 
 void TBlockState::FillOutputs(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {

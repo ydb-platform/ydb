@@ -80,6 +80,7 @@ You can click any of the methods below to go to the source code of an example in
   | Metadata | [MetadataAuthentication()](https://github.com/ydb-platform/ydb-php-sdk#metadata-url) |
   | Service Account Key | [JwtWithJsonAuthentication($jsonFilePath)](https://github.com/ydb-platform/ydb-php-sdk#jwt--json-file) or [JwtWithPrivateKeyAuthentication( $key_id, $service_account_id, $privateKeyFile )](https://github.com/ydb-platform/ydb-php-sdk#jwt--private-key) |
   | Determined by environment variables | [EnvironCredentials()](https://github.com/ydb-platform/ydb-php-sdk#determined-by-environment-variables) |
+  | Static Credentials | [StaticAuthentication($user, $password)](https://github.com/ydb-platform/ydb-php-sdk#static-credentials) |
 
 
 {% endlist %}

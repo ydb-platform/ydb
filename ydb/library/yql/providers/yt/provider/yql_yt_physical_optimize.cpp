@@ -89,6 +89,7 @@ public:
         AddHandler(0, &TYtDqWrite::Match, HNDL(YtDqWrite));
         AddHandler(0, &TYtDqProcessWrite::Match, HNDL(YtDqProcessWrite));
         AddHandler(0, &TYtTransientOpBase::Match, HNDL(ZeroSample));
+        AddHandler(0, &TYtEquiJoin::Match, HNDL(RuntimeEquiJoin));
 
         AddHandler(1, &TYtMap::Match, HNDL(FuseInnerMap));
         AddHandler(1, &TYtMap::Match, HNDL(FuseOuterMap));
@@ -109,7 +110,6 @@ public:
         AddHandler(1, &TYtWithUserJobsOpBase::Match, HNDL(EmbedLimit));
         AddHandler(1, &TYtMerge::Match, HNDL(PushMergeLimitToInput));
 
-        AddHandler(2, &TYtEquiJoin::Match, HNDL(RuntimeEquiJoin));
         AddHandler(2, &TStatWriteTable::Match, HNDL(ReplaceStatWriteTable));
         AddHandler(2, &TYtMap::Match, HNDL(MapToMerge));
         AddHandler(2, &TYtPublish::Match, HNDL(UnorderedPublishTarget));

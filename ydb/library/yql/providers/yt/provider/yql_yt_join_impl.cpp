@@ -2978,12 +2978,6 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
 
     const auto joinType = op.JoinKind->Content();
     const auto disableOptimizers = state->Configuration->DisableOptimizers.Get().GetOrElse(TSet<TString>());
-    const unsigned readyCount = unsigned(leftTables.Defined()) + rightTables.Defined();
-    if (!readyCount) {
-        return TStatus::Repeat;
-    } else if (readyCount == 1 && (disableOptimizers.contains("EarlyMapJoin") || joinType == "Cross")) {
-        return TStatus::Repeat;
-    }
 
     bool empty = false;
     if (leftTables.Defined()
@@ -3012,6 +3006,11 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
     }
 
     const bool isCross = joinType == "Cross";
+    const unsigned readyCount = unsigned(leftTables.Defined()) + rightTables.Defined();
+    if (isCross && readyCount < 2) {
+        return TStatus::Repeat;
+    }
+
     auto leftJoinKeys = BuildJoinKeys(labels.Inputs[0], *op.LeftLabel);
     auto rightJoinKeys = BuildJoinKeys(labels.Inputs[1], *op.RightLabel);
     auto leftJoinKeyList = BuildJoinKeyList(labels.Inputs[0], *op.LeftLabel);
@@ -3050,6 +3049,9 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
             forceMergeJoin = true;
         }
     }
+    if (!readyCount && !forceMergeJoin) {
+        return TStatus::Repeat;
+    }
 
     auto cluster = TString{equiJoin.DataSink().Cluster().Value()};
 
@@ -3057,7 +3059,7 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
     TJoinSideStats leftStats;
     TJoinSideStats rightStats;
 
-    const bool allowLookupJoin = !isCross && leftTables.Defined() && rightTables.Defined();
+    const bool allowLookupJoin = !isCross && leftTables.Defined() && rightTables.Defined() && !forceMergeJoin;
     if (allowLookupJoin) {
         auto status = CollectStatsAndMapJoinSettings(ESizeStatCollectMode::RawSize, mapSettings, leftStats, rightStats,
                                                      leftTables, leftJoinKeys, rightTables, rightJoinKeys,
@@ -3126,10 +3128,10 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
         }
     }
 
-    {
+    if (!forceMergeJoin) {
         auto status = CollectStatsAndMapJoinSettings(ESizeStatCollectMode::ColumnarSize, mapSettings, leftStats, rightStats,
-                                                     leftTables, leftJoinKeys, rightTables, rightJoinKeys,
-                                                     &leftLeaf, &rightLeaf, *state, isCross, cluster, ctx);
+                                                    leftTables, leftJoinKeys, rightTables, rightJoinKeys,
+                                                    &leftLeaf, &rightLeaf, *state, isCross, cluster, ctx);
         if (status.Level != TStatus::Ok) {
             return (status.Level == TStatus::Repeat) ? TStatus::Ok : status;
         }
@@ -3148,7 +3150,7 @@ TStatus RewriteYtEquiJoinLeaf(TYtEquiJoin equiJoin, TYtJoinNodeOp& op, TYtJoinNo
         << JoinSeq(",", leftStats.SortedKeys) << "], right sorted prefix: ["
         << JoinSeq(",", rightStats.SortedKeys) << "]";
 
-    bool allowOrderedJoin = !isCross && leftTables.Defined() && rightTables.Defined();
+    bool allowOrderedJoin = !isCross && ((leftTables.Defined() && rightTables.Defined()) || forceMergeJoin);
 
     TMergeJoinSortInfo sortInfo;
     sortInfo.LeftSortedKeys = leftStats.SortedKeys;

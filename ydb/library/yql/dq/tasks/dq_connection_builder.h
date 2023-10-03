@@ -30,15 +30,18 @@ void CommonBuildTasks(double hashShuffleTasksRatio, ui32 maxHashShuffleTasks, TD
                     input.Maybe<NNodes::TDqCnHashShuffle>(), "" << input.Ref().Content());
         }
 
-        if (auto maybeCnShuffle = input.Maybe<NNodes::TDqCnHashShuffle>()) {
+        if (input.Maybe<NNodes::TDqCnUnionAll>() || input.Maybe<NNodes::TDqCnMerge>()) {
+            // Prevent UnionAll after Map or Shuffle
+            YQL_ENSURE(partitionsCount == 1);
+        } else if (auto maybeCnShuffle = input.Maybe<NNodes::TDqCnHashShuffle>()) {
             auto shuffle = maybeCnShuffle.Cast();
-            auto& originStageInfo = graph.GetStageInfo(shuffle.Output().Stage());
+            const auto& originStageInfo = graph.GetStageInfo(shuffle.Output().Stage());
             partitionsCount = std::max(partitionsCount, (ui32) (originStageInfo.Tasks.size() * hashShuffleTasksRatio) );
             partitionsCount = std::min(partitionsCount, maxHashShuffleTasks);
         } else if (auto maybeCnMap = input.Maybe<NNodes::TDqCnMap>()) {
             auto cnMap = maybeCnMap.Cast();
-            auto& originStageInfo = graph.GetStageInfo(cnMap.Output().Stage());
-            partitionsCount = originStageInfo.Tasks.size();
+            const auto& originStageInfo = graph.GetStageInfo(cnMap.Output().Stage());
+            maxHashShuffleTasks = partitionsCount = originStageInfo.Tasks.size();
         }
     }
 

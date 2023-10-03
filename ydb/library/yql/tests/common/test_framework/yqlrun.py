@@ -64,7 +64,7 @@ class YQLRun(object):
 
         if cfg_dir is None:
             cfg_dir = 'yql/cfg/tests'
-        with open(yql_utils.yql_source_path(cfg_dir + '/gateways.conf')) as f:
+        with open(yql_utils.yql_source_path(cfg_dir + '/' + yql_utils.get_gateway_cfg_filename())) as f:
             text_format.Merge(f.read(), self.gateway_config)
 
         self.fs_config = file_storage_pb2.TFileStorageConfig()

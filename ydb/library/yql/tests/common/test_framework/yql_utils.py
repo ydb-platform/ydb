@@ -36,6 +36,19 @@ def get_param(name, default=None):
     return yatest.common.get_param(name, os.environ.get(name) or default)
 
 
+def get_gateway_cfg_suffix():
+    default_suffix = None
+    return get_param('gateway_config_suffix', default_suffix) or ''
+
+
+def get_gateway_cfg_filename():
+    suffix = get_gateway_cfg_suffix()
+    if suffix == '':
+        return 'gateways.conf'
+    else:
+        return 'gateways-' + suffix + '.conf'
+
+
 def find_file(path):
     arcadia_root = '.'
     while '.arcadia.root' not in os.listdir(arcadia_root):

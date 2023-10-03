@@ -20,12 +20,10 @@ void TScheduledExecutor::SetInterval(std::optional<TDuration> interval)
 
     auto guard = Guard(SpinLock_);
 
-    auto oldInterval = Interval_;
     Interval_ = interval;
 
-    if (interval && !(oldInterval && oldInterval->GetValue() % oldInterval->GetValue() == 0)) {
-        KickStartInvocationIfNeeded();
-    }
+    // NB: No-op if interval is null.
+    KickStartInvocationIfNeeded();
 }
 
 void TScheduledExecutor::ScheduleFirstCallback()
@@ -42,7 +40,7 @@ void TScheduledExecutor::ScheduleCallback()
 
 TError TScheduledExecutor::MakeStoppedError()
 {
-    return TError(NYT::EErrorCode::Canceled, "Interval executor is stopped");
+    return TError(NYT::EErrorCode::Canceled, "Scheduled executor is stopped");
 }
 
 TInstant TScheduledExecutor::NextDeadline()
@@ -52,8 +50,8 @@ TInstant TScheduledExecutor::NextDeadline()
     YT_VERIFY(Interval_);
 
     // TInstant and TDuration are guaranteed to have same precision.
-    const auto& intervalValue = Interval_->GetValue();
-    const auto& nowValue = TInstant::Now().GetValue();
+    auto intervalValue = Interval_->GetValue();
+    auto nowValue = TInstant::Now().GetValue();
 
     return TInstant::FromValue(nowValue + (intervalValue - nowValue % intervalValue));
 }

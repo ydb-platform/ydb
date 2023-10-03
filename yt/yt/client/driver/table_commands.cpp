@@ -113,8 +113,9 @@ void TReadTableCommand::DoExecute(ICommandContextPtr context)
         return;
     }
 
+    auto format = context->GetOutputFormat();
     auto writer = CreateStaticTableWriterForFormat(
-        context->GetOutputFormat(),
+        format,
         reader->GetNameTable(),
         {reader->GetTableSchema()},
         context->Request().OutputStream,
@@ -135,8 +136,10 @@ void TReadTableCommand::DoExecute(ICommandContextPtr context)
     });
 
     TRowBatchReadOptions options{
-        .MaxRowsPerRead = context->GetConfig()->ReadBufferRowCount
+        .MaxRowsPerRead = context->GetConfig()->ReadBufferRowCount,
+        .Columnar = (format.GetType() == EFormatType::Arrow)
     };
+
     PipeReaderToWriterByBatches(
         reader,
         writer,

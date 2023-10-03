@@ -396,21 +396,22 @@ void SerializeIntegerColumn(
                 ? column->GetTypedValues<ui64>()
                 : TRange<ui64>();
 
+            auto startIndex = column->StartIndex;
+
             switch (simpleType) {
                 #define XX(cppType, ytType) \
                     case ESimpleLogicalValueType::ytType: { \
                         auto dstValues = GetTypedValues<cppType>(dstRef); \
                         auto* currentOutput = dstValues.Begin(); \
                         DecodeIntegerVector( \
-                            column->StartIndex, \
-                            column->StartIndex + column->ValueCount, \
+                            startIndex, \
+                            startIndex + column->ValueCount, \
                             valueColumn->Values->BaseValue, \
                             valueColumn->Values->ZigZagEncoded, \
                             TRange<ui32>(), \
                             rleIndexes, \
                             [&] (auto index) { \
-                                YT_VERIFY(index >= column->StartIndex); \
-                                return values[index - column->StartIndex]; \
+                                return values[index]; \
                             }, \
                             [&] (auto value) { \
                                 *currentOutput++ = value; \

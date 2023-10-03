@@ -399,21 +399,22 @@ void SerializeIntegerColumn(
                 ? column->GetTypedValues<ui64>()
                 : TRange<ui64>();
 
+            auto startIndex = column->StartIndex;
+
             switch (simpleType) {
 #define XX(cppType, ytType)                                 \
     case ESimpleLogicalValueType::ytType: {                 \
         auto dstValues = GetTypedValues<cppType>(dstRef);   \
         auto* currentOutput = dstValues.Begin();            \
         DecodeIntegerVector(                                \
-            column->StartIndex,                             \
-            column->StartIndex + column->ValueCount,        \
+            startIndex,                                     \
+            startIndex + column->ValueCount,                \
             valueColumn->Values->BaseValue,                 \
             valueColumn->Values->ZigZagEncoded,             \
             TRange<ui32>(),                                 \
             rleIndexes,                                     \
             [&] (auto index) {                              \
-                YT_VERIFY(index >= column->StartIndex);     \
-                return values[index - column->StartIndex];  \
+                return values[index];                       \
             },                                              \
             [&] (auto value) {                              \
                 *currentOutput++ = value;                   \
@@ -683,10 +684,10 @@ private:
     {
         auto columnarBatch = rowBatch->TryAsColumnar();
         if (!columnarBatch) {
-            YT_LOG_DEBUG("Encoding non-columnar batch; running write rows");
+            YT_LOG_DEBUG("Encoding non-columnar batch; running write rows (RowCount: %v)", rowBatch->GetRowCount());
             DoWrite(rowBatch->MaterializeRows());
         } else {
-            YT_LOG_DEBUG("Encoding columnar batch");
+            YT_LOG_DEBUG("Encoding columnar batch (RowCount: %v)", rowBatch->GetRowCount());
             Reset();
             NumberOfRows_ = rowBatch->GetRowCount();
             PrepareColumns(columnarBatch->MaterializeColumns());

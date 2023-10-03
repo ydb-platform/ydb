@@ -18,7 +18,7 @@ jobs:
         run: echo "version=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" | sed -e 's|stable-|v|g' -e 's|-|.|g' >> $GITHUB_OUTPUT
         id: extract_version
       - name: Release
-        uses: blinkov/docs-release-action@main
+        uses: diplodoc-platform/docs-release-action@v1
         with:
           revision: "${{ github.sha }}"
           version: "${{ steps.extract_version.outputs.version }}"

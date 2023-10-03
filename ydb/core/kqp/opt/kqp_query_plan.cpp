@@ -168,7 +168,7 @@ public:
             TStringBuilder typeName;
             if (SerializerCtx.PrecomputePhases.find(TxId) != SerializerCtx.PrecomputePhases.end()) {
                 typeName << "Precompute";
-                planNode.CteName = TStringBuilder() << "tx_result_binding_" << TxId << "_" << resId;
+                planNode.CteName = TStringBuilder() << "precompute_" << TxId << "_" << resId;
                 planNode.Type = EPlanNodeType::Materialize;
             } else {
                 typeName << "ResultSet";
@@ -1021,6 +1021,8 @@ private:
             operatorId = Visit(maybeExtend.Cast(), planNode);
         } else if (auto maybeIter = TMaybeNode<TCoIterator>(node)) {
             operatorId = Visit(maybeIter.Cast(), planNode);
+        } else if (auto maybePartitionByKey = TMaybeNode<TCoPartitionByKey>(node)) {
+            operatorId = Visit(maybePartitionByKey.Cast(), planNode);
         } else if (auto maybeUpsert = TMaybeNode<TKqpUpsertRows>(node)) {
             operatorId = Visit(maybeUpsert.Cast(), planNode);
         } else if (auto maybeDelete = TMaybeNode<TKqpDeleteRows>(node)) {
@@ -1125,14 +1127,33 @@ private:
 
         TOperator op;
         op.Properties["Name"] = "Iterator";
-        op.Properties["Iterator"] = iterValue;
 
         if (auto maybeResultBinding = ContainResultBinding(iterValue)) {
             auto [txId, resId] = *maybeResultBinding;
-            planNode.CteRefName = TStringBuilder() << "tx_result_binding_" << TxId << "_" << resId;
+            planNode.CteRefName = TStringBuilder() << "precompute_" << txId << "_" << resId;
+            op.Properties["Iterator"] = *planNode.CteRefName;
+        } else {
+            op.Properties["Iterator"] = iterValue;
         }
 
         return AddOperator(planNode, "ConstantExpr", std::move(op));
+    }
+
+    ui32 Visit(const TCoPartitionByKey& partitionByKey, TQueryPlanNode& planNode) {
+        const auto inputValue = PrettyExprStr(partitionByKey.Input());
+
+        TOperator op;
+        op.Properties["Name"] = "PartitionByKey";
+
+        if (auto maybeResultBinding = ContainResultBinding(inputValue)) {
+            auto [txId, resId] = *maybeResultBinding;
+            planNode.CteRefName = TStringBuilder() << "precompute_" << txId << "_" << resId;
+            op.Properties["Input"] = *planNode.CteRefName;
+        } else {
+            op.Properties["Input"] = inputValue;
+        }
+
+        return AddOperator(planNode, "Aggregate", std::move(op));
     }
 
     ui32 Visit(const TKqpUpsertRows& upsert, TQueryPlanNode& planNode) {

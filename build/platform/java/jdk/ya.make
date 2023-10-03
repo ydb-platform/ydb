@@ -49,4 +49,5 @@ RECURSE(
     jdk18
     jdk19
     jdk20
+    testing
 )

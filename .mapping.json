@@ -54,7 +54,6 @@
   "build/scripts/export_script_gen.py":"",
   "build/scripts/generate_vcs_info.py":"",
   "build/scripts/split_unittest.py":"",
-  "build/ya.conf.json":"devtools/ya/opensource/ya.conf.json",
   "certs/CMakeLists.darwin-x86_64.txt":"",
   "certs/CMakeLists.linux-aarch64.txt":"",
   "certs/CMakeLists.linux-x86_64.txt":"",

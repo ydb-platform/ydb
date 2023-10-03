@@ -36,3 +36,7 @@ IF (NOT CATBOOST_OPENSOURCE)
 ENDIF()
 
 END()
+
+RECURSE(
+    ut
+)

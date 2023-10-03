@@ -37,15 +37,6 @@ void TQueueAutoTrimConfig::Register(TRegistrar registrar)
         .Default();
 
     registrar.Postprocessor([] (TThis* trimConfig) {
-        if (!trimConfig->Enable) {
-            if (trimConfig->RetainedLifetimeDuration) {
-                THROW_ERROR_EXCEPTION("Autotrimming is disabled, option \"retained_lifetime_duration\" can only be used while autotrimming is enabled");
-            }
-            if (trimConfig->RetainedRows) {
-                THROW_ERROR_EXCEPTION("Autotrimming is disabled, option \"retained_rows\" can only be used while autotrimming is enabled");
-            }
-        }
-
         if (trimConfig->RetainedLifetimeDuration && trimConfig->RetainedLifetimeDuration->GetValue() % TDuration::Seconds(1).GetValue() != 0) {
             THROW_ERROR_EXCEPTION("The value of \"retained_lifetime_duration\" must be a multiple of 1000 (1 second)");
         }

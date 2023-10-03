@@ -1463,7 +1463,6 @@ migrations:
     - direct/solo/registered/alert/infra/mdb/mysql
     - direct/solo/registered/alert/infra/mysql_binlog_age
     - direct/solo/registered/alert/integrations
-    - direct/solo/registered/alert/java_apps
     - direct/solo/registered/alert/jobs
     - direct/solo/registered/alert/transport_queues
     - direct/solo/registered/dashboard
@@ -7075,7 +7074,6 @@ migrations:
     - autobudget/bidder/testlib/fasttestlib
     - cloud/dwh/lms/hooks
     - cloud/mdb/dbaas-internal-api-image/dbaas_internal_api/utils
-    - contrib/python/hyperlink/hyperlink/test
     - cv/imgclassifiers/utils/python/yt_attributes
     - dict/mt/analytics/mr_metrics/lib/stages
     - dict/mt/analytics/mr_metrics/lib/util
@@ -7690,7 +7688,6 @@ migrations:
     - cloud/netinfra/rknfilter/yc_rkn_common
     - cloud/netinfra/rknfilter/yc_rkn_config_node
     - cmnt/tools/regression/request_classes
-    - contrib/python/hyperlink/hyperlink/test
     - cv/imageproc/ocr/tools/database_extraction/nirvana/imgaug/src/augmenters
     - cv/short2long/training/yt_calc_factors
     - datacloud/log_reader/lib
@@ -8799,7 +8796,6 @@ migrations:
     - sdg/library/python/sdg_yandex_staff_client/sdg_yandex_staff_client/async_client
     - sdg/library/python/sdg_yandex_staff_client/sdg_yandex_staff_client/sync_client
     - search/mon/uchenki/lib/utils
-    - trust/bill76/corovaneer/httplib
   PLW4701:
     ignore:
     - PLW4701

@@ -513,13 +513,23 @@ TBoolValidator TBoolBuilder::CreateValidator() {
 
 // TEnumBuilder
 TEnumBuilder::TEnumBuilder(THashSet<TString> items)
-    : TBase(ENodeType::Enum), Items_(std::move(items)) {}
+    : TBase(ENodeType::Enum) {
+        for (TString item : items) {
+            item.to_lower();
+            Items_.insert(item);
+        }
+    }
 
 TEnumBuilder::TEnumBuilder(const TEnumBuilder& builder)
     : TBase(builder), Items_(builder.Items_) {}
 
 TEnumBuilder::TEnumBuilder(TEnumBuilder&& builder)
-    : TBase(std::move(builder)), Items_(std::move(builder.Items_)) {}
+    : TBase(std::move(builder)), Items_(std::move(builder.Items_)) {
+        for (TString item : builder.Items_) {
+            item.to_lower();
+            Items_.insert(item);
+        }
+    }
 
 TEnumBuilder& TEnumBuilder::operator=(const TEnumBuilder& builder) {
     TBuilder::operator=(builder);
@@ -536,6 +546,15 @@ TEnumBuilder& TEnumBuilder::operator=(TEnumBuilder&& builder) {
 TEnumBuilder::TEnumBuilder(std::function<void(TEnumBuilder&)> configurator)
     : TBase(ENodeType::Enum) {
     configurator(*this);
+}
+
+TEnumBuilder& TEnumBuilder::SetItems(THashSet<TString> items) {
+    Items_.clear();
+    for (TString item : items) {
+        item.to_lower();
+        Items_.insert(item);
+    }
+    return *this;
 }
 
 TEnumValidator TEnumBuilder::CreateValidator() {

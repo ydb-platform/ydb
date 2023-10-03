@@ -186,7 +186,7 @@ Y_UNIT_TEST_SUITE(StaticValidator) {
         "    rack: '1'\n";
         
         Y_ENSURE(HasOnlyThisIssues(v.Validate(yaml), {
-            {"/hosts", "Check \"Must not have to hosts with same host name and port\" failed: items with indexes 0 and 1 are conflicting"}
+            {"/hosts", "Check \"Must not have two hosts with same host name and port\" failed: items with indexes 0 and 1 are conflicting"}
         }));
 
         yaml =
@@ -210,7 +210,7 @@ Y_UNIT_TEST_SUITE(StaticValidator) {
 
         Y_ENSURE(HasOnlyThisIssues(v.Validate(yaml), {
             {"/hosts", "Check \"All array items, that located in \"node_id\" must be unique\" failed: items with indexes 0 and 1 are conflicting"},
-            {"/hosts", "Check \"Must not have to hosts with same host name and port\" failed: items with indexes 0 and 1 are conflicting"}
+            {"/hosts", "Check \"Must not have two hosts with same host name and port\" failed: items with indexes 0 and 1 are conflicting"}
         }));
 
         yaml =
@@ -259,8 +259,8 @@ Y_UNIT_TEST_SUITE(StaticValidator) {
         "        vdisk_kind: Default\n"
         "  state_storage:\n"
         "  - ring:\n"
-        "      node: [1, 2, 3, 4, 5, 6, 7, 8]\n"
-        "      nto_select: 8\n"
+        "      node: [1, 2, 3, 4, 5, 6, 7, 8, 9]\n"
+        "      nto_select: 9\n"
         "    ssid: 1\n"
         "  security_config:\n"
         "    enforce_user_token_requirement: true\n";
@@ -283,8 +283,8 @@ Y_UNIT_TEST_SUITE(StaticValidator) {
         "        vdisk_kind: Default\n"
         "  state_storage:\n"
         "  - ring:\n"
-        "      node: [1, 2, 3, 4, 5, 6, 7, 8]\n"
-        "      nto_select: 8\n"
+        "      node: [1, 2, 3, 4, 5, 6, 7, 8, 9]\n"
+        "      nto_select: 9\n"
         "    ssid: 1\n";
         
         Y_ENSURE(HasOnlyThisIssues(v.Validate(yaml), {

@@ -261,7 +261,7 @@ public:
 
     TEnumBuilder(std::function<void(TEnumBuilder&)> configurator);
 
-    void SetItems(const THashSet<TString>& items);
+    TEnumBuilder& SetItems(THashSet<TString> items);
 
     TEnumValidator CreateValidator();
 

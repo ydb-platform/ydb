@@ -6,10 +6,9 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(example_configs)
 
-add_executable(ydb-library-yaml_config-static_validator-ut)
-target_link_libraries(ydb-library-yaml_config-static_validator-ut PUBLIC
+add_executable(static_validator-ut-example_configs)
+target_link_libraries(static_validator-ut-example_configs PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-cpuid_check
@@ -17,21 +16,21 @@ target_link_libraries(ydb-library-yaml_config-static_validator-ut PUBLIC
   library-yaml_config-static_validator
   library-yaml_config-validator
 )
-target_sources(ydb-library-yaml_config-static_validator-ut PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config/static_validator/ut/test.cpp
+target_sources(static_validator-ut-example_configs PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yaml_config/static_validator/ut/example_configs/test.cpp
 )
 set_property(
   TARGET
-  ydb-library-yaml_config-static_validator-ut
+  static_validator-ut-example_configs
   PROPERTY
   SPLIT_FACTOR
   1
 )
 add_yunittest(
   NAME
-  ydb-library-yaml_config-static_validator-ut
+  static_validator-ut-example_configs
   TEST_TARGET
-  ydb-library-yaml_config-static_validator-ut
+  static_validator-ut-example_configs
   TEST_ARG
   --print-before-suite
   --print-before-test
@@ -41,19 +40,19 @@ add_yunittest(
 )
 set_yunittest_property(
   TEST
-  ydb-library-yaml_config-static_validator-ut
+  static_validator-ut-example_configs
   PROPERTY
   LABELS
   SMALL
 )
 set_yunittest_property(
   TEST
-  ydb-library-yaml_config-static_validator-ut
+  static_validator-ut-example_configs
   PROPERTY
   PROCESSORS
   1
 )
-target_allocator(ydb-library-yaml_config-static_validator-ut
+target_allocator(static_validator-ut-example_configs
   system_allocator
 )
-vcs_info(ydb-library-yaml_config-static_validator-ut)
+vcs_info(static_validator-ut-example_configs)

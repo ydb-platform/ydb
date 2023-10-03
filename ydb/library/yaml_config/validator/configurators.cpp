@@ -28,6 +28,9 @@ std::function<void(TArrayBuilder&)> uniqueByPath(TString path, TString checkName
             for (int i = 0; i < array.Length(); ++i) {
                 TNodeWrapper node = array[i];
                 node = walkFrom(node, pathTokens);
+                if (!node.Exists()) {
+                    continue;
+                }
                 if (!node.IsScalar()) {
                     ythrow yexception() << "Can't check uniqness of non-scalar fields";
                 }
@@ -62,16 +65,20 @@ TNodeWrapper walkFrom(TNodeWrapper node, TString path) {
 
 TNodeWrapper walkFrom(TNodeWrapper node, const TVector<TString>& pathTokens) {
     for (const TString& pathToken : pathTokens) {
-        if (node.IsMap()) {
-            node = node.Map()[pathToken];
-        } else if (node.IsArray()) {
-            auto i = TryFromString<size_t>(pathToken);
-            if (!i.Defined()) {
-                ythrow yexception() << "incorrect array index";
+        if (node.Exists()) {
+            if (node.IsMap()) {
+                node = node.Map()[pathToken];
+            } else if (node.IsArray()) {
+                auto i = TryFromString<size_t>(pathToken);
+                if (!i.Defined()) {
+                    ythrow yexception() << "incorrect array index";
+                }
+                node = node.Array()[i.GetRef()];
+            } else {
+                ythrow yexception() << "incorrect path";
             }
-            node = node.Array()[i.GetRef()];
         } else {
-            ythrow yexception() << "incorrect path";
+            node = node.Map()[pathToken];
         }
     }
     return node;

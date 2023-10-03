@@ -10,5 +10,3 @@ PEERDIR(
 )
 
 END()
-
-RECURSE_FOR_TESTS(example_configs)

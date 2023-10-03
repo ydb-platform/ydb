@@ -7,3 +7,10 @@ NYamlConfig::NValidator::TMapBuilder DomainsConfigBuilder();
 NYamlConfig::NValidator::TArrayBuilder StoragePoolTypesConfigBuilder();
 NYamlConfig::NValidator::TArrayBuilder StateStorageBuilder();
 NYamlConfig::NValidator::TMapBuilder SecurityConfigBuilder();
+
+NYamlConfig::NValidator::TMapBuilder ActorSystemConfigBuilder();
+NYamlConfig::NValidator::TMapBuilder BlobStorageConfigBuilder();
+
+NYamlConfig::NValidator::TMapBuilder ChannelProfileConfigBuilder();
+
+NYamlConfig::NValidator::TMapBuilder StaticConfigBuilder();

@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(example_configs)
 
 add_executable(ydb-library-yaml_config-static_validator-ut)
 target_link_libraries(ydb-library-yaml_config-static_validator-ut PUBLIC

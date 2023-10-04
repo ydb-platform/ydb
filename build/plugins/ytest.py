@@ -78,10 +78,6 @@ def validate_test(unit, kw):
             ("contrib", "mail", "maps", "tools/idl", "metrika", "devtools", "mds", "yandex_io", "smart_devices")
         ):
             errors.append("BOOSTTEST is not allowed here")
-    elif valid_kw.get('SCRIPT-REL-PATH') == 'gtest':
-        project_path = valid_kw.get('BUILD-FOLDER-PATH', "")
-        if not project_path.startswith(("contrib", "devtools", "mds")):
-            errors.append("GTEST_UGLY is not allowed here, use GTEST instead")
 
     size_timeout = collections.OrderedDict(sorted(consts.TestSize.DefaultTimeouts.items(), key=lambda t: t[1]))
 

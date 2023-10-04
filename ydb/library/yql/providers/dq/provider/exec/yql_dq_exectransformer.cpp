@@ -1589,7 +1589,7 @@ private:
             YQL_ENSURE(stagesCount <= maxTasksPerOperation);
 
             try {
-                while (executionPlanner->PlanExecution(canFallback) > maxTasksPerOperation && tasksPerStage > 1) {
+                while (!executionPlanner->PlanExecution(canFallback) && tasksPerStage > 1) {
                     tasksPerStage /= 2;
                     settings->MaxTasksPerStage = tasksPerStage;
                     executionPlanner->Clear();

@@ -1,5 +1,6 @@
 #include "special_keys.h"
 #include "permutations.h"
+#include "reader/read_filter_merger.h"
 #include <ydb/core/formats/arrow/serializer/full.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
@@ -27,6 +28,10 @@ TString TSpecialKeys::SerializeToString() const {
     return NArrow::NSerialization::TFullDataSerializer(arrow::ipc::IpcWriteOptions::Defaults()).Serialize(Data);
 }
 
+TString TSpecialKeys::SerializeToStringDataOnlyNoCompression() const {
+    return NArrow::SerializeBatchNoCompression(Data);
+}
+
 TFirstLastSpecialKeys::TFirstLastSpecialKeys(std::shared_ptr<arrow::RecordBatch> batch, const std::vector<TString>& columnNames /*= {}*/) {
     Y_VERIFY(batch);
     Y_VERIFY(batch->num_rows());
@@ -40,13 +45,69 @@ TFirstLastSpecialKeys::TFirstLastSpecialKeys(std::shared_ptr<arrow::RecordBatch>
     }
 
     Data = NArrow::CopyRecords(keyBatch, indexes);
+    Y_VERIFY(Data->num_rows() == 1 || Data->num_rows() == 2);
+}
+
+TMinMaxSpecialKeys::TMinMaxSpecialKeys(std::shared_ptr<arrow::RecordBatch> batch, const std::shared_ptr<arrow::Schema>& schema) {
+    Y_VERIFY(batch);
+    Y_VERIFY(batch->num_rows());
+    Y_VERIFY(schema);
+
+    NOlap::NIndexedReader::TSortableBatchPosition record(batch, 0, schema->field_names(), {}, false);
+    std::optional<NOlap::NIndexedReader::TSortableBatchPosition> minValue;
+    std::optional<NOlap::NIndexedReader::TSortableBatchPosition> maxValue;
+    while (true) {
+        if (!minValue || minValue->Compare(record) == std::partial_ordering::greater) {
+            minValue = record;
+        }
+        if (!maxValue || maxValue->Compare(record) == std::partial_ordering::less) {
+            maxValue = record;
+        }
+        if (!record.NextPosition(1)) {
+            break;
+        }
+    }
+    Y_VERIFY(minValue && maxValue);
+    std::vector<ui64> indexes;
+    indexes.emplace_back(minValue->GetPosition());
+    if (maxValue->GetPosition() != minValue->GetPosition()) {
+        indexes.emplace_back(maxValue->GetPosition());
+    }
+
+    std::vector<TString> columnNamesString;
+    for (auto&& i : schema->field_names()) {
+        columnNamesString.emplace_back(i);
+    }
+
+    auto dataBatch = NArrow::ExtractColumns(batch, columnNamesString);
+    Data = NArrow::CopyRecords(dataBatch, indexes);
+    Y_VERIFY(Data->num_rows() == 1 || Data->num_rows() == 2);
 }
 
 TFirstLastSpecialKeys::TFirstLastSpecialKeys(const TString& data)
+    : TBase(data) {
+    Y_VERIFY_DEBUG(Data->ValidateFull().ok());
+    Y_VERIFY(Data->num_rows() == 1 || Data->num_rows() == 2);
+}
+
+std::shared_ptr<NKikimr::NArrow::TFirstLastSpecialKeys> TFirstLastSpecialKeys::BuildAccordingToSchemaVerified(const std::shared_ptr<arrow::Schema>& schema) const {
+    auto newData = NArrow::ExtractColumns(Data, schema);
+    AFL_VERIFY(newData);
+    return std::make_shared<TFirstLastSpecialKeys>(newData);
+}
+
+TMinMaxSpecialKeys::TMinMaxSpecialKeys(const TString& data)
     : TBase(data)
 {
     Y_VERIFY_DEBUG(Data->ValidateFull().ok());
     Y_VERIFY(Data->num_rows() == 1 || Data->num_rows() == 2);
+}
+
+std::shared_ptr<NKikimr::NArrow::TMinMaxSpecialKeys> TMinMaxSpecialKeys::BuildAccordingToSchemaVerified(const std::shared_ptr<arrow::Schema>& schema) const {
+    auto newData = NArrow::ExtractColumns(Data, schema);
+    AFL_VERIFY(newData);
+    std::shared_ptr<TMinMaxSpecialKeys> result(new TMinMaxSpecialKeys(newData));
+    return result;
 }
 
 }

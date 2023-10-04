@@ -19,6 +19,7 @@ target_link_libraries(tx-columnshard-common PUBLIC
   yutil
   ydb-core-protos
   libs-apache-arrow
+  core-formats-arrow
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(tx-columnshard-common PRIVATE

@@ -30,16 +30,16 @@ public:
         RawBytes = proto.GetRawBytes();
     }
 
-    std::optional<NArrow::TReplaceKey> GetMin(const std::shared_ptr<arrow::Schema>& schema) const {
+    std::optional<NArrow::TReplaceKey> GetFirstPK(const std::shared_ptr<arrow::Schema>& schema) const {
         if (GetSpecialKeys()) {
-            return GetSpecialKeys()->GetMin(schema);
+            return GetSpecialKeys()->GetFirst(schema);
         } else {
             return {};
         }
     }
-    std::optional<NArrow::TReplaceKey> GetMax(const std::shared_ptr<arrow::Schema>& schema) const {
+    std::optional<NArrow::TReplaceKey> GetLastPK(const std::shared_ptr<arrow::Schema>& schema) const {
         if (GetSpecialKeys()) {
-            return GetSpecialKeys()->GetMax(schema);
+            return GetSpecialKeys()->GetLast(schema);
         } else {
             return {};
         }

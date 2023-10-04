@@ -26,18 +26,16 @@ const TColumnRecord& TPortionInfo::AppendOneChunkColumn(TColumnRecord&& record) 
     return Records.back();
 }
 
-void TPortionInfo::AddMetadata(const ISnapshotSchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch,
-                               const TString& tierName) {
+void TPortionInfo::AddMetadata(const ISnapshotSchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch, const TString& tierName) {
     Y_VERIFY(batch->num_rows() == NumRows());
-    AddMetadata(snapshotSchema, NArrow::TFirstLastSpecialKeys(batch), tierName);
+    AddMetadata(snapshotSchema, NArrow::TFirstLastSpecialKeys(batch), NArrow::TMinMaxSpecialKeys(batch, TIndexInfo::ArrowSchemaSnapshot()), tierName);
 }
 
-void TPortionInfo::AddMetadata(const ISnapshotSchema& snapshotSchema, const NArrow::TFirstLastSpecialKeys& specials,
-    const TString& tierName) {
+void TPortionInfo::AddMetadata(const ISnapshotSchema& snapshotSchema, const NArrow::TFirstLastSpecialKeys& primaryKeys, const NArrow::TMinMaxSpecialKeys& snapshotKeys, const TString& tierName) {
     const auto& indexInfo = snapshotSchema.GetIndexInfo();
     Meta = {};
     Meta.FirstPkColumn = indexInfo.GetPKFirstColumnId();
-    Meta.FillBatchInfo(specials, indexInfo);
+    Meta.FillBatchInfo(primaryKeys, snapshotKeys, indexInfo);
     Meta.SetTierName(tierName);
 }
 
@@ -142,20 +140,6 @@ void TPortionInfo::AddRecord(const TIndexInfo& indexInfo, const TColumnRecord& r
     if (portionMeta) {
         Meta.FirstPkColumn = indexInfo.GetPKFirstColumnId();
         Y_VERIFY(Meta.DeserializeFromProto(*portionMeta, indexInfo));
-    }
-    if (!indexInfo.IsCompositeIndexKey() && indexInfo.GetPKFirstColumnId() == rec.ColumnId) {
-        if (rec.GetMeta().GetMin()) {
-            auto candidate = NArrow::TReplaceKey::FromScalar(rec.GetMeta().GetMin());
-            if (!Meta.IndexKeyStart || candidate < *Meta.IndexKeyStart) {
-                Meta.IndexKeyStart = candidate;
-            }
-        }
-        if (rec.GetMeta().GetMax()) {
-            auto candidate = NArrow::TReplaceKey::FromScalar(rec.GetMeta().GetMax());
-            if (!Meta.IndexKeyEnd || *Meta.IndexKeyEnd < candidate) {
-                Meta.IndexKeyEnd = candidate;
-            }
-        }
     }
 }
 

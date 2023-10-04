@@ -5,31 +5,27 @@
 
 namespace NKikimr::NOlap {
 
-void TPortionMeta::FillBatchInfo(const NArrow::TFirstLastSpecialKeys& specials, const TIndexInfo& indexInfo) {
-    auto& batch = specials.GetBatch();
-    AFL_VERIFY(batch->num_rows());
+void TPortionMeta::FillBatchInfo(const NArrow::TFirstLastSpecialKeys& primaryKeys, const NArrow::TMinMaxSpecialKeys& snapshotKeys, const TIndexInfo& indexInfo) {
     {
-        auto keyBatch = NArrow::ExtractColumns(batch, indexInfo.GetReplaceKey());
-        AFL_VERIFY(keyBatch);
-        std::vector<bool> bits(batch->num_rows(), false);
-        bits[0] = true;
-        bits[batch->num_rows() - 1] = true; // it could be 0 if batch has one row
-
-        auto filter = NArrow::TColumnFilter(std::move(bits)).BuildArrowFilter(batch->num_rows());
-        auto res = arrow::compute::Filter(keyBatch, filter);
-        Y_VERIFY(res.ok());
-
-        ReplaceKeyEdges = res->record_batch();
-        Y_VERIFY(ReplaceKeyEdges->num_rows() == 1 || ReplaceKeyEdges->num_rows() == 2);
+        ReplaceKeyEdges = primaryKeys.BuildAccordingToSchemaVerified(indexInfo.GetReplaceKey());
+        IndexKeyStart = ReplaceKeyEdges->GetFirst();
+        IndexKeyEnd = ReplaceKeyEdges->GetLast();
     }
 
-    auto edgesBatch = NArrow::ExtractColumns(ReplaceKeyEdges, indexInfo.GetIndexKey());
-    IndexKeyStart = NArrow::TReplaceKey::FromBatch(edgesBatch, 0);
-    IndexKeyEnd = NArrow::TReplaceKey::FromBatch(edgesBatch, edgesBatch->num_rows() - 1);
+    {
+        auto cPlanStep = snapshotKeys.GetBatch()->GetColumnByName(TIndexInfo::SPEC_COL_PLAN_STEP);
+        auto cTxId = snapshotKeys.GetBatch()->GetColumnByName(TIndexInfo::SPEC_COL_TX_ID);
+        Y_VERIFY(cPlanStep && cTxId);
+        Y_VERIFY(cPlanStep->type_id() == arrow::UInt64Type::type_id);
+        Y_VERIFY(cTxId->type_id() == arrow::UInt64Type::type_id);
+        const arrow::UInt64Array& cPlanStepArray = static_cast<const arrow::UInt64Array&>(*cPlanStep);
+        const arrow::UInt64Array& cTxIdArray = static_cast<const arrow::UInt64Array&>(*cTxId);
+        RecordSnapshotMin = TSnapshot(cPlanStepArray.GetView(0), cTxIdArray.GetView(0));
+        RecordSnapshotMax = TSnapshot(cPlanStepArray.GetView(snapshotKeys.GetBatch()->num_rows() - 1), cTxIdArray.GetView(snapshotKeys.GetBatch()->num_rows() - 1));
+    }
 }
 
 bool TPortionMeta::DeserializeFromProto(const NKikimrTxColumnShard::TIndexPortionMeta& portionMeta, const TIndexInfo& indexInfo) {
-    const bool compositeIndexKey = indexInfo.IsCompositeIndexKey();
     if (Produced != TPortionMeta::EProduced::UNSPECIFIED) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "DeserializeFromProto")("error", "parsing duplication");
         return true;
@@ -49,17 +45,16 @@ bool TPortionMeta::DeserializeFromProto(const NKikimrTxColumnShard::TIndexPortio
     }
 
     if (portionMeta.HasPrimaryKeyBorders()) {
-        ReplaceKeyEdges = NArrow::DeserializeBatch(portionMeta.GetPrimaryKeyBorders(), indexInfo.GetReplaceKey());
-        Y_VERIFY(ReplaceKeyEdges);
-        Y_VERIFY_DEBUG(ReplaceKeyEdges->ValidateFull().ok());
-        Y_VERIFY(ReplaceKeyEdges->num_rows() == 1 || ReplaceKeyEdges->num_rows() == 2);
+        ReplaceKeyEdges = std::make_shared<NArrow::TFirstLastSpecialKeys>(portionMeta.GetPrimaryKeyBorders(), indexInfo.GetReplaceKey());
+        IndexKeyStart = ReplaceKeyEdges->GetFirst();
+        IndexKeyEnd = ReplaceKeyEdges->GetLast();
+    }
 
-        if (compositeIndexKey) {
-            auto edgesBatch = NArrow::ExtractColumns(ReplaceKeyEdges, indexInfo.GetIndexKey());
-            Y_VERIFY(edgesBatch);
-            IndexKeyStart = NArrow::TReplaceKey::FromBatch(edgesBatch, 0);
-            IndexKeyEnd = NArrow::TReplaceKey::FromBatch(edgesBatch, edgesBatch->num_rows() - 1);
-        }
+    if (portionMeta.HasRecordSnapshotMin()) {
+        RecordSnapshotMin = TSnapshot(portionMeta.GetRecordSnapshotMin().GetPlanStep(), portionMeta.GetRecordSnapshotMin().GetTxId());
+    }
+    if (portionMeta.HasRecordSnapshotMax()) {
+        RecordSnapshotMax = TSnapshot(portionMeta.GetRecordSnapshotMax().GetPlanStep(), portionMeta.GetRecordSnapshotMax().GetTxId());
     }
     return true;
 }
@@ -93,11 +88,17 @@ std::optional<NKikimrTxColumnShard::TIndexPortionMeta> TPortionMeta::SerializeTo
             break;
     }
 
-    if (const auto& keyEdgesBatch = ReplaceKeyEdges) {
-        Y_VERIFY(keyEdgesBatch);
-        Y_VERIFY_DEBUG(keyEdgesBatch->ValidateFull().ok());
-        Y_VERIFY(keyEdgesBatch->num_rows() == 1 || keyEdgesBatch->num_rows() == 2);
-        portionMeta.SetPrimaryKeyBorders(NArrow::SerializeBatchNoCompression(keyEdgesBatch));
+    if (ReplaceKeyEdges) {
+        portionMeta.SetPrimaryKeyBorders(ReplaceKeyEdges->SerializeToStringDataOnlyNoCompression());
+    }
+
+    if (RecordSnapshotMin) {
+        portionMeta.MutableRecordSnapshotMin()->SetPlanStep(RecordSnapshotMin->GetPlanStep());
+        portionMeta.MutableRecordSnapshotMin()->SetTxId(RecordSnapshotMin->GetTxId());
+    }
+    if (RecordSnapshotMax) {
+        portionMeta.MutableRecordSnapshotMax()->SetPlanStep(RecordSnapshotMax->GetPlanStep());
+        portionMeta.MutableRecordSnapshotMax()->SetTxId(RecordSnapshotMax->GetTxId());
     }
     return portionMeta;
 }

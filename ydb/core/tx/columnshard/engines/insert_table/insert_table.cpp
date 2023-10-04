@@ -119,14 +119,14 @@ std::vector<TCommittedBlob> TInsertTable::Read(ui64 pathId, const TSnapshot& sna
         }
     }
     const auto pred = [pkSchema](const TInsertedData* l, const TInsertedData* r) {
-        return l->GetMeta().GetMin(pkSchema) < r->GetMeta().GetMin(pkSchema);
+        return l->GetMeta().GetFirstPK(pkSchema) < r->GetMeta().GetFirstPK(pkSchema);
     };
     std::sort(ret.begin(), ret.end(), pred);
 
     std::vector<TCommittedBlob> result;
     result.reserve(ret.size());
     for (auto&& i : ret) {
-        result.emplace_back(TCommittedBlob(i->GetBlobRange(), i->GetSnapshot(), i->GetSchemaVersion(), i->GetMeta().GetMin(pkSchema), i->GetMeta().GetMax(pkSchema)));
+        result.emplace_back(TCommittedBlob(i->GetBlobRange(), i->GetSnapshot(), i->GetSchemaVersion(), i->GetMeta().GetFirstPK(pkSchema), i->GetMeta().GetLastPK(pkSchema)));
     }
 
     return result;

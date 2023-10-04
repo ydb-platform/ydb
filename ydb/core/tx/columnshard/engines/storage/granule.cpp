@@ -25,7 +25,6 @@ void TGranuleMeta::UpsertPortion(const TPortionInfo& info) {
         AFL_VERIFY(record.Valid())("event", "incorrect_record")("record", record.DebugString())("portion", info.DebugString());
     }
 
-    Y_VERIFY(Record.Mark <= info.IndexKeyStart());
     if (it == Portions.end()) {
         OnBeforeChangePortion(nullptr);
         auto portionNew = std::make_shared<TPortionInfo>(info);

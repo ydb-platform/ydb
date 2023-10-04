@@ -81,7 +81,7 @@ public:
     bool IsIndexingActive() const {
         return ActiveIndexing;
     }
-    bool GetIndexingActiveCount() const {
+    i64 GetIndexingActiveCount() const {
         return ActiveIndexing;
     }
 

@@ -42,6 +42,9 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
         arrow::FieldVector indexFields;
         indexFields.emplace_back(portionIdField);
         indexFields.emplace_back(portionRecordIndexField);
+        for (auto&& i : TIndexInfo::ArrowSchemaSnapshot()->fields()) {
+            indexFields.emplace_back(i);
+        }
         auto dataSchema = std::make_shared<arrow::Schema>(indexFields);
         NIndexedReader::TMergePartialStream mergeStream(resultSchema->GetIndexInfo().GetReplaceKey(), dataSchema, false);
         ui32 idx = 0;
@@ -67,9 +70,13 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
     
     auto columnPortionIdx = batchResult->GetColumnByName(portionIdFieldName);
     auto columnPortionRecordIdx = batchResult->GetColumnByName(portionRecordIndexFieldName);
-    Y_VERIFY(columnPortionIdx && columnPortionRecordIdx);
+    auto columnSnapshotPlanStepIdx = batchResult->GetColumnByName(TIndexInfo::SPEC_COL_PLAN_STEP);
+    auto columnSnapshotTxIdx = batchResult->GetColumnByName(TIndexInfo::SPEC_COL_TX_ID);
+    Y_VERIFY(columnPortionIdx && columnPortionRecordIdx && columnSnapshotPlanStepIdx && columnSnapshotTxIdx);
     Y_VERIFY(columnPortionIdx->type_id() == arrow::UInt16Type::type_id);
     Y_VERIFY(columnPortionRecordIdx->type_id() == arrow::UInt32Type::type_id);
+    Y_VERIFY(columnSnapshotPlanStepIdx->type_id() == arrow::UInt64Type::type_id);
+    Y_VERIFY(columnSnapshotTxIdx->type_id() == arrow::UInt64Type::type_id);
     const arrow::UInt16Array& pIdxArray = static_cast<const arrow::UInt16Array&>(*columnPortionIdx);
     const arrow::UInt32Array& pRecordIdxArray = static_cast<const arrow::UInt32Array&>(*columnPortionRecordIdx);
 
@@ -89,8 +96,8 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
         TColumnMergeContext context(resultSchema, portionRecordsCountLimit, 50 * 1024 * 1024, f, *columnInfo, SaverContext);
         TMergedColumn mColumn(context);
         {
-            auto c = batchResult->GetColumnByName(f->name());
-            AFL_VERIFY(!c);
+//            auto c = batchResult->GetColumnByName(f->name());
+//            AFL_VERIFY(!c);
             AFL_VERIFY(batchResult->num_rows() == pIdxArray.length());
             std::vector<TPortionColumnCursor> cursors;
             auto loader = resultSchema->GetColumnLoader(f->name());
@@ -144,12 +151,16 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
     TSimilarSlicer slicer(4 * 1024 * 1024);
     auto packs = slicer.Split(batchSlices);
 
+    ui32 recordIdx = 0;
     for (auto&& i : packs) {
         TGeneralSerializedSlice slice(std::move(i));
+        auto b = batchResult->Slice(recordIdx, slice.GetRecordsCount());
         std::vector<std::vector<IPortionColumnChunk::TPtr>> chunksByBlobs = slice.GroupChunksByBlobs();
         AppendedPortions.emplace_back(TPortionInfoWithBlobs::BuildByBlobs(chunksByBlobs, nullptr, GranuleMeta->GetGranuleId(), *maxSnapshot, SaverContext.GetStorageOperator()));
-        NArrow::TFirstLastSpecialKeys specialKeys(slice.GetFirstLastPKBatch(resultSchema->GetIndexInfo().GetReplaceKey()));
-        AppendedPortions.back().GetPortionInfo().AddMetadata(*resultSchema, specialKeys, SaverContext.GetTierName());
+        NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(resultSchema->GetIndexInfo().GetReplaceKey()));
+        NArrow::TMinMaxSpecialKeys snapshotKeys(b, TIndexInfo::ArrowSchemaSnapshot());
+        AppendedPortions.back().GetPortionInfo().AddMetadata(*resultSchema, primaryKeys, snapshotKeys, SaverContext.GetTierName());
+        recordIdx += slice.GetRecordsCount();
     }
     if (IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD)) {
         TStringBuilder sbSwitched;

@@ -93,9 +93,6 @@ bool TChangesWithAppend::DoApplyChanges(TColumnEngineForLogs& self, TApplyChange
 
         const TPortionInfo& oldInfo = self.GetGranuleVerified(granule).GetPortionVerified(portion);
 
-        auto& granuleStart = self.Granules[granule]->Record.Mark;
-
-        Y_VERIFY(granuleStart <= portionInfo.IndexKeyStart());
         self.UpsertPortion(portionInfo, &oldInfo);
 
         for (auto& record : portionInfo.Records) {

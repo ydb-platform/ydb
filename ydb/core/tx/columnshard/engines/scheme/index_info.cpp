@@ -438,4 +438,8 @@ std::optional<TIndexInfo> TIndexInfo::BuildFromProto(const NKikimrSchemeOp::TCol
     return result;
 }
 
+std::shared_ptr<arrow::Field> TIndexInfo::SpecialColumnField(const ui32 columnId) const {
+    return ArrowSchemaSnapshot()->GetFieldByName(GetColumnName(columnId, true));
+}
+
 } // namespace NKikimr::NOlap

@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/tx/columnshard/common/portion.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/formats/arrow/replace_key.h>
 #include <ydb/core/formats/arrow/special_keys.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
@@ -12,14 +13,16 @@ struct TIndexInfo;
 
 struct TPortionMeta {
 private:
-    void AddMinMax(ui32 columnId, const std::shared_ptr<arrow::Array>& column, bool sorted);
-    std::shared_ptr<arrow::RecordBatch> ReplaceKeyEdges; // first and last PK rows
+    std::shared_ptr<NArrow::TFirstLastSpecialKeys> ReplaceKeyEdges; // first and last PK rows
     YDB_ACCESSOR_DEF(TString, TierName);
 public:
     using EProduced = NPortion::EProduced;
 
     std::optional<NArrow::TReplaceKey> IndexKeyStart;
     std::optional<NArrow::TReplaceKey> IndexKeyEnd;
+
+    std::optional<TSnapshot> RecordSnapshotMin;
+    std::optional<TSnapshot> RecordSnapshotMax;
     EProduced Produced{EProduced::UNSPECIFIED};
     ui32 FirstPkColumn = 0;
 
@@ -27,7 +30,7 @@ public:
     
     std::optional<NKikimrTxColumnShard::TIndexPortionMeta> SerializeToProto(const ui32 columnId, const ui32 chunk) const;
 
-    void FillBatchInfo(const NArrow::TFirstLastSpecialKeys& specials, const TIndexInfo& indexInfo);
+    void FillBatchInfo(const NArrow::TFirstLastSpecialKeys& primaryKeys, const NArrow::TMinMaxSpecialKeys& snapshotKeys, const TIndexInfo& indexInfo);
 
     EProduced GetProduced() const {
         return Produced;

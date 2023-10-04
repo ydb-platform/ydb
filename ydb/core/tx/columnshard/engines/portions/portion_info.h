@@ -222,7 +222,7 @@ public:
 
     void AddMetadata(const ISnapshotSchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch,
         const TString& tierName);
-    void AddMetadata(const ISnapshotSchema& snapshotSchema, const NArrow::TFirstLastSpecialKeys& specials,
+    void AddMetadata(const ISnapshotSchema& snapshotSchema, const NArrow::TFirstLastSpecialKeys& primaryKeys, const NArrow::TMinMaxSpecialKeys& snapshotKeys,
         const TString& tierName);
 
     std::shared_ptr<arrow::Scalar> MinValue(ui32 columnId) const;
@@ -236,6 +236,16 @@ public:
     const NArrow::TReplaceKey& IndexKeyEnd() const {
         Y_VERIFY(Meta.IndexKeyEnd);
         return *Meta.IndexKeyEnd;
+    }
+
+    const TSnapshot& RecordSnapshotMin() const {
+        Y_VERIFY(Meta.RecordSnapshotMin);
+        return *Meta.RecordSnapshotMin;
+    }
+
+    const TSnapshot& RecordSnapshotMax() const {
+        Y_VERIFY(Meta.RecordSnapshotMax);
+        return *Meta.RecordSnapshotMax;
     }
 
     ui32 NumRows() const {

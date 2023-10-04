@@ -98,6 +98,11 @@ public:
         return Id;
     }
 
+    static const std::vector<std::string>& SnapshotColumnNames() {
+        static std::vector<std::string> result = {SPEC_COL_PLAN_STEP, SPEC_COL_TX_ID};
+        return result;
+    }
+
     std::shared_ptr<arrow::Schema> GetColumnSchema(const ui32 columnId) const;
     std::shared_ptr<arrow::Schema> GetColumnsSchema(const std::set<ui32>& columnIds) const;
     TColumnSaver GetColumnSaver(const ui32 columnId, const TSaverContext& context) const;
@@ -154,6 +159,7 @@ public:
     std::shared_ptr<arrow::Schema> ArrowSchema(const std::vector<ui32>& columnIds, bool withSpecials = false) const;
     std::shared_ptr<arrow::Schema> ArrowSchema(const std::vector<TString>& columnNames) const;
     std::shared_ptr<arrow::Field> ArrowColumnField(ui32 columnId) const;
+    std::shared_ptr<arrow::Field> SpecialColumnField(const ui32 columnId) const;
 
     const THashSet<TString>& GetRequiredColumns() const {
         return RequiredColumns;

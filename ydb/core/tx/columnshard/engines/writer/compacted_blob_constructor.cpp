@@ -18,7 +18,7 @@ TCompactedWriteController::TCompactedWriteController(const TActorId& dstActor, T
         auto* pInfo = changes.GetWritePortionInfo(i);
         Y_VERIFY(pInfo);
         TPortionInfoWithBlobs& portionWithBlobs = *pInfo;
-        auto action = changes.GetBlobsAction().GetWriting(portionWithBlobs.GetPortionInfo());
+        auto action = changes.MutableBlobsAction().GetWriting(portionWithBlobs.GetPortionInfo());
         for (auto&& b : portionWithBlobs.GetBlobs()) {
             auto& task = AddWriteTask(TBlobWriteInfo::BuildWriteTask(b.GetBlob(), action));
             b.RegisterBlobId(portionWithBlobs, task.GetBlobId());

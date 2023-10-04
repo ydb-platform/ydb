@@ -178,7 +178,11 @@ public:
         return TaskIdentifier;
     }
 
-    TBlobsAction& GetBlobsAction() {
+    TBlobsAction& MutableBlobsAction() {
+        return BlobsAction;
+    }
+
+    const TBlobsAction& GetBlobsAction() const {
         return BlobsAction;
     }
 

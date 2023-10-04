@@ -23,13 +23,13 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         NOlap::TWriteIndexContext context(txc, dbWrap);
         changes->WriteIndex(*Self, context);
 
-        changes->GetBlobsAction().OnExecuteTxAfterAction(*Self, *context.BlobManagerDb, true);
+        changes->MutableBlobsAction().OnExecuteTxAfterAction(*Self, *context.BlobManagerDb, true);
 
         Self->UpdateIndexCounters();
     } else {
         TBlobGroupSelector dsGroupSelector(Self->Info());
         NColumnShard::TBlobManagerDb blobsDb(txc.DB);
-        changes->GetBlobsAction().OnExecuteTxAfterAction(*Self, blobsDb, false);
+        changes->MutableBlobsAction().OnExecuteTxAfterAction(*Self, blobsDb, false);
         for (ui32 i = 0; i < changes->GetWritePortionsCount(); ++i) {
             for (auto&& i : changes->GetWritePortionInfo(i)->GetPortionInfo().Records) {
                 LOG_S_WARN(TxPrefix() << "(" << changes->TypeString() << ":" << i.BlobRange << ") blob cannot apply changes: " << TxSuffix());
@@ -65,7 +65,7 @@ void TTxWriteIndex::Complete(const TActorContext& ctx) {
     }
 
     Self->UpdateResourceMetrics(ctx, Ev->Get()->PutResult->GetResourceUsage());
-    changes->GetBlobsAction().OnCompleteTxAfterAction(*Self);
+    changes->MutableBlobsAction().OnCompleteTxAfterAction(*Self);
     NYDBTest::TControllers::GetColumnShardController()->OnWriteIndexComplete(Self->TabletID(), changes->TypeString());
 }
 

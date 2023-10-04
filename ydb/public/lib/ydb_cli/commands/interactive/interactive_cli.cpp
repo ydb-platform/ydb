@@ -29,36 +29,6 @@ std::string ToLower(std::string_view value) {
     return result;
 }
 
-template <typename Predicate>
-void TrimRight(std::string & value, Predicate predicate) {
-    while (!value.empty() && predicate(value.back()))
-        value.pop_back();
-}
-
-template <typename Predicate>
-void TrimLeft(std::string & value, Predicate predicate) {
-    size_t value_size = value.size();
-    size_t i = 0;
-
-    for (; i < value_size; ++i) {
-        if (!predicate(value[i])) {
-            break;
-        }
-    }
-
-    if (i != 0) {
-        value = value.substr(i);
-    }
-}
-
-void TrimSpacesRight(std::string & value) {
-    TrimRight(value, [](char character) { return std::isspace(character); });
-}
-
-void TrimSpacesLeft(std::string & value) {
-    TrimLeft(value, [](char character) { return std::isspace(character); });
-}
-
 struct Token {
     std::string_view data;
 };
@@ -68,6 +38,8 @@ public:
     Lexer(std::string_view input);
 
     std::optional<Token> GetNextToken();
+
+    static bool IsNextTokenSymbol(char c);
 
 private:
     std::string_view Input;
@@ -89,14 +61,20 @@ std::optional<Token> Lexer::GetNextToken() {
     }
 
     const char * tokenStart = Position;
-    ++Position;
-
-    while (Position < Input.end() && !std::isspace(*Position)) {
+    if (IsNextTokenSymbol(*Position)) {
         ++Position;
+    } else {
+        while (Position < Input.end() && !std::isspace(*Position) && !IsNextTokenSymbol(*Position)) {
+            ++Position;
+        }
     }
 
     std::string_view TokenData(tokenStart, Position);
     return Token{TokenData};
+}
+
+bool Lexer::IsNextTokenSymbol(char c) {
+    return c == '=' || c == ';';
 }
 
 std::vector<Token> Tokenize(std::string_view input) {
@@ -116,39 +94,17 @@ struct InteractiveCLIState {
 
 std::optional<NTable::ECollectQueryStatsMode> TryParseCollectStatsMode(const std::vector<Token> & tokens) {
     size_t tokensSize = tokens.size();
-    if (tokensSize < 2) {
+
+    if (tokensSize > 4) {
+        Cerr << "Internal variable value for \"SET stats\" special command should contain exactly one token." << Endl;
         return {};
     }
 
-    if (ToLower(tokens[0].data) != "set") {
-        return {};
+    auto statsMode = NTable::ParseQueryStatsMode(tokens[3].data);
+    if (!statsMode) {
+        Cerr << "Unknown stats collection mode: \"" << tokens[3].data << "\"." << Endl;
     }
-
-    std::string setQuery;
-    for (size_t i = 1; i < tokensSize; ++i) {
-        setQuery += tokens[i].data;
-    }
-
-    auto position = setQuery.find_first_of('=');
-    if (position == std::string::npos) {
-        return {};
-    }
-
-    std::string name = setQuery.substr(0, position);
-    std::string value = setQuery.substr(position + 1);
-
-    TrimSpacesLeft(name);
-    TrimSpacesRight(name);
-    if (ToLower(name) != "stats") {
-        return {};
-    }
-
-    TrimSpacesLeft(value);
-    TrimRight(value, [](char character) {
-        return std::isspace(character) || character == ';';
-    });
-
-    return NTable::ParseQueryStatsMode(value);
+    return statsMode;
 }
 
 }
@@ -159,7 +115,8 @@ TInteractiveCLI::TInteractiveCLI(TClientCommand::TConfig & config, std::string p
 {}
 
 void TInteractiveCLI::Run() {
-    std::vector<std::string> SQLWords = {"SELECT", "FROM", "WHERE", "GROUP", "ORDER" , "BY", "LIMIT", "OFFSET", "EXPLAIN", "AST"};
+    std::vector<std::string> SQLWords = {"SELECT", "FROM", "WHERE", "GROUP", "ORDER", "BY", "LIMIT", "OFFSET", 
+        "EXPLAIN", "AST", "SET"};
     std::vector<std::string> Words;
     for (auto & word : SQLWords) {
         Words.push_back(word);
@@ -182,13 +139,28 @@ void TInteractiveCLI::Run() {
         try {
             auto tokens = Tokenize(line);
             size_t tokensSize = tokens.size();
-
-            if (auto collectStatsMode = TryParseCollectStatsMode(tokens)) {
-                interactiveCLIState.CollectStatsMode = *collectStatsMode;
+            if (tokens.empty()) {
                 continue;
             }
 
-            if (!tokens.empty() && ToLower(tokens.front().data) == "explain") {
+            if (ToLower(tokens[0].data) == "set") {
+                if (tokens.size() == 1) {
+                    Cerr << "Missing internal variable name for \"SET\" special command." << Endl;
+                } else if (tokens.size() == 2 || tokens[2].data != "=") {
+                    Cerr << "Missing \"=\" symbol for \"SET\" special command." << Endl;
+                } else if (tokensSize == 3) {
+                    Cerr << "Missing internal variable value for \"SET\" special command." << Endl;
+                } else if (ToLower(tokens[1].data) == "stats") {
+                    if (auto statsMode = TryParseCollectStatsMode(tokens)) {
+                        interactiveCLIState.CollectStatsMode = *statsMode;
+                    }
+                } else {
+                    Cerr << "Unknown internal variable name \"" << tokens[1].data << "\" for \"SET\" special command." << Endl;
+                }
+                continue;
+            }
+
+            if (ToLower(tokens[0].data) == "explain") {
                 bool printAst = tokensSize >= 2 && ToLower(tokens[1].data) == "ast";
                 size_t skipTokens = 1 + printAst;
                 TString explainQuery;

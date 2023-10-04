@@ -5,7 +5,7 @@
 {{ ydb-short-name }} supports two types of tables:
 
 * [Row-oriented](../../../../concepts/datamodel/table.md)
-* [Column-oriented](../../../../concepts/column-table.md).
+* [Column-oriented](../../../../concepts/datamodel/table.md#olap-data-types).
 
 When you create a table, the table type is specified by the `STORE` parameter, with `ROW` creating a [row-oriented table](#row) and `COLUMN` creating a [column](#olap-tables)-oriented table. If the `STORE` parameter is omitted, a row-oriented table is created by default.
 
@@ -77,7 +77,6 @@ It is mandatory to specify the `PRIMARY KEY` with a non-empty list of columns. T
         PRIMARY KEY (b, a)
 {% endif %}
     )
-
 
 
 {% if feature_secondary_index %}
@@ -197,7 +196,7 @@ Column-oriented {{ ydb-short-name }} tables are in the Preview mode.
 
 {% endnote %}
 
-The `CREATE TABLE` statement creates a [column-oriented](../../../../concepts/column-table.md) table with the specified data schema and key columns (`PRIMARY KEY`).
+The `CREATE TABLE` statement creates a [column-oriented](../../../../concepts/datamodel/table.md#olap-data-types) table with the specified data schema and key columns (`PRIMARY KEY`).
 
 ```sql
 CREATE TABLE table_name (
@@ -219,7 +218,7 @@ WITH (
 
 ### Columns {#olap-columns}
 
-Data types supported by column-oriented tables and constraints imposed on data types in primary keys or data columns are described in the [supported data types](../../../../concepts/column-table.md#olap-data-types) section for column-oriented tables.
+Data types supported by column-oriented tables and constraints imposed on data types in primary keys or data columns are described in the [supported data types](../../../../concepts/datamodel/table.md#olap-data-types) section for column-oriented tables.
 
 Make sure to add the `PRIMARY KEY` and `PARTITION BY` clauses with a non-empty list of columns.
 
@@ -257,7 +256,7 @@ Here, `key` is the name of the parameter and `value` is its value.
 
 Supported parameters in column-oriented tables:
 
-* `AUTO_PARTITIONING_MIN_PARTITIONS_COUNT` sets the minimum physical number of partitions used to store data (see [{#T}](../../../../concepts/column-table.md#olap-tables-partitioning)).
+* `AUTO_PARTITIONING_MIN_PARTITIONS_COUNT` sets the minimum physical number of partitions used to store data (see [{#T}](../../../../concepts/datamodel/table.md#olap-tables-partitioning)).
 
 For example, the following code creates a column-oriented table with ten partitions:
 

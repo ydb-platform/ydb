@@ -174,8 +174,14 @@ public:
 
             ProgramFactory_ = std::make_unique<NYql::TProgramFactory>(
                 false, FuncRegistry_.Get(), ExprContext_.NextUniqueId, dataProvidersInit, "embedded");
-            YTTokenPath_ = options.YTTokenPath;
+            auto credentials = MakeIntrusive<NYql::TCredentials>();
+            if (options.YTTokenPath) {
+                TFsPath path(options.YTTokenPath);
+                auto token = TIFStream(path).ReadAll();
+                credentials->AddCredential("default_yt", NYql::TCredential("yt", "", token));
+            }
             ProgramFactory_->AddUserDataTable(userDataTable);
+            ProgramFactory_->SetCredentials(credentials);
             ProgramFactory_->SetModules(ModuleResolver_);
             ProgramFactory_->SetUdfResolver(NYql::NCommon::CreateSimpleUdfResolver(FuncRegistry_.Get(), FileStorage_));
             ProgramFactory_->SetGatewaysConfig(&GatewaysConfig_);
@@ -190,18 +196,8 @@ public:
 
     TQueryResult GuardedRun(TQueryId queryId, TString impersonationUser, TString queryText, TYsonString settings, std::vector<TQueryFile> files)
     {
-        auto credentials = MakeIntrusive<NYql::TCredentials>();
-        if (YTTokenPath_) {
-            TFsPath path(YTTokenPath_);
-            auto token = TIFStream(path).ReadAll();
-
-            credentials->AddCredential("default_yt", NYql::TCredential("yt", "", token));
-        }
-
-        credentials->AddCredential("impersonation_user_yt", NYql::TCredential("yt", "", impersonationUser));
-        ProgramFactory_->SetCredentials(credentials);
-
         auto program = ProgramFactory_->Create("-memory-", queryText);
+        program->AddCredentials({{"impersonation_user_yt", NYql::TCredential("yt", "", impersonationUser)}});
         program->SetOperationAttrsYson(PatchQueryAttributes(OperationAttributes_, settings));
 
         auto userDataTable = FilesToUserTable(files);
@@ -317,7 +313,6 @@ private:
     NYql::IModuleResolver::TPtr ModuleResolver_;
     NYql::TGatewaysConfig GatewaysConfig_;
     std::unique_ptr<NYql::TProgramFactory> ProgramFactory_;
-    TString YTTokenPath_;
     THashMap<TString, TString> Clusters_;
     std::optional<TString> DefaultCluster_;
     THashMap<TString, TString> Modules_;

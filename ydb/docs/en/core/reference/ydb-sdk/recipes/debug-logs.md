@@ -338,4 +338,19 @@ Below are examples of code that enables logging in different {{ ydb-short-name }
    </Configuration>
    ```
 
+- PHP
+
+    For logging purposes, you need to use a class, that implements `\Psr\Log\LoggerInterface`.
+    YDB-PHP-SDK has build-in loggers in `YdbPlatform\Ydb\Logger` namespace:
+    * `NullLogger` - default logger, which writes nothing
+    * `SimpleStdLogger($level)` - logger, which writes to logs in stderr.
+
+    Usage example:
+    ```php
+    $config = [
+        'logger' => new \YdbPlatform\Ydb\Logger\SimpleStdLogger(\YdbPlatform\Ydb\Logger\SimpleStdLogger::INFO)
+    ]
+    $ydb = new \YdbPlatform\Ydb\Ydb($config);
+    ```
+
 {% endlist %}

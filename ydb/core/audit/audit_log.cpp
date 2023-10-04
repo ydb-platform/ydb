@@ -15,9 +15,9 @@ THolder<NActors::IActor> CreateAuditWriter(TMap<NKikimrConfig::TAuditConfig::EFo
     return MakeHolder<TAuditLogActor>(std::move(logBackends));
 }
 
-void SendAuditLog(const NActors::TActorSystem* sys, TVector<std::pair<TStringBuf, TString>>& parts)
+void SendAuditLog(const NActors::TActorSystem* sys, TVector<std::pair<TString, TString>>&& parts)
 {
-    auto request = MakeHolder<TEvAuditLog::TEvWriteAuditLog>(Now(), parts);
+    auto request = MakeHolder<TEvAuditLog::TEvWriteAuditLog>(Now(), std::move(parts));
     sys->Send(MakeAuditServiceID(), request.Release());
 }
 

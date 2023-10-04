@@ -1,5 +1,6 @@
 RECURSE(
     api
+    audit
     autoconfig
     blobstorage
     canonical

@@ -16,10 +16,10 @@
 
 #define AUDIT_LOG_S(sys, expr)                                                                                                  \
     do {                                                                                                                        \
-        if (::NKikimr::NAudit::AUDIT_LOG_ENABLED.load()) {                                                                             \
-            TVector<std::pair<TStringBuf, TString>> auditParts;                                                                 \
+        if (::NKikimr::NAudit::AUDIT_LOG_ENABLED.load()) {                                                                      \
+            TVector<std::pair<TString, TString>> auditParts;                                                                    \
             expr                                                                                                                \
-            ::NKikimr::NAudit::SendAuditLog(sys, auditParts);                                                                   \
+            ::NKikimr::NAudit::SendAuditLog(sys, std::move(auditParts));                                                        \
         }                                                                                                                       \
     } while (0) /**/
 
@@ -29,7 +29,7 @@
 #define AUDIT_PART_COND(key, value, condition)                                                                                    \
     do {                                                                                                                          \
         if (condition && !value.empty()) {                                                                                        \
-            auditParts.push_back({key, value});                                                                                   \
+            auditParts.emplace_back(key, value);                                                                                  \
         }                                                                                                                         \
     } while (0);
 
@@ -63,9 +63,9 @@ struct TEvAuditLog
         : public NActors::TEventLocal<TEvWriteAuditLog, EvWriteAuditLog>
     {
         TInstant Time;
-        TVector<std::pair<TStringBuf, TString>> Parts;
+        TVector<std::pair<TString, TString>> Parts;
 
-        TEvWriteAuditLog(TInstant time, TVector<std::pair<TStringBuf, TString>> parts)
+        TEvWriteAuditLog(TInstant time, TVector<std::pair<TString, TString>>&& parts)
             : Time(time)
             , Parts(std::move(parts))
         {}
@@ -100,7 +100,7 @@ private:
         const TActorContext& ctx);
 
     static void WriteLog(
-        const TString& log, 
+        const TString& log,
         const TVector<THolder<TLogBackend>>& logBackends);
 
     static TString GetJsonLog(
@@ -114,7 +114,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void SendAuditLog(const NActors::TActorSystem* sys, TVector<std::pair<TStringBuf, TString>>& parts);
+void SendAuditLog(const NActors::TActorSystem* sys, TVector<std::pair<TString, TString>>&& parts);
 
 inline NActors::TActorId MakeAuditServiceID() {
     return NActors::TActorId(0, TStringBuf("YDB_AUDIT"));

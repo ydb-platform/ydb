@@ -444,7 +444,7 @@ class KikimrConfigGenerator(object):
 
     @property
     def audit_file_path(self):
-        return self.yaml_config.get('audit_config', {}).get('audit_file_path')
+        return self.yaml_config.get('audit_config', {}).get('file_backend', {}).get('file_path')
 
     @property
     def nbs_enable(self):

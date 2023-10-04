@@ -1589,17 +1589,6 @@ public:
     static const inline TString MIRROR_3_DC = "mirror-3-dc";
     static const int MERGING_IGNORE_SIZE = 4;
 
-    static void IncrementFor(TStackVec<std::pair<ui32, int>>& realms, ui32 realm) {
-        auto itRealm = FindIf(realms, [realm](const std::pair<ui32, int>& p) -> bool {
-            return p.first == realm;
-        });
-        if (itRealm == realms.end()) {
-            itRealm = realms.insert(realms.end(), { realm, 1 });
-        } else {
-            itRealm->second++;
-        }
-    }
-
     struct TMergeIssuesContext {
         std::unordered_map<ETags, TList<TSelfCheckContext::TIssueRecord>> recordsMap;
         std::unordered_set<TString> removeIssuesIds;
@@ -1866,66 +1855,43 @@ public:
         }
 
         auto& groupInfo = *itGroup->second;
-        int disksColors[Ydb::Monitoring::StatusFlag::Status_ARRAYSIZE] = {};
-        TStackVec<std::pair<ui32, int>> failedRealms;
-        int failedDisks = 0;
+        bool onlyGoodDisks = true;
         for (const auto& vSlotIdProto : groupInfo.vslotid()) {
             TString vDiskId = GetVSlotId(vSlotIdProto);
             Ydb::Monitoring::StorageVDiskStatus& vDiskStatus = *storageGroupStatus.add_vdisks();
             FillVDiskStatus(vDiskId, vDiskStatus, {&context, "VDISK"});
-            ++disksColors[vDiskStatus.overall()];
-            switch (vDiskStatus.overall()) {
-                case Ydb::Monitoring::StatusFlag::BLUE: // disk is good, but not available
-                case Ydb::Monitoring::StatusFlag::RED: // disk is bad, probably not available
-                case Ydb::Monitoring::StatusFlag::GREY: { // the status is absent, the disk is not available
-                    auto itVDisk = BSConfigVSlots.find(vDiskId);
-                    if (itVDisk != BSConfigVSlots.end()) {
-                        IncrementFor(failedRealms, itVDisk->second->failrealmidx());
-                        ++failedDisks;
-                    }
-                    break;
-                }
-                default:
-                    break;
-            }
+            onlyGoodDisks &= vDiskStatus.overall() != Ydb::Monitoring::StatusFlag::RED 
+                && vDiskStatus.overall() != Ydb::Monitoring::StatusFlag::GREY;
         }
 
         context.Location.mutable_storage()->clear_node(); // group doesn't have node
         context.OverallStatus = MinStatus(context.OverallStatus, Ydb::Monitoring::StatusFlag::YELLOW);
 
-        if (groupInfo.erasurespecies() == NONE) {
-            if (failedDisks > 0) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", ETags::GroupState, {ETags::VDiskState});
-            } else if (disksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
+        switch (groupInfo.operatingstatus()) {
+            case NKikimrBlobStorage::TGroupStatus::FULL: { // all VDisks of the group are READY for specific period of time
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
+                break;
             }
-        } else if (groupInfo.erasurespecies() == BLOCK_4_2) {
-            if (failedDisks > 2) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", ETags::GroupState, {ETags::VDiskState});
-            } else if (failedDisks > 1) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Group has no redundancy", ETags::GroupState, {ETags::VDiskState});
-            } else if (failedDisks > 0) {
-                if (disksColors[Ydb::Monitoring::StatusFlag::BLUE] == failedDisks) {
+            case NKikimrBlobStorage::TGroupStatus::PARTIAL: { // some of VDisks are operational, but group is not yet DEGRADED
+                if ((groupInfo.erasurespecies() == BLOCK_4_2 || groupInfo.erasurespecies() == MIRROR_3_DC) && onlyGoodDisks) {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                 } else {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
                 }
-            } else if (disksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
+                break;
             }
-        } else if (groupInfo.erasurespecies() == MIRROR_3_DC) {
-            if (failedRealms.size() > 2 || (failedRealms.size() == 2 && failedRealms[0].second > 1 && failedRealms[1].second > 1)) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", ETags::GroupState, {ETags::VDiskState});
-            } else if (failedRealms.size() == 2) {
+            case NKikimrBlobStorage::TGroupStatus::DEGRADED: { // group is DEGRADED -- one random failure may lead to group loss (but may not lead too)
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Group has no redundancy", ETags::GroupState, {ETags::VDiskState});
-            } else if (failedDisks > 0) {
-                if (disksColors[Ydb::Monitoring::StatusFlag::BLUE] == failedDisks) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::BLUE, "Group degraded", ETags::GroupState, {ETags::VDiskState});
-                } else {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
-                }
-            } else if (disksColors[Ydb::Monitoring::StatusFlag::YELLOW] > 0) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Group degraded", ETags::GroupState, {ETags::VDiskState});
+                break;
+            }
+            case NKikimrBlobStorage::TGroupStatus::DISINTEGRATED: { // group is not available for operation
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", ETags::GroupState, {ETags::VDiskState});
+                break;
+            }
+            case NKikimrBlobStorage::TGroupStatus::UNKNOWN: { // default value, can't happen
+            default:
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "System tablet BSC provided unexpected group status", ETags::GroupState, {ETags::VDiskState});
+                break;
             }
         }
 

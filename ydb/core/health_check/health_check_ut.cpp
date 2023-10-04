@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         }
     };
 
-    void AddGroupVSlotInControllerConfigResponse(TEvBlobStorage::TEvControllerConfigResponse::TPtr* ev, int groupCount, int vslotCount, TString erasurespecies = NHealthCheck::TSelfCheckRequest::BLOCK_4_2) {
+    void AddGroupVSlotInControllerConfigResponse(TEvBlobStorage::TEvControllerConfigResponse::TPtr* ev, const int groupCount, const int vslotCount) {
         auto& pbRecord = (*ev)->Get()->Record;
         auto pbConfig = pbRecord.mutable_response()->mutable_status(0)->mutable_baseconfig();
 
@@ -98,7 +98,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             auto group = pbConfig->add_group();
             group->CopyFrom(groupSample);
             group->set_groupid(groupId);
-            group->set_erasurespecies(erasurespecies);
+            group->set_erasurespecies(NHealthCheck::TSelfCheckRequest::BLOCK_4_2);
+            group->set_operatingstatus(NKikimrBlobStorage::TGroupStatus::DISINTEGRATED);
 
             group->clear_vslotid();
             auto vslotId = VCARD_START_ID;
@@ -121,7 +122,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         }
     };
 
-    void AddGroupVSlotInControllerConfigResponse(TEvBlobStorage::TEvControllerConfigResponse::TPtr* ev, const TVector<Ydb::Monitoring::StatusFlag::Status>& vdiskStatuses, TString erasurespecies = NHealthCheck::TSelfCheckRequest::BLOCK_4_2, bool oneFailRealmIdx = false) {
+    void AddGroupVSlotInControllerConfigResponse(TEvBlobStorage::TEvControllerConfigResponse::TPtr* ev, const NKikimrBlobStorage::TGroupStatus::E groupStatus, const TVector<NKikimrBlobStorage::EVDiskStatus>& vdiskStatuses) {
         auto& pbRecord = (*ev)->Get()->Record;
         auto pbConfig = pbRecord.mutable_response()->mutable_status(0)->mutable_baseconfig();
 
@@ -139,7 +140,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         auto group = pbConfig->add_group();
         group->CopyFrom(groupSample);
         group->set_groupid(groupId);
-        group->set_erasurespecies(erasurespecies);
+        group->set_operatingstatus(groupStatus);
+        group->set_erasurespecies(NHealthCheck::TSelfCheckRequest::BLOCK_4_2);
 
         group->clear_vslotid();
         auto vslotId = VCARD_START_ID;
@@ -149,29 +151,15 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             vslot->CopyFrom(vslotSample);
             vslot->set_vdiskidx(vslotId);
             vslot->set_groupid(groupId);
-            vslot->set_failrealmidx(oneFailRealmIdx ? VCARD_START_ID : vslotId);
+            vslot->set_failrealmidx(vslotId);
             vslot->mutable_vslotid()->set_vslotid(vslotId);
 
             auto slotId = group->add_vslotid();
             slotId->CopyFrom(vslotIdSample);
             slotId->set_vslotid(vslotId);
 
-            switch (status) {
-                case Ydb::Monitoring::StatusFlag::GREEN:
-                    vslot->set_status("READY");
-                    break;
-                case Ydb::Monitoring::StatusFlag::YELLOW:
-                    vslot->set_status("INIT_PENDING");
-                    break;
-                case Ydb::Monitoring::StatusFlag::BLUE:
-                    vslot->set_status("REPLICATING");
-                    break;
-                case Ydb::Monitoring::StatusFlag::RED:
-                    vslot->set_status("ERROR");
-                    break;
-                default:
-                    break;
-            }
+            const auto *descriptor = NKikimrBlobStorage::EVDiskStatus_descriptor();
+            vslot->set_status(descriptor->FindValueByNumber(status)->name());
 
             vslotId++;
         }
@@ -293,7 +281,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         CheckHcResult(result, groupNumber, vdiscPerGroupNumber, isMergeRecords);
     }
 
-    Ydb::Monitoring::SelfCheckResult RequestHcWithVdisks(TString erasurespecies, const TVector<Ydb::Monitoring::StatusFlag::Status>& vdiskStatuses, bool oneFailRealmIdx = false) {
+    Ydb::Monitoring::SelfCheckResult RequestHcWithVdisks(const NKikimrBlobStorage::TGroupStatus::E groupStatus, const TVector<NKikimrBlobStorage::EVDiskStatus>& vdiskStatuses) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -323,7 +311,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 }
                 case TEvBlobStorage::EvControllerConfigResponse: {
                     auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerConfigResponse::TPtr*>(&ev);
-                    AddGroupVSlotInControllerConfigResponse(x, vdiskStatuses, erasurespecies, oneFailRealmIdx);
+                    AddGroupVSlotInControllerConfigResponse(x, groupStatus, vdiskStatuses);
                     break;
                 }
             }
@@ -431,99 +419,29 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         ListingTest(100, 100, true);
     }
 
-    Y_UNIT_TEST(NoneRedGroupWhenRedVdisk) {
-        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::NONE, {Ydb::Monitoring::StatusFlag::RED});
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1);
-    }
-
-    Y_UNIT_TEST(NoneRedGroupWhenBlueVdisk) {
-        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::NONE, {Ydb::Monitoring::StatusFlag::BLUE});
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1);
-    }
-
-    Y_UNIT_TEST(NoneYellowGroupWhenYellowVdisk) {
-        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::NONE, {Ydb::Monitoring::StatusFlag::YELLOW});
+    Y_UNIT_TEST(YellowroupIssueWhenPartialGroupStatus) {
+        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, {NKikimrBlobStorage::ERROR});
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1);
     }
 
-    Y_UNIT_TEST(Block42OrangeGroupWhen100YellowAnd2RedVdisks) {
-        TVector<Ydb::Monitoring::StatusFlag::Status> vdiskStatuses(100, Ydb::Monitoring::StatusFlag::YELLOW);
-        vdiskStatuses.emplace_back(Ydb::Monitoring::StatusFlag::RED);
-        vdiskStatuses.emplace_back(Ydb::Monitoring::StatusFlag::RED);
-        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::BLOCK_4_2, vdiskStatuses);
-        
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1);
-        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::RED, 1);
-    }
-
-    Y_UNIT_TEST(Block42RedGroupWhen3RedVdisks) {
-        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::BLOCK_4_2, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::RED});
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1);
-    }
-
-    Y_UNIT_TEST(Block42RedGroupWhen2RedBlueVdisks) {
-        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::BLOCK_4_2, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::BLUE});
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1);
-    }
-
-    Y_UNIT_TEST(Block42OrangeGroupWhen2RedVdisks) {
-        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::BLOCK_4_2, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::RED});
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1);
-    }
-
-    Y_UNIT_TEST(Block42OrangeGroupWhenRedBlueVdisks) {
-        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::BLOCK_4_2, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::BLUE});
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1);
-    }
-
-    Y_UNIT_TEST(Block42YellowGroupWhenRedVdisk) {
-        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::BLOCK_4_2, {Ydb::Monitoring::StatusFlag::RED});
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1);
-    }
-
-    Y_UNIT_TEST(Block42BlueGroupWhenBlueVdisk) {
-        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::BLOCK_4_2, {Ydb::Monitoring::StatusFlag::BLUE});
+    Y_UNIT_TEST(BlueGroupIssueWhenPartialGroupStatusAndReplicationDisks) {
+        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, {NKikimrBlobStorage::REPLICATING});
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::BLUE, 1);
     }
 
-    Y_UNIT_TEST(Block42YellowGroupWhenYellowVdisk) {
-        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::BLOCK_4_2, {Ydb::Monitoring::StatusFlag::YELLOW});
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1);
+    Y_UNIT_TEST(OrangeGroupIssueWhenDegradedGroupStatus) {
+        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::DEGRADED, {});
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1);
     }
 
-    Y_UNIT_TEST(Mirrot3dcYellowGroupWhen3RedVdisks) {
-        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::MIRROR_3_DC, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::RED}, true);
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1);
+    Y_UNIT_TEST(RedGroupIssueWhenDisintegratedGroupStatus) {
+        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::DISINTEGRATED, {});
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1);
     }
 
-    Y_UNIT_TEST(Mirrot3dcYellowGroupWhen2RedBlueVdisks) {
-        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::MIRROR_3_DC, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::BLUE}, true);
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1);
-    }
-
-    Y_UNIT_TEST(Mirrot3dcYellowGroupWhen2RedVdisks) {
-        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::MIRROR_3_DC, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::RED}, true);
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1);
-    }
-
-    Y_UNIT_TEST(Mirrot3dcYellowGroupWhenRedBlueVdisks) {
-        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::MIRROR_3_DC, {Ydb::Monitoring::StatusFlag::RED, Ydb::Monitoring::StatusFlag::BLUE}, true);
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1);
-    }
-
-    Y_UNIT_TEST(Mirrot3dcYellowGroupWhenRedVdisk) {
-        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::MIRROR_3_DC, {Ydb::Monitoring::StatusFlag::RED}, true);
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1);
-    }
-
-    Y_UNIT_TEST(Mirrot3dcBlueGroupWhenBlueVdisk) {
-        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::MIRROR_3_DC, {Ydb::Monitoring::StatusFlag::BLUE}, true);
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::BLUE, 1);
-    }
-
-    Y_UNIT_TEST(Mirrot3dcYellowGroupWhenYellowVdisk) {
-        auto result = RequestHcWithVdisks(NHealthCheck::TSelfCheckRequest::MIRROR_3_DC, {Ydb::Monitoring::StatusFlag::YELLOW}, true);
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1);
+    Y_UNIT_TEST(RedGroupIssueWhenUnknownGroupStatus) {
+        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::UNKNOWN, {});
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1);
     }
 
     Y_UNIT_TEST(StorageLimit95) {

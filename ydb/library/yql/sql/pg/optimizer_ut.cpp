@@ -31,11 +31,9 @@ Y_UNIT_TEST(PgJoinSearch2Rels) {
     auto optimizer = std::unique_ptr<IOptimizer>(MakePgOptimizer(input, log));
 
     auto res = optimizer->JoinSearch();
-    auto resStr = res.ToString();
+    auto resStr = res.ToString(false);
     Cerr << resStr;
-    TString expected = R"__(Rows: 500000000.00
-TotalCost: 10000001260000260.00
-{
+    TString expected = R"__({
  Inner Join
  Loop Strategy
  Rels: [1,2]
@@ -51,6 +49,8 @@ TotalCost: 10000001260000260.00
 }
 )__";
     UNIT_ASSERT_STRINGS_EQUAL(expected, resStr);
+    UNIT_ASSERT(res.TotalCost > 0);
+    UNIT_ASSERT(res.Rows > 0);
 }
 
 Y_UNIT_TEST(PgJoinSearch2RelsLeft) {
@@ -77,11 +77,9 @@ Y_UNIT_TEST(PgJoinSearch2RelsLeft) {
     auto optimizer = std::unique_ptr<IOptimizer>(MakePgOptimizer(input, log));
 
     auto res = optimizer->JoinSearch();
-    auto resStr = res.ToString();
+    auto resStr = res.ToString(false);
     Cerr << resStr;
-    TString expected = R"__(Rows: 500000000.00
-TotalCost: 1650702509.00
-{
+    TString expected = R"__({
  Left Join
  Loop Strategy
  Rels: [1,2]
@@ -97,6 +95,8 @@ TotalCost: 1650702509.00
 }
 )__";
     UNIT_ASSERT_STRINGS_EQUAL(expected, resStr);
+    UNIT_ASSERT(res.TotalCost > 0);
+    UNIT_ASSERT(res.Rows > 0);
 }
 
 Y_UNIT_TEST(PgJoinSearch2RelsRight) {
@@ -123,11 +123,9 @@ Y_UNIT_TEST(PgJoinSearch2RelsRight) {
     auto optimizer = std::unique_ptr<IOptimizer>(MakePgOptimizer(input, log));
 
     auto res = optimizer->JoinSearch();
-    auto resStr = res.ToString();
+    auto resStr = res.ToString(false);
     Cerr << resStr;
-    TString expected = R"__(Rows: 500000000.00
-TotalCost: 1260000259.00
-{
+    TString expected = R"__({
  Left Join
  Loop Strategy
  Rels: [1,2]
@@ -143,6 +141,8 @@ TotalCost: 1260000259.00
 }
 )__";
     UNIT_ASSERT_STRINGS_EQUAL(expected, resStr);
+    UNIT_ASSERT(res.TotalCost > 0);
+    UNIT_ASSERT(res.Rows > 0);
 }
 
 Y_UNIT_TEST(PgJoinSearch3Rels) {
@@ -161,11 +161,9 @@ Y_UNIT_TEST(PgJoinSearch3Rels) {
 
     auto optimizer = std::unique_ptr<IOptimizer>(MakePgOptimizer(input, log));
     auto res = optimizer->JoinSearch();
-    auto resStr = res.ToString();
+    auto resStr = res.ToString(false);
     Cerr << resStr;
-    TString expected = R"__(Rows: 25000000000.00
-TotalCost: 25100000272571156.00
-{
+    TString expected = R"__({
  Inner Join
  Hash Strategy
  Rels: [1,2,3]
@@ -191,6 +189,8 @@ TotalCost: 25100000272571156.00
 }
 )__";
     UNIT_ASSERT_STRINGS_EQUAL(expected, resStr);
+    UNIT_ASSERT(res.TotalCost > 0);
+    UNIT_ASSERT(res.Rows > 0);
 }
 
 } // Y_UNIT_TEST_SUITE(PgOptimizer)

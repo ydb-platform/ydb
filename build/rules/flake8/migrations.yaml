@@ -1642,7 +1642,6 @@ migrations:
     - quality/user_sessions/rt/deploy
     - quality/user_sessions/rt/packages/us-rt-config-generators
     - robot/jupiter/library/python/quality_acceptance
-    - robot/kwyt/tools/kwytql
     - robot/mercury/test/comparsion_callisto_test
     - robot/metrics/social_sbr/channels_sbr
     - robot/metrics/social_sbr/get_userdata_sample
@@ -2042,7 +2041,6 @@ migrations:
     - noc/traffic/monitoring/wireguard/lib/tests
     - passport/backend/core/compare
     - passport/backend/core/models/phones
-    - privacy_office/qhide/utilities/duty_helper
     - quality/functionality/chats/feedback/src/feedback/common
     - quality/functionality/facts/aspect_facts/build_fact
     - quality/functionality/facts/aspect_facts/clustering
@@ -6427,7 +6425,6 @@ migrations:
     - balancer/test/configs/lib/locations_test
     - balancer/test/functional/openssl
     - balancer/test/util/dnsfake
-    - billing/dwh/src/dwh/grocery/dcs/export
     - catboost/yandex_specific/python-package/ut_no_windows/medium
     - cloud/blockstore/tools/analytics/top-disks
     - cloud/blockstore/tools/cms/lib

@@ -533,7 +533,7 @@ struct TOperationSpecBase
     /// Coefficient defining how much resources operation gets relative to its siblings in the same pool.
     FLUENT_FIELD_OPTION(double, Weight);
 
-    /// @breif Pool tree list that operation will use.
+    /// @brief Pool tree list that operation will use.
     FLUENT_OPTIONAL_VECTOR_FIELD_ENCAPSULATED(TString, PoolTree);
 
     /// How much resources can be consumed by operation.

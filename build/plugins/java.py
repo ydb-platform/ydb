@@ -291,19 +291,14 @@ def on_check_java_srcdir(unit, *args):
             arc_srcdir = os.path.join(unit.get('MODDIR'), arg)
             abs_srcdir = unit.resolve(os.path.join("$S/", arc_srcdir))
             if not os.path.exists(abs_srcdir) or not os.path.isdir(abs_srcdir):
-                ymake.report_configure_error(
-                    'Trying to set a [[alt1]]JAVA_SRCS[[rst]] for a missing directory: [[imp]]$S/{}[[rst]]',
-                    missing_dir=arc_srcdir,
-                )
+                unit.onsrcdir(os.path.join('${ARCADIA_ROOT}', arc_srcdir))
             return
         srcdir = unit.resolve_arc_path(arg)
         if srcdir and not srcdir.startswith('$S'):
             continue
         abs_srcdir = unit.resolve(srcdir) if srcdir else unit.resolve(arg)
         if not os.path.exists(abs_srcdir) or not os.path.isdir(abs_srcdir):
-            ymake.report_configure_error(
-                'Trying to set a [[alt1]]JAVA_SRCS[[rst]] for a missing directory: [[imp]]{}[[rst]]', missing_dir=srcdir
-            )
+            unit.onsrcdir(os.path.join('${ARCADIA_ROOT}', abs_srcdir[3:]))
 
 
 def on_fill_jar_copy_resources_cmd(unit, *args):

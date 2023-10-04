@@ -2422,6 +2422,14 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Aggregate"]);
     }
+
+    Y_UNIT_TEST(AutoSampleWorksWithNamedSubquery) {
+        UNIT_ASSERT(SqlToYql("$src = select * from plato.Input; select * from $src sample 0.2").IsOk());
+    }
+
+    Y_UNIT_TEST(AutoSampleWorksWithSubquery) {
+        UNIT_ASSERT(SqlToYql("select * from (select * from plato.Input) sample 0.2").IsOk());
+    }
 }
 
 Y_UNIT_TEST_SUITE(ExternalFunction) {

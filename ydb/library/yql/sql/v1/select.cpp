@@ -608,7 +608,7 @@ public:
             ESampleMode mode,
             TNodePtr samplingRate,
             TNodePtr samplingSeed) override {
-        if (mode != ESampleMode::Bernoulli) {
+        if (mode == ESampleMode::System) {
             ctx.Error(pos) << "only Bernoulli sampling mode is supported for subqueries";
             return false;
         }
@@ -2907,7 +2907,7 @@ public:
             ESampleMode mode,
             TNodePtr samplingRate,
             TNodePtr samplingSeed) override {
-        if (mode != ESampleMode::Bernoulli) {
+        if (mode == ESampleMode::System) {
             ctx.Error(pos) << "only Bernoulli sampling mode is supported for subqueries";
             return false;
         }

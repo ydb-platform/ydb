@@ -55,6 +55,10 @@ TString EncloseAndEscapeString(const TString& value,
                                const TString& enclosingSeq,
                                const TString& replaceWith);
 
+TString EncloseSecret(const TString& value);
+
+TString HideSecrets(const TString& value);
+
 TString ExtractServiceAccountId(const FederatedQuery::ConnectionSetting& setting);
 
 TString ExtractServiceAccountId(const FederatedQuery::ConnectionContent& content);

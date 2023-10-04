@@ -328,7 +328,7 @@ public:
 
     void InitiateSchemaQueryExecution(const TString& schemeQuery) {
         CPP_LOG_I("TSchemaQueryYDBActor Executing schema query. Actor id: "
-                  << TBase::SelfId() << " SchemeQuery: " << schemeQuery);
+                  << TBase::SelfId() << " SchemeQuery: " << HideSecrets(schemeQuery));
         Request->Get()
             ->YDBClient
             ->RetryOperation([query = schemeQuery](TSession session) {

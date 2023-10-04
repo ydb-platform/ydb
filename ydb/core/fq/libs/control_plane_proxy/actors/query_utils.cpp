@@ -102,9 +102,9 @@ TMaybe<TString> CreateSecretObjectQuery(const FederatedQuery::ConnectionSetting&
         secretObjects = signer ? fmt::format(
             R"(
                     UPSERT OBJECT {sa_secret_name} (TYPE SECRET) WITH value={signature};
-                )", 
+                )",
             "sa_secret_name"_a = EncloseAndEscapeString("k1" + name, '`'),
-            "signature"_a       = EncloseAndEscapeString(SignAccountId(serviceAccountId, signer), '"')) : std::string{};
+            "signature"_a       = EncloseSecret(EncloseAndEscapeString(SignAccountId(serviceAccountId, signer), '"'))) : std::string{};
     }
 
     auto password = GetPassword(setting);
@@ -112,9 +112,9 @@ TMaybe<TString> CreateSecretObjectQuery(const FederatedQuery::ConnectionSetting&
         secretObjects += fmt::format(
                 R"(
                     UPSERT OBJECT {password_secret_name} (TYPE SECRET) WITH value={password};
-                )", 
+                )",
             "password_secret_name"_a = EncloseAndEscapeString("k2" + name, '`'),
-            "password"_a = EncloseAndEscapeString(*password, '"'));
+            "password"_a = EncloseSecret(EncloseAndEscapeString(*password, '"')));
     }
 
     return secretObjects ? secretObjects : TMaybe<TString>{};

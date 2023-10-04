@@ -3,6 +3,7 @@
 #include <util/generic/string.h>
 #include <util/string/builder.h>
 #include <util/string/subst.h>
+#include <regex>
 
 namespace NFq {
 
@@ -71,6 +72,19 @@ TString EncloseAndEscapeString(const TString& value,
                             << enclosingSeq;
 }
 
+static TString SECRET_BEGIN = "/* 51a91b5d91a99eb7 */";
+static TString SECRET_END   = "/* e87c9b191b202354 */";
+static auto SECRET_REGEXP   = std::regex{
+    "\\/\\* 51a91b5d91a99eb7 \\*\\/.*\\/\\* e87c9b191b202354 \\*\\/"};
+
+TString EncloseSecret(const TString& value) {
+    return TStringBuilder{} << SECRET_BEGIN << value << SECRET_END;
+}
+
+TString HideSecrets(const TString& value) {
+    return std::regex_replace(std::string{value}, SECRET_REGEXP, "/*SECRET*/");
+}
+
 TString ExtractServiceAccountId(const FederatedQuery::ConnectionSetting& setting) {
     switch (setting.connection_case()) {
     case FederatedQuery::ConnectionSetting::kYdbDatabase: {
@@ -116,7 +130,7 @@ TMaybe<TString> GetLogin(const FederatedQuery::ConnectionSetting& setting) {
             return setting.clickhouse_cluster().login();
         case FederatedQuery::ConnectionSetting::kDataStreams:
             return {};
-        case FederatedQuery::ConnectionSetting::kObjectStorage: 
+        case FederatedQuery::ConnectionSetting::kObjectStorage:
             return {};
         case FederatedQuery::ConnectionSetting::kMonitoring:
             return {};
@@ -135,7 +149,7 @@ TMaybe<TString> GetPassword(const FederatedQuery::ConnectionSetting& setting) {
             return setting.clickhouse_cluster().password();
         case FederatedQuery::ConnectionSetting::kDataStreams:
             return {};
-        case FederatedQuery::ConnectionSetting::kObjectStorage: 
+        case FederatedQuery::ConnectionSetting::kObjectStorage:
             return {};
         case FederatedQuery::ConnectionSetting::kMonitoring:
             return {};

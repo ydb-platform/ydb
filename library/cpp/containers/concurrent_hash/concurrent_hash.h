@@ -5,6 +5,13 @@
 
 #include <array>
 
+namespace NPrivate {
+    template <typename T, typename THash>
+    concept CHashableBy = requires (const THash& hash, const T& t) {
+        hash(t);
+    };
+}
+
 template <typename K, typename V, size_t BucketCount = 64, typename L = TAdaptiveLock>
 class TConcurrentHashMap {
 public:
@@ -69,11 +76,13 @@ public:
     std::array<TBucket, BucketCount> Buckets;
 
 public:
-    TBucket& GetBucketForKey(const K& key) {
+    template <NPrivate::CHashableBy<THash<K>> TKey>
+    TBucket& GetBucketForKey(const TKey& key) {
         return Buckets[THash<K>()(key) % BucketCount];
     }
 
-    const TBucket& GetBucketForKey(const K& key) const {
+    template <NPrivate::CHashableBy<THash<K>> TKey>
+    const TBucket& GetBucketForKey(const TKey& key) const {
         return Buckets[THash<K>()(key) % BucketCount];
     }
 

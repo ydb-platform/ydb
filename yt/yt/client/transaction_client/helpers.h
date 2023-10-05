@@ -26,12 +26,13 @@ struct TReadTimestampRange
 //! #EObjectType::SytemTransaction or #EObjectType::SystemNestedTransaction.
 bool IsMasterTransactionId(TTransactionId id);
 
+//! Checks if #type is either #EObjectType::AtomicTabletTransaction or
+//! #EObjectType::NonAtomicTabletTransaction.
 bool IsTabletTransactionType(NObjectClient::EObjectType type);
 
 //! Checks if #id represents a valid transaction accepted by tablets:
-//! the type of #id must be either
-//! #EObjectType::Transaction, #EObjectType::AtomicTabletTransaction,
-//! or #EObjectType::NonAtomicTabletTransaction.
+//! the type of #id must be either #EObjectType::AtomicTabletTransaction or
+//! #EObjectType::NonAtomicTabletTransaction.
 void ValidateTabletTransactionId(TTransactionId id);
 
 //! Checks if #id represents a valid transaction accepted by masters:

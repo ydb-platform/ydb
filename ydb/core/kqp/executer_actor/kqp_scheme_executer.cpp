@@ -60,9 +60,21 @@ public:
             case NKqpProto::TKqpSchemeOperation::kCreateTable: {
                 auto modifyScheme = schemeOp.GetCreateTable();
                 if (Temporary) {
-                    auto* createTable = modifyScheme.MutableCreateTable();
-                    createTable->SetName(createTable->GetName() + SessionId);
-                    createTable->SetPath(createTable->GetPath() + SessionId);
+                    NKikimrSchemeOp::TTableDescription* tableDesc = nullptr;
+                    switch (modifyScheme.GetOperationType()) {
+                        case NKikimrSchemeOp::ESchemeOpCreateTable: {
+                            tableDesc = modifyScheme.MutableCreateTable();
+                            break;
+                        }
+                        case NKikimrSchemeOp::ESchemeOpCreateIndexedTable: {
+                            tableDesc = modifyScheme.MutableCreateIndexedTable()->MutableTableDescription();
+                            break;
+                        }
+                        default:
+                            YQL_ENSURE(false, "Unexpected operation type");
+                    }
+                    tableDesc->SetName(tableDesc->GetName() + SessionId);
+                    tableDesc->SetPath(tableDesc->GetPath() + SessionId);
                 }
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
                 break;

@@ -1143,11 +1143,23 @@ public:
         switch (schemeOperation.GetOperationCase()) {
             case NKqpProto::TKqpSchemeOperation::kCreateTable: {
                 const auto& modifyScheme = schemeOperation.GetCreateTable();
-                const auto& desc = modifyScheme.GetCreateTable();
+                const NKikimrSchemeOp::TTableDescription* tableDesc = nullptr;
+                switch (modifyScheme.GetOperationType()) {
+                    case NKikimrSchemeOp::ESchemeOpCreateTable: {
+                        tableDesc = &modifyScheme.GetCreateTable();
+                        break;
+                    }
+                    case NKikimrSchemeOp::ESchemeOpCreateIndexedTable: {
+                        tableDesc = &modifyScheme.GetCreateIndexedTable().GetTableDescription();
+                        break;
+                    }
+                    default:
+                        YQL_ENSURE(false, "Unexpected operation type");
+                }
                 auto userToken = QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>();
-                if (desc.HasTemporary()) {
-                    if (desc.GetTemporary()) {
-                        return {{desc.GetName(), modifyScheme.GetWorkingDir(), Settings.Cluster, userToken, Settings.Database}};
+                if (tableDesc->HasTemporary()) {
+                    if (tableDesc->GetTemporary()) {
+                        return {{tableDesc->GetName(), modifyScheme.GetWorkingDir(), Settings.Cluster, userToken, Settings.Database}};
                     }
                 }
                 break;

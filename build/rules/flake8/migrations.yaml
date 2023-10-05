@@ -14,7 +14,6 @@ migrations:
     - adfox/amacs/tests/functional/tests_amacs/identification
     - adfox/amacs/tests/functional/tests_amacs/yabs
     - ads/autobudget/ml_pipeline/lib
-    - ads/emily/storage/models/tsars/models
     - ads/quality/embedding/tools/mx_crosscheck
     - ads/quality/embedding/tsar_tensor/BSFACTOR-44/preprocess
     - ads/quality/max_positions
@@ -1500,7 +1499,6 @@ migrations:
     - geoproduct/bonuses_calculation/from_wiki_to_yt
     - infra/callisto/controllers/user/jupiter
     - infra/callisto/controllers/user/jupiter/chunks
-    - infra/dostavlyator/lib/debug
     - infra/deploy_notifications_controller/lib
     - infra/kernel/test/misc
     - infra/kernel/tools/kvm_kernel/builder/lib
@@ -1978,7 +1976,6 @@ migrations:
     - extsearch/video/robot/rt_transcoder/hls2dash/repack
     - geoproduct/aml/toloka/monitorings
     - geotargeting/library/python/geoplotting
-    - infra/dostavlyator/lib/proto_utils/tests
     - infra/deploy_notifications_controller/lib
     - infra/environments/builder
     - infra/kernel/tools/kvm_kernel/builder/lib
@@ -4408,10 +4405,6 @@ migrations:
     - infra/deploy/tools/yd_migrate/lib
     - infra/diskmanager/lib
     - infra/dist/dmover/lib
-    - infra/dostavlyator/lib/activator
-    - infra/dostavlyator/lib/fetcher
-    - infra/dostavlyator/lib/misc
-    - infra/dostavlyator/lib/upravlyator
     - infra/ebpf-agent/tests
     - infra/environments/builder
     - infra/gosky/src/gosky
@@ -5250,7 +5243,6 @@ migrations:
     - search/wizard/data/wizard/conf
     - search/wizard/entitysearch/tools/es_hook_notifier/lib
     - search/wizard/entitysearch/tools/shooter_for_zeliboba
-    - search/zephyr/client
     - serp/lenour/tasklets/lenour_set_snapshot_state/impl
     - serp/lenour/test
     - skynet/api/copier
@@ -8154,7 +8146,6 @@ migrations:
     - PLE0710
     prefixes:
     - april/web/bas/oauth/utils
-    - ml/pulsar/server/scenarios_service/models/ttm/tune_the_model
   PLE0712:
     ignore:
     - PLE0712
@@ -8665,7 +8656,6 @@ migrations:
     - dict/mt/make/processes/gen_download_commoncrawl_graph/libs/commoncrawl_cube/lib
     - dict/mt/make/processes/gen_download_commoncrawl_graph/libs/parse_warc
     - extsearch/video/functionality/fastdelivery/NewCombineVhsRequests/NewCombineVhsSeries
-    - infra/dostavlyator/lib/db
     - logbroker/tools/manual/analyze_and_set_maximum_partition_speed
     - logbroker/tools/manual/collect_capacity/analyze_capacity_2020
     - logbroker/tools/manual/collect_capacity/common
@@ -8738,7 +8728,6 @@ migrations:
     - comdep_analytics/comdep_recsys/etl_core/utils
     - crowdsourcing/elc/CwasBot/utils/api
     - crowdsourcing/elc/CwasBot/utils/misc
-    - infra/dostavlyator/lib/upravlyator
     - kikimr/ci/tasklets/update_hostgroup/impl
     - kikimr/ci/tasklets/update_resource/impl
     - logbroker/tools/deploy_consistency_test/generator

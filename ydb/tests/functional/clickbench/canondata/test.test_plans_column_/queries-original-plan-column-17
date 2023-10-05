@@ -30,14 +30,11 @@
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "Limit-Aggregate",
+                                                "Node Type": "Limit",
                                                 "Operators": [
                                                     {
                                                         "Limit": "10",
                                                         "Name": "Limit"
-                                                    },
-                                                    {
-                                                        "Name": "Aggregate"
                                                     }
                                                 ],
                                                 "PlanNodeId": 3,

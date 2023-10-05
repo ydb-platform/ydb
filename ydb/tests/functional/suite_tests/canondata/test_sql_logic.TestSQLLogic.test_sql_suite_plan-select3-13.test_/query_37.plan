@@ -117,7 +117,7 @@
                 "PlanNodeType": "Materialize",
                 "Plans": [
                     {
-                        "Node Type": "Aggregate-Limit-Aggregate",
+                        "Node Type": "Aggregate-Limit",
                         "Operators": [
                             {
                                 "Name": "Aggregate"
@@ -125,9 +125,6 @@
                             {
                                 "Limit": "1",
                                 "Name": "Limit"
-                            },
-                            {
-                                "Name": "Aggregate"
                             }
                         ],
                         "PlanNodeId": 3,

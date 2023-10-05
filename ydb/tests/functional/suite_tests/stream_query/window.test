@@ -54,7 +54,7 @@ statement stream query
 SELECT depname, empno, salary, sum(salary) OVER w FROM empsalary WINDOW w AS (PARTITION BY depname) ORDER BY depname, salary;
 
 statement stream query
-SELECT depname, empno, salary, rank() OVER w FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary);
+SELECT depname, empno, salary, rank() OVER w FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary) ORDER BY salary, depname;
 
 -- with GROUP BY
 statement stream query
@@ -62,93 +62,96 @@ SELECT four, ten, SUM(SUM(four)) OVER w, AVG(ten) FROM tenk1
 GROUP BY four, ten WINDOW w AS (PARTITION BY four) ORDER BY four, ten;
 
 statement stream query
-SELECT depname, empno, salary, sum(salary) OVER w FROM empsalary WINDOW w AS (PARTITION BY depname);
+SELECT depname, empno, salary, sum(salary) OVER w FROM empsalary WINDOW w AS (PARTITION BY depname) ORDER BY depname, salary, empno;
 
 statement stream query
 SELECT depname, empno, salary, rank() OVER w AS r FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary) ORDER BY r;
 
 -- empty window specification
 statement stream query
-SELECT COUNT(*) OVER w FROM tenk1 WHERE unique2 < 10 WINDOW w AS ();
+SELECT COUNT(*) OVER w AS cnt FROM tenk1 WHERE unique2 < 10 WINDOW w AS () ORDER BY cnt;
 
 -- no window operation
 statement stream query
-SELECT four FROM tenk1 WHERE FALSE WINDOW w AS (PARTITION BY ten);
+SELECT four FROM tenk1 WHERE FALSE WINDOW w AS (PARTITION BY ten) ORDER BY four;
 
 -- cumulative aggregate
 statement stream query
-SELECT sum(four) OVER w AS sum_1, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY ten ORDER BY unique2);
+SELECT sum(four) OVER w AS sum_1, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY ten ORDER BY unique2) ORDER BY sum_1, ten, four;
 
 statement stream query
-SELECT row_number() OVER w FROM tenk1 WHERE unique2 < 10 WINDOW w AS (ORDER BY unique2);
+SELECT row_number() OVER w AS rnum_1 FROM tenk1 WHERE unique2 < 10 WINDOW w AS (ORDER BY unique2) ORDER BY rnum_1;
 
 statement stream query
-SELECT rank() OVER w AS rank_1, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten);
+SELECT rank() OVER w AS rank_1, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten) ORDER BY rank_1, ten, four;
 
 statement stream query
-SELECT dense_rank() OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten);
+SELECT dense_rank() OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten) ORDER BY ten, four;
 
 statement error
-SELECT percent_rank() OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten);
+SELECT percent_rank() OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten) ORDER BY ten, four;
 
 statement error
-SELECT cume_dist() OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten);
+SELECT cume_dist() OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten) ORDER BY ten, four;
 
 statement error
-SELECT ntile(3) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (ORDER BY ten, four);
+SELECT ntile(3) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (ORDER BY ten, four) ORDER BY ten, four;
 
 statement error
-SELECT ntile(NULL) OVER w, ten, four FROM tenk1 WINDOW w AS (ORDER BY ten, four) LIMIT 2;
+SELECT ntile(NULL) OVER w, ten, four FROM tenk1 WINDOW w AS (ORDER BY ten, four) ORDER BY ten, four LIMIT 2;
 
 statement stream query
-SELECT lag(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten);
+SELECT lag(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten) ORDER BY ten, four;
 
 statement error
-SELECT lag(ten, four) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten);
+SELECT lag(ten, four) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten) ORDER BY ten, four;
 
 statement error
-SELECT lag(ten, four, 0) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten);
+SELECT lag(ten, four, 0) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten) ORDER BY ten, four;
 
 statement stream query
-SELECT lead(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten);
+SELECT lead(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten) ORDER BY ten, four;
 
 statement stream query
-SELECT lead(ten * 2, 1) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten);
+SELECT lead(ten * 2, 1) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten) ORDER BY ten, four;
 
 statement error
-SELECT lead(ten * 2, 1, -1) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten);
+SELECT lead(ten * 2, 1, -1) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten) ORDER BY ten, four;
 
 statement stream query
-SELECT first_value(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten);
+SELECT first_value(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten) ORDER BY ten, four;
 
 -- last_value returns the last row of the frame, which is CURRENT ROW in ORDER BY window.
 -- XXX: different behavior w.r.t postgres
 statement stream query
-SELECT last_value(four) OVER w, last_value(four) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (ORDER BY ten);
+SELECT last_value(four) OVER w, last_value(four) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (ORDER BY ten) ORDER BY ten, four;
 
 statement stream query
 SELECT last_value(ten) OVER w, ten, four FROM
     (SELECT * FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten LIMIT 1000)
-WINDOW w AS (PARTITION BY four)
+WINDOW w AS (PARTITION BY four ORDER BY ten)
 ORDER BY four, ten;
 
 statement error
 SELECT nth_value(ten, four + 1) OVER w, ten, four FROM
     (SELECT * FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten)
-WINDOW w AS (PARTITION BY four);
+WINDOW w AS (PARTITION BY four ORDER BY ten)
+ORDER BY four, ten;
 
 statement stream query
 SELECT ten, two, sum(hundred) AS gsum, sum(sum(hundred)) OVER w AS wsum
-FROM tenk1 GROUP BY ten, two WINDOW w AS (PARTITION BY two ORDER BY ten);
+FROM tenk1 GROUP BY ten, two WINDOW w AS (PARTITION BY two ORDER BY ten)
+ORDER BY ten, two;
 
 statement stream query
-SELECT count(*) OVER w, four FROM (SELECT * FROM tenk1 WHERE two = 1) WHERE unique2 < 10 WINDOW w AS (PARTITION BY four);
+SELECT count(*) OVER w, four FROM (SELECT * FROM tenk1 WHERE two = 1) WHERE unique2 < 10 WINDOW w AS (PARTITION BY four) ORDER BY four;
 
 -- WRONG!
 statement stream query
 SELECT (count(*) OVER w + sum(hundred) OVER w) AS cntsum
 FROM tenk1 WHERE unique2 < 10
-WINDOW w AS (PARTITION BY four ORDER BY ten);
+WINDOW w AS (PARTITION BY four ORDER BY ten)
+ORDER BY cntsum;
 
 -- opexpr with different windows evaluation.
 statement stream query
@@ -160,41 +163,47 @@ SELECT * FROM(
     FROM tenk1
     WINDOW w1 AS (PARTITION BY four ORDER BY ten), w2 AS (PARTITION BY two ORDER BY ten)
 )
-WHERE total <> fourcount + twosum;
+WHERE total <> fourcount + twosum
+ORDER BY total, fourcount, twosum;
 
 statement stream query
-SELECT avg(four) OVER w FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY thousand / 100);
+SELECT avg(four) OVER w AS avg_1 FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY thousand / 100) ORDER BY avg_1;
 
 statement stream query
 SELECT ten, two, sum(hundred) AS gsum, sum(sum(hundred)) OVER win AS wsum
-FROM tenk1 GROUP BY ten, two WINDOW win AS (PARTITION BY two ORDER BY ten);
+FROM tenk1 GROUP BY ten, two WINDOW win AS (PARTITION BY two ORDER BY ten)
+ORDER BY wsum, ten, two;
 
 -- more than one window with GROUP BY
 statement stream query
-SELECT sum(salary),
-    row_number() OVER w1,
-    sum(sum(salary)) OVER w2
+SELECT sum(salary) AS sum_salary,
+    row_number() OVER w1 AS rnum_1,
+    sum(sum(salary)) OVER w2 AS sum_sum_salary
 FROM empsalary GROUP BY depname
-WINDOW w1 AS (ORDER BY depname), w2 AS (ORDER BY depname DESC);
+WINDOW w1 AS (ORDER BY depname), w2 AS (ORDER BY depname DESC)
+ORDER BY sum_salary, rnum_1, sum_sum_salary;
 
 -- identical windows with different names
 statement stream query
-SELECT sum(salary) OVER w1, count(*) OVER w2
-FROM empsalary WINDOW w1 AS (ORDER BY salary), w2 AS (ORDER BY salary);
+SELECT sum(salary) OVER w1 AS sum_salary, count(*) OVER w2 AS cnt
+FROM empsalary WINDOW w1 AS (ORDER BY salary), w2 AS (ORDER BY salary)
+ORDER BY sum_salary, cnt;
 
 -- subplan
 statement error
-SELECT lead(ten, (SELECT two FROM tenk1 WHERE s.unique2 = unique2)) OVER w
+SELECT lead(ten, (SELECT two FROM tenk1 WHERE s.unique2 = unique2)) OVER w AS lead_1
 FROM tenk1 s WHERE unique2 < 10
-WINDOW w AS (PARTITION BY four ORDER BY ten);
+WINDOW w AS (PARTITION BY four ORDER BY ten)
+ORDER BY lead_1;
 
 -- empty table
 statement stream query
-SELECT count(*) OVER w FROM (SELECT * FROM tenk1 WHERE FALSE) WINDOW w AS (PARTITION BY four);
+SELECT count(*) OVER w AS cnt FROM (SELECT * FROM tenk1 WHERE FALSE) WINDOW w AS (PARTITION BY four) ORDER BY cnt;
 
 -- mixture of agg/wfunc in the same window
 statement stream query
-SELECT sum(salary) OVER w, rank() OVER w FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary DESC);
+SELECT sum(salary) OVER w AS sum_salary, rank() OVER w as rank_1 FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary DESC)
+ORDER BY sum_salary, rank_1;
 
 -- strict aggs
 statement stream query
@@ -209,11 +218,12 @@ SELECT empno, depname, salary, bonus, depadj, MIN(bonus) OVER w, MAX(depadj) OVE
     FROM empsalary
     WINDOW wi AS (PARTITION BY depname)
 )
-WINDOW w AS (ORDER BY empno);
+WINDOW w AS (ORDER BY empno)
+ORDER BY empno;
 
 -- window function over ungrouped agg over empty row set (bug before 9.1)
 statement stream query
-SELECT SUM(COUNT(f1)) OVER w FROM int4_tbl WHERE f1=42 WINDOW w AS ();
+SELECT SUM(COUNT(f1)) OVER w AS sum_cnt FROM int4_tbl WHERE f1=42 WINDOW w AS () ORDER BY sum_cnt;
 
 -- window function with ORDER BY an expression involving aggregates (9.1 bug)
 statement stream query
@@ -239,21 +249,24 @@ SELECT four, ten,
 	sum(ten) over w,
 	last_value(ten) over w
 FROM (select distinct ten, four from tenk1)
-WINDOW w AS (partition by four order by ten range between unbounded preceding and current row);
+WINDOW w AS (partition by four order by ten range between unbounded preceding and current row)
+ORDER BY four, ten;
 
 statement error
 SELECT four, ten,
 	sum(ten) over w,
 	last_value(ten) over w
 FROM (select distinct ten, four from tenk1)
-WINDOW w AS (partition by four order by ten range between unbounded preceding and unbounded following);
+WINDOW w AS (partition by four order by ten range between unbounded preceding and unbounded following)
+ORDER BY four, ten;
 
 statement error
 SELECT four, ten/4 as two,
 	sum(ten/4) over w,
 	last_value(ten/4) over w
 FROM (select distinct ten, four from tenk1)
-WINDOW w AS (partition by four order by ten/4 range between unbounded preceding and current row);
+WINDOW w AS (partition by four order by ten/4 range between unbounded preceding and current row)
+ORDER BY four, two;
 
 statement stream query
 SELECT four, ten/4 as two,
@@ -267,23 +280,27 @@ statement error
 SELECT sum(unique1) over w,
 	unique1, four
 FROM tenk1 WHERE unique1 < 10
-WINDOW w AS (order by four range between current row and unbounded following);
+WINDOW w AS (order by four range between current row and unbounded following)
+ORDER BY unique1;
 
 statement stream query
 SELECT sum(unique1) over w,
 	unique1, four
 FROM tenk1 WHERE unique1 < 10
-WINDOW w AS (rows between current row and unbounded following);
+WINDOW w AS (order by unique1 rows between current row and unbounded following)
+ORDER BY unique1;
 
 statement stream query
 SELECT sum(unique1) over w,
 	unique1, four
 FROM tenk1 WHERE unique1 < 10
-WINDOW w AS (rows between 2 preceding and 2 following);
+WINDOW w AS (order by unique1 rows between 2 preceding and 2 following)
+ORDER BY unique1;
 
 statement stream query
 SELECT sum(unique1) over w,
 	unique1, four
 FROM tenk1 WHERE unique1 < 10
-WINDOW w AS (rows between 2 preceding and 2 following exclude no others);
+WINDOW w AS (order by unique1 rows between 2 preceding and 2 following exclude no others)
+ORDER BY unique1;
 

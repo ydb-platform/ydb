@@ -21,20 +21,20 @@ SELECT depname, empno, salary, sum(salary) OVER w FROM empsalary WINDOW w AS (PA
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
-SELECT depname, empno, salary, rank() OVER w FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary);
+SELECT depname, empno, salary, rank() OVER w FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary) ORDER BY salary, depname;
 
    depname    | empno | salary | column3 
 --------------+-------+--------+---------
+ b'personnel' |     5 |   3500 |       1 
+ b'personnel' |     2 |   3900 |       2 
    b'develop' |     7 |   4200 |       1 
    b'develop' |     9 |   4500 |       2 
+     b'sales' |     4 |   4800 |       1 
+     b'sales' |     3 |   4800 |       1 
+     b'sales' |     1 |   5000 |       3 
    b'develop' |    10 |   5200 |       3 
    b'develop' |    11 |   5200 |       3 
    b'develop' |     8 |   6000 |       5 
- b'personnel' |     5 |   3500 |       1 
- b'personnel' |     2 |   3900 |       2 
-     b'sales' |     3 |   4800 |       1 
-     b'sales' |     4 |   4800 |       1 
-     b'sales' |     1 |   5000 |       3 
 (10 rows)
 
 
@@ -72,20 +72,20 @@ GROUP BY four, ten WINDOW w AS (PARTITION BY four) ORDER BY four, ten;
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
-SELECT depname, empno, salary, sum(salary) OVER w FROM empsalary WINDOW w AS (PARTITION BY depname);
+SELECT depname, empno, salary, sum(salary) OVER w FROM empsalary WINDOW w AS (PARTITION BY depname) ORDER BY depname, salary, empno;
 
    depname    | empno | salary | column3 
 --------------+-------+--------+---------
    b'develop' |     7 |   4200 |   25100 
-   b'develop' |     8 |   6000 |   25100 
    b'develop' |     9 |   4500 |   25100 
    b'develop' |    10 |   5200 |   25100 
    b'develop' |    11 |   5200 |   25100 
- b'personnel' |     2 |   3900 |    7400 
+   b'develop' |     8 |   6000 |   25100 
  b'personnel' |     5 |   3500 |    7400 
-     b'sales' |     1 |   5000 |   14600 
+ b'personnel' |     2 |   3900 |    7400 
      b'sales' |     3 |   4800 |   14600 
      b'sales' |     4 |   4800 |   14600 
+     b'sales' |     1 |   5000 |   14600 
 (10 rows)
 
 
@@ -112,27 +112,27 @@ SELECT depname, empno, salary, rank() OVER w AS r FROM empsalary WINDOW w AS (PA
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
-SELECT COUNT(*) OVER w FROM tenk1 WHERE unique2 < 10 WINDOW w AS ();
+SELECT COUNT(*) OVER w AS cnt FROM tenk1 WHERE unique2 < 10 WINDOW w AS () ORDER BY cnt;
 
- column0 
----------
-      10 
-      10 
-      10 
-      10 
-      10 
-      10 
-      10 
-      10 
-      10 
-      10 
+ cnt 
+-----
+  10 
+  10 
+  10 
+  10 
+  10 
+  10 
+  10 
+  10 
+  10 
+  10 
 (10 rows)
 
 
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
-SELECT four FROM tenk1 WHERE FALSE WINDOW w AS (PARTITION BY ten);
+SELECT four FROM tenk1 WHERE FALSE WINDOW w AS (PARTITION BY ten) ORDER BY four;
 
 (0 rows)
 
@@ -140,18 +140,18 @@ SELECT four FROM tenk1 WHERE FALSE WINDOW w AS (PARTITION BY ten);
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
-SELECT sum(four) OVER w AS sum_1, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY ten ORDER BY unique2);
+SELECT sum(four) OVER w AS sum_1, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY ten ORDER BY unique2) ORDER BY sum_1, ten, four;
 
  sum_1 | ten | four 
 -------+-----+------
-     1 |   9 |    1 
+     0 |   0 |    0 
+     0 |   0 |    0 
      0 |   4 |    0 
      1 |   7 |    1 
-     0 |   0 |    0 
-     0 |   0 |    0 
+     1 |   9 |    1 
      2 |   0 |    2 
-     3 |   3 |    3 
      3 |   1 |    3 
+     3 |   3 |    3 
      4 |   1 |    1 
      5 |   1 |    1 
 (10 rows)
@@ -160,156 +160,156 @@ SELECT sum(four) OVER w AS sum_1, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
-SELECT row_number() OVER w FROM tenk1 WHERE unique2 < 10 WINDOW w AS (ORDER BY unique2);
+SELECT row_number() OVER w AS rnum_1 FROM tenk1 WHERE unique2 < 10 WINDOW w AS (ORDER BY unique2) ORDER BY rnum_1;
 
- column0 
----------
-       1 
-       2 
-       3 
-       4 
-       5 
-       6 
-       7 
-       8 
-       9 
-      10 
+ rnum_1 
+--------
+      1 
+      2 
+      3 
+      4 
+      5 
+      6 
+      7 
+      8 
+      9 
+     10 
 (10 rows)
 
 
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
-SELECT rank() OVER w AS rank_1, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten);
+SELECT rank() OVER w AS rank_1, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten) ORDER BY rank_1, ten, four;
 
  rank_1 | ten | four 
 --------+-----+------
+      1 |   0 |    0 
+      1 |   0 |    0 
       1 |   0 |    2 
       1 |   1 |    1 
       1 |   1 |    1 
-      3 |   7 |    1 
-      4 |   9 |    1 
-      1 |   0 |    0 
-      1 |   0 |    0 
-      3 |   4 |    0 
       1 |   1 |    3 
       2 |   3 |    3 
+      3 |   4 |    0 
+      3 |   7 |    1 
+      4 |   9 |    1 
 (10 rows)
 
 
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
-SELECT dense_rank() OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten);
+SELECT dense_rank() OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten) ORDER BY ten, four;
 
  column0 | ten | four 
 ---------+-----+------
+       1 |   0 |    0 
+       1 |   0 |    0 
        1 |   0 |    2 
        1 |   1 |    1 
        1 |   1 |    1 
-       2 |   7 |    1 
-       3 |   9 |    1 
-       1 |   0 |    0 
-       1 |   0 |    0 
-       2 |   4 |    0 
        1 |   1 |    3 
        2 |   3 |    3 
+       2 |   4 |    0 
+       2 |   7 |    1 
+       3 |   9 |    1 
 (10 rows)
 
 
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
-SELECT lag(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten);
+SELECT lag(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten) ORDER BY ten, four;
 
  column0 | ten | four 
 ---------+-----+------
+    None |   0 |    0 
+       0 |   0 |    0 
     None |   0 |    2 
     None |   1 |    1 
        1 |   1 |    1 
-       1 |   7 |    1 
-       7 |   9 |    1 
-    None |   0 |    0 
-       0 |   0 |    0 
-       0 |   4 |    0 
     None |   1 |    3 
        1 |   3 |    3 
+       0 |   4 |    0 
+       1 |   7 |    1 
+       7 |   9 |    1 
 (10 rows)
 
 
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
-SELECT lead(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten);
+SELECT lead(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten) ORDER BY ten, four;
 
  column0 | ten | four 
 ---------+-----+------
+       0 |   0 |    0 
+       4 |   0 |    0 
     None |   0 |    2 
        1 |   1 |    1 
        7 |   1 |    1 
-       9 |   7 |    1 
-    None |   9 |    1 
-       0 |   0 |    0 
-       4 |   0 |    0 
-    None |   4 |    0 
        3 |   1 |    3 
     None |   3 |    3 
+    None |   4 |    0 
+       9 |   7 |    1 
+    None |   9 |    1 
 (10 rows)
 
 
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
-SELECT lead(ten * 2, 1) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten);
+SELECT lead(ten * 2, 1) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten) ORDER BY ten, four;
 
  column0 | ten | four 
 ---------+-----+------
+       0 |   0 |    0 
+       8 |   0 |    0 
     None |   0 |    2 
        2 |   1 |    1 
       14 |   1 |    1 
-      18 |   7 |    1 
-    None |   9 |    1 
-       0 |   0 |    0 
-       8 |   0 |    0 
-    None |   4 |    0 
        6 |   1 |    3 
     None |   3 |    3 
+    None |   4 |    0 
+      18 |   7 |    1 
+    None |   9 |    1 
 (10 rows)
 
 
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
-SELECT first_value(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten);
+SELECT first_value(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten) ORDER BY ten, four;
 
  column0 | ten | four 
 ---------+-----+------
+       0 |   0 |    0 
+       0 |   0 |    0 
        0 |   0 |    2 
        1 |   1 |    1 
        1 |   1 |    1 
-       1 |   7 |    1 
-       1 |   9 |    1 
-       0 |   0 |    0 
-       0 |   0 |    0 
-       0 |   4 |    0 
        1 |   1 |    3 
        1 |   3 |    3 
+       0 |   4 |    0 
+       1 |   7 |    1 
+       1 |   9 |    1 
 (10 rows)
 
 
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
-SELECT last_value(four) OVER w, last_value(four) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (ORDER BY ten);
+SELECT last_value(four) OVER w, last_value(four) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (ORDER BY ten) ORDER BY ten, four;
 
  column0 | column1 | ten | four 
 ---------+---------+-----+------
+       0 |       0 |   0 |    0 
+       0 |       0 |   0 |    0 
        2 |       2 |   0 |    2 
-       0 |       0 |   0 |    0 
-       0 |       0 |   0 |    0 
+       1 |       1 |   1 |    1 
        1 |       1 |   1 |    1 
        3 |       3 |   1 |    3 
-       1 |       1 |   1 |    1 
        3 |       3 |   3 |    3 
        0 |       0 |   4 |    0 
        1 |       1 |   7 |    1 
@@ -322,20 +322,20 @@ pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT last_value(ten) OVER w, ten, four FROM
     (SELECT * FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten LIMIT 1000)
-WINDOW w AS (PARTITION BY four)
+WINDOW w AS (PARTITION BY four ORDER BY ten)
 ORDER BY four, ten;
 
  column0 | ten | four 
 ---------+-----+------
-       4 |   0 |    0 
-       4 |   0 |    0 
+       0 |   0 |    0 
+       0 |   0 |    0 
        4 |   4 |    0 
-       9 |   1 |    1 
-       9 |   1 |    1 
-       9 |   7 |    1 
+       1 |   1 |    1 
+       1 |   1 |    1 
+       7 |   7 |    1 
        9 |   9 |    1 
        0 |   0 |    2 
-       3 |   1 |    3 
+       1 |   1 |    3 
        3 |   3 |    3 
 (10 rows)
 
@@ -344,27 +344,28 @@ ORDER BY four, ten;
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT ten, two, sum(hundred) AS gsum, sum(sum(hundred)) OVER w AS wsum
-FROM tenk1 GROUP BY ten, two WINDOW w AS (PARTITION BY two ORDER BY ten);
+FROM tenk1 GROUP BY ten, two WINDOW w AS (PARTITION BY two ORDER BY ten)
+ORDER BY ten, two;
 
  ten | two | gsum  |  wsum  
 -----+-----+-------+--------
-   1 |   1 | 46000 |  46000 
-   3 |   1 | 48000 |  94000 
-   5 |   1 | 50000 | 144000 
-   7 |   1 | 52000 | 196000 
-   9 |   1 | 54000 | 250000 
    0 |   0 | 45000 |  45000 
+   1 |   1 | 46000 |  46000 
    2 |   0 | 47000 |  92000 
+   3 |   1 | 48000 |  94000 
    4 |   0 | 49000 | 141000 
+   5 |   1 | 50000 | 144000 
    6 |   0 | 51000 | 192000 
+   7 |   1 | 52000 | 196000 
    8 |   0 | 53000 | 245000 
+   9 |   1 | 54000 | 250000 
 (10 rows)
 
 
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
-SELECT count(*) OVER w, four FROM (SELECT * FROM tenk1 WHERE two = 1) WHERE unique2 < 10 WINDOW w AS (PARTITION BY four);
+SELECT count(*) OVER w, four FROM (SELECT * FROM tenk1 WHERE two = 1) WHERE unique2 < 10 WINDOW w AS (PARTITION BY four) ORDER BY four;
 
  column0 | four 
 ---------+------
@@ -382,18 +383,19 @@ pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT (count(*) OVER w + sum(hundred) OVER w) AS cntsum
 FROM tenk1 WHERE unique2 < 10
-WINDOW w AS (PARTITION BY four ORDER BY ten);
+WINDOW w AS (PARTITION BY four ORDER BY ten)
+ORDER BY cntsum;
 
  cntsum 
 --------
-     51 
-     22 
-     24 
-     82 
-     92 
      21 
      22 
+     22 
+     24 
+     51 
+     82 
      87 
+     92 
      92 
     136 
 (10 rows)
@@ -410,7 +412,8 @@ SELECT * FROM(
     FROM tenk1
     WINDOW w1 AS (PARTITION BY four ORDER BY ten), w2 AS (PARTITION BY two ORDER BY ten)
 )
-WHERE total <> fourcount + twosum;
+WHERE total <> fourcount + twosum
+ORDER BY total, fourcount, twosum;
 
 (0 rows)
 
@@ -418,20 +421,20 @@ WHERE total <> fourcount + twosum;
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
-SELECT avg(four) OVER w FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY thousand / 100);
+SELECT avg(four) OVER w AS avg_1 FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY thousand / 100) ORDER BY avg_1;
 
- column0 
----------
-     2.0 
-     1.0 
-     1.0 
-     1.0 
-     1.0 
-     0.0 
-     0.0 
-     0.0 
-     3.0 
-     3.0 
+ avg_1 
+-------
+   0.0 
+   0.0 
+   0.0 
+   1.0 
+   1.0 
+   1.0 
+   1.0 
+   2.0 
+   3.0 
+   3.0 
 (10 rows)
 
 
@@ -439,65 +442,68 @@ SELECT avg(four) OVER w FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY 
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 SELECT ten, two, sum(hundred) AS gsum, sum(sum(hundred)) OVER win AS wsum
-FROM tenk1 GROUP BY ten, two WINDOW win AS (PARTITION BY two ORDER BY ten);
+FROM tenk1 GROUP BY ten, two WINDOW win AS (PARTITION BY two ORDER BY ten)
+ORDER BY wsum, ten, two;
 
  ten | two | gsum  |  wsum  
 -----+-----+-------+--------
-   1 |   1 | 46000 |  46000 
-   3 |   1 | 48000 |  94000 
-   5 |   1 | 50000 | 144000 
-   7 |   1 | 52000 | 196000 
-   9 |   1 | 54000 | 250000 
    0 |   0 | 45000 |  45000 
+   1 |   1 | 46000 |  46000 
    2 |   0 | 47000 |  92000 
+   3 |   1 | 48000 |  94000 
    4 |   0 | 49000 | 141000 
+   5 |   1 | 50000 | 144000 
    6 |   0 | 51000 | 192000 
+   7 |   1 | 52000 | 196000 
    8 |   0 | 53000 | 245000 
+   9 |   1 | 54000 | 250000 
 (10 rows)
 
 
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
-SELECT sum(salary),
-    row_number() OVER w1,
-    sum(sum(salary)) OVER w2
+SELECT sum(salary) AS sum_salary,
+    row_number() OVER w1 AS rnum_1,
+    sum(sum(salary)) OVER w2 AS sum_sum_salary
 FROM empsalary GROUP BY depname
-WINDOW w1 AS (ORDER BY depname), w2 AS (ORDER BY depname DESC);
+WINDOW w1 AS (ORDER BY depname), w2 AS (ORDER BY depname DESC)
+ORDER BY sum_salary, rnum_1, sum_sum_salary;
 
- column0 | column1 | column2 
----------+---------+---------
-   14600 |       3 |   14600 
-    7400 |       2 |   22000 
-   25100 |       1 |   47100 
+ sum_salary | rnum_1 | sum_sum_salary 
+------------+--------+----------------
+       7400 |      2 |          22000 
+      14600 |      3 |          14600 
+      25100 |      1 |          47100 
 (3 rows)
 
 
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
-SELECT sum(salary) OVER w1, count(*) OVER w2
-FROM empsalary WINDOW w1 AS (ORDER BY salary), w2 AS (ORDER BY salary);
+SELECT sum(salary) OVER w1 AS sum_salary, count(*) OVER w2 AS cnt
+FROM empsalary WINDOW w1 AS (ORDER BY salary), w2 AS (ORDER BY salary)
+ORDER BY sum_salary, cnt;
 
- column0 | column1 
----------+---------
-    3500 |       1 
-    7400 |       2 
-   11600 |       3 
-   16100 |       4 
-   20900 |       5 
-   25700 |       6 
-   30700 |       7 
-   35900 |       8 
-   41100 |       9 
-   47100 |      10 
+ sum_salary | cnt 
+------------+-----
+       3500 |   1 
+       7400 |   2 
+      11600 |   3 
+      16100 |   4 
+      20900 |   5 
+      25700 |   6 
+      30700 |   7 
+      35900 |   8 
+      41100 |   9 
+      47100 |  10 
 (10 rows)
 
 
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
-SELECT count(*) OVER w FROM (SELECT * FROM tenk1 WHERE FALSE) WINDOW w AS (PARTITION BY four);
+SELECT count(*) OVER w AS cnt FROM (SELECT * FROM tenk1 WHERE FALSE) WINDOW w AS (PARTITION BY four) ORDER BY cnt;
 
 (0 rows)
 
@@ -505,20 +511,21 @@ SELECT count(*) OVER w FROM (SELECT * FROM tenk1 WHERE FALSE) WINDOW w AS (PARTI
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
-SELECT sum(salary) OVER w, rank() OVER w FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary DESC);
+SELECT sum(salary) OVER w AS sum_salary, rank() OVER w as rank_1 FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary DESC)
+ORDER BY sum_salary, rank_1;
 
- column0 | column1 
----------+---------
-    6000 |       1 
-   11200 |       2 
-   16400 |       2 
-   20900 |       4 
-   25100 |       5 
-    3900 |       1 
-    7400 |       2 
-    5000 |       1 
-    9800 |       2 
-   14600 |       2 
+ sum_salary | rank_1 
+------------+--------
+       3900 |      1 
+       5000 |      1 
+       6000 |      1 
+       7400 |      2 
+       9800 |      2 
+      11200 |      2 
+      14600 |      2 
+      16400 |      2 
+      20900 |      4 
+      25100 |      5 
 (10 rows)
 
 
@@ -536,7 +543,8 @@ SELECT empno, depname, salary, bonus, depadj, MIN(bonus) OVER w, MAX(depadj) OVE
     FROM empsalary
     WINDOW wi AS (PARTITION BY depname)
 )
-WINDOW w AS (ORDER BY empno);
+WINDOW w AS (ORDER BY empno)
+ORDER BY empno;
 
  empno |   depname    | salary | bonus | depadj | column5 | column6 
 -------+--------------+--------+-------+--------+---------+---------
@@ -556,9 +564,9 @@ WINDOW w AS (ORDER BY empno);
 --!syntax_v1
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
-SELECT SUM(COUNT(f1)) OVER w FROM int4_tbl WHERE f1=42 WINDOW w AS ();
+SELECT SUM(COUNT(f1)) OVER w AS sum_cnt FROM int4_tbl WHERE f1=42 WINDOW w AS () ORDER BY sum_cnt;
 
- column0 
+ sum_cnt 
 ---------
        0 
 (1 row0)
@@ -666,7 +674,8 @@ pragma SimpleColumns;
 SELECT sum(unique1) over w,
 	unique1, four
 FROM tenk1 WHERE unique1 < 10
-WINDOW w AS (rows between current row and unbounded following);
+WINDOW w AS (order by unique1 rows between current row and unbounded following)
+ORDER BY unique1;
 
  column0 | unique1 | four 
 ---------+---------+------
@@ -689,7 +698,8 @@ pragma SimpleColumns;
 SELECT sum(unique1) over w,
 	unique1, four
 FROM tenk1 WHERE unique1 < 10
-WINDOW w AS (rows between 2 preceding and 2 following);
+WINDOW w AS (order by unique1 rows between 2 preceding and 2 following)
+ORDER BY unique1;
 
  column0 | unique1 | four 
 ---------+---------+------
@@ -712,7 +722,8 @@ pragma SimpleColumns;
 SELECT sum(unique1) over w,
 	unique1, four
 FROM tenk1 WHERE unique1 < 10
-WINDOW w AS (rows between 2 preceding and 2 following exclude no others);
+WINDOW w AS (order by unique1 rows between 2 preceding and 2 following exclude no others)
+ORDER BY unique1;
 
  column0 | unique1 | four 
 ---------+---------+------

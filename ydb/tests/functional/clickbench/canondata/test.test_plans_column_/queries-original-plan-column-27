@@ -30,7 +30,7 @@
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "TopSort-Filter-Aggregate",
+                                                "Node Type": "TopSort-Filter",
                                                 "Operators": [
                                                     {
                                                         "Limit": "25",
@@ -40,9 +40,6 @@
                                                     {
                                                         "Name": "Filter",
                                                         "Predicate": "item.Count0 > 100000"
-                                                    },
-                                                    {
-                                                        "Name": "Aggregate"
                                                     }
                                                 ],
                                                 "PlanNodeId": 3,

@@ -267,7 +267,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         };
 
         TDistribution GetDistribution(const bool verbose = false) {
-            const TString selectQuery = "PRAGMA Kikimr.OptUseFinalizeByKey='true';SELECT COUNT(*) as c, field FROM `" + TablePath + "` GROUP BY field ORDER BY field";
+            const TString selectQuery = "SELECT COUNT(*) as c, field FROM `" + TablePath + "` GROUP BY field ORDER BY field";
 
             auto tableClient = KikimrRunner.GetTableClient();
             auto rows = ExecuteScanQuery(tableClient, selectQuery, verbose);
@@ -1882,7 +1882,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         {
             TString query = R"(
                 --!syntax_v1
-                PRAGMA Kikimr.OptUseFinalizeByKey;
                 SELECT
                     level, COUNT(level)
                 FROM `/Root/olapStore/olapTable`
@@ -2120,7 +2119,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             if (!Pushdown) {
                 queryFixed << "PRAGMA Kikimr.OptEnableOlapPushdown = \"false\";" << Endl;
             }
-            queryFixed << "PRAGMA Kikimr.OptUseFinalizeByKey;" << Endl;
 
             queryFixed << Query << Endl;
             Cerr << "REQUEST:\n" << queryFixed << Endl;

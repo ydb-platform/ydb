@@ -376,13 +376,15 @@ struct TSchemeCacheRequest {
 
 struct TSchemeCacheRequestContext : TAtomicRefCount<TSchemeCacheRequestContext>, TNonCopyable {
     TActorId Sender;
+    ui64 Cookie;
     ui64 WaitCounter;
     TAutoPtr<TSchemeCacheRequest> Request;
     const TInstant CreatedAt;
     TIntrusivePtr<TDomainInfo> ResolvedDomainInfo; // resolved from DatabaseName
 
-    TSchemeCacheRequestContext(const TActorId& sender, TAutoPtr<TSchemeCacheRequest> request, const TInstant& now = TInstant::Now())
+    TSchemeCacheRequestContext(const TActorId& sender, ui64 cookie, TAutoPtr<TSchemeCacheRequest> request, const TInstant& now = TInstant::Now())
         : Sender(sender)
+        , Cookie(cookie)
         , WaitCounter(0)
         , Request(request)
         , CreatedAt(now)
@@ -391,13 +393,15 @@ struct TSchemeCacheRequestContext : TAtomicRefCount<TSchemeCacheRequestContext>,
 
 struct TSchemeCacheNavigateContext : TAtomicRefCount<TSchemeCacheNavigateContext>, TNonCopyable {
     TActorId Sender;
+    ui64 Cookie;
     ui64 WaitCounter;
     TAutoPtr<TSchemeCacheNavigate> Request;
     const TInstant CreatedAt;
     TIntrusivePtr<TDomainInfo> ResolvedDomainInfo; // resolved from DatabaseName
 
-    TSchemeCacheNavigateContext(const TActorId& sender, TAutoPtr<TSchemeCacheNavigate> request, const TInstant& now = TInstant::Now())
+    TSchemeCacheNavigateContext(const TActorId& sender, ui64 cookie, TAutoPtr<TSchemeCacheNavigate> request, const TInstant& now = TInstant::Now())
         : Sender(sender)
+        , Cookie(cookie)
         , WaitCounter(0)
         , Request(request)
         , CreatedAt(now)

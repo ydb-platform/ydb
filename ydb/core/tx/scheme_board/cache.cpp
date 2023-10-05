@@ -247,7 +247,7 @@ namespace {
                 << ", recipient# " << Context->Sender
                 << ", result# " << Context->Request->ToString(*AppData()->TypeRegistry));
 
-            this->Send(Context->Sender, new TEvResult(Context->Request.Release()));
+            this->Send(Context->Sender, new TEvResult(Context->Request.Release()), 0, Context->Cookie);
             this->PassAway();
         }
 
@@ -2500,7 +2500,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
     template <typename TContext, typename TEvent>
     TIntrusivePtr<TContext> MakeContext(TEvent& ev) const {
-        TIntrusivePtr<TContext> context(new TContext(ev->Sender, ev->Get()->Request, Now()));
+        TIntrusivePtr<TContext> context(new TContext(ev->Sender, ev->Cookie, ev->Get()->Request, Now()));
 
         if (context->Request->DatabaseName) {
             if (auto* db = Cache.FindPtr(CanonizePath(context->Request->DatabaseName))) {
@@ -2603,7 +2603,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
     void Handle(TEvTxProxySchemeCache::TEvInvalidateTable::TPtr& ev) {
         SBC_LOG_D("Handle TEvTxProxySchemeCache::TEvInvalidateTable"
             << ": self# " << SelfId());
-        Send(ev->Sender, new TEvTxProxySchemeCache::TEvInvalidateTableResult(ev->Get()->Sender));
+        Send(ev->Sender, new TEvTxProxySchemeCache::TEvInvalidateTableResult(ev->Get()->Sender), 0, ev->Cookie);
     }
 
     TActorId EnsureWatchCache() {

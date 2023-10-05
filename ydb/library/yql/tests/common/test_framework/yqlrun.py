@@ -303,7 +303,7 @@ class YQLRun(object):
 
         return yql_utils.YQLExecResult(
             proc_result.std_out,
-            yql_utils.hide_source_line_number(err.replace(res_dir, '<tmp_path>')),
+            yql_utils.normalize_source_code_path(err.replace(res_dir, '<tmp_path>')),
             results,
             results_file,
             opt,

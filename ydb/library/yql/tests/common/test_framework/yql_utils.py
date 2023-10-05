@@ -793,7 +793,9 @@ def normalize_table_yson(y):
     return y
 
 
-def hide_source_line_number(s):
+def normalize_source_code_path(s):
+    # remove contrib/
+    s = re.sub(r'\b(contrib/)(ydb/library/yql.*)', r'\2', s)
     # replace line number in source code with 'xxx'
     s = re.sub(r'\b(yql/[\w/]+(?:\.cpp|\.h)):(?:\d+)', r'\1:xxx', s)
     return re.sub(r'(/lib/yql/[\w/]+(?:\.yql|\.sql)):(?:\d+):(?:\d+)', r'\1:xxx:yyy', s)

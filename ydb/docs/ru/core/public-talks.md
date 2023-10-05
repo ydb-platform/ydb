@@ -44,6 +44,7 @@
 
   * [О мероприятии](https://hydraconf.com/talks/d63511d6011a4b458b9c16be675f6897/).
   * [Презентация](https://squidex.jugru.team/api/assets/srm/acbeabc7-56f1-4234-9e97-0e66c33be4ce/hydra-2022-fomichev-nizametdinov-1-.pdf).
+  * [Запись трансляции](https://www.youtube.com/watch?v=Ga2Eg2rbPPc).
   * Описание: In this talk we present an approach to asynchronous replication in YDB that provides the following characteristics: changefeed from source database is sharded among multiple persistent queues, sharded changefeed is applied to the target database in a manner to guarantee target database consistency.
 
 ### 2022: HighLoad++ Foundation 2022 {#highload-foundation-2022}

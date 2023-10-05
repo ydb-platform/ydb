@@ -30,8 +30,8 @@ void TColumnShard::BecomeBroken(const TActorContext& ctx)
 }
 
 void TColumnShard::SwitchToWork(const TActorContext& ctx) {
-    Become(&TThis::StateWork);
-    LOG_S_INFO("Switched to work at " << TabletID() << " actor " << ctx.SelfID);
+    const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("self_id", SelfId());
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "SwitchToWork");
 
     BlobsReadActor = ctx.Register(new NOlap::NBlobOperations::NRead::TActor(TabletID(), SelfId()));
     ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));
@@ -39,11 +39,15 @@ void TColumnShard::SwitchToWork(const TActorContext& ctx) {
     for (auto&& i : TablesManager.GetTables()) {
         ActivateTiering(i.first, i.second.GetTieringUsage());
     }
+
+    Become(&TThis::StateWork);
     SignalTabletActive(ctx);
 }
 
-void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
-    LOG_S_DEBUG("OnActivateExecutor at " << TabletID() << " actor " << ctx.SelfID);
+void TColumnShard::OnActivateExecutor(const TActorContext&) {
+    const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("self_id", SelfId());
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "OnActivateExecutor");
+
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr.release());
 
     const auto selfActorId = SelfId();
@@ -60,6 +64,7 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
 void TColumnShard::Handle(TEvPrivate::TEvTieringModified::TPtr& /*ev*/, const TActorContext& ctx) {
     OnTieringModified();
     if (!TiersInitializedFlag) {
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "initialize_tiring_finished");
         TiersInitializedFlag = true;
         auto& icb = *AppData(ctx)->Icb;
         Limits.RegisterControls(icb);
@@ -244,7 +249,7 @@ void TColumnShard::UpdateIndexCounters() {
 
 ui64 TColumnShard::MemoryUsage() const {
     ui64 memory =
-        ProgressTxController.GetMemoryUsage() +
+        ProgressTxController->GetMemoryUsage() +
         ScanTxInFlight.size() * (sizeof(ui64) + sizeof(TInstant)) +
         AltersInFlight.size() * sizeof(TAlterMeta) +
         CommitsInFlight.size() * sizeof(TCommitMeta) +

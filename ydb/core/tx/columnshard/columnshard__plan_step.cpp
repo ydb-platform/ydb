@@ -62,7 +62,7 @@ bool TTxPlanStep::Execute(TTransactionContext& txc, const TActorContext& ctx) {
         ui64 lastTxId = 0;
         for (ui64 txId : txIds) {
             Y_VERIFY(lastTxId < txId, "Transactions must be sorted and unique");
-            auto planResult = Self->ProgressTxController.PlanTx(step, txId, txc);
+            auto planResult = Self->ProgressTxController->PlanTx(step, txId, txc);
             switch (planResult) {
                 case TTxController::EPlanResult::Skipped:
                 {
@@ -104,7 +104,7 @@ bool TTxPlanStep::Execute(TTransactionContext& txc, const TActorContext& ctx) {
 
     Self->IncCounter(COUNTER_PLAN_STEP_ACCEPTED);
 
-    if (plannedCount > 0 || Self->ProgressTxController.HaveOutdatedTxs()) {
+    if (plannedCount > 0 || Self->ProgressTxController->HaveOutdatedTxs()) {
         Self->EnqueueProgressTx(ctx);
     }
     return true;

@@ -144,23 +144,23 @@ bool TColumnShard::TAlterMeta::Validate(const NOlap::ISnapshotSchema::TPtr& sche
 class TColumnShard::TStoragesManager: public NOlap::IStoragesManager {
 private:
     using TBase = NOlap::IStoragesManager;
-    TColumnShard* Shard;
+    TColumnShard& Shard;
 protected:
     virtual std::shared_ptr<NOlap::IBlobsStorageOperator> DoBuildOperator(const TString& storageId) override {
         if (storageId == TBase::DefaultStorageId) {
-            return std::make_shared<NOlap::NBlobOperations::NBlobStorage::TOperator>(storageId, Shard->SelfId(), Shard->Info(), Shard->Executor()->Generation());
-        } else if (!Shard->Tiers) {
+            return std::make_shared<NOlap::NBlobOperations::NBlobStorage::TOperator>(storageId, Shard.SelfId(), Shard.Info(), Shard.Executor()->Generation());
+        } else if (!Shard.Tiers) {
             return nullptr;
         } else {
 #ifndef KIKIMR_DISABLE_S3_OPS
-            return std::make_shared<NOlap::NBlobOperations::NTier::TOperator>(storageId, *Shard);
+            return std::make_shared<NOlap::NBlobOperations::NTier::TOperator>(storageId, Shard);
 #else
             return nullptr;
 #endif
         }
     }
 public:
-    TStoragesManager(TColumnShard* shard)
+    TStoragesManager(TColumnShard& shard)
         : Shard(shard) {
 
     }
@@ -169,8 +169,8 @@ public:
 TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, nullptr)
-    , ProgressTxController(*this)
-    , StoragesManager(std::make_shared<TStoragesManager>(this))
+    , ProgressTxController(std::make_unique<TTxController>(*this))
+    , StoragesManager(std::make_shared<TStoragesManager>(*this))
     , InFlightReadsTracker(StoragesManager)
     , TablesManager(StoragesManager)
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
@@ -276,7 +276,7 @@ void TColumnShard::RescheduleWaitingReads() {
 }
 
 TRowVersion TColumnShard::GetMaxReadVersion() const {
-    auto plannedTx = ProgressTxController.GetPlannedTx();
+    auto plannedTx = ProgressTxController->GetPlannedTx();
     if (plannedTx) {
         // We may only read just before the first transaction in the queue
         return TRowVersion(plannedTx->Step, plannedTx->TxId).Prev();
@@ -402,7 +402,7 @@ bool TColumnShard::AbortTx(const ui64 txId, const NKikimrTxColumnShard::ETransac
             break;
         }
         case NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE: {
-            if (!OperationsManager.AbortTransaction(*this, txId, txc)) {
+            if (!OperationsManager->AbortTransaction(*this, txId, txc)) {
                 return false;
             }
             break;
@@ -943,6 +943,7 @@ void TColumnShard::ActivateTiering(const ui64 pathId, const TString& useTiering)
 }
 
 void TColumnShard::Enqueue(STFUNC_SIG) {
+    const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("self_id", SelfId());
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvPrivate::TEvTieringModified, Handle);
         default:

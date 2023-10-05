@@ -59,7 +59,7 @@ namespace NKikimr::NColumnShard {
         TWriteId LastWriteId = TWriteId(0);
 
     public:
-        bool Init(NTabletFlatExecutor::TTransactionContext& txc);
+        bool Load(NTabletFlatExecutor::TTransactionContext& txc);
 
         TWriteOperation::TPtr GetOperation(const TWriteId writeId) const;
         bool CommitTransaction(TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot);

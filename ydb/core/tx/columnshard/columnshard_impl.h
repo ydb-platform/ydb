@@ -278,8 +278,8 @@ protected:
     }
 
 private:
-    TTxController ProgressTxController;
-    TOperationsManager OperationsManager;
+    std::unique_ptr<TTxController> ProgressTxController;
+    std::unique_ptr<TOperationsManager> OperationsManager;
 
     struct TAlterMeta {
         NKikimrTxColumnShard::TSchemaTxBody Body;

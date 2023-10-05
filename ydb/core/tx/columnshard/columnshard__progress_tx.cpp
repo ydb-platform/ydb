@@ -68,7 +68,7 @@ public:
         LOG_S_DEBUG(TxPrefix() << "execute" << TxSuffix());
         Y_VERIFY(Self->ProgressTxInFlight);
 
-        size_t removedCount = Self->ProgressTxController.CleanExpiredTxs(txc);
+        size_t removedCount = Self->ProgressTxController->CleanExpiredTxs(txc);
         if (removedCount > 0) {
             // We cannot continue with this transaction, start a new transaction
             Self->Execute(new TTxProgressTx(Self), ctx);
@@ -76,7 +76,7 @@ public:
         }
 
         // Process a single transaction at the front of the queue
-        auto plannedItem = Self->ProgressTxController.StartPlannedTx();
+        auto plannedItem = Self->ProgressTxController->StartPlannedTx();
         if (!!plannedItem) {
             ui64 step = plannedItem->PlanStep;
             ui64 txId = plannedItem->TxId;
@@ -123,7 +123,7 @@ public:
                 }
                 case NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE: {
                     NOlap::TSnapshot snapshot(step, txId);
-                    Y_VERIFY(Self->OperationsManager.CommitTransaction(*Self, txId, txc, snapshot));
+                    Y_VERIFY(Self->OperationsManager->CommitTransaction(*Self, txId, txc, snapshot));
                     Trigger = ETriggerActivities::POST_INSERT;
                     break;
                 }
@@ -135,12 +135,12 @@ public:
             // Currently transactions never fail and there are no dependencies between them
             TxResults.emplace_back(TResultEvent(std::move(txInfo), NKikimrTxColumnShard::SUCCESS));
 
-            Self->ProgressTxController.FinishPlannedTx(txId, txc);
+            Self->ProgressTxController->FinishPlannedTx(txId, txc);
             Self->RescheduleWaitingReads();
         }
 
         Self->ProgressTxInFlight = false;
-        if (!!Self->ProgressTxController.GetPlannedTx()) {
+        if (!!Self->ProgressTxController->GetPlannedTx()) {
             Self->EnqueueProgressTx(ctx);
         }
         return true;
@@ -154,7 +154,7 @@ public:
         }
 
         for (auto& res : TxResults) {
-            Self->ProgressTxController.CompleteRunningTx(TTxController::TPlanQueueItem(res.TxInfo.PlanStep, res.TxInfo.TxId));
+            Self->ProgressTxController->CompleteRunningTx(TTxController::TPlanQueueItem(res.TxInfo.PlanStep, res.TxInfo.TxId));
 
             auto event = res.MakeEvent(Self->TabletID());
             ctx.Send(res.TxInfo.Source, event.release(), 0, res.TxInfo.Cookie);
@@ -184,7 +184,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvCheckPlannedTransaction::TPtr& ev, 
     ui64 txId = record.GetTxId();
     LOG_S_DEBUG("CheckTransaction planStep " << step << " txId " << txId << " at tablet " << TabletID());
 
-    auto frontTx = ProgressTxController.GetFrontTx();
+    auto frontTx = ProgressTxController->GetFrontTx();
     bool finished = step < frontTx.Step || (step == frontTx.Step && txId < frontTx.TxId);
     if (finished) {
         auto txKind = NKikimrTxColumnShard::ETransactionKind::TX_KIND_COMMIT;

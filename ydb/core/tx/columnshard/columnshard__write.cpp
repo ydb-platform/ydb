@@ -75,7 +75,7 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActo
             auto result = std::make_unique<TEvColumnShard::TEvWriteResult>(TabletID(), writeMeta, errCode);
             ctx.Send(writeMeta.GetSource(), result.release());
         } else {
-            auto operation = OperationsManager.GetOperation((TWriteId)writeMeta.GetWriteId());
+            auto operation = OperationsManager->GetOperation((TWriteId)writeMeta.GetWriteId());
             Y_VERIFY(operation);
             auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(operation->GetTxId(), NKikimrDataEvents::TEvWriteResult::ERROR, "put data fails");
             ctx.Send(writeMeta.GetSource(), result.release());
@@ -216,7 +216,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     }
 
     auto wg = WritesMonitor.RegisterWrite(arrowData->GetSize());
-    auto operation = OperationsManager.RegisterOperation(txId);
+    auto operation = OperationsManager->RegisterOperation(txId);
     Y_VERIFY(operation);
     operation->Start(*this, tableId, arrowData, source, ctx);
 }

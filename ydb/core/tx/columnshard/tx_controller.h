@@ -51,8 +51,6 @@ private:
 public:
     TTxController(TColumnShard& owner);
 
-    void Clear();
-
     ui64 GetMemoryUsage() const;
     bool HaveOutdatedTxs() const;
 

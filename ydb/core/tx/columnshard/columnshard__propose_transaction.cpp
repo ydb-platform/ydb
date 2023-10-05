@@ -113,7 +113,7 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
             }
 
             // Always persist the latest metadata, this may include an updated seqno
-            Self->ProgressTxController.RegisterTx(txId, txKind, txBody, Ev->Get()->GetSource(), Ev->Cookie, txc);
+            Self->ProgressTxController->RegisterTx(txId, txKind, txBody, Ev->Get()->GetSource(), Ev->Cookie, txc);
 
             if (!Self->AltersInFlight.contains(txId)) {
                 Self->AltersInFlight.emplace(txId, std::move(meta));
@@ -131,7 +131,7 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
             if (Self->CommitsInFlight.contains(txId)) {
                 LOG_S_DEBUG(TxPrefix() << "CommitTx (retry) TxId " << txId << TxSuffix());
 
-                auto txInfoPtr = Self->ProgressTxController.GetTxInfo(txId);
+                auto txInfoPtr = Self->ProgressTxController->GetTxInfo(txId);
                 Y_VERIFY(txInfoPtr);
 
                 if (txInfoPtr->Source != Ev->Get()->GetSource() || txInfoPtr->Cookie != Ev->Cookie) {
@@ -192,7 +192,7 @@ bool TTxProposeTransaction::Execute(TTransactionContext& txc, const TActorContex
                 Self->AddLongTxWrite(writeId, txId);
             }
 
-            const auto& txInfo = Self->ProgressTxController.RegisterTxWithDeadline(txId, txKind, txBody, Ev->Get()->GetSource(), Ev->Cookie, txc);
+            const auto& txInfo = Self->ProgressTxController->RegisterTxWithDeadline(txId, txKind, txBody, Ev->Get()->GetSource(), Ev->Cookie, txc);
             minStep = txInfo.MinStep;
             maxStep = txInfo.MaxStep;
 

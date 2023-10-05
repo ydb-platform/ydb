@@ -22,12 +22,6 @@ ui64 TTxController::GetAllowedStep() const {
     return Max(Owner.GetOutdatedStep() + 1, TAppData::TimeProvider->Now().MilliSeconds());
 }
 
-void TTxController::Clear() {
-    BasicTxInfo.clear();
-    DeadlineQueue.clear();
-    PlanQueue.clear();
-}
-
 ui64 TTxController::GetMemoryUsage() const {
     return  BasicTxInfo.size() * sizeof(TBasicTxInfo) +
             DeadlineQueue.size() * sizeof(TPlanQueueItem) +

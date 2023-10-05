@@ -19,7 +19,7 @@ public:
 
         const auto* msg = Ev->Get();
         const ui64 txId = msg->Record.GetTxId();
-        Self->ProgressTxController.CancelTx(txId, txc);
+        Self->ProgressTxController->CancelTx(txId, txc);
         return true;
     }
 

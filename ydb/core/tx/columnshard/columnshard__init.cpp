@@ -24,6 +24,8 @@ public:
     void Complete(const TActorContext& ctx) override;
     TTxType GetTxType() const override { return TXTYPE_INIT; }
 
+private:
+    bool Precharge(TTransactionContext& txc);
     void SetDefaults();
     bool ReadEverything(TTransactionContext& txc, const TActorContext& ctx);
 };
@@ -37,7 +39,6 @@ void TTxInit::SetDefaults() {
     Self->LastPlannedTxId = 0;
     Self->OwnerPathId = 0;
     Self->OwnerPath.clear();
-    Self->ProgressTxController.Clear();
     Self->AltersInFlight.clear();
     Self->CommitsInFlight.clear();
     Self->TablesManager.Clear();
@@ -45,8 +46,7 @@ void TTxInit::SetDefaults() {
     Self->LongTxWritesByUniqueId.clear();
 }
 
-bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
-{
+bool TTxInit::Precharge(TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
 
     bool ready = true;
@@ -76,30 +76,52 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     if (!ready) {
         return false;
     }
+    return true;
+}
 
+bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx) {
+    if (!Precharge(txc)) {
+        return false;
+    }
+
+    NIceDb::TNiceDb db(txc.DB);
     TBlobGroupSelector dsGroupSelector(Self->Info());
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
     {
-        std::unique_ptr<NOlap::TInsertTable> localInsertTable = std::make_unique<NOlap::TInsertTable>();
+        ACFL_INFO("step", "TInsertTable::Load_Start");
+        auto localInsertTable = std::make_unique<NOlap::TInsertTable>();
         if (!localInsertTable->Load(dbTable, TAppData::TimeProvider->Now())) {
-            ACFL_ERROR("event", "cannot load insert table");
+            ACFL_ERROR("step", "TInsertTable::Load_Fails");
             return false;
         }
-        Self->InsertTable = std::move(localInsertTable);
+        ACFL_INFO("step", "TInsertTable::Load_Finish");
+        Self->InsertTable.swap(localInsertTable);
     }
 
-    if (!Self->ProgressTxController.Load(txc)) {
-        ACFL_ERROR("event", "ProgressTxController");
-        return false;
+    {
+        ACFL_INFO("step", "TTxController::Load_Start");
+        auto localTxController = std::make_unique<TTxController>(*Self);
+         if (!localTxController->Load(txc)) {
+            ACFL_ERROR("step", "TTxController::Load_Fails");
+            return false;
+        }
+        ACFL_INFO("step", "TTxController::Load_Finish");
+        Self->ProgressTxController.swap(localTxController);
     }
 
-    if (!Self->OperationsManager.Init(txc)) {
-        ACFL_ERROR("event", "OperationsManager::Init");
-        return false;
+    {
+        ACFL_INFO("step", "TOperationsManager::Load_Start");
+        auto localOperationsManager = std::make_unique<TOperationsManager>();
+         if (!localOperationsManager->Load(txc)) {
+            ACFL_ERROR("step", "TOperationsManager::Load_Fails");
+            return false;
+        }
+        ACFL_INFO("step", "TOperationsManager::Load_Finish");
+        Self->OperationsManager.swap(localOperationsManager);
     }
+
     {
         TBlobManagerDb blobManagerDb(txc.DB);
-
         for (auto&& i : Self->StoragesManager->GetStorages()) {
             if (!i.second->Load(blobManagerDb)) {
                 ACFL_ERROR("event", "storages manager load")("storage", i.first);
@@ -108,20 +130,23 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
         }
     }
     {
+        ACFL_INFO("step", "TTablesManager::Load_Start");
         TTablesManager tManagerLocal(Self->StoragesManager);
         THashSet<TUnifiedBlobId> lostEvictions;
         if (!tManagerLocal.InitFromDB(db, Self->TabletID())) {
-            ACFL_ERROR("event", "InitFromDB");
+            ACFL_ERROR("step", "TTablesManager::InitFromDB_Fails");
             return false;
         }
         if (!tManagerLocal.LoadIndex(dbTable, lostEvictions)) {
-            ACFL_ERROR("event", "load index");
+            ACFL_ERROR("step", "TTablesManager::Load_Fails");
             return false;
         }
         Self->TablesManager = std::move(tManagerLocal);
+
         Self->SetCounter(COUNTER_TABLES, Self->TablesManager.GetTables().size());
         Self->SetCounter(COUNTER_TABLE_PRESETS, Self->TablesManager.GetSchemaPresets().size());
         Self->SetCounter(COUNTER_TABLE_TTLS, Self->TablesManager.GetTtl().PathsCount());
+        ACFL_INFO("step", "TTablesManager::Load_Finish");
     }
 
     { // Load long tx writes
@@ -161,8 +186,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
 }
 
 bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
-    NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID());
-    Y_UNUSED(txc);
+    NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("event", "initialize_shard");
     LOG_S_DEBUG("TTxInit.Execute at tablet " << Self->TabletID());
 
     try {

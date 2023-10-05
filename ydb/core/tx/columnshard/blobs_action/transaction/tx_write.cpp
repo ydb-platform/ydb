@@ -39,7 +39,7 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
     if (writeMeta.HasLongTxId()) {
         AFL_VERIFY(PutBlobResult->Get()->GetBlobData().size() == 1)("count", PutBlobResult->Get()->GetBlobData().size());
     } else {
-        operation = Self->OperationsManager.GetOperation((TWriteId)writeMeta.GetWriteId());
+        operation = Self->OperationsManager->GetOperation((TWriteId)writeMeta.GetWriteId());
         Y_VERIFY(operation);
         Y_VERIFY(operation->GetStatus() == EOperationStatus::Started);
     }
@@ -70,9 +70,9 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
 
     if (operation) {
         operation->OnWriteFinish(txc, writeIds);
-        auto txInfo = Self->ProgressTxController.RegisterTxWithDeadline(operation->GetTxId(), NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE, "", writeMeta.GetSource(), 0, txc);
+        auto txInfo = Self->ProgressTxController->RegisterTxWithDeadline(operation->GetTxId(), NKikimrTxColumnShard::TX_KIND_COMMIT_WRITE, "", writeMeta.GetSource(), 0, txc);
         Y_UNUSED(txInfo);
-        NEvents::TDataEvents::TCoordinatorInfo tInfo = Self->ProgressTxController.GetCoordinatorInfo(operation->GetTxId());
+        NEvents::TDataEvents::TCoordinatorInfo tInfo = Self->ProgressTxController->GetCoordinatorInfo(operation->GetTxId());
         Result = NEvents::TDataEvents::TEvWriteResult::BuildPrepared(operation->GetTxId(), tInfo);
     } else {
         Y_VERIFY(writeIds.size() == 1);

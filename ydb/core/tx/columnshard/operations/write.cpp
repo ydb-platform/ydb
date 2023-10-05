@@ -84,7 +84,7 @@ namespace NKikimr::NColumnShard {
         owner.InsertTable->Abort(dbTable, writeIds);
     }
 
-    bool TOperationsManager::Init(NTabletFlatExecutor::TTransactionContext& txc) {
+    bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
         NIceDb::TNiceDb db(txc.DB);
         auto rowset = db.Table<Schema::Operations>().Select();
         if (!rowset.IsReady()) {

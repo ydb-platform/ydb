@@ -903,6 +903,10 @@ namespace NKikimr {
                                     TABLED() {str << "VDisk LocalDb Recovery";}
                                     TABLED() {THtmlLightSignalRenderer(light, s).Output(str);}
                                 }
+                                TABLER() {
+                                    TABLED() {str << "Read only";}
+                                    TABLED() {str << (Config->BaseInfo.ReadOnly ? "True" : "False");}
+                                }
                                 if (VDiskMonGroup.VDiskState() == NKikimrWhiteboard::PDiskError) {
                                     TABLER() {
                                         TABLED() {str << "Error Details";}

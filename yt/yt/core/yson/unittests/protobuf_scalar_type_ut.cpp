@@ -11,6 +11,8 @@ namespace {
 
 using namespace google::protobuf;
 
+////////////////////////////////////////////////////////////////////////////////
+
 #define EXPECT_SCALAR_TYPE(messageType, path, expectedType) \
     do { \
         auto type = ReflectProtobufMessageType<NProto::messageType>(); \
@@ -184,6 +186,8 @@ TEST(TProtobufScalarTypeTest, MapNestedTypes)
     EXPECT_SCALAR_TYPE(TExampleMessage, "/nested_message_map/world/string_field",
         FieldDescriptor::TYPE_STRING);
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
 } // namespace NYT::NYson

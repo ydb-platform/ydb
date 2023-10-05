@@ -20,7 +20,7 @@ namespace NYT {
 struct IMemoryReferenceTracker
     : public TRefCounted
 {
-     //! Tracks reference in a tracker while the reference itself is alive.
+    //! Tracks reference in a tracker while the reference itself is alive.
     virtual TSharedRef Track(
         TSharedRef reference,
         bool keepExistingTracking = false) = 0;

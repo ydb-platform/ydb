@@ -25,6 +25,9 @@ struct TBootQueue {
             case TTabletTypes::BlobDepot:
                 priority = 2;
                 break;
+            case TTabletTypes::ColumnShard:
+                priority = 0;
+                break;
             default:
                 if (tablet.IsLeader()) {
                     priority = 1;

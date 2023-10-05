@@ -23,7 +23,8 @@ public:
         AddHandler({TDqSourceWideWrap::CallableName()}, Hndl(&TDqsDataSourceTypeAnnotationTransformer::HandleSourceWrap<true, false>));
         AddHandler({TDqSourceWideBlockWrap::CallableName()}, Hndl(&TDqsDataSourceTypeAnnotationTransformer::HandleSourceWrap<true, true>));
         AddHandler({TDqReadWrap::CallableName()}, Hndl(&TDqsDataSourceTypeAnnotationTransformer::HandleReadWrap));
-        AddHandler({TDqReadWideWrap::CallableName()}, Hndl(&TDqsDataSourceTypeAnnotationTransformer::HandleWideReadWrap));
+        AddHandler({TDqReadWideWrap::CallableName()}, Hndl(&TDqsDataSourceTypeAnnotationTransformer::HandleWideReadWrap<false>));
+        AddHandler({TDqReadBlockWideWrap::CallableName()}, Hndl(&TDqsDataSourceTypeAnnotationTransformer::HandleWideReadWrap<true>));
         AddHandler({TDqSource::CallableName()}, Hndl(&NDq::AnnotateDqSource));
         AddHandler({TDqPhyLength::CallableName()}, Hndl(&NDq::AnnotateDqPhyLength));
 
@@ -113,6 +114,7 @@ private:
         return TStatus::Ok;
     }
 
+    template<bool IsBlock>
     TStatus HandleWideReadWrap(const TExprNode::TPtr& input, TExprContext& ctx) {
         if (!EnsureMinMaxArgsCount(*input, 1, 3, ctx)) {
             return TStatus::Error;
@@ -145,8 +147,15 @@ private:
         const auto structType = readerType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
         TTypeAnnotationNode::TListType types;
         const auto& items = structType->GetItems();
-        types.reserve(items.size());
+        types.reserve(items.size() + IsBlock);
         std::transform(items.cbegin(), items.cend(), std::back_inserter(types), std::bind(&TItemExprType::GetItemType, std::placeholders::_1));
+        if constexpr (IsBlock) {
+            for (auto& type : types) {
+                type = ctx.MakeType<TBlockExprType>(type);
+            }
+
+            types.push_back(ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
+        }
 
         input->SetTypeAnn(ctx.MakeType<TFlowExprType>(ctx.MakeType<TMultiExprType>(types)));
         return TStatus::Ok;

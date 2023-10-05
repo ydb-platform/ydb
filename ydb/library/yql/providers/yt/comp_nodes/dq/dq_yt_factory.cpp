@@ -9,8 +9,8 @@ using namespace NKikimr::NMiniKQL;
 TComputationNodeFactory GetDqYtFactory(NKikimr::NMiniKQL::IStatsRegistry* jobStats) {
     return [=] (TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
         TStringBuf name = callable.GetType()->GetName();
-        if (name == "DqYtRead") {
-            return NDqs::WrapDqYtRead(callable, jobStats, ctx);
+        if (name == "DqYtRead" || name == "DqYtBlockRead") {
+            return NDqs::WrapDqYtRead(callable, jobStats, ctx, name == "DqYtBlockRead");
         }
 
         if (name == "YtDqRowsWideWrite") {

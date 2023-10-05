@@ -56,7 +56,6 @@ constexpr bool DEFAULT_USE_RPC_READER_IN_DQ = false;
 constexpr size_t DEFAULT_RPC_READER_INFLIGHT = 1;
 constexpr TDuration DEFAULT_RPC_READER_TIMEOUT = TDuration::Seconds(120);
 
-
 constexpr auto DEFAULT_SWITCH_MEMORY_LIMIT = 128_MB;
 
 constexpr ui32 DEFAULT_MAX_INPUT_TABLES = 3000;

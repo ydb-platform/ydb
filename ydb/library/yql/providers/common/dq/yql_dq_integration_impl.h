@@ -15,6 +15,7 @@ public:
     TMaybe<TOptimizerStatistics> ReadStatistics(const TExprNode::TPtr& readWrap, TExprContext& ctx) override;
     void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) override;
     TMaybe<bool> CanWrite(const TExprNode& write, TExprContext& ctx) override;
+    bool CanBlockRead(const NNodes::TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx) override;
     TExprNode::TPtr WrapWrite(const TExprNode::TPtr& write, TExprContext& ctx) override;
     bool CanFallback() override;
     void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sourceType) override;
@@ -23,6 +24,8 @@ public:
     void Annotate(const TExprNode& node, THashMap<TString, TString>& params) override;
     bool PrepareFullResultTableParams(const TExprNode& root, TExprContext& ctx, THashMap<TString, TString>& params, THashMap<TString, TString>& secureParams) override;
     void WriteFullResultTableRef(NYson::TYsonWriter& writer, const TVector<TString>& columns, const THashMap<TString, TString>& graphParams) override;
+protected:
+    bool CanBlockReadTypes(const TStructExprType* node);
 };
 
 } // namespace NYql

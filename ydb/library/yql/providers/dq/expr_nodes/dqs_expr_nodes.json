@@ -27,6 +27,11 @@
       "Match": {"Type": "Callable", "Name": "DqReadWideWrap"}
     },
     {
+      "Name": "TDqReadBlockWideWrap",
+      "Base": "TDqReadWrapBase",
+      "Match": {"Type": "Callable", "Name": "DqReadBlockWideWrap"}
+    },
+    {
       "Name": "TDqWrite",
       "Base": "TCallable",
       "Match": {"Type": "Callable", "Name": "DqWrite"},

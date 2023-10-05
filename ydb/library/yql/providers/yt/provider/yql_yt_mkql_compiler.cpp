@@ -288,7 +288,8 @@ TRuntimeNode BuildDqYtInputCall(
     const TYtState::TPtr& state,
     NCommon::TMkqlBuildContext& ctx,
     size_t inflight,
-    size_t timeout)
+    size_t timeout,
+    bool enableBlockReader)
 {
     NYT::TNode specNode = NYT::TNode::CreateMap();
     NYT::TNode& tablesNode = specNode[YqlIOSpecTables];
@@ -363,12 +364,12 @@ TRuntimeNode BuildDqYtInputCall(
             auto res = uniqSpecs.emplace(NYT::NodeToCanonicalYsonString(specNode), refName);
             if (res.second) {
                 registryNode[refName] = specNode;
-            }
-            else {
+            } else {
                 refName = res.first->second;
             }
             tablesNode.Add(refName);
-            auto skiffNode = SingleTableSpecToInputSkiff(specNode, structColumns, true, true, false);
+            // TODO() Enable range indexes
+            auto skiffNode = SingleTableSpecToInputSkiff(specNode, structColumns, true, !enableBlockReader, false);
             const auto tmpFolder = GetTablesTmpFolder(*state->Configuration);
             auto tableName = pathInfo.Table->Name;
             if (pathInfo.Table->IsAnonymous && !TYtTableInfo::HasSubstAnonymousLabel(pathInfo.Table->FromNode.Cast())) {
@@ -402,7 +403,7 @@ TRuntimeNode BuildDqYtInputCall(
     auto server = state->Gateway->GetClusterServer(clusterName);
     YQL_ENSURE(server, "Invalid YT cluster: " << clusterName);
 
-    TCallableBuilder call(ctx.ProgramBuilder.GetTypeEnvironment(), "DqYtRead", outputType);
+    TCallableBuilder call(ctx.ProgramBuilder.GetTypeEnvironment(), enableBlockReader ? "DqYtBlockRead" : "DqYtRead", outputType);
 
     call.Add(ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(server));
     call.Add(ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(tokenName));
@@ -475,6 +476,35 @@ void RegisterYtMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
 
 void RegisterDqYtMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler, const TYtState::TPtr& state) {
 
+    compiler.ChainCallable(TDqReadBlockWideWrap::CallableName(),
+        [state](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
+            if (const auto& wrapper = TDqReadBlockWideWrap(&node); wrapper.Input().Maybe<TYtReadTable>().IsValid()) {
+                const auto ytRead = wrapper.Input().Cast<TYtReadTable>();
+                const auto readType = ytRead.Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back();
+                const auto inputItemType = NCommon::BuildType(wrapper.Input().Ref(), GetSeqItemType(*readType), ctx.ProgramBuilder);
+                const auto cluster = ytRead.DataSource().Cluster().StringValue();
+                size_t inflight = state->Configuration->UseRPCReaderInDQ.Get(cluster).GetOrElse(DEFAULT_USE_RPC_READER_IN_DQ) ? state->Configuration->DQRPCReaderInflight.Get(cluster).GetOrElse(DEFAULT_RPC_READER_INFLIGHT) : 0;
+                size_t timeout = state->Configuration->DQRPCReaderTimeout.Get(cluster).GetOrElse(DEFAULT_RPC_READER_TIMEOUT).MilliSeconds();
+                const auto outputType = NCommon::BuildType(wrapper.Ref(), *wrapper.Ref().GetTypeAnn(), ctx.ProgramBuilder);
+                TString tokenName;
+                if (auto secureParams = wrapper.Token()) {
+                    tokenName = secureParams.Cast().Name().StringValue();
+                }
+
+                bool solid = false;
+                for (const auto& flag : wrapper.Flags())
+                    if (solid = flag.Value() == "Solid")
+                        break;
+
+                if (solid)
+                    return BuildDqYtInputCall<false>(outputType, inputItemType, cluster, tokenName, ytRead.Input(), state, ctx, inflight, timeout, true && inflight);
+                else
+                    return BuildDqYtInputCall<true>(outputType, inputItemType, cluster, tokenName, ytRead.Input(), state, ctx, inflight, timeout, true && inflight);
+            }
+
+            return TRuntimeNode();
+        });
+
     compiler.ChainCallable(TDqReadWideWrap::CallableName(),
         [state](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
             if (const auto& wrapper = TDqReadWideWrap(&node); wrapper.Input().Maybe<TYtReadTable>().IsValid()) {
@@ -496,9 +526,9 @@ void RegisterDqYtMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler, con
                         break;
 
                 if (solid)
-                    return BuildDqYtInputCall<false>(outputType, inputItemType, cluster, tokenName, ytRead.Input(), state, ctx, isRPC, timeout);
+                    return BuildDqYtInputCall<false>(outputType, inputItemType, cluster, tokenName, ytRead.Input(), state, ctx, isRPC, timeout, false);
                 else
-                    return BuildDqYtInputCall<true>(outputType, inputItemType, cluster, tokenName, ytRead.Input(), state, ctx, isRPC, timeout);
+                    return BuildDqYtInputCall<true>(outputType, inputItemType, cluster, tokenName, ytRead.Input(), state, ctx, isRPC, timeout, false);
             }
 
             return TRuntimeNode();

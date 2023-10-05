@@ -31,7 +31,7 @@ public:
     }
 
     NMiniKQL::TCallableVisitFunc operator()(NMiniKQL::TInternName name) {
-        if (TaskParams.contains("yt") && name == "DqYtRead") {
+        if (TaskParams.contains("yt") && (name == "DqYtRead" || name == "DqYtBlockRead")) {
             return [this](NMiniKQL::TCallable& callable, const NMiniKQL::TTypeEnvironment& env) {
                 using namespace NMiniKQL;
 

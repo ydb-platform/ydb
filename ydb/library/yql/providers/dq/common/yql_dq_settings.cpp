@@ -75,6 +75,7 @@ TDqConfiguration::TDqConfiguration() {
     REGISTER_SETTING(*this, ExportStats);
     REGISTER_SETTING(*this, TaskRunnerStats).Parser([](const TString& v) { return FromString<ETaskRunnerStats>(v); });
     REGISTER_SETTING(*this, _SkipRevisionCheck);
+    REGISTER_SETTING(*this, UseBlockReader);
 }
 
 } // namespace NYql

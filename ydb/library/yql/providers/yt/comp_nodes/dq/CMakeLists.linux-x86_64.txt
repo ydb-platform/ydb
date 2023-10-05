@@ -9,7 +9,11 @@
 
 add_library(yt-comp_nodes-dq)
 target_compile_options(yt-comp_nodes-dq PRIVATE
+  -Wno-unused-parameter
   -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_include_directories(yt-comp_nodes-dq PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/flatbuffers/include
 )
 target_link_libraries(yt-comp_nodes-dq PUBLIC
   contrib-libs-linux-headers
@@ -19,16 +23,23 @@ target_link_libraries(yt-comp_nodes-dq PUBLIC
   providers-yt-comp_nodes
   providers-yt-codec
   providers-common-codec
+  core-formats-arrow
   cpp-mapreduce-interface
   cpp-mapreduce-common
   cpp-yson-node
   yt-yt-core
+  public-udf-arrow
+  libs-apache-arrow
+  contrib-libs-flatbuffers
   yt-yt-client
   yt-client-arrow
   yt-lib-yt_rpc_helpers
 )
 target_sources(yt-comp_nodes-dq PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/comp_nodes/dq/stream_decoder.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_rpc_reader.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_rpc_helpers.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_block_reader.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_reader.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_factory.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/yt/comp_nodes/dq/dq_yt_writer.cpp

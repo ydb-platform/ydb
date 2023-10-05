@@ -233,6 +233,9 @@ private:
 
     void AfterTypeAnnotation(TTransformationPipeline* pipeline) const final {
         pipeline->Add(NDqs::CreateDqsReplacePrecomputesTransformer(*pipeline->GetTypeAnnotationContext(), State_->FunctionRegistry), "ReplacePrecomputes");
+        if (State_->Settings->UseBlockReader.Get().GetOrElse(false)) {
+            pipeline->Add(NDqs::CreateDqsRewritePhyBlockReadOnDqIntegrationTransformer(*pipeline->GetTypeAnnotationContext()), "ReplaceWideReadsWithBlock");
+        }
         bool useWideChannels = State_->Settings->UseWideChannels.Get().GetOrElse(false);
         bool useChannelBlocks = State_->Settings->UseWideBlockChannels.Get().GetOrElse(false);
         NDq::EChannelMode mode;

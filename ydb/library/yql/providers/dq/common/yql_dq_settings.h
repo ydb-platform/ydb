@@ -114,6 +114,7 @@ struct TDqSettings {
     NCommon::TConfSetting<bool, false> ExportStats;
     NCommon::TConfSetting<ETaskRunnerStats, false> TaskRunnerStats;
     NCommon::TConfSetting<bool, false> _SkipRevisionCheck;
+    NCommon::TConfSetting<bool, false> UseBlockReader;
 
     // This options will be passed to executor_actor and worker_actor
     template <typename TProtoConfig>

@@ -22,11 +22,9 @@ struct TReaderState {
 public:
     TParallelFileInputState(const TMkqlIOSpecs& spec,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-        TVector<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr>&& rawInputs,
         size_t blockSize,
         size_t inflight,
-        std::unique_ptr<TSettingsHolder>&& client,
-        TVector<size_t>&& originalIndexes);
+        std::unique_ptr<TSettingsHolder>&& settings);
 
     size_t GetTableIndex() const;
 
@@ -71,12 +69,11 @@ private:
     size_t CurrentRecord_ = 1;
     size_t Inflight_ = 1;
     bool Valid_ = true;
-    std::unique_ptr<TSettingsHolder> Settings_;
     NUdf::TUnboxedValue CurrentValue_;
     std::function<void()> OnNextBlockCallback_;
     NKikimr::NMiniKQL::TSamplingStatTimer TimerAwaiting_;
     TVector<size_t> OriginalIndexes_;
-
+    std::unique_ptr<TSettingsHolder> Settings_;
 };
 
 

@@ -344,6 +344,33 @@ public:
         return false;
     }
 
+    bool CanBlockRead(const NNodes::TExprBase& node, TExprContext&, TTypeAnnotationContext&) override {
+        auto wrap = node.Cast<TDqReadWideWrap>();
+        auto maybeRead = wrap.Input().Maybe<TYtReadTable>();
+        if (!maybeRead) {
+            return false;
+        }
+
+
+        if (!State_->Configuration->UseRPCReaderInDQ.Get(maybeRead.Cast().DataSource().Cluster().StringValue()).GetOrElse(DEFAULT_USE_RPC_READER_IN_DQ)) {
+            return false;
+        }
+
+        const auto structType = GetSeqItemType(maybeRead.Raw()->GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back())->Cast<TStructExprType>();
+        if (!CanBlockReadTypes(structType)) {
+            return false;
+        }
+
+        const TYtSectionList& sectionList = wrap.Input().Cast<TYtReadTable>().Input();
+        for (size_t i = 0; i < sectionList.Size(); ++i) {
+            auto section = sectionList.Item(i);
+            if (!NYql::GetSettingAsColumnList(section.Settings().Ref(), EYtSettingType::SysColumns).empty()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     TMaybe<TOptimizerStatistics> ReadStatistics(const TExprNode::TPtr& read, TExprContext& ctx) override {
         Y_UNUSED(ctx);
         TOptimizerStatistics stat(0, 0);

@@ -1,4 +1,5 @@
 #include "dq_yt_rpc_reader.h"
+#include "dq_yt_rpc_helpers.h"
 
 #include "yt/cpp/mapreduce/common/helpers.h"
 
@@ -11,86 +12,12 @@
 #include <yt/yt/client/api/rpc_proxy/connection.h>
 #include <yt/yt/client/api/rpc_proxy/row_stream.h>
 
-#include <ydb/library/yql/providers/yt/lib/yt_rpc_helpers/yt_convert_helpers.h>
-
 namespace NYql::NDqs {
 
 using namespace NKikimr::NMiniKQL;
 
 namespace {
 TStatKey RPCReaderAwaitingStallTime("Job_RPCReaderAwaitingStallTime", true);
-NYT::NYPath::TRichYPath ConvertYPathFromOld(const NYT::TRichYPath& richYPath) {
-    NYT::NYPath::TRichYPath tableYPath(richYPath.Path_);
-    const auto& rngs = richYPath.GetRanges();
-    if (rngs) {
-        TVector<NYT::NChunkClient::TReadRange> ranges;
-        for (const auto& rng: *rngs) {
-            auto& range = ranges.emplace_back();
-            if (rng.LowerLimit_.Offset_) {
-                range.LowerLimit().SetOffset(*rng.LowerLimit_.Offset_);
-            }
-
-            if (rng.LowerLimit_.TabletIndex_) {
-                range.LowerLimit().SetTabletIndex(*rng.LowerLimit_.TabletIndex_);
-            }
-
-            if (rng.LowerLimit_.RowIndex_) {
-                range.LowerLimit().SetRowIndex(*rng.LowerLimit_.RowIndex_);
-            }
-
-            if (rng.UpperLimit_.Offset_) {
-                range.UpperLimit().SetOffset(*rng.UpperLimit_.Offset_);
-            }
-
-            if (rng.UpperLimit_.TabletIndex_) {
-                range.UpperLimit().SetTabletIndex(*rng.UpperLimit_.TabletIndex_);
-            }
-
-            if (rng.UpperLimit_.RowIndex_) {
-                range.UpperLimit().SetRowIndex(*rng.UpperLimit_.RowIndex_);
-            }
-        }
-        tableYPath.SetRanges(std::move(ranges));
-    }
-
-    if (richYPath.Columns_) {
-        tableYPath.SetColumns(richYPath.Columns_->Parts_);
-    }
-
-    return tableYPath;
-}
-
-class TFakeRPCReader : public NYT::TRawTableReader {
-public:
-    TFakeRPCReader(NYT::TSharedRef&& payload) : Payload_(std::move(payload)), PayloadStream_(Payload_.Begin(), Payload_.Size()) {}
-
-    bool Retry(const TMaybe<ui32>& rangeIndex, const TMaybe<ui64>& rowIndex) override {
-        Y_UNUSED(rangeIndex);
-        Y_UNUSED(rowIndex);
-        return false;
-    }
-
-    void ResetRetries() override {
-
-    }
-
-    bool HasRangeIndices() const override {
-        return true;
-    };
-
-    size_t DoRead(void* buf, size_t len) override {
-        if (!PayloadStream_.Exhausted()) {
-            return PayloadStream_.Read(buf, len);
-        }
-        return 0;
-    };
-
-    virtual ~TFakeRPCReader() override {
-    }
-private:
-    NYT::TSharedRef Payload_;
-    TMemoryInput PayloadStream_;
-};
 }
 #ifdef RPC_PRINT_TIME
 int cnt = 0;
@@ -102,28 +29,21 @@ void print_add(int x) {
 }
 #endif
 
-struct TSettingsHolder {
-    NYT::NApi::IConnectionPtr Connection;
-    NYT::TIntrusivePtr<NYT::NApi::NRpcProxy::TClient> Client;
-};
-
 TParallelFileInputState::TParallelFileInputState(const TMkqlIOSpecs& spec,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    TVector<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr>&& rawInputs,
     size_t blockSize,
     size_t inflight,
-    std::unique_ptr<TSettingsHolder>&& settings,
-    TVector<size_t>&& originalIndexes)
-    : InnerState_(new TInnerState (rawInputs.size()))
-    , StateByReader_(rawInputs.size())
+    std::unique_ptr<TSettingsHolder>&& settings)
+    : InnerState_(new TInnerState (settings->RawInputs.size()))
+    , StateByReader_(settings->RawInputs.size())
     , Spec_(&spec)
     , HolderFactory_(holderFactory)
-    , RawInputs_(std::move(rawInputs))
+    , RawInputs_(std::move(settings->RawInputs))
     , BlockSize_(blockSize)
     , Inflight_(inflight)
-    , Settings_(std::move(settings))
     , TimerAwaiting_(RPCReaderAwaitingStallTime, 100)
-    , OriginalIndexes_(std::move(originalIndexes))
+    , OriginalIndexes_(std::move(settings->OriginalIndexes))
+    , Settings_(std::move(settings))
 {
 #ifdef RPC_PRINT_TIME
     print_add(1);
@@ -277,79 +197,14 @@ bool TParallelFileInputState::NextValue() {
             InnerState_->WaitPromise = NYT::NewPromise<void>();
         }
         CurrentInput_ = result.Input_;
-        CurrentReader_ = MakeIntrusive<TFakeRPCReader>(std::move(result.Value_));
+        CurrentReader_ = MakeIntrusive<TPayloadRPCReader>(std::move(result.Value_));
         MkqlReader_.SetReader(*CurrentReader_, 1, BlockSize_, ui32(OriginalIndexes_[CurrentInput_]), true, StateByReader_[CurrentInput_].CurrentRow, StateByReader_[CurrentInput_].CurrentRange);
         MkqlReader_.Next();
     }
 }
 
 void TDqYtReadWrapperRPC::MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
-    auto connectionConfig = NYT::New<NYT::NApi::NRpcProxy::TConnectionConfig>();
-    connectionConfig->ClusterUrl = ClusterName;
-    connectionConfig->DefaultTotalStreamingTimeout = TDuration::MilliSeconds(Timeout);
-    auto connection = CreateConnection(connectionConfig);
-    auto clientOptions = NYT::NApi::TClientOptions();
-
-    if (Token) {
-        clientOptions.Token = Token;
-    }
-
-    auto client = DynamicPointerCast<NYT::NApi::NRpcProxy::TClient>(connection->CreateClient(clientOptions));
-    Y_VERIFY(client);
-    auto apiServiceProxy = client->CreateApiServiceProxy();
-
-    TVector<NYT::TFuture<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr>> waitFor;
-    TVector<size_t> originalIndexes;
-    size_t inputIdx = 0;
-    for (auto [richYPath, format]: Tables) {
-        if (richYPath.GetRanges() && richYPath.GetRanges()->empty()) {
-            ++inputIdx;
-            continue;
-        }
-
-        originalIndexes.push_back(inputIdx++);
-        auto request = apiServiceProxy.ReadTable();
-        client->InitStreamingRequest(*request);
-        request->ClientAttachmentsStreamingParameters().ReadTimeout = TDuration::MilliSeconds(Timeout);
-
-        TString ppath;
-        auto tableYPath = ConvertYPathFromOld(richYPath);
-
-        NYT::NYPath::ToProto(&ppath, tableYPath);
-        request->set_path(ppath);
-        request->set_desired_rowset_format(NYT::NApi::NRpcProxy::NProto::ERowsetFormat::RF_FORMAT);
-
-        request->set_enable_table_index(true);
-        request->set_enable_range_index(true);
-        request->set_enable_row_index(true);
-        request->set_unordered(Inflight > 1);
-
-        // https://a.yandex-team.ru/arcadia/yt/yt_proto/yt/client/api/rpc_proxy/proto/api_service.proto?rev=r11519304#L2338
-        if (!SamplingSpec.IsUndefined()) {
-            TStringStream ss;
-            SamplingSpec.Save(&ss);
-            request->set_config(ss.Str());
-        }
-        ConfigureTransaction(request, richYPath);
-
-        // Get skiff format yson string
-        TStringStream fmt;
-        format.Config.Save(&fmt);
-        request->set_format(fmt.Str());
-
-        waitFor.emplace_back(std::move(CreateRpcClientInputStream(std::move(request)).ApplyUnique(BIND([](NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr&& stream) {
-            // first packet contains meta, skip it
-            return stream->Read().ApplyUnique(BIND([stream = std::move(stream)](NYT::TSharedRef&&) {
-                return std::move(stream);
-            }));
-        }))));
-    }
-
-    TVector<NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr> rawInputs;
-    NYT::NConcurrency::WaitFor(NYT::AllSucceeded(waitFor)).ValueOrThrow().swap(rawInputs);
-    state = ctx.HolderFactory.Create<TDqYtReadWrapperBase<TDqYtReadWrapperRPC, TParallelFileInputState>::TState>(
-            Specs, ctx.HolderFactory, std::move(rawInputs), 4_MB, Inflight,
-            std::make_unique<TSettingsHolder>(TSettingsHolder{std::move(connection), std::move(client)}), std::move(originalIndexes)
-        );
+    auto settings = CreateInputStreams(false, Token, ClusterName, Timeout, Inflight > 1, Tables, SamplingSpec);
+    state = ctx.HolderFactory.Create<TDqYtReadWrapperBase<TDqYtReadWrapperRPC, TParallelFileInputState>::TState>(Specs, ctx.HolderFactory, 4_MB, Inflight, std::move(settings));
 }
 }

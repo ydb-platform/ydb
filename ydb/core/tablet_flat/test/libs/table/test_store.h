@@ -26,7 +26,6 @@ namespace NTest {
             bool Rooted;
             TVector<TPageId> IndexGroupsPages;
             TVector<TPageId> IndexHistoricPages;
-            TData *Index;
             TData *Scheme;
             TData *Blobs;
             TData *ByKey;
@@ -128,7 +127,6 @@ namespace NTest {
                 Rooted,
                 { Indexes.back() }, 
                 { },
-                GetPage(MainPageCollection, Indexes.back()),
                 GetPage(MainPageCollection, Scheme),
                 GetPage(MainPageCollection, Globs),
                 GetPage(MainPageCollection, ByKey),

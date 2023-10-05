@@ -519,6 +519,8 @@ void TPrivatePageCache::DropSharedBody(TInfo *info, ui32 pageId) {
 TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ProvideBlock(
         NSharedCache::TEvResult::TLoaded&& loaded, TInfo *info)
 {
+    using EPage = NTable::NPage::EPage;
+
     Y_VERIFY_DEBUG(loaded.Page && loaded.Page.IsUsed());
     TPage *page = info->EnsurePage(loaded.PageId);
 
@@ -534,7 +536,12 @@ TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ProvideBlock(
     if (Y_UNLIKELY(page->SharedPending))
         Stats.TotalSharedPending -= page->Size;
 
-    // N.B. we must be careful not to accidentally drop the sticky bit
+    // Note: for now we mark index pages sticky after we load them
+    if (!page->Sticky && EPage(info->PageCollection->Page(page->Id).Type) == EPage::Index) {
+        MarkSticky(page->Id, info);
+    }
+
+    // Note: we must be careful not to accidentally drop the sticky bit
     page->Fill(std::move(loaded.Page), page->Sticky);
     Stats.TotalSharedBody += page->Size;
     Stats.TotalPinnedBody += page->Size;

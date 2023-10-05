@@ -86,7 +86,6 @@ namespace NTest {
                         epoch,
                         TPartScheme::Parse(*eggs.Scheme, eggs.Rooted),
                         { eggs.IndexGroupsPages, eggs.IndexHistoricPages },
-                        *eggs.Index,
                         eggs.Blobs ? new TExtBlobs(*eggs.Blobs, { }) : nullptr,
                         eggs.ByKey ? new TBloom(*eggs.ByKey) : nullptr,
                         eggs.Large ? new TFrames(*eggs.Large) : nullptr,
@@ -118,7 +117,6 @@ namespace NTest {
             if (lay.HasIndex()) {
                 indexGroupsPages.push_back(lay.GetIndex());
             }
-
             for (ui32 pageId : lay.GetGroupIndexes()) {
                 indexGroupsPages.push_back(pageId);
             }
@@ -130,7 +128,6 @@ namespace NTest {
                 true /* rooted page collection */,
                 std::move(indexGroupsPages), 
                 std::move(indexHistoricPages),
-                Store->GetPage(0, lay.HasIndex() ? lay.GetIndex() : undef),
                 Store->GetPage(0, lay.HasScheme() ? lay.GetScheme() : undef),
                 Store->GetPage(0, lay.HasGlobs() ? lay.GetGlobs() : undef),
                 Store->GetPage(0, lay.HasByKey() ? lay.GetByKey() : undef),

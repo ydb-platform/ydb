@@ -124,21 +124,11 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
     Y_VERIFY(Packs && Packs.front());
 
     TVector<TPageId> load;
-    for (auto page: { SchemeId, IndexId, GlobsId,
+    for (auto page: { SchemeId, GlobsId,
                         SmallId, LargeId, ByKeyId,
                         GarbageStatsId, TxIdStatsId }) {
         if (page != Max<TPageId>() && !Packs[0]->Lookup(page))
             load.push_back(page);
-    }
-    for (auto page : GroupIndexesIds) {
-        if (!Packs[0]->Lookup(page)) {
-            load.push_back(page);
-        }
-    }
-    for (auto page : HistoricIndexesIds) {
-        if (!Packs[0]->Lookup(page)) {
-            load.push_back(page);
-        }
     }
 
     if (load) {
@@ -146,7 +136,6 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
     }
 
     auto *scheme = GetPage(SchemeId);
-    auto *index = GetPage(IndexId);
     auto *large = GetPage(LargeId);
     auto *small = GetPage(SmallId);
     auto *blobs = GetPage(GlobsId);
@@ -154,26 +143,12 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
     auto *garbageStats = GetPage(GarbageStatsId);
     auto *txIdStats = GetPage(TxIdStatsId);
 
-    if (scheme == nullptr || index == nullptr) {
-        Y_FAIL("One of scheme or index pages is not loaded");
+    if (scheme == nullptr) {
+        Y_FAIL("Scheme page is not loaded");
     } else if (ByKeyId != Max<TPageId>() && !byKey) {
         Y_FAIL("Filter page must be loaded if it exists");
     } else if (small && Packs.size() != (1 + GroupIndexesIds.size() + 1)) {
         Y_Fail("TPart has small blobs, " << Packs.size() << " page collections");
-    }
-
-    // TODO: stop load indexes
-    for (auto pageId : GroupIndexesIds) {
-        auto* page = GetPage(pageId);
-        if (!page) {
-            Y_Fail("Missing group index page " << pageId);
-        }
-    }
-    for (auto pageId : HistoricIndexesIds) {
-        auto* page = GetPage(pageId);
-        if (!page) {
-            Y_Fail("Missing historic index page " << pageId);
-        }
     }
 
     const auto extra = BlobsLabelFor(Packs[0]->PageCollection->Label());
@@ -202,7 +177,6 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
             epoch,
             TPartScheme::Parse(*scheme, Rooted),
             { std::move(groupIndexesIds), HistoricIndexesIds },
-            *index,
             blobs ? new NPage::TExtBlobs(*blobs, extra) : nullptr,
             byKey ? new NPage::TBloom(*byKey) : nullptr,
             large ? new NPage::TFrames(*large) : nullptr,

@@ -83,7 +83,7 @@ namespace NTable {
         constexpr static bool NeedIn(EPage page) noexcept
         {
             return
-                page == EPage::Scheme || page == EPage::Index
+                page == EPage::Scheme
                 || page == EPage::Frames || page == EPage::Globs
                 || page == EPage::Schem2 || page == EPage::Bloom
                 || page == EPage::GarbageStats

@@ -56,7 +56,6 @@ namespace NTable {
             TEpoch Epoch;
             TIntrusiveConstPtr<TPartScheme> Scheme;
             TIndexPages IndexPages;
-            TSharedData Index;
             TIntrusiveConstPtr<NPage::TExtBlobs> Blobs;
             TIntrusiveConstPtr<NPage::TBloom> ByKey;
             TIntrusiveConstPtr<NPage::TFrames> Large;
@@ -85,7 +84,6 @@ namespace NTable {
             , Large(std::move(params.Large))
             , Small(std::move(params.Small))
             , IndexPages(std::move(params.IndexPages))
-            , Index(std::move(params.Index))
             , ByKey(std::move(params.ByKey))
             , GarbageStats(std::move(params.GarbageStats))
             , TxIdStats(std::move(params.TxIdStats))
@@ -140,7 +138,6 @@ namespace NTable {
             , Large(src.Large)
             , Small(src.Small)
             , IndexPages(src.IndexPages)
-            , Index(src.Index)
             , ByKey(src.ByKey)
             , GarbageStats(src.GarbageStats)
             , Stat(src.Stat)
@@ -159,7 +156,6 @@ namespace NTable {
         const TIntrusiveConstPtr<NPage::TFrames> Large;
         const TIntrusiveConstPtr<NPage::TFrames> Small;
         const TIndexPages IndexPages;
-        const NPage::TIndex Index;
         const TIntrusiveConstPtr<NPage::TBloom> ByKey;
         const TIntrusiveConstPtr<NPage::TGarbageStats> GarbageStats;
         const TIntrusiveConstPtr<NPage::TTxIdStatsPage> TxIdStats;

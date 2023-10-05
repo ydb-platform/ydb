@@ -3173,7 +3173,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     void AddChangefeed(EChangefeedMode mode, EChangefeedFormat format) {
         TKikimrRunner kikimr(TKikimrSettings()
             .SetPQConfig(DefaultPQConfig())
-            .SetEnableChangefeedDynamoDBStreamsFormat(true));
+            .SetEnableChangefeedDynamoDBStreamsFormat(true)
+            .SetEnableChangefeedDebeziumJsonFormat(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -3238,6 +3239,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 case EChangefeedFormat::Unknown:
                     continue;
                 case EChangefeedFormat::DynamoDBStreamsJson:
+                case EChangefeedFormat::DebeziumJson:
                     if (mode == EChangefeedMode::Updates) {
                         continue;
                     }
@@ -3288,7 +3290,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(AddChangefeedNegative) {
         TKikimrRunner kikimr(TKikimrSettings()
             .SetPQConfig(DefaultPQConfig())
-            .SetEnableChangefeedDynamoDBStreamsFormat(true));
+            .SetEnableChangefeedDynamoDBStreamsFormat(true)
+            .SetEnableChangefeedDebeziumJsonFormat(true));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -3374,6 +3377,18 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             )";
 
             const auto result = session.ExecuteSchemeQuery(query, TExecSchemeQuerySettings().RequestType("_document_api_request")).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table` ADD CHANGEFEED `feed` WITH (
+                    MODE = 'UPDATES', FORMAT = 'DEBEZIUM_JSON'
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
         }
     }

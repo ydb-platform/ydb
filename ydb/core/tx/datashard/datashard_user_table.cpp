@@ -115,6 +115,7 @@ static bool IsJsonCdcStream(TUserTable::TCdcStream::EFormat format) {
     switch (format) {
     case TUserTable::TCdcStream::EFormat::ECdcStreamFormatJson:
     case TUserTable::TCdcStream::EFormat::ECdcStreamFormatDynamoDBStreamsJson:
+    case TUserTable::TCdcStream::EFormat::ECdcStreamFormatDebeziumJson:
         return true;
     default:
         return false;

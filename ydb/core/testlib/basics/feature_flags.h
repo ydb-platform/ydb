@@ -49,8 +49,10 @@ public:
     FEATURE_FLAG_SETTER(EnableTopicSplitMerge)
     FEATURE_FLAG_SETTER(EnableTempTables)
     FEATURE_FLAG_SETTER(EnableChangefeedDynamoDBStreamsFormat)
+    FEATURE_FLAG_SETTER(EnableChangefeedDebeziumJsonFormat)
     FEATURE_FLAG_SETTER(ForceColumnTablesCompositeMarks)
     FEATURE_FLAG_SETTER(EnableUniqConstraint)
+    FEATURE_FLAG_SETTER(EnableTopicMessageMeta)
 
     #undef FEATURE_FLAG_SETTER
 };

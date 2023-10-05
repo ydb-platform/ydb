@@ -78,6 +78,13 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
         }
     }
 
+    static NJson::TJsonWriterConfig DefaultJsonConfig() {
+        NJson::TJsonWriterConfig jsonConfig;
+        jsonConfig.ValidateUtf8 = false;
+        jsonConfig.WriteNanAsString = true;
+        return jsonConfig;
+    }
+
     void Handle(TEvChangeExchange::TEvRecords::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
         NKikimrClient::TPersQueueRequest request;
@@ -121,10 +128,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
                     }
 
                     TStringStream str;
-                    NJson::TJsonWriterConfig jsonConfig;
-                    jsonConfig.ValidateUtf8 = false;
-                    jsonConfig.WriteNanAsString = true;
-                    WriteJson(&str, &json, jsonConfig);
+                    WriteJson(&str, &json, DefaultJsonConfig());
                     data.SetData(str.Str());
 
                     if (record.GetKind() == TChangeRecord::EKind::CdcDataChange) {
@@ -139,6 +143,29 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
                         Y_FAIL_S("Unexpected cdc record"
                             << ": kind# " << record.GetKind());
                     }
+                    break;
+                }
+
+                case NKikimrSchemeOp::ECdcStreamFormatDebeziumJson: {
+                    NJson::TJsonValue keyJson;
+                    NJson::TJsonValue valueJson;
+                    record.SerializeToDebeziumJson(keyJson, valueJson, Stream.VirtualTimestamps, Stream.Mode);
+
+                    TStringStream keyStr;
+                    WriteJson(&keyStr, &keyJson, DefaultJsonConfig());
+
+                    TStringStream valueStr;
+                    WriteJson(&valueStr, &valueJson, DefaultJsonConfig());
+
+                    // Add key in the same way as Kafka integration does
+                    auto messageMeta = data.AddMessageMeta();
+                    messageMeta->set_key("__key"); // Kafka integration stores kafka key in "__key" metadata
+                    messageMeta->set_value(keyStr.Str());
+
+                    // Add value
+                    data.SetData(valueStr.Str());
+                    cmd.SetData(data.SerializeAsString());
+                    cmd.SetPartitionKey(record.GetPartitionKey());
                     break;
                 }
 
@@ -710,7 +737,8 @@ class TCdcChangeSenderMain
             }
 
             case NKikimrSchemeOp::ECdcStreamFormatJson:
-            case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson: {
+            case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson:
+            case NKikimrSchemeOp::ECdcStreamFormatDebeziumJson: {
                 using namespace NKikimr::NDataStreams::V1;
                 const auto hashKey = HexBytesToDecimal(record.GetPartitionKey() /* MD5 */);
                 return ShardFromDecimal(hashKey, KeyDesc->Partitions.size());

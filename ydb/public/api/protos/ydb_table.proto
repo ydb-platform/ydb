@@ -141,6 +141,8 @@ message ChangefeedFormat {
         FORMAT_JSON = 1;
         // Change record in JSON format for document (DynamoDB-compatible) tables
         FORMAT_DYNAMODB_STREAMS_JSON = 2;
+        // Debezium-like change record JSON format for common (row oriented) tables
+        FORMAT_DEBEZIUM_JSON = 3;
     }
 }
 

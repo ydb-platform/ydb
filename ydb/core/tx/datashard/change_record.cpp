@@ -155,6 +155,14 @@ static void SerializeJsonValue(TUserTable::TCPtr schema, NJson::TJsonValue& valu
     }
 }
 
+static void MergeJsonMaps(NJson::TJsonValue& mergeTo, NJson::TJsonValue& mergeFrom) {
+    Y_VERIFY(mergeTo.GetType() == NJson::EJsonValueType::JSON_MAP);
+    Y_VERIFY(mergeFrom.GetType() == NJson::EJsonValueType::JSON_MAP);
+    for (const auto& entry : mergeFrom.GetMap()) {
+        mergeTo.InsertValue(entry.first, entry.second);
+    }
+}
+
 static void SerializeVirtualTimestamp(NJson::TJsonValue& value, std::initializer_list<ui64> vt) {
     for (auto v : vt) {
         value.AppendValue(v);
@@ -340,6 +348,58 @@ void TChangeRecord::SerializeToDynamoDBStreamsJson(NJson::TJsonValue& json, cons
         default:
             Y_FAIL_S("Unexpected row operation: " << static_cast<int>(body.GetRowOperationCase()));
     }
+}
+
+void TChangeRecord::SerializeToDebeziumJson(NJson::TJsonValue& keyJson, NJson::TJsonValue& valueJson, bool virtualTimestamps, TUserTable::TCdcStream::EMode streamMode) const {
+    Y_VERIFY(Kind == EKind::CdcDataChange);
+    Y_VERIFY(Schema);
+
+    const auto body = ParseBody(Body);
+    keyJson["payload"].SetType(NJson::JSON_MAP);
+    SerializeJsonValue(Schema, keyJson["payload"], body.GetKey()); // Debezium expects key in the same format as values
+
+    valueJson["payload"].SetType(NJson::JSON_MAP);
+    // payload.before. Optional
+    if (body.HasOldImage()) {
+        SerializeJsonValue(Schema, valueJson["payload"]["before"], body.GetOldImage());
+        MergeJsonMaps(valueJson["payload"]["before"], keyJson["payload"]); // Debezium expects key included in value
+    }
+
+    // payload.after. Optional
+    if (body.HasNewImage()) {
+        SerializeJsonValue(Schema, valueJson["payload"]["after"], body.GetNewImage());
+        MergeJsonMaps(valueJson["payload"]["after"], keyJson["payload"]); // Debezium expects key included in value
+    }
+
+    // payload.op. Mandatory
+    switch (body.GetRowOperationCase()) {
+        case NKikimrChangeExchange::TDataChange::kUpsert:
+        case NKikimrChangeExchange::TDataChange::kReset:
+            if (streamMode == TUserTable::TCdcStream::EMode::ECdcStreamModeNewAndOldImages) {
+                valueJson["payload"]["op"] = body.HasOldImage() ? "u" : "c"; // u = update, c = create
+            } else {
+                valueJson["payload"]["op"] = "u"; // u = update
+            }
+            break;
+        case NKikimrChangeExchange::TDataChange::kErase:
+            valueJson["payload"]["op"] = "d"; // d = delete
+            break;
+        default:
+            Y_FAIL_S("Unexpected row operation: " << static_cast<int>(body.GetRowOperationCase()));
+    }
+
+    // payload.ts. Optional. "ts_ms" int64 in Debezium, "ts" array here
+    if (virtualTimestamps) {
+        SerializeVirtualTimestamp(valueJson["payload"]["ts"], {Step, TxId});
+    }
+
+    // payload.source. Mandatory.
+    valueJson["payload"]["source"] = NJson::TJsonMap({
+        {"version", "0.0.1"},
+        {"connector", "ydb_debezium_json"},
+        {"ts_ms", GetApproximateCreationDateTime().MilliSeconds()},
+        {"txId", TxId},
+    });
 }
 
 TConstArrayRef<TCell> TChangeRecord::GetKey() const {

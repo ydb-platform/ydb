@@ -184,6 +184,11 @@ public:
                     "DYNAMODB_STREAMS_JSON format incompatible with specified stream mode");
                 return result;
             }
+            if (streamDesc.GetFormat() == NKikimrSchemeOp::ECdcStreamFormatDebeziumJson) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "DEBEZIUM_JSON format incompatible with specified stream mode");
+                return result;
+            }
             break;
         default:
             result->SetError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()
@@ -209,6 +214,13 @@ public:
             if (tablePath.Base()->DocumentApiVersion < 1) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter,
                     "DYNAMODB_STREAMS_JSON format incompatible with non-document table");
+                return result;
+            }
+            break;
+        case NKikimrSchemeOp::ECdcStreamFormatDebeziumJson:
+            if (!AppData()->FeatureFlags.GetEnableChangefeedDebeziumJsonFormat()) {
+                result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                    "DEBEZIUM_JSON format is not supported yet");
                 return result;
             }
             break;

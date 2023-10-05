@@ -2416,6 +2416,9 @@ TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
     case Ydb::Table::ChangefeedFormat::FORMAT_DYNAMODB_STREAMS_JSON:
         format = EChangefeedFormat::DynamoDBStreamsJson;
         break;
+    case Ydb::Table::ChangefeedFormat::FORMAT_DEBEZIUM_JSON:
+        format = EChangefeedFormat::DebeziumJson;
+        break;
     default:
         format = EChangefeedFormat::Unknown;
         break;
@@ -2489,6 +2492,9 @@ void TChangefeedDescription::SerializeTo(Ydb::Table::Changefeed& proto) const {
         break;
     case EChangefeedFormat::DynamoDBStreamsJson:
         proto.set_format(Ydb::Table::ChangefeedFormat::FORMAT_DYNAMODB_STREAMS_JSON);
+        break;
+    case EChangefeedFormat::DebeziumJson:
+        proto.set_format(Ydb::Table::ChangefeedFormat::FORMAT_DEBEZIUM_JSON);
         break;
     case EChangefeedFormat::Unknown:
         break;

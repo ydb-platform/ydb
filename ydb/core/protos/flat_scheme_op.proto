@@ -739,6 +739,7 @@ enum ECdcStreamFormat {
     ECdcStreamFormatProto = 1;
     ECdcStreamFormatJson = 2;
     ECdcStreamFormatDynamoDBStreamsJson = 3;
+    ECdcStreamFormatDebeziumJson = 4;
 }
 
 message TCdcStreamDescription {

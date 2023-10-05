@@ -44,6 +44,7 @@ enum class EChangefeedMode {
 enum class EChangefeedFormat {
     Json /* "JSON" */,
     DynamoDBStreamsJson /* "DYNAMODB_STREAMS_JSON" */,
+    DebeziumJson /* "DEBEZIUM_JSON" */,
 
     Unknown = std::numeric_limits<int>::max()
 };

@@ -842,6 +842,7 @@ message TFeatureFlags {
     optional bool EnableTempTables = 102 [default = false];
     optional bool SuppressCompatibilityCheck = 103 [default = false];
     optional bool EnableUniqConstraint = 104 [default = false];
+    optional bool EnableChangefeedDebeziumJsonFormat = 105 [default = false];
 }
 
 message THttpProxyConfig {

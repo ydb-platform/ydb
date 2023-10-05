@@ -718,7 +718,9 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 .SetUseRealThreads(useRealThreads)
                 .SetDomainName(root)
                 .SetGrpcPort(PortManager.GetPort(2135))
-                .SetEnableChangefeedDynamoDBStreamsFormat(true);
+                .SetEnableChangefeedDynamoDBStreamsFormat(true)
+                .SetEnableChangefeedDebeziumJsonFormat(true)
+                .SetEnableTopicMessageMeta(true);
 
             Server = new TServer(settings);
             if (useRealThreads) {
@@ -821,6 +823,22 @@ Y_UNIT_TEST_SUITE(Cdc) {
         };
     }
 
+    TCdcStream OldImage(NKikimrSchemeOp::ECdcStreamFormat format, const TString& name = "Stream") {
+        return TCdcStream{
+            .Name = name,
+            .Mode = NKikimrSchemeOp::ECdcStreamModeOldImage,
+            .Format = format,
+        };
+    }
+
+    TCdcStream NewImage(NKikimrSchemeOp::ECdcStreamFormat format, const TString& name = "Stream") {
+        return TCdcStream{
+            .Name = name,
+            .Mode = NKikimrSchemeOp::ECdcStreamModeNewImage,
+            .Format = format,
+        };
+    }
+
     TCdcStream WithVirtualTimestamps(TCdcStream streamDesc) {
         streamDesc.VirtualTimestamps = true;
         return streamDesc;
@@ -852,11 +870,22 @@ Y_UNIT_TEST_SUITE(Cdc) {
         return MD5::Calc(root.at("key").GetStringRobust());
     }
 
-    static bool AreJsonsEqual(const TString& actual, const TString& expected) {
+    static bool AreJsonsEqual(const TString& actual, const TString& expected, bool assertOnParseError = true) {
+        bool parseResult;
         NJson::TJsonValue actualJson;
-        UNIT_ASSERT(NJson::ReadJsonTree(actual, &actualJson));
+        parseResult = NJson::ReadJsonTree(actual, &actualJson);
+        if (assertOnParseError) {
+            UNIT_ASSERT(parseResult);
+        } else if (!parseResult) {
+            return false;
+        }
         NJson::TJsonValue expectedJson;
-        UNIT_ASSERT(NJson::ReadJsonTree(expected, &expectedJson));
+        parseResult = NJson::ReadJsonTree(expected, &expectedJson);
+        if (assertOnParseError) {
+            UNIT_ASSERT(parseResult);
+        } else if (!parseResult) {
+            return false;
+        }
 
         class TScanner: public NJson::IScanCallback {
             NJson::TJsonValue& Actual;
@@ -868,16 +897,22 @@ Y_UNIT_TEST_SUITE(Cdc) {
             {}
 
             bool Do(const TString& path, NJson::TJsonValue*, NJson::TJsonValue& expectedValue) override {
+                // Skip if not "***"
                 if (expectedValue.GetStringRobust() != "***") {
                     return true;
                 }
+                // Discrepancy in path format here. GetValueByPath expects ".array.[0]" while Scanner provides with ".array[0]". Don't use "***" inside a non-root array
+                UNIT_ASSERT_C(!path.Contains("["), TStringBuilder() << "Please don't use \"***\" inside an array. Seems like " << path << " has array on the way");
 
                 NJson::TJsonValue actualValue;
+                // If "***", find a corresponding actual value
                 if (!Actual.GetValueByPath(path, actualValue)) {
+                    // Couldn't find an actual value for "***"
                     Success = false;
                     return false;
                 }
 
+                // Replace "***" with actual value
                 expectedValue = actualValue;
                 return true;
             }
@@ -890,8 +925,58 @@ Y_UNIT_TEST_SUITE(Cdc) {
         TScanner scanner(actualJson);
         expectedJson.Scan(scanner);
 
-        UNIT_ASSERT(scanner.IsSuccess());
+        if (!scanner.IsSuccess()) {
+            return false; // actualJson is missing a path to ***
+        }
         return actualJson == expectedJson;
+    }
+
+    // Unit test to verify that Json comparison with wildcard works
+    Y_UNIT_TEST(AreJsonsEqualReturnsTrueOnEqual) {
+        UNIT_ASSERT(AreJsonsEqual("{}", "{}"));
+        UNIT_ASSERT(AreJsonsEqual("[]", "[]"));
+        UNIT_ASSERT(AreJsonsEqual("1", "1"));
+        UNIT_ASSERT(AreJsonsEqual("null", "null"));
+        UNIT_ASSERT(AreJsonsEqual(R"({"a":"b","c":"d","e":[1,2,"3"]})", R"({"a":"b","c":"d","e":[1,2,"3"]})"));
+        UNIT_ASSERT(AreJsonsEqual(R"({"update":{},"key":[1]})", R"({"update":{},"key":[1]})"));
+        UNIT_ASSERT(AreJsonsEqual(R"({"update":{},"key":[1,2]})", R"({"update":{},"key":[1,2]})"));
+        // Root wildcard
+        UNIT_ASSERT(AreJsonsEqual("{}", R"("***")"));
+        UNIT_ASSERT(AreJsonsEqual("1", R"("***")"));
+        UNIT_ASSERT(AreJsonsEqual(R"({"a": "b"})", R"("***")"));
+        UNIT_ASSERT(AreJsonsEqual("[1,2,3]", R"("***")"));
+        // Deep wildcard
+        UNIT_ASSERT(AreJsonsEqual(R"({"a":"b","c":"d","e":[1,2,"3"]})", R"({"a":"b","c":"***","e":"***"})"));
+        UNIT_ASSERT(AreJsonsEqual(R"({"update":{},"key":[1]})", R"({"update":{},"key":"***"})"));
+        UNIT_ASSERT(AreJsonsEqual(R"({"update":{},"ts":[1,2]})", R"({"update":{},"ts":"***"})"));
+    };
+
+    Y_UNIT_TEST(AreJsonsEqualReturnsFalseOnDifferent) {
+        // Simple cases
+        UNIT_ASSERT(!AreJsonsEqual("{}", "[]"));
+        UNIT_ASSERT(!AreJsonsEqual("[]", "{}"));
+        UNIT_ASSERT(!AreJsonsEqual("1", "2"));
+        UNIT_ASSERT(!AreJsonsEqual("null", "[]"));
+        UNIT_ASSERT(!AreJsonsEqual("null", "{}"));
+        UNIT_ASSERT(!AreJsonsEqual("[]", "null"));
+        UNIT_ASSERT(!AreJsonsEqual("{}", "null"));
+        UNIT_ASSERT(!AreJsonsEqual(R"({"a":"b","c":"d","e":[1,2,"3"]})", R"({"a":"b","c":"d","e":[9,2,"3"]})"));
+        UNIT_ASSERT(!AreJsonsEqual(R"({"update":{},"key":[1]})", R"({"update":[],"key":[1]})"));
+        UNIT_ASSERT(!AreJsonsEqual(R"({"update":{},"ts":[1,2]})", R"({"update":{},"key":[9,2]})"));
+        // Wildcart in actual value shouldn't be treated as a wildcard
+        UNIT_ASSERT(!AreJsonsEqual(R"("***")", "{}"));
+        UNIT_ASSERT(!AreJsonsEqual(R"({"a":"***"})", R"({"a":"b"})"));
+        // Deep wildcard
+        UNIT_ASSERT(!AreJsonsEqual(R"({"a":"z","c":"d","e":[1,2,"3"]})", R"({"a":"b","c":"***","e":"***"})"));
+        UNIT_ASSERT(!AreJsonsEqual(R"({"update":{"a":"b"},"key":[1]})", R"({"update":{},"key":"***"})"));
+        UNIT_ASSERT(!AreJsonsEqual(R"({"update":{},"key":{},"ts":[1,2]})", R"({"update":{},"ts":"***"})"));
+    };
+
+    Y_UNIT_TEST(AreJsonsEqualFailsOnWildcardInArray) {
+        // Wildcard in a not-root array is not supported because of a bug in code
+        UNIT_ASSERT_TEST_FAILS(AreJsonsEqual(R"({"a":[1,{"a":"b"}]})", R"({"a":[1,{"a":"***"}]})"));
+        UNIT_ASSERT_TEST_FAILS(AreJsonsEqual(R"({"a":[1]})", R"({"a":["***"]})"));
+        UNIT_ASSERT_TEST_FAILS(AreJsonsEqual(R"([1])", R"(["***"])"));
     }
 
     struct PqRunner {
@@ -930,7 +1015,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                     pStream = data->GetPartitionStream();
                     for (const auto& item : data->GetMessages()) {
                         const auto& record = records.at(reads++);
-                        UNIT_ASSERT(AreJsonsEqual(item.GetData(), record));
+                        UNIT_ASSERT_C(AreJsonsEqual(item.GetData(), record), TStringBuilder() << "Jsons are different: " << item.GetData() << " != " << record);
                         if (checkKey) {
                             UNIT_ASSERT_VALUES_EQUAL(item.GetPartitionKey(), CalcPartitionKey(record));
                         }
@@ -1034,7 +1119,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 for (ui32 i = 0; i < records.size(); ++i) {
                     const auto& actual = res.GetResult().records().at(i);
                     const auto& expected = records.at(i);
-                    UNIT_ASSERT(AreJsonsEqual(actual.data(), expected));
+                    UNIT_ASSERT_C(AreJsonsEqual(actual.data(), expected), TStringBuilder() << "Jsons are different: " << actual.data() << " != " << expected);
                     if (checkKey) {
                         UNIT_ASSERT_VALUES_EQUAL(actual.partition_key(), CalcPartitionKey(expected));
                     }
@@ -1063,9 +1148,30 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
     };
 
+    static TString MetadataToString(TVector<std::pair<TString, TString>> messageMetadata) {
+        std::stable_sort(messageMetadata.begin(), messageMetadata.end(), [](const auto& a, const auto& b){return a.first < b.first;});
+        TStringBuilder str;
+        str << "{";
+        for (const auto& entry : messageMetadata) {
+            str << entry.first << ": " << entry.second << ",";
+        }
+        str << "}";
+        return str;
+    }
+
+    static void AssertMessageMetadataContains(
+        const TVector<std::pair<TString, TString>>& actual,
+        const TVector<std::pair<TString, TString>>& expected,
+        std::function<bool(const TString&, const TString&)> areValuesEqual = [](const TString& a, const TString& b) {return AreJsonsEqual(a, b, false);}) {
+        for(const auto& item : expected) {
+            const auto& match = std::find_if(actual.begin(), actual.end(), [&item, &areValuesEqual](const auto& a){return a.first == item.first && areValuesEqual(a.second, item.second);});
+            UNIT_ASSERT_C(match != actual.end(), TStringBuilder() << "Message metadata "<< item.first << ": " << item.second << " was expected, but not found. Actual: " << MetadataToString(actual) << ". Expected: " << MetadataToString(expected));
+        }
+    }
+
     struct TopicRunner {
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
-                const TVector<TString>& queries, const TVector<TString>& records, bool checkKey = true)
+                const TVector<TString>& queries, const TVector<std::pair<TString, TVector<std::pair<TString, TString>>>>& records, bool checkKey = true)
         {
             TTestTopicEnv env(tableDesc, streamDesc);
 
@@ -1098,7 +1204,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
                     pStream = data->GetPartitionSession();
                     for (const auto& item : data->GetMessages()) {
                         const auto& record = records.at(reads++);
-                        UNIT_ASSERT(AreJsonsEqual(item.GetData(), record));
+                        UNIT_ASSERT_C(AreJsonsEqual(item.GetData(), record.first), TStringBuilder() << "Jsons are different: " << item.GetData() << " != " << record.first);
+                        AssertMessageMetadataContains(item.GetMessageMeta()->Fields, record.second);
                         Y_UNUSED(checkKey);
                     }
                 } else if (auto* create = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*ev)) {
@@ -1123,6 +1230,16 @@ Y_UNIT_TEST_SUITE(Cdc) {
             }
         }
 
+        static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
+                const TVector<TString>& queries, const TVector<TString>& records, bool checkKey = true)
+        {
+            TVector<std::pair<TString, TVector<std::pair<TString, TString>>>> recordsWithMetadata = {};
+            for (const auto& record : records) {
+                recordsWithMetadata.emplace_back(record, TVector<std::pair<TString, TString>>());
+            }
+            Read(tableDesc, streamDesc, queries, recordsWithMetadata, checkKey);
+        }
+
         static void Write(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc) {
             TTestPqEnv env(tableDesc, streamDesc);
 
@@ -1145,6 +1262,14 @@ Y_UNIT_TEST_SUITE(Cdc) {
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
         }
     };
+
+    /**
+        Usage: MessageWithMetadata("body", "metadata_key", "metadata_value")
+    */
+    static std::pair<TString, TVector<std::pair<TString,TString>>> MessageWithOneMetadataItem(const TString& body, const TString& meta_key, const TString& meta_value) {
+        TVector<std::pair<TString,TString>> metas;
+        return std::make_pair(body, TVector<std::pair<TString,TString>>{std::make_pair(meta_key, meta_value)});
+    }
 
     #define Y_UNIT_TEST_TRIPLET(N, VAR1, VAR2, VAR3)                                                                   \
         template<typename TRunner> void N(NUnitTest::TTestContext&);                                                   \
@@ -1172,6 +1297,22 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"update":{},"key":[2]})",
             R"({"update":{},"key":[3]})",
             R"({"erase":{},"key":[1]})",
+        });
+    }
+
+    Y_UNIT_TEST(KeysOnlyLogDebezium) {
+        TopicRunner::Read(SimpleTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatDebeziumJson), {R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )", R"(
+            DELETE FROM `/Root/Table` WHERE key = 1;
+        )"}, { 
+            MessageWithOneMetadataItem(R"({"payload":{"op":"u","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"}}})", "__key", R"({"payload":{"key":1}})"),
+            MessageWithOneMetadataItem(R"({"payload":{"op":"u","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"}}})", "__key", R"({"payload":{"key":2}})"),
+            MessageWithOneMetadataItem(R"({"payload":{"op":"u","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"}}})", "__key", R"({"payload":{"key":3}})"),
+            MessageWithOneMetadataItem(R"({"payload":{"op":"d","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"}}})", "__key", R"({"payload":{"key":1}})")
         });
     }
 
@@ -1215,6 +1356,78 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
+    Y_UNIT_TEST(NewAndOldImagesLogDebezium) { // Message-level meta is supported through topic api only at the time of writing
+        TopicRunner::Read(SimpleTable(), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatDebeziumJson), {R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )", R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 100),
+            (2, 200),
+            (3, 300);
+        )", R"(
+            DELETE FROM `/Root/Table` WHERE key = 1;
+        )"}, { 
+            MessageWithOneMetadataItem(R"({"payload":{"op":"c","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"},"after":{"key":1,"value":10}}})", "__key", R"({"payload":{"key":1}})"),
+            MessageWithOneMetadataItem(R"({"payload":{"op":"c","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"},"after":{"key":2,"value":20}}})", "__key", R"({"payload":{"key":2}})"),
+            MessageWithOneMetadataItem(R"({"payload":{"op":"c","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"},"after":{"key":3,"value":30}}})", "__key", R"({"payload":{"key":3}})"),
+            MessageWithOneMetadataItem(R"({"payload":{"op":"u","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"},"before":{"key":1,"value":10},"after":{"key":1,"value":100}}})", "__key", R"({"payload":{"key":1}})"),
+            MessageWithOneMetadataItem(R"({"payload":{"op":"u","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"},"before":{"key":2,"value":20},"after":{"key":2,"value":200}}})", "__key", R"({"payload":{"key":2}})"),
+            MessageWithOneMetadataItem(R"({"payload":{"op":"u","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"},"before":{"key":3,"value":30},"after":{"key":3,"value":300}}})", "__key", R"({"payload":{"key":3}})"),
+            MessageWithOneMetadataItem(R"({"payload":{"op":"d","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"},"before":{"key":1,"value":100}}})", "__key", R"({"payload":{"key":1}})"),
+        }, false);
+    }
+
+    Y_UNIT_TEST(OldImageLogDebezium) {
+        TopicRunner::Read(SimpleTable(), OldImage(NKikimrSchemeOp::ECdcStreamFormatDebeziumJson), {R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )", R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 100),
+            (2, 200),
+            (3, 300);
+        )", R"(
+            DELETE FROM `/Root/Table` WHERE key = 1;
+        )"}, { 
+            MessageWithOneMetadataItem(R"({"payload":{"op":"u","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"}}})", "__key", R"({"payload":{"key":1}})"),
+            MessageWithOneMetadataItem(R"({"payload":{"op":"u","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"}}})", "__key", R"({"payload":{"key":2}})"),
+            MessageWithOneMetadataItem(R"({"payload":{"op":"u","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"}}})", "__key", R"({"payload":{"key":3}})"),
+            MessageWithOneMetadataItem(R"({"payload":{"op":"u","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"},"before":{"key":1,"value":10}}})", "__key", R"({"payload":{"key":1}})"),
+            MessageWithOneMetadataItem(R"({"payload":{"op":"u","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"},"before":{"key":2,"value":20}}})", "__key", R"({"payload":{"key":2}})"),
+            MessageWithOneMetadataItem(R"({"payload":{"op":"u","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"},"before":{"key":3,"value":30}}})", "__key", R"({"payload":{"key":3}})"),
+            MessageWithOneMetadataItem(R"({"payload":{"op":"d","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"},"before":{"key":1,"value":100}}})", "__key", R"({"payload":{"key":1}})"),
+        }, false);
+    }
+
+    Y_UNIT_TEST(NewImageLogDebezium) { 
+        TopicRunner::Read(SimpleTable(), NewImage(NKikimrSchemeOp::ECdcStreamFormatDebeziumJson), {R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )", R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 100),
+            (2, 200),
+            (3, 300);
+        )", R"(
+            DELETE FROM `/Root/Table` WHERE key = 1;
+        )"}, { 
+            MessageWithOneMetadataItem(R"({"payload":{"op":"u","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"},"after":{"key":1,"value":10}}})", "__key", R"({"payload":{"key":1}})"),
+            MessageWithOneMetadataItem(R"({"payload":{"op":"u","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"},"after":{"key":2,"value":20}}})", "__key", R"({"payload":{"key":2}})"),
+            MessageWithOneMetadataItem(R"({"payload":{"op":"u","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"},"after":{"key":3,"value":30}}})", "__key", R"({"payload":{"key":3}})"),
+            MessageWithOneMetadataItem(R"({"payload":{"op":"u","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"},"after":{"key":1,"value":100}}})", "__key", R"({"payload":{"key":1}})"),
+            MessageWithOneMetadataItem(R"({"payload":{"op":"u","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"},"after":{"key":2,"value":200}}})", "__key", R"({"payload":{"key":2}})"),
+            MessageWithOneMetadataItem(R"({"payload":{"op":"u","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"},"after":{"key":3,"value":300}}})", "__key", R"({"payload":{"key":3}})"),
+            MessageWithOneMetadataItem(R"({"payload":{"op":"d","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"}}})", "__key", R"({"payload":{"key":1}})"),
+        }, false);
+    }
+
     Y_UNIT_TEST_TRIPLET(VirtualTimestamps, PqRunner, YdsRunner, TopicRunner) {
         TRunner::Read(SimpleTable(), WithVirtualTimestamps(KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson)), {R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
@@ -1226,6 +1439,30 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"update":{},"key":[2],"ts":"***"})",
             R"({"update":{},"key":[3],"ts":"***"})",
         });
+    }
+
+    Y_UNIT_TEST(VirtualTimestampsNewAndOldImagesLogDebezium) {
+        TopicRunner::Read(SimpleTable(), WithVirtualTimestamps(NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatDebeziumJson)), {R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )", R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 100),
+            (2, 200),
+            (3, 300);
+        )", R"(
+            DELETE FROM `/Root/Table` WHERE key = 1;
+        )"}, { 
+            MessageWithOneMetadataItem(R"({"payload":{"op":"c","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"},"after":{"key":1,"value":10},"ts":"***"}})", "__key", R"({"payload":{"key":1}})"),
+            MessageWithOneMetadataItem(R"({"payload":{"op":"c","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"},"after":{"key":2,"value":20},"ts":"***"}})", "__key", R"({"payload":{"key":2}})"),
+            MessageWithOneMetadataItem(R"({"payload":{"op":"c","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"},"after":{"key":3,"value":30},"ts":"***"}})", "__key", R"({"payload":{"key":3}})"),
+            MessageWithOneMetadataItem(R"({"payload":{"op":"u","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"},"before":{"key":1,"value":10},"after":{"key":1,"value":100},"ts":"***"}})", "__key", R"({"payload":{"key":1}})"),
+            MessageWithOneMetadataItem(R"({"payload":{"op":"u","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"},"before":{"key":2,"value":20},"after":{"key":2,"value":200},"ts":"***"}})", "__key", R"({"payload":{"key":2}})"),
+            MessageWithOneMetadataItem(R"({"payload":{"op":"u","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"},"before":{"key":3,"value":30},"after":{"key":3,"value":300},"ts":"***"}})", "__key", R"({"payload":{"key":3}})"),
+            MessageWithOneMetadataItem(R"({"payload":{"op":"d","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"},"before":{"key":1,"value":100},"ts":"***"}})", "__key", R"({"payload":{"key":1}})"),
+        }, false);
     }
 
     TShardedTableOptions DocApiTable() {
@@ -1396,6 +1633,22 @@ Y_UNIT_TEST_SUITE(Cdc) {
         )", key.c_str())}, {
             Sprintf(R"({"update":{},"key":["%s"]})", key.c_str()),
         });
+    }
+
+    Y_UNIT_TEST(DebeziumHugeKey) {
+        const auto key = TString(512_KB, 'A');
+        const auto table = TShardedTableOptions()
+            .Columns({
+                {"key", "Utf8", true, false},
+                {"value", "Uint32", false, false},
+            });
+
+        TopicRunner::Read(table, KeysOnly(NKikimrSchemeOp::ECdcStreamFormatDebeziumJson), {Sprintf(R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            ("%s", 1);
+        )", key.c_str())}, { 
+            MessageWithOneMetadataItem(R"({"payload":{"op":"u","source":{"version":"***","connector":"ydb_debezium_json","ts_ms":"***","txId":"***"}}})", "__key", Sprintf(R"({"payload":{"key":"%s"}})", key.c_str())),
+        }, false);
     }
 
     Y_UNIT_TEST_TRIPLET(Write, PqRunner, YdsRunner, TopicRunner) {
@@ -1587,8 +1840,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             const auto records = GetRecords(*server->GetRuntime(), sender, path, 0);
             if (records.size() == expected.size()) {
                 for (ui32 i = 0; i < expected.size(); ++i) {
-                    UNIT_ASSERT_C(AreJsonsEqual(records.at(i).second, expected.at(i)), TStringBuilder()
-                        << records.at(i).second << " != " << expected.at(i));
+                    UNIT_ASSERT_C(AreJsonsEqual(records.at(i).second, expected.at(i)), TStringBuilder() << "Jsons are different, " << records.at(i).second << " != " << expected.at(i));
                 }
 
                 break;

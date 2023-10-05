@@ -160,11 +160,11 @@ public:
         return tmp;
     }
 
-    bool operator==(const TGatherIterator& rhs) {
+    bool operator==(const TGatherIterator& rhs) const& {
         return First == rhs.First;
     }
 
-    bool operator!=(const TGatherIterator& rhs) {
+    bool operator!=(const TGatherIterator& rhs) const& {
         return First != rhs.First;
     }
 

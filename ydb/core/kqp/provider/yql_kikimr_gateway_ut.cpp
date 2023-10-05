@@ -475,6 +475,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
                 MDB_CLUSTER_ID="my_id",
                 DATABASE_NAME="my_db",
                 PROTOCOL="native",
+                SCHEMA="public",
                 USE_TLS="true"
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
@@ -487,11 +488,12 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
         UNIT_ASSERT_C(response.Success(), response.Issues().ToOneLineString());
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Password, secretPasswordValue);
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.ServiceAccountIdSignature, secretSaValue);
-        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Properties.GetProperties().size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Properties.GetProperties().size(), 5);
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Properties.GetProperties().at("mdb_cluster_id"), "my_id");
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Properties.GetProperties().at("database_name"), "my_db");
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Properties.GetProperties().at("protocol"), "native");
         UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Properties.GetProperties().at("use_tls"), "true");
+        UNIT_ASSERT_VALUES_EQUAL(response.Metadata->ExternalSource.Properties.GetProperties().at("schema"), "public");
     }
 }
 

@@ -55,7 +55,8 @@ void FillCreateExternalDataSourceDesc(NKikimrSchemeOp::TExternalDataSourceDescri
         "database_name",
         "protocol",
         "mdb_cluster_id",
-        "use_tls"
+        "use_tls",
+        "schema"
     };
 
     for (const auto& property: properties) {

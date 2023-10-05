@@ -75,7 +75,7 @@ void TCompactColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, T
     NeedGranuleStatusProvide = false;
 }
 
-TCompactColumnEngineChanges::TCompactColumnEngineChanges(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const std::map<ui64, std::shared_ptr<TPortionInfo>>& portions, const TSaverContext& saverContext)
+TCompactColumnEngineChanges::TCompactColumnEngineChanges(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const std::vector<std::shared_ptr<TPortionInfo>>& portions, const TSaverContext& saverContext)
     : TBase(limits.GetSplitSettings(), saverContext, StaticTypeName())
     , Limits(limits)
     , GranuleMeta(granule)
@@ -83,10 +83,10 @@ TCompactColumnEngineChanges::TCompactColumnEngineChanges(const TCompactionLimits
     Y_VERIFY(GranuleMeta);
 
     SwitchedPortions.reserve(portions.size());
-    for (const auto& [_, portionInfo] : portions) {
+    for (const auto& portionInfo : portions) {
         Y_VERIFY(portionInfo->IsActive());
         SwitchedPortions.emplace_back(*portionInfo);
-        PortionsToRemove.emplace_back(*portionInfo);
+        AFL_VERIFY(PortionsToRemove.emplace(portionInfo->GetAddress(), *portionInfo).second);
         Y_VERIFY(portionInfo->GetGranule() == GranuleMeta->GetGranuleId());
     }
     Y_VERIFY(SwitchedPortions.size());

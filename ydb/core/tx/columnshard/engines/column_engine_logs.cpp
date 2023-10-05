@@ -449,7 +449,7 @@ TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering
                 if (!keep && context.AllowDrop) {
                     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "portion_remove")("portion", info->DebugString());
                     dropBlobs += info->NumBlobs();
-                    context.Changes->PortionsToRemove.emplace_back(*info);
+                    AFL_VERIFY(context.Changes->PortionsToRemove.emplace(info->GetAddress(), *info).second);
                     SignalCounters.OnPortionToDrop(info->BlobsBytes());
                 }
             } else {
@@ -573,7 +573,7 @@ void TColumnEngineForLogs::SetGranule(const TGranuleRecord& rec) {
     const TMark mark(rec.Mark);
 
     AFL_VERIFY(PathGranules[rec.PathId].emplace(mark, rec.Granule).second)("event", "marker_duplication")("granule_id", rec.Granule)("old_granule_id", PathGranules[rec.PathId][mark]);
-    AFL_VERIFY(Granules.emplace(rec.Granule, std::make_shared<TGranuleMeta>(rec, GranulesStorage, SignalCounters.RegisterGranuleDataCounters())).second)("event", "granule_duplication")
+    AFL_VERIFY(Granules.emplace(rec.Granule, std::make_shared<TGranuleMeta>(rec, GranulesStorage, SignalCounters.RegisterGranuleDataCounters(), VersionedIndex)).second)("event", "granule_duplication")
         ("rec_path_id", rec.PathId)("granule_id", rec.Granule)("old_granule", Granules[rec.Granule]->DebugString());
 }
 
@@ -583,7 +583,7 @@ std::optional<ui64> TColumnEngineForLogs::NewGranule(const TGranuleRecord& rec) 
 
     auto insertInfo = PathGranules[rec.PathId].emplace(mark, rec.Granule);
     if (insertInfo.second) {
-        AFL_VERIFY(Granules.emplace(rec.Granule, std::make_shared<TGranuleMeta>(rec, GranulesStorage, SignalCounters.RegisterGranuleDataCounters())).second)("event", "granule_duplication")
+        AFL_VERIFY(Granules.emplace(rec.Granule, std::make_shared<TGranuleMeta>(rec, GranulesStorage, SignalCounters.RegisterGranuleDataCounters(), VersionedIndex)).second)("event", "granule_duplication")
             ("granule_id", rec.Granule)("old_granule", Granules[rec.Granule]->DebugString());
         return {};
     } else {
@@ -689,17 +689,21 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(ui64 pathId, TSnapshot
             Y_VERIFY(spg);
             bool granuleHasDataForSnaphsot = false;
 
-            std::vector<std::shared_ptr<TPortionInfo>> orderedPortions = spg->GroupOrderedPortionsByPK(snapshot);
-            for (const auto& portionInfo : orderedPortions) {
-                Y_VERIFY(portionInfo->Produced());
-                const bool skipPortion = !pkRangesFilter.IsPortionInUsage(*portionInfo, VersionedIndex.GetLastSchema()->GetIndexInfo());
-                AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", skipPortion ? "portion_skipped" : "portion_selected")
-                    ("granule", granule)("portion", portionInfo->DebugString());
-                if (skipPortion) {
-                    continue;
+            for (const auto& [_, keyPortions] : spg->GroupOrderedPortionsByPK()) {
+                for (auto&& [_, portionInfo] : keyPortions) {
+                    if (!portionInfo->IsVisible(snapshot)) {
+                        continue;
+                    }
+                    Y_VERIFY(portionInfo->Produced());
+                    const bool skipPortion = !pkRangesFilter.IsPortionInUsage(*portionInfo, VersionedIndex.GetLastSchema()->GetIndexInfo());
+                    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", skipPortion ? "portion_skipped" : "portion_selected")
+                        ("granule", granule)("portion", portionInfo->DebugString());
+                    if (skipPortion) {
+                        continue;
+                    }
+                    out->PortionsOrderedPK.emplace_back(portionInfo);
+                    granuleHasDataForSnaphsot = true;
                 }
-                out->PortionsOrderedPK.emplace_back(portionInfo);
-                granuleHasDataForSnaphsot = true;
             }
 
             if (granuleHasDataForSnaphsot) {

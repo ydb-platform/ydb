@@ -14,11 +14,13 @@ private:
 
     NMonitoring::TDynamicCounters::TCounterPtr RepliesCount;
     NMonitoring::TDynamicCounters::TCounterPtr ReplyBytes;
-    NMonitoring::THistogramPtr ReplyDuration;
+    NMonitoring::THistogramPtr ReplyDurationByCount;
+    NMonitoring::THistogramPtr ReplyDurationBySize;
 
     NMonitoring::TDynamicCounters::TCounterPtr FailsCount;
     NMonitoring::TDynamicCounters::TCounterPtr FailBytes;
-    NMonitoring::THistogramPtr FailDuration;
+    NMonitoring::THistogramPtr FailDurationByCount;
+    NMonitoring::THistogramPtr FailDurationBySize;
 public:
     TWriteCounters(const TConsumerCounters& owner);
 
@@ -30,13 +32,15 @@ public:
     void OnReply(const ui64 bytes, const TDuration d) const {
         RepliesCount->Add(1);
         ReplyBytes->Add(bytes);
-        ReplyDuration->Collect(d.MilliSeconds());
+        ReplyDurationByCount->Collect((i64)d.MilliSeconds());
+        ReplyDurationBySize->Collect((i64)d.MilliSeconds(), (i64)bytes);
     }
 
     void OnFail(const ui64 bytes, const TDuration d) const {
         FailsCount->Add(1);
         FailBytes->Add(bytes);
-        FailDuration->Collect(d.MilliSeconds());
+        FailDurationByCount->Collect((i64)d.MilliSeconds());
+        FailDurationBySize->Collect((i64)d.MilliSeconds(), (i64)bytes);
     }
 };
 

@@ -27,7 +27,6 @@ TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, TPlainR
 
 bool TScanHead::BuildNextInterval() {
     while (BorderPoints.size()) {
-//        Y_VERIFY(FrontEnds.size());
         auto position = BorderPoints.begin()->first;
         auto firstBorderPointInfo = std::move(BorderPoints.begin()->second);
         const bool isIncludeStart = CurrentSegments.empty();
@@ -49,17 +48,6 @@ bool TScanHead::BuildNextInterval() {
             AFL_VERIFY(CurrentSegments.erase(i->GetSourceIdx()))("idx", i->GetSourceIdx());
         }
 
-//        const bool isFirstFinished = (position == *FrontEnds.begin());
-//        if (firstBorderPointInfo.GetFinishSources().size()) {
-//            Y_VERIFY(isFirstFinished);
-//            Y_VERIFY(FrontEnds.erase(position));
-//        } else {
-//            Y_VERIFY(!FrontEnds.erase(position));
-//        }
-
-//        if (isFirstFinished) {
-//            DrainSources();
-//        }
         CurrentStart = BorderPoints.begin()->first;
         BorderPoints.erase(BorderPoints.begin());
         if (CurrentSegments.size()) {
@@ -87,9 +75,8 @@ void TScanHead::DrainResults() {
 }
 
 void TScanHead::DrainSources() {
-    while (Sources.size()/* && (FrontEnds.empty() || Sources.front()->GetStart().Compare(*FrontEnds.begin()) != std::partial_ordering::greater)*/) {
+    while (Sources.size()) {
         auto source = Sources.front();
-//        FrontEnds.emplace(source->GetFinish());
         BorderPoints[source->GetStart()].AddStart(source);
         BorderPoints[source->GetFinish()].AddFinish(source);
         Sources.pop_front();

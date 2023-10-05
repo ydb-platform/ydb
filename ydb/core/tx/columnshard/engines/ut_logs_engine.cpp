@@ -305,6 +305,7 @@ bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap,
     }
 
     changes->Blobs.insert(blobs.begin(), blobs.end());
+    blobs.clear();
     changes->StartEmergency();
 
     NOlap::TConstructionContext context(engine.GetVersionedIndex(), NColumnShard::TIndexationCounters("Indexation"));
@@ -381,7 +382,7 @@ bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db,
 
 
     changes->StartEmergency();
-    const bool result = engine.ApplyChanges(db, changes, TSnapshot(1,0));
+    const bool result = engine.ApplyChanges(db, changes, TSnapshot(1,1));
     changes->AbortEmergency();
     return result;
 }
@@ -527,12 +528,12 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         // insert
         ui64 planStep = 1;
 
-        THashMap<TBlobRange, TString> blobs;
         ui64 numRows = 1000;
         ui64 rowPos = 0;
         for (ui64 txId = 1; txId <= 20; ++txId, rowPos += numRows) {
             TString testBlob = MakeTestBlob(rowPos, rowPos + numRows);
             auto blobRange = MakeBlobRange(++step, testBlob.size());
+            THashMap<TBlobRange, TString> blobs;
             blobs[blobRange] = testBlob;
 
             // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
@@ -623,12 +624,13 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         THashSet<TUnifiedBlobId> lostBlobs;
         engine.Load(db, lostBlobs);
 
-        THashMap<TBlobRange, TString> blobs;
         ui64 numRows = 1000;
         ui64 rowPos = 0;
+        THashMap<TBlobRange, TString> blobsAll;
         for (ui64 txId = 1; txId <= 100; ++txId, rowPos += numRows) {
             TString testBlob = MakeTestBlob(rowPos, rowPos + numRows);
             auto blobRange = MakeBlobRange(++step, testBlob.size());
+            THashMap<TBlobRange, TString> blobs;
             blobs[blobRange] = testBlob;
 
             // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
@@ -637,6 +639,9 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
                 TInsertedData(txId, pathId, "", blobRange.BlobId, {}, 0, {}));
 
             bool ok = Insert(engine, db, TSnapshot(planStep, txId), std::move(dataToIndex), blobs, step);
+            for (auto&& i : blobs) {
+                blobsAll[i.first] = i.second;
+            }
             UNIT_ASSERT(ok);
         }
 
@@ -649,7 +654,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         // compact
         planStep = 2;
 
-        bool ok = Compact(engine, db, TSnapshot(planStep, 1), std::move(blobs), step, {23, 5, 5});
+        bool ok = Compact(engine, db, TSnapshot(planStep, 1), std::move(blobsAll), step, {23, 5, 5});
         UNIT_ASSERT(ok);
 
         // success write after compaction
@@ -658,6 +663,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         for (ui64 txId = 1; txId <= 2; ++txId, rowPos += numRows) {
             TString testBlob = MakeTestBlob(rowPos, rowPos + numRows);
             auto blobRange = MakeBlobRange(++step, testBlob.size());
+            THashMap<TBlobRange, TString> blobs;
             blobs[blobRange] = testBlob;
 
             // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
@@ -692,12 +698,12 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             engine.UpdateDefaultSchema(indexSnapshot, TIndexInfo(tableInfo));
             engine.Load(db, lostBlobs);
 
-            THashMap<TBlobRange, TString> blobs;
             ui64 numRows = 1000;
             ui64 rowPos = 0;
             for (ui64 txId = 1; txId <= 20; ++txId, rowPos += numRows) {
                 TString testBlob = MakeTestBlob(rowPos, rowPos + numRows);
                 auto blobRange = MakeBlobRange(++step, testBlob.size());
+                THashMap<TBlobRange, TString> blobs;
                 blobs[blobRange] = testBlob;
 
                 // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]

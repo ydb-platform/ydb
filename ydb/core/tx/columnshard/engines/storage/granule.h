@@ -3,7 +3,7 @@
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/portion_info.h>
-#include "optimizer/optimizer.h"
+#include "optimizer/abstract/optimizer.h"
 
 namespace NKikimr::NOlap {
 
@@ -150,10 +150,10 @@ public:
 
 class TCompactionPriority {
 private:
-    i64 Weight = 0;
+    NStorageOptimizer::TOptimizationPriority Weight;
     TMonotonic ConstructionInstant = TMonotonic::Now();
 public:
-    i64 GetWeight() const {
+    const NStorageOptimizer::TOptimizationPriority& GetWeight() const {
         return Weight;
     }
 
@@ -163,11 +163,11 @@ public:
 
     }
     bool operator<(const TCompactionPriority& item) const {
-        return std::tie(Weight) < std::tie(item.Weight);
+        return Weight < item.Weight;
     }
 
     TString DebugString() const {
-        return TStringBuilder() << "summary:(" << Weight << ");";
+        return TStringBuilder() << "summary:(" << Weight.DebugString() << ");";
     }
 
 };
@@ -192,22 +192,24 @@ private:
     const NColumnShard::TGranuleDataCounters Counters;
     NColumnShard::TEngineLogsCounters::TPortionsInfoGuard PortionInfoGuard;
     std::shared_ptr<NStorageOptimizer::IOptimizerPlanner> OptimizerPlanner;
+    std::map<NArrow::TReplaceKey, THashMap<ui64, std::shared_ptr<TPortionInfo>>> PortionsByPK;
 
     void OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> portionBefore);
-    void OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter);
+    void OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter, NStorageOptimizer::IOptimizerPlanner::TModificationGuard* modificationGuard);
     void OnAdditiveSummaryChange() const;
 public:
     std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> self, const THashSet<TPortionAddress>& busyPortions) const {
         return OptimizerPlanner->GetOptimizationTask(limits, self, busyPortions);
     }
 
-    std::vector<std::shared_ptr<TPortionInfo>> GroupOrderedPortionsByPK(const TSnapshot& snapshot) const {
-        return OptimizerPlanner->GetPortionsOrderedByPK(snapshot);
+    const std::map<NArrow::TReplaceKey, THashMap<ui64, std::shared_ptr<TPortionInfo>>>& GroupOrderedPortionsByPK() const {
+        return PortionsByPK;
     }
 
     void OnAfterPortionsLoad() {
+        auto g = OptimizerPlanner->StartModificationGuard();
         for (auto&& i : Portions) {
-            OnAfterChangePortion(i.second);
+            OnAfterChangePortion(i.second, &g);
         }
     }
 
@@ -287,7 +289,7 @@ public:
 
     bool ErasePortion(const ui64 portion);
 
-    explicit TGranuleMeta(const TGranuleRecord& rec, std::shared_ptr<TGranulesStorage> owner, const NColumnShard::TGranuleDataCounters& counters);
+    explicit TGranuleMeta(const TGranuleRecord& rec, std::shared_ptr<TGranulesStorage> owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex);
 
     ui64 GetGranuleId() const {
         return Record.Granule;

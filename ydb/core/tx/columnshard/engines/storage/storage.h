@@ -70,7 +70,8 @@ public:
             return {};
         }
         for (auto it = GranuleCompactionPrioritySorting.rbegin(); it != GranuleCompactionPrioritySorting.rend(); ++it) {
-            if (it->first.GetWeight() == 0) {
+            if (it->first.GetWeight().IsZero()) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "zero_granule_reached");
                 break;
             }
             Y_VERIFY(it->second.size());

@@ -220,6 +220,8 @@ public:
 
     bool DrainAll(TRecordBatchBuilder& builder);
     bool DrainCurrentTo(TRecordBatchBuilder& builder, const TSortableBatchPosition& readTo, const bool includeFinish);
+    std::vector<std::shared_ptr<arrow::RecordBatch>> DrainAllParts(const std::vector<TSortableBatchPosition>& positions,
+        const std::vector<std::shared_ptr<arrow::Field>>& resultFields, const bool includePositions);
 };
 
 class TRecordBatchBuilder {

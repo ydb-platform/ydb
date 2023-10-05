@@ -47,7 +47,7 @@ void TInsertColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     for (size_t i = 0; i < DataToIndex.size(); ++i) {
         const auto& insertedData = DataToIndex[i];
         Y_VERIFY(insertedData.GetBlobRange().IsFullBlob());
-        reading->AddRange(insertedData.GetBlobRange());
+        reading->AddRange(insertedData.GetBlobRange(), insertedData.GetBlobData().value_or(""));
         removing->DeclareRemove(insertedData.GetBlobRange().GetBlobId());
     }
 
@@ -90,26 +90,25 @@ TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionCont
         Y_VERIFY(indexInfo.IsSorted());
 
         std::shared_ptr<arrow::RecordBatch> batch;
-        if (auto* blobData = Blobs.FindPtr(blobRange)) {
-            Y_VERIFY(!blobData->empty(), "Blob data not present");
+        {
+            auto itBlobData = Blobs.find(blobRange);
+            Y_VERIFY(itBlobData != Blobs.end(), "Data for range %s has not been read", blobRange.ToString().c_str());
+            Y_VERIFY(!itBlobData->second.empty(), "Blob data not present");
             // Prepare batch
-            batch = NArrow::DeserializeBatch(*blobData, indexInfo.ArrowSchema());
-            if (!batch) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)
-                    ("event", "cannot_parse")
-                    ("data_snapshot", TStringBuilder() << inserted.GetSnapshot())
-                    ("index_snapshot", TStringBuilder() << blobSchema->GetSnapshot());
-            }
-        } else {
-            Y_VERIFY(blobData, "Data for range %s has not been read", blobRange.ToString().c_str());
+            batch = NArrow::DeserializeBatch(itBlobData->second, indexInfo.ArrowSchema());
+            Blobs.erase(itBlobData);
+            AFL_VERIFY(batch)("event", "cannot_parse")
+                ("data_snapshot", TStringBuilder() << inserted.GetSnapshot())
+                ("index_snapshot", TStringBuilder() << blobSchema->GetSnapshot());
+            ;
         }
-        Y_VERIFY(batch);
 
         batch = AddSpecials(batch, blobSchema->GetIndexInfo(), inserted);
         batch = resultSchema->NormalizeBatch(*blobSchema, batch);
         pathBatches[inserted.PathId].push_back(batch);
         Y_VERIFY_DEBUG(NArrow::IsSorted(pathBatches[inserted.PathId].back(), resultSchema->GetIndexInfo().GetReplaceKey()));
     }
+    Y_VERIFY(Blobs.empty());
 
     for (auto& [pathId, batches] : pathBatches) {
         AddPathIfNotExists(pathId);

@@ -26,7 +26,6 @@ private:
     std::deque<std::shared_ptr<IDataSource>> Sources;
     std::vector<std::shared_ptr<arrow::Field>> ResultFields;
     THashMap<ui32, std::shared_ptr<IDataSource>> SourceByIdx;
-//    std::set<NIndexedReader::TSortableBatchPosition> FrontEnds;
     std::map<NIndexedReader::TSortableBatchPosition, TDataSourceEndpoint> BorderPoints;
     std::map<ui32, std::shared_ptr<IDataSource>> CurrentSegments;
     std::optional<NIndexedReader::TSortableBatchPosition> CurrentStart;

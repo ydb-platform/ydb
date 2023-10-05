@@ -1,15 +1,9 @@
 LIBRARY()
 
-SRCS(
-    optimizer.cpp
-    intervals_optimizer.cpp
-)
-
 PEERDIR(
-    contrib/libs/apache/arrow
-    ydb/core/protos
-    ydb/core/formats/arrow
-    ydb/core/tx/columnshard/engines/changes/abstract
+    ydb/core/tx/columnshard/engines/storage/optimizer/abstract
+    ydb/core/tx/columnshard/engines/storage/optimizer/intervals
+    ydb/core/tx/columnshard/engines/storage/optimizer/levels
 )
 
 END()

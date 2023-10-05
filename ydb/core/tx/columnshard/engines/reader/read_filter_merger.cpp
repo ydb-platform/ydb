@@ -111,13 +111,35 @@ std::optional<TSortableBatchPosition> TMergePartialStream::DrainCurrentPosition(
     while (SortHeap.size() && (isFirst || result.Compare(SortHeap.front().GetKeyColumns()) == std::partial_ordering::equivalent)) {
         auto& anotherIterator = SortHeap.front();
         if (!isFirst) {
-            Y_VERIFY(resultVersion.Compare(anotherIterator.GetVersionColumns()) == std::partial_ordering::greater);
+            AFL_VERIFY(resultVersion.Compare(anotherIterator.GetVersionColumns()) == std::partial_ordering::greater)("r", resultVersion.DebugJson())("a", anotherIterator.GetVersionColumns().DebugJson())
+                ("key", result.DebugJson());
         }
         NextInHeap(true);
         isFirst = false;
     }
     if (deletedFlag) {
         return {};
+    }
+    return result;
+}
+
+std::vector<std::shared_ptr<arrow::RecordBatch>> TMergePartialStream::DrainAllParts(const std::vector<TSortableBatchPosition>& positions,
+    const std::vector<std::shared_ptr<arrow::Field>>& resultFields, const bool includePositions)
+{
+    std::vector<std::shared_ptr<arrow::RecordBatch>> result;
+    for (auto&& i : positions) {
+        NIndexedReader::TRecordBatchBuilder indexesBuilder(resultFields);
+        DrainCurrentTo(indexesBuilder, i, includePositions);
+        result.emplace_back(indexesBuilder.Finalize());
+        if (result.back()->num_rows() == 0) {
+            result.pop_back();
+        }
+    }
+    NIndexedReader::TRecordBatchBuilder indexesBuilder(resultFields);
+    DrainAll(indexesBuilder);
+    result.emplace_back(indexesBuilder.Finalize());
+    if (result.back()->num_rows() == 0) {
+        result.pop_back();
     }
     return result;
 }

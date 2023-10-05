@@ -1,5 +1,6 @@
 #pragma once
 #include "compaction.h"
+#include <ydb/core/formats/arrow/reader/read_filter_merger.h>
 
 namespace NKikimr::NOlap::NCompaction {
 
@@ -7,6 +8,7 @@ class TGeneralCompactColumnEngineChanges: public TCompactColumnEngineChanges {
 private:
     using TBase = TCompactColumnEngineChanges;
     virtual void DoWriteIndexComplete(NColumnShard::TColumnShard& self, TWriteIndexCompleteContext& context) override;
+    std::vector<NIndexedReader::TSortableBatchPosition> CheckPoints;
 protected:
     virtual TConclusionStatus DoConstructBlobs(TConstructionContext& context) noexcept override;
     virtual TPortionMeta::EProduced GetResultProducedClass() const override {
@@ -16,6 +18,8 @@ protected:
     virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const override;
 public:
     using TBase::TBase;
+
+    void AddCheckPoint(const NIndexedReader::TSortableBatchPosition& position);
 
     virtual TString TypeString() const override {
         return StaticTypeName();

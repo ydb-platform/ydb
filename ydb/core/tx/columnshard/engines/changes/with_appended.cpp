@@ -41,7 +41,7 @@ void TChangesWithAppend::DoWriteIndex(NColumnShard::TColumnShard& self, TWriteIn
     self.IncCounter(NColumnShard::COUNTER_PORTIONS_DEACTIVATED, PortionsToRemove.size());
 
     THashSet<TUnifiedBlobId> blobsDeactivated;
-    for (auto& portionInfo : PortionsToRemove) {
+    for (auto& [_, portionInfo] : PortionsToRemove) {
         for (auto& rec : portionInfo.Records) {
             blobsDeactivated.insert(rec.BlobRange.BlobId);
         }
@@ -84,7 +84,7 @@ bool TChangesWithAppend::DoApplyChanges(TColumnEngineForLogs& self, TApplyChange
     }
 
     auto g = self.GranulesStorage->StartPackModification();
-    for (auto& portionInfo : PortionsToRemove) {
+    for (auto& [_, portionInfo] : PortionsToRemove) {
         Y_VERIFY(!portionInfo.Empty());
         Y_VERIFY(!portionInfo.IsActive());
 
@@ -100,7 +100,7 @@ bool TChangesWithAppend::DoApplyChanges(TColumnEngineForLogs& self, TApplyChange
         }
     }
 
-    for (auto& portionInfo : PortionsToRemove) {
+    for (auto& [_, portionInfo] : PortionsToRemove) {
         self.CleanupPortions[portionInfo.GetRemoveSnapshot()].emplace_back(portionInfo);
     }
 
@@ -112,9 +112,10 @@ void TChangesWithAppend::DoCompile(TFinalizationContext& context) {
         i.GetPortionInfo().SetPortion(context.NextPortionId());
         i.GetPortionInfo().UpdateRecordsMeta(TPortionMeta::EProduced::INSERTED);
     }
-    for (auto& portionInfo : PortionsToRemove) {
-        Y_VERIFY(portionInfo.IsActive());
-        portionInfo.SetRemoveSnapshot(context.GetSnapshot());
+    for (auto& [_, portionInfo] : PortionsToRemove) {
+        if (portionInfo.IsActive()) {
+            portionInfo.SetRemoveSnapshot(context.GetSnapshot());
+        }
     }
 }
 

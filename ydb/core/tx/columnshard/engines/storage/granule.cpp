@@ -1,7 +1,8 @@
 #include "granule.h"
 #include "storage.h"
 #include <library/cpp/actors/core/log.h>
-#include "optimizer/intervals_optimizer.h"
+#include "optimizer/intervals/optimizer.h"
+#include "optimizer/levels/optimizer.h"
 
 namespace NKikimr::NOlap {
 
@@ -33,7 +34,7 @@ void TGranuleMeta::UpsertPortion(const TPortionInfo& info) {
         OnBeforeChangePortion(it->second);
         it->second = std::make_shared<TPortionInfo>(info);
     }
-    OnAfterChangePortion(it->second);
+    OnAfterChangePortion(it->second, nullptr);
 }
 
 bool TGranuleMeta::ErasePortion(const ui64 portion) {
@@ -46,7 +47,7 @@ bool TGranuleMeta::ErasePortion(const ui64 portion) {
     }
     OnBeforeChangePortion(it->second);
     Portions.erase(it);
-    OnAfterChangePortion(nullptr);
+    OnAfterChangePortion(nullptr, nullptr);
     return true;
 }
 
@@ -59,7 +60,7 @@ void TGranuleMeta::AddColumnRecord(const TIndexInfo& indexInfo, const TPortionIn
         portionNew->AddRecord(indexInfo, rec, portionMeta);
         it = Portions.emplace(portion.GetPortion(), portionNew).first;
     } else {
-        Y_VERIFY(it->second->IsEqualWithSnapshots(portion));
+        AFL_VERIFY(it->second->IsEqualWithSnapshots(portion))("self", it->second->DebugString())("item", portion.DebugString());
         it->second->AddRecord(indexInfo, rec, portionMeta);
     }
     if (portionMeta) {
@@ -67,8 +68,10 @@ void TGranuleMeta::AddColumnRecord(const TIndexInfo& indexInfo, const TPortionIn
     }
 }
 
-void TGranuleMeta::OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter) {
+void TGranuleMeta::OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter, NStorageOptimizer::IOptimizerPlanner::TModificationGuard* modificationGuard) {
     if (portionAfter) {
+        AFL_VERIFY(PortionsByPK[portionAfter->IndexKeyStart()].emplace(portionAfter->GetPortion(), portionAfter).second);
+
         THashMap<TUnifiedBlobId, ui64> blobIdSize;
         for (auto&& i : portionAfter->Records) {
             blobIdSize[i.BlobRange.BlobId] += i.BlobRange.Size;
@@ -77,7 +80,11 @@ void TGranuleMeta::OnAfterChangePortion(const std::shared_ptr<TPortionInfo> port
             PortionInfoGuard.OnNewBlob(portionAfter->IsActive() ? portionAfter->GetMeta().Produced : NPortion::EProduced::INACTIVE, i.second);
         }
         if (portionAfter->IsActive()) {
-            OptimizerPlanner->AddPortion(portionAfter);
+            if (modificationGuard) {
+                modificationGuard->AddPortion(portionAfter);
+            } else {
+                OptimizerPlanner->StartModificationGuard().AddPortion(portionAfter);
+            }
         }
     }
     if (!!AdditiveSummaryCache) {
@@ -93,6 +100,17 @@ void TGranuleMeta::OnAfterChangePortion(const std::shared_ptr<TPortionInfo> port
 
 void TGranuleMeta::OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> portionBefore) {
     if (portionBefore) {
+        {
+            auto itByKey = PortionsByPK.find(portionBefore->IndexKeyStart());
+            Y_VERIFY(itByKey != PortionsByPK.end());
+            auto itPortion = itByKey->second.find(portionBefore->GetPortion());
+            Y_VERIFY(itPortion != itByKey->second.end());
+            itByKey->second.erase(itPortion);
+            if (itByKey->second.empty()) {
+                PortionsByPK.erase(itByKey);
+            }
+        }
+
         THashMap<TUnifiedBlobId, ui64> blobIdSize;
         for (auto&& i : portionBefore->Records) {
             blobIdSize[i.BlobRange.BlobId] += i.BlobRange.Size;
@@ -101,7 +119,7 @@ void TGranuleMeta::OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> por
             PortionInfoGuard.OnDropBlob(portionBefore->IsActive() ? portionBefore->GetMeta().Produced : NPortion::EProduced::INACTIVE, i.second);
         }
         if (portionBefore->IsActive()) {
-            OptimizerPlanner->RemovePortion(portionBefore);
+            OptimizerPlanner->StartModificationGuard().RemovePortion(portionBefore);
         }
     }
     if (!!AdditiveSummaryCache) {
@@ -153,14 +171,14 @@ const NKikimr::NOlap::TGranuleAdditiveSummary& TGranuleMeta::GetAdditiveSummary(
     return *AdditiveSummaryCache;
 }
 
-TGranuleMeta::TGranuleMeta(const TGranuleRecord& rec, std::shared_ptr<TGranulesStorage> owner, const NColumnShard::TGranuleDataCounters& counters)
+TGranuleMeta::TGranuleMeta(const TGranuleRecord& rec, std::shared_ptr<TGranulesStorage> owner, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex)
     : Owner(owner)
     , Counters(counters)
     , PortionInfoGuard(Owner->GetCounters().BuildPortionBlobsGuard())
     , Record(rec)
 {
     Y_VERIFY(Owner);
-    OptimizerPlanner = std::make_shared<NStorageOptimizer::TIntervalsOptimizerPlanner>(rec.Granule, owner->GetStoragesManager());
+    OptimizerPlanner = std::make_shared<NStorageOptimizer::NLevels::TLevelsOptimizerPlanner>(rec.Granule, owner->GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetReplaceKey());
 
 }
 

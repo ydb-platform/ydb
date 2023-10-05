@@ -33,6 +33,10 @@ private:
         const TPortionInfo& GetPortionInfo() const {
             return PortionInfo;
         }
+
+        TPortionInfo& MutablePortionInfo() {
+            return PortionInfo;
+        }
     };
 
     std::optional<TPortionInfoWithBlobs> UpdateEvictedPortion(TPortionForEviction& info, const THashMap<TBlobRange, TString>& srcBlobs,

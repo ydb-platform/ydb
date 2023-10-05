@@ -5,12 +5,12 @@
 namespace NKikimr::NColumnShard {
 
 bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) {
-    TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID()));
+    auto changes = Ev->Get()->IndexChanges;
+    TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", Self->TabletID())("external_task_id", changes->GetTaskIdentifier());
     Y_VERIFY(Self->InsertTable);
     Y_VERIFY(Self->TablesManager.HasPrimaryIndex());
     txc.DB.NoMoreReadsForTx();
 
-    auto changes = Ev->Get()->IndexChanges;
     ACFL_DEBUG("event", "TTxWriteIndex::Execute")("change_type", changes->TypeString())("details", *changes);
     if (Ev->Get()->GetPutStatus() == NKikimrProto::OK) {
         NOlap::TSnapshot snapshot(Self->LastPlannedStep, Self->LastPlannedTxId);

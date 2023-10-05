@@ -39,12 +39,12 @@ public:
     virtual THashSet<TPortionAddress> GetTouchedPortions() const override {
         THashSet<TPortionAddress> result;
         for (auto&& i : PortionsToRemove) {
-            result.emplace(i.GetAddress());
+            result.emplace(i.first);
         }
         return result;
     }
 
-    std::vector<TPortionInfo> PortionsToRemove;
+    THashMap<TPortionAddress, TPortionInfo> PortionsToRemove;
     std::vector<TPortionInfoWithBlobs> AppendedPortions;
     THashMap<ui64, std::pair<ui64, TMark>> NewGranules;
     ui64 FirstGranuleId = 0;

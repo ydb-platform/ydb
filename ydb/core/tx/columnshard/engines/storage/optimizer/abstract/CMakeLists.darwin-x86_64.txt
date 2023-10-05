@@ -6,15 +6,16 @@
 # original buildsystem will not be accepted.
 
 
-add_subdirectory(abstract)
-add_subdirectory(intervals)
-add_subdirectory(levels)
 
-add_library(engines-storage-optimizer INTERFACE)
-target_link_libraries(engines-storage-optimizer INTERFACE
+add_library(storage-optimizer-abstract)
+target_link_libraries(storage-optimizer-abstract PUBLIC
   contrib-libs-cxxsupp
   yutil
-  storage-optimizer-abstract
-  storage-optimizer-intervals
-  storage-optimizer-levels
+  libs-apache-arrow
+  ydb-core-protos
+  core-formats-arrow
+  engines-changes-abstract
+)
+target_sources(storage-optimizer-abstract PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.cpp
 )

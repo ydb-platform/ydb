@@ -1,7 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/tx/columnshard/splitter/rb_splitter.h>
 #include <ydb/core/tx/columnshard/counters/indexation.h>
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/intervals_optimizer.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/intervals/optimizer.h>
 #include <ydb/core/formats/arrow/serializer/batch_only.h>
 #include <ydb/core/formats/arrow/simple_builder/batch.h>
 #include <ydb/core/formats/arrow/simple_builder/filler.h>

@@ -22,7 +22,6 @@ void TTTLColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     Y_VERIFY(PortionsToEvict.size() || PortionsToRemove.size());
     for (const auto& p : PortionsToEvict) {
         Y_VERIFY(!p.GetPortionInfo().Empty());
-        PortionsToRemove.emplace_back(p.GetPortionInfo());
 
         auto agent = BlobsAction.GetReading(p.GetPortionInfo());
         for (const auto& rec : p.GetPortionInfo().Records) {
@@ -73,7 +72,8 @@ NKikimr::TConclusionStatus TTTLColumnEngineChanges::DoConstructBlobs(TConstructi
 
     for (auto&& info : PortionsToEvict) {
         if (auto pwb = UpdateEvictedPortion(info, Blobs, context)) {
-            PortionsToRemove.emplace_back(info.GetPortionInfo());
+            info.MutablePortionInfo().SetRemoveSnapshot(info.MutablePortionInfo().GetMinSnapshot());
+            AFL_VERIFY(PortionsToRemove.emplace(info.GetPortionInfo().GetAddress(), info.GetPortionInfo()).second);
             AppendedPortions.emplace_back(std::move(*pwb));
         }
     }

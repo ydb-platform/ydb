@@ -53,7 +53,7 @@ public:
         : Columns(columns)
         , Position(position)
     {
-        Y_VERIFY_DEBUG(Size() > 0 && Position < (ui64)Column(0).length());
+        Y_VERIFY(Size() > 0 && Position < (ui64)Column(0).length());
     }
 
     template<typename T = TArrayVecPtr> requires IsOwning
@@ -61,7 +61,7 @@ public:
         : Columns(std::make_shared<TArrayVec>(std::move(columns)))
         , Position(position)
     {
-        Y_VERIFY_DEBUG(Size() > 0 && Position < (ui64)Column(0).length());
+        Y_VERIFY(Size() > 0 && Position < (ui64)Column(0).length());
     }
 
     size_t Hash() const {
@@ -70,7 +70,7 @@ public:
 
     template<typename T>
     bool operator == (const TReplaceKeyTemplate<T>& key) const {
-        Y_VERIFY_DEBUG(Size() == key.Size());
+        Y_VERIFY(Size() == key.Size());
 
         for (int i = 0; i < Size(); ++i) {
             auto cmp = CompareColumnValue(i, key, i);
@@ -83,7 +83,7 @@ public:
 
     template<typename T>
     std::partial_ordering operator <=> (const TReplaceKeyTemplate<T>& key) const {
-        Y_VERIFY_DEBUG(Size() == key.Size());
+        Y_VERIFY(Size() == key.Size());
 
         for (int i = 0; i < Size(); ++i) {
             auto cmp = CompareColumnValue(i, key, i);
@@ -96,7 +96,7 @@ public:
 
     template<typename T>
     std::partial_ordering CompareNotNull(const TReplaceKeyTemplate<T>& key) const {
-        Y_VERIFY_DEBUG(Size() == key.Size());
+        Y_VERIFY(Size() == key.Size());
 
         for (int i = 0; i < Size(); ++i) {
             auto cmp = CompareColumnValueNotNull(i, key, i);
@@ -109,8 +109,8 @@ public:
 
     template<typename T>
     std::partial_ordering ComparePartNotNull(const TReplaceKeyTemplate<T>& key, int size) const {
-        Y_VERIFY_DEBUG(size <= key.Size());
-        Y_VERIFY_DEBUG(size <= Size());
+        Y_VERIFY(size <= key.Size());
+        Y_VERIFY(size <= Size());
 
         for (int i = 0; i < size; ++i) {
             auto cmp = CompareColumnValueNotNull(i, key, i);

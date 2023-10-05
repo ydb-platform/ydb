@@ -1,5 +1,7 @@
 #pragma once
 #include "optimizer.h"
+#include "counters.h"
+#include "blob_size.h"
 #include <ydb/core/formats/arrow/replace_key.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/core/tx/columnshard/splitter/settings.h>
@@ -7,6 +9,8 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer {
+
+class TCounters;
 
 class TSegmentPosition {
 private:
@@ -69,7 +73,6 @@ private:
     YDB_READONLY(i64, PortionsRawWeight, 0);
     YDB_READONLY(i64, SmallPortionsWeight, 0);
     YDB_READONLY(i64, SmallPortionsCount, 0);
-    std::map<ui64, std::shared_ptr<TPortionInfo>> SummaryPortions;
 public:
 
     NJson::TJsonValue DebugJson() const {
@@ -80,24 +83,7 @@ public:
         result.InsertValue("sp_count", SmallPortionsCount);
         result.InsertValue("sp_weight", SmallPortionsWeight);
         result.InsertValue("r_count", RecordsCount);
-        auto& pIds = result.InsertValue("portion_ids", NJson::JSON_ARRAY);
-        for (auto&& i : SummaryPortions) {
-            pIds.AppendValue(i.first);
-        }
         return result;
-    }
-
-    bool Merge(const TIntervalFeatures& features, const i64 sumWeightLimit) {
-        if (PortionsCount > 1 && PortionsWeight + features.PortionsWeight > sumWeightLimit) {
-            return false;
-        }
-        for (auto&& i : features.SummaryPortions) {
-            if (SummaryPortions.contains(i.first)) {
-                continue;
-            }
-            Add(i.second);
-        }
-        return true;
     }
 
     i64 GetUsefulMetric() const {
@@ -116,8 +102,7 @@ public:
     }
 
     void Add(const std::shared_ptr<TPortionInfo>& info) {
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "add_portion_in_summary")("portion_id", info->GetPortion())("count", SummaryPortions.size())("this", (ui64)this);
-        AFL_VERIFY(SummaryPortions.emplace(info->GetPortion(), info).second)("portion_id", info->GetPortion())("this", (ui64)this);
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "add_portion_in_summary")("portion_id", info->GetPortion())("count", GetPortionsCount())("this", (ui64)this);
         ++PortionsCount;
         const i64 portionBytes = info->BlobsBytes();
         PortionsWeight += portionBytes;
@@ -130,8 +115,7 @@ public:
     }
 
     void Remove(const std::shared_ptr<TPortionInfo>& info) {
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "remove_portion_from_summary")("portion_id", info->GetPortion())("count", SummaryPortions.size())("this", (ui64)this);
-        AFL_VERIFY(SummaryPortions.erase(info->GetPortion()))("portion_id", info->GetPortion())("this", (ui64)this);
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "remove_portion_from_summary")("portion_id", info->GetPortion())("count", GetPortionsCount())("this", (ui64)this);
         Y_VERIFY(--PortionsCount >= 0);
         const i64 portionBytes = info->BlobsBytes();
         PortionsWeight -= portionBytes;
@@ -154,16 +138,11 @@ public:
     bool operator<(const TIntervalFeatures& item) const {
         return GetUsefulMetric() < item.GetUsefulMetric();
     }
-    const std::map<ui64, std::shared_ptr<TPortionInfo>>& GetSummaryPortions() const {
-        return SummaryPortions;
-    }
     bool IsEnoughWeight() const {
-        return GetPortionsWeight() > TSplitSettings().GetMinBlobSize();
+        return GetPortionsRawWeight() > TSplitSettings().GetMinBlobSize() * 10;
     }
 
 };
-
-class TCounters;
 
 class TIntervalsOptimizerPlanner: public IOptimizerPlanner {
 private:
@@ -244,29 +223,30 @@ private:
         void AddSummary(const std::shared_ptr<TPortionInfo>& info);
         void RemoveSummary(const std::shared_ptr<TPortionInfo>& info);
     };
+
     std::map<TIntervalFeatures, std::set<const TBorderPositions*>> RangedSegments;
+
     using TPositions = std::map<NArrow::TReplaceKey, TBorderPositions>;
     TPositions Positions;
-    i64 SumSmall = 0;
-    std::map<NArrow::TReplaceKey, std::map<ui64, std::shared_ptr<TPortionInfo>>> SmallBlobs;
+    TBlobsBySize SizeProblemBlobs;
+
+    void RemovePortion(const std::shared_ptr<TPortionInfo>& info);
+    void AddPortion(const std::shared_ptr<TPortionInfo>& info);
 
     void RemoveRanged(const TBorderPositions& data);
-
     void AddRanged(const TBorderPositions& data);
 
     bool RemoveSmallPortion(const std::shared_ptr<TPortionInfo>& info);
 
     bool AddSmallPortion(const std::shared_ptr<TPortionInfo>& info);
 
-    std::shared_ptr<TColumnEngineChanges> GetSmallPortionsMergeTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const THashSet<TPortionAddress>& busyPortions) const;
+    std::vector<std::shared_ptr<TPortionInfo>> GetPortionsForIntervalStartedIn(const NArrow::TReplaceKey& keyStart, const ui32 countExpectation) const;
 
 protected:
-    virtual void DoAddPortion(const std::shared_ptr<TPortionInfo>& info) override;
-    virtual void DoRemovePortion(const std::shared_ptr<TPortionInfo>& info) override;
+    virtual void DoModifyPortions(const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) override;
     virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(const TCompactionLimits& limits, std::shared_ptr<TGranuleMeta> granule, const THashSet<TPortionAddress>& busyPortions) const override;
-    virtual std::vector<std::shared_ptr<TPortionInfo>> DoGetPortionsOrderedByPK(const TSnapshot& snapshot) const override;
 
-    virtual i64 DoGetUsefulMetric() const override;
+    virtual TOptimizationPriority DoGetUsefulMetric() const override;
     virtual TString DoDebugString() const override;
 
 public:

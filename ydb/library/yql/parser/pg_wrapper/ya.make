@@ -38,6 +38,7 @@ SRCS(
     superuser.cpp
     config.cpp
     cost_mocks.cpp
+    syscache.cpp
 )
 
 IF (ARCH_X86_64)

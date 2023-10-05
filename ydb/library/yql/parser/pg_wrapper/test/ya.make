@@ -13,7 +13,7 @@ REQUIREMENTS(
 )
 
 DATA(
-    arcadia/ydb/docs/ru/core/postgresql/functions.md
+    arcadia/ydb/docs/ru/core/postgresql/_includes/functions.md
     arcadia/ydb/library/yql/cfg/udf_test
     arcadia/ydb/library/yql/mount
 )

@@ -10,6 +10,7 @@ namespace NYql::NPg {
 constexpr ui32 UnknownOid = 705;
 constexpr ui32 AnyOid = 2276;
 constexpr ui32 AnyArrayOid = 2277;
+constexpr ui32 RecordOid = 2249;
 
 // copied from pg_class.h
 enum class ERelPersistence : char
@@ -50,6 +51,8 @@ struct TProcDesc {
     bool IsStrict = true;
     EProcKind Kind = EProcKind::Function;
     bool ReturnSet = false;
+    TVector<TString> OutputArgNames;
+    TVector<ui32> OutputArgTypes;
 };
 
 // Copied from pg_collation_d.h

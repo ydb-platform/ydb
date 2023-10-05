@@ -732,6 +732,7 @@ public:
     }
 };
 
+template <bool RangeFunction>
 class TYqlPgCall : public TCallNode {
 public:
     TYqlPgCall(TPosition pos, const TVector<TNodePtr>& args)
@@ -754,12 +755,12 @@ public:
         }
 
         Args[0] = BuildQuotedAtom(Args[0]->GetPos(), Args[0]->GetLiteralValue());
-        Args.insert(Args.begin() + 1, Q(Y()));
+        Args.insert(Args.begin() + 1, RangeFunction ? Q(Y(Q(Y(Q("range"))))) : Q(Y()));
         return TCallNode::DoInit(ctx, src);
     }
 
     TNodePtr DoClone() const final {
-        return new TYqlPgCall(Pos, CloneContainer(Args));
+        return new TYqlPgCall<RangeFunction>(Pos, CloneContainer(Args));
     }
 };
 
@@ -2933,7 +2934,8 @@ struct TBuiltinFuncData {
             {"pgtype", BuildSimpleBuiltinFactoryCallback<TYqlPgType>() },
             {"pgconst", BuildSimpleBuiltinFactoryCallback<TYqlPgConst>() },
             {"pgop", BuildSimpleBuiltinFactoryCallback<TYqlPgOp>() },
-            {"pgcall", BuildSimpleBuiltinFactoryCallback<TYqlPgCall>() },
+            {"pgcall", BuildSimpleBuiltinFactoryCallback<TYqlPgCall<false>>() },
+            {"pgrangecall", BuildSimpleBuiltinFactoryCallback<TYqlPgCall<true>>() },
             {"pgcast", BuildSimpleBuiltinFactoryCallback<TYqlPgCast>() },
             {"frompg", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("FromPg", 1, 1) },
             {"topg", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ToPg", 1, 1) },
@@ -3379,7 +3381,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             TVector<TNodePtr> pgCallArgs;
             pgCallArgs.push_back(BuildLiteralRawString(pos, name));
             pgCallArgs.insert(pgCallArgs.end(), args.begin(), args.end());
-            return new TYqlPgCall(pos, pgCallArgs);
+            return new TYqlPgCall<false>(pos, pgCallArgs);
         }
     } else if (name == "MakeLibraPreprocessor") {
         if (args.size() != 1) {

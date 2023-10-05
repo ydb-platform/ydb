@@ -2529,8 +2529,15 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             args.push_back(MkqlBuildExpr(*node.Child(i), ctx));
         }
 
+        bool rangeFunction = false;
+        for (const auto& child : node.Child(2)->Children()) {
+            if (child->Head().Content() == "range") {
+                rangeFunction = true;
+            }
+        }
+
         auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
-        return ctx.ProgramBuilder.PgResolvedCall(node.IsCallable("PgResolvedCallCtx"), name, id, args, returnType);
+        return ctx.ProgramBuilder.PgResolvedCall(node.IsCallable("PgResolvedCallCtx"), name, id, args, returnType, rangeFunction);
     });
 
     AddCallable("PgResolvedOp", [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -2544,7 +2551,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         }
 
         auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
-        return ctx.ProgramBuilder.PgResolvedCall(false, procName, procId, args, returnType);
+        return ctx.ProgramBuilder.PgResolvedCall(false, procName, procId, args, returnType, false);
     });
 
     AddCallable("BlockPgResolvedCall", [](const TExprNode& node, TMkqlBuildContext& ctx) {

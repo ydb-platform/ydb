@@ -2514,13 +2514,10 @@ public:
 
         TString alias;
         TVector<TString> colnames;
-        if (!value->alias) {
-            AddError("RangeFunction: expected alias");
-            return {};
-        }
-
-        if (!ParseAlias(value->alias, alias, colnames)) {
-            return {};
+        if (value->alias) {
+            if (!ParseAlias(value->alias, alias, colnames)) {
+                return {};
+            }
         }
 
         auto funcNode = ListNodeNth(value->functions, 0);
@@ -2539,7 +2536,13 @@ public:
         settings.AllowColumns = false;
         settings.AllowReturnSet = true;
         settings.Scope = "RANGE FUNCTION";
-        auto func = ParseExpr(ListNodeNth(lst, 0), settings);
+        auto node = ListNodeNth(lst, 0);
+        if (NodeTag(node) != T_FuncCall) {
+            AddError("RangeFunction: extected FuncCall");
+            return {};
+        }
+
+        auto func = ParseFuncCall(CAST_NODE(FuncCall, node), settings, true);
         if (!func) {
             return {};
         }
@@ -2734,7 +2737,7 @@ public:
             return ParseNullTestExpr(CAST_NODE(NullTest, node), settings);
         }
         case T_FuncCall: {
-            return ParseFuncCall(CAST_NODE(FuncCall, node), settings);
+            return ParseFuncCall(CAST_NODE(FuncCall, node), settings, false);
         }
         case T_A_ArrayExpr: {
             return ParseAArrayExpr(CAST_NODE(A_ArrayExpr, node), settings);
@@ -3052,7 +3055,7 @@ public:
         return L(A("PgSubLink"), QA(linkType), L(A("Void")), L(A("Void")), rowTest, L(A("lambda"), QL(), select));
     }
 
-    TAstNode* ParseFuncCall(const FuncCall* value, const TExprSettings& settings) {
+    TAstNode* ParseFuncCall(const FuncCall* value, const TExprSettings& settings, bool rangeFunction) {
         AT_LOCATION(value);
         if (ListLength(value->agg_order) > 0) {
             AddError("FuncCall: unsupported agg_order");
@@ -3165,6 +3168,10 @@ public:
             }
 
             callSettings.push_back(QL(QA("distinct")));
+        }
+
+        if (rangeFunction) {
+            callSettings.push_back(QL(QA("range")));
         }
 
         args.push_back(QVL(callSettings.data(), callSettings.size()));

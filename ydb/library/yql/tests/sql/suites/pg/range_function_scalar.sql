@@ -1,3 +1,4 @@
 --!syntax_pg
-select x from upper('abc') x;
-select a from upper('abc') x(a);
+select * from upper('abc');
+select * from upper('abc') x;
+select * from upper('abc') x(a);

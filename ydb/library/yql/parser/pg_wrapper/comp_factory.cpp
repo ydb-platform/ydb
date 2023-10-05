@@ -37,10 +37,12 @@ extern "C" {
 #include "utils/arrayaccess.h"
 #include "utils/lsyscache.h"
 #include "utils/datetime.h"
+#include "utils/typcache.h"
 #include "nodes/execnodes.h"
 #include "executor/executor.h"
 #include "lib/stringinfo.h"
 #include "miscadmin.h"
+#include "funcapi.h"
 #include "thread_inits.h"
 
 #undef Abs
@@ -78,6 +80,9 @@ struct TMainContext {
     MemoryContextData Data;
     MemoryContext PrevCurrentMemoryContext = nullptr;
     MemoryContext PrevErrorContext = nullptr;
+    MemoryContext PrevCacheMemoryContext = nullptr;
+    RecordCacheState CurrentRecordCacheState = { NULL, NULL, NULL, 0, 0, INVALID_TUPLEDESC_IDENTIFIER };
+    RecordCacheState PrevRecordCacheState;
     TimestampTz StartTimestamp;
     pg_stack_base_t PrevStackBase;
     TString LastError;
@@ -339,7 +344,7 @@ class TPgResolvedCallBase : public TMutableComputationNode<TDerived> {
     typedef TMutableComputationNode<TDerived> TBaseComputation;
 public:
     TPgResolvedCallBase(TComputationMutables& mutables, const std::string_view& name, ui32 id,
-        TComputationNodePtrVector&& argNodes, TVector<TType*>&& argTypes, bool isList)
+        TComputationNodePtrVector&& argNodes, TVector<TType*>&& argTypes, bool isList, const TStructType* structType)
         : TBaseComputation(mutables)
         , Name(name)
         , Id(id)
@@ -347,6 +352,7 @@ public:
         , RetTypeDesc(NPg::LookupType(ProcDesc.ResultType))
         , ArgNodes(std::move(argNodes))
         , ArgTypes(std::move(argTypes))
+        , StructType(structType)
     {
         Zero(FInfo);
         Y_ENSURE(Id);
@@ -387,6 +393,7 @@ protected:
     const NPg::TTypeDesc RetTypeDesc;
     const TComputationNodePtrVector ArgNodes;
     const TVector<TType*> ArgTypes;
+    const TStructType* StructType;    
     TVector<NPg::TTypeDesc> ArgDesc;
 };
 
@@ -408,7 +415,7 @@ class TPgResolvedCall : public TPgResolvedCallBase<TPgResolvedCall<UseContext>> 
 public:
     TPgResolvedCall(TComputationMutables& mutables, const std::string_view& name, ui32 id,
         TComputationNodePtrVector&& argNodes, TVector<TType*>&& argTypes)
-        : TBaseComputation(mutables, name, id, std::move(argNodes), std::move(argTypes), false)
+        : TBaseComputation(mutables, name, id, std::move(argNodes), std::move(argTypes), false, nullptr)
         , StateIndex(mutables.CurValueIndex++)
     {
     }
@@ -481,13 +488,17 @@ private:
         class TIterator : public TComputationValue<TIterator> {
         public:
             TIterator(TMemoryUsageInfo* memInfo, const std::string_view& name, const TUnboxedValueVector& args,
-                const TVector<NPg::TTypeDesc>& argDesc, const NPg::TTypeDesc& retTypeDesc, const FmgrInfo* fInfo)
+                const TVector<NPg::TTypeDesc>& argDesc, const NPg::TTypeDesc& retTypeDesc, const NPg::TProcDesc& procDesc,
+                const FmgrInfo* fInfo, const TStructType* structType, const THolderFactory& holderFactory)
                 : TComputationValue<TIterator>(memInfo)
                 , Name(name)
                 , Args(args)
                 , ArgDesc(argDesc)
                 , RetTypeDesc(retTypeDesc)
+                , ProcDesc(procDesc)
                 , CallInfo(argDesc.size(), fInfo)
+                , StructType(structType)
+                , HolderFactory(holderFactory)
             {
                 auto& callInfo = CallInfo.Ref();
                 callInfo.resultinfo = (fmNodePtr)&RSInfo.Ref();
@@ -497,8 +508,30 @@ private:
                 rsInfo.returnMode = SFRM_ValuePerCall;
                 rsInfo.setResult = nullptr;
                 rsInfo.setDesc = nullptr;
-                rsInfo.expectedDesc = CreateTemplateTupleDesc(1);
-                TupleDescInitEntry(rsInfo.expectedDesc, (AttrNumber) 1, nullptr, RetTypeDesc.TypeId, -1, 0);
+                if (RetTypeDesc.TypeId != RECORDOID) {
+                    rsInfo.expectedDesc = CreateTemplateTupleDesc(1);
+                    TupleDescInitEntry(rsInfo.expectedDesc, (AttrNumber) 1, nullptr, RetTypeDesc.TypeId, -1, 0);
+                } else {
+                    if (StructType) {
+                        YQL_ENSURE(ProcDesc.OutputArgNames.size() == ProcDesc.OutputArgTypes.size());
+                        YQL_ENSURE(ProcDesc.OutputArgNames.size() == StructType->GetMembersCount());
+                        StructIndicies.resize(StructType->GetMembersCount());
+                    }
+
+                    rsInfo.expectedDesc = CreateTemplateTupleDesc(ProcDesc.OutputArgTypes.size());
+                    for (size_t i = 0; i < ProcDesc.OutputArgTypes.size(); ++i) {
+                        auto attrName = ProcDesc.OutputArgNames.empty() ? nullptr : ProcDesc.OutputArgNames[i].c_str();
+                        TupleDescInitEntry(rsInfo.expectedDesc, (AttrNumber) 1 + i, attrName, ProcDesc.OutputArgTypes[i], -1, 0);
+                        if (StructType) {
+                            auto index = StructType->FindMemberIndex(ProcDesc.OutputArgNames[i]);
+                            YQL_ENSURE(index);
+                            StructIndicies[i] = *index;
+                        }
+                    }
+
+                    rsInfo.expectedDesc = BlessTupleDesc(rsInfo.expectedDesc);
+                }
+                
                 TupleSlot = MakeSingleTupleTableSlot(rsInfo.expectedDesc, &TTSOpsMinimalTuple);
                 for (ui32 i = 0; i < args.size(); ++i) {
                     const auto& value = args[i];
@@ -541,6 +574,7 @@ private:
                     tuplestore_select_read_pointer(RSInfo.Ref().setResult, readPtr);
                     return CopyTuple(value);
                 } else {
+                    YQL_ENSURE(!StructType);
                     if (RSInfo.Ref().isDone == ExprEndResult) {
                         IsFinished = true;
                         return false;
@@ -563,53 +597,87 @@ private:
                 }
                 
                 slot_getallattrs(TupleSlot);
-                Y_ENSURE(TupleSlot->tts_nvalid == 1);
-                if (TupleSlot->tts_isnull[0]) {
-                    value = NUdf::TUnboxedValuePod();
+                if (RetTypeDesc.TypeId == RECORDOID) {
+                    if (StructType) {
+                        Y_ENSURE(TupleSlot->tts_nvalid == StructType->GetMembersCount());
+                        NUdf::TUnboxedValue* itemsPtr;
+                        value = HolderFactory.CreateDirectArrayHolder(StructType->GetMembersCount(), itemsPtr);
+                        for (ui32 i = 0; i < StructType->GetMembersCount(); ++i) {
+                            itemsPtr[StructIndicies[i]] = CloneTupleItem(i);
+                        }
+                    } else {
+                        // whole record value
+                        auto tupleDesc = RSInfo.Ref().expectedDesc;
+                        auto tuple = ExecCopySlotHeapTuple(TupleSlot);
+                        auto result = (HeapTupleHeader) palloc(tuple->t_len);
+                        memcpy(result, tuple->t_data, tuple->t_len);
+                        HeapTupleHeaderSetDatumLength(result, tuple->t_len);
+                        HeapTupleHeaderSetTypeId(result, tupleDesc->tdtypeid);
+                        HeapTupleHeaderSetTypMod(result, tupleDesc->tdtypmod);
+                        heap_freetuple(tuple);
+                        value = PointerDatumToPod(HeapTupleHeaderGetDatum(result));
+                    }
                 } else {
-                    auto datum = TupleSlot->tts_values[0];
+                    Y_ENSURE(TupleSlot->tts_nvalid == 1);
+                    value = CloneTupleItem(0);
+                }
+
+                return true;
+            }
+
+            NUdf::TUnboxedValuePod CloneTupleItem(ui32 index) {
+                if (TupleSlot->tts_isnull[index]) {
+                    return NUdf::TUnboxedValuePod();
+                } else {
+                    auto datum = TupleSlot->tts_values[index];
                     if (RetTypeDesc.PassByValue) {
-                        value = ScalarDatumToPod(datum);
+                        return ScalarDatumToPod(datum);
                     } else if (RetTypeDesc.TypeLen == -1) {
                         const text* orig = (const text*)datum;
-                        value = PointerDatumToPod((Datum)MakeVar(GetVarBuf(orig)));
+                        return PointerDatumToPod((Datum)MakeVar(GetVarBuf(orig)));
                     } else {
                         Y_ENSURE(RetTypeDesc.TypeLen == -2);
                         const char* orig = (const char*)datum;
-                        value = PointerDatumToPod((Datum)MakeCString(orig));
+                        return PointerDatumToPod((Datum)MakeCString(orig));
                     }
-               }
-
-                return true;
+                }
             }
 
             const std::string_view Name;
             TUnboxedValueVector Args;
             const TVector<NPg::TTypeDesc>& ArgDesc;
             const NPg::TTypeDesc& RetTypeDesc;
+            const NPg::TProcDesc& ProcDesc;
             TExprContextHolder ExprContextHolder;
             TFunctionCallInfo CallInfo;
+            const TStructType* StructType;
+            const THolderFactory& HolderFactory;
             TReturnSetInfo RSInfo;
             bool IsFinished = false;
             TupleTableSlot* TupleSlot = nullptr;
+            TVector<ui32> StructIndicies;
         };
 
         TListValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx,
             const std::string_view& name, TUnboxedValueVector&& args, const TVector<NPg::TTypeDesc>& argDesc,
-            const NPg::TTypeDesc& retTypeDesc, const FmgrInfo* fInfo)
+            const NPg::TTypeDesc& retTypeDesc, const NPg::TProcDesc& procDesc, const FmgrInfo* fInfo,
+            const TStructType* structType, const THolderFactory& holderFactory)
             : TCustomListValue(memInfo)
             , CompCtx(compCtx)
             , Name(name)
             , Args(args)
             , ArgDesc(argDesc)
             , RetTypeDesc(retTypeDesc)
+            , ProcDesc(procDesc)
             , FInfo(fInfo)
+            , StructType(structType)
+            , HolderFactory(holderFactory)
         {
         }
 
     private:
         NUdf::TUnboxedValue GetListIterator() const final {
-            return CompCtx.HolderFactory.Create<TIterator>(Name, Args, ArgDesc, RetTypeDesc, FInfo);
+            return CompCtx.HolderFactory.Create<TIterator>(Name, Args, ArgDesc, RetTypeDesc, ProcDesc, FInfo, StructType, CompCtx.HolderFactory);
         }
 
         TComputationContext& CompCtx;
@@ -617,13 +685,16 @@ private:
         TUnboxedValueVector Args;
         const TVector<NPg::TTypeDesc>& ArgDesc;
         const NPg::TTypeDesc& RetTypeDesc;
+        const NPg::TProcDesc& ProcDesc;
         const FmgrInfo* FInfo;
+        const TStructType* StructType;
+        const THolderFactory& HolderFactory;
     };
 
 public:
     TPgResolvedMultiCall(TComputationMutables& mutables, const std::string_view& name, ui32 id,
-        TComputationNodePtrVector&& argNodes, TVector<TType*>&& argTypes)
-        : TBaseComputation(mutables, name, id, std::move(argNodes), std::move(argTypes), true)
+        TComputationNodePtrVector&& argNodes, TVector<TType*>&& argTypes, const TStructType* structType)
+        : TBaseComputation(mutables, name, id, std::move(argNodes), std::move(argTypes), true, structType)
     {
     }
 
@@ -635,7 +706,7 @@ public:
             args.push_back(value);
         }
 
-        return compCtx.HolderFactory.Create<TListValue>(compCtx, Name, std::move(args), ArgDesc, RetTypeDesc, &FInfo);
+        return compCtx.HolderFactory.Create<TListValue>(compCtx, Name, std::move(args), ArgDesc, RetTypeDesc, ProcDesc, &FInfo, StructType, compCtx.HolderFactory);
     }
 };
 
@@ -1792,23 +1863,35 @@ TComputationNodeFactory GetPgFactory() {
 
             if (name == "PgResolvedCall") {
                 const auto useContextData = AS_VALUE(TDataLiteral, callable.GetInput(0));
-                const auto nameData = AS_VALUE(TDataLiteral, callable.GetInput(1));
-                const auto idData = AS_VALUE(TDataLiteral, callable.GetInput(2));
+                const auto rangeFunctionData = AS_VALUE(TDataLiteral, callable.GetInput(1));
+                const auto nameData = AS_VALUE(TDataLiteral, callable.GetInput(2));
+                const auto idData = AS_VALUE(TDataLiteral, callable.GetInput(3));
                 auto useContext = useContextData->AsValue().Get<bool>();
+                auto rangeFunction = rangeFunctionData->AsValue().Get<bool>();
                 auto name = nameData->AsValue().AsStringRef();
                 auto id = idData->AsValue().Get<ui32>();
                 TComputationNodePtrVector argNodes;
                 TVector<TType*> argTypes;
-                for (ui32 i = 3; i < callable.GetInputsCount(); ++i) {
+                for (ui32 i = 4; i < callable.GetInputsCount(); ++i) {
                     argNodes.emplace_back(LocateNode(ctx.NodeLocator, callable, i));
                     argTypes.emplace_back(callable.GetInput(i).GetStaticType());
                 }
 
-                const bool isList = callable.GetType()->GetReturnType()->IsList();
+                const auto returnType = callable.GetType()->GetReturnType();
+                const bool isList = returnType->IsList();
+                const auto itemType = isList ? AS_TYPE(TListType, returnType)->GetItemType() : returnType;
+                const TStructType* structType = nullptr;
+                if (rangeFunction) {
+                    if (itemType->IsStruct()) {
+                        structType = AS_TYPE(TStructType, itemType);
+                    }
+                }
+
                 if (isList) {
                     YQL_ENSURE(!useContext);
-                    return new TPgResolvedMultiCall(ctx.Mutables, name, id, std::move(argNodes), std::move(argTypes));
+                    return new TPgResolvedMultiCall(ctx.Mutables, name, id, std::move(argNodes), std::move(argTypes), structType);
                 } else {
+                    YQL_ENSURE(!structType);
                     if (useContext) {
                         return new TPgResolvedCall<true>(ctx.Mutables, name, id, std::move(argNodes), std::move(argTypes));
                     } else {
@@ -3341,7 +3424,10 @@ void PgAcquireThreadContext(void* ctx) {
         auto main = (TMainContext*)ctx;
         main->PrevCurrentMemoryContext = CurrentMemoryContext;
         main->PrevErrorContext = ErrorContext;
-        CurrentMemoryContext = ErrorContext = (MemoryContext)&main->Data;
+        main->PrevCacheMemoryContext = CacheMemoryContext;
+        SaveRecordCacheState(&main->PrevRecordCacheState);
+        LoadRecordCacheState(&main->CurrentRecordCacheState);
+        CurrentMemoryContext = ErrorContext = CacheMemoryContext = (MemoryContext)&main->Data;
         SetParallelStartTimestamps(main->StartTimestamp, main->StartTimestamp);
         main->PrevStackBase = set_stack_base();
         yql_error_report_active = true;
@@ -3353,6 +3439,9 @@ void PgReleaseThreadContext(void* ctx) {
         auto main = (TMainContext*)ctx;
         CurrentMemoryContext = main->PrevCurrentMemoryContext;
         ErrorContext = main->PrevErrorContext;
+        CacheMemoryContext = main->PrevCacheMemoryContext;
+        SaveRecordCacheState(&main->CurrentRecordCacheState);
+        LoadRecordCacheState(&main->PrevRecordCacheState);
         restore_stack_base(main->PrevStackBase);
         yql_error_report_active = false;
     }

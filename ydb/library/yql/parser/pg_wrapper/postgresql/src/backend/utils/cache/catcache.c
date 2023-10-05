@@ -1204,7 +1204,6 @@ SearchCatCacheInternal(CatCache *cache,
 					   Datum v3,
 					   Datum v4)
 {
-	return NULL;
 	Datum		arguments[CATCACHE_MAXKEYS];
 	uint32		hashValue;
 	Index		hashIndex;

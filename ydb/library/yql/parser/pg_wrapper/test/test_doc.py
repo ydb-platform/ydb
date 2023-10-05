@@ -32,8 +32,7 @@ def run_one(item):
         return (line, input, output, None, e, elapsed_time)
 
 
-def convert_value(data, output):
-    cell = data[0]
+def convert_cell(cell, output):
     if cell is None:
         value = 'NULL'
     elif isinstance(cell, bytes):
@@ -49,11 +48,21 @@ def convert_value(data, output):
     return (value, output)
 
 
+def convert_value(data, output):
+    if len(data) == 1:
+        return convert_cell(data[0], output)
+    lst = [convert_cell(x[0], x[1]) for x in zip(data, output.split(","))]
+    return (",".join(x[0] for x in lst), ",".join(x[1] for x in lst))
+
+
 def test_doc():
     skip_before = get_param("skip_before")
+    stop_at = get_param("stop_at")
     if skip_before is not None:
         print("WILL SKIP TESTS BEFORE: ", skip_before)
-    doc_src = yatest.common.source_path("ydb/docs/ru/core/postgresql/functions.md")
+    if stop_at is not None:
+        print("WILL STOP AT: ", stop_at)
+    doc_src = yatest.common.source_path("ydb/docs/ru/core/postgresql/_includes/functions.md")
     with open(doc_src) as f:
         doc_data = f.readlines()
     in_code = False
@@ -67,8 +76,10 @@ def test_doc():
     skip_in_progress = skip_before is not None
     for raw_line in doc_data:
         line = raw_line.strip()
+        if stop_at is not None and line.startswith("## " + stop_at):
+            break
         if skip_in_progress:
-            if line.startswith("# " + skip_before):
+            if line.startswith("## " + skip_before):
                 skip_in_progress = False
             continue
         if set_of is not None:

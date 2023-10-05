@@ -11,7 +11,6 @@ namespace NYql::NPg {
 constexpr ui32 InvalidOid = 0;
 constexpr ui32 Int2VectorOid = 22;
 constexpr ui32 OidVectorOid = 30;
-constexpr ui32 RecordOid = 2249;
 //constexpr ui32 AnyElementOid = 2283;
 //constexpr ui32 AnyNonArrayOid = 2776;
 //constexpr ui32 AnyCompatibleOid = 5077;
@@ -390,10 +389,64 @@ public:
             LastProc.IsStrict = (value == "t");
         } else if (key == "proretset") {
             LastProc.ReturnSet = (value == "t");
+        } else if (key == "proallargtypes") {
+            AllArgTypesStr = value;
+        } else if (key == "proargmodes") {
+            ArgModesStr = value;
+        } else if (key == "proargnames") {
+            ArgNamesStr = value;
         }
     }
 
     void OnFinish() override {
+        if (IsSupported) {
+            if (!ArgModesStr.empty()) {
+                Y_ENSURE(!AllArgTypesStr.empty());
+                Y_ENSURE(ArgModesStr.front() == '{');
+                Y_ENSURE(ArgModesStr.back() == '}');
+                TVector<TString> modes;
+                Split(ArgModesStr.substr(1, ArgModesStr.size() - 2), ",", modes);
+                Y_ENSURE(modes.size() >= LastProc.ArgTypes.size());
+                for (size_t i = 0; i < modes.size(); ++i) {
+                    if (i < LastProc.ArgTypes.size()) {
+                        if (modes[i] != "i") {
+                            IsSupported = false;
+                            break;
+                        }
+                    } else if (modes[i] != "o") {
+                        IsSupported = false;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (IsSupported) {
+            if (!ArgNamesStr.empty()) {
+                Y_ENSURE(ArgNamesStr.front() == '{');
+                Y_ENSURE(ArgNamesStr.back() == '}');
+                TVector<TString> names;
+                Split(ArgNamesStr.substr(1, ArgNamesStr.size() - 2), ",", names);
+                Y_ENSURE(names.size() >= LastProc.ArgTypes.size());
+                LastProc.OutputArgNames.insert(LastProc.OutputArgNames.begin(), names.begin() + LastProc.ArgTypes.size(), names.end());
+            }
+
+            if (!AllArgTypesStr.empty()) {
+                Y_ENSURE(!ArgModesStr.empty());
+                Y_ENSURE(AllArgTypesStr.front() == '{');
+                Y_ENSURE(AllArgTypesStr.back() == '}');
+                TVector<TString> types;
+                Split(AllArgTypesStr.substr(1, AllArgTypesStr.size() - 2), ",", types);
+                Y_ENSURE(types.size() >= LastProc.ArgTypes.size());
+
+                for (size_t i = LastProc.ArgTypes.size(); i < types.size(); ++i) {
+                    auto idPtr = TypeByName.FindPtr(types[i]);
+                    Y_ENSURE(idPtr);
+                    LastProc.OutputArgTypes.push_back(*idPtr);
+                }
+            }
+        }
+
         if (IsSupported) {
             Y_ENSURE(!LastProc.Name.empty());
             Procs[LastProc.ProcId] = LastProc;
@@ -401,6 +454,9 @@ public:
 
         IsSupported = true;
         LastProc = TProcDesc();
+        AllArgTypesStr = "";
+        ArgModesStr = "";
+        ArgNamesStr = "";
     }
 
 private:
@@ -408,6 +464,9 @@ private:
     const THashMap<TString, ui32>& TypeByName;
     TProcDesc LastProc;
     bool IsSupported = true;
+    TString AllArgTypesStr;
+    TString ArgModesStr;
+    TString ArgNamesStr;
 };
 
 struct TLazyTypeInfo {

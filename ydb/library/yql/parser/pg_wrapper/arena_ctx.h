@@ -14,11 +14,15 @@ public:
         return Current->Pool;
     }
 
+    void Acquire();
+    void Release();
+
 private:
     segmented_string_pool Pool;
+    MemoryContext PrevContext = nullptr;
+    MemoryContext MyContext = nullptr;
     static __thread TArenaMemoryContext* Current;
     TArenaMemoryContext* Prev = nullptr;
-    MemoryContext PrevContext = nullptr;
 };
 
 }

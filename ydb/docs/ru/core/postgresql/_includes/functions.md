@@ -3103,19 +3103,19 @@ jsonb_array_length('[]') → 0
 ```||
 ||json_each ( json ) → setof record ( key text, value json )  
 jsonb_each ( jsonb ) → setof record ( key text, value jsonb )|
-Expands the top-level JSON object into a set of key/value pairs. (NOT SUPPORTED)|
+Expands the top-level JSON object into a set of key/value pairs.|
 
 ```sql
-#SELECT * FROM json_each('{"a":"foo", "b":"bar"}') as a → [
+SELECT * FROM json_each('{"a":"foo", "b":"bar"}') as a → [
 a,"foo"
 b,"bar"
 ]
 ```||
 ||json_each_text ( json ) → setof record ( key text, value text )  
 jsonb_each_text ( jsonb ) → setof record ( key text, value text )|
-Expands the top-level JSON object into a set of key/value pairs. The returned values will be of type text. (NOT SUPPORTED)|
+Expands the top-level JSON object into a set of key/value pairs. The returned values will be of type text.|
 ```sql
-#SELECT * FROM json_each_text('{"a":"foo", "b":"bar"}') as a → [
+SELECT * FROM json_each_text('{"a":"foo", "b":"bar"}') as a → [
 a,foo
 b,bar
 ]

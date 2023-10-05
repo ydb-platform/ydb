@@ -922,7 +922,7 @@ void FillInputIndices(const TExprNode::TPtr& from, const TExprNode::TPtr& finalE
         bool foundColumn = false;
         ui32 inputIndex = 0;
         for (; inputIndex < from->Tail().ChildrenSize(); ++inputIndex) {
-            const auto& inputAlias = from->Tail().Child(inputIndex)->Child(1)->Content();
+            auto inputAlias = from->Tail().Child(inputIndex)->Child(1)->Content();
             const auto& read = from->Tail().Child(inputIndex)->Head();
             const auto& columns = from->Tail().Child(inputIndex)->Tail();
             if (x.second.first != Max<ui32>() && x.second.first != inputIndex) {
@@ -930,11 +930,38 @@ void FillInputIndices(const TExprNode::TPtr& from, const TExprNode::TPtr& finalE
             }
 
             if (read.IsCallable("PgResolvedCall")) {
-                Y_ENSURE(!inputAlias.empty());
-                Y_ENSURE(columns.ChildrenSize() == 0 || columns.ChildrenSize() == 1);
-                auto memberName = NTypeAnnImpl::MakeAliasedColumn(inputAlias,
-                    (columns.ChildrenSize() == 1) ? columns.Head().Content() : inputAlias);
-                foundColumn = (memberName == x.first);
+                if (inputAlias.empty()) {
+                    inputAlias = read.Head().Content();
+                }
+
+                auto itemType = GetSeqItemType(read.GetTypeAnn());
+                if (!itemType) {
+                    itemType = read.GetTypeAnn();
+                }
+
+                if (itemType->GetKind() == ETypeAnnotationKind::Struct) {
+                    if (columns.ChildrenSize() == 0) {
+                        auto structType = itemType->Cast<TStructExprType>();
+                        for (const auto& item : structType->GetItems()) {
+                            if (NTypeAnnImpl::MakeAliasedColumn(inputAlias, item->GetName()) == x.first) {
+                                foundColumn = true;
+                                break;
+                            }
+                        }
+                    } else {
+                        for (const auto& child : columns.Children()) {
+                            if (NTypeAnnImpl::MakeAliasedColumn(inputAlias, child->Content()) == x.first) {
+                                foundColumn = true;
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    Y_ENSURE(columns.ChildrenSize() == 0 || columns.ChildrenSize() == 1);
+                    auto memberName = NTypeAnnImpl::MakeAliasedColumn(inputAlias,
+                        (columns.ChildrenSize() == 1) ? columns.Head().Content() : inputAlias);
+                    foundColumn = (memberName == x.first);
+                }
             } else {
                 if (alias && alias != inputAlias) {
                     continue;
@@ -994,43 +1021,92 @@ void FillInputIndices(const TExprNode::TPtr& from, const TExprNode::TPtr& finalE
 }
 
 TExprNode::TListType BuildCleanedColumns(TPositionHandle pos, const TExprNode::TPtr& from, const TUsedColumns& usedColumns,
-    TVector<TString>& inputAliases, THashMap<TString, ui32>& memberToInput, TExprContext& ctx) {
+    TVector<TString>& inputAliases, THashMap<TString, ui32>& memberToInput, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
     TExprNode::TListType cleanedInputs;
     for (ui32 i = 0; i < from->Tail().ChildrenSize(); ++i) {
         auto list = from->Tail().Child(i)->HeadPtr();
-        const auto& inputAlias = from->Tail().Child(i)->Child(1)->Content();
+        auto originalList = list;
+        auto inputAlias = from->Tail().Child(i)->Child(1)->Content();
         inputAliases.push_back(TString(inputAlias));
         if (list->IsCallable("PgResolvedCall")) {
             const auto& columns = from->Tail().Child(i)->Tail();
-            Y_ENSURE(!inputAlias.empty());
-            Y_ENSURE(columns.ChildrenSize() == 0 || columns.ChildrenSize() == 1);
-            auto memberName = (columns.ChildrenSize() == 1) ? columns.Head().Content() : inputAlias;
-            if (list->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List) {
-                list = ctx.Builder(pos)
-                    .Callable("OrderedMap")
-                        .Add(0, list)
-                        .Lambda(1)
-                            .Param("item")
-                            .Callable("AsStruct")
-                                .List(0)
-                                    .Atom(0, memberName)
-                                    .Arg(1, "item")
+            if (inputAlias.empty()) {
+                inputAliases.back() = inputAlias = list->Head().Content();
+            }
+
+            auto itemType = GetSeqItemType(list->GetTypeAnn());
+            if (!itemType) {
+                itemType = list->GetTypeAnn();
+            }
+
+            if (itemType->GetKind() == ETypeAnnotationKind::Struct) {
+                if (list->GetTypeAnn()->GetKind() != ETypeAnnotationKind::List) {
+                    list = ctx.Builder(pos)
+                        .Callable("AsList")
+                            .Add(0, list)
+                        .Seal()
+                        .Build();
+                }
+
+                if (columns.ChildrenSize() != 0) {
+                    // rename columns
+                    list = ctx.Builder(pos)
+                        .Callable("OrderedMap")
+                            .Add(0, list)
+                            .Lambda(1)
+                                .Param("item")
+                                .Callable("AsStruct")
+                                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder & {
+                                        auto originalColumnOrder = typeCtx.LookupColumnOrder(*originalList);
+                                        YQL_ENSURE(originalColumnOrder);
+                                        YQL_ENSURE(originalColumnOrder->size() == columns.ChildrenSize());
+                                        for (ui32 i = 0; i < columns.ChildrenSize(); ++i) {
+                                            parent.List(i)
+                                                .Atom(0, columns.Child(i)->Content())
+                                                .Callable(1, "Member")
+                                                    .Arg(0, "item")
+                                                    .Atom(1, (*originalColumnOrder)[i])
+                                                .Seal()
+                                                .Seal();
+                                        }
+
+                                        return parent;
+                                    })
                                 .Seal()
                             .Seal()
                         .Seal()
-                    .Seal()
-                    .Build();
+                        .Build();
+                }
             } else {
-                list = ctx.Builder(pos)
-                    .Callable("AsList")
-                        .Callable(0, "AsStruct")
-                            .List(0)
-                                .Atom(0, memberName)
-                                .Add(1, list)
+                Y_ENSURE(columns.ChildrenSize() == 0 || columns.ChildrenSize() == 1);
+                auto memberName = (columns.ChildrenSize() == 1) ? columns.Head().Content() : inputAlias;
+                if (list->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List) {
+                    list = ctx.Builder(pos)
+                        .Callable("OrderedMap")
+                            .Add(0, list)
+                            .Lambda(1)
+                                .Param("item")
+                                .Callable("AsStruct")
+                                    .List(0)
+                                        .Atom(0, memberName)
+                                        .Arg(1, "item")
+                                    .Seal()
+                                .Seal()
                             .Seal()
                         .Seal()
-                    .Seal()
-                    .Build();
+                        .Build();
+                } else {
+                    list = ctx.Builder(pos)
+                        .Callable("AsList")
+                            .Callable(0, "AsStruct")
+                                .List(0)
+                                    .Atom(0, memberName)
+                                    .Add(1, list)
+                                .Seal()
+                            .Seal()
+                        .Seal()
+                        .Build();
+                }
             }
         }
 
@@ -3104,7 +3180,7 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
                 FillInputIndices(from, finalExtTypes, usedColumns, optCtx);
 
                 THashMap<TString, ui32> memberToInput;
-                cleanedInputs = BuildCleanedColumns(node->Pos(), from, usedColumns, inputAliases, memberToInput, ctx);
+                cleanedInputs = BuildCleanedColumns(node->Pos(), from, usedColumns, inputAliases, memberToInput, ctx, *optCtx.Types);
                 if (cleanedInputs.size() == 1) {
                     list = cleanedInputs.front();
                 } else {

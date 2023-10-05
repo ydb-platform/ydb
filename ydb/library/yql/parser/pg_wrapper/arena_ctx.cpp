@@ -75,22 +75,32 @@ const MemoryContextMethods MyMethods = {
 __thread TArenaMemoryContext* TArenaMemoryContext::Current = nullptr;
 
 TArenaMemoryContext::TArenaMemoryContext() {
-    Prev = Current;
-    Current = this;
-    PrevContext = CurrentMemoryContext;
-
-    CurrentMemoryContext = (MemoryContext)malloc(sizeof(MemoryContextData));
-    MemoryContextCreate(CurrentMemoryContext,
+    MyContext = (MemoryContext)malloc(sizeof(MemoryContextData));
+    MemoryContextCreate(MyContext,
         T_AllocSetContext,
         &MyMethods,
         nullptr,
         "arena");
+    Acquire();
 }
 
 TArenaMemoryContext::~TArenaMemoryContext() {
-    free(CurrentMemoryContext);
+    Release();
+    free(MyContext);
+}
+
+void TArenaMemoryContext::Acquire() {
+    PrevContext = CurrentMemoryContext;
+    CurrentMemoryContext = MyContext;
+    Prev = Current;
+    Current = this;
+}
+
+void TArenaMemoryContext::Release() {
     CurrentMemoryContext = PrevContext;
+    PrevContext = nullptr;
     Current = Prev;
+    Prev = nullptr;
 }
 
 }

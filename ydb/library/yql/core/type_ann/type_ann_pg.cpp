@@ -107,6 +107,7 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
         return IGraphTransformer::TStatus::Error;
     }
 
+    bool rangeFunction = false;
     for (const auto& setting : input->Child(isResolved ? 2 : 1)->Children()) {
         if (!EnsureTupleMinSize(*setting, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -117,10 +118,13 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
         }
 
         auto content = setting->Head().Content();
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-            TStringBuilder() << "Unexpected setting " << content << " in function " << name));
-
-        return IGraphTransformer::TStatus::Error;
+        if (content == "range") {
+            rangeFunction = true;
+        } else {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                TStringBuilder() << "Unexpected setting " << content << " in function " << name));
+            return IGraphTransformer::TStatus::Error;
+        }
     }
 
     TVector<ui32> argTypes;
@@ -167,12 +171,36 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
         }
 
         const TTypeAnnotationNode* result = ctx.Expr.MakeType<TPgExprType>(proc.ResultType);
+        TMaybe<TColumnOrder> resultColumnOrder;
+        if (proc.ResultType == NPg::RecordOid && rangeFunction) {
+            if (proc.OutputArgNames.empty()) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                    TStringBuilder() << "Aggregate function " << name << " cannot be used in FROM"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            resultColumnOrder.ConstructInPlace();
+            TVector<const TItemExprType*> items;
+            for (size_t i = 0; i < proc.OutputArgTypes.size(); ++i) {
+                resultColumnOrder->push_back(proc.OutputArgNames[i]);
+                items.push_back(ctx.Expr.MakeType<TItemExprType>(
+                    proc.OutputArgNames[i], 
+                    ctx.Expr.MakeType<TPgExprType>(proc.OutputArgTypes[i])));
+            }
+
+            result = ctx.Expr.MakeType<TStructExprType>(items);
+        }
+
         if (proc.ReturnSet) {
             result = ctx.Expr.MakeType<TListExprType>(result);
         }
 
         input->SetTypeAnn(result);
-        return IGraphTransformer::TStatus::Ok;
+        if (resultColumnOrder) {
+            return ctx.Types.SetColumnOrder(*input, *resultColumnOrder, ctx.Expr);
+        } else {
+            return IGraphTransformer::TStatus::Ok;
+        }
     } else {
         try {
             const auto procOrType = NPg::LookupProcWithCasts(TString(name), argTypes);
@@ -3139,27 +3167,51 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         const TStructExprType* inputStructType = nullptr;
                         if (isRangeFunction) {
                             if (alias.empty()) {
-                                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(option->Head().Pos()),
-                                    "Empty alias for range function is not allowed"));
-                                return IGraphTransformer::TStatus::Error;
+                                alias = TString(p->Head().Head().Content());
                             }
 
-                            if (p->Child(2)->ChildrenSize() > 0 && p->Child(2)->ChildrenSize() != 1) {
-                                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(option->Head().Pos()),
-                                    TStringBuilder() << "Expected exactly one column name for range function, but got: " << p->Child(2)->ChildrenSize()));
-                                return IGraphTransformer::TStatus::Error;
-                            }
-
-                            auto memberName = (p->Child(2)->ChildrenSize() == 1) ? p->Child(2)->Head().Content() : alias;
-                            TVector<const TItemExprType*> items;
                             auto itemType = p->Head().GetTypeAnn();
                             if (itemType->GetKind() == ETypeAnnotationKind::List) {
                                 itemType = itemType->Cast<TListExprType>()->GetItemType();
                             }
 
-                            items.push_back(ctx.Expr.MakeType<TItemExprType>(memberName, itemType));
-                            inputStructType = ctx.Expr.MakeType<TStructExprType>(items);
-                            columnOrder = TColumnOrder({ TString(memberName) });
+                            if (itemType->GetKind() == ETypeAnnotationKind::Struct) {
+                                inputStructType = itemType->Cast<TStructExprType>();
+                                if (p->Child(2)->ChildrenSize() > 0) {
+                                    if (p->Child(2)->ChildrenSize() != inputStructType->GetSize()) {
+                                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(option->Head().Pos()),
+                                        TStringBuilder() << "Expected exactly " << inputStructType->GetSize() << " column names for range function, but got: " << p->Child(2)->ChildrenSize()));
+                                        return IGraphTransformer::TStatus::Error;
+                                    }
+
+                                    TVector<const TItemExprType*> newItems;
+                                    TColumnOrder newOrder;
+                                    for (ui32 i = 0; i < inputStructType->GetSize(); ++i) {
+                                        auto newName = TString(p->Child(2)->Child(i)->Content());
+                                        newOrder.push_back(newName);
+                                        newItems.push_back(ctx.Expr.MakeType<TItemExprType>(newName, inputStructType->GetItems()[i]->GetItemType()));
+                                    }
+
+                                    inputStructType = ctx.Expr.MakeType<TStructExprType>(newItems);
+                                    if (!inputStructType->Validate(option->Head().Pos(), ctx.Expr)) {
+                                        return IGraphTransformer::TStatus::Error;
+                                    }
+
+                                    columnOrder = newOrder;
+                                }
+                            } else {
+                                if (p->Child(2)->ChildrenSize() > 0 && p->Child(2)->ChildrenSize() != 1) {
+                                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(option->Head().Pos()),
+                                        TStringBuilder() << "Expected exactly one column name for range function, but got: " << p->Child(2)->ChildrenSize()));
+                                    return IGraphTransformer::TStatus::Error;
+                                }
+
+                                auto memberName = (p->Child(2)->ChildrenSize() == 1) ? p->Child(2)->Head().Content() : alias;
+                                TVector<const TItemExprType*> items;
+                                items.push_back(ctx.Expr.MakeType<TItemExprType>(memberName, itemType));
+                                inputStructType = ctx.Expr.MakeType<TStructExprType>(items);
+                                columnOrder = TColumnOrder({ TString(memberName) });
+                            }
                         }
                         else {
                             if (!EnsureListType(p->Head(), ctx.Expr)) {

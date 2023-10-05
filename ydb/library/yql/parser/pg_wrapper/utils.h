@@ -1,4 +1,7 @@
 #pragma once
+#include <ydb/library/yql/minikql/mkql_alloc.h>
+#include <ydb/library/yql/minikql/computation/mkql_block_item.h>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
 
 namespace NYql {
 
@@ -113,6 +116,19 @@ inline char* MakeCStringNotFilled(size_t size) {
 
 inline char* MakeCString(TStringBuf s) {
     char* ret = MakeCStringNotFilled(s.Size());
+    memcpy(ret, s.Data(), s.Size());
+    return ret;
+}
+
+inline char* MakeFixedStringNotFilled(size_t size) {
+    char* ret = (char*)palloc(size);
+    memset(ret, 0, size);
+    return ret;
+}
+
+inline char* MakeFixedString(TStringBuf s, size_t size) {
+    auto ret = MakeFixedStringNotFilled(size);
+    Y_ENSURE(s.Size() + 1 <= size);
     memcpy(ret, s.Data(), s.Size());
     return ret;
 }

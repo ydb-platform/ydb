@@ -285,6 +285,24 @@ static __thread int32 NextRecordTypmod = 0;	/* number of entries used */
  */
 static __thread uint64 tupledesc_id_counter = INVALID_TUPLEDESC_IDENTIFIER;
 
+void LoadRecordCacheState(RecordCacheState* state) {
+    RecordCacheHash = state->RecordCacheHash;
+    RecordCacheArray = state->RecordCacheArray;
+    RecordIdentifierArray = state->RecordIdentifierArray;
+    RecordCacheArrayLen = state->RecordCacheArrayLen;
+    NextRecordTypmod = state->NextRecordTypmod;
+    tupledesc_id_counter = state->tupledesc_id_counter;
+}
+
+extern void SaveRecordCacheState(RecordCacheState* state) {
+    state->RecordCacheHash = RecordCacheHash;
+    state->RecordCacheArray = RecordCacheArray;
+    state->RecordIdentifierArray = RecordIdentifierArray;
+    state->RecordCacheArrayLen = RecordCacheArrayLen;
+    state->NextRecordTypmod = NextRecordTypmod;
+    state->tupledesc_id_counter = tupledesc_id_counter;
+}
+
 static void load_typcache_tupdesc(TypeCacheEntry *typentry);
 static void load_rangetype_info(TypeCacheEntry *typentry);
 static void load_multirangetype_info(TypeCacheEntry *typentry);

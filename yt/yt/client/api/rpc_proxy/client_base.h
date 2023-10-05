@@ -51,19 +51,19 @@ public:
         const NApi::TTransactionStartOptions& options) override;
 
     // Tables.
-    TFuture<NApi::IUnversionedRowsetPtr> LookupRows(
+    TFuture<TUnversionedLookupRowsResult> LookupRows(
         const NYPath::TYPath& path,
         NTableClient::TNameTablePtr nameTable,
         const TSharedRange<NTableClient::TLegacyKey>& keys,
         const NApi::TLookupRowsOptions& options) override;
 
-    TFuture<NApi::IVersionedRowsetPtr> VersionedLookupRows(
+    TFuture<TVersionedLookupRowsResult> VersionedLookupRows(
         const NYPath::TYPath& path,
         NTableClient::TNameTablePtr nameTable,
         const TSharedRange<NTableClient::TLegacyKey>& keys,
         const NApi::TVersionedLookupRowsOptions& options) override;
 
-    TFuture<std::vector<IUnversionedRowsetPtr>> MultiLookup(
+    TFuture<std::vector<TUnversionedLookupRowsResult>> MultiLookup(
         const std::vector<TMultiLookupSubrequest>& subrequests,
         const TMultiLookupOptions& options = {}) override;
 

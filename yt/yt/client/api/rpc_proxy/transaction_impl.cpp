@@ -492,7 +492,7 @@ TFuture<ITransactionPtr> TTransaction::StartTransaction(
         PatchTransactionId(options));
 }
 
-TFuture<IUnversionedRowsetPtr> TTransaction::LookupRows(
+TFuture<TUnversionedLookupRowsResult> TTransaction::LookupRows(
     const TYPath& path,
     TNameTablePtr nameTable,
     const TSharedRange<TLegacyKey>& keys,
@@ -506,7 +506,7 @@ TFuture<IUnversionedRowsetPtr> TTransaction::LookupRows(
         PatchTransactionTimestamp(options));
 }
 
-TFuture<IVersionedRowsetPtr> TTransaction::VersionedLookupRows(
+TFuture<TVersionedLookupRowsResult> TTransaction::VersionedLookupRows(
     const TYPath& path,
     TNameTablePtr nameTable,
     const TSharedRange<TLegacyKey>& keys,
@@ -520,7 +520,7 @@ TFuture<IVersionedRowsetPtr> TTransaction::VersionedLookupRows(
         PatchTransactionTimestamp(options));
 }
 
-TFuture<std::vector<IUnversionedRowsetPtr>> TTransaction::MultiLookup(
+TFuture<std::vector<TUnversionedLookupRowsResult>> TTransaction::MultiLookup(
     const std::vector<TMultiLookupSubrequest>& subrequests,
     const TMultiLookupOptions& options)
 {

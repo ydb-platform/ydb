@@ -42,7 +42,9 @@ struct TTestDataStorage
                 row[1] = rowBuffer->CaptureValue(NTableClient::MakeUnversionedUint64Value(key + 10, TableSchema->GetColumnIndex(ValueColumn)));
                 rows.push_back(NTableClient::TUnversionedRow{row});
             }
-            return NApi::CreateRowset(TableSchema, MakeSharedRange(rows, std::move(rowBuffer)));
+            return TUnversionedLookupRowsResult{
+                .Rowset = NApi::CreateRowset(TableSchema, MakeSharedRange(rows, std::move(rowBuffer))),
+            };
         } ();
 
         LookupResult2 = [&]() {
@@ -54,7 +56,9 @@ struct TTestDataStorage
                 row[1] = rowBuffer->CaptureValue(NTableClient::MakeUnversionedUint64Value(key + 10, TableSchema->GetColumnIndex(ValueColumn)));
                 rows.push_back(NTableClient::TUnversionedRow{row});
             }
-            return NApi::CreateRowset(TableSchema, MakeSharedRange(rows, std::move(rowBuffer)));
+            return TUnversionedLookupRowsResult{
+                .Rowset = NApi::CreateRowset(TableSchema, MakeSharedRange(rows, std::move(rowBuffer))),
+            };
         } ();
 
         NameTable = NYT::New<NTableClient::TNameTable>();
@@ -80,8 +84,8 @@ struct TTestDataStorage
     const NTableClient::TColumnSchema ValueColumnSchema = NTableClient::TColumnSchema(ValueColumn, NTableClient::EValueType::Uint64);
     NTableClient::TTableSchemaPtr TableSchema = New<NTableClient::TTableSchema>(std::vector{KeyColumnSchema, ValueColumnSchema});
 
-    IUnversionedRowsetPtr LookupResult1;
-    IUnversionedRowsetPtr LookupResult2;
+    NApi::TUnversionedLookupRowsResult LookupResult1;
+    NApi::TUnversionedLookupRowsResult LookupResult2;
     NTableClient::TNameTablePtr NameTable;
     TSharedRange<NTableClient::TUnversionedRow> Keys;
 };
@@ -115,7 +119,7 @@ TEST(TFederatedClientTest, Basic)
         .WillRepeatedly(Return(VoidFuture));
 
     // Creation of federated client.
-    std::vector<IClientPtr> clients = {mockClientSas, mockClientVla};
+    std::vector<IClientPtr> clients{mockClientSas, mockClientVla};
     auto config = New<TFederationConfig>();
     config->ClusterHealthCheckPeriod = TDuration::Seconds(5);
     config->ClusterRetryAttempts = 1;
@@ -127,7 +131,7 @@ TEST(TFederatedClientTest, Basic)
 
     EXPECT_CALL(*mockClientVla, LookupRows(data.Path, _, _, _))
         .WillOnce(Return(MakeFuture(data.LookupResult1)))
-        .WillOnce(Return(MakeFuture<IUnversionedRowsetPtr>(TError(NRpc::EErrorCode::Unavailable, "Failure"))));
+        .WillOnce(Return(MakeFuture<TUnversionedLookupRowsResult>(TError(NRpc::EErrorCode::Unavailable, "Failure"))));
 
     EXPECT_CALL(*mockClientSas, LookupRows(data.Path, _, _, _))
         .WillOnce(Return(MakeFuture(data.LookupResult2)));
@@ -138,7 +142,7 @@ TEST(TFederatedClientTest, Basic)
     // From `vla`.
     {
         auto result = federatedClient->LookupRows(data.Path, data.NameTable, data.Keys);
-        auto rows = result.Get().Value()->GetRows();
+        auto rows = result.Get().Value().Rowset->GetRows();
         ASSERT_EQ(2u, rows.Size());
         auto actualFirstRow = ToString(rows[0]);
         ASSERT_EQ("[0#10u, 1#20u]", actualFirstRow);
@@ -153,7 +157,7 @@ TEST(TFederatedClientTest, Basic)
     // From `sas`.
     {
         auto result = federatedClient->LookupRows(data.Path, data.NameTable, data.Keys);
-        auto rows = result.Get().Value()->GetRows();
+        auto rows = result.Get().Value().Rowset->GetRows();
 
         ASSERT_EQ(2u, rows.Size());
         auto actualFirstRow = ToString(rows[0]);
@@ -183,7 +187,7 @@ TEST(TFederatedClientTest, CheckHealth)
     });
     NNet::WriteLocalHostName("a-rpc-proxy.vla.yp-c.yandex.net");
 
-    std::vector<IClientPtr> clients = {mockClientSas, mockClientVla};
+    std::vector<IClientPtr> clients{mockClientSas, mockClientVla};
     auto config = New<TFederationConfig>();
     config->ClusterHealthCheckPeriod = TDuration::Seconds(5);
     config->ClusterRetryAttempts = 1;
@@ -212,7 +216,7 @@ TEST(TFederatedClientTest, CheckHealth)
     // From `vla`.
     {
         auto result = federatedClient->LookupRows(data.Path, data.NameTable, data.Keys);
-        auto rows = result.Get().Value()->GetRows();
+        auto rows = result.Get().Value().Rowset->GetRows();
         ASSERT_EQ(2u, rows.Size());
         auto actualFirstRow = ToString(rows[0]);
         ASSERT_EQ("[0#10u, 1#20u]", actualFirstRow);
@@ -224,7 +228,7 @@ TEST(TFederatedClientTest, CheckHealth)
     // From `sas` because `vla` was marked as unhealthy after CheckClustersHealth.
     {
         auto result = federatedClient->LookupRows(data.Path, data.NameTable, data.Keys);
-        auto rows = result.Get().Value()->GetRows();
+        auto rows = result.Get().Value().Rowset->GetRows();
 
         ASSERT_EQ(2u, rows.Size());
         auto actualFirstRow = ToString(rows[0]);
@@ -238,7 +242,7 @@ TEST(TFederatedClientTest, CheckHealth)
      // From `vla` because it became ok again.
     {
         auto result = federatedClient->LookupRows(data.Path, data.NameTable, data.Keys);
-        auto rows = result.Get().Value()->GetRows();
+        auto rows = result.Get().Value().Rowset->GetRows();
         ASSERT_EQ(2u, rows.Size());
         auto actualFirstRow = ToString(rows[0]);
         ASSERT_EQ("[0#10u, 1#20u]", actualFirstRow);
@@ -274,7 +278,7 @@ TEST(TFederatedClientTest, Transactions)
         .WillRepeatedly(Return(VoidFuture));
 
     // Creation of federated client.
-    std::vector<IClientPtr> clients = {mockClientSas, mockClientVla};
+    std::vector<IClientPtr> clients{mockClientSas, mockClientVla};
     auto config = New<TFederationConfig>();
     config->ClusterHealthCheckPeriod = TDuration::Seconds(5);
     config->ClusterRetryAttempts = 1;
@@ -287,7 +291,7 @@ TEST(TFederatedClientTest, Transactions)
 
     EXPECT_CALL(*mockTransactionVla, LookupRows(data.Path, _, _, _))
         .WillOnce(Return(MakeFuture(data.LookupResult1)))
-        .WillOnce(Return(MakeFuture<IUnversionedRowsetPtr>(TError(NRpc::EErrorCode::Unavailable, "Failure"))));
+        .WillOnce(Return(MakeFuture<TUnversionedLookupRowsResult>(TError(NRpc::EErrorCode::Unavailable, "Failure"))));
 
     // Wait for the first check of clusters healths.
     Sleep(TDuration::Seconds(2));
@@ -297,7 +301,7 @@ TEST(TFederatedClientTest, Transactions)
     // From `vla`.
     {
         auto result = transaction->LookupRows(data.Path, data.NameTable, data.Keys);
-        auto rows = result.Get().Value()->GetRows();
+        auto rows = result.Get().Value().Rowset->GetRows();
         ASSERT_EQ(2u, rows.Size());
         auto actualFirstRow = ToString(rows[0]);
         ASSERT_EQ("[0#10u, 1#20u]", actualFirstRow);
@@ -321,7 +325,7 @@ TEST(TFederatedClientTest, Transactions)
         transaction = federatedClient->StartTransaction(NTransactionClient::ETransactionType::Tablet).Get().Value();
 
         auto result = transaction->LookupRows(data.Path, data.NameTable, data.Keys);
-        auto rows = result.Get().Value()->GetRows();
+        auto rows = result.Get().Value().Rowset->GetRows();
 
         ASSERT_EQ(2u, rows.Size());
         auto actualFirstRow = ToString(rows[0]);
@@ -360,7 +364,7 @@ TEST(TFederatedClientTest, RetryWithoutTransaction)
         .WillRepeatedly(Return(VoidFuture));
 
     // Creation of federated client.
-    std::vector<IClientPtr> clients = {mockClientSas, mockClientVla};
+    std::vector<IClientPtr> clients{mockClientSas, mockClientVla};
     auto config = New<TFederationConfig>();
     config->ClusterHealthCheckPeriod = TDuration::Seconds(5);
     auto federatedClient = CreateClient(clients, config);
@@ -370,7 +374,7 @@ TEST(TFederatedClientTest, RetryWithoutTransaction)
     // 3. `sas` client should be used as other cluster.
 
     EXPECT_CALL(*mockClientVla, LookupRows(data.Path, _, _, _))
-        .WillOnce(Return(MakeFuture<IUnversionedRowsetPtr>(TError(NRpc::EErrorCode::Unavailable, "Failure"))));
+        .WillOnce(Return(MakeFuture<TUnversionedLookupRowsResult>(TError(NRpc::EErrorCode::Unavailable, "Failure"))));
 
     EXPECT_CALL(*mockClientSas, LookupRows(data.Path, _, _, _))
         .WillOnce(Return(MakeFuture(data.LookupResult2)));
@@ -381,7 +385,7 @@ TEST(TFederatedClientTest, RetryWithoutTransaction)
     // Go to `vla`, getting error, retry via `sas` and getting response from `sas`.
     {
         auto result = federatedClient->LookupRows(data.Path, data.NameTable, data.Keys);
-        auto rows = result.Get().Value()->GetRows();
+        auto rows = result.Get().Value().Rowset->GetRows();
 
         ASSERT_EQ(2u, rows.Size());
         auto actualFirstRow = ToString(rows[0]);
@@ -398,17 +402,16 @@ TEST(TFederatedClientTest, RetryWithoutTransaction)
 
     auto mockTransactionSas = New<TStrictMockTransaction>();
     EXPECT_CALL(*mockClientSas, StartTransaction(_, _))
-        .WillOnce(Return(MakeFuture(NApi::ITransactionPtr{mockTransactionSas})));
+        .WillOnce(Return(MakeFuture(NApi::ITransactionPtr(mockTransactionSas))));
     EXPECT_CALL(*mockTransactionSas, LookupRows(data.Path, _, _, _))
         .WillOnce(Return(MakeFuture(data.LookupResult2)));
-
 
     // Try to start transaction in `vla`, getting error, retry via `sas`, creating transaction and getting response from `sas`.
     {
         auto transaction = federatedClient->StartTransaction(NTransactionClient::ETransactionType::Tablet).Get().Value();
 
         auto result = transaction->LookupRows(data.Path, data.NameTable, data.Keys);
-        auto rows = result.Get().Value()->GetRows();
+        auto rows = result.Get().Value().Rowset->GetRows();
 
         ASSERT_EQ(2u, rows.Size());
         auto actualFirstRow = ToString(rows[0]);
@@ -457,7 +460,7 @@ TEST(TFederatedClientTest, AttachTransaction)
         .WillOnce(Return(mockConnectionVla));
 
     // Creation of federated client.
-    std::vector<IClientPtr> clients = {mockClientSas, mockClientVla};
+    std::vector<IClientPtr> clients{mockClientSas, mockClientVla};
     auto config = New<TFederationConfig>();
     config->ClusterHealthCheckPeriod = TDuration::Seconds(5);
     auto federatedClient = CreateClient(clients, config);

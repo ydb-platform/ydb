@@ -122,7 +122,8 @@ public:
             options.RetentionConfig->MaxDataVersions = 1;
 
             auto partitionRowset = WaitFor(transaction->VersionedLookupRows(Path_, NameTable_, keyRowsBuilder.Build(), options))
-                .ValueOrThrow();
+                .ValueOrThrow()
+                .Rowset;
             const auto& rows = partitionRowset->GetRows();
 
             // XXX(max42): should we use name table from the rowset, or it coincides with our own name table?
@@ -430,7 +431,8 @@ private:
             NameTable_,
             builder.Build(),
             options))
-            .ValueOrThrow();
+            .ValueOrThrow()
+            .Rowset;
 
         YT_VERIFY(versionedRowset->GetRows().size() == partitionIndices.size());
 

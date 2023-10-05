@@ -749,7 +749,7 @@ TFuture<ITableWriterPtr> TClientBase::CreateTableWriter(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TFuture<IUnversionedRowsetPtr> TClientBase::LookupRows(
+TFuture<TUnversionedLookupRowsResult> TClientBase::LookupRows(
     const TYPath& path,
     TNameTablePtr nameTable,
     const TSharedRange<TLegacyKey>& keys,
@@ -784,13 +784,16 @@ TFuture<IUnversionedRowsetPtr> TClientBase::LookupRows(
     ToProto(req->mutable_tablet_read_options(), options);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspLookupRowsPtr& rsp) {
-        return DeserializeRowset<TUnversionedRow>(
+        auto rowset = DeserializeRowset<TUnversionedRow>(
             rsp->rowset_descriptor(),
             MergeRefsToRef<TRpcProxyClientBufferTag>(rsp->Attachments()));
+        return TUnversionedLookupRowsResult{
+            .Rowset = std::move(rowset),
+        };
     }));
 }
 
-TFuture<IVersionedRowsetPtr> TClientBase::VersionedLookupRows(
+TFuture<TVersionedLookupRowsResult> TClientBase::VersionedLookupRows(
     const TYPath& path,
     TNameTablePtr nameTable,
     const TSharedRange<TLegacyKey>& keys,
@@ -825,13 +828,16 @@ TFuture<IVersionedRowsetPtr> TClientBase::VersionedLookupRows(
     }
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspVersionedLookupRowsPtr& rsp) {
-        return DeserializeRowset<TVersionedRow>(
+        auto rowset = DeserializeRowset<TVersionedRow>(
             rsp->rowset_descriptor(),
             MergeRefsToRef<TRpcProxyClientBufferTag>(rsp->Attachments()));
+        return TVersionedLookupRowsResult{
+            .Rowset = std::move(rowset),
+        };
     }));
 }
 
-TFuture<std::vector<IUnversionedRowsetPtr>> TClientBase::MultiLookup(
+TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookup(
     const std::vector<TMultiLookupSubrequest>& subrequests,
     const TMultiLookupOptions& options)
 {
@@ -876,7 +882,7 @@ TFuture<std::vector<IUnversionedRowsetPtr>> TClientBase::MultiLookup(
     return req->Invoke().Apply(BIND([subrequestCount = std::ssize(subrequests)] (const TApiServiceProxy::TRspMultiLookupPtr& rsp) {
         YT_VERIFY(subrequestCount == rsp->subresponses_size());
 
-        std::vector<IUnversionedRowsetPtr> result;
+        std::vector<TUnversionedLookupRowsResult> result;
         result.reserve(subrequestCount);
 
         int beginAttachmentIndex = 0;
@@ -884,12 +890,15 @@ TFuture<std::vector<IUnversionedRowsetPtr>> TClientBase::MultiLookup(
             int endAttachmentIndex = beginAttachmentIndex + subresponse.attachment_count();
             YT_VERIFY(endAttachmentIndex <= std::ssize(rsp->Attachments()));
 
-            std::vector<TSharedRef> subresponseAttachments{
+            std::vector<TSharedRef> subresponseAttachments(
                 rsp->Attachments().begin() + beginAttachmentIndex,
-                rsp->Attachments().begin() + endAttachmentIndex};
-            result.push_back(DeserializeRowset<TUnversionedRow>(
+                rsp->Attachments().begin() + endAttachmentIndex);
+            auto rowset = DeserializeRowset<TUnversionedRow>(
                 subresponse.rowset_descriptor(),
-                MergeRefsToRef<TRpcProxyClientBufferTag>(std::move(subresponseAttachments))));
+                MergeRefsToRef<TRpcProxyClientBufferTag>(std::move(subresponseAttachments)));
+            result.push_back({
+                .Rowset = std::move(rowset),
+            });
 
             beginAttachmentIndex = endAttachmentIndex;
         }

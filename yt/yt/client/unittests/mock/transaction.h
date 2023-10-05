@@ -21,19 +21,19 @@ public:
         NTransactionClient::ETransactionType type,
         const TTransactionStartOptions& options), (override));
 
-    MOCK_METHOD(TFuture<IUnversionedRowsetPtr>, LookupRows, (
+    MOCK_METHOD(TFuture<TUnversionedLookupRowsResult>, LookupRows, (
         const NYPath::TYPath& path,
         NTableClient::TNameTablePtr nameTable,
         const TSharedRange<NTableClient::TLegacyKey>& keys,
         const TLookupRowsOptions& options), (override));
 
-    MOCK_METHOD(TFuture<IVersionedRowsetPtr>, VersionedLookupRows, (
+    MOCK_METHOD(TFuture<TVersionedLookupRowsResult>, VersionedLookupRows, (
         const NYPath::TYPath& path,
         NTableClient::TNameTablePtr nameTable,
         const TSharedRange<NTableClient::TLegacyKey>& keys,
         const TVersionedLookupRowsOptions& options), (override));
 
-    MOCK_METHOD(TFuture<std::vector<IUnversionedRowsetPtr>>, MultiLookup, (
+    MOCK_METHOD(TFuture<std::vector<TUnversionedLookupRowsResult>>, MultiLookup, (
         const std::vector<TMultiLookupSubrequest>& subrequests,
         const TMultiLookupOptions& options), (override));
 

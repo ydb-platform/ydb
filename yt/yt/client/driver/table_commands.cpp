@@ -896,18 +896,27 @@ void TLookupRowsCommand::DoExecute(ICommandContextPtr context)
         versionedOptions.CachedSyncReplicasTimeout = Options.CachedSyncReplicasTimeout;
         versionedOptions.RetentionConfig = RetentionConfig;
         versionedOptions.ReplicaConsistency = Options.ReplicaConsistency;
-        auto asyncRowset = clientBase->VersionedLookupRows(Path.GetPath(), std::move(nameTable), std::move(keyRange), versionedOptions);
+        auto asyncRowset = clientBase->VersionedLookupRows(
+            Path.GetPath(),
+            std::move(nameTable),
+            std::move(keyRange),
+            versionedOptions);
         auto rowset = WaitFor(asyncRowset)
-            .ValueOrThrow();
+            .ValueOrThrow()
+            .Rowset;
         auto writer = CreateVersionedWriterForFormat(format, rowset->GetSchema(), output);
         writer->Write(rowset->GetRows());
         WaitFor(writer->Close())
             .ThrowOnError();
     } else {
-        auto asyncRowset = clientBase->LookupRows(Path.GetPath(), std::move(nameTable), std::move(keyRange), Options);
+        auto asyncRowset = clientBase->LookupRows(
+            Path.GetPath(),
+            std::move(nameTable),
+            std::move(keyRange),
+            Options);
         auto rowset = WaitFor(asyncRowset)
-            .ValueOrThrow();
-
+            .ValueOrThrow()
+            .Rowset;
         auto writer = CreateSchemafulWriterForFormat(format, rowset->GetSchema(), output);
         writer->Write(rowset->GetRows());
         WaitFor(writer->Close())

@@ -94,6 +94,15 @@ struct TSelectRowsResult
     NQueryClient::TQueryStatistics Statistics;
 };
 
+template <class IRowset>
+struct TLookupRowsResult
+{
+    TIntrusivePtr<IRowset> Rowset;
+};
+
+using TUnversionedLookupRowsResult = TLookupRowsResult<IUnversionedRowset>;
+using TVersionedLookupRowsResult = TLookupRowsResult<IVersionedRowset>;
+
 struct TTableReaderOptions
     : public TTransactionalOptions
     , public TSuppressableAccessTrackingOptions
@@ -404,19 +413,19 @@ struct TLocateSkynetShareOptions
 
 struct ITableClientBase
 {
-    virtual TFuture<IUnversionedRowsetPtr> LookupRows(
+    virtual TFuture<TUnversionedLookupRowsResult> LookupRows(
         const NYPath::TYPath& path,
         NTableClient::TNameTablePtr nameTable,
         const TSharedRange<NTableClient::TLegacyKey>& keys,
         const TLookupRowsOptions& options = {}) = 0;
 
-    virtual TFuture<IVersionedRowsetPtr> VersionedLookupRows(
+    virtual TFuture<TVersionedLookupRowsResult> VersionedLookupRows(
         const NYPath::TYPath& path,
         NTableClient::TNameTablePtr nameTable,
         const TSharedRange<NTableClient::TLegacyKey>& keys,
         const TVersionedLookupRowsOptions& options = {}) = 0;
 
-    virtual TFuture<std::vector<IUnversionedRowsetPtr>> MultiLookup(
+    virtual TFuture<std::vector<TUnversionedLookupRowsResult>> MultiLookup(
         const std::vector<TMultiLookupSubrequest>& subrequests,
         const TMultiLookupOptions& options = {}) = 0;
 

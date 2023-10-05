@@ -61,7 +61,7 @@ public:
         NTransactionClient::ETransactionType type,
         const TTransactionStartOptions& options = {}) override;
 
-    TFuture<IUnversionedRowsetPtr> LookupRows(
+    TFuture<TUnversionedLookupRowsResult> LookupRows(
         const NYPath::TYPath& path,
         NTableClient::TNameTablePtr nameTable,
         const TSharedRange<NTableClient::TLegacyKey>& keys,
@@ -85,12 +85,12 @@ public:
 
     TFuture<void> Abort(const TTransactionAbortOptions& options = TTransactionAbortOptions()) override;
 
-    TFuture<IVersionedRowsetPtr> VersionedLookupRows(
+    TFuture<TVersionedLookupRowsResult> VersionedLookupRows(
         const NYPath::TYPath&, NTableClient::TNameTablePtr,
         const TSharedRange<NTableClient::TUnversionedRow>&,
         const TVersionedLookupRowsOptions&) override;
 
-    TFuture<std::vector<IUnversionedRowsetPtr>> MultiLookup(
+    TFuture<std::vector<TUnversionedLookupRowsResult>> MultiLookup(
         const std::vector<TMultiLookupSubrequest>&,
         const TMultiLookupOptions&) override;
 
@@ -231,7 +231,7 @@ class TClient
 public:
     TClient(const std::vector<IClientPtr>& underlyingClients, TFederationConfigPtr config);
 
-    TFuture<IUnversionedRowsetPtr> LookupRows(
+    TFuture<TUnversionedLookupRowsResult> LookupRows(
         const NYPath::TYPath& path,
         NTableClient::TNameTablePtr nameTable,
         const TSharedRange<NTableClient::TLegacyKey>& keys,
@@ -239,10 +239,10 @@ public:
     TFuture<TSelectRowsResult> SelectRows(
         const TString& query,
         const TSelectRowsOptions& options = {}) override;
-    TFuture<std::vector<IUnversionedRowsetPtr>> MultiLookup(
+    TFuture<std::vector<TUnversionedLookupRowsResult>> MultiLookup(
         const std::vector<TMultiLookupSubrequest>&,
         const TMultiLookupOptions&) override;
-    TFuture<IVersionedRowsetPtr> VersionedLookupRows(
+    TFuture<TVersionedLookupRowsResult> VersionedLookupRows(
         const NYPath::TYPath&, NTableClient::TNameTablePtr,
         const TSharedRange<NTableClient::TUnversionedRow>&,
         const TVersionedLookupRowsOptions&) override;
@@ -469,13 +469,13 @@ TFuture<ResultType> TTransaction::MethodName(Y_METHOD_USED_ARGS_DECLARATION(Args
     return future;                                                                                                      \
 } Y_SEMICOLON_GUARD
 
-TRANSACTION_METHOD_IMPL(IUnversionedRowsetPtr, LookupRows, (const NYPath::TYPath&, NTableClient::TNameTablePtr, const TSharedRange<NTableClient::TUnversionedRow>&, const TLookupRowsOptions&));
+TRANSACTION_METHOD_IMPL(TUnversionedLookupRowsResult, LookupRows, (const NYPath::TYPath&, NTableClient::TNameTablePtr, const TSharedRange<NTableClient::TUnversionedRow>&, const TLookupRowsOptions&));
 TRANSACTION_METHOD_IMPL(TSelectRowsResult, SelectRows, (const TString&, const TSelectRowsOptions&));
 TRANSACTION_METHOD_IMPL(void, Ping, (const NApi::TTransactionPingOptions&));
 TRANSACTION_METHOD_IMPL(TTransactionCommitResult, Commit, (const TTransactionCommitOptions&));
 TRANSACTION_METHOD_IMPL(void, Abort, (const TTransactionAbortOptions&));
-TRANSACTION_METHOD_IMPL(IVersionedRowsetPtr, VersionedLookupRows, (const NYPath::TYPath&, NTableClient::TNameTablePtr, const TSharedRange<NTableClient::TUnversionedRow>&, const TVersionedLookupRowsOptions&));
-TRANSACTION_METHOD_IMPL(std::vector<IUnversionedRowsetPtr>, MultiLookup, (const std::vector<TMultiLookupSubrequest>&, const TMultiLookupOptions&));
+TRANSACTION_METHOD_IMPL(TVersionedLookupRowsResult, VersionedLookupRows, (const NYPath::TYPath&, NTableClient::TNameTablePtr, const TSharedRange<NTableClient::TUnversionedRow>&, const TVersionedLookupRowsOptions&));
+TRANSACTION_METHOD_IMPL(std::vector<TUnversionedLookupRowsResult>, MultiLookup, (const std::vector<TMultiLookupSubrequest>&, const TMultiLookupOptions&));
 TRANSACTION_METHOD_IMPL(TPullRowsResult, PullRows, (const NYPath::TYPath&, const TPullRowsOptions&));
 TRANSACTION_METHOD_IMPL(NYson::TYsonString, ExplainQuery, (const TString&, const TExplainQueryOptions&));
 TRANSACTION_METHOD_IMPL(NYson::TYsonString, GetNode, (const NYPath::TYPath&, const TGetNodeOptions&));
@@ -631,10 +631,10 @@ TFuture<ResultType> TClient::MethodName(Y_METHOD_USED_ARGS_DECLARATION(Args))   
     return DoCall<ResultType>(Config_->ClusterRetryAttempts, callee);                                                   \
 } Y_SEMICOLON_GUARD
 
-CLIENT_METHOD_IMPL(IUnversionedRowsetPtr, LookupRows, (const NYPath::TYPath&, NTableClient::TNameTablePtr, const TSharedRange<NTableClient::TLegacyKey>&, const TLookupRowsOptions&));
+CLIENT_METHOD_IMPL(TUnversionedLookupRowsResult, LookupRows, (const NYPath::TYPath&, NTableClient::TNameTablePtr, const TSharedRange<NTableClient::TLegacyKey>&, const TLookupRowsOptions&));
 CLIENT_METHOD_IMPL(TSelectRowsResult, SelectRows, (const TString&, const TSelectRowsOptions&));
-CLIENT_METHOD_IMPL(std::vector<IUnversionedRowsetPtr>, MultiLookup, (const std::vector<TMultiLookupSubrequest>&, const TMultiLookupOptions&));
-CLIENT_METHOD_IMPL(IVersionedRowsetPtr, VersionedLookupRows, (const NYPath::TYPath&, NTableClient::TNameTablePtr, const TSharedRange<NTableClient::TUnversionedRow>&, const TVersionedLookupRowsOptions&));
+CLIENT_METHOD_IMPL(std::vector<TUnversionedLookupRowsResult>, MultiLookup, (const std::vector<TMultiLookupSubrequest>&, const TMultiLookupOptions&));
+CLIENT_METHOD_IMPL(TVersionedLookupRowsResult, VersionedLookupRows, (const NYPath::TYPath&, NTableClient::TNameTablePtr, const TSharedRange<NTableClient::TUnversionedRow>&, const TVersionedLookupRowsOptions&));
 CLIENT_METHOD_IMPL(TPullRowsResult, PullRows, (const NYPath::TYPath&, const TPullRowsOptions&));
 CLIENT_METHOD_IMPL(NQueueClient::IQueueRowsetPtr, PullQueue, (const NYPath::TRichYPath&, i64, int, const NQueueClient::TQueueRowBatchReadOptions&, const TPullQueueOptions&));
 CLIENT_METHOD_IMPL(NQueueClient::IQueueRowsetPtr, PullConsumer, (const NYPath::TRichYPath&, const NYPath::TRichYPath&, i64, int, const NQueueClient::TQueueRowBatchReadOptions&, const TPullConsumerOptions&));

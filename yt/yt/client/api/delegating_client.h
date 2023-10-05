@@ -25,19 +25,19 @@ public:
         const TTransactionStartOptions& options = {}) override;
 
     // Tables
-    TFuture<IUnversionedRowsetPtr> LookupRows(
+    TFuture<TUnversionedLookupRowsResult> LookupRows(
         const NYPath::TYPath& path,
         NTableClient::TNameTablePtr nameTable,
         const TSharedRange<NTableClient::TLegacyKey>& keys,
         const TLookupRowsOptions& options = {}) override;
 
-    TFuture<IVersionedRowsetPtr> VersionedLookupRows(
+    TFuture<TVersionedLookupRowsResult> VersionedLookupRows(
         const NYPath::TYPath& path,
         NTableClient::TNameTablePtr nameTable,
         const TSharedRange<NTableClient::TLegacyKey>& keys,
         const TVersionedLookupRowsOptions& options = {}) override;
 
-    TFuture<std::vector<IUnversionedRowsetPtr>> MultiLookup(
+    TFuture<std::vector<TUnversionedLookupRowsResult>> MultiLookup(
         const std::vector<TMultiLookupSubrequest>& subrequests,
         const TMultiLookupOptions& options = {}) override;
 

@@ -25,7 +25,7 @@ TFuture<ITransactionPtr> TDelegatingClient::StartTransaction(
     return Underlying_->StartTransaction(type, options);
 }
 
-TFuture<IUnversionedRowsetPtr> TDelegatingClient::LookupRows(
+TFuture<TUnversionedLookupRowsResult> TDelegatingClient::LookupRows(
     const NYPath::TYPath& path,
     NTableClient::TNameTablePtr nameTable,
     const TSharedRange<NTableClient::TLegacyKey>& keys,
@@ -34,7 +34,7 @@ TFuture<IUnversionedRowsetPtr> TDelegatingClient::LookupRows(
     return Underlying_->LookupRows(path, std::move(nameTable), keys, options);
 }
 
-TFuture<IVersionedRowsetPtr> TDelegatingClient::VersionedLookupRows(
+TFuture<TVersionedLookupRowsResult> TDelegatingClient::VersionedLookupRows(
     const NYPath::TYPath& path,
     NTableClient::TNameTablePtr nameTable,
     const TSharedRange<NTableClient::TLegacyKey>& keys,
@@ -43,7 +43,7 @@ TFuture<IVersionedRowsetPtr> TDelegatingClient::VersionedLookupRows(
     return Underlying_->VersionedLookupRows(path, std::move(nameTable), keys, options);
 }
 
-TFuture<std::vector<IUnversionedRowsetPtr>> TDelegatingClient::MultiLookup(
+TFuture<std::vector<TUnversionedLookupRowsResult>> TDelegatingClient::MultiLookup(
     const std::vector<TMultiLookupSubrequest>& subrequests,
     const TMultiLookupOptions& options)
 {

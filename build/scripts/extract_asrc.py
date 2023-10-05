@@ -14,7 +14,7 @@ def parse_args():
 def main():
     args = parse_args()
 
-    for asrc in filter(lambda x: x.endswith('.asrc') and os.path.exists(x), args.input):
+    for asrc in [x for x in args.input if x.endswith('.asrc') and os.path.exists(x)]:
         with tarfile.open(asrc, 'r') as tar:
             tar.extractall(path=args.output)
 

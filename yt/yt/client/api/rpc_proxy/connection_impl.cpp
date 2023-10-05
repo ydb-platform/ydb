@@ -51,9 +51,9 @@ using namespace NServiceDiscovery;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TStringBuf ProxyUrlCanonicalHttpPrefix = "http://";
-const TStringBuf ProxyUrlCanonicalHttpsPrefix = "https://";
-const TStringBuf ProxyUrlCanonicalSuffix = ".yt.yandex.net";
+static const TStringBuf ProxyUrlCanonicalHttpPrefix = "http://";
+static const TStringBuf ProxyUrlCanonicalHttpsPrefix = "https://";
+static const TStringBuf ProxyUrlCanonicalSuffix = ".yt.yandex.net";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -98,12 +98,12 @@ TString NormalizeHttpProxyUrl(TString url, const std::optional<THashMap<TString,
     return url;
 }
 
+namespace {
+
 bool IsProxyUrlSecure(const TString& url)
 {
     return url.StartsWith(ProxyUrlCanonicalHttpsPrefix);
 }
-
-namespace {
 
 TString MakeConnectionLoggingTag(const TConnectionConfigPtr& config, TGuid connectionId)
 {

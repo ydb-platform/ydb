@@ -391,28 +391,23 @@ void TCommandPgConvert::Config(TConfig& config) {
     config.NeedToConnect = false;
     config.SetFreeArgsNum(0);
 
-    config.Opts->AddLongOption('i', "input",
-        "Path to input SQL file. Read from stdin if not specified").StoreResult(&Path);
+    config.Opts->AddLongOption('i', "input", "Path to input SQL file.").StoreResult(&Path);
 }
 
 void TCommandPgConvert::Parse(TConfig& config) {
     TToolsCommand::Parse(config);
+    if (!Path) {
+        throw TMisuseException() << "Path to SQL file is not specified.";
+    }
 }
 
 int TCommandPgConvert::Run(TConfig& config) {
     Y_UNUSED(config);
-    std::unique_ptr<TFileInput> fileInput;
-    if (Path) {
-        fileInput = std::make_unique<TFileInput>(Path);
-    }
-    IInputStream& input = fileInput ? *fileInput : Cin;
-    TPgDumpParser parser;
-    char c;
-
-    while (input.ReadChar(c)) {
-        parser.AddChar(c);
-    }
-    parser.WritePgDump(Cout);
+    TPgDumpParser parser(Cout);
+    std::unique_ptr<TFileInput> fileInput = std::make_unique<TFileInput>(Path);
+    parser.Prepare(*fileInput);
+    fileInput = std::make_unique<TFileInput>(Path);
+    parser.WritePgDump(*fileInput);
     return EXIT_SUCCESS;
 }
 

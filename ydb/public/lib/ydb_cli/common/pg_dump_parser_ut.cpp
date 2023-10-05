@@ -7,13 +7,14 @@ using namespace NYdb::NConsoleClient;
 
 Y_UNIT_TEST_SUITE(PgDumpParserTests) {
     TString ParseDump(const TString& data) {
-        TPgDumpParser parser;
-        for (char c : data) {
-            parser.AddChar(c);
-        }
-        TStringStream result;
-        parser.WritePgDump(result);
-        return result.Str();
+        TStringStream in, out;
+        TPgDumpParser parser(out);
+        in << data;
+        parser.Prepare(in);
+        in.clear();
+        in << data;
+        parser.WritePgDump(in);
+        return out.Str();
     }
 
     Y_UNIT_TEST(RemovePublicScheme) {
@@ -77,10 +78,11 @@ Y_UNIT_TEST_SUITE(PgDumpParserTests) {
             "    mtime timestamp without time zone,\n"
             "    filler character(22)\n"
             ");\n"
+            "--\n"
             "ALTER TABLE ONLY public.pgbench_accounts\n"
             "    ADD CONSTRAINT pgbench_accounts_pkey PRIMARY KEY (aid);\n"
             "ALTER TABLE ONLY public.pgbench_branches\n"
-                "ADD CONSTRAINT pgbench_branches_pkey PRIMARY KEY (bid);\n";
+            "    ADD CONSTRAINT pgbench_branches_pkey PRIMARY KEY (bid);\n";
         TString result = 
             "CREATE TABLE pgbench_accounts (\n"
             "    aid integer NOT NULL,\n"
@@ -103,7 +105,12 @@ Y_UNIT_TEST_SUITE(PgDumpParserTests) {
             "    mtime timestamp without time zone,\n"
             "    filler character(22),\n"
             "    __ydb_stub_id BIGSERIAL PRIMARY KEY\n"
-            ");\n";
+            ");\n"
+            "--\n"
+            "-- ALTER TABLE ONLY public.pgbench_accounts\n"
+            "--     ADD CONSTRAINT pgbench_accounts_pkey PRIMARY KEY (aid);\n"
+            "-- ALTER TABLE ONLY public.pgbench_branches\n"
+            "--     ADD CONSTRAINT pgbench_branches_pkey PRIMARY KEY (bid);\n";
         UNIT_ASSERT_EQUAL(ParseDump(data), result);
     }
 }

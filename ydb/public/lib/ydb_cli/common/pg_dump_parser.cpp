@@ -39,12 +39,12 @@ TPgDumpParser::TSQLCommandNode* TPgDumpParser::TSQLCommandNode::GetNextCommand(c
     return nullptr;
 }
 
-TPgDumpParser::TPgDumpParser() {
+TPgDumpParser::TPgDumpParser(IOutputStream& out) : Out(out) {
     auto saveTableName = [this] {
         FixPublicScheme();
         TableName = LastToken;
     };
-    auto searchPrimaryKeyNode = Root->AddCommand("CREATE")->
+    auto searchPrimaryKeyNode = RunRoot.AddCommand("CREATE")->
         AddOptionalCommands({"GLOBAL", "LOCAL", "TEMP", "TEMPORARY", "UNLOGGED"})->
         AddCommand("TABLE")->AddOptionalCommands({"IF", "NOT", "EXISTS"})->
         AddCommand("", saveTableName);
@@ -55,56 +55,60 @@ TPgDumpParser::TPgDumpParser() {
     searchPrimaryKeyNode->AddOptionalCommand("(", [this]{++BracesCount;});
     searchPrimaryKeyNode->AddOptionalCommand(")", [this]{--BracesCount;});
     searchPrimaryKeyNode->AddOptionalCommand("");
+    searchPrimaryKeyNode->AddCommand(";", [this]{NotFlush = true;});
+    searchPrimaryKeyNode->AddCommand("WITH")->AddCommand("(")->AddOptionalCommand("")->AddCommand(")", [this]{IsWithStatement = true;});
 
-    WithParsingRoot->AddCommand("WITH")->AddCommand("(")->AddOptionalCommand("")->
-        AddCommand(")", [this]{IsWithStatement = true;});
-
-    Root->AddCommand("INSERT")->AddCommand("INTO")->AddCommand("", saveTableName);
-    Root->AddCommand("SELECT")->AddCommand("", saveTableName)->
-        AddOptionalCommand("")->AddCommand(";", [this]{IsSelect = true;});
-    Root->AddCommand("ALTER")->AddCommand("TABLE", [this]{IsAlterTable = true;})->AddCommand("ONLY")->
+    RunRoot.AddCommand("INSERT")->AddCommand("INTO")->AddCommand("", saveTableName);
+    RunRoot.AddCommand("SELECT")->AddCommand("", saveTableName)->AddOptionalCommand("")->AddCommand(";", [this]{IsSelect = true; NotFlush = true;});
+    RunRoot.AddCommand("ALTER")->AddCommand("TABLE")->AddOptionalCommand("")->AddCommand(";", [this]{IsAlterTable=true; NotFlush = true;});
+    RunRoot.AddCommand("--", [this]{IsCommented = true; NotFlush = true;});
+    PrepareRoot.AddCommand("ALTER")->AddCommand("TABLE")->AddCommand("ONLY")->
         AddCommand("", saveTableName)->AddCommand("ADD")->AddCommand("CONSTRAINT")->
         AddCommand("")->AddCommand("PRIMARY")->AddCommand("KEY")->
         AddCommand("(")->AddCommand("", [this]{PrimaryKeyName=LastToken;})->
-        AddCommand(")")->AddCommand(";", [this]{IsPrimaryKey=true;});
+        AddCommand(")")->AddCommand(";", [this]{IsPrimaryKey=true; NotFlush = true;});
 }
 
-void TPgDumpParser::AddChar(char c) {
-    if (!LastToken.empty() && (std::isspace(c) || IsNewTokenSymbol(c) || IsNewTokenSymbol(Buffers.back().back()))) {
-        EndToken();
-    }
-    if (!std::isspace(c)) {
-        LastToken += c;
-    }
-    Buffers.back() += c;
-}
-
-void TPgDumpParser::WritePgDump(IOutputStream& stream) {
-    EndToken();
-    for (const auto& [name, id] : BufferIdByTableName) {
-        TString& createTableBuffer = Buffers[id];
-        createTableBuffer.pop_back();
-        while (!createTableBuffer.empty() && std::isspace(createTableBuffer.back())) {
-            createTableBuffer.pop_back();
+void TPgDumpParser::ReadStream(IInputStream& in, bool isPrepare) {
+    char c;
+    while (in.ReadChar(c)) {
+        if (!LastToken.empty() && (std::isspace(c) || IsNewTokenSymbol(c) || IsNewTokenSymbol(Buffer.back()))) {
+            EndToken(isPrepare);
         }
-        createTableBuffer += TStringBuilder() << ",\n    __ydb_stub_id BIGSERIAL PRIMARY KEY\n)";
+        if (c == '\n') {
+            IsCommented = false;
+        }
+        if (!std::isspace(c)) {
+            LastToken += c;
+        }
+        Buffer += c;
     }
-    for (const auto& buffer : Buffers) {
-        stream << buffer;
-    }
-    Buffers.clear();
+    EndToken(isPrepare);
+}
+
+void TPgDumpParser::Prepare(IInputStream& in) {
+    CurrentNode = &PrepareRoot;
+    ReadStream(in, true);
+    Buffer.clear();
+}
+
+void TPgDumpParser::WritePgDump(IInputStream& in) {
+    CurrentNode = &RunRoot;
+    ReadStream(in, false);
+    Out << Buffer;
+    Buffer.clear();
 }
 
 void TPgDumpParser::FixPublicScheme() {
     if (LastToken.StartsWith("public.")) {
-        Buffers.back().remove(Buffers.back().size() - LastToken.size());
+        Buffer.remove(Buffer.size() - LastToken.size());
         TStringBuf token = LastToken;
         token.remove_prefix(TString("public.").size());
-        Buffers.back() += token;
+        Buffer += token;
     }
 }
 
-void TPgDumpParser::ApplyToken() {
+void TPgDumpParser::ApplyToken(TSQLCommandNode* root) {
     auto next = CurrentNode->GetNextCommand(LastToken);
     if (next != nullptr) {
         CurrentNode = next;
@@ -115,34 +119,52 @@ void TPgDumpParser::ApplyToken() {
         CurrentNode = next;
         return;
     }
-    if (CurrentNode != Root.get()) {
-        CurrentNode = Root.get();
-        if (IsAlterTable) {
-            IsCommentAlterTable = true;
-            IsAlterTable = false;
+    if (CurrentNode != root) {
+        CurrentNode = root;
+        if (!NotFlush) {
+            if (root != &PrepareRoot) {
+                Out << Buffer;
+            }
+            Buffer.clear();
         }
-        ApplyToken();
+        NotFlush = false;
+        ApplyToken(root);
     }
 }
 
-void TPgDumpParser::EndToken() {
-    ApplyToken();
-    PgCatalogCheck();
-    CreateTableCheck();
-    AlterTableCheck();
+void TPgDumpParser::PrimaryKeyCheck() {
+    if (IsPrimaryKey) {
+        PrimaryKeyByTable[TableName] = PrimaryKeyName;
+    }
+}
+
+void TPgDumpParser::EndToken(bool isPrepare) {
+    if (IsCommented) {
+        LastToken.clear();
+        return;
+    }
+    if (isPrepare) {
+        ApplyToken(&PrepareRoot);
+        PrimaryKeyCheck();
+    } else {
+        ApplyToken(&RunRoot);
+        PgCatalogCheck();
+        CreateTableCheck();
+        AlterTableCheck();
+    }
     LastToken.clear();
 }
 
 TString TPgDumpParser::ExtractToken(TString* result, const std::function<bool(char)>& pred) {
-    auto pos = Buffers.back().size();
-    while (pos > 0 && pred(Buffers.back()[pos - 1])) {
+    auto pos = Buffer.size();
+    while (pos > 0 && pred(Buffer[pos - 1])) {
         --pos;
         if (result) {
-            *result += Buffers.back()[pos];
+            *result += Buffer[pos];
         }
     }
-    TString token = Buffers.back().substr(pos, Buffers.back().size() - pos);
-    Buffers.back().remove(pos);
+    TString token = Buffer.substr(pos, Buffer.size() - pos);
+    Buffer.remove(pos);
     return token;
 }
 
@@ -151,7 +173,7 @@ void TPgDumpParser::PgCatalogCheck() {
         IsSelect = false;
         if (TableName.StartsWith("pg_catalog.set_config")) {
             TString tmpBuffer;
-            while (!Buffers.back().empty()) {
+            while (!Buffer.empty()) {
                 auto token = ExtractToken(&tmpBuffer, [](char c){return !std::isspace(c);});
                 if (token == "SELECT") {
                     break;
@@ -159,45 +181,28 @@ void TPgDumpParser::PgCatalogCheck() {
                 ExtractToken(&tmpBuffer, [](char c){return std::isspace(c);});
             }
             std::reverse(tmpBuffer.begin(), tmpBuffer.vend());
-            Buffers.back() += TStringBuilder() << "-- " << tmpBuffer;
+            Buffer += TStringBuilder() << "-- " << tmpBuffer;
         }
     }
 }
 
 void TPgDumpParser::AlterTableCheck() {
-    if (IsCommentAlterTable) {
-        IsCommentAlterTable = false;
+    if (IsAlterTable) {
+        IsAlterTable = false;
         TString tmpBuffer;
-        while (!Buffers.back().empty()) {
+        while (!Buffer.empty()) {
             auto token = ExtractToken(&tmpBuffer, [](char c){return !std::isspace(c);});
             if (token == "ALTER") {
                 break;
             }
+            ExtractToken(&tmpBuffer, [](char c){return std::isspace(c) && c != '\n';});
+            if (!Buffer.empty() && Buffer.back() == '\n') {
+                tmpBuffer += " --";
+            }
             ExtractToken(&tmpBuffer, [](char c){return std::isspace(c);});
         }
         std::reverse(tmpBuffer.begin(), tmpBuffer.vend());
-        Buffers.back() += TStringBuilder() << "-- " << tmpBuffer;
-    }
-
-    if (IsPrimaryKey) {
-        IsPrimaryKey = false;
-        IsAlterTable = false;
-        if (BufferIdByTableName.find(TableName) != BufferIdByTableName.end()) {
-            TString& createTableBuffer = Buffers[BufferIdByTableName[TableName]];
-            createTableBuffer.pop_back();
-            while (!createTableBuffer.empty() && std::isspace(createTableBuffer.back())) {
-                createTableBuffer.pop_back();
-            }
-            createTableBuffer += TStringBuilder() << ",\n    PRIMARY KEY(" + PrimaryKeyName + ")\n)";
-            BufferIdByTableName.erase(TableName);
-        }
-        while (!Buffers.back().empty()) {
-            auto token = ExtractToken(nullptr, [](char c){return !std::isspace(c);});
-            ExtractToken(nullptr, [](char c){return std::isspace(c);});
-            if (token == "ALTER") {
-                break;
-            }
-        }
+        Buffer += TStringBuilder() << "-- " << tmpBuffer;
     }
 }
 
@@ -207,14 +212,20 @@ void TPgDumpParser::CreateTableCheck() {
     }
     if (IsCreateTable && BracesCount == 0) {
         IsCreateTable = false;
-        BufferIdByTableName[TableName] = Buffers.size() - 1;
-        Buffers.push_back("");
-        CurrentNode =
-        WithParsingRoot.get();
+        Buffer.pop_back();
+        while (!Buffer.empty() && std::isspace(Buffer.back())) {
+            Buffer.pop_back();
+        }
+        if (PrimaryKeyByTable.find(TableName) != PrimaryKeyByTable.end()) {
+            Buffer += TStringBuilder() << ",\n    PRIMARY KEY(" + PrimaryKeyByTable[TableName] + ")\n)";
+        } else {
+            Buffer += TStringBuilder() << ",\n    __ydb_stub_id BIGSERIAL PRIMARY KEY\n)";
+        }
+        PrimaryKeyByTable.erase(TableName);
     }
     if (IsWithStatement) {
         IsWithStatement = false;
-        while (!Buffers.back().empty()) {
+        while (!Buffer.empty()) {
             auto token = ExtractToken(nullptr, [](char c){return !std::isspace(c);});
             ExtractToken(nullptr, [](char c){return std::isspace(c);});
             if (token == "WITH") {

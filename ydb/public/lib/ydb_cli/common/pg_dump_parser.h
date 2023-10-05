@@ -32,37 +32,42 @@ class TPgDumpParser {
     };
 
 public:
-    explicit TPgDumpParser();
+    explicit TPgDumpParser(IOutputStream& out);
 
-    void AddChar(char c);
-    void WritePgDump(IOutputStream& stream);
+    void Prepare(IInputStream& in);
+    void WritePgDump(IInputStream& in);
 
 private:
     static bool IsNewTokenSymbol(char c) {
         return c == '(' || c == ')' || c == ',' || c == ';' || c == '\'';
     }
 
-    void FixPublicScheme();
-    void ApplyToken();
-    void EndToken();
+    void ReadStream(IInputStream& in, bool isPrepare);
+    void ApplyToken(TSQLCommandNode* root);
+    void EndToken(bool isPrepare);
     TString ExtractToken(TString* result, const std::function<bool(char)>& pred);
+
+    void FixPublicScheme();
     void PgCatalogCheck();
     void AlterTableCheck();
     void CreateTableCheck();
+    void PrimaryKeyCheck();
 
-    std::vector<TString> Buffers{""};
-    std::map<TString, size_t> BufferIdByTableName;
+    TString Buffer, LastTokenBuffer;
+    std::map<TString, TString> PrimaryKeyByTable;
     TString LastToken, TableName, PrimaryKeyName;
     bool IsCreateTable = false;
     bool IsWithStatement = false;
     bool IsSelect = false;
     bool IsAlterTable = false;
-    bool IsCommentAlterTable = false;
     bool IsPrimaryKey = false;
+    bool IsCommented = false;
+    bool NotFlush = false;
     size_t BracesCount = 0;
-    std::unique_ptr<TSQLCommandNode> Root = std::make_unique<TSQLCommandNode>();
-    std::unique_ptr<TSQLCommandNode> WithParsingRoot = std::make_unique<TSQLCommandNode>();
-    TSQLCommandNode* CurrentNode = Root.get();
+
+    IOutputStream& Out;
+    TSQLCommandNode RunRoot, PrepareRoot;
+    TSQLCommandNode* CurrentNode = nullptr;
 };
 
 } // NYdb::NConsoleClient

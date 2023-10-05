@@ -22,6 +22,10 @@ Y_UNIT_TEST_SUITE(ObjectDistribuiton) {
         std::uniform_int_distribution<TNodeId> pickNode(0, NUM_NODES - 1);
         std::bernoulli_distribution subtract(0.2);
 
+        for (TNodeId node = 0; node < NUM_NODES; ++node) {
+            objectDistributions.AddNode(node);
+        }
+
         for (size_t i = 0; i < NUM_OPERATIONS; i++) {
             TObjectId object = pickObject(engine);
             TNodeId node = pickNode(engine);
@@ -35,7 +39,6 @@ Y_UNIT_TEST_SUITE(ObjectDistribuiton) {
         }
 
         ui64 imbalancedObjects = 0;
-        ui64 totalImbalance = 0;
         for (const auto& [object, it] : objectDistributions.Distributions) {
             ui64 maxCnt = 0;
             ui64 minCnt = NUM_OPERATIONS;
@@ -43,9 +46,9 @@ Y_UNIT_TEST_SUITE(ObjectDistribuiton) {
             ui64 nonZeroCount = 0;
             for (TNodeId node = 0; node < NUM_NODES; ++node) {
                 ui64 cnt = trueDistribution[{node, object}];
-                if (cnt == 0) {
+               /* if (cnt == 0) {
                     continue;
-                }
+                }*/
                 maxCnt = std::max(maxCnt, cnt);
                 minCnt = std::min(minCnt, cnt);
                 total += cnt;
@@ -54,28 +57,26 @@ Y_UNIT_TEST_SUITE(ObjectDistribuiton) {
             if (maxCnt == 0) {
                 continue;
             }
-            ui64 trueImbalance = std::max<ui64>(maxCnt - minCnt, 1) - 1;
+            double trueImbalance = (std::max<double>(maxCnt - minCnt, 1) - 1) / maxCnt;
             // std::cerr << "imbalance for " << object << " should be " << trueImbalance << std::endl;
-            ui64 imbalance = it->GetImbalance();
-            UNIT_ASSERT_VALUES_EQUAL(trueImbalance, imbalance);
+            double imbalance = it->GetImbalance();
+            UNIT_ASSERT_DOUBLES_EQUAL(trueImbalance, imbalance, 1e-5);
 
-            totalImbalance += trueImbalance;
-            imbalancedObjects += (trueImbalance != 0);
+            imbalancedObjects += (trueImbalance > 1e-7);
 
             double mean = (double)total / nonZeroCount;
             double varianceNumerator = 0;
             for (TNodeId node = 0; node < NUM_NODES; ++node) {
                 ui64 cnt = trueDistribution[{node, object}];
-                if (cnt == 0) {
+               /* if (cnt == 0) {
                     continue;
-                }
+                }*/
                 varianceNumerator += (mean - cnt) * (mean - cnt);
             }
             double trueVariance = varianceNumerator / nonZeroCount;
             double variance = it->GetVariance();
             UNIT_ASSERT_DOUBLES_EQUAL(trueVariance, variance, 1e-5);
         }
-        UNIT_ASSERT_VALUES_EQUAL(totalImbalance, objectDistributions.GetTotalImbalance());
         UNIT_ASSERT_VALUES_EQUAL(imbalancedObjects, objectDistributions.GetImbalancedObjectsCount());
     }
 }

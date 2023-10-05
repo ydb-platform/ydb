@@ -1,4 +1,4 @@
-#include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/monlib/service/pages/templates.h> 
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <util/string/vector.h>
@@ -1327,6 +1327,7 @@ public:
 
         out << "<head>";
         out << "<style>";
+        out << "table.simple-table1 th { text-align: center; }";
         out << "table.simple-table1 td { padding: 1px 3px; }";
         out << "table.simple-table1 td:nth-child(1) { text-align: right; }";
         out << "table.simple-table2 th { text-align: right; }";
@@ -1337,41 +1338,73 @@ public:
         out << "table.simple-table2 td:nth-child(2) { text-align: left; }";
         out << "table.simple-table2 td:nth-child(3) { text-align: left; }";
         out << "table.simple-table2 td:nth-child(4) { text-align: left; }";
+        out << "table.simple-table3 td { padding: 1px 3px; text-align: right; }";
+        out << "table.simple-table3 th { text-align: center; }";
         out << ".table-hover tbody tr:hover > td { background-color: #9dddf2; }";
         out << ".blinking { animation:blinkingText 0.8s infinite; }";
         out << "@keyframes blinkingText { 0% { color: #000; } 49% { color: #000; } 60% { color: transparent; } 99% { color:transparent; } 100% { color: #000; } }";
         out << "</style>";
         out << "</head>";
         out << "<body>";
-        out << "<table class='simple-table1'>";
-
+        out << "<div style='display:flex'><div style='min-width:220px'><table class='simple-table1'>";
+        out << "<tr><th colspan='2'>Info</th></tr>";
         TSubDomainKey domainId = Self->GetMySubDomainKey();
         if (domainId) {
-            out << "<tr><td>" << "Tenant:" << "</td>";
+            out << "<tr><td><span id='alert-placeholder' class='glyphicon' style='height:14px'></span>" << "Tenant:" << "</td>";
             TDomainInfo* domainInfo = Self->FindDomain(domainId);
             if (domainInfo && domainInfo->Path) {
                 out << "<td>" << domainInfo->Path << "</td>";
             } else {
                 out << "<td>" << domainId << "</td>";
             }
-            out << "<td><span id='alert-placeholder' class='glyphicon' style='height:14px'></span></td>";
-            out << "</tr>";
+            out << "<td></tr>";
         }
 
-        /*out << "<tr><td>" << "Nodes:" << "</td><td id='aliveNodes'>" << (nodes == 0 ? 0 : aliveNodes * 100 / nodes) << "% "
-            << aliveNodes << "/" << nodes << "</td></tr>";*/
-        out << "<tr><td>" << "Tablets:" << "</td><td id='runningTablets'>" << GetRunningTabletsText(runningTablets, tablets, Self->WarmUp) << "</td></tr>";
-        out << "<tr><td>Balancer:</td><td id='balancerProgress'>"
-            << GetBalancerProgressText(Self->BalancerProgress, Self->LastBalancerTrigger) << "</td></tr>";
+        out << "<tr><td>" << "Nodes:" << "</td><td id='aliveNodes'>" << aliveNodes << "</td></tr>";
+        out << "<tr><td>" << "Tablets:" << "</td><td id='runningTablets'>" << runningTablets << "</td></tr>";
         out << "<tr><td>" << "Boot Queue:" << "</td><td id='bootQueue'>" << Self->BootQueue.BootQueue.size() << "</td></tr>";
         out << "<tr><td>" << "Wait Queue:" << "</td><td id='waitQueue'>" << Self->BootQueue.WaitQueue.size() << "</td></tr>";
-        out << "<tr><td>" << "Resource Total: " << "</td><td id='resourceTotal'>" << GetResourceValuesText(Self->TotalRawResourceValues) << "</td></tr>";
-        out << "<tr><td>" << "Resource StDev: " << "</td><td id='resourceVariance'>"
-            << convert(Self->GetStDevResourceValues(), [](double d) -> TString { return Sprintf("%.9f", d); }) << "</td></tr>";
-        THive::THiveStats stats = Self->GetStats();
-        out << "<tr><td>" << "Max usage:" << "<td id='maxUsage'>" << GetValueWithColoredGlyph(stats.MaxUsage, Self->GetMaxNodeUsageToKick()) << "</td></tr>";
-        out << "<tr><td>" << "Scatter:" << "<td id='scatter'>" << convert(stats.ScatterByResource, Self->GetMinScatterToBalance(), GetValueWithColoredGlyph) << "</td></tr>";
-        out << "</table>";
+        out << "</table></div>";
+        out << "<div style='width:180px'><table class='simple-table1'>";
+        out << "<tr><th colspan='2'>Totals</th></tr>";
+        out << "<tr><td>Counter</td><td id='resourceTotalCounter'></td></tr>";
+        out << "<tr><td>CPU</td><td id='resourceTotalCPU'></td></tr>";
+        out << "<tr><td>Memory</td><td id='resourceTotalMemory'></td></tr>";
+        out << "<tr><td>Network</td><td id='resourceTotalNetwork'></td></tr>";
+        out << "</table></div>";
+        out << "<div style='width:220px'><table class='simple-table1'>";
+        out << "<tr><th colspan='2'>Variance</th></tr>";
+        out << "<tr><td>Counter</td><td id='resourceStdDevCounter'></td></tr>";
+        out << "<tr><td>CPU</td><td id='resourceStdDevCPU'></td></tr>";
+        out << "<tr><td>Memory</td><td id='resourceStdDevMemory'></td></tr>";
+        out << "<tr><td>Network</td><td id='resourceStdDevNetwork'></td></tr>";
+        out << "</table></div>";
+        out << "<div style='min-width:220px'><table class='simple-table1'>";
+        out << "<tr><th colspan='2'>Triggers</th></tr>";
+        out << "<tr><td>Counter</td><td id='resourceScatterCounter'></td></tr>";
+        out << "<tr><td>CPU</td><td id='resourceScatterCPU'></td></tr>";
+        out << "<tr><td>Memory</td><td id='resourceScatterMemory'></td></tr>";
+        out << "<tr><td>Network</td><td id='resourceScatterNetwork'></td></tr>";
+        out << "<tr><td>MaxUsage</td><td id='maxUsage'></td></tr>";
+        out << "<tr><td>Imbalance</td><td id='objectImbalance'></td></tr>";
+        out << "</table></div>";
+        out << "<div style='min-width:220px'><table class='simple-table3'>";
+        out << "<tr><th>Balancer</th><th style='min-width:50px'>Runs</th><th style='min-width:50px'>Moves</th>";
+        out << "<th style='min-width:80px'>Last run</th><th style='min-width:80px'>Last moves</th><th style='min-width:80px'>Progress</th></tr>";
+        for (EBalancerType type : {
+            EBalancerType::ScatterCounter,
+            EBalancerType::ScatterCPU,
+            EBalancerType::ScatterMemory,
+            EBalancerType::ScatterNetwork,
+            EBalancerType::Emergency,
+            EBalancerType::SpreadNeighbours,
+            EBalancerType::Scatter,
+            EBalancerType::Manual
+        }) {
+            int balancer = static_cast<int>(type);
+            out << "<tr id='balancer" << balancer << "'><td>" << EBalancerTypeName(type) << "</td><td></td><td></td><td></td><td></td><td></td></tr>";
+        }
+        out << "</table></div></div>";
 
         out << "<table id='node_table' class='table simple-table2 table-hover table-condensed'>";
         out << "<thead><tr>"
@@ -1649,350 +1682,420 @@ public:
         }
         out << "];";
         out << R"___(
-            $('.container')
-                .toggleClass('container container-fluid')
-                .css('padding-left', '1%')
-                .css('padding-right', '1%');
 
-            function initReassignGroups() {
-                var domTabletType = document.getElementById('tablet_type');
-                for (var tab = 0; tab < tablets.length; tab++) {
-                    var opt = document.createElement('option');
-                    opt.text = tablets[tab].name;
-                    opt.value = tablets[tab].type;
-                    domTabletType.add(opt);
-                }
-            }
+$('.container')
+    .toggleClass('container container-fluid')
+    .css('padding-left', '1%')
+    .css('padding-right', '1%');
 
-            )___";
+function initReassignGroups() {
+    var domTabletType = document.getElementById('tablet_type');
+    for (var tab = 0; tab < tablets.length; tab++) {
+        var opt = document.createElement('option');
+        opt.text = tablets[tab].name;
+        opt.value = tablets[tab].type;
+        domTabletType.add(opt);
+    }
+}
 
-        out << R"___(
-            initReassignGroups();
+initReassignGroups();
 
-            var tablets_found;
-            var Nodes = {};
+var tablets_found;
+var Nodes = {};
 
-            function queryTablets() {
-                var storage_pool = $('#tablet_storage_pool').val();
-                var storage_group = $('#tablet_storage_group').val();
-                var tablet_type = $('#tablet_type').val();
-                var channel_from = $('#tablet_from_channel').val();
-                var channel_to = $('#tablet_to_channel').val();
-                var percent = $('#tablet_percent').val();
-                var url = 'app?TabletID=' + hiveId + '&page=FindTablet';
-                if (storage_pool) {
-                    url = url + '&storagePool=' + storage_pool;
-                }
-                if (storage_group) {
-                    url = url + '&group=' + storage_group;
-                }
-                if (tablet_type) {
-                    url = url + '&type=' + tablet_type;
-                }
-                if (channel_from) {
-                    url = url + '&channelFrom=' + channel_from;
-                }
-                if (channel_to) {
-                    url = url + '&channelTo=' + channel_to;
-                }
-                if (percent) {
-                    url = url + '&percent=' + percent;
-                }
-                $.ajax({
-                    url: url,
-                    success: function(result) {
-                        tablets_found = result;
-                        $('#tablets_found_group').parent().css({visibility: 'visible'});
-                        $('#tablets_found').text(tablets_found.length);
-                        $('#button_reassign').removeClass('disabled');
-                    },
-                    error: function(jqXHR, status) {
-                        $('#status_text').text(status);
-                    }
-                });
-            }
+function queryTablets() {
+    var storage_pool = $('#tablet_storage_pool').val();
+    var storage_group = $('#tablet_storage_group').val();
+    var tablet_type = $('#tablet_type').val();
+    var channel_from = $('#tablet_from_channel').val();
+    var channel_to = $('#tablet_to_channel').val();
+    var percent = $('#tablet_percent').val();
+    var url = 'app?TabletID=' + hiveId + '&page=FindTablet';
+    if (storage_pool) {
+        url = url + '&storagePool=' + storage_pool;
+    }
+    if (storage_group) {
+        url = url + '&group=' + storage_group;
+    }
+    if (tablet_type) {
+        url = url + '&type=' + tablet_type;
+    }
+    if (channel_from) {
+        url = url + '&channelFrom=' + channel_from;
+    }
+    if (channel_to) {
+        url = url + '&channelTo=' + channel_to;
+    }
+    if (percent) {
+        url = url + '&percent=' + percent;
+    }
+    $.ajax({
+        url: url,
+        success: function(result) {
+            tablets_found = result;
+            $('#tablets_found_group').parent().css({visibility: 'visible'});
+            $('#tablets_found').text(tablets_found.length);
+            $('#button_reassign').removeClass('disabled');
+        },
+        error: function(jqXHR, status) {
+            $('#status_text').text(status);
+        }
+    });
+}
 
-            var tables_processed;
-            var current_inflight;
+var tables_processed;
+var current_inflight;
 
-            function continueReassign() {
-                var max_inflight = $('#tablet_reassign_inflight').val();
-                while (tablets_processed < tablets_found.length && current_inflight < max_inflight) {
-                    var tablet = tablets_found[tablets_processed];
-                    tablets_processed++;
-                    current_inflight++;
-                    $('#current_inflight').text(current_inflight);
-                    $.ajax({
-                        url: 'app?TabletID=' + hiveId
-                             + '&page=ReassignTablet&tablet=' + tablet.tabletId
-                             + '&channels=' + tablet.channels
-                             + '&wait=1',
-                        success: function() {
+function continueReassign() {
+    var max_inflight = $('#tablet_reassign_inflight').val();
+    while (tablets_processed < tablets_found.length && current_inflight < max_inflight) {
+        var tablet = tablets_found[tablets_processed];
+        tablets_processed++;
+        current_inflight++;
+        $('#current_inflight').text(current_inflight);
+        $.ajax({
+            url: 'app?TabletID=' + hiveId
+                + '&page=ReassignTablet&tablet=' + tablet.tabletId
+                + '&channels=' + tablet.channels
+                + '&wait=1',
+            success: function() {
 
-                        },
-                        error: function(jqXHR, status) {
-                            $('#status_text').text(status);
-                        },
-                        complete: function() {
-                            $('#tablets_processed').text(tablets_processed);
-                            var value = Number(tablets_processed * 100 / tablets_found.length).toFixed();
-                            $('#progress_bar').css('width', value + '%').attr('aria-valuenow', value).text(value + '%');
-                            current_inflight--;
-                            continueReassign();
-                        },
-                    });
-                }
-                if (tablets_processed >= tablets_found.length) {
-                    $('#button_query').removeClass('disabled');
-                    $('#button_reassign').removeClass('disabled');
-                }
-            }
-
-            function cancel() {
-                tablets_processed = tablets_found.length;
-                $('#tablets_processed_group').parent().css({visibility: 'hidden'});
-                $('#current_inflight_group').parent().css({visibility: 'hidden'});
-                $('#time_left_group').parent().css({visibility: 'hidden'});
-                $('#progress_bar_group').parent().css({visibility: 'hidden'});
-            }
-
-            function reassignGroups() {
-                $('#tablets_processed_group').parent().css({visibility: 'visible'});
-                $('#current_inflight_group').parent().css({visibility: 'visible'});
-                //$('#time_left_group').parent().css({visibility: 'visible'});
-                $('#progress_bar_group').parent().css({visibility: 'visible'});
-                $('#button_query').addClass('disabled');
-                $('#button_reassign').addClass('disabled');
-                tablets_processed = 0;
-                current_inflight = 0;
+            },
+            error: function(jqXHR, status) {
+                $('#status_text').text(status);
+            },
+            complete: function() {
+                $('#tablets_processed').text(tablets_processed);
+                var value = Number(tablets_processed * 100 / tablets_found.length).toFixed();
+                $('#progress_bar').css('width', value + '%').attr('aria-valuenow', value).text(value + '%');
+                current_inflight--;
                 continueReassign();
-            }
+            },
+        });
+    }
+    if (tablets_processed >= tablets_found.length) {
+        $('#button_query').removeClass('disabled');
+        $('#button_reassign').removeClass('disabled');
+    }
+}
 
-            function setDown(element, nodeId, down) {
-                if (down && $(element).hasClass('glyphicon-ok')) {
-                    $(element).removeClass('glyphicon-ok');
-                    element.inProgress = true;
-                    $.ajax({url:'app?TabletID=' + hiveId + '&node=' + nodeId + '&page=SetDown&down=1', success: function(){ $(element).addClass('glyphicon-remove'); element.inProgress = false; }});
-                } else if (!down && $(element).hasClass('glyphicon-remove')) {
-                    $(element).removeClass('glyphicon-remove');
-                    element.inProgress = true;
-                    $.ajax({url:'app?TabletID=' + hiveId + '&node=' + nodeId + '&page=SetDown&down=0', success: function(){ $(element).addClass('glyphicon-ok'); element.inProgress = false; }});
+function cancel() {
+    tablets_processed = tablets_found.length;
+    $('#tablets_processed_group').parent().css({visibility: 'hidden'});
+    $('#current_inflight_group').parent().css({visibility: 'hidden'});
+    $('#time_left_group').parent().css({visibility: 'hidden'});
+    $('#progress_bar_group').parent().css({visibility: 'hidden'});
+}
+
+function reassignGroups() {
+    $('#tablets_processed_group').parent().css({visibility: 'visible'});
+    $('#current_inflight_group').parent().css({visibility: 'visible'});
+    //$('#time_left_group').parent().css({visibility: 'visible'});
+    $('#progress_bar_group').parent().css({visibility: 'visible'});
+    $('#button_query').addClass('disabled');
+    $('#button_reassign').addClass('disabled');
+    tablets_processed = 0;
+    current_inflight = 0;
+    continueReassign();
+}
+
+function setDown(element, nodeId, down) {
+    if (down && $(element).hasClass('glyphicon-ok')) {
+        $(element).removeClass('glyphicon-ok');
+        element.inProgress = true;
+        $.ajax({url:'app?TabletID=' + hiveId + '&node=' + nodeId + '&page=SetDown&down=1', success: function(){ $(element).addClass('glyphicon-remove'); element.inProgress = false; }});
+    } else if (!down && $(element).hasClass('glyphicon-remove')) {
+        $(element).removeClass('glyphicon-remove');
+        element.inProgress = true;
+        $.ajax({url:'app?TabletID=' + hiveId + '&node=' + nodeId + '&page=SetDown&down=0', success: function(){ $(element).addClass('glyphicon-ok'); element.inProgress = false; }});
+    }
+}
+
+function toggleDown(element, nodeId) {
+    setDown(element, nodeId, $(element).hasClass('glyphicon-ok'));
+}
+
+function toggleFreeze(element, nodeId) {
+    if ($(element).hasClass('glyphicon-play')) {
+        $(element).removeClass('glyphicon-play');
+        element.inProgress = true;
+        $.ajax({url:'app?TabletID=' + hiveId + '&node=' + nodeId + '&page=SetFreeze&freeze=1', success: function(){ $(element).addClass('glyphicon-pause'); element.inProgress = false; }});
+    } else if ($(element).hasClass('glyphicon-pause')) {
+        $(element).removeClass('glyphicon-pause');
+        element.inProgress = true;
+        $.ajax({url:'app?TabletID=' + hiveId + '&node=' + nodeId + '&page=SetFreeze&freeze=0', success: function(){ $(element).addClass('glyphicon-play'); element.inProgress = false; }});
+    }
+}
+
+function kickNode(element, nodeId) {
+    $(element).removeClass('glyphicon-transfer');
+    $.ajax({url:'app?TabletID=' + hiveId + '&node=' + nodeId + '&page=KickNode', success: function(){ $(element).addClass('glyphicon-transfer'); }});
+}
+
+function drainNode(element, nodeId) {
+    $(element).removeClass('glyphicon-transfer');
+    $.ajax({url:'app?TabletID=' + hiveId + '&node=' + nodeId + '&page=DrainNode', success: function(){ $(element).addClass('blinking'); Nodes[nodeId].Drain = true; }});
+}
+
+function rebalanceTablets() {
+    $('#balancerProgress').html('o.O');
+    var max_movements = $('#balancer_max_movements').val();
+    $.ajax({url:'app?TabletID=' + hiveId + '&page=Rebalance&movements=' + max_movements});
+}
+
+function rebalanceTabletsFromScratch(element) {
+    var tenant_name = $('#tenant_name').val();
+    $.ajax({url:'app?TabletID=' + hiveId + '&page=RebalanceFromScratch&tenantName=' + tenant_name});
+}
+
+function toggleAlert() {
+    $('#alert-placeholder').toggleClass('glyphicon-refresh');
+}
+
+function clearAlert() {
+    $('#alert-placeholder').removeClass('glyphicon-refresh');
+}
+
+var Empty = true;
+
+function getBalancerString(balancer) {
+    return 'runs=' + balancer.TotalRuns + ' moves=' + balancer.TotalMovements;
+}
+
+function fillDataShort(result) {
+    try {
+        if ("TotalTablets" in result) {
+            var percent = Math.floor(result.RunningTablets * 100 / result.TotalTablets) + '%';
+            var values = result.RunningTablets + ' of ' + result.TotalTablets;
+            var warmup = result.Warmup ? "<span class='glyphicon glyphicon-fire' style='color:red; margin-right:4px'></span>" : "";
+            $('#runningTablets').html(warmup + percent + ' (' + values + ')');
+            $('#aliveNodes').html(result.AliveNodes);
+            $('#bootQueue').html(result.BootQueueSize);
+            $('#waitQueue').html(result.WaitQueueSize);
+            $('#maxUsage').html(result.MaxUsage);
+            $('#objectImbalance').html(result.ObjectImbalance);
+
+            $('#resourceTotalCounter').html(result.ResourceTotal.Counter);
+            $('#resourceTotalCPU').html(result.ResourceTotal.CPU);
+            $('#resourceTotalMemory').html(result.ResourceTotal.Memory);
+            $('#resourceTotalNetwork').html(result.ResourceTotal.Network);
+
+            $('#resourceStdDevCounter').html(result.ResourceVariance.Counter);
+            $('#resourceStdDevCPU').html(result.ResourceVariance.CPU);
+            $('#resourceStdDevMemory').html(result.ResourceVariance.Memory);
+            $('#resourceStdDevNetwork').html(result.ResourceVariance.Network);
+
+            $('#resourceScatterCounter').html(result.ScatterHtml.Counter);
+            $('#resourceScatterCPU').html(result.ScatterHtml.CPU);
+            $('#resourceScatterMemory').html(result.ScatterHtml.Memory);
+            $('#resourceScatterNetwork').html(result.ScatterHtml.Network);
+
+            for (var b = 0; b < result.Balancers.length; b++) {
+                var balancerObj = result.Balancers[b];
+                var balancerHtml = $('#balancer' + b)[0];
+                balancerHtml.cells[1].innerHTML = balancerObj.TotalRuns;
+                balancerHtml.cells[2].innerHTML = balancerObj.TotalMovements;
+                if (balancerObj.TotalRuns > 0) {
+                    balancerHtml.cells[3].innerHTML = balancerObj.LastRunTimestamp;
+                    balancerHtml.cells[4].innerHTML = balancerObj.LastRunMovements;
+                } else {
+                    balancerHtml.cells[3].innerHTML = '';
+                    balancerHtml.cells[4].innerHTML = '';
+                }
+                if (balancerObj.IsRunningNow && balancerObj.CurrentMaxMovements > 0) {
+                    balancerHtml.cells[5].innerHTML = Math.floor(balancerObj.CurrentMovements * 100 / balancerObj.CurrentMaxMovements) + '%';
+                } else {
+                    balancerHtml.cells[5].innerHTML = '';
                 }
             }
+        }
+        clearAlert();
+    }
+    catch(err) {
+        toggleAlert();
+    }
+}
 
-            function toggleDown(element, nodeId) {
-                setDown(element, nodeId, $(element).hasClass('glyphicon-ok'));
+function onFreshDataShort(result) {
+    fillDataShort(result);
+    setTimeout(function(){updateDataShort();}, 500);
+}
+
+function onFreshDataLong(result) {
+    var nlen;
+    try {
+        fillDataShort(result);
+        if ("Nodes" in result) {
+            $('#move_history > tbody > tr').remove();
+            for (var i in result.Moves) {
+                $(result.Moves[i]).appendTo('#move_history > tbody');
             }
-
-            function toggleFreeze(element, nodeId) {
-                if ($(element).hasClass('glyphicon-play')) {
-                    $(element).removeClass('glyphicon-play');
-                    element.inProgress = true;
-                    $.ajax({url:'app?TabletID=' + hiveId + '&node=' + nodeId + '&page=SetFreeze&freeze=1', success: function(){ $(element).addClass('glyphicon-pause'); element.inProgress = false; }});
-                } else if ($(element).hasClass('glyphicon-pause')) {
-                    $(element).removeClass('glyphicon-pause');
-                    element.inProgress = true;
-                    $.ajax({url:'app?TabletID=' + hiveId + '&node=' + nodeId + '&page=SetFreeze&freeze=0', success: function(){ $(element).addClass('glyphicon-play'); element.inProgress = false; }});
+            var old_nodes = {};
+            if (Empty) {
+                // initialization
+                $('#node_table > tbody > tr').remove();
+                Empty = false;
+            } else {
+                for (var id in Nodes) {
+                    old_nodes[id] = true;
                 }
             }
-
-            function kickNode(element, nodeId) {
-                $(element).removeClass('glyphicon-transfer');
-                $.ajax({url:'app?TabletID=' + hiveId + '&node=' + nodeId + '&page=KickNode', success: function(){ $(element).addClass('glyphicon-transfer'); }});
-            }
-
-            function drainNode(element, nodeId) {
-                $(element).removeClass('glyphicon-transfer');
-                $.ajax({url:'app?TabletID=' + hiveId + '&node=' + nodeId + '&page=DrainNode', success: function(){ $(element).addClass('blinking'); Nodes[nodeId].Drain = true; }});
-            }
-
-            function rebalanceTablets() {
-                $('#balancerProgress').html('o.O');
-                var max_movements = $('#balancer_max_movements').val();
-                $.ajax({url:'app?TabletID=' + hiveId + '&page=Rebalance&movements=' + max_movements});
-            }
-
-            function rebalanceTabletsFromScratch(element) {
-                var tenant_name = $('#tenant_name').val();
-                $.ajax({url:'app?TabletID=' + hiveId + '&page=RebalanceFromScratch&tenantName=' + tenant_name});
-            }
-
-            function toggleAlert() {
-                $('#alert-placeholder').toggleClass('glyphicon-refresh');
-            }
-
-            function clearAlert() {
-                $('#alert-placeholder').removeClass('glyphicon-refresh');
-            }
-            )___";
-
-        out << R"___(
-
-            var Empty = true;
-
-            function onFreshData(result) {
-                var nlen;
-                try {
-                    if ("TotalTablets" in result) {
-                        $('#runningTablets').html(result.RunningTabletsText);
-                        //$('#aliveNodes').html(result.TotalNodes == 0 ? 0 : Math.floor(result.AliveNodes * 100 / result.TotalNodes) + '% ' + result.AliveNodes + '/' + result.TotalNodes);
-                        $('#resourceVariance').html(result.ResourceVariance);
-                        $('#resourceTotal').html(result.ResourceTotal);
-                        $('#bootQueue').html(result.BootQueueSize);
-                        $('#waitQueue').html(result.WaitQueueSize);
-                        $('#balancerProgress').html(result.BalancerProgress);
-                        $('#maxUsage').html(result.MaxUsage);
-                        $('#scatter').html(result.Scatter);
-                        $('#move_history > tbody > tr').remove();
-                        for (var i in result.Moves) {
-                            $(result.Moves[i]).appendTo('#move_history > tbody');
-                        }
-                        var old_nodes = {};
-                        if (Empty) {
-                            // initialization
-                            $('#node_table > tbody > tr').remove();
-                            Empty = false;
+            var was_append = false;
+            nlen = result.Nodes.length;
+            for (i = 0; i < nlen; i++) {
+                var node = result.Nodes[i];
+                var old_node = Nodes[node.Id];
+                var nodeElement = $('#node' + node.Id).get(0);
+                var nodeElement;
+                if (old_node) {
+                    nodeElement = old_node.NodeElement;
+                } else {
+                    nodeElement = $('<tr id="node' + node.Id + '"><td>' + node.Id + '</td>'
+                        + '<td></td>'
+                        + '<td></td>'
+                        + '<td></td>'
+                        + '<td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>'
+                        + '<td style="text-align:center"><span title="Toggle node availability" onclick="toggleDown(this,' + node.Id + ')" style="cursor:pointer" class="active-mark glyphicon glyphicon-ok"></span></td>'
+                        + '<td style="text-align:center"><span title="Toggle node freeze" onclick="toggleFreeze(this,' + node.Id + ')" style="cursor:pointer" class="glyphicon glyphicon-play"></span></td>'
+                        + '<td style="text-align:center"><span title="Kick tablets on this node" onclick="kickNode(this,' + node.Id + ')" style="cursor:pointer" class="glyphicon glyphicon-transfer"></span></td>'
+                        + '<td style="text-align:center"><span title="Drain this node" onclick="drainNode(this,' + node.Id + ')" style="cursor:pointer" class="glyphicon glyphicon-log-out"></span></td>'
+                        + '</tr>').appendTo('#node_table > tbody').get(0);
+                    nodeElement.cells[1].innerHTML = '<a href="' + node.Host + ':8765">' + node.Name + '</a>';
+                    nodeElement.cells[2].innerHTML = node.DataCenter;
+                    was_append = true;
+                }
+                delete old_nodes[node.Id];
+                if (!old_node || old_node.Alive != node.Alive) {
+                    if (node.Alive) {
+                        nodeElement.style.color = 'initial';
+                    } else {
+                        nodeElement.style.color = '#E0E0E0';
+                    }
+                }
+                var element = $(nodeElement.cells[14].children[0]);
+                if (!element.hasOwnProperty("inProgress") || !element.inProgress) {
+                    if (!old_node || old_node.Down != node.Down) {
+                        if (node.Down) {
+                            element.removeClass('glyphicon-ok');
+                            element.addClass('glyphicon-remove');
                         } else {
-                            for (var id in Nodes) {
-                                old_nodes[id] = true;
-                            }
-                        }
-                        var was_append = false;
-                        nlen = result.Nodes.length;
-                        for (i = 0; i < nlen; i++) {
-                            var node = result.Nodes[i];
-                            var old_node = Nodes[node.Id];
-                            var nodeElement = $('#node' + node.Id).get(0);
-                            var nodeElement;
-                            if (old_node) {
-                                nodeElement = old_node.NodeElement;
-                            } else {
-                                nodeElement = $('<tr id="node' + node.Id + '"><td>' + node.Id + '</td>'
-                                    + '<td></td>'
-                                    + '<td></td>'
-                                    + '<td></td>'
-                                    + '<td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>'
-                                    + '<td style="text-align:center"><span title="Toggle node availability" onclick="toggleDown(this,' + node.Id + ')" style="cursor:pointer" class="active-mark glyphicon glyphicon-ok"></span></td>'
-                                    + '<td style="text-align:center"><span title="Toggle node freeze" onclick="toggleFreeze(this,' + node.Id + ')" style="cursor:pointer" class="glyphicon glyphicon-play"></span></td>'
-                                    + '<td style="text-align:center"><span title="Kick tablets on this node" onclick="kickNode(this,' + node.Id + ')" style="cursor:pointer" class="glyphicon glyphicon-transfer"></span></td>'
-                                    + '<td style="text-align:center"><span title="Drain this node" onclick="drainNode(this,' + node.Id + ')" style="cursor:pointer" class="glyphicon glyphicon-log-out"></span></td>'
-                                    + '</tr>').appendTo('#node_table > tbody').get(0);
-                                nodeElement.cells[1].innerHTML = '<a href="' + node.Host + ':8765">' + node.Name + '</a>';
-                                nodeElement.cells[2].innerHTML = node.DataCenter;
-                                was_append = true;
-                            }
-                            delete old_nodes[node.Id];
-                            if (!old_node || old_node.Alive != node.Alive) {
-                                if (node.Alive) {
-                                    nodeElement.style.color = 'initial';
-                                } else {
-                                    nodeElement.style.color = '#E0E0E0';
-                                }
-                            }
-                            var element = $(nodeElement.cells[14].children[0]);
-                            if (!element.hasOwnProperty("inProgress") || !element.inProgress) {
-                                if (!old_node || old_node.Down != node.Down) {
-                                    if (node.Down) {
-                                        element.removeClass('glyphicon-ok');
-                                        element.addClass('glyphicon-remove');
-                                    } else {
-                                        element.removeClass('glyphicon-remove');
-                                        element.addClass('glyphicon-ok');
-                                    }
-                                }
-                            }
-                            element = $(nodeElement.cells[15].children[0]);
-                            if (!element.hasOwnProperty("inProgress") || !element.inProgress) {
-                                if (!old_node || old_node.Freeze != node.Freeze) {
-                                    if (node.Freeze) {
-                                        element.removeClass('glyphicon-play');
-                                        element.addClass('glyphicon-pause');
-                                    } else {
-                                        element.removeClass('glyphicon-pause');
-                                        element.addClass('glyphicon-play');
-                                    }
-                                }
-                            }
-                            element = $(nodeElement.cells[17].children[0]);
-                            if (!element.hasOwnProperty("inProgress") || !element.inProgress) {
-                                if (!old_node || old_node.Drain != node.Drain) {
-                                    if (node.Drain) {
-                                        element.addClass('blinking');
-                                    } else {
-                                        element.removeClass('blinking');
-                                    }
-                                }
-                            }
-                            if (!old_node || old_node.Name != node.Name) {
-                                nodeElement.cells[1].innerHTML = '<a href="' + node.Host + ':8765">' + node.Name + '</a>';
-                            }
-                            if (!old_node || old_node.DataCenter != node.DataCenter) {
-                                nodeElement.cells[2].innerHTML = node.DataCenter;
-                            }
-                            if (!old_node || old_node.Domain != node.Domain) {
-                                nodeElement.cells[3].innerHTML = node.Domain;
-                            }
-                            if (!old_node || old_node.Uptime != node.Uptime) {
-                                nodeElement.cells[4].innerHTML = node.Uptime;
-                            }
-                            if (!old_node || old_node.Unknown != node.Unknown) {
-                                nodeElement.cells[5].innerHTML = node.Unknown;
-                            }
-                            if (!old_node || old_node.Starting != node.Starting) {
-                                nodeElement.cells[6].innerHTML = node.Starting;
-                            }
-                            if (!old_node || old_node.Running != node.Running) {
-                                nodeElement.cells[7].innerHTML = node.Running;
-                            }
-                            if (!old_node || old_node.Types != node.Types) {
-                                nodeElement.cells[8].innerHTML = node.Types;
-                            }
-                            if (!old_node || old_node.Usage != node.Usage) {
-                                nodeElement.cells[9].innerHTML = node.Usage;
-                            }
-                            if (!old_node || old_node.ResourceValues[0] != node.ResourceValues[0]) {
-                                nodeElement.cells[10].innerHTML = node.ResourceValues[0];
-                            }
-                            if (!old_node || old_node.ResourceValues[1] != node.ResourceValues[1]) {
-                                nodeElement.cells[11].innerHTML = node.ResourceValues[1];
-                            }
-                            if (!old_node || old_node.ResourceValues[2] != node.ResourceValues[2]) {
-                                nodeElement.cells[12].innerHTML = node.ResourceValues[2];
-                            }
-                            if (!old_node || old_node.ResourceValues[3] != node.ResourceValues[3]) {
-                                nodeElement.cells[13].innerHTML = node.ResourceValues[3];
-                            }
-                            node.NodeElement = nodeElement;
-                            Nodes[node.Id] = node;
-                        }
-                        for (var id in old_nodes) {
-                            $('#node' + id).remove();
-                            delete Nodes[id];
-                        }
-                        if (was_append) {
-                            $('#node_table > tbody > tr').sort(function(a,b) {
-                                if (a.cells[3].innerHTML > b.cells[3].innerHTML)
-                                    return 1;
-                                if (a.cells[3].innerHTML < b.cells[3].innerHTML)
-                                    return -1;
-                                return parseInt(a.cells[0].innerHTML, 10) - parseInt(b.cells[0].innerHTML, 10);
-                            }).appendTo('#node_table > tbody');
+                            element.removeClass('glyphicon-remove');
+                            element.addClass('glyphicon-ok');
                         }
                     }
-                    clearAlert();
                 }
-                catch(err) {
-                    toggleAlert();
+                element = $(nodeElement.cells[15].children[0]);
+                if (!element.hasOwnProperty("inProgress") || !element.inProgress) {
+                    if (!old_node || old_node.Freeze != node.Freeze) {
+                        if (node.Freeze) {
+                            element.removeClass('glyphicon-play');
+                            element.addClass('glyphicon-pause');
+                        } else {
+                            element.removeClass('glyphicon-pause');
+                            element.addClass('glyphicon-play');
+                        }
+                    }
                 }
-                setTimeout(function(){updateData();}, 500 + nlen);
+                element = $(nodeElement.cells[17].children[0]);
+                if (!element.hasOwnProperty("inProgress") || !element.inProgress) {
+                    if (!old_node || old_node.Drain != node.Drain) {
+                        if (node.Drain) {
+                            element.addClass('blinking');
+                        } else {
+                            element.removeClass('blinking');
+                        }
+                    }
+                }
+                if (!old_node || old_node.Name != node.Name) {
+                    nodeElement.cells[1].innerHTML = '<a href="' + node.Host + ':8765">' + node.Name + '</a>';
+                }
+                if (!old_node || old_node.DataCenter != node.DataCenter) {
+                    nodeElement.cells[2].innerHTML = node.DataCenter;
+                }
+                if (!old_node || old_node.Domain != node.Domain) {
+                    nodeElement.cells[3].innerHTML = node.Domain;
+                }
+                if (!old_node || old_node.Uptime != node.Uptime) {
+                    nodeElement.cells[4].innerHTML = node.Uptime;
+                }
+                if (!old_node || old_node.Unknown != node.Unknown) {
+                    nodeElement.cells[5].innerHTML = node.Unknown;
+                }
+                if (!old_node || old_node.Starting != node.Starting) {
+                    nodeElement.cells[6].innerHTML = node.Starting;
+                }
+                if (!old_node || old_node.Running != node.Running) {
+                    nodeElement.cells[7].innerHTML = node.Running;
+                }
+                if (!old_node || old_node.Types != node.Types) {
+                    nodeElement.cells[8].innerHTML = node.Types;
+                }
+                if (!old_node || old_node.Usage != node.Usage) {
+                    nodeElement.cells[9].innerHTML = node.Usage;
+                }
+                if (!old_node || old_node.ResourceValues[0] != node.ResourceValues[0]) {
+                    nodeElement.cells[10].innerHTML = node.ResourceValues[0];
+                }
+                if (!old_node || old_node.ResourceValues[1] != node.ResourceValues[1]) {
+                    nodeElement.cells[11].innerHTML = node.ResourceValues[1];
+                }
+                if (!old_node || old_node.ResourceValues[2] != node.ResourceValues[2]) {
+                    nodeElement.cells[12].innerHTML = node.ResourceValues[2];
+                }
+                if (!old_node || old_node.ResourceValues[3] != node.ResourceValues[3]) {
+                    nodeElement.cells[13].innerHTML = node.ResourceValues[3];
+                }
+                node.NodeElement = nodeElement;
+                Nodes[node.Id] = node;
             }
+            for (var id in old_nodes) {
+                $('#node' + id).remove();
+                delete Nodes[id];
+            }
+            if (was_append) {
+                $('#node_table > tbody > tr').sort(function(a,b) {
+                    if (a.cells[3].innerHTML > b.cells[3].innerHTML)
+                        return 1;
+                    if (a.cells[3].innerHTML < b.cells[3].innerHTML)
+                        return -1;
+                    return parseInt(a.cells[0].innerHTML, 10) - parseInt(b.cells[0].innerHTML, 10);
+                }).appendTo('#node_table > tbody');
+            }
+        }
+        clearAlert();
+    }
+    catch(err) {
+        toggleAlert();
+    }
+    setTimeout(function(){updateDataLong();}, 500 + nlen * 10);
+}
 
-            function updateData() {
-                $.ajax({url:'app?TabletID=' + hiveId + '&page=LandingData',
-                    success: function(result){ onFreshData(result); },
-                    error: function(){ toggleAlert(); setTimeout(updateData, 1000); }
-                });
-            }
+var switchToLong = false;
+
+function updateDataShort() {
+    if (switchToLong) {
+        updateDataLong();
+        return;
+    }
+    $.ajax({url:'app?TabletID=' + hiveId + '&page=LandingData',
+        success: function(result){ onFreshDataShort(result); },
+        error: function(){ toggleAlert(); setTimeout(updateDataShort, 1000); }
+    });
+}
+
+function updateDataLong() {
+    $.ajax({url:'app?TabletID=' + hiveId + '&page=LandingData&nodes=1&moves=1',
+        success: function(result){ onFreshDataLong(result); },
+        error: function(){ toggleAlert(); setTimeout(updateDataLong, 1000); }
+    });
+}
+
+function updateData() {
+    switchToLong = true;
+}
+
+updateDataShort();
+
 
             )___";
         out << "</script>";
@@ -2068,89 +2171,98 @@ public:
         jsonData["RunningTablets"] = runningTablets;
         jsonData["TotalNodes"] = nodes;
         jsonData["AliveNodes"] = aliveNodes;
-        jsonData["ResourceTotal"] = GetResourceValuesText(Self->TotalRawResourceValues);
-        jsonData["ResourceVariance"] = GetResourceValuesText(Self->GetStDevResourceValues());//, [](double d) -> TString { return Sprintf("%.9f", d); });
+        jsonData["ResourceTotal"] = GetResourceValuesJson(Self->TotalRawResourceValues);
+        jsonData["ResourceVariance"] = GetResourceValuesJson(Self->GetStDevResourceValues());
         jsonData["BootQueueSize"] = Self->BootQueue.BootQueue.size();
         jsonData["WaitQueueSize"] = Self->BootQueue.WaitQueue.size();
-        jsonData["BalancerProgress"] = GetBalancerProgressText(Self->BalancerProgress, Self->LastBalancerTrigger);
+        jsonData["Balancers"] = Self->GetBalancerProgressJson();
         jsonData["MaxUsage"] =  GetValueWithColoredGlyph(stats.MaxUsage, Self->GetMaxNodeUsageToKick()) ;
-        jsonData["Scatter"] = TStringBuilder() << convert(stats.ScatterByResource, Self->GetMinScatterToBalance(), GetValueWithColoredGlyph);
-        jsonData["RunningTabletsText"] = GetRunningTabletsText(runningTablets, tablets, Self->WarmUp);
+        auto scatterHtml = convert(stats.ScatterByResource, Self->GetMinScatterToBalance(), GetValueWithColoredGlyph);
+        jsonData["ScatterHtml"]["Counter"] = std::get<NMetrics::EResource::Counter>(scatterHtml);
+        jsonData["ScatterHtml"]["CPU"] = std::get<NMetrics::EResource::CPU>(scatterHtml);
+        jsonData["ScatterHtml"]["Memory"] = std::get<NMetrics::EResource::Memory>(scatterHtml);
+        jsonData["ScatterHtml"]["Network"] = std::get<NMetrics::EResource::Network>(scatterHtml);
+        jsonData["ObjectImbalance"] = GetValueWithColoredGlyph(Self->ObjectDistributions.GetMaxImbalance(), Self->GetObjectImbalanceToBalance());
+        jsonData["WarmUp"] = Self->WarmUp;
 
-        TVector<TNodeInfo*> nodeInfos;
-        nodeInfos.reserve(Self->Nodes.size());
-        for (auto& pr : Self->Nodes) {
-            if (!pr.second.IsUnknown()) {
-                nodeInfos.push_back(&pr.second);
-            }
-        }
-        std::sort(nodeInfos.begin(), nodeInfos.end(), [](TNodeInfo* a, TNodeInfo* b) -> bool {
-            return std::make_tuple(a->ServicedDomains, a->Id) < std::make_tuple(b->ServicedDomains, b->Id);
-        });
-
-        TInstant aliveLine = TInstant::Now() - TDuration::Minutes(10);
-
-        NJson::TJsonValue& jsonNodes = jsonData["Nodes"];
-        for (TNodeInfo* nodeInfo : nodeInfos) {
-            TNodeInfo& node = *nodeInfo;
-            TNodeId id = node.Id;
-
-            if (!node.IsAlive() && TInstant::MilliSeconds(node.Statistics.GetLastAliveTimestamp()) < aliveLine) {
-                continue;
-            }
-
-            NJson::TJsonValue& jsonNode = jsonNodes.AppendValue(NJson::TJsonValue());
-            TString name = "";
-            TString host;
-            auto it = Self->NodesInfo.find(node.Id);
-            if (it != Self->NodesInfo.end()) {
-                auto &ni = it->second;
-                if (ni.Host.empty()) {
-                    name = ni.Address + ":" + ToString(ni.Port);
-                    host = ni.Address;
-                } else {
-                    name = ni.Host.substr(0, ni.Host.find('.')) + ":" + ToString(ni.Port);
-                    host = ni.Host;
+        if (Cgi.Get("nodes") == "1") {
+            TVector<TNodeInfo*> nodeInfos;
+            nodeInfos.reserve(Self->Nodes.size());
+            for (auto& pr : Self->Nodes) {
+                if (!pr.second.IsUnknown()) {
+                    nodeInfos.push_back(&pr.second);
                 }
             }
+            std::sort(nodeInfos.begin(), nodeInfos.end(), [](TNodeInfo* a, TNodeInfo* b) -> bool {
+                return std::make_tuple(a->ServicedDomains, a->Id) < std::make_tuple(b->ServicedDomains, b->Id);
+            });
 
-            jsonNode["Id"] = id;
-            jsonNode["Host"] = host;
-            jsonNode["Name"] = name;
-            if (node.LocationAcquired) {
-                jsonNode["DataCenter"] = node.Location.GetDataCenterId();
-            }
-            jsonNode["Domain"] = node.ServicedDomains.empty() ? "" : Self->GetDomainName(node.GetServicedDomain());
-            jsonNode["Alive"] = node.IsAlive();
-            jsonNode["Down"] = node.Down;
-            jsonNode["Freeze"] = node.Freeze;
-            jsonNode["Drain"] = node.IsAlive() ? node.Drain : false;
-            jsonNode["Uptime"] = node.IsAlive() ? GetDurationString(node.GetUptime()) : "";
-            jsonNode["Unknown"] = node.Tablets[TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_UNKNOWN].size();
-            jsonNode["Starting"] = node.Tablets[TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_STARTING].size();
-            jsonNode["Running"] = node.Tablets[TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_RUNNING].size();
-            {
-                TString types;
-                auto nodeTabletTypes = tabletsByNodeByType.find(node.Id);
-                if (nodeTabletTypes != tabletsByNodeByType.end()) {
-                    for (auto it = nodeTabletTypes->second.begin(); it != nodeTabletTypes->second.end(); ++it) {
-                        if (!types.empty()) {
-                            types += ' ';
-                        }
-                        types += Sprintf("%s:%d", it->first.c_str(), it->second);
+            TInstant aliveLine = TInstant::Now() - TDuration::Minutes(10);
+
+            NJson::TJsonValue& jsonNodes = jsonData["Nodes"];
+            for (TNodeInfo* nodeInfo : nodeInfos) {
+                TNodeInfo& node = *nodeInfo;
+                TNodeId id = node.Id;
+
+                if (!node.IsAlive() && TInstant::MilliSeconds(node.Statistics.GetLastAliveTimestamp()) < aliveLine) {
+                    continue;
+                }
+
+                NJson::TJsonValue& jsonNode = jsonNodes.AppendValue(NJson::TJsonValue());
+                TString name = "";
+                TString host;
+                auto it = Self->NodesInfo.find(node.Id);
+                if (it != Self->NodesInfo.end()) {
+                    auto &ni = it->second;
+                    if (ni.Host.empty()) {
+                        name = ni.Address + ":" + ToString(ni.Port);
+                        host = ni.Address;
+                    } else {
+                        name = ni.Host.substr(0, ni.Host.find('.')) + ":" + ToString(ni.Port);
+                        host = ni.Host;
                     }
                 }
-                jsonNode["Types"] = types;
+
+                jsonNode["Id"] = id;
+                jsonNode["Host"] = host;
+                jsonNode["Name"] = name;
+                if (node.LocationAcquired) {
+                    jsonNode["DataCenter"] = node.Location.GetDataCenterId();
+                }
+                jsonNode["Domain"] = node.ServicedDomains.empty() ? "" : Self->GetDomainName(node.GetServicedDomain());
+                jsonNode["Alive"] = node.IsAlive();
+                jsonNode["Down"] = node.Down;
+                jsonNode["Freeze"] = node.Freeze;
+                jsonNode["Drain"] = node.IsAlive() ? node.Drain : false;
+                jsonNode["Uptime"] = node.IsAlive() ? GetDurationString(node.GetUptime()) : "";
+                jsonNode["Unknown"] = node.Tablets[TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_UNKNOWN].size();
+                jsonNode["Starting"] = node.Tablets[TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_STARTING].size();
+                jsonNode["Running"] = node.Tablets[TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_RUNNING].size();
+                {
+                    TString types;
+                    auto nodeTabletTypes = tabletsByNodeByType.find(node.Id);
+                    if (nodeTabletTypes != tabletsByNodeByType.end()) {
+                        for (auto it = nodeTabletTypes->second.begin(); it != nodeTabletTypes->second.end(); ++it) {
+                            if (!types.empty()) {
+                                types += ' ';
+                            }
+                            types += Sprintf("%s:%d", it->first.c_str(), it->second);
+                        }
+                    }
+                    jsonNode["Types"] = types;
+                }
+                double nodeUsage = node.GetNodeUsage();
+                jsonNode["Usage"] = GetConditionalRedString(Sprintf("%.9f", nodeUsage), nodeUsage >= 1);
+                jsonNode["ResourceValues"] = GetResourceValuesJson(node.ResourceValues, node.ResourceMaximumValues);
+                jsonNode["StDevResourceValues"] = GetResourceValuesText(node.GetStDevResourceValues());
             }
-            double nodeUsage = node.GetNodeUsage();
-            jsonNode["Usage"] = GetConditionalRedString(Sprintf("%.9f", nodeUsage), nodeUsage >= 1);
-            jsonNode["ResourceValues"] = GetResourceValuesJson(node.ResourceValues, node.ResourceMaximumValues);
-            jsonNode["StDevResourceValues"] = GetResourceValuesText(node.GetStDevResourceValues());
         }
-        NJson::TJsonValue& moves = jsonData["Moves"];
-        if (Self->TabletMoveHistory.TotalSize()) {
-            for (int i = Self->TabletMoveHistory.TotalSize() - 1; i >= (int)Self->TabletMoveHistory.FirstIndex(); --i) {
-                moves.AppendValue(Self->TabletMoveHistory[i].ToHTML());
+        if (Cgi.Get("moves") == "1") {
+            NJson::TJsonValue& moves = jsonData["Moves"];
+            if (Self->TabletMoveHistory.TotalSize()) {
+                for (int i = Self->TabletMoveHistory.TotalSize() - 1; i >= (int)Self->TabletMoveHistory.FirstIndex(); --i) {
+                    moves.AppendValue(Self->TabletMoveHistory[i].ToHTML());
+                }
             }
         }
         NJson::WriteJson(&out, &jsonData);
@@ -2356,8 +2468,10 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_REBALANCE; }
 
     bool Execute(TTransactionContext&, const TActorContext&) override {
-        Self->LastBalancerTrigger = EBalancerType::Manual;
-        Self->StartHiveBalancer({.MaxMovements = MaxMovements});
+        Self->StartHiveBalancer({
+            .Type = EBalancerType::Manual,
+            .MaxMovements = MaxMovements
+        });
         return true;
     }
 

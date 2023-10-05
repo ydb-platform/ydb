@@ -369,10 +369,16 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
             ResourceValues.AddGroupWriteThroughput()->CopyFrom(v);
         }
     }
-    ResourceValues.SetCounter(GetCounterValue(ResourceValues, GetTabletAllowedMetricIds()));
+    i64 counterBefore = ResourceValues.GetCounter();
+    ActualizeCounter();
+    i64 counterAfter = ResourceValues.GetCounter();
     const auto& after = ResourceValues;
     if (Node != nullptr) {
         Node->UpdateResourceValues(this, before, after);
+        i64 deltaCounter = counterAfter - counterBefore;
+        if (deltaCounter != 0) {
+            Hive.UpdateObjectCount(GetObjectId(), Node->Id, deltaCounter);
+        }
     }
 }
 
@@ -433,6 +439,11 @@ void TTabletInfo::FilterRawValues(TResourceNormalizedValues& values) const {
     if (Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kNetworkFieldNumber) == allowedMetricIds.end() || !THive::IsValidMetricsNetwork(metrics)) {
         std::get<NMetrics::EResource::Network>(values) = 0;
     }
+}
+
+void TTabletInfo::ActualizeCounter() {
+    auto value = GetCounterValue(ResourceValues, GetTabletAllowedMetricIds());
+    ResourceValues.SetCounter(value);
 }
 
 const TVector<TNodeId>& TTabletInfo::GetAllowedNodes() const {

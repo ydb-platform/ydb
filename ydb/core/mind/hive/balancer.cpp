@@ -120,14 +120,18 @@ protected:
     ui64 KickInFlight;
     int Movements;
     TBalancerSettings Settings;
+    TBalancerStats& Stats;
 
     TString GetLogPrefix() const {
         return Hive->GetLogPrefix();
     }
 
     void PassAway() override {
-        Hive->BalancerProgress = -1;
         BLOG_I("Balancer finished with " << Movements << " movements made");
+        Stats.TotalRuns++;
+        Stats.TotalMovements += Movements;
+        Stats.LastRunMovements = Movements;
+        Stats.IsRunningNow = false;
         Hive->RemoveSubActor(this);
         if (Movements == 0) {
             Hive->TabletCounters->Cumulative()[NHive::COUNTER_BALANCER_FAILED].Increment(1);
@@ -159,15 +163,7 @@ protected:
     }
 
     void UpdateProgress() {
-        if (Settings.MaxMovements != 0) {
-            Hive->BalancerProgress = Movements * 100 / Settings.MaxMovements;
-        } else {
-            if (Hive->TabletsTotal != 0) {
-                Hive->BalancerProgress = Movements * 100 / Hive->TabletsTotal;
-            } else {
-                Hive->BalancerProgress = 0;
-            }
-        }
+        Stats.CurrentMovements = Movements;
     }
 
     void KickNextTablet() {
@@ -299,12 +295,18 @@ public:
         return NKikimrServices::TActivity::HIVE_BALANCER_ACTOR;
     }
 
-    THiveBalancer(THive* hive, TBalancerSettings settings)
+    THiveBalancer(THive* hive, TBalancerSettings&& settings)
         : Hive(hive)
         , KickInFlight(0)
         , Movements(0)
         , Settings(std::move(settings))
-    {}
+        , Stats(Hive->BalancerStats[static_cast<std::size_t>(Settings.Type)])
+    {
+        Stats.IsRunningNow = true;
+        Stats.CurrentMaxMovements = Settings.MaxMovements ? Settings.MaxMovements : Hive->TabletsTotal;
+        Stats.CurrentMovements = 0;
+        Stats.LastRunTimestamp = TActivationContext::Now();
+    }
 
     void Bootstrap() {
         UpdateProgress();
@@ -322,11 +324,11 @@ public:
     }
 };
 
-void THive::StartHiveBalancer(TBalancerSettings settings) {
-    if (BalancerProgress == -1) {
+void THive::StartHiveBalancer(TBalancerSettings&& settings) {
+    if (IsItPossibleToStartBalancer(settings.Type)) {
+        LastBalancerTrigger = settings.Type;
         auto* balancer = new THiveBalancer(this, std::move(settings));
         SubActors.emplace_back(balancer);
-        BalancerProgress = -2;
         RegisterWithSameMailbox(balancer);
     }
 }

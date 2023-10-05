@@ -52,8 +52,10 @@ public:
             if (auto node = tablet->GetNode(); node != nullptr) {
                 node->TabletsOfObject[oldObject].erase(tablet);
                 node->TabletsOfObject[objectId].emplace(tablet);
-                Self->UpdateObjectCount(oldObject, node->Id, -1);
-                Self->UpdateObjectCount(objectId, node->Id, +1);
+                if (tablet->HasCounter()) {
+                    Self->UpdateObjectCount(oldObject, node->Id, -1);
+                    Self->UpdateObjectCount(objectId, node->Id, +1);
+                }
             }
 
             db.Table<Schema::Tablet>().Key(tabletId).Update<Schema::Tablet::ObjectID>(objectId);

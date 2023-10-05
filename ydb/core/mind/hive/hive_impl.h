@@ -125,7 +125,9 @@ TResourceRawValues ResourceRawValuesFromMetrics(const NKikimrHive::TTabletMetric
 TString GetResourceValuesText(const NKikimrTabletBase::TMetrics& values);
 TString GetResourceValuesText(const TTabletInfo& tablet);
 TString GetResourceValuesText(const TResourceRawValues& values);
+NJson::TJsonValue GetResourceValuesJson(const TResourceRawValues& values);
 TString GetResourceValuesText(const TResourceNormalizedValues& values);
+NJson::TJsonValue GetResourceValuesJson(const TResourceNormalizedValues& values);
 TString GetResourceValuesHtml(const TResourceRawValues& values);
 NJson::TJsonValue GetResourceValuesJson(const TResourceRawValues& values);
 NJson::TJsonValue GetResourceValuesJson(const TResourceRawValues& values, const TResourceRawValues& maximum);
@@ -146,7 +148,6 @@ TString LongToShortTabletName(const TString& longTabletName);
 TString GetLocationString(const NActors::TNodeLocation& location);
 void MakeTabletTypeSet(std::vector<TTabletTypes::EType>& list);
 bool IsValidTabletType(TTabletTypes::EType type);
-TString GetBalancerProgressText(i32 balancerProgress, EBalancerType balancerType);
 TString GetRunningTabletsText(ui64 runningTablets, ui64 totalTablets, bool warmUp);
 
 class THive : public TActor<THive>, public TTabletExecutedFlat, public THiveSharedSettings {
@@ -165,6 +166,7 @@ protected:
     friend class TQueryMigrationWaitActor;
     friend class TReleaseTabletsWaitActor;
     friend class TDrainNodeWaitActor;
+    friend struct TNodeInfo;
 
     friend class TTxInitScheme;
     friend class TTxDeleteBase;
@@ -230,10 +232,12 @@ protected:
 
     friend struct TStoragePoolInfo;
 
-    void StartHiveBalancer(TBalancerSettings settings);
+    bool IsItPossibleToStartBalancer(EBalancerType balancerType);
+    void StartHiveBalancer(TBalancerSettings&& settings);
     void StartHiveDrain(TNodeId nodeId, TDrainSettings settings);
     void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
     void CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
+    NJson::TJsonValue GetBalancerProgressJson();
     ITransaction* CreateDeleteTablet(TEvHive::TEvDeleteTablet::TPtr& ev);
     ITransaction* CreateDeleteOwnerTablets(TEvHive::TEvDeleteOwnerTablets::TPtr& ev);
     ITransaction* CreateDeleteTabletResult(TEvTabletBase::TEvDeleteTabletResult::TPtr& ev);
@@ -360,10 +364,9 @@ protected:
     THashMap<ui32, TEvInterconnect::TNodeInfo> NodesInfo;
     TTabletCountersBase* TabletCounters;
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;
-    i32 BalancerProgress; // all values below 0 mean that balancer is not active (-1 = dead, -2 = starting)
     std::unordered_set<TNodeId> BalancerNodes; // all nodes, affected by running balancers
-    EBalancerType LastBalancerTrigger = EBalancerType::None;
-
+    EBalancerType LastBalancerTrigger = EBalancerType::Manual;
+    std::array<TBalancerStats, EBalancerTypeSize> BalancerStats;
     NKikimrHive::EMigrationState MigrationState = NKikimrHive::EMigrationState::MIGRATION_UNKNOWN;
     i32 MigrationProgress = 0;
     NKikimrHive::TEvSeizeTablets MigrationFilter;

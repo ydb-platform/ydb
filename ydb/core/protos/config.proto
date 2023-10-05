@@ -1726,15 +1726,15 @@ message THiveConfig {
     optional uint64 MetricsWindowSize = 21 [default = 60000]; // milliseconds
     optional double MaxNodeUsageToKick = 22 [default = 0.9];
     optional uint64 ResourceChangeReactionPeriod = 23 [default = 10]; // seconds
-    optional uint64 TabletKickCooldownPeriod = 24 [default = 1800]; // seconds
+    optional uint64 TabletKickCooldownPeriod = 24 [default = 600]; // seconds
     optional double ResourceOvercommitment = 25 [default = 3.00];
     optional uint64 BalancerInflight = 26 [default = 1]; // tablets
     optional EHiveNodeBalanceStrategy NodeBalanceStrategy = 27 [default = HIVE_NODE_BALANCE_STRATEGY_HEAVIEST];
     optional EHiveTabletBalanceStrategy TabletBalanceStrategy = 28 [default = HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM];
-    optional double MinPeriodBetweenBalance = 29 [default = 1.0]; // seconds
+    optional double MinPeriodBetweenBalance = 29 [default = 0.2]; // seconds
     optional uint64 MaxMovementsOnAutoBalancer = 30 [default = 1]; // tablets
     optional bool ContinueAutoBalancer = 31 [default = true];
-    optional double MinNodeUsageToBalance = 32 [default = 0.3];
+    optional double MinNodeUsageToBalance = 32 [default = 0.1];
     optional double MinPeriodBetweenReassign = 33 [default = 300.0]; // seconds
     optional double TabletRestartWatchPeriod = 34 [default = 3600.0]; // seconds
     optional double NodeRestartWatchPeriod = 35 [default = 3600.0]; // seconds
@@ -1766,8 +1766,9 @@ message THiveConfig {
     optional double MinCPUScatterToBalance = 62 [default = 0.5];
     optional double MinMemoryScatterToBalance = 63 [default = 0.5];
     optional double MinNetworkScatterToBalance = 64 [default = 0.5];
-    optional double MinCounterScatterToBalance = 65 [default = 0.01];
-    optional uint64 ObjectImbalanceToBalance = 66 [default = 0];
+    optional double MinCounterScatterToBalance = 65 [default = 0.02];
+    reserved 66;
+    optional double ObjectImbalanceToBalance = 67 [default = 0.02];
 }
 
 message TDataShardConfig {

@@ -74,21 +74,28 @@ enum class EFollowerStrategy : ui32 {
 TString EFollowerStrategyName(EFollowerStrategy value);
 
 enum class EBalancerType {
-    None,
-    Scatter,
-    Emergency,
     Manual,
+    Scatter,
+    ScatterCounter,
+    ScatterCPU,
+    ScatterMemory,
+    ScatterNetwork,
+    Emergency,
     SpreadNeighbours,
+
+    Last = SpreadNeighbours,
 };
+
+constexpr std::size_t EBalancerTypeSize = static_cast<std::size_t>(EBalancerType::Last) + 1;
 
 TString EBalancerTypeName(EBalancerType value);
 
 enum class EResourceToBalance {
     Dominant,
+    Counter,
     CPU,
     Memory,
     Network,
-    Counter,
 };
 
 EResourceToBalance ToResourceToBalance(NMetrics::EResource resource);
@@ -242,12 +249,23 @@ struct TDrainSettings {
 };
 
 struct TBalancerSettings {
+    EBalancerType Type = EBalancerType::Manual;
     int MaxMovements = 0;
     bool RecheckOnFinish = false;
     ui64 MaxInFlight = 1;
     const std::vector<TNodeId> FilterNodeIds = {};
     EResourceToBalance ResourceToBalance = EResourceToBalance::Dominant;
     std::optional<TObjectId> FilterObjectId;
+};
+
+struct TBalancerStats {
+    ui64 TotalRuns = 0;
+    ui64 TotalMovements = 0;
+    bool IsRunningNow = false;
+    ui64 CurrentMovements = 0;
+    ui64 CurrentMaxMovements = 0;
+    TInstant LastRunTimestamp;
+    ui64 LastRunMovements = 0;
 };
 
 } // NHive

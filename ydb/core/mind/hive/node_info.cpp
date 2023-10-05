@@ -69,7 +69,9 @@ bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EV
         TabletsRunningByType[tablet->GetTabletType()].erase(tablet);
         TabletsOfObject[tablet->GetObjectId()].erase(tablet);
         Hive.UpdateCounterTabletsAlive(-1);
-        Hive.UpdateObjectCount(tablet->GetObjectId(), Id, -1);
+        if (tablet->HasCounter()) {
+            Hive.UpdateObjectCount(tablet->GetObjectId(), Id, -1);
+        }
     }
     if (IsResourceDrainingState(newState)) {
         if (Tablets[newState].insert(tablet).second) {
@@ -82,7 +84,9 @@ bool TNodeInfo::OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EV
         TabletsRunningByType[tablet->GetTabletType()].emplace(tablet);
         TabletsOfObject[tablet->GetObjectId()].emplace(tablet);
         Hive.UpdateCounterTabletsAlive(+1);
-        Hive.UpdateObjectCount(tablet->GetObjectId(), Id, +1);
+        if (tablet->HasCounter()) {
+            Hive.UpdateObjectCount(tablet->GetObjectId(), Id, +1);
+        }
     }
     return true;
 }

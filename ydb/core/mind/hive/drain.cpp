@@ -210,6 +210,8 @@ void THive::StartHiveDrain(TNodeId nodeId, TDrainSettings settings) {
         auto* balancer = new THiveDrain(this, nodeId, std::move(settings));
         SubActors.emplace_back(balancer);
         RegisterWithSameMailbox(balancer);
+    } else {
+        BLOG_W("It's not possible to start drain on node " << nodeId << ", the node is already busy");
     }
 }
 

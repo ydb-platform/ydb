@@ -30,11 +30,14 @@ TString EFollowerStrategyName(EFollowerStrategy value) {
 
 TString EBalancerTypeName(EBalancerType value) {
     switch (value) {
-        case EBalancerType::None: return "???";
         case EBalancerType::Scatter: return "Scatter";
+        case EBalancerType::ScatterCounter: return "Counter";
+        case EBalancerType::ScatterCPU: return "CPU";
+        case EBalancerType::ScatterMemory: return "Memory";
+        case EBalancerType::ScatterNetwork: return "Network";
         case EBalancerType::Emergency: return "Emergency";
+        case EBalancerType::SpreadNeighbours: return "Spread";
         case EBalancerType::Manual: return "Manual";
-        case EBalancerType::SpreadNeighbours: return "SpreadNeighbours";
     }
 }
 

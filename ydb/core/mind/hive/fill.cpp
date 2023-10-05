@@ -134,7 +134,8 @@ void THive::StartHiveFill(TNodeId nodeId, const TActorId& initiator) {
         SubActors.emplace_back(balancer);
         RegisterWithSameMailbox(balancer);
     } else {
-        Send(initiator, new TEvHive::TEvDrainNodeResult(NKikimrProto::ALREADY));
+        BLOG_W("It's not possible to start fill on node " << nodeId << ", the node is already busy");
+        Send(initiator, new TEvHive::TEvFillNodeResult(NKikimrProto::ALREADY));
     }
 }
 

@@ -11,21 +11,24 @@ namespace NKikimr {
 namespace NHive {
 
 struct TObjectDistribution {
-    std::multiset<ui64> SortedDistribution;
-    std::unordered_map<TNodeId, ui64> Distribution;
+    std::multiset<i64> SortedDistribution;
+    std::unordered_map<TNodeId, i64> Distribution;
     const TObjectId Id;
     double Mean = 0;
     double VarianceNumerator = 0;
 
     TObjectDistribution(TObjectId id) : Id(id) {}
 
-    ui64 GetImbalance() const {
+    double GetImbalance() const {
         if (SortedDistribution.empty()) {
             return 0;
         }
-        ui64 minVal = *SortedDistribution.begin();
-        ui64 maxVal = *SortedDistribution.rbegin();
-        return std::max<ui64>(maxVal - minVal, 1) - 1;
+        i64 minVal = *SortedDistribution.begin();
+        i64 maxVal = *SortedDistribution.rbegin();
+        if (maxVal == 0) {
+            return 0;
+        }
+        return (std::max<double>(maxVal - minVal, 1) - 1) / maxVal;
     }
 
     double GetVariance() const {
@@ -35,29 +38,43 @@ struct TObjectDistribution {
         return VarianceNumerator / Distribution.size();
     }
 
-    void UpdateCount(TNodeId node, i64 diff) {
-        ui64& value = Distribution[node];
-        auto it = SortedDistribution.find(value);
+    void RemoveFromSortedDistribution(i64 value) {
         i64 numNodes = Distribution.size();
-        if (it != SortedDistribution.end()) {
-            SortedDistribution.erase(it);
-            double meanWithoutNode = 0;
-            if (numNodes > 1) {
-                meanWithoutNode = (Mean * numNodes - value) / (numNodes - 1);
-            }
-            VarianceNumerator -= (Mean - value) * (meanWithoutNode - value);
-            Mean = meanWithoutNode;
+        auto it = SortedDistribution.find(value);
+        SortedDistribution.erase(it);
+        double meanWithoutNode = 0;
+        if (numNodes > 1) {
+            meanWithoutNode = (Mean * numNodes - value) / (numNodes - 1);
         }
-        Y_VERIFY(diff + value >= 0);
+        VarianceNumerator -= (Mean - value) * (meanWithoutNode - value);
+        Mean = meanWithoutNode;
+    }
+
+    void UpdateCount(TNodeId node, i64 diff) {
+        auto [it, newNode] = Distribution.insert({node, 0});
+        i64& value = it->second;
+        i64 numNodes = Distribution.size();
+        if (!newNode) {
+            RemoveFromSortedDistribution(value);
+        }
+        if (diff + value < 0) {
+            BLOG_ERROR("UpdateObjectCount: new value " << diff + value << " is negative");
+        }
+        Y_VERIFY_DEBUG(diff + value >= 0);
         value += diff;
-        if (value > 0) {
-            SortedDistribution.insert(value);
-            double newMean = (Mean * (numNodes - 1) + value) / numNodes;
-            VarianceNumerator += (Mean - value) * (newMean - value);
-            Mean = newMean;
-        } else {
-            Distribution.erase(node);
+        SortedDistribution.insert(value);
+        double newMean = (Mean * (numNodes - 1) + value) / numNodes;
+        VarianceNumerator += (Mean - value) * (newMean - value);
+        Mean = newMean;
+    }
+
+    void RemoveNode(TNodeId node) {
+        auto it = Distribution.find(node);
+        if (it == Distribution.end()) {
+            return;
         }
+        RemoveFromSortedDistribution(it->second);
+        Distribution.erase(node);
     }
 
     bool operator<(const TObjectDistribution& other) const {
@@ -68,11 +85,14 @@ struct TObjectDistribution {
 struct TObjectDistributions {
     std::multiset<TObjectDistribution> SortedDistributions;
     std::unordered_map<TObjectId, std::multiset<TObjectDistribution>::iterator> Distributions;
-    ui64 TotalImbalance = 0;
     ui64 ImbalancedObjects = 0;
+    std::unordered_set<TNodeId> Nodes;
 
-    ui64 GetTotalImbalance() {
-        return TotalImbalance;
+    double GetMaxImbalance() {
+        if (SortedDistributions.empty()) {
+            return 0;
+        }
+        return SortedDistributions.rbegin()->GetImbalance();
     }
 
     struct TObjectToBalance {
@@ -85,11 +105,11 @@ struct TObjectDistributions {
     TObjectToBalance GetObjectToBalance() {
         Y_VERIFY(!SortedDistributions.empty());
         const auto& dist = *SortedDistributions.rbegin();
-        ui64 maxCnt = *dist.SortedDistribution.rbegin();
+        i64 maxCnt = *dist.SortedDistribution.rbegin();
         TObjectToBalance result(dist.Id);
         for (const auto& [node, cnt] : dist.Distribution) {
             ui64 n = node;
-            ui64 c = cnt;
+            i64 c = cnt;
             BLOG_TRACE("Node " << n << "has " << c << ", maximum: " << maxCnt);
             if (cnt == maxCnt) {
                 result.Nodes.push_back(node);
@@ -109,30 +129,67 @@ struct TObjectDistributions {
         return SortedDistributions.rbegin()->GetVariance();
     }
 
-    void UpdateCount(TObjectId object, TNodeId node, i64 diff) {
+    template <typename F>
+    bool UpdateDistribution(TObjectId object, F updateFunc) {
         auto distIt = Distributions.find(object);
         if (distIt == Distributions.end()) {
-            TObjectDistribution dist(object);
+            return false;
+        }
+        auto handle = SortedDistributions.extract(distIt->second);
+        if (!handle) {
+            return false;
+        }
+        auto& dist = handle.value();
+        double imbalanceBefore = dist.GetImbalance();
+        updateFunc(dist);
+        double imbalanceAfter = dist.GetImbalance();
+        if (imbalanceBefore <= 1e-7 && imbalanceAfter > 1e-7) {
+            ++ImbalancedObjects;
+        } else if (imbalanceBefore > 1e-7 && imbalanceAfter <= 1e-7) {
+            --ImbalancedObjects;
+        }
+        if (!dist.Distribution.empty()) {
+            auto sortedIt = SortedDistributions.insert(std::move(handle));
+            distIt->second = sortedIt;
+        } else {
+            Distributions.erase(distIt);
+        }
+        return true;
+    }
+
+
+    void UpdateCount(TObjectId object, TNodeId node, i64 diff) {
+        auto updateFunc = [=](TObjectDistribution& dist) {
             dist.UpdateCount(node, diff);
-            TotalImbalance += dist.GetImbalance();
+        };
+        if (!UpdateDistribution(object, updateFunc)) {
+            TObjectDistribution dist(object);
+            for (auto node : Nodes) {
+                dist.UpdateCount(node, 0);
+            }
+            dist.UpdateCount(node, diff);
             auto sortedDistIt = SortedDistributions.insert(std::move(dist));
             Distributions.emplace(object, sortedDistIt);
             return;
         }
-        auto handle = SortedDistributions.extract(distIt->second);
-        Y_VERIFY(handle);
-        auto& dist = handle.value();
-        ui64 imbalanceBefore = dist.GetImbalance();
-        dist.UpdateCount(node, diff);
-        ui64 imbalanceAfter = dist.GetImbalance();
-        TotalImbalance += imbalanceAfter - imbalanceBefore;
-        if (imbalanceBefore == 0 && imbalanceAfter > 0) {
-            ++ImbalancedObjects;
-        } else if (imbalanceBefore > 0 && imbalanceAfter == 0) {
-            --ImbalancedObjects;
+        // std::cerr << object << ": " << diff << " ~>" << GetTotalImbalance() << std::endl;
+    }
+
+    void AddNode(TNodeId node) {
+        Nodes.insert(node);
+        for (const auto& [obj, it] : Distributions) {
+            UpdateCount(obj, node, 0);
         }
-        auto sortedIt = SortedDistributions.insert(std::move(handle));
-        distIt->second = sortedIt;
+    }
+
+    void RemoveNode(TNodeId node) {
+        Nodes.erase(node);
+        auto updateFunc = [=](TObjectDistribution& dist) {
+            dist.RemoveNode(node);
+        };
+        for (auto it = Distributions.begin(); it != Distributions.end();) {
+            UpdateDistribution((it++)->first, updateFunc);
+        }
     }
 };
 

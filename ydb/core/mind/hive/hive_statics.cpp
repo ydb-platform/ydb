@@ -76,6 +76,15 @@ TString GetResourceValuesText(const TResourceRawValues& values) {
     return str.Str();
 }
 
+NJson::TJsonValue GetResourceValuesJson(const TResourceRawValues& values) {
+    NJson::TJsonValue json;
+    json["Counter"] = GetCounter(std::get<NMetrics::EResource::Counter>(values));
+    json["CPU"] = GetTimes(std::get<NMetrics::EResource::CPU>(values));
+    json["Memory"] = GetBytes(std::get<NMetrics::EResource::Memory>(values));
+    json["Network"] = GetBytesPerSecond(std::get<NMetrics::EResource::Network>(values));
+    return json;
+}
+
 TString GetResourceValuesText(const TResourceNormalizedValues& values) {
     TStringStream str;
     str << '(';
@@ -88,6 +97,15 @@ TString GetResourceValuesText(const TResourceNormalizedValues& values) {
     str << Sprintf("%.9f", std::get<NMetrics::EResource::Network>(values));
     str << ')';
     return str.Str();
+}
+
+NJson::TJsonValue GetResourceValuesJson(const TResourceNormalizedValues& values) {
+    NJson::TJsonValue json;
+    json["Counter"] = Sprintf("%.9f", std::get<NMetrics::EResource::Counter>(values));
+    json["CPU"] = Sprintf("%.9f", std::get<NMetrics::EResource::CPU>(values));
+    json["Memory"] = Sprintf("%.9f", std::get<NMetrics::EResource::Memory>(values));
+    json["Network"] = Sprintf("%.9f", std::get<NMetrics::EResource::Network>(values));
+    return json;
 }
 
 TString GetResourceValuesText(const TTabletInfo& tablet) {
@@ -141,14 +159,14 @@ TString GetResourceValuesHtml(const TResourceRawValues& values) {
     return str.Str();
 }
 
-NJson::TJsonValue GetResourceValuesJson(const TResourceRawValues& values) {
-    NJson::TJsonValue value;
-    value.AppendValue(GetCounter(std::get<NMetrics::EResource::Counter>(values)));
-    value.AppendValue(GetTimes(std::get<NMetrics::EResource::CPU>(values)));
-    value.AppendValue(GetBytes(std::get<NMetrics::EResource::Memory>(values)));
-    value.AppendValue(GetBytesPerSecond(std::get<NMetrics::EResource::Network>(values)));
-    return value;
-}
+// NJson::TJsonValue GetResourceValuesJson(const TResourceRawValues& values) {
+//     NJson::TJsonValue value;
+//     value.AppendValue(GetCounter(std::get<NMetrics::EResource::Counter>(values)));
+//     value.AppendValue(GetTimes(std::get<NMetrics::EResource::CPU>(values)));
+//     value.AppendValue(GetBytes(std::get<NMetrics::EResource::Memory>(values)));
+//     value.AppendValue(GetBytesPerSecond(std::get<NMetrics::EResource::Network>(values)));
+//     return value;
+// }
 
 NJson::TJsonValue GetResourceValuesJson(const TResourceRawValues& values, const TResourceRawValues& maximum) {
     NMetrics::EResource resource = GetDominantResourceType(values, maximum);
@@ -201,7 +219,7 @@ TString GetValueWithColoredGlyph(double val, double maxVal) {
     if (maxVal != 0) {
         ratio = val / maxVal;
     } else {
-        ratio = 1.0;
+        ratio = val ? 1.0 : 0.0;
     }
     TString glyph;
     if (ratio < 0.9) {
@@ -370,12 +388,20 @@ bool IsValidTabletType(TTabletTypes::EType type) {
             );
 }
 
-TString GetBalancerProgressText(i32 balancerProgress, EBalancerType balancerType) {
-    TStringBuilder str;
-    if (balancerProgress >= 0) {
-        str << balancerProgress << "% (" << EBalancerTypeName(balancerType) << ")";
+NJson::TJsonValue THive::GetBalancerProgressJson() {
+    NJson::TJsonValue result;
+    for (const auto& stats : BalancerStats) {
+        NJson::TJsonValue json;
+        json["TotalRuns"] = stats.TotalRuns;
+        json["TotalMovements"] = stats.TotalMovements;
+        json["IsRunningNow"] = stats.IsRunningNow;
+        json["CurrentMovements"] = stats.CurrentMovements;
+        json["CurrentMaxMovements"] = stats.CurrentMaxMovements;
+        json["LastRunTimestamp"] = stats.LastRunTimestamp.ToString();
+        json["LastRunMovements"] = stats.LastRunMovements;
+        result.AppendValue(std::move(json));
     }
-    return str;
+    return result;
 }
 
 TString GetRunningTabletsText(ui64 runningTablets, ui64 totalTablets, bool warmUp) {

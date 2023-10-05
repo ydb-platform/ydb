@@ -423,7 +423,6 @@ public:
                 tablet.NeedToReleaseFromParent = tabletRowset.GetValueOrDefault<Schema::Tablet::NeedToReleaseFromParent>();
                 tablet.ChannelProfileReassignReason = tabletRowset.GetValueOrDefault<Schema::Tablet::ReassignReason>();
                 tablet.Statistics = tabletRowset.GetValueOrDefault<Schema::Tablet::Statistics>();
-                tablet.InitTabletMetrics();
 
                 if (tablet.NodeId == 0) {
                     tablet.BecomeStopped();
@@ -584,7 +583,6 @@ public:
                     TFollowerGroup& followerGroup = tablet->GetFollowerGroup(followerGroupId);
                     TFollowerTabletInfo& follower = tablet->AddFollower(followerGroup, followerId);
                     follower.Statistics = tabletFollowerRowset.GetValueOrDefault<Schema::TabletFollowerTablet::Statistics>();
-                    follower.InitTabletMetrics();
                     if (nodeId == 0) {
                         follower.BecomeStopped();
                     } else {
@@ -633,6 +631,10 @@ public:
             }
             BLOG_D("THive::TTxLoadEverything loaded " << numMetrics << " metrics ("
                     << numMissingTablets << " for missing tablets)");
+        }
+
+        for (auto& [tabletId, tablet] : Self->Tablets) {
+            tablet.ActualizeCounter();
         }
 
         size_t numDeletedNodes = 0;

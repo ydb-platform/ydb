@@ -233,6 +233,7 @@ public:
     static i64 GetCounterValue(const NKikimrTabletBase::TMetrics& metrics, const TVector<i64>& allowedMetricIds);
     void FilterRawValues(TResourceRawValues& values) const;
     void FilterRawValues(TResourceNormalizedValues& values) const;
+    void ActualizeCounter();
 
     template <typename ResourcesType>
     static double GetUsage(const ResourcesType& current, const ResourcesType& maximum, EResourceToBalance resource = EResourceToBalance::Dominant) {
@@ -295,6 +296,10 @@ public:
     void ActualizeTabletStatistics(TInstant now);
     ui64 GetRestartsPerPeriod(TInstant barrier);
     bool RestartsOften() const;
+
+    bool HasCounter() {
+        return std::get<NMetrics::EResource::Counter>(GetResourceCurrentValues()) > 0;
+    }
 };
 
 

@@ -2188,14 +2188,13 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
 
         if (!overloadedNodes.empty()) {
             BLOG_D("Nodes " << overloadedNodes << " with usage over limit " << GetMaxNodeUsageToKick() << " - starting balancer");
-            LastBalancerTrigger = EBalancerType::Emergency;
-            TBalancerSettings emergencySettings{
+            StartHiveBalancer({
+                .Type = EBalancerType::Emergency,
                 .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnEmergencyBalancer(),
                 .RecheckOnFinish = CurrentConfig.GetContinueEmergencyBalancer(),
                 .MaxInFlight = GetEmergencyBalancerInflight(),
                 .FilterNodeIds = std::move(overloadedNodes),
-            };
-            StartHiveBalancer(std::move(emergencySettings));
+            });
             return;
         }
     }
@@ -2204,32 +2203,56 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
         TabletCounters->Cumulative()[NHive::COUNTER_SUGGESTED_SCALE_DOWN].Increment(1);
     }
 
+    if (ObjectDistributions.GetMaxImbalance() > GetObjectImbalanceToBalance()) {
+        TInstant now = TActivationContext::Now();
+        if (LastBalancerTrigger != EBalancerType::SpreadNeighbours
+            || BalancerStats[static_cast<std::size_t>(EBalancerType::SpreadNeighbours)].LastRunMovements != 0
+            || BalancerStats[static_cast<std::size_t>(EBalancerType::SpreadNeighbours)].LastRunTimestamp + TDuration::Seconds(1) < now) {
+            auto objectToBalance = ObjectDistributions.GetObjectToBalance();
+            BLOG_D("Max imbalance " << ObjectDistributions.GetMaxImbalance() << " - starting balancer for object " << objectToBalance.ObjectId);
+            StartHiveBalancer({
+                .Type = EBalancerType::SpreadNeighbours,
+                .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnAutoBalancer(),
+                .RecheckOnFinish = CurrentConfig.GetContinueAutoBalancer(),
+                .MaxInFlight = GetBalancerInflight(),
+                .FilterNodeIds = std::move(objectToBalance.Nodes),
+                .FilterObjectId = objectToBalance.ObjectId,
+            });
+            return;
+        } else {
+            BLOG_D("Skipping SpreadNeigbours Balancer, now: " << now << ", allowed: " << BalancerStats[static_cast<std::size_t>(EBalancerType::SpreadNeighbours)].LastRunTimestamp + TDuration::Seconds(1));
+        }
+    }
+
     auto scatteredResource = CheckScatter(stats.ScatterByResource);
     if (scatteredResource) {
+        EBalancerType balancerType = EBalancerType::Scatter;
+        switch (*scatteredResource) {
+            case EResourceToBalance::Counter:
+                balancerType = EBalancerType::ScatterCounter;
+                break;
+            case EResourceToBalance::CPU:
+                balancerType = EBalancerType::ScatterCPU;
+                break;
+            case EResourceToBalance::Memory:
+                balancerType = EBalancerType::ScatterMemory;
+                break;
+            case EResourceToBalance::Network:
+                balancerType = EBalancerType::ScatterNetwork;
+                break;
+            case EResourceToBalance::Dominant:
+                balancerType = EBalancerType::Scatter;
+                break;
+        }
         BLOG_TRACE("Scatter " << stats.ScatterByResource << " over limit "
-                   << GetMinScatterToBalance() << " - starting balancer");
-        LastBalancerTrigger = EBalancerType::Scatter;
-        TBalancerSettings scatterSettings{
+                   << GetMinScatterToBalance() << " - starting balancer " << EBalancerTypeName(balancerType));
+        StartHiveBalancer({
+            .Type = balancerType,
             .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnAutoBalancer(),
             .RecheckOnFinish = CurrentConfig.GetContinueAutoBalancer(),
             .MaxInFlight = GetBalancerInflight(),
             .ResourceToBalance = *scatteredResource,
-        };
-        StartHiveBalancer(std::move(scatterSettings));
-        return;
-    }
-
-    if (ObjectDistributions.GetTotalImbalance() > GetObjectImbalanceToBalance()) {
-        LastBalancerTrigger = EBalancerType::SpreadNeighbours;
-        auto objectToBalance = ObjectDistributions.GetObjectToBalance();
-        TBalancerSettings neighboursSettings{
-            .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnAutoBalancer(),
-            .RecheckOnFinish = CurrentConfig.GetContinueAutoBalancer(),
-            .MaxInFlight = GetBalancerInflight(),
-            .FilterNodeIds = std::move(objectToBalance.Nodes),
-            .FilterObjectId = objectToBalance.ObjectId,
-        };
-        StartHiveBalancer(std::move(neighboursSettings));
+        });
         return;
     }
 
@@ -2296,11 +2319,11 @@ bool THive::IsValidMetrics(const NKikimrTabletBase::TMetrics& metrics) {
 }
 
 bool THive::IsValidMetricsCPU(const NKikimrTabletBase::TMetrics& metrics) {
-    return metrics.GetCPU() > 1000/*1ms*/;
+    return metrics.GetCPU() > 1'000/*1ms*/;
 }
 
 bool THive::IsValidMetricsMemory(const NKikimrTabletBase::TMetrics& metrics) {
-    return metrics.GetMemory() > 1024/*1KB*/;
+    return metrics.GetMemory() > 128'000/*128KB*/;
 }
 
 bool THive::IsValidMetricsNetwork(const NKikimrTabletBase::TMetrics& metrics) {
@@ -2518,9 +2541,11 @@ void THive::UpdateTabletFollowersNumber(TLeaderTabletInfo& tablet, NIceDb::TNice
 
 TDuration THive::GetBalancerCooldown() const {
     switch(LastBalancerTrigger) {
-        case EBalancerType::None:
-            return TDuration::Seconds(0);
         case EBalancerType::Scatter:
+        case EBalancerType::ScatterCounter:
+        case EBalancerType::ScatterCPU:
+        case EBalancerType::ScatterMemory:
+        case EBalancerType::ScatterNetwork:
         case EBalancerType::SpreadNeighbours:
             return GetMinPeriodBetweenBalance();
         case EBalancerType::Emergency:
@@ -2532,9 +2557,9 @@ TDuration THive::GetBalancerCooldown() const {
 
 void THive::UpdateObjectCount(TObjectId object, TNodeId node, i64 diff) {
     ObjectDistributions.UpdateCount(object, node, diff);
-    TabletCounters->Simple()[NHive::COUNTER_BALANCE_OBJECT_IMBALANCE].Set(ObjectDistributions.GetTotalImbalance());
     TabletCounters->Simple()[NHive::COUNTER_IMBALANCED_OBJECTS].Set(ObjectDistributions.GetImbalancedObjectsCount());
     TabletCounters->Simple()[NHive::COUNTER_WORST_OBJECT_VARIANCE].Set(ObjectDistributions.GetWorstObjectVariance());
+    BLOG_TRACE("UpdateObjectCount " << "for " << object << " on " << node << " (" << diff << ") ~> Imbalance: " << ObjectDistributions.GetMaxImbalance());
 }
 
 ui64 THive::GetObjectImbalance(TObjectId object) {
@@ -2557,7 +2582,6 @@ THive::THive(TTabletStorageInfo *info, const TActorId &tablet)
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(PipeClientCacheConfig))
     , PipeTracker(*PipeClientCache)
     , PipeRetryPolicy()
-    , BalancerProgress(-1)
     , ResponsivenessPinger(nullptr)
 {
     TabletCountersPtr.Reset(new TProtobufTabletCounters<
@@ -3134,6 +3158,18 @@ bool THive::IsSystemTablet(TTabletTypes::EType type) {
 
 TString THive::GetLogPrefix() const {
     return TStringBuilder() << "HIVE#" << TabletID() << " ";
+}
+
+bool THive::IsItPossibleToStartBalancer(EBalancerType balancerType) {
+    for (std::size_t balancer = 0; balancer < std::size(BalancerStats); ++balancer) {
+        const auto& stats(BalancerStats[balancer]);
+        if (stats.IsRunningNow) {
+            EBalancerType type = static_cast<EBalancerType>(balancer);
+            BLOG_D("It's not possible to start balancer " << EBalancerTypeName(balancerType) << " because balancer " << EBalancerTypeName(type) << " is already running");
+            return false;
+        }
+    }
+    return true;
 }
 
 } // NHive

@@ -58,6 +58,7 @@ public:
                 db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Local>(TActorId());
             }
         }
+        Self->ObjectDistributions.RemoveNode(NodeId);
         return true;
     }
 

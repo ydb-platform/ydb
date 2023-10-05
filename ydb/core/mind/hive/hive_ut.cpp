@@ -4191,6 +4191,16 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             MakeSureTabletIsUp(runtime, tabletId, 0);
         }
 
+        // report empty metrics to turn neighbour-balancing on
+        for (auto tablet : tablets) {
+            THolder<TEvHive::TEvTabletMetrics> metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
+            NKikimrHive::TTabletMetrics* metric = metrics->Record.AddTabletMetrics();
+            metric->SetTabletID(tablet);
+            metric->MutableResourceUsage()->SetMemory(0);
+
+            runtime.SendToPipe(hiveTablet, senderA, metrics.Release());
+        }
+
         // update objects, so that distribution of objects on nodes becomes {0, 0, 0, 1}, {0, 1, 1, 1}
         auto initialDistribution = getDistribution();
         TVector<ui64> tabletsToUpdate = {initialDistribution[0][0], initialDistribution[1][0], initialDistribution[1][1], initialDistribution[1][2]};

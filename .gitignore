@@ -18,3 +18,5 @@ __pycache__/
 
 /build_*
 /build-*
+
+.idea/

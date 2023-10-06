@@ -4191,7 +4191,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             MakeSureTabletIsUp(runtime, tabletId, 0);
         }
 
-        // report empty metrics to turn neighbour-balancing on
+        // make metrics empty to turn neighbour-balancing on
+        runtime.AdvanceCurrentTime(TDuration::Hours(24));
         for (auto tablet : tablets) {
             THolder<TEvHive::TEvTabletMetrics> metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
             NKikimrHive::TTabletMetrics* metric = metrics->Record.AddTabletMetrics();

@@ -314,7 +314,7 @@ const TVector<i64>& TTabletInfo::GetTabletAllowedMetricIds() const {
 }
 
 void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics) {
-    TInstant now = TInstant::Now();
+    TInstant now = TActivationContext::Now();
     const TVector<i64>& allowedMetricIds(GetTabletAllowedMetricIds());
     auto before = ResourceValues;
     auto maximum = GetResourceMaximumValues();

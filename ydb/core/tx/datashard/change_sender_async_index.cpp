@@ -202,6 +202,10 @@ class TAsyncIndexChangeSenderShard: public TActorBootstrapped<TAsyncIndexChangeS
     }
 
     bool CanRetry() const {
+        if (CurrentStateFunc() != static_cast<TReceiveFunc>(&TThis::StateHandshake)) {
+            return false;
+        }
+
         return Attempt < MaxAttempts;
     }
 

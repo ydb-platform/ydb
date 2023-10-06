@@ -173,8 +173,7 @@ def add_python_lint_checks(unit, py_ver, files):
             ]
 
             extra_params = []
-            # Don't use migration config in opensource
-            if unit.get("OPENSOURCE") == "yes" or unit.get("DISABLE_FLAKE8_MIGRATIONS") == "yes":
+            if unit.get("DISABLE_FLAKE8_MIGRATIONS") == "yes":
                 extra_params.append("DISABLE_FLAKE8_MIGRATIONS=yes")
                 config_files = [flake8_cfg, '']
             else:

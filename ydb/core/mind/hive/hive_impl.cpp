@@ -2409,7 +2409,7 @@ NKikimrTabletBase::TMetrics THive::GetDefaultResourceValuesForProfile(TTabletTyp
     return resourceValues;
 }
 
-const TVector<i64>& THive::GetDefaultAllowedMetricIds() {
+const TVector<i64>& THive::GetDefaultAllowedMetricIdsForType(TTabletTypes::EType type) {
     static const TVector<i64> defaultAllowedMetricIds = {
         NKikimrTabletBase::TMetrics::kCounterFieldNumber,
         NKikimrTabletBase::TMetrics::kCPUFieldNumber,
@@ -2419,11 +2419,22 @@ const TVector<i64>& THive::GetDefaultAllowedMetricIds() {
         NKikimrTabletBase::TMetrics::kGroupReadThroughputFieldNumber,
         NKikimrTabletBase::TMetrics::kGroupWriteThroughputFieldNumber
     };
-    return defaultAllowedMetricIds;
+    static const TVector<i64> onlyCounterAndStorage = {
+        NKikimrTabletBase::TMetrics::kCounterFieldNumber,
+        NKikimrTabletBase::TMetrics::kStorageFieldNumber,
+        NKikimrTabletBase::TMetrics::kGroupReadThroughputFieldNumber,
+        NKikimrTabletBase::TMetrics::kGroupWriteThroughputFieldNumber,
+    };
+    switch (type) {
+        case TTabletTypes::ColumnShard:
+            return onlyCounterAndStorage;
+        default:
+            return defaultAllowedMetricIds;
+    }
 }
 
 const TVector<i64>& THive::GetTabletTypeAllowedMetricIds(TTabletTypes::EType type) const {
-    const TVector<i64>& defaultAllowedMetricIds = GetDefaultAllowedMetricIds();
+    const TVector<i64>& defaultAllowedMetricIds = GetDefaultAllowedMetricIdsForType(type);
     auto it = TabletTypeAllowedMetrics.find(type);
     if (it != TabletTypeAllowedMetrics.end()) {
         return it->second;

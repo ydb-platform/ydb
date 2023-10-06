@@ -628,7 +628,7 @@ public:
     void ProcessPendingOperations();
     void ProcessTabletBalancer();
     const TVector<i64>& GetTabletTypeAllowedMetricIds(TTabletTypes::EType type) const;
-    static const TVector<i64>& GetDefaultAllowedMetricIds();
+    static const TVector<i64>& GetDefaultAllowedMetricIdsForType(TTabletTypes::EType type);
     static bool IsValidMetrics(const NKikimrTabletBase::TMetrics& metrics);
     static bool IsValidMetricsCPU(const NKikimrTabletBase::TMetrics& metrics);
     static bool IsValidMetricsMemory(const NKikimrTabletBase::TMetrics& metrics);

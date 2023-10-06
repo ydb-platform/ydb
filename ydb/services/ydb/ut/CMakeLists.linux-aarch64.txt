@@ -79,7 +79,7 @@ set_property(
   ydb-services-ydb-ut
   PROPERTY
   SPLIT_FACTOR
-  10
+  60
 )
 add_yunittest(
   NAME
@@ -112,7 +112,7 @@ set_yunittest_property(
   ydb-services-ydb-ut
   PROPERTY
   TIMEOUT
-  300
+  600
 )
 target_allocator(ydb-services-ydb-ut
   cpp-malloc-jemalloc

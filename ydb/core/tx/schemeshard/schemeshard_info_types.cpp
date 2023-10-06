@@ -1348,6 +1348,7 @@ void TTableInfo::SetPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
         newAggregatedStats.RowCount += newStats.RowCount;
         newAggregatedStats.DataSize += newStats.DataSize;
         newAggregatedStats.IndexSize += newStats.IndexSize;
+        newAggregatedStats.InFlightTxCount += newStats.InFlightTxCount;
         cpuTotal += newStats.GetCurrentRawCpuUsage();
         newAggregatedStats.Memory += newStats.Memory;
         newAggregatedStats.Network += newStats.Network;

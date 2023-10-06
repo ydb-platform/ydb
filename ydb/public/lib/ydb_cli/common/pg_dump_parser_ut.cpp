@@ -9,10 +9,22 @@ Y_UNIT_TEST_SUITE(PgDumpParserTests) {
     TString ParseDump(const TString& data) {
         TStringStream in, out;
         TPgDumpParser parser(out);
+
         in << data;
         parser.Prepare(in);
         in.clear();
         in << data;
+        parser.WritePgDump(in);
+        return out.Str();
+    }
+
+    TString ParseDumpFixedString(const TString& data) {
+        TStringStream out;
+        TFixedStringStream in(data);
+        TPgDumpParser parser(out);
+
+        parser.Prepare(in);
+        in.MovePointer();
         parser.WritePgDump(in);
         return out.Str();
     }
@@ -37,6 +49,7 @@ Y_UNIT_TEST_SUITE(PgDumpParserTests) {
             "INSERT INTO pgbench_accounts (aid, bid, abalance, filler) VALUES\n"
             "(4, 1, 0, '                                                                                    ');\n";
         UNIT_ASSERT_EQUAL(ParseDump(data), result);
+        UNIT_ASSERT_EQUAL(ParseDumpFixedString(data), result);
     }
 
     Y_UNIT_TEST(PgCatalogAndAlterComment) {
@@ -53,6 +66,7 @@ Y_UNIT_TEST_SUITE(PgDumpParserTests) {
             "SET check_function_bodies = false;\n"
             "-- ALTER TABLE public.pgbench_accounts OWNER TO root;\n";
         UNIT_ASSERT_EQUAL(ParseDump(data), result);
+        UNIT_ASSERT_EQUAL(ParseDumpFixedString(data), result);
     }
 
     Y_UNIT_TEST(CreateTablePrimaryKeys) {
@@ -112,5 +126,6 @@ Y_UNIT_TEST_SUITE(PgDumpParserTests) {
             "-- ALTER TABLE ONLY public.pgbench_branches\n"
             "--     ADD CONSTRAINT pgbench_branches_pkey PRIMARY KEY (bid);\n";
         UNIT_ASSERT_EQUAL(ParseDump(data), result);
+        UNIT_ASSERT_EQUAL(ParseDumpFixedString(data), result);
     }
 }

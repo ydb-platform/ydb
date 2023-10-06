@@ -213,11 +213,11 @@ public:
         }
         auto selfId = SelfId();
         auto as = TActivationContext::ActorSystem();
-        ev->Get()->SetClientLostAction(selfId, as);
+        ev->Get()->SetClientLostAction(selfId, as);  
         QueryState = std::make_shared<TKqpQueryState>(
             ev, QueryId, Settings.Database, Settings.Cluster, Settings.DbCounters, Settings.LongSession,
             Settings.TableService, Settings.QueryService, std::move(id), SessionId);
-        if (QueryState->UserRequestContext->TraceId == "") {
+        if (QueryState->UserRequestContext->TraceId.empty()) {
             QueryState->UserRequestContext->TraceId = UlidGen.Next().ToString();
         }
     }
@@ -989,11 +989,9 @@ public:
         }
 
         if (literal) {
-            if (QueryState) {
-                request.Orbit = std::move(QueryState->Orbit);
-            }
-            request.TraceId = QueryState ? QueryState->KqpSessionSpan.GetTraceId() : NWilson::TTraceId();
             Y_ENSURE(QueryState);
+            request.Orbit = std::move(QueryState->Orbit);
+            request.TraceId = QueryState->KqpSessionSpan.GetTraceId();
             auto response = ExecuteLiteral(std::move(request), RequestCounters, SelfId(), QueryState->UserRequestContext);
             ++QueryState->CurrentTx;
             ProcessExecuterResult(response.get());

@@ -11,6 +11,8 @@ SRCS(
     dq_compute_actor.cpp
     dq_compute_issues_buffer.cpp
     retry_queue.cpp
+    dq_request_context.h
+    dq_request_context.cpp
 )
 
 PEERDIR(

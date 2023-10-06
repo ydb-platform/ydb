@@ -1111,6 +1111,8 @@ void SerializeTaskToProto(const TKqpTasksGraph& tasksGraph, const TTask& task, N
         }
     }
 
+    SerializeCtxToMap(*tasksGraph.GetMeta().UserRequestContext, *result->MutableRequestContext());
+
     FillTaskMeta(stageInfo, task, *result);
 }
 

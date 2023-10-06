@@ -17,6 +17,8 @@ SRCS(
     kqp_types.cpp
     kqp.cpp
     kqp.h
+    kqp_user_request_context.cpp
+    kqp_user_request_context.h
 )
 
 PEERDIR(

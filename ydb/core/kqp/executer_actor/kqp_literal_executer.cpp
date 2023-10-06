@@ -391,6 +391,10 @@ private:
         Counters->Counters->LiteralTxTotalTimeHistogram->Collect(totalTime.MilliSeconds());
     }
 
+    const TIntrusivePtr<TUserRequestContext>& GetUserRequestContext() {
+        return UserRequestContext;
+    }
+
 private:
     IKqpGateway::TExecPhysicalRequest Request;
     TKqpRequestCounters::TPtr Counters;

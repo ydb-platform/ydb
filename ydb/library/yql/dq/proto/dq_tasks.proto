@@ -185,4 +185,5 @@ message TDqTask {
     optional uint32 MetaId = 15;
     optional bool UseLlvm = 16;
     repeated bytes ReadRanges = 17;
+    map<string, string> RequestContext = 18;
 }

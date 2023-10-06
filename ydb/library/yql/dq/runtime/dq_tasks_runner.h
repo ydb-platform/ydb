@@ -404,6 +404,10 @@ public:
         return Arena;
     }
 
+    const google::protobuf::Map<TProtoStringType, TProtoStringType>& GetRequestContext() const {
+        return Task_->GetRequestContext();
+    }
+
 private:
 
     // external callback to retrieve parameter value.

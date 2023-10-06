@@ -22,6 +22,7 @@
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/dq/actors/dq.h>
+#include <ydb/library/yql/dq/actors/compute/dq_request_context.h>
 
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/wilson/wilson_span.h>
@@ -29,6 +30,7 @@
 #include <util/generic/size_literals.h>
 #include <util/string/join.h>
 #include <util/system/hostname.h>
+
 
 #include <any>
 #include <queue>
@@ -129,8 +131,14 @@ protected:
 public:
     void Bootstrap() {
         try {
-            LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << Task.GetId() << ". ";
-
+            {
+                TStringBuilder prefixBuilder;
+                prefixBuilder << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << Task.GetId() << ". ";
+                if (RequestContext) {
+                    prefixBuilder << "Ctx: " << *RequestContext << ". ";
+                }
+                LogPrefix = prefixBuilder;
+            }
             CA_LOG_D("Start compute actor " << this->SelfId() << ", task: " << Task.GetId());
 
             Channels = new TDqComputeActorChannels(this->SelfId(), TxId, Task, !RuntimeSettings.FailOnUndelivery,
@@ -1904,6 +1912,8 @@ private:
         if (OutputChannelSize) {
             OutputChannelSize->Add(OutputChannelsMap.size() * MemoryLimits.ChannelBufferSize);
         }
+
+        RequestContext = MakeIntrusive<NYql::NDq::TRequestContext>(Task.GetRequestContext());
     }
 
     void InitializeWatermarks() {
@@ -2187,6 +2197,7 @@ protected:
     THashMap<ui64, TAsyncOutputTransformInfo> OutputTransformsMap; // Output index -> Transforms info
     bool ResumeEventScheduled = false;
     NDqProto::EComputeState State;
+    TIntrusivePtr<NYql::NDq::TRequestContext> RequestContext;
 
     struct TBasicStats {
         TDuration CpuTime;

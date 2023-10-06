@@ -2,6 +2,7 @@
 
 #include <util/stream/output.h>
 #include <util/generic/fwd.h>
+#include <contrib/libs/protobuf/src/google/protobuf/map.h>
 
 namespace NKikimr::NKqp {
     
@@ -18,10 +19,10 @@ namespace NKikimr::NKqp {
             , SessionId(sessionId) {}
 
 
-        void Out(IOutputStream& o) const {
-            o << "{" << " TraceId: " << TraceId << ", Database: " << Database << ", SessionId: " << SessionId << "}";
-        }
+        void Out(IOutputStream& o) const;
     };
+
+    void SerializeCtxToMap(const TUserRequestContext& ctx, google::protobuf::Map<TString, TString>& resultMap);
 }
 
 template<>

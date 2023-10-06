@@ -53,13 +53,13 @@ LWTRACE_USING(KQP_PROVIDER);
 namespace NKikimr {
 namespace NKqp {
 
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext,  NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "UserRequestContext: " << *UserRequestContext << ". " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext,  NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "UserRequestContext: " << *UserRequestContext << ". " << stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext,   NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "UserRequestContext: " << *UserRequestContext << ". " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "UserRequestContext: " << *UserRequestContext << ". " << stream)
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext,   NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "UserRequestContext: " << *UserRequestContext << ". " << stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext,  NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "UserRequestContext: " << *UserRequestContext << ". " << stream)
-#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext,   NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "UserRequestContext: " << *UserRequestContext << ". " << stream)
+#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext,  NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << stream)
+#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext,  NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << stream)
+#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext,   NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << stream)
+#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << stream)
+#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext,   NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << stream)
+#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext,  NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << stream)
+#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext,   NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << stream)
 
 enum class EExecType {
     Data,
@@ -128,7 +128,6 @@ public:
         , Planner(nullptr)
         , ExecuterRetriesConfig(executerRetriesConfig)
         , MaximalSecretsSnapshotWaitTime(maximalSecretsSnapshotWaitTime)
-        , UserRequestContext(userRequestContext)
         , AggregationSettings(aggregation)
         , HasOlapTable(false)
     {
@@ -136,6 +135,7 @@ public:
         TasksGraph.GetMeta().Arena = MakeIntrusive<NActors::TProtoArenaHolder>();
         TasksGraph.GetMeta().Database = Database;
         TasksGraph.GetMeta().ChannelTransportVersion = chanTransportVersion;
+        TasksGraph.GetMeta().UserRequestContext = userRequestContext;
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc);
         ResponseEv->Orbit = std::move(Request.Orbit);
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
@@ -796,8 +796,8 @@ protected:
             if (sinkName) {
                 auto structuredToken = NYql::CreateStructuredTokenParser(extSink.GetAuthInfo()).ToBuilder().ReplaceReferences(secureParams).ToJson();
                 task.Meta.SecureParams.emplace(sinkName, structuredToken);
-                if (UserRequestContext->TraceId) {
-                    task.Meta.TaskParams.emplace("fq.job_id", UserRequestContext->TraceId);
+                if (GetUserRequestContext()->TraceId) {
+                    task.Meta.TaskParams.emplace("fq.job_id", GetUserRequestContext()->TraceId);
                     // "fq.restart_count"
                 }
             }
@@ -1529,6 +1529,14 @@ protected:
         return std::move(sb);
     }
 
+    const TIntrusivePtr<TUserRequestContext>& GetUserRequestContext() const {
+        return TasksGraph.GetMeta().UserRequestContext;
+    }
+
+    TIntrusivePtr<TUserRequestContext>& MutableUserRequestContext() {
+        return TasksGraph.GetMeta().UserRequestContext;
+    }
+
 protected:
     IKqpGateway::TExecPhysicalRequest Request;
     const TString Database;
@@ -1571,8 +1579,6 @@ protected:
     TVector<TString> SecretNames;
     TDuration MaximalSecretsSnapshotWaitTime;
     bool SubscribedOnSecrets = false;
-
-    TIntrusivePtr<TUserRequestContext> UserRequestContext;
 
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig AggregationSettings;
     TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;

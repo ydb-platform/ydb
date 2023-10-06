@@ -858,41 +858,73 @@ private:
     }
 
     static bool CollectSortSet(const TExprNode& sortNode, TSet<TVector<TStringBuf>>& sortSets) {
-        YQL_ENSURE(sortNode.IsCallable("Sort"));
+        if (sortNode.IsCallable("Sort")) {
+            auto directions = sortNode.ChildPtr(1);
 
-        auto directions = sortNode.ChildPtr(1);
+            auto lambdaArg = sortNode.Child(2)->Child(0)->Child(0);
+            auto lambdaBody = sortNode.Child(2)->ChildPtr(1);
 
-        auto lambdaArg = sortNode.Child(2)->Child(0)->Child(0);
-        auto lambdaBody = sortNode.Child(2)->ChildPtr(1);
+            TExprNode::TListType directionItems;
+            if (directions->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) {
+                directionItems = directions->ChildrenList();
+            } else {
+                directionItems.push_back(directions);
+            }
 
-        TExprNode::TListType directionItems;
-        if (directions->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) {
-            directionItems = directions->ChildrenList();
-        } else {
-            directionItems.push_back(directions);
-        }
-
-        if (AnyOf(directionItems, [](const TExprNode::TPtr& direction) { return !IsAscending(*direction); })) {
-            return false;
-        }
-
-        TExprNode::TListType lambdaBodyItems;
-        if (directions->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) {
-            lambdaBodyItems = lambdaBody->ChildrenList();
-        } else {
-            lambdaBodyItems.push_back(lambdaBody);
-        }
-
-        TVector<TStringBuf> sortBy;
-        for (auto& item : lambdaBodyItems) {
-            if (!item->IsCallable("Member") || item->Child(0) != lambdaArg) {
+            if (AnyOf(directionItems, [](const TExprNode::TPtr& direction) { return !IsAscending(*direction); })) {
                 return false;
             }
-            YQL_ENSURE(item->Child(1)->IsAtom());
-            sortBy.push_back(item->Child(1)->Content());
-        }
 
-        return sortSets.insert(sortBy).second;
+            TExprNode::TListType lambdaBodyItems;
+            if (directions->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) {
+                lambdaBodyItems = lambdaBody->ChildrenList();
+            } else {
+                lambdaBodyItems.push_back(lambdaBody);
+            }
+
+            TVector<TStringBuf> sortBy;
+            for (auto& item : lambdaBodyItems) {
+                if (!item->IsCallable("Member") || item->Child(0) != lambdaArg) {
+                    return false;
+                }
+                YQL_ENSURE(item->Child(1)->IsAtom());
+                sortBy.push_back(item->Child(1)->Content());
+            }
+
+            return sortSets.insert(sortBy).second;
+        } else if (sortNode.IsCallable("Aggregate")) {
+            if (!HasSetting(TCoAggregate(&sortNode).Settings().Ref(), "compact")) {
+                return false;
+            }
+            auto keys = sortNode.Child(1);
+            const auto keyNum = keys->ChildrenSize();
+            if (keyNum == 0) {
+                return false;
+            }
+
+            TVector<TStringBuf> keyList;
+            keyList.reserve(keys->ChildrenSize());
+
+            for (const auto& key : keys->ChildrenList()) {
+                keyList.push_back(key->Content());
+            }
+
+            do {
+                TVector<TStringBuf> sortBy;
+                sortBy.reserve(keyNum);
+                copy(keyList.begin(), keyList.end(), std::back_inserter(sortBy));
+                sortSets.insert(sortBy);
+                if (sortSets.size() > 20) {
+                    YQL_CLOG(WARN, ProviderYt) << __FUNCTION__ << ": join's preferred_sort can't have more than 20 key combinations";
+                    return true;
+                }
+            } while(next_permutation(keyList.begin(), keyList.end()));
+            sortSets.insert(keyList);
+
+            return true;
+        } else {
+            return false;
+        }
     }
 
     static TExprNode::TPtr CollectPreferredSortsForEquiJoinOutput(TExprBase join, const TExprNode::TPtr& options,
@@ -906,7 +938,7 @@ private:
         TSet<TVector<TStringBuf>> sortSets = LoadJoinSortSets(*options);
         size_t collected = 0;
         for (auto& parent : parentsIt->second) {
-            if (parent->IsCallable("Sort") && CollectSortSet(*parent, sortSets)) {
+            if (CollectSortSet(*parent, sortSets)) {
                 ++collected;
             }
         }

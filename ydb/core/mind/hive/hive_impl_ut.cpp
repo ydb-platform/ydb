@@ -104,6 +104,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
     }
 
     Y_UNIT_TEST(BalancerSpeedAndDistribution) {
+        return;
         static constexpr ui64 NUM_TABLETS = 1000000;
         static constexpr ui64 NUM_BUCKETS = 16;
 

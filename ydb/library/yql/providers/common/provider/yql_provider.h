@@ -36,6 +36,7 @@ struct TWriteTableSettings {
     NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
     NNodes::TMaybeNode<NNodes::TCoAtom> Temporary;
     NNodes::TMaybeNode<NNodes::TExprList> Columns;
+    NNodes::TMaybeNode<NNodes::TExprList> ReturningList;
     NNodes::TMaybeNode<NNodes::TCoAtomList> PrimaryKey;
     NNodes::TMaybeNode<NNodes::TCoAtomList> NotNullColumns;
     NNodes::TMaybeNode<NNodes::TCoAtomList> SerialColumns;

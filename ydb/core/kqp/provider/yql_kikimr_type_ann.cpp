@@ -353,6 +353,7 @@ private:
                 .Add(convertedValues)
                 .Done();
 
+
             node.Ptr()->ChildRef(TKiWriteTable::idx_Input) = list.Ptr();
             return TStatus::Repeat;
         }
@@ -490,6 +491,26 @@ private:
             return status;
         }
 
+        bool sysColumnsEnabled = SessionCtx->Config().SystemColumnsEnabled();
+        if (TString(node.ReturningStar()) == "true") {
+            node.Ptr()->ChildRef(TKiWriteTable::idx_ReturningColumns) =
+                BuildColumnsList(*table, node.Pos(), ctx, sysColumnsEnabled).Ptr();
+        }
+
+        auto selectType = GetReadTableRowType(
+            ctx, SessionCtx->Tables(), TString(node.DataSink().Cluster()), TString(node.Table().Value()),
+            node.ReturningColumns(), sysColumnsEnabled
+        );
+        if (!selectType) {
+            return TStatus::Error;
+        }
+
+        if (!node.ReturningColumns().Empty()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+                << "It is not allowed to use returning"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }
@@ -558,6 +579,26 @@ private:
                     << "Can't set NULL or optional value to not null column: " << column->Name));
                 return TStatus::Error;
             }
+        }
+
+        bool sysColumnsEnabled = SessionCtx->Config().SystemColumnsEnabled();
+        if (TString(node.ReturningStar()) == "true") {
+            node.Ptr()->ChildRef(TKiWriteTable::idx_ReturningColumns) =
+                BuildColumnsList(*table, node.Pos(), ctx, sysColumnsEnabled).Ptr();
+        }
+
+        auto selectType = GetReadTableRowType(
+            ctx, SessionCtx->Tables(), TString(node.DataSink().Cluster()), TString(node.Table().Value()),
+            node.ReturningColumns(), sysColumnsEnabled
+        );
+        if (!selectType) {
+            return TStatus::Error;
+        }
+
+        if (!node.ReturningColumns().Empty()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+                << "It is not allowed to use returning"));
+            return IGraphTransformer::TStatus::Error;
         }
 
         auto updateBody = node.Update().Body().Ptr();

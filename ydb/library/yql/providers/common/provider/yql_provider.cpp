@@ -225,6 +225,7 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     TMaybeNode<TCoAtom> mode;
     TMaybeNode<TCoAtom> temporary;
     TMaybeNode<TExprList> columns;
+    TMaybeNode<TExprList> returningList;
     TMaybeNode<TCoAtomList> primaryKey;
     TMaybeNode<TCoAtomList> notNullColumns;
     TMaybeNode<TCoAtomList> serialColumns;
@@ -346,6 +347,9 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
                 pgFilter = tuple.Value().Cast<TCallable>();
             } else if (name == "temporary") {
                 temporary = Build<TCoAtom>(ctx, node.Pos()).Value("true").Done();
+            } else if (name == "returning") {
+                YQL_ENSURE(tuple.Value().Maybe<TExprList>());
+                returningList = tuple.Value().Cast<TExprList>();
             } else {
                 other.push_back(tuple);
             }
@@ -384,6 +388,7 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     ret.Mode = mode;
     ret.Temporary = temporary;
     ret.Columns = columns;
+    ret.ReturningList = returningList;
     ret.PrimaryKey = primaryKey;
     ret.NotNullColumns = notNullColumns;
     ret.SerialColumns = serialColumns;

@@ -518,7 +518,7 @@ public:
             YQL_CVLOG(NLog::ELevel::ERROR, NLog::EComponent::ProviderKikimr) << "Skip RewriteIO for external entity: unknown entity type: " << (int)tableDesc.Metadata->ExternalSource.SourceType;
             return true;
         }
-        
+
         if (mode != "insert_abort") {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Write mode '" << static_cast<TStringBuf>(mode) << "' is not supported for external entities"));
             return false;
@@ -584,7 +584,35 @@ public:
                 if (resultNode) {
                     return resultNode;
                 }
-                
+
+                if (!settings.ReturningList.IsValid()) {
+                    settings.ReturningList = Build<TExprList>(ctx, node->Pos()).Done();
+                }
+
+                auto returningColumns = Build<TCoAtomList>(ctx, node->Pos()).Done();
+                auto returningStar = Build<TCoAtom>(ctx, node->Pos()).Value("false").Done();
+
+                TVector<TExprBase> columnsToReturn;
+                for (const auto item : settings.ReturningList.Cast()) {
+                    auto pgResultNode = item.Cast<TCoPgResultItem>();
+                    const auto value = pgResultNode.ExpandedColumns().Cast<TCoAtom>().Value();
+                    if (value.empty()) {
+                        returningStar = Build<TCoAtom>(ctx, node->Pos()).Value("true").Done();
+                        break;
+                    } else {
+                        auto atom = Build<TCoAtom>(ctx, node->Pos())
+                            .Value(value)
+                            .Done();
+                        columnsToReturn.emplace_back(std::move(atom));
+                    }
+                }
+
+                if (!columnsToReturn.empty()) {
+                    returningColumns = Build<TCoAtomList>(ctx, node->Pos())
+                        .Add(columnsToReturn)
+                        .Done();
+                }
+
                 if (mode == "drop" || mode == "drop_if_exists") {
                     return MakeKiDropTable(node, settings, key, ctx);
                 } else if (mode == "update") {
@@ -596,6 +624,8 @@ public:
                             .Table().Build(key.GetTablePath())
                             .Filter(settings.Filter.Cast())
                             .Update(settings.Update.Cast())
+                            .ReturningColumns(returningColumns)
+                            .ReturningStar(returningStar)
                             .Done()
                             .Ptr();
                     } else {
@@ -609,6 +639,8 @@ public:
                                 .Value("update_on")
                             .Build()
                             .Settings(settings.Other)
+                            .ReturningColumns(returningColumns)
+                            .ReturningStar(returningStar)
                             .Done()
                             .Ptr();
                     }
@@ -632,6 +664,8 @@ public:
                                 .Value("delete_on")
                             .Build()
                             .Settings(settings.Other)
+                            .ReturningColumns(returningColumns)
+                            .ReturningStar(returningStar)
                             .Done()
                             .Ptr();
                     }
@@ -643,6 +677,8 @@ public:
                         .Input(node->Child(3))
                         .Mode(mode)
                         .Settings(settings.Other)
+                        .ReturningColumns(returningColumns)
+                        .ReturningStar(returningStar)
                         .Done()
                         .Ptr();
                 }

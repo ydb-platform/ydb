@@ -1327,6 +1327,66 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         }
     }
 
+    Y_UNIT_TEST(ReturningTypeAnn) {
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
+
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        const auto queryCreate = Q_(R"(
+            --!syntax_pg
+            CREATE TABLE ReturningTable (
+            key serial PRIMARY KEY,
+            value int4))");
+
+        auto resultCreate = session.ExecuteSchemeQuery(queryCreate).GetValueSync();
+        UNIT_ASSERT_C(resultCreate.IsSuccess(), resultCreate.GetIssues().ToString());
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                INSERT INTO ReturningTable (value) VALUES(2) RETURNING key;
+            )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT(result.GetIssues().ToString(true) == "{ <main>: Error: Type annotation, code: 1030 subissue: { <main>:1:1: Error: At function: KiWriteTable! subissue: { <main>:1:1: Error: It is not allowed to use returning } } }");
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                INSERT INTO ReturningTable (value) VALUES(2) RETURNING key, value;
+            )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT(result.GetIssues().ToString(true) == "{ <main>: Error: Type annotation, code: 1030 subissue: { <main>:1:1: Error: At function: KiWriteTable! subissue: { <main>:1:1: Error: It is not allowed to use returning } } }");
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                INSERT INTO ReturningTable (value) VALUES(2) RETURNING *;
+            )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT(result.GetIssues().ToString(true) == "{ <main>: Error: Type annotation, code: 1030 subissue: { <main>:1:1: Error: At function: KiWriteTable! subissue: { <main>:1:1: Error: It is not allowed to use returning } } }");
+        }
+
+        {
+            const auto query = Q_(R"(
+                --!syntax_pg
+                INSERT INTO ReturningTable (value) VALUES(2) RETURNING fake;
+            )");
+
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT(result.GetIssues().ToString(true) == "{ <main>: Error: Type annotation, code: 1030 subissue: { <main>:1:1: Error: At function: KiWriteTable! subissue: { <main>:1:1: Error: Column not found: fake } } }");
+        }
+    }
+
     Y_UNIT_TEST(DropTablePg) {
         TKikimrRunner kikimr;
         auto client = kikimr.GetTableClient();

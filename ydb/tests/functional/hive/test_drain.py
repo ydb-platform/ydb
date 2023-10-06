@@ -21,9 +21,15 @@ class TestHive(object):
     def setup_class(cls):
         cls.cluster = kikimr_cluster_factory(
             KikimrConfigGenerator(
-                Erasure.BLOCK_4_2, additional_log_configs={
+                Erasure.BLOCK_4_2,
+                additional_log_configs={
                     'HIVE': LogLevels.TRACE, 'LOCAL': LogLevels.TRACE
-                }
+                },
+                hive_config={
+                    'max_node_usage_to_kick': 100,
+                    'min_scatter_to_balance': 100,
+                    'object_imbalance_to_balance': 1000000,
+                },
             )
         )
         cls.cluster.start()

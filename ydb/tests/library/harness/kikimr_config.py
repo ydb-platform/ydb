@@ -147,6 +147,7 @@ class KikimrConfigGenerator(object):
             default_users=None,  # dict[user]=password
             extra_feature_flags=None,  # list[str]
             extra_grpc_services=None,  # list[str]
+            hive_config=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -327,6 +328,9 @@ class KikimrConfigGenerator(object):
             self.yaml_config["public_http_config"] = public_http_config
         elif public_http_config_path:
             self.yaml_config["public_http_config"] = _load_yaml_config(public_http_config_path)
+
+        if hive_config:
+            self.yaml_config["hive_config"] = hive_config
 
         self.__build()
 

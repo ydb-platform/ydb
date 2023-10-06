@@ -69,6 +69,12 @@ $to_update = (
 UPDATE table1 ON SELECT * FROM $to_update
 ```
 
+{% note info %}
+
+Currently, data updating is possible using a synchronous secondary index only.
+
+{% endnote %}
+
 ## Deleting data using a secondary index {#delete}
 
 To delete data by secondary index, use `SELECT` with a predicate by secondary index and then call `DELETE ON`.
@@ -81,6 +87,12 @@ SELECT series_id
 FROM series VIEW views_index
 WHERE views = 0;
 ```
+
+{% note info %}
+
+Currently, data deletion is possible using a synchronous secondary index only.
+
+{% endnote %}
 
 ## Atomic replacement of a secondary index {#atomic-index-replacement}
 

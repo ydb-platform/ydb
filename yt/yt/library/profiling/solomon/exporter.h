@@ -49,6 +49,7 @@ struct TSolomonExporterConfig
     int WindowSize;
 
     int ThreadPoolSize;
+    int EncodingThreadPoolSize;
 
     bool ConvertCountersToRateForSolomon;
     bool RenameConvertedCounters;
@@ -132,6 +133,7 @@ private:
 
     const NConcurrency::TActionQueuePtr ControlQueue_;
     const NConcurrency::IThreadPoolPtr OffloadThreadPool_;
+    const NConcurrency::IThreadPoolPtr EncodingOffloadThreadPool_;
 
     TFuture<void> CollectorFuture_;
 

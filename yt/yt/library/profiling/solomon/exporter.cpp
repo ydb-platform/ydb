@@ -66,6 +66,8 @@ void TSolomonExporterConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("thread_pool_size", &TThis::ThreadPoolSize)
         .Default(1);
+    registrar.Parameter("encoding_thread_pool_size", &TThis::ThreadPoolSize)
+        .Default(1);
 
     registrar.Parameter("convert_counters_to_rate_for_solomon", &TThis::ConvertCountersToRateForSolomon)
         .Alias("convert_counters_to_rate")
@@ -173,6 +175,7 @@ TSolomonExporter::TSolomonExporter(
     , Registry_(registry ? registry : TSolomonRegistry::Get())
     , ControlQueue_(New<TActionQueue>("ProfControl"))
     , OffloadThreadPool_(CreateThreadPool(Config_->ThreadPoolSize, "ProfOffload"))
+    , EncodingOffloadThreadPool_(CreateThreadPool(Config_->EncodingThreadPoolSize, "ProfEncode"))
 {
     if (Config_->EnableSelfProfiling) {
         Registry_->Profile(TProfiler{Registry_, ""});
@@ -269,6 +272,7 @@ void TSolomonExporter::Stop()
     CollectorFuture_.Cancel(TError("Stopped"));
     ControlQueue_->Shutdown();
     OffloadThreadPool_->Shutdown();
+    EncodingOffloadThreadPool_->Shutdown();
 }
 
 void TSolomonExporter::TransferSensors()
@@ -603,26 +607,25 @@ void TSolomonExporter::DoHandleShard(
             }
         }
 
-        TStringStream buffer;
-
+        auto buffer = std::make_shared<TStringStream>();
         NMonitoring::IMetricEncoderPtr encoder;
         switch (format) {
             case NMonitoring::EFormat::UNKNOWN:
             case NMonitoring::EFormat::JSON:
-                encoder = NMonitoring::BufferedEncoderJson(&buffer);
+                encoder = NMonitoring::BufferedEncoderJson(buffer.get());
                 format = NMonitoring::EFormat::JSON;
                 compression = NMonitoring::ECompression::IDENTITY;
                 break;
 
             case NMonitoring::EFormat::SPACK:
                 encoder = NMonitoring::EncoderSpackV1(
-                    &buffer,
+                    buffer.get(),
                     NMonitoring::ETimePrecision::SECONDS,
                     compression);
                 break;
 
             case NMonitoring::EFormat::PROMETHEUS:
-                encoder = NMonitoring::EncoderPrometheus(&buffer);
+                encoder = NMonitoring::EncoderPrometheus(buffer.get());
                 break;
 
             default:
@@ -815,11 +818,18 @@ void TSolomonExporter::DoHandleShard(
 
         guard->Release();
 
-        encoder->Close();
+        // NB(eshcherbin): Offload inner representation to binary/text format encoding (including compression).
+        auto encodeFuture = BIND([buffer, encoder = std::move(encoder)] {
+            encoder->Close();
+        })
+            .AsyncVia(EncodingOffloadThreadPool_->GetInvoker())
+            .Run();
+        WaitFor(encodeFuture)
+            .ThrowOnError();
 
         rsp->SetStatus(EStatusCode::OK);
 
-        auto replyBlob = TSharedRef::FromString(buffer.Str());
+        auto replyBlob = TSharedRef::FromString(buffer->Str());
         responsePromise.Set(replyBlob);
 
         WaitFor(rsp->WriteBody(replyBlob))

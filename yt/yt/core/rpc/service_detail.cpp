@@ -1286,17 +1286,13 @@ void TRequestQueue::OnRequestFinished()
 }
 
 // Prevents reentrant invocations.
+// One case is: RunRequest calling the handler synchronously, which replies the
+// context, which calls context->Finish, and we're back here again.
 static thread_local bool ScheduleRequestsLatch = false;
 
 void TRequestQueue::ScheduleRequestsFromQueue()
 {
-    // COMPAT(shakurov): remove the latch after making sure it's unnecessary.
     if (ScheduleRequestsLatch) {
-        const auto& Logger = Service_ ? Service_->Logger : NLogging::TLogger();
-        YT_LOG_ALERT("Reentrant call to TRequestQueue::ScheduleRequestsFromQueue detected (ServiceId: %v, Method: %v, Queue: %v)",
-            Service_ ? Service_->GetServiceId() : TServiceId(),
-            RuntimeInfo_ ? RuntimeInfo_->Descriptor.Method : TString(),
-            GetName());
         return;
     }
 

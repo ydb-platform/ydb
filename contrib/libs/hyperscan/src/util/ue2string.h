@@ -106,6 +106,7 @@ public:
             boost::random_access_traversal_tag,
             elem const> {
     public:
+        using iterator_category = typename std::random_access_iterator_tag;
         const_iterator() {}
     private:
         friend class boost::iterator_core_access;

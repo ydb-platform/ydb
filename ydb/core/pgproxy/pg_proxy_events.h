@@ -147,14 +147,12 @@ struct TEvPGEvents {
         */
 
     struct TEvParseResponse : NActors::TEventLocal<TEvParseResponse, EvParseResponse> {
-        std::unique_ptr<TPGParse> OriginalMessage;
         std::vector<std::pair<char, TString>> ErrorFields;
         std::vector<std::pair<char, TString>> NoticeFields;
         TString Tag;
         char TransactionStatus = 0;
 
-        TEvParseResponse(std::unique_ptr<TPGParse> originalMessage)
-            : OriginalMessage(std::move(originalMessage))
+        TEvParseResponse()
         {}
     };
 
@@ -166,16 +164,14 @@ struct TEvPGEvents {
         {}
 
         std::unique_ptr<TEvParseResponse> Reply() {
-            return std::make_unique<TEvParseResponse>(std::move(Message));
+            return std::make_unique<TEvParseResponse>();
         }
     };
 
     struct TEvBindResponse : NActors::TEventLocal<TEvBindResponse, EvBindResponse> {
-        std::unique_ptr<TPGBind> OriginalMessage;
         std::vector<std::pair<char, TString>> ErrorFields;
 
-        TEvBindResponse(std::unique_ptr<TPGBind> originalMessage)
-            : OriginalMessage(std::move(originalMessage))
+        TEvBindResponse()
         {}
     };
 
@@ -187,7 +183,7 @@ struct TEvPGEvents {
         {}
 
         std::unique_ptr<TEvBindResponse> Reply() {
-            return std::make_unique<TEvBindResponse>(std::move(Message));
+            return std::make_unique<TEvBindResponse>();
         }
     };
 

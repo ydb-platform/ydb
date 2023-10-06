@@ -205,6 +205,7 @@ TString MakeCreateExternalDataSourceQuery(
         case FederatedQuery::ConnectionSetting::kMonitoring:
         break;
         case FederatedQuery::ConnectionSetting::kPostgresqlCluster:
+            const auto schema = connectionContent.setting().postgresql_cluster().schema();
             properties = fmt::format(
                 R"(
                     SOURCE_TYPE="PostgreSQL",
@@ -212,9 +213,11 @@ TString MakeCreateExternalDataSourceQuery(
                     DATABASE_NAME={database_name},
                     PROTOCOL="NATIVE",
                     USE_TLS="true"
+                    {schema}
                 )",
                 "mdb_cluster_id"_a = EncloseAndEscapeString(connectionContent.setting().postgresql_cluster().database_id(), '"'),
-                "database_name"_a = EncloseAndEscapeString(connectionContent.setting().postgresql_cluster().database_name(), '"'));
+                "database_name"_a = EncloseAndEscapeString(connectionContent.setting().postgresql_cluster().database_name(), '"'),
+                "schema"_a =  schema ? ", SCHEMA=" + EncloseAndEscapeString(schema, '"') : TString{});
         break;
     }
 

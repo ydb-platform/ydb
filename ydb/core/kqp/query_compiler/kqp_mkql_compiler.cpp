@@ -425,6 +425,19 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             return ctx.PgmBuilder().KqpEnsure(value, predicate, issueCode, message);
         });
 
+    compiler->AddCallable(TKqpIndexLookupJoin::CallableName(),
+        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
+            TKqpIndexLookupJoin indexLookupJoin(&node);
+
+            const TString joinType(indexLookupJoin.JoinType().Value());
+            const TString leftLabel(indexLookupJoin.LeftLabel().Value());
+            const TString rightLabel(indexLookupJoin.RightLabel().Value());
+
+            auto input = MkqlBuildExpr(indexLookupJoin.Input().Ref(), buildCtx);
+
+            return ctx.PgmBuilder().KqpIndexLookupJoin(input, joinType, leftLabel, rightLabel);
+        });
+
     return compiler;
 }
 

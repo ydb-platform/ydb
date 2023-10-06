@@ -183,6 +183,20 @@
             "Match": {"Type": "Callable", "Name": "KqlStreamLookupTable"}
         },
         {
+            "Name": "TKqlStreamIdxLookupJoin",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqlStreamIdxLookupJoin"},
+            "Children": [
+                {"Index": 0, "Name": "LeftInput", "Type": "TExprBase"},
+                {"Index": 1, "Name": "LeftLabel", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "RightTable", "Type": "TKqpTable"},
+                {"Index": 3, "Name": "RightColumns", "Type": "TCoAtomList"},
+                {"Index": 4, "Name": "RightLabel", "Type": "TCoAtom"},
+                {"Index": 5, "Name": "JoinType", "Type": "TCoAtom"}
+            ]
+
+        },
+        {
             "Name": "TKqlSequencer",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KqlSequencer"},
@@ -416,7 +430,19 @@
             "Children": [
                 {"Index": 1, "Name": "Table", "Type": "TKqpTable"},
                 {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
-                {"Index": 3, "Name": "LookupKeysType", "Type": "TExprBase"}
+                {"Index": 3, "Name": "InputType", "Type": "TExprBase"},
+                {"Index": 4, "Name": "LookupStrategy", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TKqpIndexLookupJoin",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpIndexLookupJoin"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "JoinType", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "LeftLabel", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "RightLabel", "Type": "TCoAtom"}
             ]
         },
         {

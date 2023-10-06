@@ -613,7 +613,8 @@ NYql::NNodes::TExprBase KqpRewriteLookupTable(NYql::NNodes::TExprBase node, NYql
                     .Build()
                 .Table(lookupTable.Table())
                 .Columns(lookupTable.Columns())
-                .LookupKeysType(ExpandType(node.Pos(), *keysPrecompute.Ref().GetTypeAnn(), ctx))
+                .InputType(ExpandType(node.Pos(), *keysPrecompute.Ref().GetTypeAnn(), ctx))
+                .LookupStrategy().Build(TKqpStreamLookupStrategyName)
                 .Done();
 
             newInputs.emplace_back(std::move(cnStreamLookup));
@@ -647,7 +648,8 @@ NYql::NNodes::TExprBase KqpRewriteLookupTable(NYql::NNodes::TExprBase node, NYql
                 .Build()
             .Table(lookupTable.Table())
             .Columns(lookupTable.Columns())
-            .LookupKeysType(ExpandType(node.Pos(), *lookupKeysList.Ref().GetTypeAnn(), ctx))
+            .InputType(ExpandType(node.Pos(), *lookupKeysList.Ref().GetTypeAnn(), ctx))
+            .LookupStrategy().Build(TKqpStreamLookupStrategyName)
             .Done();
 
         newInputs.emplace_back(std::move(cnStreamLookup));
@@ -698,7 +700,8 @@ NYql::NNodes::TExprBase KqpBuildStreamLookupTableStages(NYql::NNodes::TExprBase 
             .Build()
             .Table(lookup.Table())
             .Columns(lookup.Columns())
-            .LookupKeysType(ExpandType(lookup.Pos(), *lookup.LookupKeys().Ref().GetTypeAnn(), ctx))
+            .InputType(ExpandType(lookup.Pos(), *lookup.LookupKeys().Ref().GetTypeAnn(), ctx))
+            .LookupStrategy().Build(TKqpStreamLookupStrategyName)
             .Done();
 
     } else if (lookup.LookupKeys().Maybe<TDqCnUnionAll>()) {
@@ -708,7 +711,8 @@ NYql::NNodes::TExprBase KqpBuildStreamLookupTableStages(NYql::NNodes::TExprBase 
             .Output(output)
             .Table(lookup.Table())
             .Columns(lookup.Columns())
-            .LookupKeysType(ExpandType(lookup.Pos(), *output.Ref().GetTypeAnn(), ctx))
+            .InputType(ExpandType(lookup.Pos(), *output.Ref().GetTypeAnn(), ctx))
+            .LookupStrategy().Build(TKqpStreamLookupStrategyName)
             .Done();
     } else {
         return node;
@@ -729,6 +733,44 @@ NYql::NNodes::TExprBase KqpBuildStreamLookupTableStages(NYql::NNodes::TExprBase 
             .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
             .Build()
             .Index().Build("0")
+        .Build().Done();
+}
+
+NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStages(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx) {
+    if (!node.Maybe<TKqlStreamIdxLookupJoin>()) {
+        return node;
+    }
+
+    const auto& idxLookupJoin = node.Cast<TKqlStreamIdxLookupJoin>();
+    YQL_ENSURE(idxLookupJoin.LeftInput().Maybe<TDqCnUnionAll>(), "Expected UnionAll as left input");
+
+    auto output = idxLookupJoin.LeftInput().Cast<TDqCnUnionAll>().Output();
+    auto cnStreamIdxLookupJoin = Build<TKqpCnStreamLookup>(ctx, idxLookupJoin.Pos())
+        .Output(output)
+        .Table(idxLookupJoin.RightTable())
+        .Columns(idxLookupJoin.RightColumns())
+        .InputType(ExpandType(idxLookupJoin.Pos(), *output.Ref().GetTypeAnn(), ctx))
+        .LookupStrategy().Build(TKqpStreamLookupJoinStrategyName)
+        .Done();
+
+    return Build<TDqCnUnionAll>(ctx, node.Pos())
+        .Output()
+            .Stage<TDqStage>()
+            .Inputs()
+                .Add(cnStreamIdxLookupJoin)
+                .Build()
+            .Program()
+                .Args({"stream_lookup_join_output"})
+                .Body<TKqpIndexLookupJoin>()
+                    .Input("stream_lookup_join_output")
+                    .JoinType(idxLookupJoin.JoinType())
+                    .LeftLabel(idxLookupJoin.LeftLabel())
+                    .RightLabel(idxLookupJoin.RightLabel())
+                    .Build()
+                .Build()
+            .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+            .Build()
+        .Index().Build("0")
         .Build().Done();
 }
 

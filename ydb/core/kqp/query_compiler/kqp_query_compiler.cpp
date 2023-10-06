@@ -81,6 +81,20 @@ NKqpProto::TKqpPhyInternalBinding::EType GetPhyInternalBindingType(const std::st
     return bindingType;
 }
 
+NKqpProto::EStreamLookupStrategy GetStreamLookupStrategy(const std::string_view strategy) {
+    NKqpProto::EStreamLookupStrategy lookupStrategy = NKqpProto::EStreamLookupStrategy::UNSPECIFIED;
+
+    if (strategy == "LookupRows"sv) {
+        lookupStrategy = NKqpProto::EStreamLookupStrategy::LOOKUP;
+    } else if (strategy == "LookupJoinRows"sv) {
+        lookupStrategy = NKqpProto::EStreamLookupStrategy::JOIN;
+    }
+
+    YQL_ENSURE(lookupStrategy != NKqpProto::EStreamLookupStrategy::UNSPECIFIED,
+        "Unexpected stream lookup strategy: " << strategy);
+    return lookupStrategy;
+}
+
 void FillTableId(const TKqpTable& table, NKqpProto::TKqpPhyTableId& tableProto) {
     auto pathId = TKikimrPathId::Parse(table.PathId());
 
@@ -1088,18 +1102,11 @@ private:
             FillTablesMap(streamLookup.Table(), streamLookup.Columns(), tablesMap);
             FillTableId(streamLookup.Table(), *streamLookupProto.MutableTable());
 
-            const auto lookupKeysType = streamLookup.LookupKeysType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-            YQL_ENSURE(lookupKeysType, "Empty stream lookup keys type");
-            YQL_ENSURE(lookupKeysType->GetKind() == ETypeAnnotationKind::List, "Unexpected stream lookup keys type");
-            const auto lookupKeysItemType = lookupKeysType->Cast<TListExprType>()->GetItemType();
-            streamLookupProto.SetLookupKeysType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *lookupKeysItemType), TypeEnv));
-
-            YQL_ENSURE(lookupKeysItemType->GetKind() == ETypeAnnotationKind::Struct);
-            const auto& lookupKeyColumns = lookupKeysItemType->Cast<TStructExprType>()->GetItems();
-            for (const auto keyColumn : lookupKeyColumns) {
-                YQL_ENSURE(tableMeta->Columns.FindPtr(keyColumn->GetName()), "Unknown column: " << keyColumn->GetName());
-                streamLookupProto.AddKeyColumns(TString(keyColumn->GetName()));
-            }
+            const auto inputType = streamLookup.InputType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            YQL_ENSURE(inputType, "Empty stream lookup input type");
+            YQL_ENSURE(inputType->GetKind() == ETypeAnnotationKind::List, "Unexpected stream lookup input type");
+            const auto inputItemType = inputType->Cast<TListExprType>()->GetItemType();
+            streamLookupProto.SetLookupKeysType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *inputItemType), TypeEnv));
 
             const auto resultType = streamLookup.Ref().GetTypeAnn();
             YQL_ENSURE(resultType, "Empty stream lookup result type");
@@ -1107,13 +1114,65 @@ private:
             const auto resultItemType = resultType->Cast<TStreamExprType>()->GetItemType();
             streamLookupProto.SetResultType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *resultItemType), TypeEnv));
 
-            YQL_ENSURE(resultItemType->GetKind() == ETypeAnnotationKind::Struct);
-            const auto& resultColumns = resultItemType->Cast<TStructExprType>()->GetItems();
-            for (const auto column : resultColumns) {
-                const auto& systemColumns = GetSystemColumns();
-                YQL_ENSURE(tableMeta->Columns.FindPtr(column->GetName()) || systemColumns.find(column->GetName()) != systemColumns.end(),
-                    "Unknown column: " << column->GetName());
-                streamLookupProto.AddColumns(TString(column->GetName()));
+            YQL_ENSURE(streamLookup.LookupStrategy().Maybe<TCoAtom>());
+            TString lookupStrategy = streamLookup.LookupStrategy().Maybe<TCoAtom>().Cast().StringValue();
+            streamLookupProto.SetLookupStrategy(GetStreamLookupStrategy(lookupStrategy));
+
+            switch (streamLookupProto.GetLookupStrategy()) {
+                case NKqpProto::EStreamLookupStrategy::LOOKUP: {
+                    YQL_ENSURE(inputItemType->GetKind() == ETypeAnnotationKind::Struct);
+                    const auto& lookupKeyColumns = inputItemType->Cast<TStructExprType>()->GetItems();
+                    for (const auto keyColumn : lookupKeyColumns) {
+                        YQL_ENSURE(tableMeta->Columns.FindPtr(keyColumn->GetName()),
+                            "Unknown column: " << keyColumn->GetName());
+                        streamLookupProto.AddKeyColumns(TString(keyColumn->GetName()));
+                    }
+
+                    YQL_ENSURE(resultItemType->GetKind() == ETypeAnnotationKind::Struct);
+                    const auto& resultColumns = resultItemType->Cast<TStructExprType>()->GetItems();
+                    for (const auto column : resultColumns) {
+                        const auto &systemColumns = GetSystemColumns();
+                        YQL_ENSURE(tableMeta->Columns.FindPtr(column->GetName())
+                            || systemColumns.find(column->GetName()) != systemColumns.end(),
+                            "Unknown column: " << column->GetName());
+                        streamLookupProto.AddColumns(TString(column->GetName()));
+                    }
+
+                    break;
+                }
+                case NKqpProto::EStreamLookupStrategy::JOIN: {
+                    YQL_ENSURE(inputItemType->GetKind() == ETypeAnnotationKind::Tuple);
+                    const auto inputTupleType = inputItemType->Cast<TTupleExprType>();
+                    YQL_ENSURE(inputTupleType->GetSize() == 2);
+
+                    YQL_ENSURE(inputTupleType->GetItems()[0]->GetKind() == ETypeAnnotationKind::Struct);
+                    const auto& joinKeyColumns = inputTupleType->GetItems()[0]->Cast<TStructExprType>()->GetItems();
+                    for (const auto keyColumn : joinKeyColumns) {
+                        YQL_ENSURE(tableMeta->Columns.FindPtr(keyColumn->GetName()),
+                            "Unknown column: " << keyColumn->GetName());
+                        streamLookupProto.AddKeyColumns(TString(keyColumn->GetName()));
+                    }
+
+                    YQL_ENSURE(resultItemType->GetKind() == ETypeAnnotationKind::Tuple);
+                    const auto resultTupleType = resultItemType->Cast<TTupleExprType>();
+                    YQL_ENSURE(resultTupleType->GetSize() == 2);
+
+                    YQL_ENSURE(resultTupleType->GetItems()[1]->GetKind() == ETypeAnnotationKind::Optional);
+                    auto rightRowOptionalType = resultTupleType->GetItems()[1]->Cast<TOptionalExprType>()->GetItemType();
+                    YQL_ENSURE(rightRowOptionalType->GetKind() == ETypeAnnotationKind::Struct);
+                    const auto& rightColumns = rightRowOptionalType->Cast<TStructExprType>()->GetItems();
+                    for (const auto column : rightColumns) {
+                        const auto& systemColumns = GetSystemColumns();
+                        YQL_ENSURE(tableMeta->Columns.FindPtr(column->GetName())
+                            || systemColumns.find(column->GetName()) != systemColumns.end(),
+                            "Unknown column: " << column->GetName());
+                        streamLookupProto.AddColumns(TString(column->GetName()));
+                    }
+
+                    break;
+                }
+                default:
+                    YQL_ENSURE(false, "Unexpected lookup strategy for stream lookup: " << lookupStrategy);
             }
 
             return;

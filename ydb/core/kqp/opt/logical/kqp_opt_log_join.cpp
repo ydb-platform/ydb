@@ -338,6 +338,21 @@ bool IsParameterToListOfStructsRepack(const TExprBase& expr) {
 #define DBG(...)
 
 template<typename ReadType>
+TMaybeNode<TExprBase> BuildKqpStreamIndexLookupJoin(const TDqJoin& join, TExprBase leftInput, ReadType rightRead, TExprContext& ctx) {
+    TString leftLabel = join.LeftLabel().Maybe<TCoAtom>() ? TString(join.LeftLabel().Cast<TCoAtom>().Value()) : "";
+    TString rightLabel = join.RightLabel().Maybe<TCoAtom>() ? TString(join.RightLabel().Cast<TCoAtom>().Value()) : "";
+
+    return Build<TKqlStreamIdxLookupJoin>(ctx, join.Pos())
+        .LeftInput(leftInput)
+        .LeftLabel().Build(leftLabel)
+        .RightTable(rightRead.Table())
+        .RightColumns(rightRead.Columns())
+        .RightLabel().Build(rightLabel)
+        .JoinType(join.JoinType())
+        .Done();
+}
+
+template<typename ReadType>
 TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     static_assert(std::is_same_v<ReadType, TKqlReadTableBase> || std::is_same_v<ReadType, TKqlReadTableRangesBase>, "unsupported read type");
 
@@ -347,6 +362,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
     }
 
     static THashSet<TStringBuf> supportedJoinKinds = {"Inner", "Left", "LeftOnly", "LeftSemi", "RightSemi"};
+    static THashSet<TStringBuf> supportedStreamJoinKinds = {"Inner", "Left"};
     if (!supportedJoinKinds.contains(join.JoinType().Value())) {
         return {};
     }
@@ -554,9 +570,14 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
         return {};
     }
 
+    const bool useStreamIndexLookupJoin = kqpCtx.IsDataQuery()
+        && kqpCtx.Config->EnableKqpDataQueryStreamIdxLookupJoin
+        && supportedStreamJoinKinds.contains(join.JoinType().Value());
+
     bool needPrecomputeLeft = kqpCtx.IsDataQuery()
         && !join.LeftInput().Maybe<TCoParameter>()
-        && !IsParameterToListOfStructsRepack(join.LeftInput());
+        && !IsParameterToListOfStructsRepack(join.LeftInput())
+        && !useStreamIndexLookupJoin;
 
     TExprBase leftData = needPrecomputeLeft
         ? Build<TDqPrecompute>(ctx, join.Pos())
@@ -602,6 +623,23 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
                     .Build()
                 .Build()
             .Done();
+    }
+
+    if (useStreamIndexLookupJoin) {
+        auto leftInput = Build<TCoMap>(ctx, join.Pos())
+            .Input(leftData)
+            .Lambda()
+                .Args({leftRowArg})
+                .Body<TExprList>()
+                    .Add<TCoAsStruct>()
+                        .Add(lookupMembers)
+                     .Build()
+                    .Add(leftRowArg)
+                    .Build()
+                .Build()
+            .Done();
+
+        return BuildKqpStreamIndexLookupJoin(join, leftInput, rightRead, ctx);
     }
 
     auto leftDataDeduplicated = DeduplicateByMembers(leftData, filter, deduplicateLeftColumns, ctx, join.Pos());

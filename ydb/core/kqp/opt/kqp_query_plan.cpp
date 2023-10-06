@@ -560,7 +560,6 @@ private:
 
             TTableRead readInfo;
             readInfo.Type = EPlanTableReadType::Lookup;
-            planNode.TypeName = "TableLookup";
             TString table(tableLookup.Table().Path().Value());
             auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, table);
             planNode.NodeInfo["Table"] = tableData.RelativePath ? *tableData.RelativePath : table;
@@ -572,15 +571,25 @@ private:
                 readInfo.Columns.push_back(TString(column.Value()));
             }
 
-            const auto lookupKeysType = tableLookup.LookupKeysType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-            YQL_ENSURE(lookupKeysType);
-            YQL_ENSURE(lookupKeysType->GetKind() == ETypeAnnotationKind::List);
-            const auto lookupKeysItemType = lookupKeysType->Cast<TListExprType>()->GetItemType();
-            YQL_ENSURE(lookupKeysItemType->GetKind() == ETypeAnnotationKind::Struct);
-            const auto& lookupKeyColumnsStruct = lookupKeysItemType->Cast<TStructExprType>()->GetItems();
-            readInfo.LookupBy.reserve(lookupKeyColumnsStruct.size());
+            const auto inputType = tableLookup.InputType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            YQL_ENSURE(inputType);
+            YQL_ENSURE(inputType->GetKind() == ETypeAnnotationKind::List);
+            const auto inputItemType = inputType->Cast<TListExprType>()->GetItemType();
+
+            const TStructExprType* lookupKeyColumnsStruct = nullptr;
+            if (inputItemType->GetKind() == ETypeAnnotationKind::Struct) {
+                planNode.TypeName = "TableLookup";
+                lookupKeyColumnsStruct = inputItemType->Cast<TStructExprType>();
+            } else if (inputItemType->GetKind() == ETypeAnnotationKind::Tuple) {
+                planNode.TypeName = "TableLookupJoin";
+                const auto inputTupleType = inputItemType->Cast<TTupleExprType>();
+                lookupKeyColumnsStruct = inputTupleType->GetItems()[0]->Cast<TStructExprType>();
+            }
+
+            YQL_ENSURE(lookupKeyColumnsStruct);
+            readInfo.LookupBy.reserve(lookupKeyColumnsStruct->GetItems().size());
             auto& lookupKeyColumns = planNode.NodeInfo["LookupKeyColumns"];
-            for (const auto keyColumn : lookupKeyColumnsStruct) {
+            for (const auto keyColumn : lookupKeyColumnsStruct->GetItems()) {
                 lookupKeyColumns.AppendValue(keyColumn->GetName());
                 readInfo.LookupBy.push_back(TString(keyColumn->GetName()));
             }

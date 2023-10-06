@@ -84,8 +84,11 @@ void PrepareTables(TSession session) {
 
 Y_UNIT_TEST_SUITE(KqpIndexLookupJoin) {
 
-void Test(const TString& query, const TString& answer, size_t rightTableReads) {
-    TKikimrSettings settings;
+void Test(const TString& query, const TString& answer, size_t rightTableReads, bool useStreamLookup = false) {
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(useStreamLookup);
+
+    auto settings = TKikimrSettings().SetAppConfig(appConfig);
     TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
@@ -101,25 +104,27 @@ void Test(const TString& query, const TString& answer, size_t rightTableReads) {
     CompareYson(answer, FormatResultSetYson(result.GetResultSet(0)));
 
     auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-    if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+    if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamIdxLookupJoin()) {
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Left");
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).name(), "/Root/Right");
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).reads().rows(), rightTableReads);
     } else {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
-    }
 
-    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Left");
-    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Left");
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 5);
 
-    ui32 index = 1;
-    if (!settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
         UNIT_ASSERT(stats.query_phases(1).table_access().empty()); // keys extraction for lookups
-        index = 2;
-    }
 
-    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access().size(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).name(), "/Root/Right");
-    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(index).table_access(0).reads().rows(), rightTableReads);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(0).name(), "/Root/Right");
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access(0).reads().rows(), rightTableReads);
+    }
 }
 
 Y_UNIT_TEST(MultiJoins) {
@@ -241,6 +246,157 @@ Y_UNIT_TEST(RightSemi) {
             [[101];["Value21"]];
             [[103];["Value23"]]
         ])", 3);
+}
+
+Y_UNIT_TEST_TWIN(SimpleInnerJoin, StreamLookup) {
+    Test(
+        R"(
+            SELECT l.Key, l.Fk, l.Value, r.Key, r.Value
+            FROM `/Root/Left` AS l
+            INNER JOIN `/Root/Right` AS r
+               ON l.Fk = r.Key
+            ORDER BY l.Key;
+        )",
+        R"([
+            [[1];[101];["Value1"];[101];["Value21"]];
+            [[2];[102];["Value1"];[102];["Value22"]];
+            [[3];[103];["Value2"];[103];["Value23"]]
+        ])", 3, StreamLookup);
+}
+
+Y_UNIT_TEST_TWIN(InnerJoinCustomColumnOrder, StreamLookup) {
+    Test(
+        R"(
+            SELECT r.Value, l.Key, r.Key, l.Value, l.Fk
+            FROM `/Root/Left` AS l
+            INNER JOIN `/Root/Right` AS r
+               ON l.Fk = r.Key
+            ORDER BY r.Key;
+        )",
+        R"([
+            [["Value21"];[1];[101];["Value1"];[101]];
+            [["Value22"];[2];[102];["Value1"];[102]];
+            [["Value23"];[3];[103];["Value2"];[103]]
+        ])", 3, StreamLookup);
+}
+
+Y_UNIT_TEST_TWIN(InnerJoinOnlyRightColumn, StreamLookup) {
+    Test(
+        R"(
+            SELECT r.Value
+            FROM `/Root/Left` AS l
+            INNER JOIN `/Root/Right` AS r
+               ON l.Fk = r.Key
+            ORDER BY r.Value;
+        )",
+        R"([
+            [["Value21"]];
+            [["Value22"]];
+            [["Value23"]]
+        ])", 3, StreamLookup);
+}
+
+Y_UNIT_TEST_TWIN(InnerJoinOnlyLeftColumn, StreamLookup) {
+    Test(
+        R"(
+            SELECT l.Fk
+            FROM `/Root/Left` AS l
+            INNER JOIN `/Root/Right` AS r
+               ON l.Fk = r.Key
+            ORDER BY l.Fk;
+        )",
+        R"([
+            [[101]];
+            [[102]];
+            [[103]]
+        ])", 3, StreamLookup);
+}
+
+Y_UNIT_TEST_TWIN(InnerJoinLeftFilter, StreamLookup) {
+    Test(
+        R"(
+            SELECT l.Key, l.Fk, l.Value, r.Key, r.Value
+            FROM `/Root/Left` AS l
+            INNER JOIN `/Root/Right` AS r
+               ON l.Fk = r.Key
+            WHERE l.Value != 'Value1'
+            ORDER BY l.Key;
+        )",
+        R"([
+            [[3];[103];["Value2"];[103];["Value23"]]
+        ])", 1, StreamLookup);
+}
+
+Y_UNIT_TEST_TWIN(SimpleLeftJoin, StreamLookup) {
+    Test(
+        R"(
+            SELECT l.Key, l.Fk, l.Value, r.Key, r.Value
+            FROM `/Root/Left` AS l
+            LEFT JOIN `/Root/Right` AS r
+               ON l.Fk = r.Key
+            ORDER BY l.Key;
+        )",
+        R"([
+            [[1];[101];["Value1"];[101];["Value21"]];
+            [[2];[102];["Value1"];[102];["Value22"]];
+            [[3];[103];["Value2"];[103];["Value23"]];
+            [[4];[104];["Value2"];#;#];
+            [[5];[105];["Value3"];#;#]
+        ])", 3, StreamLookup);
+}
+
+Y_UNIT_TEST_TWIN(LeftJoinCustomColumnOrder, StreamLookup) {
+    Test(
+        R"(
+            SELECT r.Value, l.Key, r.Key, l.Value, l.Fk
+            FROM `/Root/Left` AS l
+            LEFT JOIN `/Root/Right` AS r
+               ON l.Fk = r.Key
+            ORDER BY l.Key;
+        )",
+        R"([
+            [["Value21"];[1];[101];["Value1"];[101]];
+            [["Value22"];[2];[102];["Value1"];[102]];
+            [["Value23"];[3];[103];["Value2"];[103]];
+            [#;[4];#;["Value2"];[104]];
+            [#;[5];#;["Value3"];[105]]
+        ])", 3, StreamLookup);
+}
+
+Y_UNIT_TEST_TWIN(LeftJoinOnlyRightColumn, StreamLookup) {
+    Test(
+        R"(
+            SELECT r.Value
+            FROM `/Root/Left` AS l
+            LEFT JOIN `/Root/Right` AS r
+               ON l.Fk = r.Key
+            ORDER BY r.Value;
+        )",
+        R"([
+            [#];
+            [#];
+            [["Value21"]];
+            [["Value22"]];
+            [["Value23"]]
+        ])", 3, StreamLookup);
+}
+
+Y_UNIT_TEST_TWIN(LeftJoinOnlyLeftColumn, StreamLookup) {
+    Test(
+        R"(
+            SELECT l.Fk
+            FROM `/Root/Left` AS l
+            LEFT JOIN `/Root/Right` AS r
+               ON l.Fk = r.Key
+            ORDER BY l.Fk;
+        )",
+        R"([
+            [[101]];
+            [[102]];
+            [[103]];
+            [[104]];
+            [[105]]
+        ])", 3, StreamLookup);
 }
 
 void CreateSimpleTableWithKeyType(TSession session, const TString& columnType) {

@@ -143,6 +143,22 @@ TType* MakeBlockType(TProgramBuilder& builder, TStructType* rowType) {
     return builder.NewBlockType(builder.NewTupleType(tupleItems), TBlockType::EShape::Many);
 }
 
+EJoinKind GetIndexLookupJoinKind(const TString& joinKind) {
+    if (joinKind == "Inner") {
+        return EJoinKind::Inner;
+    } else if (joinKind == "Left") {
+        return EJoinKind::Left;
+    } else if (joinKind == "LeftOnly") {
+        return EJoinKind::LeftOnly;
+    } else if (joinKind == "RightSemi") {
+        return EJoinKind::RightSemi;
+    } else if (joinKind == "LeftSemi") {
+        return EJoinKind::LeftSemi;
+    } else {
+        MKQL_ENSURE_S(false, "Unexpected join kind: " << joinKind);
+    }
+}
+
 } // namespace
 
 TKqpProgramBuilder::TKqpProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry)
@@ -311,6 +327,39 @@ TRuntimeNode TKqpProgramBuilder::KqpEnsure(TRuntimeNode value, TRuntimeNode pred
     callableBuilder.Add(predicate);
     callableBuilder.Add(issueCode);
     callableBuilder.Add(message);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TKqpProgramBuilder::KqpIndexLookupJoin(const TRuntimeNode& input, const TString& joinType,
+    const TString& leftLabel, const TString& rightLabel) {
+
+    auto inputRowItems = AS_TYPE(TTupleType, AS_TYPE(TStreamType, input.GetStaticType())->GetItemType());
+    MKQL_ENSURE(inputRowItems->GetElementsCount() == 2, "Expected 2 elements");
+
+    auto leftRowType = AS_TYPE(TStructType, inputRowItems->GetElementType(0));
+    auto rightRowType = AS_TYPE(TStructType, AS_TYPE(TOptionalType, inputRowItems->GetElementType(1))->GetItemType());
+
+    TStructTypeBuilder rowTypeBuilder(GetTypeEnvironment());
+
+    for (ui32 i = 0; i < leftRowType->GetMembersCount(); ++i) {
+        TString newMemberName = leftLabel.empty() ? TString(leftRowType->GetMemberName(i))
+            : TString::Join(leftLabel, ".", leftRowType->GetMemberName(i));
+        rowTypeBuilder.Add(newMemberName, leftRowType->GetMemberType(i));
+    }
+
+    for (ui32 i = 0; i < rightRowType->GetMembersCount(); ++i) {
+        TString newMemberName = rightLabel.empty() ? TString(rightRowType->GetMemberName(i))
+            : TString::Join(rightLabel, ".", rightRowType->GetMemberName(i));
+        rowTypeBuilder.Add(newMemberName, rightRowType->GetMemberType(i));
+    }
+
+    auto returnType = NewStreamType(rowTypeBuilder.Build());
+
+    TCallableBuilder callableBuilder(Env, __func__, returnType);
+    callableBuilder.Add(input);
+    callableBuilder.Add(NewDataLiteral<ui32>((ui32)GetIndexLookupJoinKind(joinType)));
+    callableBuilder.Add(NewDataLiteral<ui64>(leftRowType->GetMembersCount()));
+    callableBuilder.Add(NewDataLiteral<ui64>(rightRowType->GetMembersCount()));
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 

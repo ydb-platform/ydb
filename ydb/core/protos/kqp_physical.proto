@@ -253,12 +253,19 @@ message TKqpPhyCnMerge {
     repeated TKqpPhySortColumn SortColumns = 1;
 }
 
+enum EStreamLookupStrategy {
+    UNSPECIFIED = 0;
+    LOOKUP = 1;
+    JOIN = 2;
+};
+
 message TKqpPhyCnStreamLookup {
     TKqpPhyTableId Table = 1;
     repeated string KeyColumns = 2;
     repeated string Columns = 3;
     bytes LookupKeysType = 4;
     bytes ResultType = 5;
+    EStreamLookupStrategy LookupStrategy = 6;
 }
 
 message TKqpPhyCnSequencer {

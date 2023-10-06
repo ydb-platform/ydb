@@ -50,6 +50,10 @@ TComputationNodeFactory GetKqpActorComputeFactory(TKqpScanComputeContext* comput
                 return WrapKqpEnsure(callable, ctx);
             }
 
+            if (name == "KqpIndexLookupJoin"sv) {
+                return WrapKqpIndexLookupJoin(callable, ctx);
+            }
+
             return nullptr;
         };
 }

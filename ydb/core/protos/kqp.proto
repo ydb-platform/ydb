@@ -640,6 +640,7 @@ message TKqpStreamLookupSettings {
      optional uint64 LockTxId = 5;
      optional bool ImmediateTx = 6;
      repeated string LookupKeyColumns = 7;
+     optional NKqpProto.EStreamLookupStrategy LookupStrategy = 8;
 }
 
 message TKqpSequencerSettings {

@@ -45,6 +45,9 @@ struct TKqpPhyTxSettings {
 
 constexpr TStringBuf KqpReadRangesSourceName = "KqpReadRangesSource";
 
+static constexpr std::string_view TKqpStreamLookupStrategyName = "LookupRows"sv;
+static constexpr std::string_view TKqpStreamLookupJoinStrategyName = "LookupJoinRows"sv;
+
 struct TKqpReadTableSettings {
     static constexpr TStringBuf SkipNullKeysSettingName = "SkipNullKeys";
     static constexpr TStringBuf ItemsLimitSettingName = "ItemsLimit";

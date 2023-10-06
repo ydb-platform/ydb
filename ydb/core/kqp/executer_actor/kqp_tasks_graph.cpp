@@ -384,6 +384,8 @@ void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
         columnProto->SetTypeId(columnIt->second.Type.GetTypeId());
     }
 
+    settings->SetLookupStrategy(streamLookup.GetLookupStrategy());
+
     TTransform streamLookupTransform;
     streamLookupTransform.Type = "StreamLookupInputTransformer";
     streamLookupTransform.InputType = streamLookup.GetLookupKeysType();

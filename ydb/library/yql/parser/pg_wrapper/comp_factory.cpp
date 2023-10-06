@@ -353,6 +353,7 @@ public:
         , ArgNodes(std::move(argNodes))
         , ArgTypes(std::move(argTypes))
         , StructType(structType)
+        , PgFuncArgsList(nullptr, &free)
     {
         Zero(FInfo);
         Y_ENSURE(Id);
@@ -376,6 +377,30 @@ public:
         }
 
         Y_ENSURE(ArgDesc.size() == ArgNodes.size());
+        Zero(PgFuncNode);
+        PgArgNodes.resize(ArgDesc.size());
+        for (size_t i = 0; i < ArgDesc.size(); ++i) {
+            auto& v = PgArgNodes[i];
+            Zero(v);
+            v.xpr.type = T_Var;
+            v.vartype = ArgDesc[i].TypeId;
+            v.vartypmod = -1;
+        }
+
+        PgFuncArgsList.reset((List*)malloc(offsetof(List, initial_elements) + ArgDesc.size() * sizeof(ListCell)));
+        PgFuncArgsList->type = T_List;
+        PgFuncArgsList->elements = PgFuncArgsList->initial_elements;
+        PgFuncArgsList->length = PgFuncArgsList->max_length = ArgDesc.size();
+        for (size_t i = 0; i < ArgDesc.size(); ++i) {
+            PgFuncArgsList->elements[i].ptr_value = &PgArgNodes[i];
+        }
+
+        PgFuncNode.xpr.type = T_FuncExpr;
+        PgFuncNode.funcid = ProcDesc.ProcId;
+        PgFuncNode.funcresulttype = ProcDesc.ResultType;
+        PgFuncNode.funcretset = ProcDesc.ReturnSet;
+        PgFuncNode.args = PgFuncArgsList.get();
+        FInfo.fn_expr = (Node*)&PgFuncNode;
     }
 
 private:
@@ -393,8 +418,12 @@ protected:
     const NPg::TTypeDesc RetTypeDesc;
     const TComputationNodePtrVector ArgNodes;
     const TVector<TType*> ArgTypes;
-    const TStructType* StructType;    
+    const TStructType* StructType;
     TVector<NPg::TTypeDesc> ArgDesc;
+    
+    TVector<Var> PgArgNodes;
+    std::unique_ptr<List, decltype(&free)> PgFuncArgsList;
+    FuncExpr PgFuncNode;
 };
 
 struct TPgResolvedCallState : public TComputationValue<TPgResolvedCallState> {

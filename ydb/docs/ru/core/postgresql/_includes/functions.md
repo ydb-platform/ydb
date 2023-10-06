@@ -652,9 +652,9 @@ Replaces substrings resulting from the first match of a POSIX regular expression
 regexp_replace('Thomas', '.[mN]a.', 'M') → ThM
 ```||
 ||regexp_split_to_array ( string text, pattern text [, flags text ] ) → text[]|
-Splits string using a POSIX regular expression as the delimiter, producing an array of results; see Section 9.7.3. (NOT SUPPORTED)|
+Splits string using a POSIX regular expression as the delimiter, producing an array of results; see Section 9.7.3.|
 ```sql
-#regexp_split_to_array('hello world', '\s+') → {hello,world}
+regexp_split_to_array('hello world', '\s+') → {hello,world}
 ```||
 ||regexp_split_to_table ( string text, pattern text [, flags text ] ) → setof text|
 Splits string using a POSIX regular expression as the delimiter, producing a set of results; see Section 9.7.3. (NOT SUPPORTED)|
@@ -714,9 +714,9 @@ Returns true if string starts with prefix.|
 starts_with('alphabet', 'alph') → true
 ```||
 ||string_to_array ( string text, delimiter text [, null_string text ] ) → text[]|
-Splits the string at occurrences of delimiter and forms the resulting fields into a text array. If delimiter is NULL, each character in the string will become a separate element in the array. If delimiter is an empty string, then the string is treated as a single field. If null_string is supplied and is not NULL, fields matching that string are replaced by NULL. (NOT SUPPORTED)|
+Splits the string at occurrences of delimiter and forms the resulting fields into a text array. If delimiter is NULL, each character in the string will become a separate element in the array. If delimiter is an empty string, then the string is treated as a single field. If null_string is supplied and is not NULL, fields matching that string are replaced by NULL.|
 ```sql
-#string_to_array('xx~~yy~~zz', '~~', 'yy') → {xx,NULL,zz}
+string_to_array('xx~~yy~~zz', '~~', 'yy') → {xx,NULL,zz}
 ```||
 ||string_to_table ( string text, delimiter text [, null_string text ] ) → setof text|
 Splits the string at occurrences of delimiter and returns the resulting fields as a set of text rows. If delimiter is NULL, each character in the string will become a separate row of the result. If delimiter is an empty string, then the string is treated as a single field. If null_string is supplied and is not NULL, fields matching that string are replaced by NULL. (NOT SUPPORTED)|
@@ -3033,9 +3033,9 @@ Converts any SQL value to json or jsonb. Arrays and composites are converted rec
 #to_jsonb(row(42, 'Fred said "Hi."'::text)) → {"f1": 42, "f2": "Fred said \"Hi.\""}
 ```||
 ||array_to_json ( anyarray [, boolean ] ) → json|
-Converts an SQL array to a JSON array. The behavior is the same as to_json except that line feeds will be added between top-level array elements if the optional boolean parameter is true. (NOT SUPPORTED)|
+Converts an SQL array to a JSON array. The behavior is the same as to_json except that line feeds will be added between top-level array elements if the optional boolean parameter is true.|
 ```sql
-#array_to_json('{{1,5},{99,100}}'::int[]) → [[1,5],[99,100]]
+array_to_json('{{1,5},{99,100}}'::int[]) → [[1,5],[99,100]]
 ```||
 ||row_to_json ( record [, boolean ] ) → json|
 Converts an SQL composite value to a JSON object. The behavior is the same as to_json except that line feeds will be added between top-level elements if the optional boolean parameter is true. (NOT SUPPORTED)|
@@ -3817,9 +3817,9 @@ Returns the total number of elements in the array, or 0 if the array is empty.|
 cardinality(ARRAY[[1,2],[3,4]]) → 4
 ```||
 ||trim_array ( array anyarray, n integer ) → anyarray|
-Trims an array by removing the last n elements. If the array is multidimensional, only the first dimension is trimmed. (NOT SUPPORTED)|
+Trims an array by removing the last n elements. If the array is multidimensional, only the first dimension is trimmed.|
 ```sql
-#trim_array(ARRAY[1,2,3,4,5,6], 2) → {1,2,3,4}
+trim_array(ARRAY[1,2,3,4,5,6], 2) → {1,2,3,4}
 ```||
 ||unnest ( anyarray ) → setof anyelement|
 Expands an array into a set of rows. The array's elements are read out in storage order. (NOT SUPPORTED)|
@@ -3980,8 +3980,14 @@ jsonb_object_agg ( key any, value any ) → jsonb|
 Collects all the key/value pairs into a JSON object. Key arguments are coerced to text; value arguments are converted as per to_json or to_jsonb. Values can be null, but not keys.|
 No|
 ```sql
-#SELECT json_object_agg(x,y) FROM (VALUES ('a',1),('b',2),('c',3)) a(x,y) → {"a":1,"b":2,"c":3}
-#SELECT jsonb_object_agg(x,y) FROM (VALUES ('x','a'),('y','b'),('z','c')) a(x,y) → {"x":"a","y":"b","z":"c"}
+SELECT json_object_agg(x,y) FROM (VALUES ('a',1),('b',2),('c',3)) a(x,y) → [
+{ "a" : 1, "b" : 2, "c" : 3 }
+]
+
+SELECT jsonb_object_agg(x,y) FROM (VALUES ('x','a'),('y','b'),('z','c')) a(x,y) → [
+{"x": "a", "y": "b", "z": "c"}
+]
+
 ```||
 ||max ( see text ) → same as input type|
 Computes the maximum of the non-null input values. Available for any numeric, string, date/time, or enum type, as well as inet, interval, money, oid, pg_lsn, tid, and arrays of any of these types. (Arrays aren't supported)|

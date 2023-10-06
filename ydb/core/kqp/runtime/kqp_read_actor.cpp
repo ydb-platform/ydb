@@ -1446,7 +1446,7 @@ private:
 
 
 void RegisterKqpReadActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<TKqpCounters> counters) {
-    factory.RegisterSourceWithPtr<NKikimrTxDataShard::TKqpReadRangesSourceSettings>(
+    factory.RegisterSource<NKikimrTxDataShard::TKqpReadRangesSourceSettings>(
         TString(NYql::KqpReadRangesSourceName),
         [counters] (const NKikimrTxDataShard::TKqpReadRangesSourceSettings* settings, NYql::NDq::TDqAsyncIoFactory::TSourceArguments&& args) {
             auto* actor = new TKqpReadActor(settings, args, counters);

@@ -161,6 +161,7 @@ message PingTaskRequest {
     repeated Ydb.Issue.IssueMessage internal_issues = 34;
     string operation_id = 35;
     string execution_id = 36;
+    NYql.NDqProto.StatusIds.StatusCode pending_status_code = 37;
 }
 
 message PingTaskResult {

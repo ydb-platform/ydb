@@ -100,12 +100,12 @@ public:
         if (ev.Get()->Get()->Success) {
             pingCounters->Ok->Inc();
             LOG_I("Information about the status of operation is stored");
-            Send(Parent, new TEvYdbCompute::TEvStatusTrackerResponse(Issues, Status, ExecStatus));
+            Send(Parent, new TEvYdbCompute::TEvStatusTrackerResponse(Issues, Status, ExecStatus, ComputeStatus));
             CompleteAndPassAway();
         } else {
             pingCounters->Error->Inc();
             LOG_E("Error saving information about the status of operation");
-            Send(Parent, new TEvYdbCompute::TEvStatusTrackerResponse(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Error saving information about the status of operation: " << ProtoToString(OperationId)}}, NYdb::EStatus::INTERNAL_ERROR, ExecStatus));
+            Send(Parent, new TEvYdbCompute::TEvStatusTrackerResponse(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Error saving information about the status of operation: " << ProtoToString(OperationId)}}, NYdb::EStatus::INTERNAL_ERROR, ExecStatus, ComputeStatus));
             FailedAndPassAway();
         }
     }
@@ -114,7 +114,7 @@ public:
         const auto& response = *ev.Get()->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
             LOG_E("Can't get operation: " << ev->Get()->Issues.ToOneLineString());
-            Send(Parent, new TEvYdbCompute::TEvStatusTrackerResponse(ev->Get()->Issues, ev->Get()->Status, ExecStatus));
+            Send(Parent, new TEvYdbCompute::TEvStatusTrackerResponse(ev->Get()->Issues, ev->Get()->Status, ExecStatus, ComputeStatus));
             FailedAndPassAway();
             return;
         }
@@ -129,21 +129,11 @@ public:
             case NYdb::NQuery::EExecStatus::Aborted:
             case NYdb::NQuery::EExecStatus::Canceled:
             case NYdb::NQuery::EExecStatus::Failed:
-                if (response.ExecStatus == NYdb::NQuery::EExecStatus::Failed) {
-                    TStringBuilder builder;
-                    builder << "Query failed with code " << NYql::NDqProto::StatusIds_StatusCode_Name(
-                        NYql::NDq::YdbStatusToDqStatus(response.StatusCode));
-                    auto issue = NYql::TIssue(builder);
-                    for (auto& subIssue : response.Issues) {
-                        issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(subIssue));
-                    }
-                    Issues.AddIssue(issue);
-                } else {
-                    Issues = response.Issues;
-                }
+                Issues = response.Issues;
                 Status = response.Status;
                 ExecStatus = response.ExecStatus;
                 QueryStats = response.QueryStats;
+                StatusCode = NYql::NDq::YdbStatusToDqStatus(response.StatusCode);
                 Failed();
                 break;
             case NYdb::NQuery::EExecStatus::Completed:
@@ -161,23 +151,24 @@ public:
     }
 
     void Failed() {
-        LOG_I("Execution status: Failed, " << Status);
+        LOG_I("Execution status: Failed, Status: " << Status << ", StatusCode: " << NYql::NDqProto::StatusIds::StatusCode_Name(StatusCode) << " Issues: " << Issues.ToOneLineString());
         auto pingCounters = Counters.GetCounters(ERequestType::RT_PING);
         pingCounters->InFly->Inc();
         Fq::Private::PingTaskRequest pingTaskRequest;
         NYql::IssuesToMessage(Issues, pingTaskRequest.mutable_issues());
-        pingTaskRequest.set_status(::FederatedQuery::QueryMeta::FAILING);
+        pingTaskRequest.set_pending_status_code(StatusCode);
         PrepareAstAndPlan(pingTaskRequest, QueryStats.query_plan(), QueryStats.query_ast());
         Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest));
     }
 
     void Complete() {
-        LOG_I("Execution status: Complete" << Status);
+        LOG_I("Execution status: Complete " << Status << ", StatusCode: " << NYql::NDqProto::StatusIds::StatusCode_Name(StatusCode) << " Issues: " << Issues.ToOneLineString());
         auto pingCounters = Counters.GetCounters(ERequestType::RT_PING);
         pingCounters->InFly->Inc();
         Fq::Private::PingTaskRequest pingTaskRequest;
         NYql::IssuesToMessage(Issues, pingTaskRequest.mutable_issues());
-        pingTaskRequest.set_status(::FederatedQuery::QueryMeta::COMPLETING);
+        ComputeStatus = ::FederatedQuery::QueryMeta::COMPLETING;
+        pingTaskRequest.set_status(ComputeStatus);
         PrepareAstAndPlan(pingTaskRequest, QueryStats.query_plan(), QueryStats.query_ast());
         try {
             pingTaskRequest.set_statistics(GetV1StatFromV2Plan(QueryStats.query_plan()));
@@ -213,9 +204,11 @@ private:
     NYql::TIssues Issues;
     NYdb::EStatus Status = NYdb::EStatus::SUCCESS;
     NYdb::NQuery::EExecStatus ExecStatus = NYdb::NQuery::EExecStatus::Unspecified;
+    NYql::NDqProto::StatusIds::StatusCode StatusCode = NYql::NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_UNSPECIFIED;
     Ydb::TableStats::QueryStats QueryStats;
     NKikimr::TBackoffTimer BackoffTimer;
     const TCompressor Compressor;
+    FederatedQuery::QueryMeta::ComputeStatus ComputeStatus = FederatedQuery::QueryMeta::RUNNING;
 };
 
 std::unique_ptr<NActors::IActor> CreateStatusTrackerActor(const TRunActorParams& params,

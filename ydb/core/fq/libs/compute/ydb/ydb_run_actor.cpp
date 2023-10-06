@@ -19,10 +19,11 @@
 #include <ydb/core/fq/libs/private_client/events.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 
 
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] QueryId: " << Params.QueryId << " " << stream)
@@ -75,7 +76,7 @@ public:
         auto& response = *ev->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
             LOG_I("InitializerResponse (failed). Issues: " << response.Issues.ToOneLineString());
-            ResignAndPassAway(response.Issues);
+            ResignAndPassAway(response.Status, response.Issues);
             return;
         }
 
@@ -85,9 +86,9 @@ public:
 
     void Handle(const TEvYdbCompute::TEvExecuterResponse::TPtr& ev) {
         auto& response = *ev->Get();
-        if (!response.Success) {
+        if (response.Status != NYdb::EStatus::SUCCESS) {
             LOG_I("ExecuterResponse (failed). Issues: " << response.Issues.ToOneLineString());
-            ResignAndPassAway(response.Issues);
+            ResignAndPassAway(response.Status, response.Issues);
             return;
         }
         Params.ExecutionId = response.ExecutionId;
@@ -100,10 +101,11 @@ public:
         auto& response = *ev->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
             LOG_I("StatusTrackerResponse (failed). Status: " << response.Status << " Issues: " << response.Issues.ToOneLineString());
-            ResignAndPassAway(response.Issues);
+            ResignAndPassAway(response.Status, response.Issues);
             return;
         }
         ExecStatus = response.ExecStatus;
+        Params.Status = response.ComputeStatus;
         LOG_I("StatusTrackerResponse (success) " << response.Status << " ExecStatus: " << static_cast<int>(response.ExecStatus) << " Issues: " << response.Issues.ToOneLineString());
         if (response.ExecStatus == NYdb::NQuery::EExecStatus::Completed) {
             Register(ActorFactory->CreateResultWriter(SelfId(), Connector, Pinger, Params.OperationId).release());
@@ -116,7 +118,7 @@ public:
         auto& response = *ev->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
             LOG_I("ResultWriterResponse (failed). Status: " << response.Status << " Issues: " << response.Issues.ToOneLineString());
-            ResignAndPassAway(response.Issues);
+            ResignAndPassAway(response.Status, response.Issues);
             return;
         }
         LOG_I("ResultWriterResponse (success) " << response.Status << " Issues: " << response.Issues.ToOneLineString());
@@ -127,18 +129,18 @@ public:
         auto& response = *ev->Get();
         if (response.Status != NYdb::EStatus::SUCCESS && response.Status != NYdb::EStatus::UNSUPPORTED) {
             LOG_I("ResourcesCleanerResponse (failed). Status: " << response.Status << " Issues: " << response.Issues.ToOneLineString());
-            ResignAndPassAway(response.Issues);
+            ResignAndPassAway(response.Status, response.Issues);
             return;
         }
         LOG_I("ResourcesCleanerResponse (success) " << response.Status << " Issues: " << response.Issues.ToOneLineString());
-        Register(ActorFactory->CreateFinalizer(SelfId(), Pinger, ExecStatus, IsAborted ? FederatedQuery::QueryMeta::ABORTING_BY_USER : Params.Status).release());
+        Register(ActorFactory->CreateFinalizer(Params, SelfId(), Pinger, ExecStatus, IsAborted ? FederatedQuery::QueryMeta::ABORTING_BY_USER : Params.Status).release());
     }
 
     void Handle(const TEvYdbCompute::TEvFinalizerResponse::TPtr ev) {
         auto& response = *ev->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
             LOG_I("FinalizerResponse (failed). Status: " << response.Status << " Issues: " << response.Issues.ToOneLineString());
-            ResignAndPassAway(response.Issues);
+            ResignAndPassAway(response.Status, response.Issues);
             return;
         }
         LOG_I("FinalizerResponse (success) " << response.Status << " Issues: " << response.Issues.ToOneLineString());
@@ -157,46 +159,52 @@ public:
         auto& response = *ev->Get();
         if (response.Status != NYdb::EStatus::SUCCESS) {
             LOG_I("StopperResponse (failed). Status: " << response.Status << " Issues: " << response.Issues.ToOneLineString());
-            ResignAndPassAway(response.Issues);
+            ResignAndPassAway(response.Status, response.Issues);
             return;
         }
         LOG_I("StopperResponse (success) " << response.Status << " Issues: " << response.Issues.ToOneLineString());
         Register(ActorFactory->CreateResourcesCleaner(SelfId(), Connector, Params.OperationId).release());
     }
 
-    void Run() {
+    void Run() { // recover points
         switch (Params.Status) {
-        case FederatedQuery::QueryMeta::ABORTING_BY_USER:
-        case FederatedQuery::QueryMeta::ABORTING_BY_SYSTEM:
-        case FederatedQuery::QueryMeta::FAILING:
-            if (Params.OperationId.GetKind() != Ydb::TOperationId::UNUSED) {
-                Register(ActorFactory->CreateResourcesCleaner(SelfId(), Connector, Params.OperationId).release());
+        case FederatedQuery::QueryMeta::STARTING:
+            Register(ActorFactory->CreateInitializer(SelfId(), Pinger).release());
+            break;
+        case FederatedQuery::QueryMeta::RUNNING:
+            if (Params.OperationId.GetKind() == Ydb::TOperationId::UNUSED) {
+                Register(ActorFactory->CreateExecuter(SelfId(), Connector, Pinger).release()); // restart query
             } else {
-                Register(ActorFactory->CreateFinalizer(SelfId(), Pinger, ExecStatus, Params.Status).release());
+                Register(ActorFactory->CreateStatusTracker(SelfId(), Connector, Pinger, Params.OperationId).release());
             }
             break;
         case FederatedQuery::QueryMeta::COMPLETING:
             if (Params.OperationId.GetKind() != Ydb::TOperationId::UNUSED) {
                 Register(ActorFactory->CreateResultWriter(SelfId(), Connector, Pinger, Params.OperationId).release());
             } else {
-                Register(ActorFactory->CreateFinalizer(SelfId(), Pinger, ExecStatus, Params.Status).release());
+                Register(ActorFactory->CreateFinalizer(Params, SelfId(), Pinger, ExecStatus, Params.Status).release());
             }
             break;
-        case FederatedQuery::QueryMeta::STARTING:
-            Register(ActorFactory->CreateInitializer(SelfId(), Pinger).release());
-            break;
-        case FederatedQuery::QueryMeta::RUNNING:
-            Register(ActorFactory->CreateStatusTracker(SelfId(), Connector, Pinger, Params.OperationId).release());
+        case FederatedQuery::QueryMeta::FAILING:
+        case FederatedQuery::QueryMeta::ABORTING_BY_USER:
+        case FederatedQuery::QueryMeta::ABORTING_BY_SYSTEM:
+            if (Params.OperationId.GetKind() != Ydb::TOperationId::UNUSED) {
+                Register(ActorFactory->CreateResourcesCleaner(SelfId(), Connector, Params.OperationId).release());
+            } else {
+                Register(ActorFactory->CreateFinalizer(Params, SelfId(), Pinger, ExecStatus, Params.Status).release());
+            }
             break;
         default:
             break;
         }
     }
 
-    void ResignAndPassAway(const NYql::TIssues& issues) {
+    void ResignAndPassAway(NYdb::EStatus status, const NYql::TIssues& issues) {
         Fq::Private::PingTaskRequest pingTaskRequest;
         NYql::IssuesToMessage(issues, pingTaskRequest.mutable_transient_issues());
         pingTaskRequest.set_resign_query(true);
+        
+        pingTaskRequest.set_status_code(NYql::NDq::YdbStatusToDqStatus(static_cast<Ydb::StatusIds::StatusCode>(status)));
         Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest, true));
         FinishAndPassAway();
     }

@@ -73,7 +73,7 @@ TPingTaskParams ConstructHardPingTask(
 
     auto meteringRecords = std::make_shared<std::vector<TString>>();
 
-    auto prepareParams = [=, counters=counters, actorSystem = NActors::TActivationContext::ActorSystem()](const TVector<TResultSet>& resultSets) {
+    auto prepareParams = [=, counters=counters, actorSystem = NActors::TActivationContext::ActorSystem(), request=request](const TVector<TResultSet>& resultSets) mutable {
         TString jobId;
         FederatedQuery::Query query;
         FederatedQuery::Internal::QueryInternal internal;
@@ -145,6 +145,13 @@ TPingTaskParams ConstructHardPingTask(
         TDuration backoff = taskLeaseTtl;
 
         if (request.resign_query()) {
+            if (request.status_code() == NYql::NDqProto::StatusIds::UNSPECIFIED && internal.pending_status_code() != NYql::NDqProto::StatusIds::UNSPECIFIED) {
+                request.set_status_code(internal.pending_status_code());
+                internal.clear_pending_status_code();
+                internal.clear_execution_id();
+                internal.clear_operation_id();
+            }
+
             TRetryPolicyItem policy(0, TDuration::Seconds(1), TDuration::Zero());
             auto it = retryPolicies.find(request.status_code());
             auto policyFound = it != retryPolicies.end();
@@ -179,6 +186,13 @@ TPingTaskParams ConstructHardPingTask(
                 }
                 builder << " at " << Now();
                 auto issue = NYql::TIssue(builder);
+                if (query.issue().size() > 0 && request.issues().empty()) {
+                    NYql::TIssues queryIssues;
+                    NYql::IssuesFromMessage(query.issue(), queryIssues);
+                    for (auto& subIssue : queryIssues) {
+                        issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(subIssue));
+                    }
+                }
                 if (transientIssues) {
                     for (auto& subIssue : *transientIssues) {
                         issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(subIssue));
@@ -197,6 +211,10 @@ TPingTaskParams ConstructHardPingTask(
 
         if (request.status_code() != NYql::NDqProto::StatusIds::UNSPECIFIED) {
             internal.set_status_code(request.status_code());
+        }
+
+        if (request.pending_status_code() != NYql::NDqProto::StatusIds::UNSPECIFIED) {
+            internal.set_pending_status_code(request.pending_status_code());
         }
 
         if (issues) {

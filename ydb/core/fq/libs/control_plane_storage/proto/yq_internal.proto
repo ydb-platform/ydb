@@ -49,6 +49,7 @@ message QueryInternal {
     string execution_id = 25;
     NFq.NConfig.TYdbStorageConfig compute_connection = 26;
     google.protobuf.Duration result_ttl = 27;
+    NYql.NDqProto.StatusIds.StatusCode pending_status_code = 28;
 }
 
 message JobInternal {

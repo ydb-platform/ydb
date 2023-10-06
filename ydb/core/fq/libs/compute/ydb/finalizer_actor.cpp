@@ -77,13 +77,12 @@ public:
         auto pingCounters = Counters.GetCounters(ERequestType::RT_PING);
         pingCounters->InFly->Inc();
         Become(&TFinalizerActor::StateFunc);
-        Fq::Private::PingTaskRequest pingTaskRequest;
-        if (ExecStatus == NYdb::NQuery::EExecStatus::Completed || Status == FederatedQuery::QueryMeta::COMPLETING) {
-            pingTaskRequest.mutable_result_id()->set_value(Params.ResultId);
+        if (IsResignQuery()) {
+            SendResignQuery();
+        } else {
+            SendFinalPing();
         }
-        pingTaskRequest.set_status(GetFinalStatus());
-        *pingTaskRequest.mutable_finished_at() = google::protobuf::util::TimeUtil::MillisecondsToTimestamp(TInstant::Now().MilliSeconds());
-        Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest, true));
+
     }
 
     FederatedQuery::QueryMeta::ComputeStatus GetFinalStatus() const {
@@ -123,6 +122,40 @@ public:
         }
     }
 
+    bool IsResignQuery() const {
+        switch (ExecStatus) {
+            case NYdb::NQuery::EExecStatus::Completed:
+                return false;
+            case NYdb::NQuery::EExecStatus::Unspecified:
+            case NYdb::NQuery::EExecStatus::Starting:
+            case NYdb::NQuery::EExecStatus::Aborted:
+            case NYdb::NQuery::EExecStatus::Canceled:
+            case NYdb::NQuery::EExecStatus::Failed:
+            break;
+        }
+
+        switch (Status) {
+            case FederatedQuery::QueryMeta::COMPLETING:
+            case FederatedQuery::QueryMeta::COMPLETED:
+            case FederatedQuery::QueryMeta::ABORTING_BY_USER:
+            case FederatedQuery::QueryMeta::ABORTED_BY_USER:
+            case FederatedQuery::QueryMeta::ABORTING_BY_SYSTEM:
+            case FederatedQuery::QueryMeta::ABORTED_BY_SYSTEM:
+            case FederatedQuery::QueryMeta::STARTING:
+            case FederatedQuery::QueryMeta::FAILED:
+            case FederatedQuery::QueryMeta::RESUMING:
+            case FederatedQuery::QueryMeta::FAILING:
+            case FederatedQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED:
+            case FederatedQuery::QueryMeta_ComputeStatus_QueryMeta_ComputeStatus_INT_MIN_SENTINEL_DO_NOT_USE_:
+            case FederatedQuery::QueryMeta_ComputeStatus_QueryMeta_ComputeStatus_INT_MAX_SENTINEL_DO_NOT_USE_:
+            case FederatedQuery::QueryMeta::PAUSING:
+            case FederatedQuery::QueryMeta::PAUSED:
+                return false;
+            case FederatedQuery::QueryMeta::RUNNING:
+                return true;
+        }
+    }
+
     STRICT_STFUNC(StateFunc,
         hFunc(TEvents::TEvForwardPingResponse, Handle);
     )
@@ -142,6 +175,22 @@ public:
             Send(Parent, new TEvYdbCompute::TEvFinalizerResponse(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Error moving the query to the terminal state"}}, NYdb::EStatus::INTERNAL_ERROR));
             FailedAndPassAway();
         }
+    }
+
+    void SendResignQuery() {
+        Fq::Private::PingTaskRequest pingTaskRequest;
+        pingTaskRequest.set_resign_query(true);
+        Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest, true));
+    }
+
+    void SendFinalPing() {
+        Fq::Private::PingTaskRequest pingTaskRequest;
+        if (ExecStatus == NYdb::NQuery::EExecStatus::Completed || Status == FederatedQuery::QueryMeta::COMPLETING) {
+            pingTaskRequest.mutable_result_id()->set_value(Params.ResultId);
+        }
+        pingTaskRequest.set_status(GetFinalStatus());
+        *pingTaskRequest.mutable_finished_at() = google::protobuf::util::TimeUtil::MillisecondsToTimestamp(TInstant::Now().MilliSeconds());
+        Send(Pinger, new TEvents::TEvForwardPingRequest(pingTaskRequest, true));
     }
 
 private:

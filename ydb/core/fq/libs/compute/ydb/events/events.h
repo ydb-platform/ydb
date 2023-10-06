@@ -236,33 +236,36 @@ struct TEvYdbCompute {
     };
 
     struct TEvExecuterResponse : public NActors::TEventLocal<TEvExecuterResponse, EvExecuterResponse> {
-        TEvExecuterResponse(NYdb::TOperation::TOperationId operationId, const TString& executionId)
+        TEvExecuterResponse(NYdb::TOperation::TOperationId operationId, const TString& executionId, NYdb::EStatus status)
             : OperationId(operationId)
             , ExecutionId(executionId)
-            , Success(true)
+            , Status(status)
         {}
 
-        explicit TEvExecuterResponse(NYql::TIssues issues)
-            : Success(false)
+        explicit TEvExecuterResponse(NYql::TIssues issues, NYdb::EStatus status)
+            : Status(status)
             , Issues(std::move(issues))
+            
         {}
 
         NYdb::TOperation::TOperationId OperationId;
         TString ExecutionId;
-        bool Success = true;
+        NYdb::EStatus Status;
         NYql::TIssues Issues;
     };
 
     struct TEvStatusTrackerResponse : public NActors::TEventLocal<TEvStatusTrackerResponse, EvStatusTrackerResponse> {
-        TEvStatusTrackerResponse(NYql::TIssues issues, NYdb::EStatus status, NYdb::NQuery::EExecStatus execStatus)
+        TEvStatusTrackerResponse(NYql::TIssues issues, NYdb::EStatus status, NYdb::NQuery::EExecStatus execStatus, FederatedQuery::QueryMeta::ComputeStatus computeStatus)
             : Issues(std::move(issues))
             , Status(status)
             , ExecStatus(execStatus)
+            , ComputeStatus(computeStatus)
         {}
 
         NYql::TIssues Issues;
         NYdb::EStatus Status;
         NYdb::NQuery::EExecStatus ExecStatus;
+        FederatedQuery::QueryMeta::ComputeStatus ComputeStatus;
     };
 
     struct TEvResultWriterResponse : public NActors::TEventLocal<TEvResultWriterResponse, EvResultWriterResponse> {

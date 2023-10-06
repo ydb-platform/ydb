@@ -134,7 +134,7 @@ IOutputStream& operator<<(IOutputStream& out, const TRunActorParams& params) {
                 << " OperationId: " << (params.OperationId.GetKind() != Ydb::TOperationId::UNUSED ? ProtoToString(params.OperationId) : "<empty>")
                 << " ComputeConnection: " << params.ComputeConnection.ShortDebugString()
                 << " ResultTtl: " << params.ResultTtl
-                << " }";
+                << "}";
 }
 
 } /* NFq */

@@ -32,7 +32,8 @@ struct IActorFactory : public TThrRefBase {
     virtual std::unique_ptr<NActors::IActor> CreateResourcesCleaner(const NActors::TActorId& parent,
                                                                     const NActors::TActorId& connector,
                                                                     const NYdb::TOperation::TOperationId& operationId) const = 0;
-    virtual std::unique_ptr<NActors::IActor> CreateFinalizer(const NActors::TActorId& parent,
+    virtual std::unique_ptr<NActors::IActor> CreateFinalizer(const NFq::TRunActorParams& params,
+                                                             const NActors::TActorId& parent,
                                                              const NActors::TActorId& pinger,
                                                              NYdb::NQuery::EExecStatus execStatus,
                                                              FederatedQuery::QueryMeta::ComputeStatus status) const = 0;

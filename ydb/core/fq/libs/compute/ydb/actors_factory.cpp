@@ -69,11 +69,12 @@ struct TActorFactory : public IActorFactory {
         return CreateResourcesCleanerActor(Params, parent, connector, operationId, Counters);
     }
 
-    std::unique_ptr<NActors::IActor> CreateFinalizer(const NActors::TActorId& parent,
+    std::unique_ptr<NActors::IActor> CreateFinalizer(const NFq::TRunActorParams& params,
+                                                     const NActors::TActorId& parent,
                                                      const NActors::TActorId& pinger,
                                                      NYdb::NQuery::EExecStatus execStatus,
                                                      FederatedQuery::QueryMeta::ComputeStatus status) const override {
-        return CreateFinalizerActor(Params, parent, pinger, execStatus, status, Counters);
+        return CreateFinalizerActor(params, parent, pinger, execStatus, status, Counters);
     }
 
     std::unique_ptr<NActors::IActor> CreateStopper(const NActors::TActorId& parent,

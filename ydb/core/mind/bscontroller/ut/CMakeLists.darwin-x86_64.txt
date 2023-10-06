@@ -37,7 +37,7 @@ set_property(
   ydb-core-mind-bscontroller-ut
   PROPERTY
   SPLIT_FACTOR
-  10
+  30
 )
 add_yunittest(
   NAME

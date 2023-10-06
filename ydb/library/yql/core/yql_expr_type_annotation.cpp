@@ -1327,14 +1327,26 @@ const TPgExprType* CommonType(TPositionHandle pos, const TPgExprType* one, const
 }
 
 template<bool Silent>
-const TDataExprType* CommonType(TPositionHandle pos, const TResourceExprType* resource, const TDataExprType* data, TExprContext& ctx) {
+const TResourceExprType* CommonType(TPositionHandle pos, const TResourceExprType* resource, const TDataExprType* data, TExprContext& ctx) {
     const auto slot = data->GetSlot();
     const auto& tag = resource->GetTag();
-    if (tag == "Yson2.Node" && EDataSlot::Yson == slot)
-        return data;
+    if ((tag == "Yson2.Node" || tag == "Yson.Node") && (EDataSlot::Yson == slot || EDataSlot::Json == slot)) {
+        return resource;
+    }
 
-    if constexpr (!Silent)
-        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Incompatible resourse '" << tag << "' with " << GetDataTypeInfo(slot).Name));
+    if (tag == "DateTime2.TM" &&
+        (GetDataTypeInfo(slot).Features & (NUdf::EDataTypeFeatures::DateType | NUdf::EDataTypeFeatures::TzDateType)))
+    {
+        return resource;
+    }
+
+    if (tag == "JsonNode" && EDataSlot::Json == slot) {
+        return resource;
+    }
+
+    if constexpr (!Silent) {
+        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Incompatible resource '" << tag << "' with " << GetDataTypeInfo(slot).Name));
+    }
     return nullptr;
 }
 

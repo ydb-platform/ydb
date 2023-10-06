@@ -851,6 +851,7 @@ struct TEvBlobStorage {
         // node controller internal messages
         EvRegisterNodeRetry = EvPut + 14 * 512,
         EvAskRestartPDisk,
+        EvAskRestartVDisk,
         EvRestartPDisk,
         EvRestartPDiskResult,
         EvNodeWardenQueryGroupInfo,
@@ -2354,6 +2355,7 @@ struct TEvBlobStorage {
     struct TEvBunchOfEvents;
 
     struct TEvAskRestartPDisk;
+    struct TEvAskRestartVDisk;
     struct TEvRestartPDisk;
     struct TEvRestartPDiskResult;
 };

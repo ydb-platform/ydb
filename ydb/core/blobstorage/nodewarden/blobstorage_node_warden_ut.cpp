@@ -807,7 +807,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         Setup(runtime, "", nullptr);
         auto edge = runtime.AllocateEdgeActor(0);
         TActorId nodeWarden = MakeBlobStorageNodeWardenID(edge.NodeId());
-        THttpRequest HttpRequest;
+        THttpRequestMock HttpRequest;
         NMonitoring::TMonService2HttpRequest monService2HttpRequest(nullptr, &HttpRequest, nullptr, nullptr, path,
                 nullptr);
         runtime.Send(new IEventHandle(nodeWarden, edge, new NMon::TEvHttpInfo(monService2HttpRequest)), 0);

@@ -19,6 +19,7 @@ struct TEnvironmentSetup {
     const ui32 NumGroups = 1;
     TIntrusivePtr<NFake::TProxyDS> Group0 = MakeIntrusive<NFake::TProxyDS>();
     std::map<std::pair<ui32, ui32>, TIntrusivePtr<TPDiskMockState>> PDiskMockStates;
+    TVector<TActorId> PDiskActors;
     std::set<TActorId> CommencedReplication;
     std::unordered_map<ui32, TString> Cache;
 
@@ -58,6 +59,7 @@ struct TEnvironmentSetup {
             const TActorId& actorId = ctx.Register(CreatePDiskMockActor(state), TMailboxType::HTSwap, poolId);
             const TActorId& serviceId = MakeBlobStoragePDiskID(nodeId, pdiskId);
             ctx.ExecutorThread.ActorSystem->RegisterLocalService(serviceId, actorId);
+            Env.PDiskActors.push_back(actorId);
         }
     };
 

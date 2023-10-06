@@ -15,6 +15,7 @@ add_subdirectory(ut_osiris)
 add_subdirectory(ut_read_only_vdisk)
 add_subdirectory(ut_replication)
 add_subdirectory(ut_scrub)
+add_subdirectory(ut_vdisk_restart)
 
 add_executable(ydb-core-blobstorage-ut_blobstorage)
 target_link_libraries(ydb-core-blobstorage-ut_blobstorage PUBLIC

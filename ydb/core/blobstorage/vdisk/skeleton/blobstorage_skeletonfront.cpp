@@ -926,6 +926,15 @@ namespace NKikimr {
                                 }
                             }
                         }
+                        {
+                            str << "<a class=\"btn btn-default\" href=\"?type=restart\" "
+                                << (
+                                    IsVDiskRestartAllowed(VDiskMonGroup.VDiskState())
+                                    ? "style='background:Tomato' "
+                                    : "disabled style='background:LightGray' "
+                                )
+                                << ">Restart</a>";
+                        }
                     }
                 }
             }
@@ -1535,7 +1544,7 @@ namespace NKikimr {
             TString html = (type == TString()) ? GenerateHtmlState(ctx) : TString();
 
             auto aid = ctx.Register(CreateFrontSkeletonMonRequestHandler(SelfVDiskId, ctx.SelfID, SkeletonId,
-                ctx.SelfID, Config, Top, ev, html));
+                ctx.SelfID, Config, Top, ev, html, VDiskMonGroup));
             ActiveActors.Insert(aid);
         }
 

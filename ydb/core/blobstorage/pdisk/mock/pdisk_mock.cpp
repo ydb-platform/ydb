@@ -45,6 +45,7 @@ struct TPDiskMockState::TImpl {
     TIntervalSet<ui64> Corrupted;
     NPDisk::TStatusFlags StatusFlags;
     THashSet<TVDiskID> ReadOnlyVDisks;
+    TString StateErrorReason;
 
     TImpl(ui32 nodeId, ui32 pdiskId, ui64 pdiskGuid, ui64 size, ui32 chunkSize)
         : NodeId(nodeId)
@@ -221,6 +222,15 @@ struct TPDiskMockState::TImpl {
         return ChunkSize;
     }
 
+    TMaybe<TOwner> GetOwner(const TVDiskID& vDiskId) const {
+        for (auto& [ownerId, owner] : Owners) {
+            if (owner.VDiskId.GroupID == vDiskId.GroupID && owner.VDiskId.VDisk == vDiskId.VDisk) {
+                return owner;
+            }
+        }
+        return Nothing();
+    }
+
     TIntervalSet<i64> GetWrittenAreas(ui32 chunkIdx) const {
         TIntervalSet<i64> res;
         for (auto& [ownerId, owner] : Owners) {
@@ -308,10 +318,21 @@ void TPDiskMockState::SetReadOnly(const TVDiskID& vDiskId, bool isReadOnly) {
     Impl->SetReadOnly(vDiskId, isReadOnly);
 }
 
+TString& TPDiskMockState::GetStateErrorReason() {
+    return Impl->StateErrorReason;
+}
+
 TPDiskMockState::TPtr TPDiskMockState::Snapshot() {
     auto res = MakeIntrusive<TPDiskMockState>(std::make_unique<TImpl>(*Impl));
     res->Impl->AdjustRefs();
     return res;
+}
+
+TMaybe<NPDisk::TOwnerRound> TPDiskMockState::GetOwnerRound(const TVDiskID& vDiskId) const {
+    if (auto owner = Impl->GetOwner(vDiskId)) {
+        return owner->OwnerRound;
+    }
+    return Nothing();
 }
 
 class TPDiskMockActor : public TActorBootstrapped<TPDiskMockActor> {
@@ -339,7 +360,7 @@ public:
     }
 
     void Bootstrap() {
-        Become(&TThis::StateFunc);
+        Become(&TThis::StateNormal);
         ReportMetrics();
     }
 
@@ -814,7 +835,89 @@ public:
         return Impl.StatusFlags;
     }
 
-    STRICT_STFUNC(StateFunc,
+    void ErrorHandle(NPDisk::TEvYardInit::TPtr &ev) {
+        Send(ev->Sender, new NPDisk::TEvYardInitResult(NKikimrProto::CORRUPTED, State->GetStateErrorReason()));
+    }
+
+    void ErrorHandle(NPDisk::TEvCheckSpace::TPtr &ev) {
+        Send(ev->Sender, new NPDisk::TEvCheckSpaceResult(NKikimrProto::CORRUPTED, 0, 0, 0, 0, 0, State->GetStateErrorReason()));
+    }
+
+    void ErrorHandle(NPDisk::TEvLog::TPtr &ev) {
+        const NPDisk::TEvLog &evLog = *ev->Get();
+        THolder<NPDisk::TEvLogResult> result(new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, State->GetStateErrorReason()));
+        result->Results.push_back(NPDisk::TEvLogResult::TRecord(evLog.Lsn, evLog.Cookie));
+        Send(ev->Sender, result.Release());
+    }
+
+    void ErrorHandle(NPDisk::TEvMultiLog::TPtr &ev) {
+        const NPDisk::TEvMultiLog &evMultiLog = *ev->Get();
+        THolder<NPDisk::TEvLogResult> result(new NPDisk::TEvLogResult(NKikimrProto::CORRUPTED, 0, State->GetStateErrorReason()));
+        for (auto &log : evMultiLog.Logs) {
+            result->Results.push_back(NPDisk::TEvLogResult::TRecord(log->Lsn, log->Cookie));
+        }
+        Send(ev->Sender, result.Release());
+    }
+
+    void ErrorHandle(NPDisk::TEvReadLog::TPtr &ev) {
+        const NPDisk::TEvReadLog &evReadLog = *ev->Get();
+        THolder<NPDisk::TEvReadLogResult> result(new NPDisk::TEvReadLogResult(
+            NKikimrProto::CORRUPTED, evReadLog.Position, evReadLog.Position, true, 0, State->GetStateErrorReason(), evReadLog.Owner));
+        Send(ev->Sender, result.Release());
+    }
+
+    void ErrorHandle(NPDisk::TEvChunkWrite::TPtr &ev) {
+        const NPDisk::TEvChunkWrite &evChunkWrite = *ev->Get();
+        Send(ev->Sender, new NPDisk::TEvChunkWriteResult(NKikimrProto::CORRUPTED,
+            evChunkWrite.ChunkIdx, evChunkWrite.Cookie, 0, State->GetStateErrorReason()));
+    }
+
+    void ErrorHandle(NPDisk::TEvChunkRead::TPtr &ev) {
+        const NPDisk::TEvChunkRead &evChunkRead = *ev->Get();
+        THolder<NPDisk::TEvChunkReadResult> result = MakeHolder<NPDisk::TEvChunkReadResult>(NKikimrProto::CORRUPTED,
+            evChunkRead.ChunkIdx, evChunkRead.Offset, evChunkRead.Cookie, 0, "PDisk is in error state");
+        Send(ev->Sender, result.Release());
+    }
+
+    void ErrorHandle(NPDisk::TEvHarakiri::TPtr &ev) {
+        Send(ev->Sender, new NPDisk::TEvHarakiriResult(NKikimrProto::CORRUPTED, 0, State->GetStateErrorReason()));
+    }
+
+    void ErrorHandle(NPDisk::TEvSlay::TPtr &ev) {
+        const NPDisk::TEvSlay &evSlay = *ev->Get();
+        Send(ev->Sender, new NPDisk::TEvSlayResult(NKikimrProto::CORRUPTED, 0,
+                    evSlay.VDiskId, evSlay.SlayOwnerRound, evSlay.PDiskId, evSlay.VSlotId, State->GetStateErrorReason()));
+    }
+
+    void ErrorHandle(NPDisk::TEvChunkReserve::TPtr &ev) {
+        Send(ev->Sender, new NPDisk::TEvChunkReserveResult(NKikimrProto::CORRUPTED, 0, State->GetStateErrorReason()));
+    }
+
+    void ErrorHandle(NPDisk::TEvChunkForget::TPtr &ev) {
+        Send(ev->Sender, new NPDisk::TEvChunkForgetResult(NKikimrProto::CORRUPTED, 0, State->GetStateErrorReason()));
+    }
+
+    void ErrorHandle(NPDisk::TEvYardControl::TPtr &ev) {
+        const NPDisk::TEvYardControl &evControl = *ev->Get();
+        Send(ev->Sender, new NPDisk::TEvYardControlResult(NKikimrProto::CORRUPTED, evControl.Cookie, State->GetStateErrorReason()));
+    }
+
+    void ErrorHandle(NPDisk::TEvAskForCutLog::TPtr &ev) {
+        // Just ignore the event, can't send cut log in this state.
+        Y_UNUSED(ev);
+    }
+
+    void HandleMoveToErrorState() {
+        Impl.StateErrorReason = "Some error reason";
+        Become(&TThis::StateError);
+    }
+
+    void HandleMoveToNormalState() {
+        Impl.StateErrorReason = "";
+        Become(&TThis::StateNormal);
+    }
+
+    STRICT_STFUNC(StateNormal,
         hFunc(NPDisk::TEvYardInit, Handle);
         hFunc(NPDisk::TEvLog, Handle);
         hFunc(NPDisk::TEvChunkForget, Handle);
@@ -829,6 +932,25 @@ public:
         hFunc(NPDisk::TEvHarakiri, Handle);
         hFunc(NPDisk::TEvConfigureScheduler, Handle);
         cFunc(TEvents::TSystem::Wakeup, ReportMetrics);
+
+        cFunc(EvBecomeError, HandleMoveToErrorState);
+    )
+
+    STRICT_STFUNC(StateError,
+        hFunc(NPDisk::TEvYardInit, ErrorHandle);
+        hFunc(NPDisk::TEvCheckSpace, ErrorHandle);
+        hFunc(NPDisk::TEvLog, ErrorHandle);
+        hFunc(NPDisk::TEvMultiLog, ErrorHandle);
+        hFunc(NPDisk::TEvReadLog, ErrorHandle);
+        hFunc(NPDisk::TEvChunkWrite, ErrorHandle);
+        hFunc(NPDisk::TEvChunkRead, ErrorHandle);
+        hFunc(NPDisk::TEvHarakiri, ErrorHandle);
+        hFunc(NPDisk::TEvSlay, ErrorHandle);
+        hFunc(NPDisk::TEvChunkReserve, ErrorHandle);
+        hFunc(NPDisk::TEvChunkForget, ErrorHandle);
+
+        cFunc(TEvents::TSystem::Wakeup, ReportMetrics);
+        cFunc(EvBecomeNormal, HandleMoveToNormalState);
     )
 };
 

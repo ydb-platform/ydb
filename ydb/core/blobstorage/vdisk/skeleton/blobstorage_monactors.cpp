@@ -3,6 +3,8 @@
 #include "skeleton_mon_dbmainpage.h"
 #include "skeleton_mon_util.h"
 
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/mon.h>
@@ -983,6 +985,49 @@ namespace NKikimr {
         {}
     };
 
+    class TRestartVDiskActor : public TActorBootstrapped<TRestartVDiskActor> {
+        const ui32 PDiskId;
+        const TVDiskID VDiskId;
+        const TActorId WardenId;
+        const TActorId NotifyId;
+        const TActorId Sender;
+
+        friend class TActorBootstrapped<TRestartVDiskActor>;
+
+        void Bootstrap(const TActorContext &ctx) {
+            ctx.Send(WardenId, new TEvBlobStorage::TEvAskRestartVDisk(PDiskId, VDiskId));
+            ctx.Send(NotifyId, new TEvents::TEvActorDied);
+            ctx.Send(Sender, new NMon::TEvHttpInfoRes(MakeReply()));
+            Die(ctx);
+        }
+
+        TString MakeReply() const {
+            TStringStream str;
+            HTML(str) {
+                str << "VDisk restart request has been sent <br>\n"
+                    << "<a class=\"btn btn-default\" href=\"?\">Go back to the main VDisk page</a>";
+            }
+            return str.Str();
+        }
+
+    public:
+        TRestartVDiskActor(
+            const ui32 pDiskId,
+            const TVDiskID &vDiskId,
+            const TActorId &wardenId,
+            const TActorId &notifyId,
+            const TActorId &sender
+        )
+            : TActorBootstrapped<TRestartVDiskActor>()
+            , PDiskId(pDiskId)
+            , VDiskId(vDiskId)
+            , WardenId(wardenId)
+            , NotifyId(notifyId)
+            , Sender(sender)
+        {
+        }
+    };
+
     ////////////////////////////////////////////////////////////////////////////
     // TSkeletonFrontMonMainPageActor
     ////////////////////////////////////////////////////////////////////////////
@@ -1064,6 +1109,10 @@ namespace NKikimr {
         {}
     };
 
+    bool IsVDiskRestartAllowed(NKikimrWhiteboard::EVDiskState state) {
+        return state == NKikimrWhiteboard::EVDiskState::PDiskError;
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // SKELETON FRONT MON REQUEST HANDLER
     ////////////////////////////////////////////////////////////////////////////
@@ -1074,7 +1123,8 @@ namespace NKikimr {
                                                  TIntrusivePtr<TVDiskConfig> cfg,
                                                  const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top,
                                                  NMon::TEvHttpInfo::TPtr &ev,
-                                                 const TString &frontHtml) {
+                                                 const TString &frontHtml,
+                                                 const NMonGroup::TVDiskStateGroup& vDiskMonGroup) {
         const TCgiParameters& cgi = ev->Get()->Request.GetParams();
 
         const TString &type = cgi.Get("type");
@@ -1104,6 +1154,17 @@ namespace NKikimr {
                     ev, NKikimrBlobStorage::StatHugeAction, dbname);
         } else if (type == "dbmainpage") {
             return CreateMonDbMainPageActor(selfVDiskId, notifyId, skeletonFrontID, skeletonID, ev);
+        } else if (type == "restart") {
+            if (IsVDiskRestartAllowed(vDiskMonGroup.VDiskState())) {
+                return new TRestartVDiskActor(
+                    cfg->BaseInfo.PDiskId, selfVDiskId, MakeBlobStorageNodeWardenID(skeletonFrontID.NodeId()), notifyId, ev->Sender
+                );
+            } else {
+                return new TMonErrorActor(notifyId, ev, 
+                    "VDisk restart in the normal state is not allowed <br>\n"
+                    "<a class=\"btn btn-default\" href=\"?\">Go back to the main VDisk page</a>"
+                );
+            }
         } else {
             auto s = Sprintf("Unknown value '%s' for CGI parameter 'type'", type.data());
             return new TMonErrorActor(notifyId, ev, s);

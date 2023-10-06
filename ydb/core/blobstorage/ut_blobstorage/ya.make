@@ -67,4 +67,5 @@ RECURSE_FOR_TESTS(
     ut_osiris
     ut_replication
     ut_scrub
+    ut_vdisk_restart
 )

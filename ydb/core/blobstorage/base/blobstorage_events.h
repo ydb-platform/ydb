@@ -431,6 +431,19 @@ namespace NKikimr {
         {}
     };
 
+    struct TEvBlobStorage::TEvAskRestartVDisk : TEventLocal<TEvAskRestartVDisk, EvAskRestartVDisk> {
+        const ui32 PDiskId;
+        const TVDiskID VDiskId;
+
+        TEvAskRestartVDisk(
+            const ui32 pDiskId,
+            const TVDiskID& vDiskId
+        )
+            : PDiskId(pDiskId)
+            , VDiskId(vDiskId)
+        {}
+    };
+
     struct TEvBlobStorage::TEvRestartPDisk : TEventLocal<TEvRestartPDisk, EvRestartPDisk> {
         const ui32 PDiskId;
         const NPDisk::TMainKey MainKey;

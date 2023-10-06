@@ -6,6 +6,8 @@
 
 namespace NKikimr::NStorage {
 
+    constexpr TDuration PDISK_CONFIDENCE_DELAY = TDuration::Seconds(15);
+
     void TNodeWarden::DestroyLocalVDisk(TVDiskRecord& vdisk) {
         STLOG(PRI_INFO, BS_NODE, NW35, "DestroyLocalVDisk", (VDiskId, vdisk.GetVDiskId()), (VSlotId, vdisk.GetVSlotId()));
         Y_VERIFY(!vdisk.RuntimeData);
@@ -267,7 +269,7 @@ namespace NKikimr::NStorage {
             StartLocalVDiskActor(record, TDuration::Zero());
         } else if (record.RuntimeData->DonorMode < record.Config.HasDonorMode() || record.RuntimeData->ReadOnly != record.Config.GetReadOnly()) {
             PoisonLocalVDisk(record);
-            StartLocalVDiskActor(record, TDuration::Seconds(15) /* PDisk confidence delay */);
+            StartLocalVDiskActor(record, PDISK_CONFIDENCE_DELAY);
         }
     }
 
@@ -282,6 +284,21 @@ namespace NKikimr::NStorage {
             const ui64 round = NextLocalPDiskInitOwnerRound();
             Send(pdiskServiceId, new NPDisk::TEvSlay(vdisk.GetVDiskId(), round, vslotId.PDiskId, vslotId.VDiskSlotId));
             SlayInFlight.emplace(vslotId, round);
+        }
+    }
+
+    void TNodeWarden::Handle(TEvBlobStorage::TEvAskRestartVDisk::TPtr ev) {
+        const auto& [pDiskId, vDiskId] = *ev->Get();
+        const auto nodeId = SelfId().NodeId();  // Skeleton and NodeWarden are on the same node
+        TVSlotId slotId(nodeId, pDiskId, 0);
+
+        for (auto it = LocalVDisks.lower_bound(slotId); it != LocalVDisks.end() && it->first.NodeId == nodeId && it->first.PDiskId == pDiskId; ++it) {
+            auto& record = it->second;
+            if (record.GetVDiskId() == vDiskId) {
+                PoisonLocalVDisk(record);
+                StartLocalVDiskActor(record, PDISK_CONFIDENCE_DELAY);
+                break;
+            }
         }
     }
 

@@ -464,6 +464,7 @@ namespace NKikimr::NStorage {
 
         void Handle(TEvBlobStorage::TEvDropDonor::TPtr ev);
         void Handle(TEvBlobStorage::TEvAskRestartPDisk::TPtr ev);
+        void Handle(TEvBlobStorage::TEvAskRestartVDisk::TPtr ev);
         void Handle(TEvBlobStorage::TEvRestartPDiskResult::TPtr ev);
 
         void FillInVDiskStatus(google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TVDiskStatus> *pb, bool initial);
@@ -535,6 +536,7 @@ namespace NKikimr::NStorage {
                 hFunc(TEvStatusUpdate, Handle);
                 hFunc(TEvBlobStorage::TEvDropDonor, Handle);
                 hFunc(TEvBlobStorage::TEvAskRestartPDisk, Handle);
+                hFunc(TEvBlobStorage::TEvAskRestartVDisk, Handle);
                 hFunc(TEvBlobStorage::TEvRestartPDiskResult, Handle);
 
                 hFunc(TEvGroupStatReport, Handle);

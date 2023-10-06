@@ -21,7 +21,8 @@ namespace NKikimr {
                                                  TIntrusivePtr<TVDiskConfig> cfg,
                                                  const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top,
                                                  NMon::TEvHttpInfo::TPtr &ev,
-                                                 const TString &frontHtml);
+                                                 const TString &frontHtml,
+                                                 const NMonGroup::TVDiskStateGroup& vDiskMonGroup);
 
     IActor *CreateFrontSkeletonGetLogoBlobRequestHandler(const TVDiskID &selfVDiskId,
                                                          const TActorId &notifyId,
@@ -30,6 +31,7 @@ namespace NKikimr {
                                                          const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top,
                                                          TEvGetLogoBlobRequest::TPtr &ev);
 
+    bool IsVDiskRestartAllowed(NKikimrWhiteboard::EVDiskState state);
 
 } // NKikimr
 

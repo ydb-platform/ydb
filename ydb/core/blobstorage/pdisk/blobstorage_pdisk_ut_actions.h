@@ -1301,7 +1301,7 @@ public:
 };
 
 class TTestHttpInfo : public TBaseTest {
-    THttpRequest HttpRequest;
+    THttpRequestMock HttpRequest;
     NMonitoring::TMonService2HttpRequest MonService2HttpRequest;
 
     void TestFSM(const TActorContext &ctx);
@@ -1313,7 +1313,7 @@ public:
 };
 
 class TTestHttpInfoFileDoesntExist : public TBaseTest {
-    THttpRequest HttpRequest;
+    THttpRequestMock HttpRequest;
     NMonitoring::TMonService2HttpRequest MonService2HttpRequest;
 
     void TestFSM(const TActorContext &ctx);
@@ -1326,7 +1326,7 @@ public:
 
 class TTestBootingState : public TBaseTest {
     const ui32 HttpRequestsCount = 1000;
-    THttpRequest HttpRequest;
+    THttpRequestMock HttpRequest;
     NMonitoring::TMonService2HttpRequest MonService2HttpRequest;
     bool EvYardAnswered = false;
     ui32 AnsweredRequests = 0;

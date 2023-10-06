@@ -2273,8 +2273,6 @@ migrations:
     - alice/boltalka/tools/suggest_topics
     - alice/hollywood/library/python/hollywood_recipe
     - alice/hollywood/library/python/testing/integration
-    - alice/hollywood/library/scenarios/market/how_much/it
-    - alice/hollywood/library/scenarios/market/orders_status/it
     - alice/nlu/tools/binary_classifier
     - alice/nlu/tools/tagger/train
     - alice/nlu/tools/tagger/update_resources

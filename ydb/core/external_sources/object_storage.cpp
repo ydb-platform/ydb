@@ -1,4 +1,5 @@
 #include "external_source.h"
+#include "object_storage.h"
 
 #include <ydb/core/protos/external_sources.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -106,8 +107,8 @@ struct TObjectStorageExternalSource : public IExternalSource {
         }
     }
 
-private:
-    static NYql::TIssues Validate(const NKikimrExternalSources::TSchema& schema, const NKikimrExternalSources::TObjectStorage& objectStorage) {
+    template<typename TScheme, typename TObjectStorage>
+    static NYql::TIssues Validate(const TScheme& schema, const TObjectStorage& objectStorage, size_t pathsLimit = 50000) {
         NYql::TIssues issues;
         issues.AddIssues(ValidateFormatSetting(objectStorage.format(), objectStorage.format_setting()));
         if (objectStorage.projection_size() || objectStorage.partitioned_by_size()) {
@@ -122,7 +123,7 @@ private:
                     }
                     projectionStr = projection.ToJsonPretty();
                 }
-                issues.AddIssues(ValidateProjection(schema, projectionStr, partitionedBy));
+                issues.AddIssues(ValidateProjection(schema, projectionStr, partitionedBy, pathsLimit));
             } catch (...) {
                 issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, CurrentExceptionMessage()));
             }
@@ -164,7 +165,7 @@ private:
         return issues;
     }
 
-    static NYql::TIssues ValidateDateFormatSetting(const google::protobuf::Map<TString, TString>& formatSetting) {
+    static NYql::TIssues ValidateDateFormatSetting(const google::protobuf::Map<TString, TString>& formatSetting, bool matchAllSettings = false) {
         NYql::TIssues issues;
         TSet<TString> conflictingKeys;
         for (const auto& [key, value]: formatSetting) {
@@ -205,10 +206,15 @@ private:
                 conflictingKeys.insert("data.timestamp.format");
                 continue;
             }
+
+            if (matchAllSettings) {
+                issues.AddIssue(MakeErrorIssue(Ydb::StatusIds::BAD_REQUEST, "unknown format setting " + key));
+            }
         }
         return issues;
     }
 
+private:
     static bool IsValidIntervalUnit(const TString& unit) {
         static constexpr std::array<std::string_view, 7> IntervalUnits = {
             "MICROSECONDS"sv,
@@ -248,7 +254,8 @@ private:
         return issue;
     }
 
-    static NYql::TIssues ValidateProjectionColumns(const NKikimrExternalSources::TSchema& schema, const TVector<TString>& partitionedBy) {
+    template<typename TScheme>
+    static NYql::TIssues ValidateProjectionColumns(const TScheme& schema, const TVector<TString>& partitionedBy) {
         NYql::TIssues issues;
         TMap<TString, Ydb::Type> types;
         for (const auto& column: schema.column()) {
@@ -356,8 +363,9 @@ private:
         return ValidateProjectionType(columnType, columnName, availableTypes);
     }
 
-    static NYql::TIssues ValidateProjection(const NKikimrExternalSources::TSchema& schema, const TString& projection, const TVector<TString>& partitionedBy) {
-        auto generator = NYql::NPathGenerator::CreatePathGenerator(projection, partitionedBy, GetDataSlotColumns(schema)); // an exception is thrown if an error occurs
+    template<typename TScheme>
+    static NYql::TIssues ValidateProjection(const TScheme& schema, const TString& projection, const TVector<TString>& partitionedBy, size_t pathsLimit) {
+        auto generator = NYql::NPathGenerator::CreatePathGenerator(projection, partitionedBy, GetDataSlotColumns(schema), pathsLimit); // an exception is thrown if an error occurs
         TMap<TString, NYql::NPathGenerator::IPathGenerator::EType> projectionColumns;
         for (const auto& column: generator->GetConfig().Rules) {
             projectionColumns[column.Name] = column.Type;
@@ -385,7 +393,8 @@ private:
         return issues;
     }
 
-    static TMap<TString, NYql::NUdf::EDataSlot> GetDataSlotColumns(const NKikimrExternalSources::TSchema& schema) {
+    template<typename TSchema>
+    static TMap<TString, NYql::NUdf::EDataSlot> GetDataSlotColumns(const TSchema& schema) {
         TMap<TString, NYql::NUdf::EDataSlot> dataSlotColumns;
         for (const auto& column: schema.column()) {
             if (column.has_type()) {
@@ -403,6 +412,14 @@ private:
 
 IExternalSource::TPtr CreateObjectStorageExternalSource() {
     return MakeIntrusive<TObjectStorageExternalSource>();
+}
+
+NYql::TIssues Validate(const FederatedQuery::Schema& schema, const FederatedQuery::ObjectStorageBinding::Subset& objectStorage, size_t pathsLimit) {
+    return TObjectStorageExternalSource::Validate(schema, objectStorage, pathsLimit);
+}
+
+NYql::TIssues ValidateDateFormatSetting(const google::protobuf::Map<TString, TString>& formatSetting, bool matchAllSettings) {
+    return TObjectStorageExternalSource::ValidateDateFormatSetting(formatSetting, matchAllSettings);
 }
 
 }

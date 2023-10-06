@@ -293,12 +293,11 @@ def on_check_java_srcdir(unit, *args):
             if not os.path.exists(abs_srcdir) or not os.path.isdir(abs_srcdir):
                 unit.onsrcdir(os.path.join('${ARCADIA_ROOT}', arc_srcdir))
             return
-        srcdir = unit.resolve_arc_path(arg)
-        if srcdir and not srcdir.startswith('$S'):
-            continue
-        abs_srcdir = unit.resolve(srcdir) if srcdir else unit.resolve(arg)
-        if not os.path.exists(abs_srcdir) or not os.path.isdir(abs_srcdir):
-            unit.onsrcdir(os.path.join('${ARCADIA_ROOT}', abs_srcdir[3:]))
+        srcdir = common.resolve_common_const(unit.resolve_arc_path(arg))
+        if srcdir and srcdir.startswith('$S'):
+            abs_srcdir = unit.resolve(srcdir)
+            if not os.path.exists(abs_srcdir) or not os.path.isdir(abs_srcdir):
+                unit.onsrcdir(os.path.join('${ARCADIA_ROOT}', srcdir[3:]))
 
 
 def on_fill_jar_copy_resources_cmd(unit, *args):

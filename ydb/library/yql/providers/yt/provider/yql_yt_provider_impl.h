@@ -7,10 +7,18 @@
 #include <ydb/library/yql/core/yql_graph_transformer.h>
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.h>
+#include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 
 #include <util/generic/ptr.h>
 
 namespace NYql {
+
+struct TYtExtraPeepHoleSettings {
+    TString CurrentCluster;
+    const NNodes::TYtOutTable* TmpTable = nullptr;
+    TString TmpFolder;
+    TYtSettings::TConstPtr Config;
+};
 
 THolder<IGraphTransformer> CreateYtIODiscoveryTransformer(TYtState::TPtr state);
 THolder<IGraphTransformer> CreateYtEpochTransformer(TYtState::TPtr state);
@@ -31,7 +39,7 @@ THolder<IGraphTransformer> CreateYtDataSinkFinalizingTransformer(TYtState::TPtr 
 THolder<IGraphTransformer> CreateYtLogicalOptProposalTransformer(TYtState::TPtr state);
 THolder<IGraphTransformer> CreateYtPhysicalOptProposalTransformer(TYtState::TPtr state);
 THolder<IGraphTransformer> CreateYtPhysicalFinalizingTransformer(TYtState::TPtr state);
-THolder<IGraphTransformer> CreateTYtPeepholeTransformer(TYtState::TPtr state);
+THolder<IGraphTransformer> CreateTYtPeepholeTransformer(TYtState::TPtr state, const TYtExtraPeepHoleSettings& settings);
 THolder<IGraphTransformer> CreateTYtWideFlowTransformer(TYtState::TPtr state);
 THolder<IGraphTransformer> CreateYtDqHybridTransformer(TYtState::TPtr state, THolder<IGraphTransformer>&& finalizer);
 

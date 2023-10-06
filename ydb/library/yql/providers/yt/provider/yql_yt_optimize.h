@@ -1,6 +1,7 @@
 #pragma once
 
 #include "yql_yt_provider.h"
+#include "yql_yt_provider_impl.h"
 
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/lib/mkql_helpers/mkql_helpers.h>
@@ -32,6 +33,7 @@ IGraphTransformer::TStatus UpdateTableContentMemoryUsage(const TExprNode::TPtr& 
 
 template<bool ForNativeExecution>
 IGraphTransformer::TStatus PeepHoleOptimizeBeforeExec(TExprNode::TPtr input, TExprNode::TPtr& output,
-    const TYtState::TPtr& state, bool& hasNonDeterministicFunctions, TExprContext& ctx);
+    const TYtState::TPtr& state, bool& hasNonDeterministicFunctions, TExprContext& ctx,
+    const TYtExtraPeepHoleSettings& settings = {});
 
 } //NYql

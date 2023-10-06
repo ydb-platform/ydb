@@ -670,85 +670,18 @@ private:
             const auto tmpFolder = GetTablesTmpFolder(*config);
             auto clusterStr = TString{cluster.Value()};
 
-            TMaybeNode<TCoSecureParam> secParams;
-            if (State_->Configuration->Auth.Get().GetOrElse(TString())) {
-                secParams = Build<TCoSecureParam>(ctx, op.Ref().Pos()).Name().Build(TString("cluster:default_").append(clusterStr)).Done();
-            }
-
-            VisitExpr(input, [&](const TExprNode::TPtr& node) {
-                if (auto maybeWrite = TMaybeNode<TYtDqWideWrite>(node)) {
-                    auto server = State_->Gateway->GetClusterServer(clusterStr);
-                    YQL_ENSURE(server, "Invalid YT cluster: " << clusterStr);
-
-                    NYT::TRichYPath realTable = State_->Gateway->GetWriteTable(State_->SessionId, clusterStr, tmpTable.Name().StringValue(), tmpFolder);
-                    realTable.Append(true);
-                    YQL_ENSURE(realTable.TransactionId_.Defined(), "Expected TransactionId");
-
-                    NYT::TNode spec;
-                    TYqlRowSpecInfo(tmpTable.RowSpec()).FillCodecNode(spec[YqlRowSpecAttribute]);
-                    NYT::TNode outSpec = NYT::TNode::CreateMap()(TString{YqlIOSpecTables}, NYT::TNode::CreateList().Add(spec));
-                    NYT::TNode writerOptions = NYT::TNode::CreateMap();
-
-                    if (config->MaxRowWeight.Get(clusterStr)) {
-                        auto maxRowWeight = config->MaxRowWeight.Get(clusterStr)->GetValue();
-                        writerOptions["max_row_weight"] = static_cast<i64>(maxRowWeight);
-                    }
-
-                    auto settings = Build<TCoNameValueTupleList>(ctx, node->Pos())
-                        .Add()
-                            .Name().Value("table", TNodeFlags::Default).Build()
-                            .Value<TCoAtom>().Value(NYT::NodeToYsonString(NYT::PathToNode(realTable))).Build()
-                        .Build()
-                        .Add()
-                            .Name().Value("server", TNodeFlags::Default).Build()
-                            .Value<TCoAtom>().Value(server).Build()
-                        .Build()
-                        .Add()
-                            .Name().Value("outSpec", TNodeFlags::Default).Build()
-                            .Value<TCoAtom>().Value(NYT::NodeToYsonString(outSpec)).Build()
-                        .Build()
-                        .Add()
-                            .Name().Value("secureParams", TNodeFlags::Default).Build()
-                            .Value(secParams)
-                        .Build()
-                        .Add()
-                            .Name().Value("tx", TNodeFlags::Default).Build()
-                            .Value<TCoAtom>().Value(GetGuidAsString(*realTable.TransactionId_), TNodeFlags::Default).Build()
-                        .Build()
-                        .Add()
-                            .Name().Value("outTable", TNodeFlags::Default).Build()
-                            .Value(tmpTable)
-                        .Build()
-                        .Add()
-                            .Name().Value("writerOptions", TNodeFlags::Default).Build()
-                            .Value<TCoAtom>().Value(NYT::NodeToYsonString(writerOptions)).Build()
-                        .Build()
-                        .Done().Ptr();
-
-                    node->ChildRef(TYtDqWideWrite::idx_Settings) = settings;
-
-                    auto atomType = ctx.MakeType<TUnitExprType>();
-
-                    VisitExpr(node->ChildRef(TYtDqWideWrite::idx_Settings), [&atomType](const TExprNode::TPtr& tupleNode) {
-                        if (tupleNode->GetTypeAnn() == nullptr) {
-                            tupleNode->SetTypeAnn(atomType);
-                            tupleNode->SetState(TExprNode::EState::ConstrComplete);
-                        }
-                        return true;
-                    });
-
-                    return false;
-                }
-
-                return true;
-            });
-
             delegatedNode = input->ChildPtr(TYtDqProcessWrite::idx_Input);
             if (const auto status = SubstTables(delegatedNode, State_, false, ctx); status.Level == TStatus::Error) {
                 return SyncStatus(status);
             }
             bool hasNonDeterministicFunctions = false;
-            if (const auto status = PeepHoleOptimizeBeforeExec<false>(delegatedNode, delegatedNode, State_, hasNonDeterministicFunctions, ctx); status.Level == TStatus::Error) {
+            TYtExtraPeepHoleSettings settings;
+            settings.CurrentCluster = clusterStr;
+            settings.TmpTable = &tmpTable;
+            settings.TmpFolder = tmpFolder;
+            settings.Config = config;
+            if (const auto status = PeepHoleOptimizeBeforeExec<false>(delegatedNode, delegatedNode, State_, 
+                hasNonDeterministicFunctions, ctx, settings); status.Level == TStatus::Error) {
                 return SyncStatus(status);
             }
 

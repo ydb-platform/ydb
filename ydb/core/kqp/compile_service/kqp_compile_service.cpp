@@ -477,7 +477,7 @@ private:
 
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Perform request, TraceId.SpanIdPtr: " << ev->TraceId.GetSpanIdPtr());
 
-        NWilson::TSpan CompileServiceSpan(TWilsonKqp::CompileService, std::move(ev->TraceId), "CompileService");
+        NWilson::TSpan compileServiceSpan(TWilsonKqp::CompileService, std::move(ev->TraceId), "CompileService");
 
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Received compile request"
             << ", sender: " << ev->Sender
@@ -505,7 +505,7 @@ private:
                         << ", sender: " << ev->Sender
                         << ", queryUid: " << *request.Uid);
 
-                    ReplyFromCache(ev->Sender, compileResult, ctx, ev->Cookie, std::move(ev->Get()->Orbit), std::move(CompileServiceSpan));
+                    ReplyFromCache(ev->Sender, compileResult, ctx, ev->Cookie, std::move(ev->Get()->Orbit), std::move(compileServiceSpan));
                     return;
                 } else {
                     LOG_NOTICE_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Non-matching user sid for query"
@@ -523,7 +523,7 @@ private:
                 << ", queryUid: " << *request.Uid);
 
             NYql::TIssue issue(NYql::TPosition(), TStringBuilder() << "Query not found: " << *request.Uid);
-            ReplyError(ev->Sender, *request.Uid, Ydb::StatusIds::NOT_FOUND, {issue}, ctx, ev->Cookie, std::move(ev->Get()->Orbit), std::move(CompileServiceSpan));
+            ReplyError(ev->Sender, *request.Uid, Ydb::StatusIds::NOT_FOUND, {issue}, ctx, ev->Cookie, std::move(ev->Get()->Orbit), std::move(compileServiceSpan));
             return;
         }
 
@@ -546,7 +546,7 @@ private:
                 << ", sender: " << ev->Sender
                 << ", queryUid: " << compileResult->Uid);
 
-            ReplyFromCache(ev->Sender, compileResult, ctx, ev->Cookie, std::move(ev->Get()->Orbit), std::move(CompileServiceSpan));
+            ReplyFromCache(ev->Sender, compileResult, ctx, ev->Cookie, std::move(ev->Get()->Orbit), std::move(compileServiceSpan));
             return;
         }
 
@@ -560,7 +560,7 @@ private:
         TKqpCompileRequest compileRequest(ev->Sender, CreateGuidAsString(), std::move(*request.Query),
             request.KeepInCache, request.UserToken, request.Deadline, dbCounters,
             ev->Cookie, std::move(ev->Get()->IntrestedInResult), ev->Get()->UserRequestContext,
-            std::move(ev->Get()->Orbit), std::move(CompileServiceSpan), std::move(ev->Get()->TempTablesState));
+            std::move(ev->Get()->Orbit), std::move(compileServiceSpan), std::move(ev->Get()->TempTablesState));
 
         if (!RequestsQueue.Enqueue(std::move(compileRequest))) {
             Counters->ReportCompileRequestRejected(dbCounters);
@@ -605,14 +605,14 @@ private:
         if (compileResult || request.Query) {
             Counters->ReportCompileRequestCompile(dbCounters);
 
-            NWilson::TSpan CompileServiceSpan(TWilsonKqp::CompileService, ev->Get() ? std::move(ev->TraceId) : NWilson::TTraceId(), "CompileService");
+            NWilson::TSpan compileServiceSpan(TWilsonKqp::CompileService, ev->Get() ? std::move(ev->TraceId) : NWilson::TTraceId(), "CompileService");
 
             TKqpCompileRequest compileRequest(ev->Sender, request.Uid, compileResult ? *compileResult->Query : *request.Query,
                 true, request.UserToken, request.Deadline, dbCounters,
                 ev->Cookie, std::move(ev->Get()->IntrestedInResult),
                 ev->Get()->UserRequestContext,
                 ev->Get() ? std::move(ev->Get()->Orbit) : NLWTrace::TOrbit(),
-                std::move(CompileServiceSpan), std::move(ev->Get()->TempTablesState));
+                std::move(compileServiceSpan), std::move(ev->Get()->TempTablesState));
 
             if (!RequestsQueue.Enqueue(std::move(compileRequest))) {
                 Counters->ReportCompileRequestRejected(dbCounters);
@@ -633,10 +633,10 @@ private:
 
             NYql::TIssue issue(NYql::TPosition(), TStringBuilder() << "Query not found: " << request.Uid);
 
-            NWilson::TSpan CompileServiceSpan(TWilsonKqp::CompileService, ev->Get() ? std::move(ev->TraceId) : NWilson::TTraceId(), "CompileService");
+            NWilson::TSpan compileServiceSpan(TWilsonKqp::CompileService, ev->Get() ? std::move(ev->TraceId) : NWilson::TTraceId(), "CompileService");
 
             ReplyError(ev->Sender, request.Uid, Ydb::StatusIds::NOT_FOUND, {issue}, ctx,
-                ev->Cookie, std::move(ev->Get()->Orbit), std::move(CompileServiceSpan));
+                ev->Cookie, std::move(ev->Get()->Orbit), std::move(compileServiceSpan));
             return;
         }
 

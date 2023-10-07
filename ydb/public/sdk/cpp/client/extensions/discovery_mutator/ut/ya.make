@@ -1,6 +1,6 @@
 UNITTEST_FOR(ydb/public/sdk/cpp/client/extensions/discovery_mutator)
 
-IF (SANITIZER_TYPE)
+IF (SANITIZER_TYPE == "thread")
     TIMEOUT(1200)
     SIZE(LARGE)
     TAG(ya:fat)

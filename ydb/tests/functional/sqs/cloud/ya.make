@@ -8,7 +8,7 @@ TEST_SRCS(
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 ENV(SQS_CLIENT_BINARY="ydb/core/ymq/client/bin/sqs")
 
-IF (SANITIZER_TYPE)
+IF (SANITIZER_TYPE == "thread")
     TIMEOUT(2400)
     SIZE(LARGE)
     TAG(ya:fat)
@@ -19,7 +19,7 @@ IF (SANITIZER_TYPE)
 ELSE()
     REQUIREMENTS(
         cpu:4
-        ram:16
+        ram:32
     )
     TIMEOUT(600)
     SIZE(MEDIUM)
@@ -39,6 +39,6 @@ PEERDIR(
 )
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(10)
+SPLIT_FACTOR(40)
 
 END()

@@ -33,7 +33,6 @@ message TChunkSpec
     // No medium indices.
     repeated fixed32 legacy_replicas = 4;
 
-    // COMPAT(babenko)
     // Initial seeds replicas. The reader may ask the master for additional ones.
     repeated fixed64 replicas = 25;
 

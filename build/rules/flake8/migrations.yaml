@@ -1088,7 +1088,6 @@ migrations:
     - ads/quality/embedding/tools/mx_crosscheck
     - ads/quality/max_positions
     - ads/tools/ml_spiral
-    - afisha/infra/libs/mdb
     - alice/analytics/operations/priemka/alice_parser/lib
     - alice/analytics/operations/timespent/timespent
     - antiadblock/tasks/bypass_uids_stat
@@ -2321,7 +2320,6 @@ migrations:
     - captcha/tools/kikimr_uploader
     - captcha/tools/make_fallback_archive
     - captcha/tools/make_sharded_session_table
-    - catboost/tools/limited_precision_numpy_diff
     - catboost/yandex_specific/github_issues/1855
     - catboost/yandex_specific/model_ops/test
     - catboost/yandex_specific/tools/performance_evaluation/bin

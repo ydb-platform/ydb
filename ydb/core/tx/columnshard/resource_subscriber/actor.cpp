@@ -19,7 +19,7 @@ void TActor::Handle(TEvStartTask::TPtr& ev) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "ask_resources")("task", task->DebugString());
     Tasks.emplace(++Counter, task);
     Send(NKikimr::NResourceBroker::MakeResourceBrokerID(), new NKikimr::NResourceBroker::TEvResourceBroker::TEvSubmitTask(
-        task->GetName(),
+        task->GetExternalTaskId(),
         {{task->GetCPUAllocation(), task->GetMemoryAllocation()}},
         task->GetType(),
         task->GetPriority(),

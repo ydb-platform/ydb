@@ -403,7 +403,7 @@ TDuration TColumnEngineForLogs::ProcessTiering(const ui64 pathId, const TTiering
                     const TInstant maxTtlPortionInstant = *mpiOpt;
                     const TDuration d = maxTtlPortionInstant - *expireTimestampOpt;
                     keep = !!d;
-                    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "keep_detect")("max", maxTtlPortionInstant.Seconds())("expire", expireTimestampOpt->Seconds());
+                    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "keep_detect")("max", maxTtlPortionInstant.Seconds())("expire", expireTimestampOpt->Seconds());
                     if (d && dWaiting > d) {
                         dWaiting = d;
                     }

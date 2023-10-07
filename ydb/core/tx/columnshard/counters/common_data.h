@@ -22,7 +22,7 @@ public:
     TDataOwnerSignals(const TString& module, const TString dataName);
 
     i64 GetDataSize() const {
-        return DataSize->GetValue();
+        return DataSize->GetValueSimple();
     }
 
     void Add(const ui64 size, const bool load) const {

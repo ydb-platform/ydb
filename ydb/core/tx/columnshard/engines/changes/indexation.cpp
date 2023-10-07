@@ -61,7 +61,7 @@ void TInsertColumnEngineChanges::DoWriteIndexComplete(NColumnShard::TColumnShard
 }
 
 void TInsertColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& /*context*/) {
-    self.BackgroundController.FinishIndexing();
+    self.BackgroundController.FinishIndexing(*this);
 }
 
 TConclusionStatus TInsertColumnEngineChanges::DoConstructBlobs(TConstructionContext& context) noexcept {

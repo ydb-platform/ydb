@@ -16,8 +16,11 @@ TSubscriberTypeCounters::TSubscriberTypeCounters(const TSubscriberCounters& owne
 {
     DeepSubGroup("ResourceType", resourceType);
 
-    RequestsCount = TBase::GetDeriviative("Requests/Count");
     RequestBytes = TBase::GetDeriviative("Requests/Bytes");
+    RequestsCount = TBase::GetDeriviative("Requests/Count");
+
+    BytesRequested = TBase::GetValueAutoAggregationsClient("Requested/Bytes");
+    CountRequested = TBase::GetValueAutoAggregationsClient("Requested/Count");
 
     RepliesCount = TBase::GetDeriviative("Replies/Count");
     ReplyBytes = TBase::GetDeriviative("Replies/Bytes");

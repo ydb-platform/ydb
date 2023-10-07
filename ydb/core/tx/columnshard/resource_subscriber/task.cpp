@@ -6,7 +6,8 @@
 namespace NKikimr::NOlap::NResourceBroker::NSubscribe {
 
 void ITask::OnAllocationSuccess(const ui64 taskId, const NActors::TActorId& senderId) {
-    DoOnAllocationSuccess(std::make_shared<TResourcesGuard>(taskId, *this, senderId, Context));
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "resource_allocated")("external_task_id", ExternalTaskId)("mem", MemoryAllocation)("cpu", CPUAllocation);
+    DoOnAllocationSuccess(std::make_shared<TResourcesGuard>(taskId, ExternalTaskId, *this, senderId, Context));
 }
 
 void ITask::Start(const NActors::TActorId& actorId, const std::shared_ptr<ITask>& task) {
@@ -17,21 +18,22 @@ TResourcesGuard::~TResourcesGuard() {
     if (!NActors::TlsActivationContext) {
         return;
     }
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "free_resources")("task_id", TaskId)("mem", Memory)("cpu", Cpu);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "free_resources")("task_id", TaskId)("external_task_id", ExternalTaskId)("mem", Memory)("cpu", Cpu);
     auto ev = std::make_unique<IEventHandle>(NKikimr::NResourceBroker::MakeResourceBrokerID(), Sender, new NKikimr::NResourceBroker::TEvResourceBroker::TEvFinishTask(TaskId));
     NActors::TActorContext::AsActorContext().Send(std::move(ev));
     Context.GetCounters()->GetBytesAllocated()->Remove(Memory);
 }
 
-TResourcesGuard::TResourcesGuard(const ui64 taskId, const ITask& task, const NActors::TActorId& sender, const TTaskContext& context)
+TResourcesGuard::TResourcesGuard(const ui64 taskId, const TString& externalTaskId, const ITask& task, const NActors::TActorId& sender, const TTaskContext& context)
     : TaskId(taskId)
+    , ExternalTaskId(externalTaskId)
     , Sender(sender)
     , Memory(task.GetMemoryAllocation())
     , Cpu(task.GetCPUAllocation())
     , Context(context)
 {
     Context.GetCounters()->GetBytesAllocated()->Add(Memory);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "allocate_resources")("task_id", TaskId)("mem", Memory)("cpu", Cpu);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "allocate_resources")("external_task_id", ExternalTaskId)("task_id", TaskId)("mem", Memory)("cpu", Cpu);
 }
 
 }

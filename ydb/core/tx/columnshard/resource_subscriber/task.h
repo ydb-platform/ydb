@@ -21,12 +21,13 @@ public:
 class TResourcesGuard: public NColumnShard::TMonitoringObjectsCounter<TResourcesGuard> {
 private:
     const ui64 TaskId;
+    const TString ExternalTaskId;
     const NActors::TActorId Sender;
     const ui64 Memory;
     const ui32 Cpu;
     const TTaskContext Context;
 public:
-    TResourcesGuard(const ui64 taskId, const ITask& task, const NActors::TActorId& sender, const TTaskContext& context);
+    TResourcesGuard(const ui64 taskId, const TString& externalTaskId, const ITask& task, const NActors::TActorId& sender, const TTaskContext& context);
     ~TResourcesGuard();
 };
 
@@ -34,17 +35,17 @@ class ITask: public NColumnShard::TMonitoringObjectsCounter<ITask> {
 private:
     YDB_READONLY(ui32, CPUAllocation, 0);
     YDB_READONLY(ui64, MemoryAllocation, 0);
-    YDB_READONLY_DEF(TString, Name);
+    YDB_READONLY_DEF(TString, ExternalTaskId);
     YDB_READONLY_DEF(TString, Type);
     YDB_ACCESSOR(ui64, Priority, 0);
     TTaskContext Context;
 protected:
     virtual void DoOnAllocationSuccess(const std::shared_ptr<TResourcesGuard>& guard) = 0;
 public:
-    ITask(const ui32 cpu, const ui64 memory, const TString& name, const TTaskContext& context)
+    ITask(const ui32 cpu, const ui64 memory, const TString& externalTaskId, const TTaskContext& context)
         : CPUAllocation(cpu)
         , MemoryAllocation(memory)
-        , Name(name)
+        , ExternalTaskId(externalTaskId)
         , Type(context.GetTypeName())
         , Context(context)
     {
@@ -56,7 +57,7 @@ public:
     }
 
     TString DebugString() const {
-        return TStringBuilder() << "cpu=" << CPUAllocation << ";mem=" << MemoryAllocation << ";name=" << Name << ";type=" << Type << ";priority=" << Priority << ";";
+        return TStringBuilder() << "cpu=" << CPUAllocation << ";mem=" << MemoryAllocation << ";external_task_id=" << ExternalTaskId << ";type=" << Type << ";priority=" << Priority << ";";
     }
 
     virtual ~ITask() = default;

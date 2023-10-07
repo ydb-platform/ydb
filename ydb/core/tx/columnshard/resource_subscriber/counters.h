@@ -12,23 +12,30 @@ private:
     using TBase = NColumnShard::TCommonCountersOwner;
     NMonitoring::TDynamicCounters::TCounterPtr RequestsCount;
     NMonitoring::TDynamicCounters::TCounterPtr RequestBytes;
+    std::shared_ptr<NColumnShard::TValueAggregationClient> CountRequested;
+    std::shared_ptr<NColumnShard::TValueAggregationClient> BytesRequested;
 
     NMonitoring::TDynamicCounters::TCounterPtr RepliesCount;
     NMonitoring::TDynamicCounters::TCounterPtr ReplyBytes;
 
     YDB_READONLY_DEF(std::shared_ptr<NColumnShard::TValueAggregationClient>, BytesAllocated);
     YDB_READONLY_DEF(std::shared_ptr<NColumnShard::TValueAggregationClient>, CountAllocated);
+
 public:
     TSubscriberTypeCounters(const TSubscriberCounters& owner, const TString& resourceType);
 
     void OnRequest(const ui64 bytes) const {
         RequestsCount->Add(1);
         RequestBytes->Add(bytes);
+        CountRequested->Add(1);
+        BytesRequested->Add(bytes);
     }
 
     void OnReply(const ui64 bytes) const {
         RepliesCount->Add(1);
         ReplyBytes->Add(bytes);
+        CountRequested->Remove(1);
+        BytesRequested->Remove(bytes);
     }
 };
 

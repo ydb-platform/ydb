@@ -4,11 +4,8 @@
 namespace NKikimr::NColumnShard {
 
 void TBackgroundController::StartTtl(const NOlap::TColumnEngineChanges& changes) {
-    const NOlap::TTTLColumnEngineChanges* ttlChanges = dynamic_cast<const NOlap::TTTLColumnEngineChanges*>(&changes);
-    Y_VERIFY(ttlChanges);
     Y_VERIFY(TtlPortions.empty());
-
-    TtlPortions = ttlChanges->GetTouchedPortions();
+    TtlPortions = changes.GetTouchedPortions();
 }
 
 bool TBackgroundController::StartCompaction(const NOlap::TPlanCompactionInfo& info, const NOlap::TColumnEngineChanges& changes) {
@@ -46,10 +43,34 @@ void TBackgroundController::CheckDeadlines() {
     }
 }
 
-void TBackgroundController::StartIndexing(const NOlap::TColumnEngineChanges& /*changes*/) {
-    ++ActiveIndexing;
+void TBackgroundController::CheckDeadlinesIndexation() {
+    for (auto&& i : ActiveIndexationTasks) {
+        if (TMonotonic::Now() - i.second > NOlap::TCompactionLimits::CompactionTimeout) {
+            AFL_EMERG(NKikimrServices::TX_COLUMNSHARD)("event", "deadline_compaction")("task_id", i.first);
+            Y_VERIFY_DEBUG(false);
+        }
+    }
 }
 
+void TBackgroundController::StartIndexing(const NOlap::TColumnEngineChanges& changes) {
+    Y_VERIFY(ActiveIndexationTasks.emplace(changes.GetTaskIdentifier(), TMonotonic::Now()).second);
+}
+
+void TBackgroundController::FinishIndexing(const NOlap::TColumnEngineChanges& changes) {
+    Y_VERIFY(ActiveIndexationTasks.erase(changes.GetTaskIdentifier()));
+}
+
+TString TBackgroundController::DebugStringIndexation() const {
+    TStringBuilder sb;
+    sb << "{";
+    sb << "task_ids=";
+    for (auto&& i : ActiveIndexationTasks) {
+        sb << i.first << ",";
+    }
+    sb << ";";
+    sb << "}";
+    return sb;
+}
 
 TString TBackgroundActivity::DebugString() const {
     return TStringBuilder()

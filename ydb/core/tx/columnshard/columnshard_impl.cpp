@@ -742,17 +742,13 @@ public:
 };
 
 void TColumnShard::StartIndexTask(std::vector<const NOlap::TInsertedData*>&& dataToIndex, const i64 bytesToIndex) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "indexation")("bytes", bytesToIndex)("blobs_count", dataToIndex.size())("max_limit", (i64)Limits.MaxInsertBytes)
-        ("has_more", bytesToIndex >= Limits.MaxInsertBytes);
     if (bytesToIndex < Limits.MinInsertBytes && dataToIndex.size() < TLimits::MIN_SMALL_BLOBS_TO_INSERT) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_indexation")("bytes", bytesToIndex)("blobs_count", dataToIndex.size());
-
         if (!bytesToIndex || SkippedIndexations < TSettings::MAX_INDEXATIONS_TO_SKIP) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_indexation")("bytes", bytesToIndex)("blobs_count", dataToIndex.size());
             ++SkippedIndexations;
             return;
         }
     }
-
     CSCounters.IndexationInput(bytesToIndex);
     SkippedIndexations = 0;
 
@@ -772,15 +768,21 @@ void TColumnShard::StartIndexTask(std::vector<const NOlap::TInsertedData*>&& dat
     indexChanges->Start(*this);
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges, Settings.CacheDataAfterIndexing);
 
-    const TString taskName = indexChanges->GetTaskIdentifier();
+    const TString externalTaskId = indexChanges->GetTaskIdentifier();
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "indexation")("bytes", bytesToIndex)("blobs_count", dataToIndex.size())("max_limit", (i64)Limits.MaxInsertBytes)
+        ("has_more", bytesToIndex >= Limits.MaxInsertBytes)("external_task_id", externalTaskId);
+
     NOlap::NResourceBroker::NSubscribe::ITask::Start(
         ResourceSubscribeActor, std::make_shared<NOlap::NBlobOperations::NRead::ITask::TReadSubscriber>(BlobsReadActor,
-                                std::make_unique<TChangesReadTask>(std::move(ev), SelfId(), TabletID(), IndexationCounters), 0, memoryNeed, taskName, InsertTaskSubscription));
+                                std::make_unique<TChangesReadTask>(std::move(ev), SelfId(), TabletID(), IndexationCounters), 0, memoryNeed, externalTaskId, InsertTaskSubscription));
 }
 
 void TColumnShard::SetupIndexation() {
-    if (BackgroundController.IsIndexingActive()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_indexation")("reason", "in_progress")("count", BackgroundController.GetIndexingActiveCount())("insert_overload_size", InsertTable->GetCountersCommitted().Bytes);
+    BackgroundController.CheckDeadlinesIndexation();
+    if (BackgroundController.GetIndexingActiveCount()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_indexation")("reason", "in_progress")
+            ("count", BackgroundController.GetIndexingActiveCount())("insert_overload_size", InsertTable->GetCountersCommitted().Bytes)
+            ("indexing_debug", BackgroundController.DebugStringIndexation());
         return;
     } else {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "start_indexation_tasks")("insert_overload_size", InsertTable->GetCountersCommitted().Bytes);
@@ -803,7 +805,9 @@ void TColumnShard::SetupIndexation() {
             }
         }
     }
-    StartIndexTask(std::move(dataToIndex), bytesToIndex);
+    if (dataToIndex.size()) {
+        StartIndexTask(std::move(dataToIndex), bytesToIndex);
+    }
 }
 
 void TColumnShard::SetupCompaction() {
@@ -831,11 +835,7 @@ void TColumnShard::SetupCompaction() {
 bool TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls, const bool force) {
     CSCounters.OnSetupTtl();
     if (BackgroundController.IsTtlActive()) {
-        LOG_S_DEBUG("TTL already in progress at tablet " << TabletID());
-        return false;
-    }
-    if (ActiveEvictions) {
-        LOG_S_DEBUG("Do not start TTL while eviction is in progress at tablet " << TabletID());
+        ACFL_DEBUG("background", "ttl")("skip_reason", "in_progress");
         return false;
     }
     if (force) {
@@ -843,20 +843,19 @@ bool TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls, con
     }
     THashMap<ui64, NOlap::TTiering> eviction = pathTtls;
     for (auto&& i : eviction) {
-        LOG_S_DEBUG("Prepare TTL evicting path " << i.first << " with " << i.second.GetDebugString()
-            << " at tablet " << TabletID());
+        ACFL_DEBUG("background", "ttl")("path", i.first)("info", i.second.GetDebugString());
     }
 
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
     std::shared_ptr<NOlap::TTTLColumnEngineChanges> indexChanges = TablesManager.MutablePrimaryIndex().StartTtl(eviction, BackgroundController.GetConflictTTLPortions());
 
     if (!indexChanges) {
-        LOG_S_INFO("Cannot prepare TTL at tablet " << TabletID());
+        ACFL_DEBUG("background", "ttl")("skip_reason", "no_changes");
         return false;
     }
 
     const bool needWrites = indexChanges->NeedConstruction();
-    LOG_S_INFO("TTL" << (needWrites ? " with writes" : "" ) << " prepared at tablet " << TabletID());
+    ACFL_DEBUG("background", "ttl")("need_writes", needWrites);
 
     indexChanges->Start(*this);
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), indexChanges, false);
@@ -873,7 +872,7 @@ bool TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls, con
 void TColumnShard::SetupCleanup() {
     CSCounters.OnSetupCleanup();
     if (BackgroundController.IsCleanupActive()) {
-        LOG_S_DEBUG("Cleanup already in progress at tablet " << TabletID());
+        ACFL_DEBUG("background", "ttl")("skip_reason", "in_progress");
         return;
     }
 
@@ -882,10 +881,11 @@ void TColumnShard::SetupCleanup() {
     auto changes =
         TablesManager.MutablePrimaryIndex().StartCleanup(cleanupSnapshot, TablesManager.MutablePathsToDrop(), TLimits::MAX_TX_RECORDS);
     if (!changes) {
-        LOG_S_INFO("Cannot prepare cleanup at tablet " << TabletID());
+        ACFL_DEBUG("background", "ttl")("skip_reason", "no_changes");
         return;
     }
 
+    ACFL_DEBUG("background", "ttl")("changes_info", changes->DebugString());
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndex();
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(std::move(actualIndexInfo), changes, false);
     ev->SetPutStatus(NKikimrProto::OK); // No new blobs to write

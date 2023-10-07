@@ -46,7 +46,7 @@ private:
 
 class TBackgroundController {
 private:
-    i64 ActiveIndexing = 0;
+    THashMap<TString, TMonotonic> ActiveIndexationTasks;
 
     using TCurrentCompaction = THashMap<ui64, NOlap::TPlanCompactionInfo>;
     TCurrentCompaction ActiveCompactionInfo;
@@ -60,6 +60,7 @@ public:
     THashSet<NOlap::TPortionAddress> GetConflictCompactionPortions() const;
 
     void CheckDeadlines();
+    void CheckDeadlinesIndexation();
 
     bool StartCompaction(const NOlap::TPlanCompactionInfo& info, const NOlap::TColumnEngineChanges& changes);
     void FinishCompaction(const NOlap::TPlanCompactionInfo& info) {
@@ -74,15 +75,10 @@ public:
     }
 
     void StartIndexing(const NOlap::TColumnEngineChanges& changes);
-    void FinishIndexing() {
-        --ActiveIndexing;
-        Y_VERIFY(ActiveIndexing >= 0);
-    }
-    bool IsIndexingActive() const {
-        return ActiveIndexing;
-    }
+    void FinishIndexing(const NOlap::TColumnEngineChanges& changes);
+    TString DebugStringIndexation() const;
     i64 GetIndexingActiveCount() const {
-        return ActiveIndexing;
+        return ActiveIndexationTasks.size();
     }
 
     void StartCleanup() {

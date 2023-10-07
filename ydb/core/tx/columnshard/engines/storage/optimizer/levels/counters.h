@@ -15,6 +15,8 @@ private:
 
     std::shared_ptr<NColumnShard::TValueAggregationAgent> CriticalRecordsCount;
     std::shared_ptr<NColumnShard::TValueAggregationAgent> NormalRecordsCount;
+
+    std::shared_ptr<NColumnShard::TValueAggregationAgent> OldestCriticalActuality;
 public:
     TGlobalCounters()
         : TBase("LevelsStorageOptimizer")
@@ -22,7 +24,12 @@ public:
         SmallPortionsCount = TBase::GetValue("SmallPortions/Count");
         CriticalRecordsCount = TBase::GetValueAutoAggregations("Granule/CriticalRecord/Count");
         NormalRecordsCount = TBase::GetValueAutoAggregations("Granule/NormalRecord/Count");
+        OldestCriticalActuality = TBase::GetValueAutoAggregations("Granule/ActualityMs");
         SmallPortionsCountByGranule = TBase::GetValueAutoAggregations("Granule/SmallPortions/Count");
+    }
+
+    static std::shared_ptr<NColumnShard::TValueAggregationClient> BuildOldestCriticalActualityAggregation() {
+        return Singleton<TGlobalCounters>()->OldestCriticalActuality->GetClient();
     }
 
     static std::shared_ptr<NColumnShard::TValueAggregationClient> BuildClientSmallPortionsAggregation() {
@@ -48,11 +55,13 @@ private:
     std::shared_ptr<NColumnShard::TValueAggregationClient> CriticalRecordsCount;
     std::shared_ptr<NColumnShard::TValueAggregationClient> NormalRecordsCount;
 
+    std::shared_ptr<NColumnShard::TValueAggregationClient> OldestCriticalActuality;
+
     std::shared_ptr<NColumnShard::TValueGuard> SmallPortionsCount;
     std::shared_ptr<NColumnShard::TValueAggregationClient> SmallPortionsByGranule;
 public:
     i64 GetSmallCounts() const {
-        return SmallPortionsByGranule->GetValue();
+        return SmallPortionsByGranule->GetValueSimple();
     }
 
     TCounters() {
@@ -60,6 +69,11 @@ public:
         NormalRecordsCount = TGlobalCounters::BuildNormalRecordsCountAggregation();
         SmallPortionsCount = TGlobalCounters::BuildSmallPortionsGuard();
         SmallPortionsByGranule = TGlobalCounters::BuildClientSmallPortionsAggregation();
+        OldestCriticalActuality = TGlobalCounters::BuildOldestCriticalActualityAggregation();
+    }
+
+    void OnMinProblemSnapshot(const TDuration d) {
+        OldestCriticalActuality->SetValue(d.MilliSeconds(), TInstant::Now() + TDuration::Seconds(10));
     }
 
     void OnAddCriticalCount(const ui32 count) {

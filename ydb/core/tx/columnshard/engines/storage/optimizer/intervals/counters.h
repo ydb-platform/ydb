@@ -58,7 +58,7 @@ private:
 public:
     std::shared_ptr<NColumnShard::TValueAggregationClient> SmallPortionsByGranule;
     i64 GetSmallCounts() const {
-        return SmallPortionsByGranule->GetValue();
+        return SmallPortionsByGranule->GetValueSimple();
     }
 
     TCounters() {
@@ -84,13 +84,13 @@ public:
     void OnAddSmallPortion() {
         SmallPortionsCount->Add(1);
         SmallPortionsByGranule->Add(1);
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("add_opt_count", SmallPortionsByGranule->GetValue())("counter", (ui64)SmallPortionsByGranule.get());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("add_opt_count", SmallPortionsByGranule->GetValueSimple())("counter", (ui64)SmallPortionsByGranule.get());
     }
 
     void OnRemoveSmallPortion() {
         SmallPortionsCount->Sub(1);
         SmallPortionsByGranule->Remove(1);
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("remove_opt_count", SmallPortionsByGranule->GetValue())("counter", (ui64)SmallPortionsByGranule.get());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("remove_opt_count", SmallPortionsByGranule->GetValueSimple())("counter", (ui64)SmallPortionsByGranule.get());
     }
 
 };

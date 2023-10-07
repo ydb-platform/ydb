@@ -8,7 +8,7 @@ TEST_SRCS(
     test_polling.py
 )
 
-IF (SANITIZER_TYPE)
+IF (SANITIZER_TYPE == "thread")
     TIMEOUT(2400)
     SIZE(LARGE)
     TAG(ya:fat)
@@ -19,7 +19,7 @@ IF (SANITIZER_TYPE)
 ELSE()
     REQUIREMENTS(
         cpu:4
-        ram:16
+        ram:32
     )
     TIMEOUT(600)
     SIZE(MEDIUM)

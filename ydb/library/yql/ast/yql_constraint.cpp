@@ -522,9 +522,19 @@ TSortedConstraintNode::DoGetSimplifiedForType(const TTypeAnnotationNode& type, T
     for (bool setChanged = true; setChanged;) {
         setChanged = false;
         for (auto it = content.begin(); content.end() != it;) {
-            if (it->first.size() != 1U || it->first.front().size() <= 1U)
+            if (it->first.size() > 1U) {
+                for (const auto& path : it->first) {
+                    if (path.size() > 1U && path.back() == ctx.GetIndexAsString(0U)) {
+                        const auto prefix = getPrefix(path);
+                        if (const auto subType = GetSubTypeByPath(prefix, rowType); ETypeAnnotationKind::Struct != subType->GetKind() && 1 == GetElementsCount(subType)) {
+                            it->first.erase(path);
+                            it->first.insert(prefix);
+                            changed = setChanged = true;
+                        }
+                    }
+                }
                 ++it;
-            else {
+            } else if (it->first.size() == 1U && it->first.front().size() > 1U) {
                 const auto prefix = getPrefix(it->first.front());
                 if (const auto subType = GetSubTypeByPath(prefix, rowType); it->first.front().back() == ctx.GetIndexAsString(0U) && ETypeAnnotationKind::Struct != subType->GetKind()) {
                     auto from = it++;
@@ -538,7 +548,8 @@ TSortedConstraintNode::DoGetSimplifiedForType(const TTypeAnnotationNode& type, T
                     }
                 } else
                     ++it;
-            }
+            } else
+                ++it;
         }
     }
 

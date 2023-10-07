@@ -65,7 +65,7 @@ set_yunittest_property(
   ydb-core-blobstorage-dsproxy-ut
   PROPERTY
   PROCESSORS
-  1
+  4
 )
 set_yunittest_property(
   TEST

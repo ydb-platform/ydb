@@ -18,7 +18,11 @@ TEST_SRCS(
     test_update_script_tables.py
 )
 
-IF (SANITIZER_TYPE)
+FORK_TEST_FILES()
+FORK_SUBTESTS()
+SPLIT_FACTOR(10)
+
+IF (SANITIZER_TYPE == "thread")
     TIMEOUT(2400)
     SIZE(LARGE)
     TAG(ya:fat)

@@ -30,15 +30,15 @@ std::shared_ptr<IBlobsReadingAction> TOperator::DoStartReadingAction() {
     return std::make_shared<TReadingAction>(GetStorageId(), GetCurrentOperator());
 }
 
-bool TOperator::DoStartGC() {
-    std::vector<TUnifiedBlobId> draftBlobIds;
-    std::vector<TUnifiedBlobId> deleteBlobIds;
+std::shared_ptr<IBlobsGCAction> TOperator::DoStartGCAction() const {
+    std::deque<TUnifiedBlobId> draftBlobIds;
+    std::deque<TUnifiedBlobId> deleteBlobIds;
     if (!GCInfo->ExtractForGC(draftBlobIds, deleteBlobIds, 100000)) {
-        return false;
+        return nullptr;
     }
     auto gcTask = std::make_shared<TGCTask>(GetStorageId(), std::move(draftBlobIds), std::move(deleteBlobIds), GetCurrentOperator());
     TActorContext::AsActorContext().Register(new TGarbageCollectionActor(gcTask, TabletActorId));
-    return true;
+    return gcTask;
 }
 
 void TOperator::InitNewExternalOperator(const NColumnShard::NTiers::TManager& tierManager) {

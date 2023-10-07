@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/gc.h>
 #include <ydb/core/tx/columnshard/blob_manager.h>
 #include <ydb/core/tx/columnshard/blob_cache.h>
 
@@ -11,13 +12,13 @@ private:
     using TBase = IBlobsStorageOperator;
     std::shared_ptr<NColumnShard::TBlobManager> Manager;
     const TActorId BlobCacheActorId;
-    ui64 PerGenerationCounter = 1;
+    mutable ui64 PerGenerationCounter = 1;
     const TActorId TabletActorId;
 protected:
     virtual std::shared_ptr<IBlobsDeclareRemovingAction> DoStartDeclareRemovingAction() override;
     virtual std::shared_ptr<IBlobsWritingAction> DoStartWritingAction() override;
     virtual std::shared_ptr<IBlobsReadingAction> DoStartReadingAction() override;
-    virtual bool DoStartGC() override;
+    virtual std::shared_ptr<IBlobsGCAction> DoStartGCAction() const override;
     virtual bool DoLoad(NColumnShard::IBlobManagerDb& dbBlobs) override {
         return Manager->LoadState(dbBlobs);
     }

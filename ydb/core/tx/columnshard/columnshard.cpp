@@ -17,6 +17,7 @@ void TColumnShard::CleanupActors(const TActorContext& ctx)
 {
     ctx.Send(BlobsReadActor, new TEvents::TEvPoisonPill);
     ctx.Send(ResourceSubscribeActor, new TEvents::TEvPoisonPill);
+    StoragesManager->Stop();
     if (Tiers) {
         Tiers->Stop();
     }

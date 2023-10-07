@@ -13,20 +13,27 @@ class IBlobsGCAction: public ICommonBlobsAction {
 private:
     using TBase = ICommonBlobsAction;
 protected:
+    bool AbortedFlag = false;
+    bool FinishedFlag = false;
 
     virtual void DoOnExecuteTxAfterCleaning(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs) = 0;
-    virtual void DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction) = 0;
+    virtual bool DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction) = 0;
 public:
-    void OnExecuteTxAfterCleaning(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs) {
-        return DoOnExecuteTxAfterCleaning(self, dbBlobs);
-    }
+    void OnExecuteTxAfterCleaning(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs);
     void OnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction);
+
+    bool IsInProgress() const {
+        return !AbortedFlag && !FinishedFlag;
+    }
 
     IBlobsGCAction(const TString& storageId)
         : TBase(storageId)
     {
 
     }
+
+    void Abort();
+    void OnFinished();
 };
 
 }

@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/blob_manager.h>
+#include <library/cpp/actors/core/log.h>
 
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
 
@@ -23,9 +24,12 @@ void TGCTask::DoOnExecuteTxAfterCleaning(NColumnShard::TColumnShard& /*self*/, N
     }
 }
 
-void TGCTask::DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction) {
+bool TGCTask::DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction) {
     if (KeepsToErase.size() || DeletesToErase.size()) {
         TActorContext::AsActorContext().Send(self.SelfId(), std::make_unique<NColumnShard::TEvPrivate::TEvGarbageCollectionFinished>(taskAction));
+        return false;
+    } else {
+        return true;
     }
 }
 
@@ -41,7 +45,7 @@ TGCTask::TGCTask(const TString& storageId, TGCListsByGroup&& listsByGroupId, con
 }
 
 void TGCTask::OnGCResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev) {
-    Y_VERIFY(ev->Get()->Status == NKikimrProto::OK, "The caller must handle unsuccessful status");
+    AFL_VERIFY(ev->Get()->Status == NKikimrProto::OK)("status", ev->Get()->Status)("details", ev->Get()->ToString())("action_id", GetActionGuid());
 
     // Find the group for this result
     ui64 counterFromRequest = ev->Get()->PerGenerationCounter;

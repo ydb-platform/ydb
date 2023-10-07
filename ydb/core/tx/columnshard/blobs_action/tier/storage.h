@@ -30,7 +30,7 @@ protected:
     virtual std::shared_ptr<IBlobsDeclareRemovingAction> DoStartDeclareRemovingAction() override;
     virtual std::shared_ptr<IBlobsWritingAction> DoStartWritingAction() override;
     virtual std::shared_ptr<IBlobsReadingAction> DoStartReadingAction() override;
-    virtual bool DoStartGC() override;
+    virtual std::shared_ptr<IBlobsGCAction> DoStartGCAction() const override;
     virtual bool DoLoad(NColumnShard::IBlobManagerDb& dbBlobs) override {
         dbBlobs.LoadTierLists(GetStorageId(), GCInfo->MutableBlobsToDelete(), GCInfo->MutableDraftBlobIdsToRemove());
         return true;

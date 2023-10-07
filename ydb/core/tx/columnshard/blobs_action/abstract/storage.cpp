@@ -34,4 +34,12 @@ bool TCommonBlobsTracker::DoFreeBlob(const TUnifiedBlobId& blobId) {
     return true;
 }
 
+void IBlobsStorageOperator::Stop() {
+    if (CurrentGCAction && CurrentGCAction->IsInProgress()) {
+        CurrentGCAction->Abort();
+    }
+    AFL_VERIFY(DoStop());
+    Stopped = true;
+}
+
 }

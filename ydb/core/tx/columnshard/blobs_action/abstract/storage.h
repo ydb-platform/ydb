@@ -2,6 +2,7 @@
 #include "remove.h"
 #include "write.h"
 #include "read.h"
+#include "gc.h"
 
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
@@ -28,31 +29,37 @@ public:
 class IBlobsStorageOperator {
 private:
     YDB_READONLY_DEF(TString, StorageId);
-    friend class IBlobsGCAction;
-    bool GCActivity = false;
 
-    void FinishGC() {
-        Y_VERIFY(GCActivity);
-        GCActivity = false;
-    }
+    std::shared_ptr<IBlobsGCAction> CurrentGCAction;
+    YDB_READONLY(bool, Stopped, false);
     std::shared_ptr<NBlobOperations::TStorageCounters> Counters;
 protected:
     virtual std::shared_ptr<IBlobsDeclareRemovingAction> DoStartDeclareRemovingAction() = 0;
     virtual std::shared_ptr<IBlobsWritingAction> DoStartWritingAction() = 0;
     virtual std::shared_ptr<IBlobsReadingAction> DoStartReadingAction() = 0;
-    virtual bool DoStartGC() = 0;
     virtual bool DoLoad(NColumnShard::IBlobManagerDb& dbBlobs) = 0;
+    virtual bool DoStop() {
+        return true;
+    }
 
     virtual void DoOnTieringModified(const std::shared_ptr<NColumnShard::TTiersManager>& tiers) = 0;
     virtual TString DoDebugString() const {
         return "";
     }
+
+    virtual std::shared_ptr<IBlobsGCAction> DoStartGCAction() const = 0;
+    std::shared_ptr<IBlobsGCAction> StartGCAction() const {
+        return DoStartGCAction();
+    }
+
 public:
     IBlobsStorageOperator(const TString& storageId)
         : StorageId(storageId)
     {
         Counters = std::make_shared<NBlobOperations::TStorageCounters>(storageId);
     }
+
+    void Stop();
 
     virtual std::shared_ptr<IBlobInUseTracker> GetBlobsTracker() const = 0;
 
@@ -83,11 +90,18 @@ public:
         return result;
     }
     bool StartGC() {
-        if (!GCActivity) {
-            GCActivity = DoStartGC();
-            return GCActivity;
+        if (CurrentGCAction && CurrentGCAction->IsInProgress()) {
+            return false;
         }
-        return false;
+        if (Stopped) {
+            return false;
+        }
+        auto task = StartGCAction();
+        if (!task) {
+            return false;
+        }
+        CurrentGCAction = task;
+        return true;
     }
 };
 

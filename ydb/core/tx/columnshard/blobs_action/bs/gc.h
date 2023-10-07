@@ -25,7 +25,7 @@ private:
     std::shared_ptr<NColumnShard::TBlobManager> Manager;
 protected:
     virtual void DoOnExecuteTxAfterCleaning(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs) override;
-    virtual void DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction) override;
+    virtual bool DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction) override;
 public:
     bool IsEmpty() const {
         return ListsByGroupId.empty();

@@ -23,13 +23,14 @@ public:
     }
 
     STFUNC(StateWork) {
+        NActors::TLogContextGuard logGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("action_id", GCTask->GetActionGuid());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
         }
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("actor", "TGarbageCollectionActor")("event", "starting");
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("actor", "TGarbageCollectionActor")("event", "starting")("action_id", GCTask->GetActionGuid());
         for (auto&& i : Requests) {
             SendToBSProxy(ctx, i.first, i.second.release());
         }

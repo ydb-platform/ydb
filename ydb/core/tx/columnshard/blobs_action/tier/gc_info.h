@@ -17,7 +17,7 @@ public:
         }
     }
 
-    bool ExtractForGC(std::vector<TUnifiedBlobId>& deleteDraftBlobIds, std::vector<TUnifiedBlobId>& deleteBlobIds, const ui32 blobsCountLimit) {
+    bool ExtractForGC(std::deque<TUnifiedBlobId>& deleteDraftBlobIds, std::deque<TUnifiedBlobId>& deleteBlobIds, const ui32 blobsCountLimit) {
         if (DraftBlobIdsToRemove.empty() && BlobsToDelete.empty()) {
             return false;
         }

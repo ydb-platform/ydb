@@ -1,14 +1,30 @@
 #include "gc.h"
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
+#include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
 
 namespace NKikimr::NOlap::NBlobOperations::NTier {
 
 void TGCTask::DoOnExecuteTxAfterCleaning(NColumnShard::TColumnShard& /*self*/, NColumnShard::TBlobManagerDb& dbBlobs) {
-    for (auto&& i : DraftBlobIds) {
-        dbBlobs.RemoveTierDraftBlobId(GetStorageId(), i);
+    size_t numBlobs = 0;
+
+    for (; DraftBlobIds.size() && numBlobs < NColumnShard::TLimits::MAX_BLOBS_TO_DELETE; ++numBlobs) {
+        dbBlobs.EraseBlobToKeep(DraftBlobIds.front());
+        DraftBlobIds.pop_front();
     }
-    for (auto&& i : DeleteBlobIds) {
-        dbBlobs.RemoveTierBlobToDelete(GetStorageId(), i);
+
+    for (; DeleteBlobIds.size() && numBlobs < NColumnShard::TLimits::MAX_BLOBS_TO_DELETE; ++numBlobs) {
+        dbBlobs.EraseBlobToDelete(DeleteBlobIds.front());
+        DeleteBlobIds.pop_front();
+    }
+}
+
+bool TGCTask::DoOnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction) {
+    if (DraftBlobIds.size() || DeleteBlobIds.size()) {
+        TActorContext::AsActorContext().Send(self.SelfId(), std::make_unique<NColumnShard::TEvPrivate::TEvGarbageCollectionFinished>(taskAction));
+        return false;
+    } else {
+        return true;
     }
 }
 

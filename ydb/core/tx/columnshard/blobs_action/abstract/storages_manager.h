@@ -24,6 +24,12 @@ public:
 
     IStoragesManager() = default;
 
+    void Stop() {
+        for (auto&& i : Constructed) {
+            i.second->Stop();
+        }
+    }
+
     std::shared_ptr<IBlobsStorageOperator> GetDefaultOperator() {
         return GetOperator(DefaultStorageId);
     }

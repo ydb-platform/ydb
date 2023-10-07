@@ -20,17 +20,17 @@ std::shared_ptr<NKikimr::NOlap::IBlobsReadingAction> TOperator::DoStartReadingAc
     return std::make_shared<TReadingAction>(GetStorageId(), BlobCacheActorId);
 }
 
-bool TOperator::DoStartGC() {
+std::shared_ptr<IBlobsGCAction> TOperator::DoStartGCAction() const {
     auto gcTask = Manager->BuildGCTask(GetStorageId(), Manager);
     if (!gcTask || gcTask->IsEmpty()) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartGCSkipped");
-        return false;
+        return nullptr;
     }
     auto requests = gcTask->BuildRequests(PerGenerationCounter, Manager->GetTabletId(), Manager->GetCurrentGen());
     AFL_VERIFY(requests.size());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartGC")("requests_count", requests.size());
     TActorContext::AsActorContext().Register(new TGarbageCollectionActor(gcTask, std::move(requests), TabletActorId));
-    return true;
+    return gcTask;
 }
 
 TOperator::TOperator(const TString& storageId, const NActors::TActorId& tabletActorId, const TIntrusivePtr<TTabletStorageInfo>& tabletInfo, const ui64 generation)

@@ -4,8 +4,31 @@
 namespace NKikimr::NOlap {
 
 void IBlobsGCAction::OnCompleteTxAfterCleaning(NColumnShard::TColumnShard& self, const std::shared_ptr<IBlobsGCAction>& taskAction) {
-    self.GetStoragesManager()->GetOperator(GetStorageId())->FinishGC();
-    return DoOnCompleteTxAfterCleaning(self, taskAction);
+    if (!AbortedFlag) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnCompleteTxAfterCleaning")("action_guid", GetActionGuid());
+        if (!DoOnCompleteTxAfterCleaning(self, taskAction)) {
+            return;
+        }
+        taskAction->OnFinished();
+    }
+}
+
+void IBlobsGCAction::OnExecuteTxAfterCleaning(NColumnShard::TColumnShard& self, NColumnShard::TBlobManagerDb& dbBlobs) {
+    if (!AbortedFlag) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnExecuteTxAfterCleaning")("action_guid", GetActionGuid());
+        return DoOnExecuteTxAfterCleaning(self, dbBlobs);
+    }
+}
+
+void IBlobsGCAction::Abort() {
+    Y_VERIFY(IsInProgress());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "gc_aborted")("action_guid", GetActionGuid());
+    AbortedFlag = true;
+}
+
+void IBlobsGCAction::OnFinished() {
+    Y_VERIFY(IsInProgress());
+    FinishedFlag = true;
 }
 
 }

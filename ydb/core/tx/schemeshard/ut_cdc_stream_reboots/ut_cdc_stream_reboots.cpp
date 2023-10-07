@@ -654,4 +654,45 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         });
     }
 
+    Y_UNIT_TEST(RacySplitTableAndCreateStream) {
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Uint64" }
+                    Columns { Name: "value" Type: "Uint64" }
+                    KeyColumnNames: ["key"]
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            AsyncSplitTable(runtime, ++t.TxId, "/MyRoot/Table", Sprintf(R"(
+                SourceTabletId: %lu
+                SplitBoundary {
+                    KeyPrefix {
+                        Tuple { Optional { Uint64: 2 } }
+                    }
+                }
+            )", TTestTxConfig::FakeHiveTablets));
+
+            AsyncCreateCdcStream(runtime, ++t.TxId, "/MyRoot", R"(
+                TableName: "Table"
+                StreamDescription {
+                  Name: "Stream"
+                  Mode: ECdcStreamModeKeysOnly
+                  Format: ECdcStreamFormatProto
+                }
+            )");
+
+            t.TestEnv->TestWaitNotification(runtime, {t.TxId - 1, t.TxId});
+
+            {
+                TInactiveZone inactive(activeZone);
+                CheckRegistrations(runtime, {"/MyRoot/Table", 2}, {"/MyRoot/Table/Stream/streamImpl", 1});
+            }
+        });
+    }
+
 } // TCdcStreamWithRebootsTests

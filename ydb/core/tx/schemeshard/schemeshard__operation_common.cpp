@@ -695,6 +695,7 @@ THolder<TEvPersQueue::TEvProposeTransaction> TConfigureParts::MakeEvProposeTrans
                                                                                        const TTopicTabletInfo& pqShard,
                                                                                        const TString& topicName,
                                                                                        const TString& topicPath,
+                                                                                       const std::optional<NKikimrPQ::TBootstrapConfig>& bootstrapConfig,
                                                                                        const TString& cloudId,
                                                                                        const TString& folderId,
                                                                                        const TString& databaseId,
@@ -715,9 +716,10 @@ THolder<TEvPersQueue::TEvProposeTransaction> TConfigureParts::MakeEvProposeTrans
                        folderId,
                        databaseId,
                        databasePath);
-    MakeBootstrapConfig(*event->Record.MutableConfig()->MutableBootstrapConfig(),
-                        pqGroup,
-                        txType);
+    if (bootstrapConfig) {
+        Y_VERIFY(txType == TTxState::TxCreatePQGroup);
+        event->Record.MutableConfig()->MutableBootstrapConfig()->CopyFrom(*bootstrapConfig);
+    }
 
     LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "Propose configure PersQueue" <<
@@ -731,6 +733,7 @@ THolder<TEvPersQueue::TEvUpdateConfig> TConfigureParts::MakeEvUpdateConfig(TTxId
                                                                            const TTopicTabletInfo& pqShard,
                                                                            const TString& topicName,
                                                                            const TString& topicPath,
+                                                                           const std::optional<NKikimrPQ::TBootstrapConfig>& bootstrapConfig,
                                                                            const TString& cloudId,
                                                                            const TString& folderId,
                                                                            const TString& databaseId,
@@ -750,9 +753,10 @@ THolder<TEvPersQueue::TEvUpdateConfig> TConfigureParts::MakeEvUpdateConfig(TTxId
                        folderId,
                        databaseId,
                        databasePath);
-    MakeBootstrapConfig(*event->Record.MutableBootstrapConfig(),
-                        pqGroup,
-                        txType);
+    if (bootstrapConfig) {
+        Y_VERIFY(txType == TTxState::TxCreatePQGroup);
+        event->Record.MutableBootstrapConfig()->CopyFrom(*bootstrapConfig);
+    }
 
     LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "Propose configure PersQueue" <<

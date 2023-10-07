@@ -2,9 +2,11 @@
 
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
+
+#include <ydb/core/base/subdomain.h>
+#include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/tx_processing.h>
-#include <ydb/core/base/subdomain.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -657,7 +659,39 @@ public:
         }
 
         TString databasePath = TPath::Init(context.SS->RootPathId(), context.SS).PathString();
-        TString topicPath = TPath::Init(txState->TargetPathId, context.SS).PathString();
+        auto topicPath = TPath::Init(txState->TargetPathId, context.SS);
+
+        std::optional<NKikimrPQ::TBootstrapConfig> bootstrapConfig;
+        if (txState->TxType == TTxState::TxCreatePQGroup && topicPath.Parent().IsCdcStream()) {
+            bootstrapConfig.emplace();
+
+            auto tablePath = topicPath.Parent().Parent(); // table/cdc_stream/topic
+            Y_VERIFY(tablePath.IsResolved());
+
+            Y_VERIFY(context.SS->Tables.contains(tablePath.Base()->PathId));
+            auto table = context.SS->Tables.at(tablePath.Base()->PathId);
+
+            const auto& partitions = table->GetPartitions();
+
+            for (ui32 i = 0; i < partitions.size(); ++i) {
+                const auto& cur = partitions.at(i);
+
+                Y_VERIFY(context.SS->ShardInfos.contains(cur.ShardIdx));
+                const auto& shard = context.SS->ShardInfos.at(cur.ShardIdx);
+
+                auto& mg = *bootstrapConfig->AddExplicitMessageGroups();
+                mg.SetId(NPQ::NSourceIdEncoding::EncodeSimple(ToString(shard.TabletID)));
+
+                if (i != partitions.size() - 1) {
+                    mg.MutableKeyRange()->SetToBound(cur.EndOfRange);
+                }
+
+                if (i) {
+                    const auto& prev = partitions.at(i - 1);
+                    mg.MutableKeyRange()->SetFromBound(prev.EndOfRange);
+                }
+            }
+        }
 
         for (auto shard : txState->Shards) {
             TShardIdx idx = shard.Idx;
@@ -680,7 +714,8 @@ public:
                                                      *pqGroup,
                                                      *pqShard,
                                                      topicName,
-                                                     topicPath,
+                                                     topicPath.PathString(),
+                                                     bootstrapConfig,
                                                      cloudId,
                                                      folderId,
                                                      databaseId,
@@ -692,7 +727,8 @@ public:
                                                *pqGroup,
                                                *pqShard,
                                                topicName,
-                                               topicPath,
+                                               topicPath.PathString(),
+                                               bootstrapConfig,
                                                cloudId,
                                                folderId,
                                                databaseId,
@@ -839,16 +875,6 @@ private:
         }
     }
 
-    static void MakeBootstrapConfig(NKikimrPQ::TBootstrapConfig& config,
-                                    const TTopicInfo& pqGroup,
-                                    TTxState::ETxType txType)
-    {
-        if (pqGroup.AlterData && pqGroup.AlterData->BootstrapConfig) {
-            Y_VERIFY(txType == TTxState::TxCreatePQGroup);
-            Y_VERIFY(ParseFromStringNoSizeLimit(config, pqGroup.AlterData->BootstrapConfig));
-        }
-    }
-
     static void ParsePQTabletConfig(NKikimrPQ::TPQTabletConfig& config,
                                     const TTopicInfo& pqGroup)
     {
@@ -869,6 +895,7 @@ private:
                                  const TTopicTabletInfo& pqShard,
                                  const TString& topicName,
                                  const TString& topicPath,
+                                 const std::optional<NKikimrPQ::TBootstrapConfig>& bootstrapConfig,
                                  const TString& cloudId,
                                  const TString& folderId,
                                  const TString& databaseId,
@@ -881,6 +908,7 @@ private:
                            const TTopicTabletInfo& pqShard,
                            const TString& topicName,
                            const TString& topicPath,
+                           const std::optional<NKikimrPQ::TBootstrapConfig>& bootstrapConfig,
                            const TString& cloudId,
                            const TString& folderId,
                            const TString& databaseId,

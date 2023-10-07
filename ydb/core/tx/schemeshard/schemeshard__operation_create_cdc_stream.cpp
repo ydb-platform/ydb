@@ -3,7 +3,6 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/engine/mkql_proto.h>
-#include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
 #define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -796,15 +795,8 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
             }
         }
 
-        auto& bootstrapConfig = *desc.MutableBootstrapConfig();
         for (ui32 i = 0; i < partitions.size(); ++i) {
             const auto& cur = partitions.at(i);
-
-            Y_VERIFY(context.SS->ShardInfos.contains(cur.ShardIdx));
-            const auto& shard = context.SS->ShardInfos.at(cur.ShardIdx);
-
-            auto& mg = *bootstrapConfig.AddExplicitMessageGroups();
-            mg.SetId(NPQ::NSourceIdEncoding::EncodeSimple(ToString(shard.TabletID)));
 
             if (i != partitions.size() - 1) {
                 TSerializedCellVec endKey(cur.EndOfRange);
@@ -820,13 +812,6 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
                     const bool ok = NMiniKQL::CellToValue(typeId, cell, *boundary.AddTuple(), errStr);
                     Y_VERIFY(ok, "Failed to build key tuple at position %" PRIu32 " error: %s", ki, errStr.data());
                 }
-
-                mg.MutableKeyRange()->SetToBound(cur.EndOfRange);
-            }
-
-            if (i) {
-                const auto& prev = partitions.at(i - 1);
-                mg.MutableKeyRange()->SetFromBound(prev.EndOfRange);
             }
         }
 

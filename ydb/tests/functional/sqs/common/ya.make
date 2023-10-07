@@ -1,6 +1,7 @@
 PY3TEST()
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 ENV(SQS_CLIENT_BINARY="ydb/core/ymq/client/bin/sqs")
+ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 
 TEST_SRCS(
     test_account_actions.py
@@ -15,7 +16,7 @@ TEST_SRCS(
     test_throttling_nonexistent_queue.py
 )
 
-IF (SANITIZER_TYPE)
+IF (SANITIZER_TYPE == "thread")
     TIMEOUT(2400)
     SIZE(LARGE)
     TAG(ya:fat)
@@ -26,7 +27,7 @@ IF (SANITIZER_TYPE)
 ELSE()
     REQUIREMENTS(
         cpu:4
-        ram:16
+        ram:32
     )
     TIMEOUT(600)
     SIZE(MEDIUM)

@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: types-PyYAML
-Version: 6.0.12.11
+Version: 6.0.12.12
 Summary: Typing stubs for PyYAML
 Home-page: https://github.com/python/typeshed
 License: Apache-2.0 license
@@ -26,6 +26,6 @@ https://github.com/python/typeshed/tree/main/stubs/PyYAML. All fixes for
 types and metadata should be contributed there.
 
 See https://github.com/python/typeshed/blob/main/README.md for more details.
-This package was generated from typeshed commit `afe18e95a9592434e93b648de5194cfe54443f84` and was tested
-with mypy 1.4.1, pyright 1.1.318, and
-pytype 2023.6.16.
+This package was generated from typeshed commit `e40b5be2ea48dc83ffc2f38bfd542334deb98b20` and was tested
+with mypy 1.5.1, pyright 1.1.328, and
+pytype 2023.8.31.

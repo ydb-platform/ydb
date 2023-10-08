@@ -663,7 +663,7 @@ bool TCms::TryToLockVDisk(const TActionOptions& opts,
 
         switch (opts.AvailabilityMode) {
         case MODE_MAX_AVAILABILITY:
-            if (!counters->CheckForMaxAvailability(error, defaultDeadline, opts.PartialPermissionAllowed)) {
+            if (!counters->CheckForMaxAvailability(ClusterInfo, error, defaultDeadline, opts.PartialPermissionAllowed)) {
                 return false;
             }
             break;

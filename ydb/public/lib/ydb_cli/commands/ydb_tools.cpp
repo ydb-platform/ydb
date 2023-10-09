@@ -383,7 +383,7 @@ int TCommandRename::Run(TConfig& config) {
 }
 
 TCommandPgConvert::TCommandPgConvert()
-    : TToolsCommand("pg-convert", {}, "Convert pg_dump result SQL file for YDB postgres layer")
+    : TToolsCommand("pg-convert", {}, "Convert pg_dump result SQL file to format readable by YDB postgres layer")
 {}
 
 void TCommandPgConvert::Config(TConfig& config) {

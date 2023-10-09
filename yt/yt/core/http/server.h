@@ -24,7 +24,7 @@ public:
     void HandleRequest(const IRequestPtr& req, const IResponseWriterPtr& rsp) override;
 
 private:
-    TCallback<void(const IRequestPtr&, const IResponseWriterPtr&)> Handler_;
+    const TCallback<void(const IRequestPtr&, const IResponseWriterPtr&)> Handler_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -109,15 +109,13 @@ IServerPtr CreateServer(
 ////////////////////////////////////////////////////////////////////////////////
 
 //! IRequestPathMatcher is responsible for storing handlers and giving them back by path
-class IRequestPathMatcher
+struct IRequestPathMatcher
     : public virtual TRefCounted
 {
-public:
     virtual void Add(const TString& pattern, const IHttpHandlerPtr& handler) = 0;
     virtual void Add(const TString& pattern, TCallback<void(const IRequestPtr&, const IResponseWriterPtr&)> handler) = 0;
     virtual IHttpHandlerPtr Match(TStringBuf path) = 0;
     virtual bool IsEmpty() const = 0;
-
 };
 
 DEFINE_REFCOUNTED_TYPE(IRequestPathMatcher)
@@ -132,7 +130,6 @@ public:
     void Add(const TString& pattern, TCallback<void(const IRequestPtr&, const IResponseWriterPtr&)> handler) override;
     IHttpHandlerPtr Match(TStringBuf path) override;
     bool IsEmpty() const override;
-
 
 private:
     THashMap<TString, IHttpHandlerPtr> Exact_;

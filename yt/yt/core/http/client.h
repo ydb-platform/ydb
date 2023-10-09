@@ -14,10 +14,9 @@ namespace NYT::NHttp {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class IActiveRequest
+struct IActiveRequest
     : public virtual TRefCounted
 {
-public:
     virtual TFuture<IResponsePtr> Finish() = 0;
     virtual NConcurrency::IAsyncOutputStreamPtr GetRequestStream() = 0;
     virtual IResponsePtr GetResponse() = 0;

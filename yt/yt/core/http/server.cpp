@@ -61,21 +61,21 @@ public:
         const IPollerPtr& poller,
         const IPollerPtr& acceptor,
         const IInvokerPtr& invoker,
-        const IRequestPathMatcherPtr& handlers,
+        const IRequestPathMatcherPtr& requestPathMatcher,
         bool ownPoller = false)
         : Config_(config)
         , Listener_(listener)
         , Poller_(poller)
         , Acceptor_(acceptor)
         , Invoker_(invoker)
-        , Handlers_(handlers)
+        , RequestPathMatcher_(requestPathMatcher)
         , OwnPoller_(ownPoller)
     { }
 
     void AddHandler(const TString& path, const IHttpHandlerPtr& handler) override
     {
         YT_VERIFY(!Started_);
-        Handlers_->Add(path, handler);
+        RequestPathMatcher_->Add(path, handler);
     }
 
     const TNetworkAddress& GetAddress() const override
@@ -106,14 +106,14 @@ public:
 
     void SetPathMatcher(const IRequestPathMatcherPtr& matcher) override
     {
-        YT_VERIFY(Handlers_->IsEmpty());
-        Handlers_ = matcher;
-        YT_LOG_INFO("Changed path matcher");
+        YT_VERIFY(RequestPathMatcher_->IsEmpty());
+        RequestPathMatcher_ = matcher;
+        YT_LOG_INFO("Request path matcher changed");
     }
 
     IRequestPathMatcherPtr GetPathMatcher() override
     {
-        return Handlers_;
+        return RequestPathMatcher_;
     }
 
 private:
@@ -122,14 +122,13 @@ private:
     const IPollerPtr Poller_;
     const IPollerPtr Acceptor_;
     const IInvokerPtr Invoker_;
-    IRequestPathMatcherPtr Handlers_;
-    bool OwnPoller_ = false;
+    IRequestPathMatcherPtr RequestPathMatcher_;
+    const bool OwnPoller_ = false;
 
     bool Started_ = false;
-    std::atomic<bool> Stopped_ = {false};
+    std::atomic<bool> Stopped_ = false;
 
-
-    std::atomic<ui64> ActiveConnections_{0};
+    std::atomic<int> ActiveConnections_ = 0;
     TGauge ConnectionsActive_ = HttpProfiler.Gauge("/connections_active");
     TCounter ConnectionsAccepted_ = HttpProfiler.Counter("/connections_accepted");
     TCounter ConnectionsDropped_ = HttpProfiler.Counter("/connections_dropped");
@@ -157,7 +156,7 @@ private:
         auto connection = connectionOrError.ValueOrThrow();
 
         auto count = ActiveConnections_.fetch_add(1) + 1;
-        if (count >= static_cast<ui64>(Config_->MaxSimultaneousConnections)) {
+        if (count >= Config_->MaxSimultaneousConnections) {
             ConnectionsDropped_.Increment();
             ActiveConnections_--;
             YT_LOG_WARNING("Server is over max active connection limit (RemoteAddress: %v)",
@@ -200,7 +199,7 @@ private:
                 FindBalancerRealIP(request),
                 FindUserAgent(request));
 
-            auto handler = Handlers_->Match(path);
+            auto handler = RequestPathMatcher_->Match(path);
             if (handler) {
                 closeResponse = false;
 
@@ -255,7 +254,7 @@ private:
     void HandleConnection(const IConnectionPtr& connection, TGuid connectionId)
     {
         try {
-            connection->SubscribePeerDisconnect(BIND([config=Config_, canceler=GetCurrentFiberCanceler(), connectionId=connectionId] {
+            connection->SubscribePeerDisconnect(BIND([config = Config_, canceler = GetCurrentFiberCanceler(), connectionId = connectionId] {
                 YT_LOG_DEBUG("Client closed TCP socket (ConnectionId: %v)", connectionId);
 
                 if (config->CancelFiberOnConnectionClose) {
@@ -381,7 +380,14 @@ IServerPtr CreateServer(
     bool ownPoller)
 {
     auto handlers = New<TRequestPathMatcher>();
-    return New<TServer>(config, listener, poller, acceptor, invoker, handlers, ownPoller);
+    return New<TServer>(
+        config,
+        listener,
+        poller,
+        acceptor,
+        invoker,
+        handlers,
+        ownPoller);
 }
 
 IServerPtr CreateServer(
@@ -416,7 +422,13 @@ IServerPtr CreateServer(
     const IListenerPtr& listener,
     const IPollerPtr& poller)
 {
-    return CreateServer(config, listener, poller, poller, poller->GetInvoker(), false);
+    return CreateServer(
+        config,
+        listener,
+        poller,
+        poller,
+        poller->GetInvoker(),
+        /*ownPoller*/ false);
 }
 
 IServerPtr CreateServer(
@@ -425,17 +437,31 @@ IServerPtr CreateServer(
     const IPollerPtr& poller,
     const IPollerPtr& acceptor)
 {
-    return CreateServer(config, listener, poller, acceptor, poller->GetInvoker(), false);
+    return CreateServer(
+        config,
+        listener,
+        poller,
+        acceptor,
+        poller->GetInvoker(),
+        /*ownPoller*/ false);
 }
 
 IServerPtr CreateServer(const TServerConfigPtr& config, const IPollerPtr& poller, const IPollerPtr& acceptor)
 {
-    return CreateServer(config, poller, acceptor, poller->GetInvoker(), false);
+    return CreateServer(
+        config,
+        poller,
+        acceptor,
+        poller->GetInvoker(),
+        /*ownPoller*/ false);
 }
 
 IServerPtr CreateServer(const TServerConfigPtr& config, const IPollerPtr& poller)
 {
-    return CreateServer(config, poller, poller);
+    return CreateServer(
+        config,
+        poller,
+        poller);
 }
 
 IServerPtr CreateServer(int port, const IPollerPtr& poller)
@@ -448,7 +474,12 @@ IServerPtr CreateServer(int port, const IPollerPtr& poller)
 IServerPtr CreateServer(const TServerConfigPtr& config, int pollerThreadCount)
 {
     auto poller = CreateThreadPoolPoller(pollerThreadCount, config->ServerName);
-    return CreateServer(config, poller, poller, poller->GetInvoker(), true);
+    return CreateServer(
+        config,
+        poller,
+        poller,
+        poller->GetInvoker(),
+        /*ownPoller*/ true);
 }
 
 IServerPtr CreateServer(
@@ -456,7 +487,12 @@ IServerPtr CreateServer(
     const NConcurrency::IPollerPtr& poller,
     const IInvokerPtr& invoker)
 {
-    return CreateServer(config, poller, poller, invoker, false);
+    return CreateServer(
+        config,
+        poller,
+        poller,
+        invoker,
+        /*ownPoller*/ false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

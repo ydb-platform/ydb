@@ -1,7 +1,6 @@
 [root]
 template="settings.gradle.kts.jinja"
 copy=[
-    "build.gradle.kts",
     "gradlew",
     "gradlew.bat",
     "gradle/wrapper/gradle-wrapper.jar",

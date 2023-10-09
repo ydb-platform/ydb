@@ -8,6 +8,16 @@ plugins {
     `maven-publish`
     `signing`
 {% endif -%}
+    kotlin("jvm") version "1.8.22"
+    kotlin("plugin.allopen") version "1.8.22"
+}
+
+allOpen {
+    annotation("org.springframework.stereotype.Component")
+}
+
+kotlin {
+    jvmToolchain(17)
 }
 
 {% if targets|selectattr('publish') -%}
@@ -17,6 +27,13 @@ version = project.properties["version"]
 {% endif -%}
 repositories {
     mavenCentral()
+}
+
+configurations {
+    all {
+        exclude(group = "ch.qos.logback", module = "logback-classic")
+        exclude(group = "org.apache.logging.log4j", module = "log4j-to-slf4j")
+    }
 }
 
 {% if targets|selectattr("app_main_class") -%}
@@ -73,6 +90,14 @@ tasks.test {
         events("passed", "skipped", "failed")
     }
 }
+
+val testsJar by tasks.registering(Jar::class) {
+    dependsOn(JavaPlugin.COMPILE_TEST_JAVA_TASK_NAME)
+    archiveClassifier.set("tests")
+    from(sourceSets["test"].output)
+}
+
+artifacts.add(configurations.create("testOutput").name, testsJar)
 
 {% include "extra-tests.gradle.kts" ignore missing %}
 {% if targets|selectattr('publish') -%}
